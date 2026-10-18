@@ -809,6 +809,31 @@ def _lowest_outcome_at_or_above(chart: "ResultChart | None", floor: int) -> "Che
     return CheckOutcome.objects.filter(success_level__gte=floor).order_by("success_level").first()
 
 
+def mirrored_outcome(outcome: "CheckOutcome") -> "CheckOutcome | None":
+    """The outcome on the other side of a resisted roll (#4418).
+
+    When a PC resists an NPC's action, the PC's outcome read from the NPC's side: the
+    row whose ``success_level`` is the negation of ``outcome``'s. With no exact row, the
+    nearest row on the same side of zero, the milder one on a tie. ``None`` when no row
+    sits on that side (a zero outcome mirrors only to another zero row).
+    """
+    target = -outcome.success_level
+    exact = CheckOutcome.objects.filter(success_level=target).order_by("name").first()
+    if exact is not None:
+        return exact
+    if target > 0:
+        candidates = CheckOutcome.objects.filter(success_level__gt=0)
+    elif target < 0:
+        candidates = CheckOutcome.objects.filter(success_level__lt=0)
+    else:
+        return None
+    return min(
+        candidates.order_by("name"),
+        key=lambda row: (abs(row.success_level - target), abs(row.success_level)),
+        default=None,
+    )
+
+
 def compute_check_rating(  # noqa: PLR0913 - keyword-only check params mirror perform_check
     character: "ObjectDB",
     check_type: "CheckType",

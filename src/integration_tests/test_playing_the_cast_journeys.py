@@ -10,12 +10,17 @@ from world.battles.constants import BattleSideRole
 from world.battles.resolution import select_surrounded_terminal_pool
 from world.battles.services import add_place, add_side, create_battle, enlist_participant
 from world.checks.factories import CheckTypeFactory
+from world.checks.services import compute_check_rating
+from world.checks.test_helpers import force_check_outcome
 from world.consent.factories import SocialConsentCategoryFactory
 from world.progression.models import WeeklySocialEngagement
 from world.roster.factories import RosterFactory
 from world.roster.models.choices import RosterType
+from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import create_action_request
 from world.scenes.factories import SceneFactory
+from world.traits.factories import CheckOutcomeFactory
+from world.traits.models import CheckOutcome
 from world.vitals.constants import POOL_SURROUNDED_TERMINAL_ENEMY
 from world.vitals.factories import ensure_surrounded_content
 
@@ -82,6 +87,7 @@ class AnNpcActsOnAPc(JourneyCase):
     """Hobb is a major NPC a GM plays; Ysmay is a player character he acts on."""
 
     RESIST_ONLY_LINE = "You can resist this, but not refuse it."
+    NOT_YET_LINE = "That action can't be used by an NPC on a player character yet."
 
     def setUp(self) -> None:
         super().setUp()
@@ -91,17 +97,27 @@ class AnNpcActsOnAPc(JourneyCase):
         entry = self.hobb.sheet_data.roster_entry
         entry.move_to_roster(RosterFactory(roster_type=RosterType.NPC))
         self.scene = SceneFactory(room=self.room)
-        check_type = CheckTypeFactory(name="Persuasion")
-        self.deceive = ActionTemplateFactory(name="Deceive", check_type=check_type)
+        self.persuasion = CheckTypeFactory(name="Persuasion")
+        self.insight = CheckTypeFactory(name="Insight")
+        antagonism = SocialConsentCategoryFactory(key="antagonism", name="Antagonism")
+        self.deceive = ActionTemplateFactory(
+            name="Deceive",
+            check_type=self.persuasion,
+            resist_check_type=self.insight,
+            consent_category=antagonism,
+        )
         self.romantic = SocialConsentCategoryFactory(key="romantic", name="Romantic")
         self.romantic.refusable_from_npcs = True
         self.romantic.save()
         self.flirt = ActionTemplateFactory(
-            name="Flirt", check_type=check_type, consent_category=self.romantic
+            name="Flirt",
+            check_type=self.persuasion,
+            resist_check_type=self.insight,
+            consent_category=self.romantic,
         )
 
-    def _npc_acts(self, action_key: str) -> dict:
-        response = self.api(self.account_of(self.hobb)).post(
+    def _npc_posts(self, action_key: str):
+        return self.api(self.account_of(self.hobb)).post(
             "/api/action-requests/",
             {
                 "scene": self.scene.pk,
@@ -111,6 +127,9 @@ class AnNpcActsOnAPc(JourneyCase):
             },
             format="json",
         )
+
+    def _npc_acts(self, action_key: str) -> dict:
+        response = self._npc_posts(action_key)
         self.assertIn(response.status_code, (status.HTTP_200_OK, status.HTTP_201_CREATED))
         return response.json()
 
@@ -188,3 +207,44 @@ class AnNpcActsOnAPc(JourneyCase):
         denied = self._ysmay_responds(body["id"], "deny")
         self.assertEqual(denied.status_code, status.HTTP_200_OK)
         self.assertEqual(denied.json()["status"], "denied")
+
+    def test_the_pc_rolls_to_see_through_the_lie(self) -> None:
+        seen_through = CheckOutcomeFactory(name="Sees right through it", success_level=2)
+        CheckOutcomeFactory(name="Caught in the lie", success_level=-2)
+        body = self._npc_acts("deceive")
+        self.assertEqual(body["status"], "pending")
+        with force_check_outcome(seen_through) as capture:
+            response = self.api(self.account_of(self.ysmay)).post(
+                f"/api/action-requests/{body['id']}/respond/",
+                {"decision": "accept", "resist_effort": "high"},
+                format="json",
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], "resolved")
+        self.assertEqual(capture.check_type, self.insight)
+        self.assertEqual(
+            capture.target_difficulty, compute_check_rating(self.hobb, self.persuasion)
+        )
+        main = response.json()["result"]["action_resolution"]["main_result"]
+        self.assertLess(CheckOutcome.objects.get(name=main["check_outcome"]).success_level, 0)
+        self.assertEqual(main["check_outcome"], "Caught in the lie")
+
+    def test_no_resist_check_refuses_before_any_row(self) -> None:
+        self.deceive.resist_check_type = None
+        self.deceive.save()
+        response = self._npc_posts("deceive")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json()["detail"], [self.NOT_YET_LINE])
+        self.assertEqual(SceneActionRequest.objects.count(), 0)
+
+    def test_untagged_template_refuses_npc_on_pc(self) -> None:
+        ActionTemplateFactory(
+            name="Seduce",
+            check_type=self.persuasion,
+            resist_check_type=self.insight,
+            consent_category=None,
+        )
+        response = self._npc_posts("seduce")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json()["detail"], [self.NOT_YET_LINE])
+        self.assertEqual(SceneActionRequest.objects.count(), 0)

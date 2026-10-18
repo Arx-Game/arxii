@@ -11,7 +11,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
-from actions.services import start_action_resolution
+from actions.services import start_action_resolution, start_resisted_action_resolution
 from world.checks.theater import check_outcome_faces, maybe_emit_resolution_theater
 from world.checks.types import ResolutionContext
 from world.fatigue.constants import EffortLevel
@@ -19,6 +19,7 @@ from world.progression.models import KudosSourceCategory
 from world.progression.models.kudos import KudosDifficultyWeight
 from world.progression.services.engagement import accrue
 from world.scenes.action_constants import (
+    DIFFICULTY_BAND_STEP,
     DIFFICULTY_VALUES,
     RESIST_FATIGUE_BASE,
     ActionDelivery,
@@ -370,6 +371,22 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
             character_id=initiator_persona.character_sheet_id,
         )
 
+    if (
+        action_template is not None
+        and target_persona is not None
+        and (
+            action_template.resist_check_type_id is None
+            or action_template.consent_category_id is None
+        )
+        and _persona_is_npc(initiator_persona)
+        and not _persona_is_npc(target_persona)
+    ):
+        # #4418: an NPC acting on a PC needs a resisting roll for the PC, and a consent
+        # category to decide whether the PC may refuse. An untagged template (Seduce,
+        # today) must fail closed rather than become a resist-only request.
+        msg = "That action can't be used by an NPC on a player character yet."
+        raise ValidationError(msg)
+
     if action_template is not None and action_template.settles_allegiance:
         from world.npc_services.allegiance import allegiance_instance_on  # noqa: PLC0415
 
@@ -660,6 +677,10 @@ def _compute_difficulty_override_for_primary(
     """
     if action_request.target_persona is None:
         return None
+    if _pc_resists(action_request, action_request.target_persona):
+        return _resisted_difficulty(
+            action_request, action_request.target_persona.character_sheet, resist_effort
+        )
     from actions.constants import ActionCategory  # noqa: PLC0415
     from world.checks.services import compute_resist_increment  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue  # noqa: PLC0415
@@ -695,6 +716,44 @@ def _compute_difficulty_override_for_primary(
         target_persona=action_request.target_persona,
         base=base,
         increment=increment,
+    )
+
+
+def _pc_resists(action_request: SceneActionRequest, target_persona: Persona) -> bool:
+    """True when ``target_persona`` (a PC) rolls to resist an NPC's action (#4418).
+
+    The NPC never rolls: the PC rolls the template's ``resist_check_type`` instead.
+    """
+    template = action_request.action_template
+    return (
+        template is not None
+        and template.resist_check_type_id is not None
+        and npc_acts_on_pc(action_request, target_persona)
+    )
+
+
+def _resisted_difficulty(
+    action_request: SceneActionRequest,
+    resister_sheet: CharacterSheet,
+    resist_effort: str,
+) -> int:
+    """The difficulty a resisting PC rolls against: the NPC's rating in the action (#4418).
+
+    The NPC's pre-roll rating in the template's ``check_type``, shifted by the template's
+    ``difficulty_tier_modifier`` bands. The PC's resist effort is their roll's effort (no
+    resist increment here); it still costs them social fatigue.
+    """
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.checks.services import compute_check_rating  # noqa: PLC0415
+    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+    template = action_request.action_template
+    initiator_character = action_request.initiator_persona.character_sheet.character
+    if resist_effort:
+        apply_fatigue(resister_sheet, ActionCategory.SOCIAL, RESIST_FATIGUE_BASE, resist_effort)
+    return (
+        compute_check_rating(initiator_character, template.check_type)
+        + DIFFICULTY_BAND_STEP * template.difficulty_tier_modifier
     )
 
 
@@ -1101,6 +1160,7 @@ def _resolve_action_against_persona(
     *,
     difficulty_override: int | None = None,
     pull_flat_bonus: int = 0,
+    resist_effort: str = "",
 ) -> tuple[EnhancedSceneActionResult, Interaction | None, int]:
     """Resolve ``action_request`` against ONE persona.
 
@@ -1118,6 +1178,8 @@ def _resolve_action_against_persona(
             into the check's ``extra_modifiers`` on both the plain and the
             technique-enhanced branch. 0 when no pull was declared or the pull
             fizzled.
+        resist_effort: The target's declared resist effort. Read only when the target
+            is a PC resisting an NPC (#4418), where it is the PC's roll effort.
 
     Returns:
         (result, result_interaction, difficulty) — difficulty is returned so
@@ -1183,8 +1245,32 @@ def _resolve_action_against_persona(
     )
     # #4333: a declared Call on favor rolls first (once per request) and its
     # labelled bonus joins this check.
-    favor = declared_invocation_contribution(action_request)
-    if action_request.technique is not None:
+    pc_resists = _pc_resists(action_request, target_persona)
+    favor = None if pc_resists else declared_invocation_contribution(action_request)
+    if pc_resists:
+        # #4418: an NPC acting on a PC never rolls. The PC rolls the template's
+        # resist check against the NPC's rating (``difficulty``), with their own
+        # modifiers and their declared resist effort; the mirrored outcome drives the
+        # template's consequence pool from the NPC's side.
+        resist_breakdown = collect_check_modifiers(
+            target_persona.character_sheet,
+            action_template.resist_check_type,
+            scene=action_request.scene,
+        )
+        result = EnhancedSceneActionResult(
+            action_resolution=start_resisted_action_resolution(
+                initiator=character,
+                resister=target_character,
+                template=action_template,
+                target_difficulty=difficulty,
+                context=context,
+                effort_level=resist_effort or None,
+                extra_modifiers=resist_breakdown.extra_modifiers_total,
+            ),
+            action_key=action_request.action_key,
+            fury_committed=None,
+        )
+    elif action_request.technique is not None:
         # Fold condition / rollmod / scene / equipment / fashion modifiers into
         # the technique branch's check roll through the shared seam — the plain
         # branch already does this at line 930. Without this, conditions are
@@ -1331,6 +1417,7 @@ def _resolve_standard_action(
             action_request.target_persona,
             difficulty_override=difficulty_override,
             pull_flat_bonus=pull_flat_bonus,
+            resist_effort=action_request.resist_effort_level,
         )
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
@@ -1426,6 +1513,10 @@ def _compute_target_difficulty_override(
     target's band lives on SceneActionTarget, not the request). Applies resist
     fatigue when a resist effort is supplied.
     """
+    if _pc_resists(action_request, action_target.target_persona):
+        return _resisted_difficulty(
+            action_request, action_target.target_persona.character_sheet, resist_effort
+        )
     from world.scenes.social_difficulty import resolved_base_difficulty  # noqa: PLC0415
 
     base = resolved_base_difficulty(
@@ -1534,6 +1625,7 @@ def respond_to_action_target(
                 action_target.target_persona,
                 difficulty_override=difficulty_override,
                 pull_flat_bonus=pull_flat_bonus,
+                resist_effort=resist_effort,
             )
             action_target.status = ActionRequestStatus.RESOLVED
             action_target.resolved_at = timezone.now()
