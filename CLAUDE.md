@@ -161,10 +161,13 @@ drafts the spec, flags the team, then **stops** until a human org member approve
   **Agents MUST NEVER apply `spec:approved`** — hold the PAT but self-restrain and
   only poll for it.
 - `status:implementing` — approved; building toward a PR (normal code review).
-  The only exception is a clearly bounded issue carrying exactly one complete
+  There are two exceptions. A clearly bounded issue carrying exactly one complete
   `<!-- discovery:lane=lightweight;state=complete -->` marker outside the spec
-  markers; the validator and issue-to-merged-pr skill must accept no other
-  marker-based bypass.
+  markers. A slice of an approved spec: one `Slice N of #M` line before the spec
+  markers, valid only while #M is open and carries `spec:approved` (the member
+  gate is on the parent; ADR-4447-A). The validator and issue-to-merged-pr skill
+  must accept no other marker-based bypass, and a slice never writes a lightweight
+  marker to pass.
 
 Discovery markers record the collaborative product gate before the technical spec:
 `lane=lightweight|standard|heavyweight` and
