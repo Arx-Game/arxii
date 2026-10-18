@@ -1847,9 +1847,10 @@ def _weekly_obligation_settlement() -> int:
 
     ``settle_obligations`` marks the declarations it consumed as settled, so a re-run
     (or a second rollover before any new collection) finds nothing and pays nothing.
-    An org whose treasury cannot cover the transfers rolls its whole settlement back
-    (the call is atomic), keeps its declarations unsettled, and is retried next week;
-    that failure never stops the other orgs. Returns the number of orgs that paid.
+    An org whose settlement fails (typically a treasury that cannot cover the transfers)
+    rolls it back whole (the call is atomic), keeps its declarations unsettled, and is
+    retried next week; one org's failure never stops the other orgs. Returns the number of
+    orgs that paid.
     """
     from world.societies.models import Organization  # noqa: PLC0415
 
@@ -1864,7 +1865,7 @@ def _weekly_obligation_settlement() -> int:
         try:
             if settle_obligations(organization):
                 count += 1
-        except ValidationError:
+        except Exception:
             logger.exception("weekly economy: obligations for org %s not settled", organization.pk)
     return count
 

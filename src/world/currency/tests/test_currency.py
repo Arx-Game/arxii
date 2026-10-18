@@ -870,6 +870,39 @@ class WeeklyEconomyTests(TestCase):
         liege_treasury.refresh_from_db()
         assert liege_treasury.balance == 200
 
+    def test_unexpected_settlement_error_does_not_wedge_the_rollover(self) -> None:
+        """Any failure in one org's settlement leaves the other orgs and later phases running."""
+        from unittest import mock
+
+        from world.currency import services
+        from world.currency.models import OrgIncomeStream, OrgObligation
+        from world.currency.services import process_income_stream, run_weekly_economy
+        from world.societies.factories import OrganizationFactory
+
+        liege = OrganizationFactory()
+        orgs = [OrganizationFactory(), OrganizationFactory()]
+        for org in orgs:
+            stream = OrgIncomeStream.objects.create(
+                organization=org, name="Land taxes", kind="domain_tax", gross_amount=1000
+            )
+            OrgObligation.objects.create(
+                from_organization=org, to_organization=liege, name="Crown taxes", percent=20
+            )
+            process_income_stream(stream, 1000)
+        real = services.settle_obligations
+
+        def flaky(organization):
+            if organization.pk == orgs[0].pk:
+                msg = "boom"
+                raise RuntimeError(msg)
+            return real(organization)
+
+        with mock.patch.object(services, "settle_obligations", side_effect=flaky):
+            counts = run_weekly_economy()
+
+        assert counts["obligations"] == 1
+        assert "businesses" in counts
+
     def test_weekly_economy_accrues_asset_income(self) -> None:
         """The weekly cron accrues asset weekly_income into uncollected_pool."""
         from world.assets.factories import NPCAssetFactory
