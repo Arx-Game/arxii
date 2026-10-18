@@ -59,6 +59,20 @@ describe('NPC play UI', () => {
     expect(tags).toEqual(['NPC', 'CROWD']);
   });
 
+  it('tags a crowd voice CROWD on the active tab', () => {
+    const crowd = { ...vael, id: 10, name: 'Gate guards', is_crowd_voice: true };
+    store.dispatch(startSession('Gate guards'));
+    store.dispatch(setActiveSession('Gate guards'));
+    renderWithProviders(<GameTopBar characters={[crowd]} />);
+    expect(screen.getByTestId('npc-tag')).toHaveTextContent('CROWD');
+  });
+
+  it('tags NPC and CROWD in the list shown with no active character', () => {
+    const crowd = { ...vael, id: 10, name: 'Gate guards', is_crowd_voice: true };
+    renderWithProviders(<GameTopBar characters={[vael, crowd]} />);
+    expect(screen.getAllByTestId('npc-tag').map((t) => t.textContent)).toEqual(['NPC', 'CROWD']);
+  });
+
   it('calls onPoseAs from the response card', () => {
     const onPoseAs = vi.fn();
     const interaction = {
@@ -66,10 +80,23 @@ describe('NPC play UI', () => {
       persona: { id: 5, name: 'Mirel' },
       content: 'Mirel looks at Dannic.',
       target_persona_ids: [70],
+      action_links: [
+        {
+          id: 1,
+          ordering: 0,
+          action_interaction: {
+            id: 2,
+            content: 'Persuade Vael: Solid success',
+            mode: 'action',
+            timestamp: '',
+          },
+        },
+      ],
     } as unknown as Interaction;
     renderWithProviders(
       <NpcResponseCard interaction={interaction} npcName="Vael" onPoseAs={onPoseAs} />
     );
+    expect(screen.getByText('Mirel: Persuade Vael: Solid success')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Pose as Vael' }));
     expect(onPoseAs).toHaveBeenCalledWith(interaction);
   });

@@ -7,6 +7,8 @@ export type SidebarMode = 'here' | 'history';
 
 interface PlaySidebarProps {
   here: ReactNode;
+  /** The Guide's NPC cards (#4418): offers, notes, response. Shown above the Here panels. */
+  npcCards?: ReactNode;
   accountId?: number | null;
   onOpenReference?: (ref: {
     kind: string;
@@ -30,6 +32,7 @@ interface PlaySidebarProps {
  */
 export function PlaySidebar({
   here,
+  npcCards,
   accountId,
   onOpenReference,
   mode,
@@ -104,7 +107,10 @@ export function PlaySidebar({
         ref={scrollRef}
         onScroll={handleScroll}
       >
-        <div hidden={mode !== 'here'}>{here}</div>
+        <div hidden={mode !== 'here'}>
+          {npcCards}
+          {here}
+        </div>
         <div hidden={mode !== 'history'}>
           <HistoryNavigator onOpenReference={onOpenReference} />
         </div>

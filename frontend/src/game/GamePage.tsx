@@ -58,6 +58,7 @@ import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActi
 import { NpcOfferCard } from '@/gm/npcs/NpcOfferCard';
 import { NpcNotesCard } from '@/gm/npcs/NpcNotesCard';
 import { NpcResponseCard } from '@/gm/npcs/NpcResponseCard';
+import { pendingNpcResponse } from '@/gm/npcs/pendingNpcResponse';
 import { useNpcOffersQuery } from '@/gm/npcs/queries';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
 import { PlaceBar } from '@/scenes/components/PlaceBar';
@@ -356,20 +357,15 @@ function NpcPlayCards({ activeEntry, interactions, onPoseAs }: NpcPlayCardsProps
   const { data: offers = [] } = useNpcOffersQuery();
   const isNpc = activeEntry?.roster_type === 'NPC';
   const npcPersonaId = isNpc ? actingPersonaId(activeEntry) : null;
-  const pending = useMemo(() => {
-    if (npcPersonaId === null) return null;
-    for (let i = interactions.length - 1; i >= 0; i--) {
-      const row = interactions[i];
-      if (row.persona.id === npcPersonaId) return null;
-      if (row.target_persona_ids.includes(npcPersonaId)) return row;
-    }
-    return null;
-  }, [interactions, npcPersonaId]);
+  const pending = useMemo(
+    () => (npcPersonaId === null ? null : pendingNpcResponse(interactions, npcPersonaId)),
+    [interactions, npcPersonaId]
+  );
 
   if (!activeEntry) return null;
   if (offers.length === 0 && !isNpc) return null;
   return (
-    <div className="space-y-2 p-2">
+    <div className="space-y-2 border-b p-2">
       {offers.map((offer) => (
         <NpcOfferCard key={offer.loan_id} loan={offer} characterId={activeEntry.character_id} />
       ))}
@@ -386,19 +382,11 @@ interface GameCenterProps {
   accountId: number;
   activeCharacter?: string | null;
   gameWindow: ComponentProps<typeof GameWindow>;
-  npcCards: NpcPlayCardsProps;
 }
 
-function GameCenter({
-  sceneId,
-  accountId,
-  activeCharacter,
-  gameWindow,
-  npcCards,
-}: GameCenterProps) {
+function GameCenter({ sceneId, accountId, activeCharacter, gameWindow }: GameCenterProps) {
   return (
     <>
-      <NpcPlayCards {...npcCards} />
       {sceneId && <ConsentPrompt sceneId={sceneId} viewerKey={activeCharacter ?? undefined} />}
       <GameWindow {...gameWindow} draftScopePrefix={`account:${accountId}`} />
       {sceneId && <ActionPanel sceneId={sceneId} viewerKey={activeCharacter ?? undefined} />}
@@ -1116,11 +1104,17 @@ export function GamePage() {
             accountId={account.id}
             activeCharacter={active}
             gameWindow={gameWindowProps}
-            npcCards={{ activeEntry, interactions: allInteractions, onPoseAs: handleReply }}
           />
         }
         sidebar={
           <PlaySidebar
+            npcCards={
+              <NpcPlayCards
+                activeEntry={activeEntry}
+                interactions={allInteractions}
+                onPoseAs={handleReply}
+              />
+            }
             accountId={account?.id}
             mode={sidebarMode}
             onModeChange={setSidebarMode}
