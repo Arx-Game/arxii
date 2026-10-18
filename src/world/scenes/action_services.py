@@ -171,13 +171,15 @@ def _resolve_treatment_request(
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from actions.models.action_templates import ActionTemplate
     from actions.types import PendingActionResolution, StepResult
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType, Consequence
-    from world.checks.types import CheckResult
+    from world.checks.types import CheckResult, ExtraTraitTerm
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
     from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
@@ -1073,6 +1075,7 @@ def _resolve_action_against_persona(
     from actions.constants import ActionCategory  # noqa: PLC0415
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue, get_fatigue_penalty  # noqa: PLC0415
+    from world.magic.services.magic_skills import technique_skill_term  # noqa: PLC0415
     from world.npc_services.social_disposition import (  # noqa: PLC0415
         apply_social_disposition_delta,
     )
@@ -1132,13 +1135,19 @@ def _resolve_action_against_persona(
         # the technique branch's check roll through the shared seam — the plain
         # branch already does this at line 930. Without this, conditions are
         # structurally invisible to technique-enhanced social actions (#2697).
+        #
+        # The template's own check type still rolls; the technique's skill (#4450) rides
+        # along as one extra term on both the modifier collection and the roll.
         tech_check_type = action_template.check_type
+        skill_term = technique_skill_term(character, action_request.technique)
+        technique_terms = (skill_term,) if skill_term is not None else ()
         technique_check_modifiers = 0
         if tech_check_type is not None:
             technique_check_modifiers = collect_check_modifiers(
                 action_request.initiator_persona.character_sheet,
                 tech_check_type,
                 scene=action_request.scene,
+                extra_traits=technique_terms,
             ).total
         result = _resolve_enhanced_action(
             character=character,
@@ -1154,6 +1163,7 @@ def _resolve_action_against_persona(
             strain_commitment=action_request.strain_commitment,
             fury_commitment=action_request.fury_commitment,
             fury_anchor=action_request.fury_anchor,
+            extra_traits=technique_terms,
         )
     else:
         # Plain (non-technique) actions do not use the fury lever; fury is a
@@ -1543,6 +1553,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
+    extra_traits: Sequence[ExtraTraitTerm] = (),
 ) -> EnhancedSceneActionResult:
     """Resolve a technique-enhanced social action via use_technique().
 
@@ -1571,6 +1582,8 @@ def _resolve_enhanced_action(  # noqa: PLR0913
             calculation accounts for the strain.
         fury_commitment: Optional FuryTier the player declared.
         fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
+        extra_traits: Skill terms the action's main check adds (#4450), passed to
+            start_action_resolution. The caller collects the matching modifiers.
 
     Returns:
         EnhancedSceneActionResult with both action_resolution and technique_result.
@@ -1598,6 +1611,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
             context=context,
             extra_modifiers=effort_modifier + extra_modifiers,
             effort_level=effort_level,
+            extra_traits=extra_traits,
         ),
         confirm_soulfray_risk=True,
         strain_commitment=strain_commitment,

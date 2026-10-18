@@ -16,6 +16,7 @@ from actions.models import ActionEnhancement
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.factories import create_social_action_templates
+from world.checks.types import ExtraTraitTerm
 from world.conditions.factories import (
     SoulfrayTemplateFactory,
 )
@@ -33,6 +34,7 @@ from world.magic.factories import (
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneFactory
+from world.skills.factories import SkillFactory
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import CharacterTraitValue, Trait
 
@@ -402,3 +404,78 @@ class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
         # or the pool existed but no matching entry was selected. Either way the action
         # resolved and technique_result is present, confirming the mishap path was reached.
         assert result.action_resolution is not None
+
+
+class TestEnhancedSocialActionTechniqueSkill(SceneMagicTestMixin, TestCase):
+    """A technique-enhanced social action keeps the template check and adds the technique skill.
+
+    The Flirt template's own check type is what rolls; the technique's skill rides along as a
+    single ``ExtraTraitTerm`` on both the modifier collection and the roll (#4450).
+    """
+
+    def _flirt_with(self, technique):
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name=f"Skilled Flirt {technique.pk}",
+            source_type="technique",
+            technique=technique,
+        )
+        sheet = CharacterSheet.objects.get(character=self.initiator.character_sheet.character)
+        CharacterTechniqueFactory(character=sheet, technique=technique)
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="flirt",
+            technique=technique,
+        )
+        request.action_template = self.flirt_template
+        request.save(update_fields=["action_template"])
+
+        from world.checks.services import collect_check_modifiers, perform_check
+
+        rolls: list[dict] = []
+        collected: list[dict] = []
+
+        def spy_roll(character, check_type, *args, **kwargs):
+            rolls.append({"check_type": check_type, **kwargs})
+            return perform_check(character, check_type, *args, **kwargs)
+
+        def spy_collect(sheet, check_type, **kwargs):
+            collected.append({"check_type": check_type, **kwargs})
+            return collect_check_modifiers(sheet, check_type, **kwargs)
+
+        with (
+            patch("actions.services.perform_check", side_effect=spy_roll),
+            patch("world.checks.services.collect_check_modifiers", side_effect=spy_collect),
+        ):
+            respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+        return rolls, collected
+
+    def test_enhanced_social_action_keeps_template_check_adds_technique_term(self) -> None:
+        skill = SkillFactory()
+        technique = TechniqueFactory(
+            name="Skilled Gaze", intensity=3, control=8, anima_cost=2, skill=skill
+        )
+
+        rolls, collected = self._flirt_with(technique)
+
+        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        main = [r for r in rolls if "extra_traits" in r]
+        assert len(main) == 1
+        assert main[0]["check_type"] == self.flirt_template.check_type
+        assert tuple(main[0]["extra_traits"]) == (term,)
+        modifiers = [c for c in collected if c.get("extra_traits")]
+        assert len(modifiers) == 1
+        assert modifiers[0]["check_type"] == self.flirt_template.check_type
+        assert tuple(modifiers[0]["extra_traits"]) == (term,)
+
+    def test_enhanced_social_action_without_a_technique_skill_adds_no_term(self) -> None:
+        technique = TechniqueFactory(name="Plain Gaze", intensity=3, control=8, anima_cost=2)
+
+        rolls, collected = self._flirt_with(technique)
+
+        main = [r for r in rolls if r["check_type"] == self.flirt_template.check_type]
+        assert main
+        assert all(not r.get("extra_traits") for r in main)
+        assert all(not c.get("extra_traits") for c in collected)

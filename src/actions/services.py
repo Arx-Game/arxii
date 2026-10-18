@@ -20,13 +20,15 @@ from world.checks.services import perform_check
 from world.checks.types import PendingResolution, ResolutionContext
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from actions.models import ConsequencePool
     from actions.models.action_templates import ActionTemplate, ActionTemplateGate
     from actions.models.consequence_pools import ConsequencePoolEntry
     from world.checks.models import CheckType
-    from world.checks.types import CheckResult
+    from world.checks.types import CheckResult, ExtraTraitTerm
     from world.mechanics.types import AppliedEffect
 
 
@@ -100,6 +102,7 @@ def start_action_resolution(  # noqa: PLR0913
     *,
     check_type: CheckType | None = None,
     effort_level: str | None = None,
+    extra_traits: Sequence[ExtraTraitTerm] = (),
 ) -> PendingActionResolution:
     """Start an action resolution pipeline and run it to completion or pause.
 
@@ -120,6 +123,10 @@ def start_action_resolution(  # noqa: PLR0913
     bonus double-counts. ``None`` (the default) is byte-identical to before
     #3066. Also drives ``perform_check``'s own check-based development-point
     accrual (#3039). Gates are unaffected, matching ``extra_modifiers``.
+
+    ``extra_traits`` (#4450): skill terms the main check adds at call time, passed to
+    ``perform_check`` and stored on the pending record so a GATED resume rolls the same
+    terms. Gates are unaffected. ``()`` (the default) leaves every roll unchanged.
     """
     pending = PendingActionResolution(
         template_id=template.pk,
@@ -134,6 +141,7 @@ def start_action_resolution(  # noqa: PLR0913
         current_phase=ResolutionPhase.GATE_PENDING,
         extra_modifiers=extra_modifiers,
         effort_level=effort_level,
+        extra_traits=tuple(extra_traits),
     )
 
     if template.pipeline == Pipeline.GATED:
@@ -168,6 +176,7 @@ def start_action_resolution(  # noqa: PLR0913
         extra_modifiers,
         check_type=check_type,
         effort_level=effort_level,
+        extra_traits=extra_traits,
     )
     pending.main_result = main_result
     pending.current_phase = ResolutionPhase.MAIN_RESOLVED
@@ -227,6 +236,7 @@ def _resume_confirmed(
             context,
             pending.extra_modifiers,
             effort_level=pending.effort_level,
+            extra_traits=pending.extra_traits,
         )
         pending.current_phase = ResolutionPhase.MAIN_RESOLVED
 
@@ -310,6 +320,7 @@ def _run_main_step(  # noqa: PLR0913
     *,
     check_type: CheckType | None = None,
     effort_level: str | None = None,
+    extra_traits: Sequence[ExtraTraitTerm] = (),
 ) -> StepResult:
     """Run the main resolution step."""
     check_result = perform_check(
@@ -318,6 +329,7 @@ def _run_main_step(  # noqa: PLR0913
         difficulty,
         extra_modifiers=extra_modifiers,
         effort_level=effort_level,
+        extra_traits=extra_traits,
     )
 
     if template.consequence_pool is None:

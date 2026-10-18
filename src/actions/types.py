@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePoolEntry
     from flows.scene_data_manager import SceneDataManager
     from world.checks.models import CheckType, Consequence
-    from world.checks.types import CheckResult
+    from world.checks.types import CheckResult, ExtraTraitTerm
     from world.mechanics.types import ChallengeResolutionResult
     from world.scenes.action_availability import AvailableEnhancement
     from world.scenes.models import Persona, Scene
@@ -463,6 +463,9 @@ class PendingActionResolution:
     # check-based development-point accrual (#3039). Carried the same way as
     # extra_modifiers so a paused GATED pipeline's resume still applies it.
     effort_level: str | None = None
+    # Skill terms the main check adds at call time (#4450), carried like
+    # extra_modifiers so a paused GATED pipeline's resume rolls the same terms.
+    extra_traits: tuple[ExtraTraitTerm, ...] = ()
 
 
 @dataclass(frozen=True)
