@@ -37,6 +37,7 @@ from world.magic.factories import (
 from world.magic.models.rituals import Ritual
 from world.magic.services.magic_skills import resolve_cast_check
 from world.magic.types.pull import CastPullDeclaration
+from world.progression.seeds import seed_social_engagement_kudos_category
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_services import (
     _resolve_enhanced_action,
@@ -65,6 +66,8 @@ class SceneMagicTestMixin:
     def setUpTestData(cls) -> None:
         super().setUpTestData()  # type: ignore[misc]
 
+        # A PC-on-PC accept accrues good-sport credit, which reads this row (#4418).
+        seed_social_engagement_kudos_category()
         CheckSystemSetupFactory.create()
         templates = create_social_action_templates()
         cls.flirt_template = next(t for t in templates if t.name == "Flirt")
@@ -82,6 +85,11 @@ class SceneMagicTestMixin:
         target_character = cls.target.character_sheet.character
         target_character.db_account = AccountFactory()
         target_character.save(update_fields=["db_account"])
+        # The initiator is a PC too: an unheld initiator reads as a story NPC acting on
+        # a PC, which these PC-on-PC tests do not model (#4418).
+        initiator_character = cls.initiator.character_sheet.character
+        initiator_character.db_account = AccountFactory()
+        initiator_character.save(update_fields=["db_account"])
 
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(

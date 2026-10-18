@@ -23,6 +23,7 @@ from actions.types import PendingActionResolution, StepResult
 from commands.consent import CmdAccept, CmdDeny, CmdIntimidate
 from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.progression.seeds import seed_social_engagement_kudos_category
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.factories import SceneFactory
@@ -72,6 +73,10 @@ class TelnetConsentJourneyTests(TestCase):
         # immediately instead of staying PENDING for CmdAccept/CmdDeny to act on.
         self.target_char.db_account = AccountFactory()
         self.target_char.save(update_fields=["db_account"])
+        # Alice is a player too: an unheld initiator reads as a story NPC, whose
+        # actions on a PC are resist-only, and this journey denies one (#4418).
+        self.initiator_char.db_account = AccountFactory()
+        self.initiator_char.save(update_fields=["db_account"])
         self.initiator_sheet = CharacterSheetFactory(character=self.initiator_char)
         self.target_sheet = CharacterSheetFactory(character=self.target_char)
         self.scene = SceneFactory(is_active=True, room=self.room)
@@ -84,6 +89,8 @@ class TelnetConsentJourneyTests(TestCase):
 
         self.accrue_patcher = patch("world.scenes.action_services.accrue")
         self.accrue_patcher.start()
+        # A PC-on-PC accept accrues good-sport credit, which reads this row (#4418).
+        seed_social_engagement_kudos_category()
         self.addCleanup(self.accrue_patcher.stop)
 
     def _run(self, cmd_cls: type, caller: object, args: str = "") -> object:
