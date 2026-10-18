@@ -73,8 +73,8 @@ or a Guide plays one with an ordinary tenure or an active loan.
   `NPCSection` (identity, description, background, powers, regard, preferences, all)
   and `copy_npc_as_new(source, by, name, as_template)`. Copying keeps the copier as
   owner. `all` carries `notes_for_player` only when `by` owns the source or is staff,
-  so a copy of another GM's listed NPC never has its notes. Copied regard rows are a direct write plus one audit event; PC gauges are
-  never mirrored.
+  so a copy of another GM's listed NPC never has its notes. Copied regard rows are a
+  direct write plus one audit event; PC gauges are never mirrored.
 - `services/npc_placement.py`: `place_npc_in_scene(entry, scene, by)` moves the NPC
   into the scene's room through the real move (hooks run); templates and other GMs'
   NPCs are refused with `NPCPlacementError`.
