@@ -133,7 +133,8 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
         # Budget set just above this observed marginal — a regression here means
         # a new per-declaration query was reintroduced into the modifier stack,
         # scope resolution, or use_technique envelope.
-        per_declaration_budget = 32  # +2: military_unit.save() per STRIKE
+        # +2: military_unit.save() per STRIKE; +1: Path lookup (#4450)
+        per_declaration_budget = 33
         self.assertLess(
             marginal,
             per_declaration_budget,
@@ -287,7 +288,9 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
         # Budget set just above this observed marginal -- a regression here means
         # a new per-declaration query was reintroduced into one of the non-STRIKE
         # resolution paths (#1871).
-        per_declaration_budget = 37  # +2: military_unit.save() per ROUT/RALLY
+        per_declaration_budget = (
+            38  # +2: military_unit.save() per ROUT/RALLY; +1: Path lookup (#4450)
+        )
         self.assertLess(
             marginal,
             per_declaration_budget,

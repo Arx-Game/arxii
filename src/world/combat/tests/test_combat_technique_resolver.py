@@ -827,8 +827,8 @@ class NonAttackPCActionRoutingTests(TestCase):
         call_kwargs = mock_resolve.call_args.kwargs
         self.assertIs(call_kwargs["participant"], participant)
         self.assertIs(call_kwargs["action"], action)
-        # offense_check_type is sourced from the technique's action_template
-        self.assertIs(call_kwargs["offense_check_type"], check_type)
+        # the cast check is sourced from the technique's action_template
+        self.assertIs(call_kwargs["cast_check"].check_type, check_type)
         # outcome is returned cleanly (no exception)
         self.assertIsNotNone(outcome)
 
@@ -881,7 +881,7 @@ class NonAttackPCActionRoutingTests(TestCase):
             _resolve_pc_action(participant=participant, action=action, offense_check_fn=None)
 
         call_kwargs = mock_resolve.call_args.kwargs
-        self.assertIs(call_kwargs["offense_check_type"], catalog_template.check_type)
+        self.assertIs(call_kwargs["cast_check"].check_type, catalog_template.check_type)
 
 
 class ApplyDamageWithProfilesTests(EvenniaTestCase):
