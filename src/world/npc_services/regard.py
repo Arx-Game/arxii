@@ -151,6 +151,70 @@ def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a di
     return event
 
 
+def author_npc_regard(
+    *,
+    holder_persona: Persona,
+    target: Persona | Organization | Society,
+    value: int,
+    reason: str = "",
+) -> NpcRegard:
+    """Set ``holder_persona``'s active regard toward ``target`` to ``value`` (#4418).
+
+    A GM or owner authoring an NPC's opinion, not play moving it. A persona target goes
+    through ``record_npc_regard_event`` as GM manual adjustments (stepped, since one event
+    is capped at ``max_event_delta``); an organization or society target updates or
+    creates the active row directly, clamped to REGARD_MIN/REGARD_MAX.
+    """
+    from world.npc_services.constants import (  # noqa: PLC0415
+        NpcRegardEventReason,
+        RegardTargetType,
+    )
+    from world.npc_services.models import REGARD_MAX, REGARD_MIN, NpcRegard  # noqa: PLC0415
+    from world.scenes.models import Persona as PersonaModel  # noqa: PLC0415
+    from world.societies.models import Organization as OrganizationModel  # noqa: PLC0415
+
+    value = max(REGARD_MIN, min(REGARD_MAX, value))
+    if isinstance(target, PersonaModel):
+        step = get_regard_event_config().max_event_delta
+        current = get_regard(holder_persona, target)
+        while current != value:
+            amount = max(-step, min(step, value - current))
+            record_npc_regard_event(
+                holder_persona=holder_persona,
+                target=target,
+                amount=amount,
+                reason=NpcRegardEventReason.GM_MANUAL_ADJUSTMENT,
+            )
+            current += amount
+        regard = NpcRegard.objects.get(
+            holder_persona=holder_persona, target_persona=target, ended_at__isnull=True
+        )
+        if reason and regard.reason != reason:
+            regard.reason = reason
+            regard.save(update_fields=["reason"])
+        return regard
+
+    if isinstance(target, OrganizationModel):
+        target_type, column = RegardTargetType.ORGANIZATION, "target_organization"
+    else:
+        target_type, column = RegardTargetType.SOCIETY, "target_society"
+    regard, created = NpcRegard.objects.get_or_create(
+        holder_persona=holder_persona,
+        target_type=target_type,
+        ended_at__isnull=True,
+        **{column: target},
+        defaults={"value": value, "reason": reason},
+    )
+    if not created:
+        regard.value = value
+        update_fields = ["value"]
+        if reason:
+            regard.reason = reason
+            update_fields.append("reason")
+        regard.save(update_fields=update_fields)
+    return regard
+
+
 def reconcile_distinction_regard_seeds(character_distinction: CharacterDistinction) -> None:
     """Materialize a CharacterDistinction's DistinctionRegardSeed rows into real state (#2039).
 
