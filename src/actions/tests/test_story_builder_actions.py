@@ -56,8 +56,8 @@ def _gm_actor(db_key: str) -> tuple[ObjectDB, GMProfile]:
     account via ``actor.active_account`` -> ``sheet_data.roster_entry.
     current_tenure.player_data.account`` -- a bare ``char.db_account`` (the
     world_builder staff-test shortcut, which ``StaffOnlyPrerequisite`` reads
-    directly) does not wire that up. Mirrors ``_pc_in_room`` in
-    ``test_gm_adjudication_actions.py``.
+    directly) does not wire that up. Mirrors ``JourneyCase.make_player``
+    (``integration_tests/harness.py``).
     """
     char = CharacterFactory(db_key=db_key)
     CharacterSheetFactory(character=char)

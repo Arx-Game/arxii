@@ -619,7 +619,12 @@ actions, backends, and service functions.
   resolves by pk-or-name, and `reason=` is required — it becomes the token's
   `provenance_note`), `gm condition
   <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]`
-  (`GMApplyConditionAction`). `gm prompts` (#4101) lists the caller's PENDING/NARRATED
+  (`GMApplyConditionAction`). Every player path of `gm check`, `gm award` and `gm condition`
+  (with `remove`) is typed through the handler in
+  `integration_tests/test_refereeing_the_table_journeys.py` (#3657 tranche 7); the
+  hand-built `tests/test_gm_ops_adjudication.py` keeps only `gm dramatic` for the combat
+  group, and a new `gm` subverb gets its lines in that journey module. `gm prompts` (#4101)
+  lists the caller's PENDING/NARRATED
   GM prompts for the scene active where they stand, via `visible_prompts_for_location`,
   the one visibility source the REST queue also reads, so a muted GM or one standing
   outside any scene sees the same thing on both faces. `gm prompt send <id>` narrates
