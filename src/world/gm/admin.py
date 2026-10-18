@@ -18,6 +18,7 @@ from world.gm.models import (
     GMTable,
     GMTableMembership,
     GMWeeklyRewardTracker,
+    GuideProfile,
     ProfileTextRequestDetails,
     SituationDifficultyGuide,
     SituationKind,
@@ -25,6 +26,8 @@ from world.gm.models import (
     StoryRoomGrant,
     TableUpdateRequest,
 )
+from world.roster.constants import NPCLoanStatus
+from world.roster.models import NPCLoan
 
 
 @admin.register(GMProfile)
@@ -33,6 +36,22 @@ class GMProfileAdmin(admin.ModelAdmin):
     list_filter = ["level"]
     raw_id_fields = ["account", "approved_by"]
     search_fields = ["account__username"]
+
+
+@admin.register(GuideProfile)
+class GuideProfileAdmin(admin.ModelAdmin):
+    list_display = ["account", "is_active", "granted_by", "granted_at"]
+    list_filter = ["is_active"]
+    raw_id_fields = ["account", "granted_by"]
+    search_fields = ["account__username"]
+    readonly_fields = ["active_loans"]
+
+    @admin.display(description="Active NPC loans")
+    def active_loans(self, obj: GuideProfile) -> str:
+        """The major NPCs this Guide is playing now (ending one is wired in Task 8)."""
+        loans = NPCLoan.objects.filter(borrower=obj.account, status=NPCLoanStatus.ACTIVE)
+        names = [str(loan.roster_entry) for loan in loans]
+        return ", ".join(names) or "None"
 
 
 @admin.register(AreaBuildGrant)

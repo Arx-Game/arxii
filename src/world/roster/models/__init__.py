@@ -10,6 +10,7 @@ This module is organized into logical groups:
 - mail: PlayerMail model
 - families: Family + the kinship graph (#2062)
 - npc_presets: NPCStatlinePreset + its trait/skill lines (#3427)
+- npc_lending: StoryNPCSettings + NPCLoan, lending a major NPC (#4418)
 """
 
 # Import all models for backward compatibility
@@ -38,6 +39,7 @@ from world.roster.models.families import (
 )
 from world.roster.models.invites import GameInvite, InviteStatus
 from world.roster.models.mail import PlayerMail
+from world.roster.models.npc_lending import NPCLoan, StoryNPCSettings
 from world.roster.models.npc_presets import (
     NPCPresetSkillLine,
     NPCPresetTraitLine,
@@ -64,6 +66,7 @@ __all__ = [
     "KinSlotPool",
     "Kinsperson",
     "KinspersonTraitValue",
+    "NPCLoan",
     "NPCPresetSkillLine",
     "NPCPresetTraitLine",
     "NPCStatlinePreset",
@@ -77,6 +80,7 @@ __all__ = [
     "RosterType",
     "Soul",
     "SoulIncarnation",
+    "StoryNPCSettings",
     "TenureDisplaySettings",
     "TenureMedia",
     "Union",

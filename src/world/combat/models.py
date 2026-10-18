@@ -632,6 +632,14 @@ class CombatOpponent(SharedMemoryModel):
         related_name="combat_opponents",
         help_text="Links to a persistent NPC identity for story NPCs.",
     )
+    voice_persona = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="voiced_opponents",
+        help_text="Who this row poses as in the scene; no combat identity (unlike persona).",
+    )
     portrait = models.ForeignKey(
         "arxii.Media",
         on_delete=models.SET_NULL,

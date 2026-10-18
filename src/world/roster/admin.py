@@ -21,6 +21,7 @@ from world.roster.models import (
     KinSlotPool,
     Kinsperson,
     KinspersonTraitValue,
+    NPCLoan,
     NPCPresetSkillLine,
     NPCPresetTraitLine,
     NPCStatlinePreset,
@@ -32,6 +33,7 @@ from world.roster.models import (
     RosterTenure,
     Soul,
     SoulIncarnation,
+    StoryNPCSettings,
     TenureDisplaySettings,
     TenureMedia,
     Union,
@@ -727,6 +729,20 @@ class NPCStatlinePresetAdmin(admin.ModelAdmin):
     list_display = ["name", "description"]
     search_fields = ["name", "description"]
     inlines = [NPCPresetTraitLineInline, NPCPresetSkillLineInline]
+
+
+@admin.register(StoryNPCSettings)
+class StoryNPCSettingsAdmin(admin.ModelAdmin):
+    list_display = ["roster_entry", "lend_policy", "borrow_audience", "listed_on_npc_roster"]
+    list_filter = ["lend_policy", "borrow_audience", "listed_on_npc_roster", "is_template"]
+    raw_id_fields = ["roster_entry"]
+
+
+@admin.register(NPCLoan)
+class NPCLoanAdmin(admin.ModelAdmin):
+    list_display = ["roster_entry", "borrower", "status", "created_at", "started_at", "ended_at"]
+    list_filter = ["status"]
+    raw_id_fields = ["roster_entry", "borrower", "offered_by", "scene"]
 
 
 @admin.register(UnionKind)

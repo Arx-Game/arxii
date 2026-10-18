@@ -40,6 +40,14 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
         related_name="action_templates",
         help_text="Check type for the main resolution step.",
     )
+    resist_check_type = models.ForeignKey(
+        "arxii.CheckType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="resisted_action_templates",
+        help_text="Check the target rolls to resist this action; blank = no resisting roll.",
+    )
     consequence_pool = models.ForeignKey(
         ConsequencePool,
         on_delete=models.PROTECT,

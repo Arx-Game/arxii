@@ -94,6 +94,35 @@ class GMProfile(SharedMemoryModel):
         return f"GMProfile({self.account.username}, {self.get_level_display()})"
 
 
+class GuideProfile(SharedMemoryModel):
+    """An account staff have named a Guide (#4418).
+
+    A Guide may borrow major NPCs lent to ``gms_and_guides``. One per account;
+    ``is_active`` turns it off without losing who granted it.
+    """
+
+    account = models.OneToOneField(
+        ACCOUNT_DB_MODEL,
+        on_delete=models.CASCADE,
+        related_name="guide_profile",
+    )
+    granted_by = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Staff account that named this account a Guide.",
+    )
+    granted_at = models.DateTimeField(default=timezone.now)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Guide Profile"
+        verbose_name_plural = "Guide Profiles"
+
+    def __str__(self) -> str:
+        return f"GuideProfile({self.account.username})"
+
+
 class AreaBuildGrant(SharedMemoryModel):
     """A GM's build-rights warrant over an area subtree (#3477).
 

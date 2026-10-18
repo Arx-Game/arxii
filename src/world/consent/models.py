@@ -203,6 +203,13 @@ class SocialConsentCategory(NaturalKeyMixin, SharedMemoryModel):
             "its whitelist skips the ask while its blacklist refuses, whatever the mode."
         ),
     )
+    refusable_from_npcs = models.BooleanField(
+        default=False,
+        help_text=(
+            "A player may refuse this kind of action from a played major NPC "
+            "(romantic, for instance). Tick it for the categories a player can say no to."
+        ),
+    )
 
     class Meta:
         ordering = ["display_order", "name"]
