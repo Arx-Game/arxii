@@ -20,6 +20,7 @@ from world.combat.factories import (
 )
 from world.conditions.factories import ConditionTemplateFactory
 from world.mechanics.factories import PropertyFactory
+from world.roster.factories import RosterFactory
 from world.roster.models.choices import RosterType
 from world.standoffs.constants import (
     PROFILE_LOCKED_MESSAGE,
@@ -195,8 +196,8 @@ class PlayersReadAndPressEachOther(JourneyCase):
     def test_a_story_npc_a_gm_holds_needs_no_consent(self) -> None:
         npc = self.make_player("Corporal Vey", room=self.gate)
         entry = npc.sheet_data.roster_entry
-        entry.roster.roster_type = RosterType.NPC
-        entry.roster.save(update_fields=["roster_type"])
+        entry.roster = RosterFactory(roster_type=RosterType.NPC, name="NPCs (journey)")
+        entry.save(update_fields=["roster"])
         self.stand(npc)
         groups = open_standoff(self.encounter)
         self.assertEqual([g.name for g in groups], ["Corporal Vey"])

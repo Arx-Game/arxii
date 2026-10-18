@@ -57,14 +57,14 @@ class CharacterProfileTests(TestCase):
 
     def test_a_gm_may_stand_only_an_opted_in_player(self) -> None:
         self.assertFalse(may_stand_persona(None, self.persona, is_staff=False))
-        self.assertEqual(opted_in_personas(), [])
+        self.assertFalse(opted_in_personas().exists())
         apply_profile_change(self.sheet, ProfileChange.OPT_IN)
         self.assertTrue(may_stand_as_opponent(self.persona))
         self.assertTrue(may_stand_persona(None, self.persona, is_staff=False))
-        self.assertEqual(opted_in_personas(), [self.persona])
+        self.assertEqual(list(opted_in_personas()), [self.persona])
         # An alt face is not a way around it: only the primary persona is offered.
         apply_profile_change(self.sheet, ProfileChange.OPT_OUT)
-        self.assertEqual(opted_in_personas(), [])
+        self.assertFalse(opted_in_personas().exists())
 
     def test_a_drive_must_come_from_the_creature_catalog(self) -> None:
         invented = PropertyFactory(name="Invented (profile)")
@@ -146,3 +146,18 @@ class CharacterProfileTests(TestCase):
         group.save(update_fields=["state"])
         _graded, hits, _targeted = press_grade(group, presser, approach)
         self.assertEqual([(d.property_id, h.strength) for d, h in hits], [(self.greedy.pk, 3)])
+
+    def test_the_picker_leaves_out_a_story_npc_and_a_character_nobody_plays(self) -> None:
+        from world.roster.factories import RosterFactory
+        from world.roster.models.choices import RosterType
+        from world.standoffs.models import CharacterStandoffProfile
+
+        npc = JourneyCase.make_player("Corporal Vey", room=self.maud.location)
+        entry = npc.sheet_data.roster_entry
+        entry.roster = RosterFactory(roster_type=RosterType.NPC, name="NPCs (picker)")
+        entry.save(update_fields=["roster"])
+        unplayed = CombatParticipantFactory().character_sheet
+        for sheet in (npc.sheet_data, unplayed):
+            CharacterStandoffProfile.objects.create(sheet=sheet, opted_in=True)
+        apply_profile_change(self.sheet, ProfileChange.OPT_IN)
+        self.assertEqual(list(opted_in_personas()), [self.persona])

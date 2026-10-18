@@ -364,8 +364,10 @@ class PlacementPersonaViewSet(ReadOnlyModelViewSet):
             return Persona.objects.none()
         # A player character who opted in to being read and pressed may be stood by any
         # GM (#4441).
-        opted_in = Persona.objects.filter(pk__in=[p.pk for p in opted_in_personas()])
-        return (story_npc_personas(story) | opted_in).distinct().order_by("name")
+        return Persona.objects.filter(
+            Q(pk__in=story_npc_personas(story).values("pk"))
+            | Q(pk__in=opted_in_personas().values("pk"))
+        ).order_by("name")
 
     def _story_and_encounter(self) -> tuple[Story | None, CombatEncounter | None]:
         """The story the pick is for, and the encounter it came through (if any)."""

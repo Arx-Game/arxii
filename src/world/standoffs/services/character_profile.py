@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import Q
 
 from world.combat.constants import CauseKind
 from world.scenes.constants import RoundStatus
@@ -43,6 +44,8 @@ from world.standoffs.models import (
 )
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from world.character_sheets.models import CharacterSheet
     from world.mechanics.models import Property
     from world.scenes.models import Persona
@@ -128,16 +131,31 @@ def may_stand_as_opponent(persona: Persona) -> bool:
     return is_standoff_player_character(sheet) and is_opted_in(sheet)
 
 
-def opted_in_personas() -> list[Persona]:
-    """The primary personas of every opted-in character that is still a player character."""
+def opted_in_personas() -> QuerySet[Persona]:
+    """The primary personas of every opted-in character that is still a player character.
+
+    The same test as ``is_standoff_player_character`` (held by an account or puppeted, and not
+    on the NPC shelf) as one query, so a picker never loops over the game's opted-in players.
+    """
+    from world.roster.models.choices import RosterType  # noqa: PLC0415
     from world.scenes.constants import PersonaType  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
-    candidates = Persona.objects.filter(
-        persona_type=PersonaType.PRIMARY,
-        character_sheet__standoff_profile__opted_in=True,
-    ).select_related("character_sheet")
-    return [p for p in candidates if is_standoff_player_character(p.character_sheet)]
+    return (
+        Persona.objects.filter(
+            persona_type=PersonaType.PRIMARY,
+            character_sheet__standoff_profile__opted_in=True,
+        )
+        .exclude(character_sheet__roster_entry__roster__roster_type=RosterType.NPC)
+        .filter(
+            Q(
+                character_sheet__roster_entry__tenures__isnull=False,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+            )
+            | Q(character_sheet__character__db_account__isnull=False)
+        )
+        .distinct()
+    )
 
 
 def target_refusal(persona: Persona | None, actor_sheet: CharacterSheet) -> str | None:

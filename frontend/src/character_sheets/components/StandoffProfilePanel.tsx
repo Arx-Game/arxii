@@ -101,10 +101,6 @@ export function StandoffProfilePanel({ sheetId }: StandoffProfilePanelProps) {
   return (
     <div className="refsheet-stack" data-testid="standoff-profile-panel">
       <Subheading>Standoffs</Subheading>
-      <p className="refsheet-ledger">
-        Other player characters can read and press you in a standoff only while you are opted in.
-        You can change this only while you are not standing in one.
-      </p>
       {data.locked && <p className="refsheet-note">{data.locked_reason}</p>}
       {error && (
         <p className="refsheet-note" style={{ color: 'hsl(var(--destructive))' }}>
