@@ -329,9 +329,10 @@ class Character(ObjectParent, DefaultCharacter):
         the ACTIVE loan's borrower answers here, not the tenure holder: a Guide playing
         a lent NPC never inherits its owner's GM standing, and consent asks, page
         blocks and presence follow the borrower. The loan is read from the holder's
-        ``PlayerData.cached_npc_loans`` (no query once warm; cleared by every
-        ``NPCLoan`` save through ``NPCLoan.related_cache_fields``), and only for an
-        NPC-shelf entry, so ending a loan flips this back at once.
+        ``PlayerData.cached_npc_loans`` (no query once warm), and only for an
+        NPC-shelf entry. Every loan change clears that cache: a save through
+        ``NPCLoan.related_cache_fields``, and the activation, a raw UPDATE, through
+        ``npc_lending._clear_loan_caches``. So ending a loan flips this back at once.
 
         Returns:
             Account | None: The controlling account, if any.

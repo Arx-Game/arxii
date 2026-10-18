@@ -330,23 +330,24 @@ JUST_LENT_MESSAGE = "That NPC was just lent to someone else."
 
 
 def _lock_status(loan: NPCLoan) -> None:
-    """Lock ``loan``'s row and bring its status up to date with the database.
+    """Lock ``loan``'s row and bring its status and times up to date with the database.
 
-    Read as a value, never as an instance: the identity map would hand back the
-    cached object as it was. A concurrent answer or take-back that landed first is
-    then seen here, inside this transaction.
+    Read as values, never as an instance: the identity map would hand back the
+    cached object as it was, and ``refresh_from_db()`` goes through the same map, so
+    it would copy the stale fields back onto themselves. The values read here are
+    assigned onto the cached ``loan``, so a concurrent answer or take-back that
+    landed first is what the caller decides on, inside this transaction.
     """
     fresh = (
         NPCLoan.objects.select_for_update()
         .filter(pk=loan.pk)
-        .values_list("status", flat=True)
+        .values_list("status", "started_at", "ended_at")
         .first()
     )
     if fresh is None:
         msg = "That loan no longer exists."
         raise NPCLendingError(msg)
-    if fresh != loan.status:
-        loan.refresh_from_db()
+    loan.status, loan.started_at, loan.ended_at = fresh
 
 
 def _clear_selection(account: AccountDB | None, entry: RosterEntry) -> None:
@@ -369,7 +370,7 @@ def _activate(loan: NPCLoan) -> None:
     they are ended. The activation itself is written as a raw UPDATE in a savepoint,
     so the cached ``loan`` is only changed once the database has accepted it; a
     competing ACTIVE row the lock could not see becomes a refusal, and every loan
-    touched here is dropped from the identity map because the refusal rolls it back.
+    this ended is dropped from the identity map because the refusal rolls it back.
     """
     others = list(
         NPCLoan.objects.select_for_update()
@@ -387,7 +388,9 @@ def _activate(loan: NPCLoan) -> None:
                 started_at=started_at,
             )
     except IntegrityError:
-        for stale in [*others, loan]:
+        # ``loan`` was never changed in memory (the write did not land); the
+        # others were ended by ``end_loan`` and that end is rolled back with this.
+        for stale in others:
             NPCLoan.flush_cached_instance(stale, force=True)
         raise NPCLendingError(JUST_LENT_MESSAGE) from None
     loan.status = NPCLoanStatus.ACTIVE
