@@ -114,6 +114,14 @@ on every verb, the Assistant GM's mark and credit, a GM's own arc earning nothin
 gate, routing by transition order, a story nobody is in, a group story advancing one table,
 the clock's reuse and the one-beat-per-scene rule, and `declare_stakes`; the covenant journey
 gained `covenant request-gm`, the GM queue, `gm claim` and `covenant withdraw-gm-request`.
+Its fourth step (2026-10-18) rules the consent group: `test_consent_preferences` is removed,
+`test_social_consent_enforcement` keeps only the no-actor branches and the batched sweep's
+query budget, `test_consent_rivals_sweep` only the batched sweep, and
+`test_block_target_exclusion` stays (the target picker's predicate over faces); the
+body-handling journey gained `consent category` for every mode tried against the carry
+(everyone, all-but-blacklist, friends with the owner's friendship counting and the actor's
+not, rivals through `relationship declare` from both sides, the default), `consent off`/`on`,
+and the web's tenure ownership, boolean and ended-tenure refusals.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
