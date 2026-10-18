@@ -20,8 +20,10 @@
  * the payload fixes both halves at once: the server is the gate.
  *
  * Drawn in the Reference Sheet's vocabulary (#3898): subheadings over entries on
- * hairlines, with the rank or tier as the row's tag. The sheet supplies "Standing"
- * above all of it, so nothing here draws a heading at that weight.
+ * hairlines, with the rank or tier as the row's tag. The sheet supplies "Organizations"
+ * (it read "Standing", an avoid-word for reputation) above all of it, so nothing here
+ * draws a heading at that weight. Each reputation row lists up to three reason lines
+ * (#4448), staff-authored per cause, for the owner and staff; never a number.
  */
 
 import { Link } from 'react-router-dom';
@@ -60,6 +62,15 @@ interface Props {
    * how it draws.
    */
   standing: CharacterSheetStanding;
+}
+
+const DOWN_TIERS = new Set(['reviled', 'despised', 'disliked', 'disfavored']);
+const UP_TIERS = new Set(['favored', 'liked', 'honored', 'revered']);
+
+/** Which way a tier leans from Unknown, for the chip's colour. */
+function tierTone(tier: string): 'up' | 'down' | undefined {
+  if (DOWN_TIERS.has(tier)) return 'down';
+  return UP_TIERS.has(tier) ? 'up' : undefined;
 }
 
 export function ReputationTab({
@@ -162,8 +173,16 @@ function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStand
               <Entry
                 key={rep.organization_id}
                 name={<Link to={`/orgs/${rep.organization_id}`}>{rep.organization}</Link>}
-                tags={<Tag accent>{formatTier(rep.tier)}</Tag>}
-              />
+                aside={<Tag tone={tierTone(rep.tier)}>{formatTier(rep.tier)}</Tag>}
+              >
+                {rep.reasons.length > 0 && (
+                  <ul className="refsheet-reasons">
+                    {rep.reasons.map((reason, index) => (
+                      <li key={`${rep.organization_id}-${index}`}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
+              </Entry>
             ))}
           </Entries>
         </Stack>

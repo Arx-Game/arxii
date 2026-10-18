@@ -429,6 +429,37 @@ def _probe_spectacle_reaction_lines() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_reputation_reason_lines() -> ProbeResult:
+    """Every live cause of an organization reputation change has authored reason text (#4448).
+
+    Consumer: `world/societies/reputation_reasons.py` `reason_line`. A cause with no row, or
+    a row with blank text, shows the player the tier and a bracketed placeholder.
+    """
+    from world.societies.constants import (  # noqa: PLC0415
+        LIVE_REASON_LINE_CAUSES,
+        OrganizationReputationCause,
+    )
+    from world.societies.models import OrganizationReputationReasonLine  # noqa: PLC0415
+
+    covered = set(
+        OrganizationReputationReasonLine.objects.exclude(text__regex=r"^\s*$").values_list(
+            "cause", flat=True
+        )
+    )
+    missing = tuple(
+        OrganizationReputationCause(cause).label
+        for cause in LIVE_REASON_LINE_CAUSES
+        if cause not in covered
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        f"No reason line text for: {', '.join(missing)}. The Organizations card and the "
+        "tier-change message show a bracketed placeholder for them."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_path_major_gift_ultimates() -> ProbeResult:
     """Every Path x MAJOR-gift grant carries at least one ultimate (#4098 decision 15).
 
@@ -2044,6 +2075,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_spectacle_reaction_lines),
             admin_model="SpectacleReactionLine",
+        ),
+        ContentDependency(
+            key="reputation-reason-lines",
+            label="Organization reputation reason lines",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/societies/reputation_reasons.py reason_line() (Organizations card)",
+            consequence=(
+                "A player whose standing with an organization moved sees the tier and a "
+                "bracketed placeholder where the reason should read, and the tier-change "
+                "message carries the same placeholder."
+            ),
+            probe=CustomProbe(fn=_probe_reputation_reason_lines),
+            admin_model="OrganizationReputationReasonLine",
         ),
         ContentDependency(
             key="path-major-gift-ultimates",

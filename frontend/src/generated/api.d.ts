@@ -33890,6 +33890,7 @@ export interface components {
       matched_by: string[];
       revealed: boolean;
       source: string;
+      why: string[];
     };
     GMGroupView: {
       group_id: number;

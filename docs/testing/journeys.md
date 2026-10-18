@@ -26,6 +26,7 @@ inventory reports for commands, API routes and frontend routes.
 | Journey | Seam | Covering test |
 |---|---|---|
 | A greeting is heard by the speaker and the room; an unknown line is refused; a typed /switch reaches its command (the harness's own journeys). | handler | `src/integration_tests/test_harness_journeys.py` |
+| An exposed secret makes its victim react: a spy job gone wrong leaves a residue secret naming the target organization, nothing changes until Hobb's `gossip plant` carries it public, then Ysmay's tier with the organization drops, she is told by a RENOWN message, her sheet lists the staff-authored reason line (a bracketed placeholder until authored), and neither the line nor anyone else's sheet names the secret or Hobb (#4448, slice 1 of #4339). | handler + API | `src/integration_tests/test_organization_reputation_journeys.py` |
 | Shaking off a charm: `breakfree` weakens the hold, a second try is refused, `rally` grants the bonus her next attempt carries; nothing to fight says so (#3657 pilot). | handler | `src/integration_tests/test_conditions_journeys.py` |
 | Treating a fever in a scene: `treat` lists candidates, the offer waits, `accept` applies the poultice and the feed shows it; the sheet and the treat panel read the same rows (#3657 pilot). | handler + API | `src/integration_tests/test_conditions_journeys.py` |
 | A GM applies, lists and removes a condition from the panel; a player who is not the GM is refused (#3657 pilot). | dispatch | `src/integration_tests/test_conditions_journeys.py` |

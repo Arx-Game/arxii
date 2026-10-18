@@ -346,6 +346,24 @@ reputation.get_tier()  # Returns ReputationTier enum member
 reputation.get_tier().display_name  # "Favored"
 ```
 
+### OrganizationReputationEvent: why a reputation moved (#4448)
+
+Every change to an organization's reputation of a persona is recorded. `bump_organization_reputation(persona, organization, delta, *, cause, <citation>, scale_gain=True)` is the one writer; in the same transaction as the clamped value change it writes one `OrganizationReputationEvent` (`cause`, the applied `amount`, `tier_before`/`tier_after`, and the citation the cause needs). No event is written when the clamp changes nothing. `clean()` enforces the citation per cause (`NpcRegardEvent`'s shape):
+
+| Cause (`OrganizationReputationCause`) | Cites | Writer |
+|---|---|---|
+| `SECRET_EXPOSED` / `SECRET_REVERSED` | `secret` | `secrets.services._apply_relational_exposure` / `reverse_secret_exposure` |
+| `STAKE_RESOLVED` | `stake_resolution` | `stories.services.stake_resolution._write_faction_standing` |
+| `LEADER_DECLARATION` | `standing_declaration` | `standing_services.declare_standing` (the audit row is created first, `delta_applied` filled after the write) |
+| `CHARACTER_CREATION` | nothing | character creation's questionnaire and enemy seeds |
+| `GANG_TURF` | nothing | `gang_turf.complete_gang_turf` |
+| `STAFF_ADJUSTMENT` | nothing | `OrganizationReputationAdmin.save_model` and the staff estate editor |
+| `DEED_NAMED` / `RELATED_ORGANIZATION` | `legend_entry` or `mission_deed` / `source_event` | slice 2 of #4339 (columns exist, no writer yet) |
+
+`OrganizationReputationAdmin.save_model` routes an edited `value` through the writer as `STAFF_ADJUSTMENT` (no admin edit skips the record); the change history is a read-only inline.
+
+**Reason lines.** `societies/reputation_reasons.py` builds what a player reads: the tier after the change plus staff-authored copy per cause (`OrganizationReputationReasonLine`, one row per cause, tokens `{tier}` `{title}` `{organization}`; a bracketed placeholder until authored; the Required-content panel lists the live causes still unauthored). A leader declaration shows the leader's own public citation. A secret's reason never names the secret or who spread it. The sheet payload carries up to three lines per organization (`standing.reputations[].reasons`) for the owner and staff only; a friend allowed to see the tier gets none. A tier change on a player-run persona sends a RENOWN narrative message (`notifications.notify_reputation_tier_change`), except for a character-creation seed. `explain_leaf_for_staff` adds up to three recent causes to a reputation leaf's staff reason, one per line: the tier line, then "Moved by: ...", then "Earlier: ...". It is read by the Faction Rules page's "Test a character" rail and, since #4448, by the standoff GM panel's "Why" column (`GMFactionRuleView.why`, built in `standoffs/services/gm_view.py`; the panel showed no Why column before).
+
 ### LegendEntry
 
 ```python

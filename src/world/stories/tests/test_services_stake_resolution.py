@@ -776,6 +776,42 @@ class WriterTests(EvenniaTestCase):
         rep = SocietyReputation.objects.get(persona=persona, society=society)
         self.assertEqual(rep.value, 50)
 
+    def test_faction_subject_organization_resolution_records_the_stake_as_cause(self) -> None:
+        from world.societies.constants import OrganizationReputationCause
+        from world.societies.factories import OrganizationFactory
+        from world.societies.models import OrganizationReputationEvent
+        from world.societies.reputation_reasons import reason_lines_by_reputation
+
+        organization = OrganizationFactory()
+        pc_sheet = CharacterSheetFactory()
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(
+            beat=beat,
+            subject_kind=StakeSubjectKind.FACTION,
+            subject_organization=organization,
+        )
+        resolution = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.WIN, subject_standing_delta=-300
+        )
+        progress = StoryProgressFactory(story=beat.episode.chapter.story, character_sheet=pc_sheet)
+
+        record_gm_marked_outcome(progress=progress, beat=beat, outcome=BeatOutcome.SUCCESS)
+
+        (event,) = OrganizationReputationEvent.objects.filter(
+            reputation__persona=pc_sheet.primary_persona
+        )
+        self.assertEqual(event.cause, OrganizationReputationCause.STAKE_RESOLVED)
+        self.assertEqual(event.stake_resolution, resolution)
+        self.assertEqual(event.amount, -300)
+        # The reason names the story the stake sat in, through the staff-authored copy.
+        from world.societies.factories import OrganizationReputationReasonLineFactory
+
+        OrganizationReputationReasonLineFactory(
+            cause=OrganizationReputationCause.STAKE_RESOLVED, text="{tier}, because of {title}"
+        )
+        lines = reason_lines_by_reputation([event.reputation_id])[event.reputation_id]
+        self.assertEqual(lines, [f"Disliked, because of {beat.episode.chapter.story.title}"])
+
     def test_lifecycle_write_on_unheld_npc(self):
         _sheet, beat, progress = _character_story_beat()
         npc_sheet = CharacterSheetFactory()

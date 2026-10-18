@@ -6923,6 +6923,7 @@
   - route_candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
   - legend_entries -> societies.LegendEntry [M2M]
 **Pointed to by:**
+  - organization_reputation_events <- societies.OrganizationReputationEvent
   - encounters <- combat.CombatEncounter
   - reward_lines <- missions.MissionDeedRewardLine
   - queued_rewards <- missions.MissionRewardQueue
@@ -9027,6 +9028,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - enemy_rows <- character_sheets.CharacterEnemy
   - clues <- clues.Clue
+  - organization_reputation_events <- societies.OrganizationReputationEvent
   - distinction <- distinctions.CharacterDistinction
   - accusation_crime_claim <- justice.AccusationCrimeClaim
   - nullification <- justice.AccusationNullification
@@ -9067,6 +9069,7 @@
 
 ### Service Functions
 - `accusation_permitted(*, framer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet') -> 'bool' - Target-side consent gate for a frame-job (#1825) — may *framer* accuse *target*?`
+- `add_secret_victim(secret: 'Secret', *, organization: 'Organization | None' = None, persona: 'Persona | None' = None) -> 'SecretVictim' - Name a victim of ``secret``'s underlying fact: an organization or a persona (#4448).`
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' - Author a Level-1 player-flavor secret (the only tier a player may free-write).`
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', subject_aware: 'bool' = True, author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None, hook: 'Secret | None' = None) -> 'Secret' - Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 - `author_truth(hook: 'Secret', *, content: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, category: 'SecretCategory | None' = None, consequences: 'str' = '') -> 'Secret' - Write the truth under a hook, unknown to its subject until revealed (#4397).`
@@ -9513,6 +9516,7 @@
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - titles <- achievements.PersonaTitle
+  - organization_reputation_events <- societies.OrganizationReputationEvent
   - spread_assist_targets <- societies.SpreadAssistTarget
   - spreads <- societies.LegendSpread
   - deed_stories <- societies.LegendDeedStory
@@ -9790,6 +9794,22 @@
 **Foreign Keys:**
   - persona -> scenes.Persona [FK]
   - organization -> societies.Organization [FK]
+**Pointed to by:**
+  - events <- societies.OrganizationReputationEvent
+
+### OrganizationReputationEvent
+**Foreign Keys:**
+  - reputation -> societies.OrganizationReputation [FK]
+  - legend_entry -> societies.LegendEntry [FK] (nullable)
+  - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
+  - secret -> secrets.Secret [FK] (nullable)
+  - stake_resolution -> stories.StakeResolution [FK] (nullable)
+  - standing_declaration -> societies.StandingDeclaration [FK] (nullable)
+  - source_event -> societies.OrganizationReputationEvent [FK] (nullable)
+**Pointed to by:**
+  - ripple_events <- societies.OrganizationReputationEvent
+
+### OrganizationReputationReasonLine
 
 ### OrganizationType
 **Pointed to by:**
@@ -9914,6 +9934,8 @@
   - target_persona -> scenes.Persona [FK]
   - declared_by_persona -> scenes.Persona [FK]
   - game_week -> game_clock.GameWeek [FK]
+**Pointed to by:**
+  - reputation_events <- societies.OrganizationReputationEvent
 
 ### StatureBand
 **Pointed to by:**
@@ -10401,6 +10423,7 @@
   - stake -> stories.Stake [FK]
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
+  - organization_reputation_events <- societies.OrganizationReputationEvent
   - npc_regard_events <- npc_services.NpcRegardEvent
   - reward_lines <- stories.StakeRewardLine
 

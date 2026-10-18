@@ -488,6 +488,7 @@ class OrgReputationEntry(TypedDict):
     organization_id: int
     organization: str
     tier: str
+    reasons: list[str]  # the newest reason lines (#4448); empty for any viewer but owner/staff
 
 
 class StandingSection(TypedDict):

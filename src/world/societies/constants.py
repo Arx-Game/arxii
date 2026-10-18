@@ -525,3 +525,52 @@ class CrownBidStatus(models.TextChoices):
     OPEN = "open", "Open"
     PASSED = "passed", "Passed"
     FAILED = "failed", "Failed"
+
+
+# ---------------------------------------------------------------------------
+# OrganizationReputationEvent (#4448) - why an organization's reputation moved
+# ---------------------------------------------------------------------------
+
+
+class OrganizationReputationCause(models.TextChoices):
+    """What moved an organization's reputation of a character (#4339).
+
+    Each cause names the citation an event of that cause must carry; the matrix lives on
+    ``OrganizationReputationEvent`` (``_CITATIONS``). Players see the reason line
+    staff author for a cause (``OrganizationReputationReasonLine``), never a number.
+    """
+
+    DEED_NAMED = "deed_named", "Deed named the organization"
+    SECRET_EXPOSED = "secret_exposed", "Secret exposed"
+    SECRET_REVERSED = "secret_reversed", "Secret disproved"
+    STAKE_RESOLVED = "stake_resolved", "Story stake resolved"
+    LEADER_DECLARATION = "leader_declaration", "Leader declaration"
+    CHARACTER_CREATION = "character_creation", "Character creation"
+    GANG_TURF = "gang_turf", "Gang turf"
+    STAFF_ADJUSTMENT = "staff_adjustment", "Staff adjustment"
+    RELATED_ORGANIZATION = "related_organization", "Related organization"
+
+
+#: Causes whose reason line is staff-authored copy (``OrganizationReputationReasonLine``).
+#: A leader declaration shows the leader's own public citation; the rest show the tier only.
+REASON_LINE_CAUSES: tuple[str, ...] = (
+    OrganizationReputationCause.DEED_NAMED,
+    OrganizationReputationCause.SECRET_EXPOSED,
+    OrganizationReputationCause.SECRET_REVERSED,
+    OrganizationReputationCause.STAKE_RESOLVED,
+    OrganizationReputationCause.RELATED_ORGANIZATION,
+)
+
+#: The reason-line causes a writer fires today. The Required-content probe covers these;
+#: ``DEED_NAMED`` and ``RELATED_ORGANIZATION`` join it when slice 2 adds their writers.
+LIVE_REASON_LINE_CAUSES: tuple[str, ...] = (
+    OrganizationReputationCause.SECRET_EXPOSED,
+    OrganizationReputationCause.SECRET_REVERSED,
+    OrganizationReputationCause.STAKE_RESOLVED,
+)
+
+#: What a reason line says until staff author the copy for its cause.
+REASON_LINE_PLACEHOLDER = "[staff-authored reason text]"
+
+#: Reason lines a player sees per organization, and recent causes a GM sees.
+REASON_LINES_SHOWN = 3

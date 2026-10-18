@@ -476,6 +476,7 @@ def _seed_connection_reputation(draft: CharacterDraft, persona: Persona) -> None
     stores no anchor at all, still seeds the right Organization.
     """
     from world.character_creation.questionnaire import DraftAnswers, anchor_for  # noqa: PLC0415
+    from world.societies.constants import OrganizationReputationCause  # noqa: PLC0415
     from world.societies.models import Organization  # noqa: PLC0415
     from world.societies.renown import bump_organization_reputation  # noqa: PLC0415
 
@@ -503,7 +504,13 @@ def _seed_connection_reputation(draft: CharacterDraft, persona: Persona) -> None
         if org is not None:
             # A starting seed is where the character begins, not regard gained in play,
             # so the reputation-gain lever (#4394) leaves it alone.
-            bump_organization_reputation(persona, org, choice.reputation_seed, scale_gain=False)
+            bump_organization_reputation(
+                persona,
+                org,
+                choice.reputation_seed,
+                cause=OrganizationReputationCause.CHARACTER_CREATION,
+                scale_gain=False,
+            )
 
 
 def _write_actor_sheet(
@@ -582,6 +589,7 @@ def _create_enemy(
     from world.character_creation.constants import ENEMY_REPUTATION_SEED  # noqa: PLC0415
     from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
     from world.character_creation.sheet_writers import set_enemy  # noqa: PLC0415
+    from world.societies.constants import OrganizationReputationCause  # noqa: PLC0415
     from world.societies.models import Organization  # noqa: PLC0415
     from world.societies.renown import bump_organization_reputation  # noqa: PLC0415
 
@@ -616,7 +624,11 @@ def _create_enemy(
         sheet.enemy_rows = [*cached_enemy_rows, enemy]
     if org is not None:
         bump_organization_reputation(
-            persona, org, ENEMY_REPUTATION_SEED[resolved.degree], scale_gain=False
+            persona,
+            org,
+            ENEMY_REPUTATION_SEED[resolved.degree],
+            cause=OrganizationReputationCause.CHARACTER_CREATION,
+            scale_gain=False,
         )
 
     _seed_enemy_heat(resolved, org, persona, character)

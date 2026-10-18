@@ -119,7 +119,7 @@ export function TiesPanel({
       </Stack>
       <Stack wide>
         <Stack>
-          <Heading>Standing</Heading>
+          <Heading>Organizations</Heading>
           <ReputationTab
             entryCharacterId={sheetId}
             viewerPersonaId={viewerPersonaId}

@@ -31,7 +31,15 @@ _Avoid_: org category, kind.
 
 **Reputation / ReputationTier**:
 A persona's hidden numeric standing (−1000 to +1000) with a Society or Organization. The raw value is never shown; players see only the named `ReputationTier` (Reviled … Unknown … Revered).
-_Avoid_: standing, favor, rep score.
+_Avoid_: standing, favor, rep score. The player-facing label of a persona's organizations on the sheet is **Organizations** (it read "Standing", #4448).
+
+**Reputation event** (`OrganizationReputationEvent`, #4448):
+One recorded change to a persona's reputation with an organization: the cause (`OrganizationReputationCause`), the amount actually applied, the tier before and after, and a citation of the record that caused it. Written only by `bump_organization_reputation`. Staff see the amount; a player sees a **reason line**, never a number.
+_Avoid_: reputation log entry, standing event.
+
+**Reason line**:
+The one line a player reads for a recorded reputation change: the tier after the change plus staff-authored copy for the cause (`OrganizationReputationReasonLine`). A secret's reason line never names the secret or whoever spread it.
+_Avoid_: explanation, reputation note.
 
 **Principle Axes**:
 The six −5..+5 value axes — mercy, method, status, change, allegiance, power — that define a Society's (or Organization's) moral character; archetype vectors dot-product against them to produce reputation deltas.

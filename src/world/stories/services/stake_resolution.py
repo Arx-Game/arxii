@@ -1222,6 +1222,7 @@ def _write_faction_standing(
     payload validation gate — checks society first, matching how Stake's own
     FACTION-kind serializer validation orders the pair.
     """
+    from world.societies.constants import OrganizationReputationCause  # noqa: PLC0415
     from world.societies.renown import (  # noqa: PLC0415
         bump_organization_reputation,
         bump_society_reputation,
@@ -1243,7 +1244,11 @@ def _write_faction_standing(
     elif stake.subject_organization_id is not None:
         for participant in participants:
             bump_organization_reputation(
-                participant, stake.subject_organization, resolution.subject_standing_delta
+                participant,
+                stake.subject_organization,
+                resolution.subject_standing_delta,
+                cause=OrganizationReputationCause.STAKE_RESOLVED,
+                stake_resolution=resolution,
             )
     else:
         logger.warning(

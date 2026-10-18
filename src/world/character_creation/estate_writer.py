@@ -224,6 +224,7 @@ def set_organization_reputation(
     open-beat re-evaluation (#3570) are the ones every other reputation write runs.
     Replaces, for staff, CG's questionnaire seed, which needs draft answers.
     """
+    from world.societies.constants import OrganizationReputationCause  # noqa: PLC0415
     from world.societies.models import (  # noqa: PLC0415
         REPUTATION_MAX,
         REPUTATION_MIN,
@@ -240,5 +241,7 @@ def set_organization_reputation(
         .values_list("value", flat=True)
         .first()
     ) or 0
-    bump_organization_reputation(persona, organization, value - current)
+    bump_organization_reputation(
+        persona, organization, value - current, cause=OrganizationReputationCause.STAFF_ADJUSTMENT
+    )
     return value

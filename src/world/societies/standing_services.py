@@ -18,6 +18,7 @@ from world.societies.constants import (
     STANDING_DECLARATION_DISFAVOR_DELTA,
     STANDING_DECLARATION_FAVOR_DELTA,
     STANDING_DISFAVOR_CONSENT_CATEGORY_KEY,
+    OrganizationReputationCause,
     StandingDirection,
 )
 from world.societies.exceptions import (
@@ -129,17 +130,26 @@ def declare_standing(
         .first()
         or 0
     )
-    new_value = bump_organization_reputation(target_persona, organization, nominal_delta)
-    # None when the target's reputation-gain lever (#4394) scales a favor to nothing;
-    # is_established_or_primary was checked above and nominal_delta is never zero.
-    applied = 0 if new_value is None else new_value - old_value
-
-    return StandingDeclaration.objects.create(
+    # The audit row is written first so the recorded reputation change can cite it; its
+    # ``delta_applied`` is filled in once the writer has clamped and scaled the change.
+    declaration = StandingDeclaration.objects.create(
         organization=organization,
         target_persona=target_persona,
         declared_by_persona=declared_by_persona,
         direction=direction,
-        delta_applied=applied,
+        delta_applied=0,
         citation=citation,
         game_week=game_week,
     )
+    new_value = bump_organization_reputation(
+        target_persona,
+        organization,
+        nominal_delta,
+        cause=OrganizationReputationCause.LEADER_DECLARATION,
+        standing_declaration=declaration,
+    )
+    # None when the target's reputation-gain lever (#4394) scales a favor to nothing;
+    # is_established_or_primary was checked above and nominal_delta is never zero.
+    declaration.delta_applied = 0 if new_value is None else new_value - old_value
+    declaration.save(update_fields=["delta_applied"])
+    return declaration

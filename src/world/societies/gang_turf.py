@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from world.projects.constants import CompletionMode, ProjectKind
 from world.projects.services import resolve_project
+from world.societies.constants import OrganizationReputationCause
 from world.societies.models import (
     GangTurfDetails,
     GangTurfReputationAward,
@@ -105,7 +106,12 @@ def complete_gang_turf(project: Project, outcome_tier: CheckOutcome | None) -> N
     details = project.gang_turf_details
     delta = _tier_to_reputation_delta(outcome_tier)
     if delta > 0:
-        bump_organization_reputation(project.owner_persona, details.organization, delta)
+        bump_organization_reputation(
+            project.owner_persona,
+            details.organization,
+            delta,
+            cause=OrganizationReputationCause.GANG_TURF,
+        )
     # #2862: reputation was always the trophy — grip is now the ground. A
     # completed tier pushes the target neighborhood's turf state.
     if details.target_area_id is not None and delta > 0:

@@ -17,6 +17,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.npc_services.constants import NpcRegardEventReason
 from world.npc_services.models import NpcRegard
 from world.npc_services.regard import record_npc_regard_event
+from world.societies.constants import OrganizationReputationCause
 from world.societies.factories import OrganizationFactory, SocietyFactory
 from world.societies.models import SocietyReputation
 from world.societies.renown import bump_organization_reputation, bump_society_reputation
@@ -171,7 +172,12 @@ class ReputationReactivityTests(EvenniaTestCase):
             required_standing=100,
         )
 
-        bump_organization_reputation(sheet.primary_persona, organization, 150)
+        bump_organization_reputation(
+            sheet.primary_persona,
+            organization,
+            150,
+            cause=OrganizationReputationCause.STAFF_ADJUSTMENT,
+        )
 
         gated.refresh_from_db()
         self.assertEqual(gated.outcome, BeatOutcome.SUCCESS)
