@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -38,14 +38,19 @@ function lendingLine(row: NpcRow): string {
   return `Owner ${row.owner_name} · ${policy} to ${audience}`;
 }
 
-async function fetchRoster(search: string, lendableToMe: boolean): Promise<NpcRow[]> {
+async function fetchRoster(
+  search: string,
+  lendableToMe: boolean,
+  page: number
+): Promise<NpcRosterPage> {
   const params = new URLSearchParams();
+  if (page > 1) params.set('page', String(page));
   if (search.trim()) params.set('search', search.trim());
   if (lendableToMe) params.set('lendable_to_me', 'true');
   const query = params.toString();
   const res = await apiFetch(`/api/roster/npcs/${query ? `?${query}` : ''}`);
   if (!res.ok) await throwApiError(res, 'Failed to load the NPC roster');
-  return ((await res.json()) as NpcRosterPage).results;
+  return (await res.json()) as NpcRosterPage;
 }
 
 function NpcCard({ row }: { row: NpcRow }) {
@@ -143,10 +148,23 @@ function NpcCard({ row }: { row: NpcRow }) {
 export function NpcRosterPage() {
   const [search, setSearch] = useState('');
   const [lendableToMe, setLendableToMe] = useState(false);
-  const { data, isLoading, isError } = useQuery({
-    queryKey: [...NPC_ROSTER_KEY, search, lendableToMe],
-    queryFn: () => fetchRoster(search, lendableToMe),
-  });
+  const { data, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: [...NPC_ROSTER_KEY, search, lendableToMe],
+      queryFn: ({ pageParam }) => fetchRoster(search, lendableToMe, pageParam),
+      initialPageParam: 1,
+      getNextPageParam: (last, pages) => (last.next ? pages.length + 1 : undefined),
+      retry: false,
+    });
+  const rows = data?.pages.flatMap((p) => p.results);
+
+  if (error && (error as Error & { status?: number }).status === 403) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        You must be a GM or Guide to view this page.
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto max-w-4xl space-y-4 px-4 py-6">
@@ -168,13 +186,22 @@ export function NpcRosterPage() {
         </Button>
       </div>
       {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
-      {isError && <p className="text-sm text-destructive">Couldn't load the NPC roster.</p>}
-      {data && data.length === 0 && <p className="text-sm text-muted-foreground">No NPCs.</p>}
+      {error && <p className="text-sm text-destructive">Couldn't load the NPC roster.</p>}
+      {rows && rows.length === 0 && <p className="text-sm text-muted-foreground">No NPCs.</p>}
       <div className="grid gap-4 md:grid-cols-2">
-        {data?.map((row) => (
+        {rows?.map((row) => (
           <NpcCard key={row.id} row={row} />
         ))}
       </div>
+      {hasNextPage && (
+        <Button
+          variant="outline"
+          disabled={isFetchingNextPage}
+          onClick={() => void fetchNextPage()}
+        >
+          Load more
+        </Button>
+      )}
     </div>
   );
 }

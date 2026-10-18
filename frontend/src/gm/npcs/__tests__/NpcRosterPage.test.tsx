@@ -99,4 +99,29 @@ describe('NpcRosterPage', () => {
       })
     );
   });
+
+  it('shows only a message to an account that is not a GM or Guide', async () => {
+    apiFetch.mockImplementation(() =>
+      Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ detail: 'no' }) })
+    );
+    renderPage();
+    expect(
+      await screen.findByText('You must be a GM or Guide to view this page.')
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Lendable to me' })).not.toBeInTheDocument();
+  });
+
+  it('loads the next page of the roster', async () => {
+    apiFetch.mockImplementation((url: string) =>
+      ok(
+        url.includes('page=2')
+          ? { count: 2, next: null, results: [rows[1]] }
+          : { count: 2, next: 'http://x/?page=2', results: [rows[0]] }
+      )
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Load more' }));
+    expect(await screen.findByText('The Masked Envoy')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+  });
 });
