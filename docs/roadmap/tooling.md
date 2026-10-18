@@ -90,7 +90,19 @@ and a third talks a berserker down with `restore_sense` so the remove-condition 
 journey instead of a mock. The coins journey found `secure` raising after it set the policy
 (the room line was built from an item state with no key; the unit test had patched
 `msg_contents`) and a bare `withdraw coins` falling to the container usage; both fixed in
-place.
+place. Its second step (2026-10-18) rules the scenes group of the actions ledger:
+`test_scene_actions`, `test_round_mode_action`, `test_places_actions` and
+`test_scene_reactions` are removed, `test_round_actions` keeps only the row shapes no
+player path stages (a pass over leftover immediate rows, a DANGER round) and
+`test_scene_checks_actions` only the SENIOR `gm check` regression for the GM adjudication
+group; the scene journeys gained the round's web verbs from an empty room through join,
+pass, leave and end, a round ordered with a mode (owner, non-owner, staff defaults), a knob
+on its own, a staged battle's room opening its own scene, staff granting GM, pacing and
+finishing any scene, every verb typed from nowhere, the check band and invention firewalls,
+a synthesized check for its owner alone, a call outside a scene, decline-then-answer, a
+proposal's required parts, a roster-less reactor and a bare `places join`.
+`test_scene_resolution` is held (its service has no production caller found; the function's
+removal is its own ruling) and `test_round_context` is held for the combat ledger.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

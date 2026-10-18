@@ -7,21 +7,34 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from evennia_extensions.factories import CharacterFactory
 from integration_tests.harness import JourneyCase
+from world.battles.staging import stage_battle
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import CheckCallTargetStatus
 from world.checks.factories import CheckTypeFactory
-from world.checks.models import CheckCall, CheckCallTarget
+from world.checks.models import CheckCall, CheckCallTarget, CheckType
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
-from world.scenes.constants import InteractionMode, ReactionWindowKind, SceneRoundMode
+from world.player_submissions.models import CheckProposal
+from world.scenes.constants import (
+    InteractionMode,
+    ReactionWindowKind,
+    RoundStatus,
+    SceneRoundMode,
+    SceneRoundParticipantStatus,
+)
 from world.scenes.factories import PlaceFactory
 from world.scenes.models import (
     Interaction,
     Scene,
+    SceneActionDeclaration,
     SceneParticipation,
     SceneRound,
+    SceneRoundParticipant,
     WindowReaction,
+    get_scene_round_defaults_config,
 )
 from world.traits.factories import CheckSystemSetupFactory
 
@@ -110,6 +123,32 @@ class RunningAScene(JourneyCase):
         self.assertIn("That account is not an approved GM.", told)
         told = self.telnet(self.bram, "scene gm Hobb")
         self.assertIn("Only the scene's GM or an owner can grant GM status.", told)
+
+    def test_a_staged_battle_does_not_block_a_scene_and_staff_may_run_any(self) -> None:
+        # A staged battle has a backing scene of its own; the room's RP scene is a new one.
+        battle = stage_battle(name="Siege of the Hall", location=self.lantern)
+        told = self.telnet(self.ysmay, "scene start The Lantern Hour")
+        self.assertIn("A scene begins.", told)
+        scene = Scene.objects.get(location_id=self.lantern.pk, is_active=True, battle__isnull=True)
+        self.assertNotEqual(scene.pk, battle.scene_id)
+
+        marrow = self.make_player("Marrow", room=self.lantern)
+        staff = self.account_of(marrow)
+        staff.is_staff = True
+        staff.save(update_fields=["is_staff"])
+        GMProfileFactory(account=self.hobb.db_account)
+        self.assertIn("Hobb is now a GM of this scene.", self.telnet(marrow, "scene gm Hobb"))
+        self.assertEqual(self.web(self.ysmay, "start_round").detail.message, "A round begins.")
+        self.assertIn("Round mode set to open.", self.telnet(marrow, "scene round open"))
+        self.assertIn("The scene comes to a close.", self.telnet(marrow, "scene finish"))
+        self.assertIsNone(active_scene(self.lantern))
+
+    def test_nowhere_is_not_a_room_and_the_street_has_no_scene(self) -> None:
+        self.ysmay.location = None
+        for line in ("scene start", "scene finish", "scene gm Hobb", "scene round open"):
+            self.assertIn("You are not in a room.", self.telnet(self.ysmay, line), line)
+        self.ysmay.location = self.street
+        self.assertIn("There is no active scene here.", self.telnet(self.ysmay, "scene gm Bram"))
 
     def test_the_web_starts_and_finishes_the_same_scene(self) -> None:
         result = self.web(self.ysmay, "start_scene", name="The Lantern Hour")
@@ -206,6 +245,7 @@ class SpeakingInTheRoom(JourneyCase):
 
         self.assertIn("You leave The Hearth.", self.telnet(self.ysmay, "places leave"))
         self.assertIn("You aren't at a place.", self.telnet(self.ysmay, "places leave"))
+        self.assertIn("Join which place?", self.telnet(self.ysmay, "places join"))
 
     def test_the_web_poses_the_same_line(self) -> None:
         result = self.web(self.ysmay, "pose", text="waves.")
@@ -315,6 +355,97 @@ class RollingAtTheTable(JourneyCase):
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertIn("Ysmay attempts Climbing (Hard) and", result.detail.message)
 
+        # The band is a named choice, never a number, and the invention-shaped kwargs
+        # a client might send (a stat, a skill, a pool) change nothing.
+        result = self.web(self.ysmay, "scene_self_check", check_type_ref="Climbing", difficulty=60)
+        self.assertFalse(result.detail.success)
+        self.assertIn("difficulty band", result.detail.message)
+        with ROLL_WELL:
+            result = self.web(
+                self.ysmay,
+                "scene_self_check",
+                check_type_ref="Climbing",
+                difficulty="trivial",
+                stat="strength",
+                skill="athletics",
+                consequence_pool_id=999,
+            )
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertIn("Ysmay attempts Climbing (Trivial) and", result.detail.message)
+
+    def test_a_signature_working_is_hers_alone(self) -> None:
+        # A check synthesized for one character resolves for her and for nobody else,
+        # and a GM's call never reaches it.
+        CheckTypeFactory(name="Ysmay's Signature Working", owner_sheet=self.ysmay.sheet_data)
+        CheckTypeFactory(name="Hobb's Signature Working", owner_sheet=self.hobb.sheet_data)
+        with ROLL_WELL:
+            told = self.telnet(self.ysmay, "check Ysmay's Signature Working at normal")
+        self.assertIn("Ysmay attempts Ysmay's Signature Working (Normal) and", told)
+        self.assertIn(
+            "No such check -- try `check find <term>`.",
+            self.telnet(self.ysmay, "check Hobb's Signature Working at normal"),
+        )
+        GMProfileFactory(account=self.ravenna.db_account, level=GMLevel.JUNIOR)
+        self.assertIn(
+            "No such check -- try `check find <term>`.",
+            self.telnet(self.ravenna, "callcheck Ysmay's Signature Working=Ysmay at normal"),
+        )
+        self.assertFalse(CheckCall.objects.exists())
+
+    def test_a_call_needs_a_scene_and_is_answered_or_declined_once(self) -> None:
+        GMProfileFactory(account=self.ravenna.db_account, level=GMLevel.JUNIOR)
+        street = self.make_room("Lantern Street")
+        self.ravenna.location = street
+        self.hobb.location = street
+        self.assertIn(
+            "You must be running an active scene to call for a check.",
+            self.telnet(self.ravenna, "callcheck Climbing=Hobb at normal"),
+        )
+        self.assertFalse(CheckCall.objects.exists())
+        self.ravenna.location = self.lantern
+        self.hobb.location = self.lantern
+
+        # The web names its targets by id; the call lands the same.
+        result = self.web(
+            self.ravenna,
+            "call_for_check",
+            check_type_ref="Climbing",
+            difficulty="hard",
+            targets=[self.hobb.pk],
+        )
+        self.assertTrue(result.detail.success, result.detail.message)
+        call = CheckCall.objects.get(scene=self.scene)
+        self.assertEqual(CheckCallTarget.objects.filter(call=call).count(), 1)
+        self.assertIn("You decline to roll.", self.telnet(self.hobb, f"check decline {call.pk}"))
+        self.assertIn(
+            "No pending check call found for you.",
+            self.telnet(self.hobb, f"check decline {call.pk}"),
+        )
+        self.assertIn(
+            "No pending check call found for you.",
+            self.telnet(self.hobb, f"check answer {call.pk}"),
+        )
+        self.assertEqual(
+            CheckCallTarget.objects.get(call=call).status, CheckCallTargetStatus.DECLINED
+        )
+
+    def test_a_proposal_needs_its_parts_and_mints_nothing(self) -> None:
+        result = self.web(
+            self.ysmay, "propose_check_type", proposed_name="", intent="", situation_text=""
+        )
+        self.assertFalse(result.detail.success)
+        self.assertIn(
+            "A proposal needs a name, its intent, and the situation it serves.",
+            result.detail.message,
+        )
+        told = self.telnet(
+            self.ysmay, "check propose Haggling=Talk a merchant down from their price"
+        )
+        self.assertIn("Proposal for 'Haggling' sent to staff.", told)
+        proposal = CheckProposal.objects.get(proposed_name="Haggling")
+        self.assertEqual(proposal.submitted_by_account, self.ysmay.db_account)
+        self.assertFalse(CheckType.objects.filter(name="Haggling").exists())
+
 
 class ReactingToAPose(JourneyCase):
     """Hobb poses; Ysmay favorites it, reacts to it and gives it kudos."""
@@ -367,6 +498,18 @@ class ReactingToAPose(JourneyCase):
             "No character named 'Nobody' here.", self.telnet(self.ysmay, "react favorite Nobody #1")
         )
 
+    def test_a_character_off_the_roster_has_nothing_to_react_with(self) -> None:
+        # A staff puppet or a stray body: a sheet but no roster entry and no account.
+        stray = CharacterFactory(db_key="Stray", location=self.lantern)
+        CharacterSheetFactory(character=stray)
+        self.assertIn(
+            "You have no roster entry to favorite with.",
+            self.telnet(stray, "react favorite Hobb #1"),
+        )
+        self.assertIn(
+            "You have no account to react with.", self.telnet(stray, "react emoji Hobb #1 :clap:")
+        )
+
     def test_an_entrance_is_answered_with_one_of_the_posers_resonances(self) -> None:
         # The pose opened its entrance window on its own; the answer names one of
         # Hobb's resonances, so he has to hold one first.
@@ -397,6 +540,76 @@ class PacingTheRoom(JourneyCase):
 
     def current_round(self) -> SceneRound:
         return SceneRound.objects.filter(room=self.lantern.room_profile).order_by("-pk").first()
+
+    def test_the_round_s_doors_open_close_and_a_pass_waits_for_the_round(self) -> None:
+        # These verbs have no telnet face; the web client dispatches them.
+        for key in ("join_round", "pass_round", "end_round", "force_resolve_round"):
+            result = self.web(self.hobb, key)
+            self.assertFalse(result.detail.success, key)
+            self.assertEqual(result.detail.message, "There is no active round here.", key)
+        self.assertEqual(self.web(self.hobb, "leave_round").detail.message, "You leave the round.")
+
+        # Ordering a round's pace needs a scene; a plain round does not, and takes the
+        # staff defaults.
+        result = self.web(self.ysmay, "start_round", mode="strict")
+        self.assertFalse(result.detail.success)
+        self.assertIn(
+            "Only a scene GM/owner can choose the round mode at start (start a scene first).",
+            result.detail.message,
+        )
+        self.assertEqual(self.web(self.ysmay, "start_round").detail.message, "A round begins.")
+        cfg = get_scene_round_defaults_config()
+        rnd = self.current_round()
+        self.assertIsNone(rnd.scene_id)
+        self.assertEqual(
+            (rnd.mode, rnd.advance_quorum_pct, rnd.max_actions_per_round),
+            (cfg.default_mode, cfg.advance_quorum_pct, cfg.max_actions_per_round),
+        )
+        self.assertIn(
+            "Mode ordering needs an active scene here; start one first.",
+            self.telnet(self.ysmay, "scene round open"),
+        )
+
+        result = self.web(self.hobb, "pass_round")
+        self.assertFalse(result.detail.success)
+        self.assertEqual(result.detail.message, "You are not in this round.")
+        self.assertEqual(self.web(self.hobb, "join_round").detail.message, "You join the round.")
+        self.assertEqual(self.web(self.hobb, "pass_round").detail.message, "You pass.")
+        passed = SceneActionDeclaration.objects.get(scene_round=rnd, round_number=1, is_pass=True)
+        self.assertFalse(passed.is_immediate)
+        self.assertEqual(self.web(self.hobb, "leave_round").detail.message, "You leave the round.")
+        # The seat is marked by a queryset update, which the identity map does not see;
+        # read the column.
+        status = SceneRoundParticipant.objects.filter(
+            scene_round=rnd, character_sheet=self.hobb.sheet_data
+        ).values_list("status", flat=True)
+        self.assertEqual(list(status), [SceneRoundParticipantStatus.LEFT])
+        self.assertEqual(self.web(self.ysmay, "end_round").detail.message, "The round ends.")
+        rnd.refresh_from_db()
+        self.assertEqual(rnd.status, RoundStatus.COMPLETED)
+
+    def test_the_owner_opens_the_round_at_her_own_pace(self) -> None:
+        self.telnet(self.ysmay, "scene start The Lantern Hour")
+        self.bram.location = self.lantern
+        result = self.web(self.bram, "start_round", mode="open")
+        self.assertFalse(result.detail.success)
+        self.assertIsNone(self.current_round())
+        result = self.web(self.ysmay, "start_round", mode="strict", advance_quorum_pct=80)
+        self.assertEqual(result.detail.message, "A round begins.")
+        rnd = self.current_round()
+        self.assertEqual((rnd.mode, rnd.advance_quorum_pct), (SceneRoundMode.STRICT, 80))
+        self.assertEqual(rnd.scene_id, active_scene(self.lantern).pk)
+        # A knob on its own, without a mode, is a settings update.
+        result = self.web(self.ysmay, "set_round_mode", advance_quorum_pct=75)
+        self.assertEqual(result.detail.message, "Round settings updated.")
+        rnd.refresh_from_db()
+        self.assertEqual(rnd.advance_quorum_pct, 75)
+        # With nothing declared yet, forcing a resolve has nothing to gather.
+        self.assertEqual(
+            self.web(self.ysmay, "force_resolve_round").detail.message,
+            "You force the round to resolve.",
+        )
+        self.assertIn("The scene comes to a close.", self.telnet(self.ysmay, "scene finish"))
 
     def test_the_owner_sets_the_pace_and_a_declaration_holds_it(self) -> None:
         self.telnet(self.ysmay, "scene start The Lantern Hour")
