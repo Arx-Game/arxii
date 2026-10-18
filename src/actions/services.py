@@ -203,8 +203,9 @@ def start_resisted_action_resolution(  # noqa: PLR0913 - mirrors start_action_re
     ``target_difficulty`` (the NPC's rating, computed by the caller) and the NPC never
     rolls. The PC's outcome is mirrored (``mirrored_outcome``) to the NPC's side, and that
     mirrored result drives the template's own consequence pool, exactly as the NPC's own
-    roll would have. ``effort_level`` and ``extra_modifiers`` are the resister's. Main
-    step only: gates are not run.
+    roll would have. The resister's own unmirrored roll rides on
+    ``main_result.rolled_check_result`` for the wheel. ``effort_level`` and
+    ``extra_modifiers`` are the resister's. Main step only: gates are not run.
     """
     pending = PendingActionResolution(
         template_id=template.pk,
@@ -245,6 +246,8 @@ def start_resisted_action_resolution(  # noqa: PLR0913 - mirrors start_action_re
     pending.main_result = _build_step_result(
         "main", pending_resolution, applied, template.consequence_pool_id
     )
+    # The wheel spins the resister's own roll on their own chart, never the mirror.
+    pending.main_result.rolled_check_result = resist_result
     pending.current_phase = ResolutionPhase.COMPLETE
     return pending
 

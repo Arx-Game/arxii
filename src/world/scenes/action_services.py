@@ -11,6 +11,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
+from actions.constants import ActionCategory, ActionTargetType
 from actions.services import start_action_resolution, start_resisted_action_resolution
 from world.checks.theater import check_outcome_faces, maybe_emit_resolution_theater
 from world.checks.types import ResolutionContext
@@ -338,6 +339,7 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
     technique: Technique | None,
     delivery: str,
     boon: BoonAsk | None,
+    additional_target_personas: list[Persona] | None = None,
 ) -> None:
     """Every refusal that must land BEFORE any row exists.
 
@@ -371,21 +373,11 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
             character_id=initiator_persona.character_sheet_id,
         )
 
-    if (
-        action_template is not None
-        and target_persona is not None
-        and (
-            action_template.resist_check_type_id is None
-            or action_template.consent_category_id is None
-        )
-        and _persona_is_npc(initiator_persona)
-        and not _persona_is_npc(target_persona)
-    ):
-        # #4418: an NPC acting on a PC needs a resisting roll for the PC, and a consent
-        # category to decide whether the PC may refuse. An untagged template (Seduce,
-        # today) must fail closed rather than become a resist-only request.
-        msg = "That action can't be used by an NPC on a player character yet."
-        raise ValidationError(msg)
+    _refuse_untagged_npc_action_on_pc(
+        initiator_persona=initiator_persona,
+        targets=[target_persona, *(additional_target_personas or [])],
+        action_template=action_template,
+    )
 
     if action_template is not None and action_template.settles_allegiance:
         from world.npc_services.allegiance import allegiance_instance_on  # noqa: PLC0415
@@ -416,6 +408,48 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
 
     if delivery == ActionDelivery.TABLE_TALK and _current_place_for(initiator_persona) is None:
         msg = "Table-talk delivery requires you to be at a place."
+        raise ValidationError(msg)
+
+
+def is_contested_social_template(template: ActionTemplate | None) -> bool:
+    """True for a single-target social template, the kind a PC resists from an NPC (#4418).
+
+    The flipped roll and the NPC-on-PC refusal apply only to these. The same scope as
+    the ``npc-resist-checks`` Required-content sentinel (social, single target).
+    """
+    return (
+        template is not None
+        and template.category == ActionCategory.SOCIAL
+        and template.target_type == ActionTargetType.SINGLE
+    )
+
+
+def _refuse_untagged_npc_action_on_pc(
+    *,
+    initiator_persona: Persona,
+    targets: list[Persona | None],
+    action_template: ActionTemplate | None,
+) -> None:
+    """Refuse an NPC's contested social action on any PC when the template is untagged (#4418).
+
+    A PC resists an NPC's action with the template's resist check, and the consent category
+    decides whether they may refuse it. A template missing either (Seduce, today) fails
+    closed rather than becoming a resist-only request. Every PC target is checked, the
+    primary and each additional target alike.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    if not is_contested_social_template(action_template):
+        return
+    if (
+        action_template.resist_check_type_id is not None
+        and action_template.consent_category_id is not None
+    ):
+        return
+    if not _persona_is_npc(initiator_persona):
+        return
+    if any(target is not None and not _persona_is_npc(target) for target in targets):
+        msg = "That action can't be used by an NPC on a player character yet."
         raise ValidationError(msg)
 
 
@@ -559,6 +593,7 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
         technique=technique,
         delivery=delivery,
         boon=boon,
+        additional_target_personas=additional_target_personas,
     )
 
     snapshot_kwargs: dict[str, object] = {}
@@ -726,7 +761,7 @@ def _pc_resists(action_request: SceneActionRequest, target_persona: Persona) -> 
     """
     template = action_request.action_template
     return (
-        template is not None
+        is_contested_social_template(template)
         and template.resist_check_type_id is not None
         and npc_acts_on_pc(action_request, target_persona)
     )
@@ -957,7 +992,7 @@ def request_is_resist_only(
     category = template.consent_category if template is not None else None
     if category is None:
         return True
-    return not any(node.refusable_from_npcs for node in category.ancestor_chain())
+    return not category.is_refusable_from_npcs()
 
 
 def respond_to_action_request(
@@ -1913,6 +1948,7 @@ def _resolution_steps(
     return [
         SimpleNamespace(
             check_result=check_result,
+            rolled_check_result=None,
             consequence_pool_id=None,
             consequence_id=None,
         )
@@ -2003,7 +2039,9 @@ def _schedule_check_outcome_theater(  # noqa: PLR0913 - one keyword per wheel so
 
     def _emit() -> None:
         for step in steps:
-            current_check = step.check_result
+            # #4418: a resisted step spins the resister's own roll, not its mirror;
+            # the pool wheel below still reads the mirrored ``check_result``.
+            current_check = step.rolled_check_result or step.check_result
             chart_faces, chart_selected = check_outcome_faces(current_check)
             if not chart_faces or chart_selected is None:
                 continue

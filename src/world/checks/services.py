@@ -814,19 +814,19 @@ def mirrored_outcome(outcome: "CheckOutcome") -> "CheckOutcome | None":
 
     When a PC resists an NPC's action, the PC's outcome read from the NPC's side: the
     row whose ``success_level`` is the negation of ``outcome``'s. With no exact row, the
-    nearest row on the same side of zero, the milder one on a tie. ``None`` when no row
-    sits on that side (a zero outcome mirrors only to another zero row).
+    nearest row on the same side of zero, the milder one on a tie. A zero outcome mirrors
+    to itself. ``None`` only when no row sits on the mirrored side at all.
     """
+    if outcome.success_level == 0:
+        return outcome
     target = -outcome.success_level
     exact = CheckOutcome.objects.filter(success_level=target).order_by("name").first()
     if exact is not None:
         return exact
     if target > 0:
         candidates = CheckOutcome.objects.filter(success_level__gt=0)
-    elif target < 0:
-        candidates = CheckOutcome.objects.filter(success_level__lt=0)
     else:
-        return None
+        candidates = CheckOutcome.objects.filter(success_level__lt=0)
     return min(
         candidates.order_by("name"),
         key=lambda row: (abs(row.success_level - target), abs(row.success_level)),

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from rest_framework import status
 
+from actions.constants import ActionCategory, ActionTargetType
 from actions.factories import ActionTemplateFactory
 from integration_tests.harness import JourneyCase
 from world.battles.constants import BattleSideRole
@@ -19,8 +21,8 @@ from world.roster.models.choices import RosterType
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import create_action_request
 from world.scenes.factories import SceneFactory
-from world.traits.factories import CheckOutcomeFactory
-from world.traits.models import CheckOutcome
+from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
+from world.traits.models import CheckOutcome, ResultChart
 from world.vitals.constants import POOL_SURROUNDED_TERMINAL_ENEMY
 from world.vitals.factories import ensure_surrounded_content
 
@@ -102,6 +104,8 @@ class AnNpcActsOnAPc(JourneyCase):
         antagonism = SocialConsentCategoryFactory(key="antagonism", name="Antagonism")
         self.deceive = ActionTemplateFactory(
             name="Deceive",
+            category=ActionCategory.SOCIAL,
+            target_type=ActionTargetType.SINGLE,
             check_type=self.persuasion,
             resist_check_type=self.insight,
             consent_category=antagonism,
@@ -111,6 +115,8 @@ class AnNpcActsOnAPc(JourneyCase):
         self.romantic.save()
         self.flirt = ActionTemplateFactory(
             name="Flirt",
+            category=ActionCategory.SOCIAL,
+            target_type=ActionTargetType.SINGLE,
             check_type=self.persuasion,
             resist_check_type=self.insight,
             consent_category=self.romantic,
@@ -237,9 +243,21 @@ class AnNpcActsOnAPc(JourneyCase):
         self.assertEqual(response.json()["detail"], [self.NOT_YET_LINE])
         self.assertEqual(SceneActionRequest.objects.count(), 0)
 
+    def _untagged_seduce(self) -> None:
+        ActionTemplateFactory(
+            name="Seduce",
+            category=ActionCategory.SOCIAL,
+            target_type=ActionTargetType.SINGLE,
+            check_type=self.persuasion,
+            resist_check_type=self.insight,
+            consent_category=None,
+        )
+
     def test_untagged_template_refuses_npc_on_pc(self) -> None:
         ActionTemplateFactory(
             name="Seduce",
+            category=ActionCategory.SOCIAL,
+            target_type=ActionTargetType.SINGLE,
             check_type=self.persuasion,
             resist_check_type=self.insight,
             consent_category=None,
@@ -248,3 +266,56 @@ class AnNpcActsOnAPc(JourneyCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.json()["detail"], [self.NOT_YET_LINE])
         self.assertEqual(SceneActionRequest.objects.count(), 0)
+
+    def test_untagged_template_refuses_a_pc_extra_target(self) -> None:
+        self._untagged_seduce()
+        tam = self.make_player("Tam", room=self.room)
+        tam.sheet_data.roster_entry.move_to_roster(RosterFactory(roster_type=RosterType.NPC))
+        # No social action takes a group over the API yet, so the group is asked for
+        # through the service the API calls.
+        with self.assertRaises(ValidationError) as refused:
+            create_action_request(
+                scene=self.scene,
+                initiator_persona=persona_of(self.hobb),
+                target_persona=persona_of(tam),
+                action_key="seduce",
+                additional_target_personas=[persona_of(self.ysmay)],
+            )
+        self.assertEqual(refused.exception.messages, [self.NOT_YET_LINE])
+        self.assertEqual(SceneActionRequest.objects.count(), 0)
+
+    def test_a_template_that_is_not_contested_keeps_todays_path(self) -> None:
+        ActionTemplateFactory(
+            name="Intimidate",
+            category=ActionCategory.PHYSICAL,
+            target_type=ActionTargetType.SINGLE,
+            check_type=self.persuasion,
+        )
+        body = self._npc_acts("intimidate")
+        self.assertEqual(body["status"], "pending")
+
+    def test_the_wheel_spins_the_pcs_own_roll(self) -> None:
+        setup = CheckSystemSetupFactory.create()
+        ResultChart.clear_cache()
+        self.addCleanup(ResultChart.clear_cache)
+        body = self._npc_acts("deceive")
+        self.watch(self.ysmay)
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            force_check_outcome(setup["outcomes"]["success"]),
+        ):
+            response = self.api(self.account_of(self.ysmay)).post(
+                f"/api/action-requests/{body['id']}/respond/",
+                {"decision": "accept", "resist_effort": "high"},
+                format="json",
+            )
+        main = response.json()["result"]["action_resolution"]["main_result"]
+        self.assertEqual(main["check_outcome"], "Failure")
+        wheels = [
+            kwargs["roulette_result"][1]
+            for _args, kwargs in self.mailbox(self.ysmay).calls
+            if "roulette_result" in kwargs
+        ]
+        self.assertTrue(wheels)
+        selected = [face for face in wheels[0]["consequences"] if face["is_selected"]]
+        self.assertEqual([face["tier_name"] for face in selected], ["Success"])

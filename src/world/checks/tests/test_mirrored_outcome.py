@@ -22,5 +22,6 @@ class MirroredOutcomeTests(TestCase):
         triumph = CheckOutcomeFactory(name="Mirror 3", success_level=3)
         self.assertEqual(mirrored_outcome(triumph).success_level, -2)
 
-    def test_zero_with_no_zero_row_mirrors_to_nothing(self) -> None:
-        self.assertIsNone(mirrored_outcome(CheckOutcomeFactory.build(success_level=0)))
+    def test_zero_mirrors_to_itself(self) -> None:
+        middling = CheckOutcomeFactory(name="Mirror 0", success_level=0)
+        self.assertEqual(mirrored_outcome(middling), middling)
