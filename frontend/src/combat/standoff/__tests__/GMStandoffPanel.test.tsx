@@ -171,7 +171,7 @@ describe('GMStandoffPanel', () => {
     );
     const why = screen.getByTestId('standoff-rule-why');
     const lines = within(why)
-      .getAllByText(/./)
+      .getAllByText(/^(reputation|Moved by|Earlier)/)
       .map((el) => [el.textContent, el.className]);
     expect(lines[0][0]).toContain('Disliked');
     expect(lines[0][1]).not.toContain('text-muted-foreground');

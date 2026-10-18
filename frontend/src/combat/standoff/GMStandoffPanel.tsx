@@ -8,7 +8,7 @@
  * came from (the template, its organization, a parent, a society).
  */
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -273,42 +273,50 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
               <th className="py-1 pr-2 font-medium">Faction rule</th>
               <th className="py-1 pr-2 font-medium">From</th>
               <th className="py-1 pr-2 font-medium">Matches</th>
-              <th className="py-1 pr-2 font-medium">Read</th>
-              <th className="py-1 font-medium">Why</th>
+              <th className="py-1 font-medium">Read</th>
             </tr>
           </thead>
           <tbody>
             {group.faction_rules.map((r) => (
-              <tr key={r.faction_rule_id} className="border-t border-border align-top">
-                <td className="py-1 pr-2">
-                  {r.label}
-                  {CAUSE_EFFECT_WORD[r.cause_effect] && (
-                    <span className="text-muted-foreground">
-                      {' '}
-                      · {CAUSE_EFFECT_WORD[r.cause_effect]}
-                    </span>
-                  )}
-                </td>
-                <td className="py-1 pr-2 text-muted-foreground">{r.source}</td>
-                <td className="py-1 pr-2">
-                  {r.matched_by.length > 0 ? r.matched_by.join(', ') : 'nobody'}
-                </td>
-                <td className="py-1 pr-2">{readLabel(r)}</td>
-                <td className="py-1" data-testid="standoff-rule-why">
-                  {r.why.map((reason, reasonIndex) => (
-                    <div key={reasonIndex}>
-                      {reason.split('\n').map((line, lineIndex) => (
-                        <div
-                          key={lineIndex}
-                          className={lineIndex > 0 ? 'text-muted-foreground' : ''}
-                        >
-                          {line}
+              <Fragment key={r.faction_rule_id}>
+                <tr className="border-t border-border align-top">
+                  <td className="py-1 pr-2">
+                    {r.label}
+                    {CAUSE_EFFECT_WORD[r.cause_effect] && (
+                      <span className="text-muted-foreground">
+                        {' '}
+                        · {CAUSE_EFFECT_WORD[r.cause_effect]}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-1 pr-2 text-muted-foreground">{r.source}</td>
+                  <td className="py-1 pr-2">
+                    {r.matched_by.length > 0 ? r.matched_by.join(', ') : 'nobody'}
+                  </td>
+                  <td className="py-1">{readLabel(r)}</td>
+                </tr>
+                {r.why.length > 0 && (
+                  <tr data-testid="standoff-rule-why">
+                    <td colSpan={4} className="pb-1">
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        Why
+                      </div>
+                      {r.why.map((reason, reasonIndex) => (
+                        <div key={reasonIndex} className="mb-1">
+                          {reason.split('\n').map((line, lineIndex) => (
+                            <div
+                              key={lineIndex}
+                              className={lineIndex > 0 ? 'text-muted-foreground' : ''}
+                            >
+                              {line}
+                            </div>
+                          ))}
                         </div>
                       ))}
-                    </div>
-                  ))}
-                </td>
-              </tr>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
