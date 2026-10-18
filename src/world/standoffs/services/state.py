@@ -73,12 +73,25 @@ def open_standoff(encounter: CombatEncounter) -> list[StandoffGroup]:
     """One OPEN group per named NPC and per creature template among the active opponents.
 
     An opponent standing as a persona is its own group (#4373); the rest group by creature
-    template. An opponent with neither is not part of the standoff. Then check causes.
+    template. An opponent with neither is not part of the standoff, and neither is a player
+    character who has not opted in (#4441). Then check causes.
     """
+    from world.standoffs.services.character_profile import (  # noqa: PLC0415
+        is_opted_in,
+        is_standoff_player_character,
+    )
+
     persona_template: dict[int, int | None] = {}
     template_ids: set[int] = set()
-    for opponent in encounter.opponents.filter(status=OpponentStatus.ACTIVE).order_by("pk"):
+    for opponent in (
+        encounter.opponents.filter(status=OpponentStatus.ACTIVE)
+        .select_related("persona__character_sheet")
+        .order_by("pk")
+    ):
         if opponent.persona_id is not None:
+            sheet = opponent.persona.character_sheet
+            if is_standoff_player_character(sheet) and not is_opted_in(sheet):
+                continue
             persona_template.setdefault(opponent.persona_id, opponent.creature_template_id)
         elif opponent.creature_template_id is not None:
             template_ids.add(opponent.creature_template_id)

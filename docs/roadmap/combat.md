@@ -546,7 +546,15 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   cause is asked again: a paid-off or fed group, or one the party outweighs, leaves; one whose
   reason still holds goes back into the standoff and fires (a GM proposal in a GM-run scene),
   or fights on once the fight has begun. The GM sees each clock; the config page previews the
-  numbers. Slice 5 remains (player-character profiles).
+  numbers. Slice 5 followed (#4441, player-character profiles).
+- **Standoffs slice 5: player characters opt in** - SHIPPED (#4441, ADR-4441-A): a player gives
+  their own character drives and a cause, picked from the same catalogs creatures use (no free
+  text), and opts in to being read and pressed by other player characters. Only an opted-in
+  player character becomes a standoff group when a GM stands them as an opponent, and read,
+  press and terms refuse one that has not opted in, or the character acting on itself. The
+  pressing player still rolls; the target's drives and cause only set the grade. The profile
+  is locked while the character stands in a standoff. Web: a panel on the sheet's Growth tab;
+  telnet `standoff profile`. This completes the #4121 slice cut.
 - **Spectacle breaks morale** - SHIPPED (#4147, ADR-4147, 2026-10-05): an earned display
   shakes the enemies who witness it. Audere entry, an ultimate, a Crossing, a critical
   technique (intensity and success level thresholds) and a devastating action (one action

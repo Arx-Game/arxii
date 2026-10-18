@@ -7681,7 +7681,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
-### Standoffs (#4145, #4354, #4361, #4373, #4415)
+### Standoffs (#4145, #4354, #4361, #4373, #4415, #4441)
 The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
 creatures, presses them with social approaches and names terms that settle them. Derived
 from live (OPEN or PROPOSED) `StandoffGroup` rows, never a stored flag (ADR-4145-A). In a
@@ -7689,7 +7689,9 @@ scene a GM is running, a firing cause becomes a GM proposal (ADR-4354-A). A plac
 edits over its template are stamped on each opponent at spawn (ADR-4361-A). A named NPC is
 its own group, read live from its persona (ADR-4373-A), and verbal approaches and terms pass a
 language gate. Hunger, Hatred and Territory run on each group's clock and on faction rules that
-provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A).
+provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A). A player
+character who opts in, with drives and a cause of their own, can be read and pressed by other
+player characters as a persona group (ADR-4441-A).
 
 - **Models:** `CreatureDrive`, `FactionRule` (was `RegardRule`), `StandoffApproach`,
   `StandoffTerms`, `StandoffConfig` (singleton), `StandoffCauseGloss`, `StandoffGroup`,
@@ -7706,7 +7708,8 @@ provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A
   `resolution_note` (`GMPromptKind.STANDOFF_CAUSE`, a decision kind); `StandoffGroup.persona`;
   `StandoffApproach.is_verbal`; `CreatureTemplate.language`;
   `StandoffConfig.regard_per_band` / `regard_max_bands` / `hunger_margin_step` /
-  `territory_patience`; `StandoffGroup.actions_elapsed`.
+  `territory_patience`; `StandoffGroup.actions_elapsed`; `CharacterStandoffProfile` /
+  `CharacterDrive` (a player character's opt-in, cause and drives).
 - **Key functions:** `open_standoff`, `end_standoff_into_fight`,
   `begin_round_or_break_standoff` (`services/state.py`); `evaluate_causes`,
   `cause_fire_reason`, `cause_fires`, `cause_clock`, `hunger_margin`, `patience_line`,
@@ -7722,7 +7725,9 @@ provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A
   `group_drives`, `group_rules`, `inherited_rules`, `affiliation_rules`, `persona_drives`
   (`services/profile.py`); `member_filter`, `attack_line` (`services/state.py`);
   `group_languages`, `persona_languages`, `language_refusal` (`services/language.py`);
-  `regard_for` (`services/verbs.py`); `story_npc_personas`, `may_stand_persona`
+  `regard_for` (`services/verbs.py`); `apply_profile_change`, `build_profile_view`,
+  `is_standoff_player_character`, `target_refusal`, `is_in_live_standoff`, `drive_catalog`
+  (`services/character_profile.py`); `story_npc_personas`, `may_stand_persona`
   (`world/stories/services/cast.py`);
   predicate leaves `max_org_reputation`, `max_society_standing`, `associated_with_org`,
   `associated_with_society`; `association_with_org` / `association_with_society`
@@ -7730,8 +7735,10 @@ provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A
   `standoff_fight`, `standoff_share_angle` (`services/verbs.py`); `build_standoff_view`
   (`services/view.py`); `social_target_difficulty` (`world/checks/social_target.py`, one
   grade for every social check on a character, ADR-4145-B).
-- **Surfaces:** actions `standoff_*` and `gm_standoff_*` / `gm_open_standoff`, telnet
-  `standoff`, `gm prompt confirm|hold|override`, `gm standoff shake|steady`; `StandoffCard`,
+- **Surfaces:** actions `standoff_*` (incl. `standoff_profile`) and `gm_standoff_*` /
+  `gm_open_standoff`, `/api/character-sheets/<id>/standoff-profile/` and the sheet's
+  `StandoffProfilePanel`, telnet
+  `standoff` (incl. `standoff profile`), `gm prompt confirm|hold|override`, `gm standoff shake|steady`; `StandoffCard`,
   `GMStandoffPanel` and `StandoffSummaryCard` from the encounter detail's `standoff`,
   `gm_standoff` and `standoff_summary` blocks; `PlacementPanel` in the beat dialog and the
   mission studio's option page; `/api/combat/creature-templates/<id>/placement-context/`,

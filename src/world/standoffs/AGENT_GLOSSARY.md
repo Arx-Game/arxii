@@ -79,3 +79,7 @@ _Avoid_: consider (a Consider read is a level-band concept in combat), probe (a 
 **Reaction line (standoff)** (`StandoffReactionLine`):
 Staff-authored room text for how a press or terms roll lands, banded by success level (highest floor at or below the roll wins; a creature-specific line beats a generic one at the same floor). It replaces the plain outcome line for that action.
 _Avoid_: NPC reaction line (`NPCReactionLine` is a different thing: an NPC role's line banded on the served character's allure or menace), flavour text, barks
+
+**Profile** (player character, `CharacterStandoffProfile`, #4441, ADR-4441-A):
+A player's own standoff entry for their character: whether other player characters may read and press them (`opted_in`), a cause and drives picked from the creature catalogs. Only an opted-in player character can be a group. It cannot change while the character stands in a standoff.
+_Avoid_: creature template (shared authored content), flag, consent form
