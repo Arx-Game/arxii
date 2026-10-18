@@ -319,6 +319,7 @@ class ActionRegistryTests(TestCase):
             "standoff_terms",
             "standoff_fight",
             "standoff_share_angle",
+            "standoff_profile",
             "gm_standoff_confirm",
             "gm_standoff_hold",
             "gm_standoff_override",

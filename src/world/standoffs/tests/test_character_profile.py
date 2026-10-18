@@ -10,7 +10,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
     CreatureTemplateFactory,
 )
-from world.mechanics.factories import PropertyFactory
+from world.mechanics.factories import ApplicationFactory, PropertyFactory
 from world.scenes.constants import RoundStatus
 from world.standoffs.constants import (
     PROFILE_LOCKED_MESSAGE,
@@ -19,7 +19,11 @@ from world.standoffs.constants import (
     ProfileChange,
     StandoffGroupState,
 )
-from world.standoffs.factories import CreatureDriveFactory, StandoffGroupFactory
+from world.standoffs.factories import (
+    CreatureDriveFactory,
+    StandoffApproachFactory,
+    StandoffGroupFactory,
+)
 from world.standoffs.services.character_profile import (
     StandoffProfileError,
     apply_profile_change,
@@ -29,6 +33,7 @@ from world.standoffs.services.character_profile import (
     may_stand_as_opponent,
     opted_in_personas,
 )
+from world.standoffs.services.verbs import press_grade
 from world.standoffs.services.view import build_standoff_view
 from world.stories.services.cast import may_stand_persona
 
@@ -119,3 +124,25 @@ class CharacterProfileTests(TestCase):
         npc = CombatParticipantFactory().character_sheet
         with self.assertRaises(StandoffProfileError):
             apply_profile_change(npc, ProfileChange.OPT_IN)
+
+    def test_the_players_drives_ease_the_press_grade_and_nothing_else_rolls(self) -> None:
+        apply_profile_change(self.sheet, ProfileChange.OPT_IN)
+        group = self.stand_in_a_standoff()
+        approach = StandoffApproachFactory()
+        ApplicationFactory(capability=approach.capability, target_property=self.greedy)
+        presser = self.ysmay.sheet_data
+        _graded, bare_hits, _targeted = press_grade(group, presser, approach)
+        self.assertEqual(bare_hits, [])
+        # The profile is locked while she stands in the standoff, so edit between standoffs.
+        group.state = StandoffGroupState.SETTLED
+        group.save(update_fields=["state"])
+        apply_profile_change(
+            self.sheet,
+            ProfileChange.DRIVE,
+            property_id=self.greedy.pk,
+            strength=DriveStrength.DEFINING,
+        )
+        group.state = StandoffGroupState.OPEN
+        group.save(update_fields=["state"])
+        _graded, hits, _targeted = press_grade(group, presser, approach)
+        self.assertEqual([(d.property_id, h.strength) for d, h in hits], [(self.greedy.pk, 3)])
