@@ -26,6 +26,7 @@ import { StatusPanel } from '@/status/components/StatusPanel';
 import { InventorySidebarPanel } from '@/inventory/components/InventorySidebarPanel';
 import { VoyagePanel } from '@/travel/components/VoyagePanel';
 import { actingPersonaId } from '@/roster/persona';
+import type { MyRosterEntry } from '@/roster/types';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -54,6 +55,10 @@ import { normalizeFind } from './feedFind';
 import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
 import { threadToComposerMode, tabKeyToComposerMode } from '@/scenes/hooks/threadToComposerMode';
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
+import { NpcOfferCard } from '@/gm/npcs/NpcOfferCard';
+import { NpcNotesCard } from '@/gm/npcs/NpcNotesCard';
+import { NpcResponseCard } from '@/gm/npcs/NpcResponseCard';
+import { useNpcOffersQuery } from '@/gm/npcs/queries';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
 import { PlaceBar } from '@/scenes/components/PlaceBar';
 import { TavernGameWidget } from '@/scenes/components/TavernGameWidget';
@@ -337,16 +342,63 @@ function useSceneThreadStateSync({
   }, [sceneId, active, allInteractions, ambientInteractions, activeThreadTab, dispatch]);
 }
 
+interface NpcPlayCardsProps {
+  activeEntry: MyRosterEntry | null;
+  interactions: Interaction[];
+  onPoseAs: (interaction: Interaction) => void;
+}
+
+/**
+ * The Guide's play cards (#4418): offers waiting for an answer, the GM's notes for
+ * the NPC being played, and the latest action aimed at that NPC with no reply yet.
+ */
+function NpcPlayCards({ activeEntry, interactions, onPoseAs }: NpcPlayCardsProps) {
+  const { data: offers = [] } = useNpcOffersQuery();
+  const isNpc = activeEntry?.roster_type === 'NPC';
+  const npcPersonaId = isNpc ? actingPersonaId(activeEntry) : null;
+  const pending = useMemo(() => {
+    if (npcPersonaId === null) return null;
+    for (let i = interactions.length - 1; i >= 0; i--) {
+      const row = interactions[i];
+      if (row.persona.id === npcPersonaId) return null;
+      if (row.target_persona_ids.includes(npcPersonaId)) return row;
+    }
+    return null;
+  }, [interactions, npcPersonaId]);
+
+  if (!activeEntry) return null;
+  if (offers.length === 0 && !isNpc) return null;
+  return (
+    <div className="space-y-2 p-2">
+      {offers.map((offer) => (
+        <NpcOfferCard key={offer.loan_id} loan={offer} characterId={activeEntry.character_id} />
+      ))}
+      {isNpc && <NpcNotesCard entry={activeEntry} />}
+      {pending && (
+        <NpcResponseCard interaction={pending} npcName={activeEntry.name} onPoseAs={onPoseAs} />
+      )}
+    </div>
+  );
+}
+
 interface GameCenterProps {
   sceneId?: string;
   accountId: number;
   activeCharacter?: string | null;
   gameWindow: ComponentProps<typeof GameWindow>;
+  npcCards: NpcPlayCardsProps;
 }
 
-function GameCenter({ sceneId, accountId, activeCharacter, gameWindow }: GameCenterProps) {
+function GameCenter({
+  sceneId,
+  accountId,
+  activeCharacter,
+  gameWindow,
+  npcCards,
+}: GameCenterProps) {
   return (
     <>
+      <NpcPlayCards {...npcCards} />
       {sceneId && <ConsentPrompt sceneId={sceneId} viewerKey={activeCharacter ?? undefined} />}
       <GameWindow {...gameWindow} draftScopePrefix={`account:${accountId}`} />
       {sceneId && <ActionPanel sceneId={sceneId} viewerKey={activeCharacter ?? undefined} />}
@@ -1064,6 +1116,7 @@ export function GamePage() {
             accountId={account.id}
             activeCharacter={active}
             gameWindow={gameWindowProps}
+            npcCards={{ activeEntry, interactions: allInteractions, onPoseAs: handleReply }}
           />
         }
         sidebar={

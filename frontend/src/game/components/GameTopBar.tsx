@@ -92,6 +92,19 @@ interface GameTopBarProps {
   onJumpToCombat?: () => void;
 }
 
+/** NPC or CROWD mark for a character the account plays but does not own (#4418). */
+function NpcTag({ entry }: { entry: MyRosterEntry }) {
+  if (entry.roster_type !== 'NPC') return null;
+  return (
+    <span
+      data-testid="npc-tag"
+      className="rounded border px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+    >
+      {entry.is_crowd_voice ? 'CROWD' : 'NPC'}
+    </span>
+  );
+}
+
 function getInitials(name: string): string {
   return name
     .split(' ')
@@ -311,6 +324,7 @@ export function GameTopBar({
                 <AvatarFallback className="text-xs">{getInitials(active)}</AvatarFallback>
               </Avatar>
             </button>
+            <NpcTag entry={activeCharacter} />
             <PersonaSwitcher
               characterSheetId={activeCharacter.character_id}
               activePersonaId={activeCharacter.active_persona_id}
@@ -367,6 +381,7 @@ export function GameTopBar({
                   </AvatarFallback>
                 </Avatar>
                 <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
+                <NpcTag entry={char} />
               </button>
             );
           })}
@@ -383,6 +398,7 @@ export function GameTopBar({
                 <AvatarFallback className="text-xs">{getInitials(char.name)}</AvatarFallback>
               </Avatar>
               <span>{char.name}</span>
+              <NpcTag entry={char} />
             </button>
           ))}
 
