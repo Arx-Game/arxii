@@ -110,6 +110,15 @@ class PlayersReadAndPressEachOther(JourneyCase):
         self.assertIn("Greedy (journey)", [p["label"] for p in body["properties"]])
         self.assertEqual(self.api(self.account_of(self.ysmay)).get(url).status_code, 404)
 
+        # The web action is the same one the telnet line dispatches to.
+        dropped = self.web(
+            self.maud, "standoff_profile", change="drop_drive", property_id=self.greedy.pk
+        )
+        self.assertTrue(dropped.detail.success)
+        refused = self.web(self.maud, "standoff_profile", change="drop_drive")
+        self.assertFalse(refused.detail.success)
+        self.web(self.maud, "standoff_profile", change="drive", property_id=self.greedy.pk)
+
         # A web change goes through the same rule, and a stranger cannot make it.
         response = self.api(self.account_of(self.maud)).post(
             url, {"change": "drop_drive", "property_id": self.greedy.pk}, format="json"

@@ -8,10 +8,11 @@ ADR-4145-B (one difficulty function for social checks on a character), and ADR-4
 standoff proposal is a GM decision prompt, and GM-run is derived), and ADR-4361-A (a
 placement's profile is stamped on each opponent at spawn), and ADR-4373-A (a named NPC's
 group reads its persona live and stamps nothing on it), and ADR-4415-A (a broken hold asks
-the NPC's cause again, and the cause decides). Issue #4145 (missions),
+the NPC's cause again, and the cause decides), and ADR-4441-A (a player character stands as a
+persona group only on opt-in). Issue #4145 (missions),
 #4354 (GM-run scenes), #4361 (placement edits and inherited faction rules), #4373 (named
-NPCs and the language gate), #4415 (Hunger, Hatred, Territory and the broken hold),
-umbrella #4121.
+NPCs and the language gate), #4415 (Hunger, Hatred, Territory and the broken hold), #4441
+(player-character profiles), umbrella #4121.
 Later slices are listed at the end.
 
 ## Lifecycle
@@ -61,6 +62,8 @@ Later slices are listed at the end.
 | `StandoffMoraleRuling` (:586, #4354) | A GM moved a group one morale state: `direction` (SHAKE, STEADY), required `reason`, `ruled_by`. The GM's own record. |
 | `OpponentLineDrive` (#4361) | One placement's drive edit: `beat_line` or `mission_line` (exactly one), `property`, `strength` (blank removes the template's drive). An edit equal to the template's strength is not stored. |
 | `OpponentLineFactionRuleSuppression` (#4361) | One placement switches off one inherited `faction_rule`. Unique per line and rule. |
+| `CharacterStandoffProfile` (#4441) | A player character's own profile: `sheet` (one per sheet), `opted_in` (consent to be read and pressed), `cause` (`CauseKind`). Play state, not authored content. |
+| `CharacterDrive` (#4441) | One drive on a profile: `property` (a `Property` some `CreatureDrive` already carries) and `strength` (`DriveStrength`). Unique per profile and property. |
 
 #4373 also adds `StandoffConfig.regard_per_band` and `regard_max_bands` (how a named NPC's
 regard turns into bands), `CreatureTemplate.language` (the language its creatures understand;
@@ -518,6 +521,44 @@ affiliation brings, and the predicate widget for each rule's test.
   (data only: `suppresses_cause=True` becomes `cause_effect="suppress"`), `0246` (drops
   `suppresses_cause`). Faction rules are authored content; the disposition is restructure.
 
+## Player-character profiles (#4441)
+
+- **Consent and profile** (`services/character_profile.py`, ADR-4441-A). A player gives their own
+  character drives and a cause and opts in to being read and pressed by other player
+  characters. Drives are picked from `drive_catalog()` (the properties some `CreatureDrive`
+  already carries) at a `DriveStrength`; the cause is any `CauseKind`; nothing is free text.
+  `apply_profile_change(sheet, change, ...)` makes one edit (`ProfileChange`: OPT_IN, OPT_OUT,
+  CAUSE, DRIVE, DROP_DRIVE) and raises `StandoffProfileError` (with a `user_message`) when
+  refused. Only a player character has a profile: `is_standoff_player_character` is
+  `is_player_character` minus the NPC shelf, so a story NPC a GM holds stays a named NPC.
+- **The lock.** The profile is read live, so it cannot change (opting out included) while the
+  character stands as a group in a standoff that has not ended (`is_in_live_standoff`: a live
+  group, round zero, encounter not COMPLETED). It unlocks when the group settles, the fight
+  begins or the encounter completes.
+- **Standing a player character.** A scene GM adds an opted-in player character through the
+  ordinary named NPC paths (`AddOpponentAction` with `persona_id`, web `add_opponent`, telnet
+  `encounter addnamed`): `may_stand_persona` also accepts an opted-in player character's
+  persona, and the placement persona picker adds them for the encounter's GMs. `open_standoff`
+  gives an opted-in character its own persona group and skips one that has not opted in.
+- **The gate on the target.** `verbs._refusal` takes the actor's sheet: read, press and terms
+  against a player character's group are refused, with no roll, when the character has not
+  opted in (`REFUSAL_NOT_OPTED_IN`) or is the actor itself (`REFUSAL_SELF_TARGET`). Share does
+  not touch the target. `build_standoff_view` omits a player's own character from their card.
+- **Difficulty.** The pressing player rolls as ever. `group_cause` and `persona_drives` read
+  the profile (none until opted in), so the target's drives ease approaches and unlock terms
+  exactly as a creature's do and the cause is tested like any group's; the grade still comes
+  from `social_target_difficulty` with the character's real Composure and level. A player
+  character's cause fires like any group's, so opting in covers a standoff that ends in a fight
+  with that character in it (a GM-run scene proposes it first).
+- **Surfaces.** Action `standoff_profile` (`kwargs`: `change`, `cause`, `property_id`,
+  `strength`). Telnet `standoff profile` (shows consent, cause, drives, and why it is locked),
+  `standoff profile optin|optout`, `cause <cause>`, `drive <drive> [minor|major|defining]`,
+  `drop <drive>`. Web: `GET/POST /api/character-sheets/<id>/standoff-profile/` (the account
+  playing the character now, by current tenure; a stranger gets 404) and the
+  `StandoffProfilePanel` on the sheet's Growth tab (a consent switch, the cause select and the
+  drive rows; locked with the reason while the character stands in a standoff).
+- **Migration** `0247` (schema only: the two new play-state tables).
+
 ## Later slices
 
 Plan from #4121 (the proposed slice cut there):
@@ -525,7 +566,7 @@ Plan from #4121 (the proposed slice cut there):
 - **Slice 2, placement edits and inheritance:** built in #4361 (sections above).
 - **Slice 3, named NPCs and language:** built in #4373 (section above).
 - **Slice 4, the remaining causes and the broken hold:** built in #4415 (section above).
-- **Slice 5:** opt-in profiles for player characters.
+- **Slice 5:** opt-in profiles for player characters: built in #4441 (section above).
 - **Separately:** resonance from acts via archetype tags. `StandoffApproach.archetypes` and
   `StandoffTerms.archetypes` are stored for it and unread today.
 - **Reaction narration** (deviation 5) has no slice yet.
