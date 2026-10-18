@@ -158,6 +158,7 @@ class FactionRulesPageTests(_Seed):
             ),
             "rules-0-difficulty_shift_bands": "-2",
             "rules-0-drive_shift": "0",
+            "rules-0-cause_effect": "none",
             "rules-0-angle_text": "PLACEHOLDER angle",
             "rules-0-revealed_text": "",
             "rules-1-id": str(self.harbor_rule.pk),
@@ -165,6 +166,7 @@ class FactionRulesPageTests(_Seed):
             "rules-1-rule": "{}",
             "rules-1-difficulty_shift_bands": "0",
             "rules-1-drive_shift": "0",
+            "rules-1-cause_effect": "none",
             "rules-1-DELETE": "on",
             "rules-2-organization": str(self.company.pk),
             "rules-2-rule": (
@@ -173,6 +175,7 @@ class FactionRulesPageTests(_Seed):
             ),
             "rules-2-difficulty_shift_bands": "-1",
             "rules-2-drive_shift": "0",
+            "rules-2-cause_effect": "none",
             "rules-2-angle_text": "PLACEHOLDER enemy angle",
             "save_continue": "Save and continue editing",
         }
@@ -194,6 +197,7 @@ class FactionRulesPageTests(_Seed):
             "rules-0-rule": '{"leaf": "max_org_reputation", "params": {"org": "x", "tier": "?"}}',
             "rules-0-difficulty_shift_bands": "0",
             "rules-0-drive_shift": "0",
+            "rules-0-cause_effect": "none",
             "save": "Save",
         }
         response = self.client.post(self.url(), data)

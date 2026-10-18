@@ -21,15 +21,27 @@ What a kind of creature wants, as a property (for example Greedy) with a `DriveS
 _Avoid_: motive (a Reaction owner's "Enemy reason" owns that word), want, desire
 
 **Cause** (`CreatureTemplate.cause`, `CauseKind`):
-Why a kind of creature picks a fight on its own when nothing else moves it. Predation fires when the party's force does not outweigh the group's by `cause_margin_percent` unless every active participant matches a faction rule that suppresses it. Orders fires the same way, and also on a provocation (a botched press or terms against the group). In a GM-run standoff a firing cause becomes a Proposal; the fight then begins with `initiated_by_pc_side=False`.
+Why a kind of creature picks a fight on its own when nothing else moves it. Predation fires when the party's force does not outweigh the group's by `cause_margin_percent`. Orders fires the same way, and also on a provocation (a botched press or terms against the group). Hunger (#4415) is Predation with the margin widened by `StandoffConfig.hunger_margin_step` for every party action that passed. Hatred (#4415) never fires on force: only a participant matching a faction rule that provokes them sets them off, until the group breaks. Territory (#4415) fires once the party has taken `territory_patience` actions without settling or leaving, and warns the room one action earlier. A matched suppressing rule for every participant stops any cause but a provocation by rule. In a GM-run standoff a firing cause becomes a Proposal; the fight then begins with `initiated_by_pc_side=False`.
 _Avoid_: aggression, hostility flag, motive
+
+**Cause effect** (`FactionRule.cause_effect`, `CauseEffect`, #4415, was `suppresses_cause`):
+What a matched faction rule does to the group's cause: None, Suppress (they will not start the fight while every participant matches one), or Provoke (a participant who matches one sets them off, whatever the force, unless the group is broken). The most specific rule with an effect decides for each character; at one level Provoke beats Suppress.
+_Avoid_: aggro, trigger (a flows term), taunt
+
+**Clock** (`StandoffGroup.actions_elapsed`, #4415):
+The count of party actions (read, press, terms, share) taken while a group stood in the standoff. Hunger's margin and Territory's patience run on it; arrival and GM controls do not move it. The GM view shows it as "Hunger margin N%" or "Patience: N of M actions".
+_Avoid_: timer, turn counter (a standoff has no rounds), patience meter
+
+**Broken-hold re-test** (`retest_cause_on_release`, #4415, ADR-4415-A):
+When a Calm or Charmed hold on an opponent ends (broken, settled or lapsed) in an encounter still running, its cause is asked again. It does not hold: the NPC leaves (FLED). It holds: a settled group re-enters the standoff and its cause fires (a Proposal where a GM runs the scene), or, once the fight is under way, the NPC fights on. Terms a group accepted meet an Orders, Hunger or Territory cause.
+_Avoid_: re-aggro, hostility restart, relapse
 
 **Faction** (#4121):
 How a group views a character, following the character's reputation with an organization or society and their visible association with one, through the group's faction rules. Not which side an opponent fights on (that is Allegiance).
 _Avoid_: allegiance, side
 
 **Faction rule** (`FactionRule`, was Regard rule; renamed #4354):
-How a group stands toward particular characters: a predicate over the acting character's own state (plus a typed `deed_archetype` for deeds they are commonly known for) that can shift difficulty bands, shift a drive's strength, or suppress the cause. It carries an owner-only angle and a revealed text. Owned by a creature template, an organization or a society (#4361); a group carries its template's rules and those inherited through its Affiliation, and where two shift the same thing the most specific owner wins.
+How a group stands toward particular characters: a predicate over the acting character's own state (plus a typed `deed_archetype` for deeds they are commonly known for) that can shift difficulty bands, shift a drive's strength, or suppress or provoke the cause (its Cause effect). It carries an owner-only angle and a revealed text. Owned by a creature template, an organization or a society (#4361); a group carries its template's rules and those inherited through its Affiliation, and where two shift the same thing the most specific owner wins.
 _Avoid_: regard rule (`NpcRegard` is one named NPC's own opinion, a different thing), reaction (Reaction Line and Reaction Economy are other systems), social profile, reputation modifier
 
 **Angle** (`FactionRule.angle_text`, was Spark; renamed #4354):

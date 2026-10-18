@@ -12,11 +12,16 @@ from world.combat.models import OpponentTierTemplate
 from world.combat.morale import OpponentMoraleState, morale_state_for
 from world.covenants.mentorship import effective_combat_level
 from world.standoffs.constants import (
+    LINE_LOSING_PATIENCE,
     LIVE_GROUP_STATES,
+    REASON_HUNGER,
     REASON_OUTWEIGHED,
+    REASON_RULE_PROVOKES,
+    REASON_TERRITORY,
+    REASON_TERRITORY_HELD,
     StandoffGroupState,
 )
-from world.standoffs.services.faction_rules import suppressed_for_all_participants
+from world.standoffs.services.faction_rules import cause_effects
 from world.standoffs.services.profile import group_cause
 from world.standoffs.services.state import (
     active_members,
@@ -26,6 +31,7 @@ from world.standoffs.services.state import (
 from world.stories.services.stakes import LEVELS_PER_TIER
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
     from world.standoffs.models import StandoffConfig, StandoffGroup
 
@@ -131,8 +137,37 @@ def effective_party_force(
     return max(0.0, party_force(encounter, config) * (100 - penalty) / 100)
 
 
-FORCE_CAUSES = frozenset({CauseKind.PREDATION, CauseKind.ORDERS})
+#: Causes a botched press or terms against the group sets off.
 PROVOKED_CAUSES = frozenset({CauseKind.ORDERS})
+
+
+def group_is_broken(group: StandoffGroup) -> bool:
+    """True when every active member's morale is broken (the group as a whole breaks)."""
+    members = active_members(group)
+    return bool(members) and all(
+        morale_state_for(member) == OpponentMoraleState.BREAK for member in members
+    )
+
+
+def hunger_margin(group: StandoffGroup, margin: int, config: StandoffConfig) -> int:
+    """A Hunger group's margin now: its own, widened by each action nobody fed them."""
+    return margin + config.hunger_margin_step * group.actions_elapsed
+
+
+def effective_margin(group: StandoffGroup, cause: str, margin: int, config: StandoffConfig) -> int:
+    """The margin the force test uses now: Hunger's widened one, else the stamped one."""
+    return hunger_margin(group, margin, config) if cause == CauseKind.HUNGER else margin
+
+
+def territory_out_of_patience(group: StandoffGroup, config: StandoffConfig) -> bool:
+    """True once the party has lingered ``territory_patience`` actions."""
+    return group.actions_elapsed >= config.territory_patience
+
+
+def _presented_name(sheet: CharacterSheet) -> str:
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    return active_persona_for_sheet(sheet).name
 
 
 def _override_stands(
@@ -169,36 +204,145 @@ def cause_fire_reason(
     provocation: str = "",
     *,
     lapse_override: bool = True,
+    released: bool = False,
 ) -> str | None:
-    """Why the group's cause fires now, or None when it holds back.
+    """Why the group's cause fires now, or None when it holds back (system text, GM-only).
 
-    Predation fires when the party does not outweigh the group by its margin. Orders fires
-    the same way, and also on ``provocation`` (the reason text of a botched press or terms
-    against this group, passed only on the action that botched). A faction rule that
-    suppresses the cause for every active participant stops either, and a standing GM
-    override stops both until force moves. A read-only caller (the GM view) passes
-    ``lapse_override=False`` so asking never clears an override that force has outgrown.
+    - A participant matching a faction rule that provokes the group sets it off whatever the
+      force, unless the group is broken (any cause but None; the only trigger for Hatred).
+    - Every active participant matching a suppressing rule stops any other trigger.
+    - Predation fires when the party does not outweigh the group by its margin. Orders fires
+      the same way, and also on ``provocation`` (the reason text of a botched press or terms
+      against this group, passed only on the action that botched). Hunger is Predation with
+      the margin widened by ``hunger_margin_step`` for each action that passed
+      (``actions_elapsed``). Territory fires once ``territory_patience`` actions passed, or,
+      when ``released`` (a hold on a member ended outside the standoff's count), at once.
+    - A standing GM override stops all of it until force moves. A read-only caller (the GM
+      view) passes ``lapse_override=False`` so asking never clears an override that force
+      has outgrown.
     """
     cause, margin = group_cause(group)
-    if cause not in FORCE_CAUSES:
+    if cause == CauseKind.NONE:
         return None
     party = effective_party_force(group.encounter, group, config)
     theirs = group_force(group, config)
     if _override_stands(group, party, theirs, lapse=lapse_override):
         return None
-    reason = None
-    if provocation and cause in PROVOKED_CAUSES:
-        reason = provocation
-    elif party * 100 <= theirs * (100 + margin):
-        reason = REASON_OUTWEIGHED
-    if reason is None or suppressed_for_all_participants(group):
+    effects = cause_effects(group)
+    if effects.provoked_by is not None and not group_is_broken(group):
+        return REASON_RULE_PROVOKES.format(name=_presented_name(effects.provoked_by))
+    if effects.suppressed or cause == CauseKind.HATRED:
         return None
-    return reason
+    if provocation and cause in PROVOKED_CAUSES:
+        return provocation
+    if cause == CauseKind.TERRITORY:
+        return _territory_reason(group, config, released=released)
+    return _force_reason(group, cause, margin, (party, theirs), config)
+
+
+def _territory_reason(
+    group: StandoffGroup, config: StandoffConfig, *, released: bool
+) -> str | None:
+    if released:
+        return REASON_TERRITORY_HELD
+    if territory_out_of_patience(group, config):
+        return REASON_TERRITORY.format(count=group.actions_elapsed)
+    return None
+
+
+def _force_reason(
+    group: StandoffGroup,
+    cause: str,
+    margin: int,
+    forces: tuple[float, float],
+    config: StandoffConfig,
+) -> str | None:
+    """The force test: fires when the party does not outweigh them by the margin.
+
+    ``forces`` is (effective party force, group force). Hunger's margin widens with every
+    action that passed.
+    """
+    party, theirs = forces
+    widened = effective_margin(group, cause, margin, config)
+    if party * 100 > theirs * (100 + widened):
+        return None
+    return REASON_HUNGER.format(margin=widened) if widened != margin else REASON_OUTWEIGHED
+
+
+def cause_clock(group: StandoffGroup, config: StandoffConfig) -> str:
+    """Where a Hunger or Territory group's clock stands, for the GM; "" for other causes."""
+    cause, margin = group_cause(group)
+    if cause == CauseKind.HUNGER:
+        return (
+            f"Hunger margin {hunger_margin(group, margin, config)}%, widening "
+            f"{config.hunger_margin_step} each action nobody feeds them."
+        )
+    if cause == CauseKind.TERRITORY:
+        return f"Patience: {group.actions_elapsed} of {config.territory_patience} actions."
+    return ""
 
 
 def cause_fires(group: StandoffGroup, config: StandoffConfig, provocation: str = "") -> bool:
     """True when the group's cause fires now (see ``cause_fire_reason``)."""
     return cause_fire_reason(group, config, provocation) is not None
+
+
+def _count_action(
+    encounter: CombatEncounter, config: StandoffConfig, sink: list[str] | None
+) -> None:
+    """One party action passed: every live group's clock moves on.
+
+    A Territory group one action short of its patience says so to the room (into ``sink``
+    when the caller sends the lines itself, else after commit), unless its faction rules
+    keep it from starting the fight against this party.
+    """
+    for group in encounter.standoff_groups.filter(state__in=LIVE_GROUP_STATES):
+        group.actions_elapsed += 1
+        group.save(update_fields=["actions_elapsed"])
+        cause, _ = group_cause(group)
+        if (
+            cause == CauseKind.TERRITORY
+            and group.actions_elapsed == config.territory_patience - 1
+            and not cause_effects(group).suppressed
+        ):
+            _send_line(encounter, patience_line(group), sink)
+
+
+def patience_line(group: StandoffGroup) -> str:
+    """The room line one action before a Territory group fires.
+
+    "The Wolves are losing patience." for a template group, "Maud Carrow is ..." for one NPC.
+    """
+    referent = group.referent
+    verb = "is" if group.persona_id is not None else "are"
+    return LINE_LOSING_PATIENCE.format(referent=f"{referent[0].upper()}{referent[1:]}", verb=verb)
+
+
+def _send_line(encounter: CombatEncounter, line: str, sink: list[str] | None) -> None:
+    if sink is not None:
+        sink.append(line)
+        return
+    from functools import partial  # noqa: PLC0415
+
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    transaction.on_commit(
+        partial(broadcast_action_outcome, encounter=encounter, narration=line, deliver_telnet=True)
+    )
+
+
+def _completed_by_settling(encounter: CombatEncounter) -> bool:
+    """Settle empty groups; when none is left unsettled, complete the standoff. True then."""
+    if not settle_empty_groups(encounter):
+        return False
+    if encounter.standoff_groups.exclude(state=StandoffGroupState.SETTLED).exists():
+        return False
+    from world.standoffs.services.routing import complete_standoff  # noqa: PLC0415
+
+    complete_standoff(encounter)
+    return True
 
 
 def evaluate_causes(
@@ -207,6 +351,7 @@ def evaluate_causes(
     *,
     provoked: StandoffGroup | None = None,
     provocation: str = "",
+    after_action: bool = False,
 ) -> bool:
     """Settle empty groups, then test every live group's cause.
 
@@ -217,8 +362,10 @@ def evaluate_causes(
     slice 1). In a GM-run standoff it becomes a proposal instead: the group goes PROPOSED
     and the GM gets a prompt; a group already PROPOSED just has its reason restated.
     ``provoked`` and ``provocation`` name the group a botch landed on this action and why.
-    ``attack_sink`` is handed to ``end_standoff_into_fight`` (see there). True when the
-    fight began.
+    ``attack_sink`` collects the room lines testing the causes produced, in order: a
+    Territory group's warning, then the attack line from ``end_standoff_into_fight`` (see
+    there). ``after_action`` is True when a party action (read, press, terms, share) called
+    this: every live group's clock moves on first (#4415). True when the fight began.
     """
     from world.standoffs.models import StandoffConfig  # noqa: PLC0415
     from world.standoffs.services.proposals import (  # noqa: PLC0415
@@ -227,15 +374,11 @@ def evaluate_causes(
         standoff_is_gm_run,
     )
 
-    if (
-        settle_empty_groups(encounter)
-        and not encounter.standoff_groups.exclude(state=StandoffGroupState.SETTLED).exists()
-    ):
-        from world.standoffs.services.routing import complete_standoff  # noqa: PLC0415
-
-        complete_standoff(encounter)
+    if _completed_by_settling(encounter):
         return False
     config = StandoffConfig.load()
+    if after_action:
+        _count_action(encounter, config, attack_sink)
     gm_run: bool | None = None
     for group in encounter.standoff_groups.filter(state__in=LIVE_GROUP_STATES).select_related(
         "creature_template", "persona"

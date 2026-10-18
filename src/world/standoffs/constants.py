@@ -28,6 +28,19 @@ class RevealKind(models.TextChoices):
     FACTION_RULE = "faction_rule", "Faction rule"
 
 
+class CauseEffect(models.TextChoices):
+    """What a matched faction rule does to a group's cause (#4415).
+
+    SUPPRESS: the group will not start the fight while every active participant matches a
+    suppressing rule. PROVOKE: a participant who matches one sets the group off, whatever
+    the force, unless the group is broken.
+    """
+
+    NONE = "none", "None"
+    SUPPRESS = "suppress", "Suppress"
+    PROVOKE = "provoke", "Provoke"
+
+
 class TermsEffect(models.TextChoices):
     """What a successful set of terms does to a group."""
 
@@ -61,6 +74,12 @@ class ProposalResolution(models.TextChoices):
 REASON_OUTWEIGHED = "The party does not outweigh them by their margin."
 REASON_PROVOKED_PRESS = "Critical failure on a press (counts as a provocation)."
 REASON_PROVOKED_TERMS = "Critical failure on terms (counts as a provocation)."
+# #4415: the remaining causes and the re-test when a hold on an opponent ends.
+REASON_HUNGER = "The party does not outweigh them by their margin, widened by hunger to {margin}%."
+REASON_RULE_PROVOKES = "{name} matches a faction rule that provokes them."
+REASON_TERRITORY = "They waited {count} actions for the party to settle or leave."
+REASON_TERRITORY_HELD = "The party is still in their ground."
+REASON_RELEASED = "A hold on them ended and their cause still holds: {reason}"
 
 # The five check tiers, by ``success_level``, as one plain word each.
 SUCCESS_LEVEL_WORDS: dict[int, str] = {
@@ -72,6 +91,10 @@ SUCCESS_LEVEL_WORDS: dict[int, str] = {
 }
 
 FIGHT_BEGINS_MESSAGE = "The fight begins."
+
+# System strings: room lines from the remaining causes and the broken-hold re-test (#4415).
+LINE_LOSING_PATIENCE = "{referent} {verb} losing patience."
+LINE_RELEASED_LEAVES = "{name} leaves."
 
 # System strings: why the language gate refuses a verbal approach or terms (#4373).
 REFUSAL_NO_LANGUAGE = "They have no language to answer in."

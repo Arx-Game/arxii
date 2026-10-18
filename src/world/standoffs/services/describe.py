@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from world.character_sheets.models import CharacterSheet
-    from world.standoffs.models import StandoffGroup, StandoffReveal
+    from world.standoffs.models import StandoffConfig, StandoffGroup, StandoffReveal
 
 HIDDEN_FACTION_RULE_LINE = "Something about one of you matters to them."
 
@@ -76,3 +76,27 @@ def _describe_reveal(
             return rule.revealed_text or HIDDEN_FACTION_RULE_LINE
         return HIDDEN_FACTION_RULE_LINE
     return None
+
+
+#: How many actions the config preview walks a Hunger group through.
+PREVIEW_HUNGER_ACTIONS = 3
+
+
+def config_preview(config: StandoffConfig) -> list[str]:
+    """What the cause numbers do over a few actions, in plain words (the config admin rail)."""
+    step = config.hunger_margin_step
+    widened = step * PREVIEW_HUNGER_ACTIONS
+    patience = config.territory_patience
+    territory = f"A Territory group fires after action {patience}."
+    if patience > 1:
+        territory = (
+            f"A Territory group warns after action {patience - 1}, fires after action {patience}."
+        )
+    return [
+        (
+            "A Hunger group with margin 0 needs the party to outweigh it now; after "
+            f"{PREVIEW_HUNGER_ACTIONS} unfed actions, by {widened} percent."
+        ),
+        territory,
+        "Listed on Game Tuning as Required content.",
+    ]

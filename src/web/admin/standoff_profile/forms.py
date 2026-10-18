@@ -33,7 +33,10 @@ class StandoffProfileForm(forms.ModelForm):
             "cause": (
                 "Why they would start a fight on their own. Predation: they hunt the weak. "
                 "Orders: they hold what they were told to hold, and fire when provoked or "
-                "outmatched."
+                "outmatched. Hunger: as Predation, but every action nobody feeds them widens "
+                "the margin. Hatred: only a character matching a faction rule that provokes "
+                "them sets them off, whatever the force, until they break. Territory: they "
+                "fire once the party lingers too many actions without settling or leaving."
             ),
             "cause_margin_percent": (
                 "How much stronger the party must look before they hold back. 10 means the "
@@ -66,7 +69,7 @@ class FactionRuleForm(forms.ModelForm):
             "difficulty_shift_bands",
             "drive",
             "drive_shift",
-            "suppresses_cause",
+            "cause_effect",
             "angle_text",
             "revealed_text",
         ]
