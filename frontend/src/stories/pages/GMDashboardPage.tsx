@@ -3,8 +3,8 @@
  *
  * Opens on the "Waiting on you" strip (#4188, `WaitingOnYouStrip` over
  * GET /api/gm/attention/: offers, invites, requests, claims, sessions, each
- * row a door), then the GM's profile summary, tables, Story NPCs + a mint
- * dialog (#3426), the remaining stat tiles and the open group requests, from
+ * row a door), then the GM's profile summary, tables, Story NPCs with the
+ * new-NPC form (#3426, #4418 `NpcForm`), the remaining stat tiles and the open group requests, from
  * GET /api/gm/dashboard/ plus GET /api/roster/entries/mine/.
  *
  * Permission gating: the endpoint returns 403 for non-GMs. We use a local
@@ -12,33 +12,15 @@
  * rather than blowing the error boundary.
  */
 
-import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
 import { apiFetch } from '@/evennia_replacements/api';
 import { parseDispatchBody } from '@/lib/errors';
 import { gmKeys, useGMAttention } from '@/gm/queries';
+import { NpcForm } from '@/gm/npcs/NpcForm';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useAccount } from '@/store/hooks';
 import { GMPromptFilterCard } from '../components/GMPromptFilterCard';
@@ -126,60 +108,6 @@ async function claimGroupStoryRequest(characterId: number, requestId: number): P
   return detail ?? 'Request claimed.';
 }
 
-/**
- * Dispatch MintStoryNPCAction as the actor's own character (#3426) — mints a
- * Story NPC tenure-bound to the GM's own account, playable immediately via
- * the persona picker / telnet `@ic`. Mirrors claimGroupStoryRequest's dispatch
- * shape; `success === false` (not just `res.ok`) signals a refusal (trust
- * gate or cap), per the same #3155 contract.
- *
- * `preset`, when given (#3427), names a curated `NPCStatlinePreset` by
- * natural key — the same string the telnet `gm npc ... preset=<name>`
- * grammar takes.
- */
-async function mintStoryNpc(
-  characterId: number,
-  name: string,
-  description: string,
-  preset: string | null
-): Promise<string> {
-  const kwargs: Record<string, string> = { name, description };
-  if (preset) kwargs.preset = preset;
-  const res = await apiFetch(`/api/actions/characters/${characterId}/dispatch/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ref: { backend: 'registry', registry_key: 'mint_story_npc' },
-      kwargs,
-    }),
-  });
-  const { success, message: detail } = await parseDispatchBody(res);
-  if (!res.ok || success === false) throw new Error(detail ?? 'Failed to mint the NPC.');
-  return detail ?? 'NPC minted.';
-}
-
-/** One curated statline preset in the GM mint dialog's picker (#3427). */
-interface NPCStatlinePresetOption {
-  id: number;
-  name: string;
-  description: string;
-}
-
-/**
- * Read-only preset catalog for the mint dialog's Select (GET
- * /api/roster/npc-presets/). No paging param: the ViewSet's page size (100)
- * already covers the whole starter catalog in one page.
- */
-async function getNpcStatlinePresets(): Promise<NPCStatlinePresetOption[]> {
-  const res = await apiFetch('/api/roster/npc-presets/');
-  if (!res.ok) return [];
-  const body = (await res.json()) as { results?: NPCStatlinePresetOption[] };
-  return body.results ?? [];
-}
-
-/** Sentinel Select value for "no preset" — Radix Select rejects an empty-string item value. */
-const NO_PRESET_VALUE = '__none__';
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -228,35 +156,6 @@ function GMDashboardContent() {
   // general character list client-side (no dedicated backend endpoint needed).
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const myNpcs = myRosterEntries.filter((entry) => entry.roster_type === 'NPC');
-
-  const [mintOpen, setMintOpen] = useState(false);
-  const [npcName, setNpcName] = useState('');
-  const [npcDescription, setNpcDescription] = useState('');
-  const [npcPreset, setNpcPreset] = useState<string | null>(null);
-
-  // Preset catalog (#3427) — only fetched once the dialog is open, since it's
-  // a GM-only catalog with no reason to load before the GM asks to mint.
-  const { data: presets = [] } = useQuery({
-    queryKey: ['npc-statline-presets'],
-    queryFn: getNpcStatlinePresets,
-    enabled: mintOpen,
-  });
-
-  const mintMutation = useMutation({
-    mutationFn: () => {
-      if (actorCharacterId === null) {
-        return Promise.reject(new Error('Puppet a character to mint an NPC.'));
-      }
-      return mintStoryNpc(actorCharacterId, npcName.trim(), npcDescription.trim(), npcPreset);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] }).catch(() => {});
-      setMintOpen(false);
-      setNpcName('');
-      setNpcDescription('');
-      setNpcPreset(null);
-    },
-  });
 
   if (isLoading) {
     return <Skeleton className="h-96 w-full" />;
@@ -335,87 +234,9 @@ function GMDashboardContent() {
       <section className="rounded-lg border p-4">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-lg font-semibold">My NPCs ({myNpcs.length})</h2>
-          <Dialog open={mintOpen} onOpenChange={setMintOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
-                Mint Story NPC
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Mint Story NPC</DialogTitle>
-              </DialogHeader>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  mintMutation.mutate();
-                }}
-                className="space-y-4"
-              >
-                <div className="space-y-1">
-                  <Label htmlFor="mint-npc-name">Name *</Label>
-                  <Input
-                    id="mint-npc-name"
-                    value={npcName}
-                    onChange={(e) => setNpcName(e.target.value)}
-                    placeholder="e.g. Master Aldous"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="mint-npc-description">
-                    Description{' '}
-                    <span className="font-normal text-muted-foreground">(optional)</span>
-                  </Label>
-                  <Textarea
-                    id="mint-npc-description"
-                    value={npcDescription}
-                    onChange={(e) => setNpcDescription(e.target.value)}
-                    rows={3}
-                    className="resize-y"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="mint-npc-preset">
-                    Statline preset{' '}
-                    <span className="font-normal text-muted-foreground">(optional)</span>
-                  </Label>
-                  <Select
-                    value={npcPreset ?? NO_PRESET_VALUE}
-                    onValueChange={(val) => setNpcPreset(val === NO_PRESET_VALUE ? null : val)}
-                  >
-                    <SelectTrigger id="mint-npc-preset">
-                      <SelectValue placeholder="No preset (blank sheet)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_PRESET_VALUE}>No preset (blank sheet)</SelectItem>
-                      {presets.map((preset) => (
-                        <SelectItem key={preset.id} value={preset.name}>
-                          {preset.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {mintMutation.isError && (
-                  <p className="text-sm text-destructive">
-                    {(mintMutation.error as Error).message}
-                  </p>
-                )}
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setMintOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={npcName.trim().length === 0 || mintMutation.isPending}
-                  >
-                    {mintMutation.isPending ? 'Minting…' : 'Mint'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/gm/npcs">NPC roster</Link>
+          </Button>
         </div>
         {myNpcs.length === 0 ? (
           <p className="text-sm text-muted-foreground">No Story NPCs yet.</p>
@@ -430,6 +251,9 @@ function GMDashboardContent() {
             ))}
           </ul>
         )}
+        <div className="mt-4 border-t pt-4" id="new-npc">
+          <NpcForm mode="quick" />
+        </div>
       </section>
 
       {/* Stat tiles. Pending AGM claims and assigned sessions moved to the
