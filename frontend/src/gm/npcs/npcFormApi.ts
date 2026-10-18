@@ -43,6 +43,11 @@ export type RegardLine = RegardRequest & { target_name: string };
 export type PreferenceLine = PreferencesRequest['preferences'][number];
 export type PreferenceValence = PreferenceLine['valence'];
 
+/** The owner's view of one NPC, with its saved preferences and regard. */
+export type NpcDetail = Schemas['NPCDetail'];
+export type SavedPreference = NpcDetail['preferences'][number];
+export type SavedRegard = NpcDetail['regard'][number];
+
 /** A source for "Copy from": an NPC or template the GM may copy. */
 export interface NpcCopySource {
   id: number;
@@ -79,6 +84,29 @@ export async function fetchPersonalityTraits(): Promise<PersonalityTrait[]> {
     traits.push(...body.results);
     if (!body.next) return traits;
   }
+}
+
+/** One NPC as its owner reads it (404 for an NPC the viewer may not manage). */
+export async function fetchNpcDetail(entryId: number): Promise<NpcDetail> {
+  const res = await apiFetch(`/api/roster/npcs/${entryId}/`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the NPC');
+  return (await res.json()) as NpcDetail;
+}
+
+/**
+ * The preference list to save: the saved rows, less the ones the GM removed, with the
+ * GM's own lines on top (a typed line replaces a saved one for the same trait).
+ */
+export function mergePreferences(
+  saved: SavedPreference[],
+  removedTraits: number[],
+  typed: PreferenceLine[]
+): PreferenceLine[] {
+  const typedTraits = new Set(typed.map((line) => line.trait));
+  const kept = saved
+    .filter((row) => !removedTraits.includes(row.trait_id) && !typedTraits.has(row.trait_id))
+    .map((row) => ({ trait: row.trait_id, valence: row.valence }));
+  return [...kept, ...typed];
 }
 
 /** The sheet behind a roster entry (the sheet id is the character id). */
@@ -208,6 +236,8 @@ export interface NpcFormDraft {
   sheet: StaffEditBody;
   regard: RegardLine[];
   preferences: PreferenceLine[];
+  /** Copied preference rows the GM removed before saving, by trait id. */
+  removedPreferences: number[];
   /** Lending settings and notes the GM changed. */
   settings: NpcSettingsPatch;
 }
@@ -236,10 +266,11 @@ function sectionFilled(draft: NpcFormDraft, section: NpcSection): boolean {
       return BACKGROUND_KEYS.some((key) => sheet[key] !== undefined);
     case 'powers':
       return draft.preset !== '';
+    // Copied regard and preferences are kept and the GM's lines merge on top, so
+    // "Start from" fills these two even when the GM adds lines of their own.
     case 'regard':
-      return draft.regard.length > 0;
     case 'preferences':
-      return draft.preferences.length > 0;
+      return false;
   }
 }
 
@@ -368,8 +399,16 @@ export async function createNpc(
   for (const line of draft.regard) {
     await step('saving Who they favor and oppose', () => putNpcRegard(id, line));
   }
-  if (draft.preferences.length > 0) {
-    await step('saving What works on them', () => putNpcPreferences(id, draft.preferences));
+  const preferencesCopied = copies.some(([section]) => section === 'preferences');
+  if (draft.preferences.length > 0 || (preferencesCopied && draft.removedPreferences.length > 0)) {
+    await step('saving What works on them', async () => {
+      // A copy wrote the source's rows; read them back so the save keeps them.
+      const saved = preferencesCopied ? (await fetchNpcDetail(id)).preferences : [];
+      await putNpcPreferences(
+        id,
+        mergePreferences(saved, draft.removedPreferences, draft.preferences)
+      );
+    });
   }
   if (Object.keys(draft.settings).length > 0) {
     await step('saving the notes and lending', () => patchNpcSettings(id, draft.settings));

@@ -41,6 +41,7 @@ import {
   IDENTITY_KEYS,
   NpcStepError,
   createNpc,
+  fetchNpcDetail,
   fetchNpcTemplates,
   fetchPersonalityTraits,
   fetchSheetIdForEntry,
@@ -218,6 +219,11 @@ export function NpcForm({
   const [sheet, setSheet] = useState<StaffEditBody>({});
   const [regard, setRegard] = useState<RegardLine[]>([]);
   const [preferences, setPreferences] = useState<PreferenceLine[]>([]);
+  /** Copied preference rows the GM removed, for the source they were copied from. */
+  const [removedCopied, setRemovedCopied] = useState<{ source: number | null; traits: number[] }>({
+    source: null,
+    traits: [],
+  });
   const [settings, setSettings] = useState<NpcSettingsPatch>({});
   /** What this form already minted, kept so a retry never mints a second one. */
   const [minted, setMinted] = useState<{ id: number; asTemplate: boolean } | null>(null);
@@ -251,6 +257,25 @@ export function NpcForm({
   ];
 
   const shown = (section: FoldedSection) => mode === 'detailed' || expanded.has(section);
+
+  // What a regard or preferences copy will bring, read from the source so the editors
+  // show it. A source the GM may not read (a staff template) shows nothing here; its
+  // rows still arrive with the copy and the save merges onto them.
+  const preferenceSource = sectionCopies.preferences ?? startFrom;
+  const regardSource = sectionCopies.regard ?? startFrom;
+  const { data: preferenceSourceDetail } = useQuery({
+    queryKey: ['npc-detail', preferenceSource],
+    queryFn: () => fetchNpcDetail(preferenceSource as number),
+    enabled: preferenceSource !== null && shown('preferences'),
+    retry: false,
+  });
+  const { data: regardSourceDetail } = useQuery({
+    queryKey: ['npc-detail', regardSource],
+    queryFn: () => fetchNpcDetail(regardSource as number),
+    enabled: regardSource !== null && shown('regard'),
+    retry: false,
+  });
+  const removedPreferences = removedCopied.source === preferenceSource ? removedCopied.traits : [];
 
   const setSheetField = <K extends keyof StaffEditBody>(key: K, value: StaffEditBody[K] | '') => {
     setSheet((current) => {
@@ -317,6 +342,7 @@ export function NpcForm({
       ) as StaffEditBody,
       regard: shown('regard') ? regard : [],
       preferences: shown('preferences') ? preferences : [],
+      removedPreferences: shown('preferences') ? removedPreferences : [],
       settings: sentSettings,
     };
   };
@@ -357,6 +383,7 @@ export function NpcForm({
     setSheet({});
     setRegard([]);
     setPreferences([]);
+    setRemovedCopied({ source: null, traits: [] });
     setSettings({});
     setMinted(null);
     setCreated(null);
@@ -562,13 +589,26 @@ export function NpcForm({
           title="Who they favor and oppose"
           copy={copyFor('regard', 'Who they favor and oppose')}
         >
-          <NpcRegardEditor lines={regard} onChange={setRegard} />
+          <NpcRegardEditor
+            lines={regard}
+            onChange={setRegard}
+            copied={regardSourceDetail?.regard ?? []}
+          />
         </FormSection>
       )}
 
       {shown('preferences') && (
         <FormSection title="What works on them" copy={copyFor('preferences', 'What works on them')}>
-          <NpcPreferenceEditor traits={traits} lines={preferences} onChange={setPreferences} />
+          <NpcPreferenceEditor
+            traits={traits}
+            lines={preferences}
+            onChange={setPreferences}
+            copied={preferenceSourceDetail?.preferences ?? []}
+            removed={removedPreferences}
+            onRemovedChange={(removed) =>
+              setRemovedCopied({ source: preferenceSource, traits: removed })
+            }
+          />
         </FormSection>
       )}
 

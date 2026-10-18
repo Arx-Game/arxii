@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -25,7 +25,27 @@ function ok(body: unknown) {
   return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
 }
 
+const COPIED = {
+  preferences: [{ trait_id: 9, trait_name: 'Duty', valence: 'likes' }],
+  regard: [
+    {
+      target_type: 'organization',
+      target_id: 2,
+      target_name: 'City Watch',
+      value: 700,
+      reason: 'Brothers in the same trade',
+    },
+  ],
+};
+
 function route(url: string, init?: RequestInit) {
+  // The source's detail, and the new NPC's once the copy has written the same rows.
+  if (
+    !init?.method &&
+    (url === '/api/roster/npcs/12/' || url === `/api/roster/npcs/${NEW_ENTRY}/`)
+  ) {
+    return ok({ id: 12, name: 'Veteran gate officer', ...COPIED });
+  }
   if (url === '/api/roster/npcs/templates/') {
     return ok({ count: 1, results: [{ id: 12, name: 'Veteran gate officer' }] });
   }
@@ -354,5 +374,84 @@ describe('NpcForm', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(writes()).toEqual([]);
     expect(screen.getByRole('form', { name: 'New NPC' })).toBeInTheDocument();
+  });
+
+  async function copyFromOfficer(user: ReturnType<typeof userEvent.setup>, section: string) {
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('option', { name: 'Veteran gate officer (template)' }).length
+      ).toBeGreaterThan(0)
+    );
+    await user.selectOptions(screen.getByLabelText(`Copy ${section} from`), '12');
+  }
+
+  it('shows the copied preferences and saves them with the one the GM added', async () => {
+    const user = userEvent.setup();
+    renderForm('detailed');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await copyFromOfficer(user, 'What works on them');
+    const section = screen.getByRole('region', { name: 'What works on them' });
+    expect(await within(section).findByText('Duty')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Flattery' })).toBeTruthy());
+    await user.selectOptions(screen.getByLabelText('Easier or harder'), 'dislikes');
+    await user.selectOptions(screen.getByLabelText('Trait'), '4');
+    await user.click(screen.getByRole('button', { name: 'Add trait' }));
+    expect(
+      within(section)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent)
+    ).toEqual(['EasierDuty', 'HarderFlattery']);
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
+
+    await waitFor(() => expect(writes()).toHaveLength(3));
+    expect(writes().slice(1)).toEqual([
+      {
+        method: 'POST',
+        url: `/api/roster/npcs/${NEW_ENTRY}/copy-section/`,
+        body: { source_entry: 12, section: 'preferences' },
+      },
+      {
+        method: 'PUT',
+        url: `/api/roster/npcs/${NEW_ENTRY}/preferences/`,
+        body: {
+          preferences: [
+            { trait: 9, valence: 'likes' },
+            { trait: 4, valence: 'dislikes' },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('a copied preference the GM removes is not saved', async () => {
+    const user = userEvent.setup();
+    renderForm('detailed');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await copyFromOfficer(user, 'What works on them');
+    await user.click(await screen.findByRole('button', { name: 'Remove Duty' }));
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
+
+    await waitFor(() => expect(writes()).toHaveLength(3));
+    expect(writes()[2]).toEqual({
+      method: 'PUT',
+      url: `/api/roster/npcs/${NEW_ENTRY}/preferences/`,
+      body: { preferences: [] },
+    });
+  });
+
+  it('shows copied regard and leaves it to the copy', async () => {
+    const user = userEvent.setup();
+    renderForm('detailed');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await copyFromOfficer(user, 'Who they favor and oppose');
+    const section = screen.getByRole('region', { name: 'Who they favor and oppose' });
+    expect(await within(section).findByText('Brothers in the same trade')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
+
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Vael' })).toBeInTheDocument());
+    expect(writes().map((call) => call.url)).toEqual([
+      '/api/actions/characters/7/dispatch/',
+      `/api/roster/npcs/${NEW_ENTRY}/copy-section/`,
+    ]);
   });
 });

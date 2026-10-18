@@ -2,6 +2,8 @@
  * "Who they favor and oppose" (#4418, Screen 1b): the NPC's signed regard of a persona,
  * an organization or a society, each with a strength and a reason. Lines are gathered
  * here and written through `PUT /api/roster/npcs/{id}/regard/` when the NPC is created.
+ * `copied` are the lines a "Copy from" brings: shown, never re-sent (the copy writes
+ * them); a line the GM adds for the same target replaces the copied one.
  */
 
 import { useRef, useState } from 'react';
@@ -11,7 +13,7 @@ import { EntitySearchField, type EntitySearchResult } from '@/components/EntityS
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { searchOrganizations, searchPersonas, searchSocieties } from '@/events/queries';
-import type { RegardLine, RegardTargetType } from './npcFormApi';
+import type { RegardLine, RegardTargetType, SavedRegard } from './npcFormApi';
 
 /** Strength of a regard, as the signed value's size (the model's range is -1000 to 1000). */
 const STRENGTHS = [
@@ -37,12 +39,31 @@ function strengthLabel(value: number): string {
   return Math.abs(value) >= STRENGTHS[1].size ? STRENGTHS[1].label : STRENGTHS[0].label;
 }
 
+function RegardPill({ value, name }: { value: number; name: string }) {
+  return (
+    <span
+      className={
+        value >= 0
+          ? 'rounded-full border border-emerald-600/40 px-2 py-0.5 text-emerald-700 dark:text-emerald-400'
+          : 'rounded-full border border-destructive/40 px-2 py-0.5 text-destructive'
+      }
+    >
+      {value >= 0 ? '+' : '−'} {name}
+    </span>
+  );
+}
+
 interface NpcRegardEditorProps {
   lines: RegardLine[];
   onChange: (lines: RegardLine[]) => void;
+  /** Lines the section's copy brings. */
+  copied?: SavedRegard[];
 }
 
-export function NpcRegardEditor({ lines, onChange }: NpcRegardEditorProps) {
+const lineKey = (line: { target_type: string; target_id: number }) =>
+  `${line.target_type}:${line.target_id}`;
+
+export function NpcRegardEditor({ lines, onChange, copied = [] }: NpcRegardEditorProps) {
   const [favors, setFavors] = useState(true);
   const [targetType, setTargetType] = useState<RegardTargetType>('organization');
   const [targetId, setTargetId] = useState<number | null>(null);
@@ -77,22 +98,23 @@ export function NpcRegardEditor({ lines, onChange }: NpcRegardEditorProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      {lines.length > 0 && (
+      {(lines.length > 0 || copied.length > 0) && (
         <ul className="flex flex-col gap-1 text-sm">
+          {copied
+            .filter((row) => !lines.some((line) => lineKey(line) === lineKey(row)))
+            .map((row) => (
+              <li key={`copied-${lineKey(row)}`} className="flex flex-wrap items-center gap-2">
+                <RegardPill value={row.value} name={row.target_name} />
+                <span className="text-muted-foreground">{strengthLabel(row.value)}</span>
+                {row.reason && <span className="min-w-0 flex-1">{row.reason}</span>}
+              </li>
+            ))}
           {lines.map((line) => (
             <li
               key={`${line.target_type}:${line.target_id}`}
               className="flex flex-wrap items-center gap-2"
             >
-              <span
-                className={
-                  line.value >= 0
-                    ? 'rounded-full border border-emerald-600/40 px-2 py-0.5 text-emerald-700 dark:text-emerald-400'
-                    : 'rounded-full border border-destructive/40 px-2 py-0.5 text-destructive'
-                }
-              >
-                {line.value >= 0 ? '+' : '−'} {line.target_name}
-              </span>
+              <RegardPill value={line.value} name={line.target_name} />
               <span className="text-muted-foreground">{strengthLabel(line.value)}</span>
               {line.reason && <span className="min-w-0 flex-1">{line.reason}</span>}
               <Button
