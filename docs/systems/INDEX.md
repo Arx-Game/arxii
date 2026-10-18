@@ -5374,7 +5374,7 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   (weekly pool growth), `collect_org_income` (the dispatch: check → band pct → graft →
   per-stream proportional landing), `improve_org_domain` (Domain Investment check → gross
   bump + graft crackdown), `process_income_stream(stream, amount)` (landing path),
-  `settle_obligations`, `run_weekly_economy` (Sunday rollover phases),
+  `settle_obligations` (run by the rollover's `obligations` phase, after `debt_service`, per org; declarations settle once, an unaffordable org retries next week, #4435), `run_weekly_economy` (Sunday rollover phases),
   `snapshot_purse_drains` / `run_purse_drains` (#2613 — the two-band Somehow Always Broke
   weekly drain: `SNAPSHOT` records each holder's opening balance before income, `DRAIN` empties
   the purse down to `opening − outflows` after upkeep, so only that week's income survives;
