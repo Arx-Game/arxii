@@ -62,6 +62,7 @@ function entry(id: number, name: string): MyRosterEntry {
     profile_picture_url: null,
     loan: null,
     npc_notes: null,
+    is_crowd_voice: false,
     primary_persona_id: id,
     active_persona_id: id,
     unread_narrative_count: 0,
