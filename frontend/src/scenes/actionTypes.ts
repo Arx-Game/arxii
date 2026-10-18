@@ -293,9 +293,9 @@ export interface ActionRequest {
   /** The structured ask on a boon request (#2540) — null for every other action. */
   boon?: BoonReadPayload | null;
   /** True when an NPC-started contested action leaves the target only a resist roll (#4418). */
-  resist_only?: boolean;
+  resist_only: boolean;
   /** Name of the check the target rolls to resist; null when not resist-only (#4418). */
-  resist_check_name?: string | null;
+  resist_check_name: string | null;
   created_at: string;
 }
 
@@ -602,5 +602,8 @@ export interface PendingActionTarget {
   combat_risk_level?: string | null;
   /** Stakes summaries for staked beats behind the gating encounter (#1770). */
   combat_stakes?: StakesSummary[] | null;
+  /** True when an NPC-started contested action leaves only a resist roll (#4418). */
+  resist_only: boolean;
+  resist_check_name: string | null;
   created_at: string;
 }

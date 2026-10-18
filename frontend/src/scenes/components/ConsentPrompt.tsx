@@ -54,7 +54,7 @@ interface ConsentCardProps {
   combatStakes?: StakesSummary[] | null;
   /** The structured ask on a boon request (#2540) — what granting costs you. */
   boon?: BoonReadPayload | null;
-  /** Resist-only: no refusal, just an effort choice and Roll / Believe him (#4418). */
+  /** Resist-only: no refusal, just an effort choice and Roll / Believe {initiatorName} (#4418). */
   resistOnly?: boolean;
   resistCheckName?: string | null;
   resistEffort: string;
@@ -126,7 +126,7 @@ function ConsentCard({
             onClick={() => onAccept('normal', 'low')}
             disabled={isPending}
           >
-            Believe him
+            Believe {initiatorName}
           </Button>
         </div>
       </div>
@@ -368,6 +368,8 @@ export function ConsentPrompt({ sceneId, viewerKey }: Props) {
             strainCommitment={t.strain_commitment}
             combatRiskLevel={t.combat_risk_level}
             combatStakes={t.combat_stakes}
+            resistOnly={t.resist_only}
+            resistCheckName={t.resist_check_name}
             resistEffort={selectedResist}
             onResistChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
             onDeny={() =>
@@ -385,13 +387,14 @@ export function ConsentPrompt({ sceneId, viewerKey }: Props) {
                 blacklist_actor: true,
               })
             }
-            onAccept={(difficulty) =>
+            onAccept={(difficulty, effortOverride) =>
               respondTarget.mutate({
                 requestId: t.action_request_id,
                 targetPersonaId: t.target_persona_id,
                 accept: true,
-                difficulty,
-                resist_effort: selectedResist !== '' ? selectedResist : undefined,
+                difficulty: t.resist_only ? undefined : difficulty,
+                resist_effort:
+                  effortOverride ?? (selectedResist !== '' ? selectedResist : undefined),
               })
             }
             isPending={respondTarget.isPending}
