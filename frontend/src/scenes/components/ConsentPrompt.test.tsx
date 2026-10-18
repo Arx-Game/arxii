@@ -703,7 +703,7 @@ describe('ConsentPrompt', () => {
       render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
 
       await waitFor(() =>
-        expect(screen.getByText('Vael is lying. See through it?')).toBeInTheDocument()
+        expect(screen.getByText('Vael acts against you. Resist?')).toBeInTheDocument()
       );
       expect(screen.getByText('You roll Read people.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Roll' })).toBeInTheDocument();
@@ -731,7 +731,7 @@ describe('ConsentPrompt', () => {
       );
     });
 
-    it('Believe him accepts at low effort', async () => {
+    it('Believe accepts at low effort', async () => {
       vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [RESIST_REQUEST] });
       vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
       render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
@@ -786,6 +786,28 @@ describe('ConsentPrompt', () => {
         expect(respondToRequest).toHaveBeenCalledWith('42', 13, {
           accept: true,
           resist_effort: 'high',
+          target_persona_id: 99,
+        })
+      );
+    });
+
+    it('extra-target Believe accepts at low effort for that target', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
+      vi.mocked(fetchPendingTargets).mockResolvedValue({
+        results: [{ ...MOCK_TARGET, initiator_name: 'Vael', resist_only: true }],
+      });
+      vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Believe Vael' })).toBeInTheDocument()
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Believe Vael' }));
+
+      await waitFor(() =>
+        expect(respondToRequest).toHaveBeenCalledWith('42', 12, {
+          accept: true,
+          resist_effort: 'low',
           target_persona_id: 99,
         })
       );

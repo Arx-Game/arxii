@@ -102,10 +102,7 @@ function ConsentCard({
   );
 
   if (resistOnly) {
-    const heading =
-      actionKey === 'Deceive'
-        ? `${initiatorName} is lying. See through it?`
-        : `Resist ${actionKey}?`;
+    const heading = `${initiatorName} acts against you. Resist?`;
     return (
       <div className="flex items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
         <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
