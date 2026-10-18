@@ -39,6 +39,7 @@ import { useEncounterForScene } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { GMStoryRail } from '../components/GMStoryRail';
+import { CastListPanel } from '@/gm/npcs/CastListPanel';
 import { ScenarioCard } from '../components/ScenarioCard';
 import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
 import {
@@ -512,6 +513,7 @@ export function SceneDetailPage() {
               data-testid="scene-detail-combat-rail"
             >
               {showStoryRail && scene && <GMStoryRail scene={scene} />}
+              {showStoryRail && scene && <CastListPanel sceneId={scene.id} />}
               {showCombatRail && (
                 <>
                   {/* The rail lingers past the encounter's end so the aftermath digest
