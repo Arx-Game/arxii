@@ -124,6 +124,7 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
     character_slots = serializers.SerializerMethodField()
     is_staff = serializers.BooleanField(read_only=True)
     is_gm = serializers.SerializerMethodField()
+    is_guide = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
     available_characters = serializers.SerializerMethodField()
     pending_applications = serializers.SerializerMethodField()
@@ -172,6 +173,15 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
         except GMProfile.DoesNotExist:
             return False
         return True
+
+    def get_is_guide(self, obj) -> bool:
+        """Whether this account is an active Guide (#4418)."""
+        from world.gm.models import GuideProfile  # noqa: PLC0415
+
+        try:
+            return obj.guide_profile.is_active
+        except GuideProfile.DoesNotExist:
+            return False
 
     def get_avatar_url(self, obj):
         """Get player's avatar URL if available."""
@@ -230,6 +240,7 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
             "character_slots",
             "is_staff",
             "is_gm",
+            "is_guide",
             "avatar_url",
             "available_characters",
             "pending_applications",

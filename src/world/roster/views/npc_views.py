@@ -16,6 +16,7 @@ from django.db.models import Exists, OuterRef, Q, QuerySet
 from django.shortcuts import get_object_or_404
 import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -324,6 +325,7 @@ class StoryNPCViewSet(
             return self._refused(exc)
         return Response(NPCLoanSerializer(loan).data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(responses=NPCOfferSerializer(many=True))
     @action(detail=False, methods=[HTTPMethod.GET])
     def offers(self, request: Request) -> Response:
         """The NPC offers waiting for the requesting Guide to answer."""

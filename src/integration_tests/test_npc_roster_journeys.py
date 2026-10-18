@@ -242,7 +242,7 @@ class TheListCostsTheSameForAnyCast(NpcRosterCase):
 
         self._list_vael()
 
-        def cost() -> int:
+        def cost() -> tuple[int, int]:
             self.api(self.other_gm).get(NPCS)  # warm per-process caches
             with CaptureQueriesContext(connection) as queries:
                 response = self.api(self.other_gm).get(NPCS)
@@ -426,7 +426,7 @@ class OfferListQueryCount(NpcRosterCase):
             )
             self.assertTrue(offered.detail.success, offered.detail.message)
 
-        def cost() -> int:
+        def cost() -> tuple[int, int]:
             from world.roster.models import RosterEntry as Entry
 
             guide_client.get(f"{NPCS}offers/")
@@ -453,3 +453,13 @@ class OfferListQueryCount(NpcRosterCase):
         loan = Loan(roster_entry=self.entry, borrower=self.guide, offered_by=self.owner)
         data = NPCOfferSerializer(loan, context={"offered_names": {}}).data
         self.assertEqual(data["offered_by_name"], "Staff")
+
+
+class TheAccountSaysWhetherItIsAGuide(NpcRosterCase):
+    def test_is_guide_follows_an_active_guide_profile(self) -> None:
+        self.assertIs(self.api(self.guide).get("/api/user/").json()["is_guide"], True)
+        self.assertIs(self.api(self.other_gm).get("/api/user/").json()["is_guide"], False)
+        profile = self.guide.guide_profile
+        profile.is_active = False
+        profile.save()
+        self.assertIs(self.api(self.guide).get("/api/user/").json()["is_guide"], False)
