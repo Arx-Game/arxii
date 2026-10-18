@@ -202,6 +202,42 @@ class BattleTechniqueResolverTests(TestCase):
         self.assertEqual(captured, [config.check_type])
         self.assertNotEqual(config.check_type, self.technique.action_template.check_type)
 
+    def test_battle_cast_adds_technique_term(self) -> None:
+        """A battle cast rolls its cast check plus the technique skill term (#4450)."""
+        from decimal import Decimal
+
+        from world.battles.resolution import resolve_battle_technique
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+        from world.checks.types import ExtraTraitTerm
+        from world.skills.factories import SkillFactory
+
+        skill = SkillFactory()
+        self.technique.skill = skill
+        self.technique.save(update_fields=["skill"])
+        battle = create_battle(name="Resolver Technique Skill Battle")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = enlist_participant(battle=battle, character_sheet=self.sheet, side=side)
+        begin_battle_round(battle=battle)
+        declaration = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
+        )
+
+        with patch(
+            "world.battles.resolution.perform_check", return_value=_success_result()
+        ) as rolled:
+            resolve_battle_technique(declaration=declaration)
+
+        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        self.assertEqual(tuple(rolled.call_args.kwargs["extra_traits"]), (term,))
+
 
 class BattleActionKindCheckBonusScopingTests(TestCase):
     """A CHECK_BONUS perk scoped to ``battle_action_kind=ROUT`` fires on a ROUT

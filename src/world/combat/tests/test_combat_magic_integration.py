@@ -37,6 +37,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.services.targeting import InvalidCastTarget
+from world.magic.types import CastCheck
 from world.mechanics.constants import PropertyHolder
 from world.mechanics.factories import (
     AerialPropertyFactory,
@@ -120,7 +121,7 @@ class AnimaDeductionTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )
 
@@ -141,7 +142,7 @@ class AnimaDeductionTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )
 
@@ -174,7 +175,7 @@ class EventEmissionTest(TestCase):
                     participant=participant,
                     action=action,
                     fatigue_category=ActionCategory.PHYSICAL,
-                    offense_check_type=MagicMock(),
+                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                     offense_check_fn=None,
                 )
         finally:
@@ -205,7 +206,7 @@ class EventEmissionTest(TestCase):
                     participant=participant,
                     action=action,
                     fatigue_category=ActionCategory.PHYSICAL,
-                    offense_check_type=MagicMock(),
+                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                     offense_check_fn=None,
                 )
         finally:
@@ -256,7 +257,7 @@ class ReactiveScarCancelTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )
 
@@ -297,7 +298,7 @@ class ReactiveScarCancelTest(TestCase):
                     participant=participant,
                     action=action,
                     fatigue_category=ActionCategory.PHYSICAL,
-                    offense_check_type=MagicMock(),
+                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                     offense_check_fn=None,
                 )
         finally:
@@ -334,7 +335,7 @@ class MishapTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )
 
@@ -368,7 +369,7 @@ class FlatBonusPullCheckTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )
 
@@ -417,7 +418,7 @@ class FullHappyPathTest(TestCase):
                     participant=participant,
                     action=action,
                     fatigue_category=ActionCategory.PHYSICAL,
-                    offense_check_type=MagicMock(),
+                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                     offense_check_fn=None,
                 )
         finally:
@@ -520,7 +521,7 @@ class IdentityIntensityModifierRaisesCombatDamageTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )
 
@@ -554,7 +555,7 @@ class CombatTargetPrerequisitesTest(TestCase):
                     participant=participant,
                     action=action,
                     fatigue_category=ActionCategory.PHYSICAL,
-                    offense_check_type=MagicMock(),
+                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                     offense_check_fn=None,
                 )
 
@@ -572,7 +573,7 @@ class CombatTargetPrerequisitesTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )  # does not raise
 
@@ -604,7 +605,7 @@ class CombatTargetPrerequisitesTest(TestCase):
                     participant=participant,
                     action=action,
                     fatigue_category=ActionCategory.PHYSICAL,
-                    offense_check_type=MagicMock(),
+                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                     offense_check_fn=None,
                 )
 
@@ -631,7 +632,7 @@ class CombatTargetPrerequisitesTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )  # does not raise
 
@@ -718,7 +719,7 @@ class CombatAoETargetPrerequisitesPreFlightTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )  # must NOT raise InvalidCastTarget
 
@@ -794,7 +795,7 @@ class TargetKeyedSituationalPerkCombatTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )
 
@@ -861,7 +862,7 @@ class TargetKeyedSituationalPerkCombatTest(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )
 

@@ -1,5 +1,6 @@
 """Display of power: a casting press, terms eased by morale, and the view fields (#4147)."""
 
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -9,7 +10,9 @@ from django.test.utils import CaptureQueriesContext
 from actions.constants import ActionBackend
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
+from world.checks.services import collect_check_modifiers, preview_check_difficulty
 from world.checks.social_target import SocialDifficulty
+from world.checks.types import ExtraTraitTerm
 from world.combat.constants import FALTER_MORALE_THRESHOLD, SpectacleKind
 from world.combat.models import SpectacleRecord
 from world.combat.morale import OpponentMoraleState, morale_state_for
@@ -22,6 +25,7 @@ from world.magic.factories import (
 )
 from world.magic.models import CharacterAnima
 from world.magic.types.techniques import SoulfrayWarning
+from world.skills.factories import SkillFactory
 from world.standoffs.factories import StandoffApproachFactory, StandoffTermsFactory
 from world.standoffs.models import StandoffConfig
 from world.standoffs.services.verbs import standoff_press, terms_difficulty
@@ -121,6 +125,65 @@ class DisplayPressTests(DisplayPressBase):
         self.assertFalse(result.success)
         self.assertEqual(self.group.terms_ease, 0)
         self.assertEqual(result.morale_line, "")
+
+
+class DisplayTechniqueSkillTests(DisplayPressBase):
+    """The display cast adds the technique skill, and the preview shows the same term (#4450)."""
+
+    def test_standoff_display_cast_preview_matches_roll(self) -> None:
+        skill = SkillFactory()
+        self.technique.skill = skill
+        self.technique.save(update_fields=["skill"])
+        plain = StandoffApproachFactory()
+        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+
+        with (
+            patch(
+                "world.standoffs.services.view.preview_check_difficulty",
+                wraps=preview_check_difficulty,
+            ) as previewed,
+            patch(
+                "world.standoffs.services.view.collect_check_modifiers",
+                wraps=collect_check_modifiers,
+            ) as gathered,
+        ):
+            build_standoff_view(self.encounter, self.sheet, technique=self.technique)
+        with (
+            patch(CHECK, return_value=forced(1)) as rolled,
+            patch(
+                "world.standoffs.services.verbs.collect_check_modifiers",
+                wraps=collect_check_modifiers,
+            ) as press_gathered,
+        ):
+            standoff_press(self.participant, self.group, self.approach, self.technique)
+
+        def terms_for(mock, check_type, *, position: int) -> list[tuple]:
+            return [
+                tuple(call.kwargs.get("extra_traits", ()))
+                for call in mock.call_args_list
+                if call.args[position] == check_type
+            ]
+
+        casting = self.approach.check_type
+        self.assertEqual(tuple(rolled.call_args.kwargs["extra_traits"]), (term,))
+        self.assertEqual(terms_for(previewed, casting, position=1), [(term,)])
+        self.assertEqual(terms_for(gathered, casting, position=1), [(term,)])
+        self.assertEqual(terms_for(press_gathered, casting, position=1), [(term,)])
+        # An approach that casts nothing never takes the technique's skill.
+        self.assertEqual(terms_for(previewed, plain.check_type, position=1), [()])
+
+    def test_the_view_without_a_technique_adds_no_term(self) -> None:
+        skill = SkillFactory()
+        self.technique.skill = skill
+        self.technique.save(update_fields=["skill"])
+        with patch(
+            "world.standoffs.services.view.preview_check_difficulty",
+            wraps=preview_check_difficulty,
+        ) as previewed:
+            build_standoff_view(self.encounter, self.sheet)
+        self.assertTrue(previewed.called)
+        for call in previewed.call_args_list:
+            self.assertEqual(tuple(call.kwargs.get("extra_traits", ())), ())
 
 
 class DisplayRefusalTests(DisplayPressBase):

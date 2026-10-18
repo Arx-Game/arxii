@@ -33,7 +33,6 @@ from world.magic.services.anima import (
     get_character_anima_ritual,
     get_character_cast_check,
     provision_player_anima_ritual,
-    resolve_cast_check_type,
 )
 from world.magic.services.magic_skills import (
     activity_skill_terms,
@@ -136,7 +135,6 @@ __all__ = [
     "reconcile_ritual_knowledge",
     "resolve_and_consume_ritual_components",
     "resolve_cast_check",
-    "resolve_cast_check_type",
     "resolve_pending_alteration",
     "resolve_pull_effects",
     "seed_thread_survivability_tuning",

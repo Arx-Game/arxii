@@ -199,17 +199,21 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
 
     # 1. Resolve the check via the shared cast-check rule (ADR-0096): the
     #    caster's personal magic check when provisioned, else the template's.
-    template = technique.action_template
-    if template is None:
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
+
+    # A template-less technique is refused even for a caster with a personal check: it has
+    # not been configured for combat use.
+    cast_check = (
+        resolve_cast_check(objectdb, technique) if technique.action_template is not None else None
+    )
+    if cast_check is None:
         msg = (
             f"Technique {technique.pk!r} ({technique.name!r}) has no action_template "
             "and cannot be used in a Clash contribution. Configure the technique for "
             "combat use by assigning an ActionTemplate with a check_type."
         )
         raise ValueError(msg)
-    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
-
-    check_type = resolve_cast_check_type(objectdb, template)
+    check_type = cast_check.check_type
 
     # 2b. Express the affinity tilt as a labeled ModifierContribution and route it
     #     through the shared collect_check_modifiers seam so the clash check honors
@@ -235,6 +239,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         check_type,
         scene=clash.encounter.scene,
         extra_contributions=extra_contributions,
+        extra_traits=cast_check.extra_traits,
     )
     check_extra_modifiers = breakdown.total
 
@@ -278,6 +283,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
             target_difficulty=0,
             extra_modifiers=check_extra_modifiers + extra_modifiers,
             situation_ctx=check_situation_ctx,
+            extra_traits=cast_check.extra_traits,
         )
 
     # 4. Route through the full magic pipeline (anima cost, Soulfray, mishap,

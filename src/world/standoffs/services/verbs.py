@@ -41,6 +41,7 @@ from world.combat.spectacle import apply_spectacle, classify_cast
 from world.conditions.services import apply_condition
 from world.fatigue.constants import EffortLevel
 from world.magic.services.capability_requirements import technique_performable
+from world.magic.services.magic_skills import technique_skill_term
 from world.magic.services.techniques import use_technique
 from world.magic.services.ultimates import floor_ultimate_check, readied_ultimate
 from world.mechanics.models import Application
@@ -92,7 +93,7 @@ from world.standoffs.types import DisplayCast, StandoffActionResult
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.checks.types import CheckResult
+    from world.checks.types import CheckResult, ExtraTraitTerm
     from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
     from world.magic.models import Technique
     from world.magic.types.techniques import SoulfrayWarning, TechniqueUseResult
@@ -509,6 +510,16 @@ def _share_shifting_angles(
             )
 
 
+def display_cast_terms(sheet: CharacterSheet, technique: Technique) -> tuple[ExtraTraitTerm, ...]:
+    """The skill terms a display cast of ``technique`` adds to its press check.
+
+    The approach keeps its own check type; only the technique skill rides along. The press
+    and the view's grade both call this, so the grade shown is the grade rolled.
+    """
+    term = technique_skill_term(sheet.character, technique)
+    return (term,) if term is not None else ()
+
+
 def _press_check(
     sheet: CharacterSheet,
     approach: StandoffApproach,
@@ -535,6 +546,7 @@ def _press_check(
             None,
         )
     captured: dict[str, CheckResult] = {}
+    terms = display_cast_terms(sheet, technique)
 
     def _resolve_fn(*, power: int, ledger: object, extra_modifiers: int = 0) -> DisplayCast:  # noqa: ARG001
         check = perform_check(
@@ -543,8 +555,12 @@ def _press_check(
             target_difficulty=graded.difficulty,
             extra_modifiers=extra_modifiers
             + collect_check_modifiers(
-                sheet, approach.check_type, extra_contributions=graded.contributions
+                sheet,
+                approach.check_type,
+                extra_contributions=graded.contributions,
+                extra_traits=terms,
             ).total,
+            extra_traits=terms,
         )
         captured["check"] = floor_ultimate_check(check, technique)
         return DisplayCast(check_result=captured["check"])

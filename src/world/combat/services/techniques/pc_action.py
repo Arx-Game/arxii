@@ -49,21 +49,23 @@ def _run_combat_technique_pipeline(
 ) -> CombatTechniqueResult:
     """Run the magic combat-technique pipeline for a single focused action.
 
-    Derives the ``offense_check_type`` from the technique's action_template
-    and resolves it via ``resolve_combat_technique``. Raises
-    ``ActionDispatchError(TECHNIQUE_NOT_COMBAT_READY)`` if the technique has
-    no action_template (not configured for combat use).
+    Resolves the cast check (check type plus the technique skill term) and rolls it via
+    ``resolve_combat_technique``. Raises ``ActionDispatchError(TECHNIQUE_NOT_COMBAT_READY)``
+    if the technique has no action_template (not configured for combat use).
     """
     template = technique.action_template
     if template is None:
         raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
-    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
 
+    cast_check = resolve_cast_check(participant.character_sheet.character, technique)
+    if cast_check is None:
+        raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
     return _svc.resolve_combat_technique(
         participant=participant,
         action=action,
         fatigue_category=fatigue_category,
-        offense_check_type=resolve_cast_check_type(participant.character_sheet.character, template),
+        cast_check=cast_check,
         offense_check_fn=offense_check_fn,
     )
 

@@ -17,9 +17,10 @@ This module also provides ``BattleTechniqueResolver`` and
 ``resolve_battle_technique``, which cast a declaration's ``technique`` through
 the real magic envelope (``use_technique``). Routing through ``use_technique``
 (rather than a generic shared check) means the check is sourced from
-``resolve_cast_check_type`` — the caster's provisioned personal magic check
+``resolve_cast_check`` — the caster's provisioned personal magic check
 when they have one, falling back to the technique's
-``action_template.check_type`` only for an unprovisioned caster (ADR-0096) —
+``action_template.check_type`` only for an unprovisioned caster (ADR-0096),
+plus the technique skill as an added term (#4450) —
 anima/Soulfray/mishap apply normally, and Audere/Audere Majora escalation
 fires automatically (it's wired inside ``use_technique`` itself, Step 8c — no
 separate call site is needed here). ``resolve_battle_round`` calls
@@ -409,16 +410,20 @@ class BattleTechniqueResolver:
         ledger: PowerLedger,  # noqa: ARG002 — battle doesn't use the power ledger
         extra_modifiers: int = 0,
     ) -> BattleTechniqueResolution:
-        from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+        from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
 
-        check_type = resolve_cast_check_type(self.character, self.technique.action_template)
+        cast_check = resolve_cast_check(self.character, self.technique)
+        if cast_check is None:
+            msg = f"Technique {self.technique.pk!r} has no cast check for a battle roll."
+            raise ValueError(msg)
         total_modifiers = extra_modifiers + self._battle_modifier_stack()
         situation_ctx = _battle_situation_ctx(self.character, self.declaration.action_kind)
         check_result = perform_check(
             self.character,
-            check_type,
+            cast_check.check_type,
             extra_modifiers=total_modifiers,
             situation_ctx=situation_ctx,
+            extra_traits=cast_check.extra_traits,
         )
         return BattleTechniqueResolution(check_result=check_result)
 

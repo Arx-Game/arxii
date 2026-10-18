@@ -41,6 +41,7 @@ from world.standoffs.services.profile import GroupDrive, group_cause, group_driv
 from world.standoffs.services.state import active_members, is_in_standoff
 from world.standoffs.services.verbs import (
     build_grading_context,
+    display_cast_terms,
     hidden_things,
     morale_terms_ease,
     press_grade,
@@ -49,10 +50,13 @@ from world.standoffs.services.verbs import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
-    from world.checks.types import ModifierContribution
+    from world.checks.types import ExtraTraitTerm, ModifierContribution
     from world.combat.models import CombatEncounter
+    from world.magic.models import Technique
 
 
 @dataclass(frozen=True)
@@ -153,27 +157,35 @@ class _Grader:
     """Grades one viewer's checks for one build; its dicts live and die with that build.
 
     The roll's own modifier total feeds the preview, so the shown grade matches the roll.
-    ``base_totals`` holds the viewer's gathered modifiers per check type and ``graded``
-    the finished grade per (check type, difficulty, modifiers). The roll adds the social
-    contributions on top of the gathered total as a plain sum.
+    ``base_totals`` holds the viewer's gathered modifiers per (check type, skill terms) and
+    ``graded`` the finished grade per (check type, skill terms, difficulty, modifiers). The
+    roll adds the social contributions on top of the gathered total as a plain sum.
     """
 
     sheet: CharacterSheet
-    base_totals: dict[int, int] = field(default_factory=dict)
-    graded: dict[tuple[int, int, int], str] = field(default_factory=dict)
+    base_totals: dict[tuple, int] = field(default_factory=dict)
+    graded: dict[tuple, str] = field(default_factory=dict)
 
     def grade(
         self,
         check_type: CheckType,
         difficulty: int,
         contributions: list[ModifierContribution],
+        extra_traits: Sequence[ExtraTraitTerm] = (),
     ) -> str:
-        if check_type.pk not in self.base_totals:
-            self.base_totals[check_type.pk] = collect_check_modifiers(self.sheet, check_type).total
-        extra = self.base_totals[check_type.pk] + sum(c.value for c in contributions)
-        key = (check_type.pk, difficulty, extra)
+        """The shown grade. ``extra_traits`` are the roll's skill terms (a display cast's)."""
+        terms_key = tuple((term.trait.pk, term.weight) for term in extra_traits)
+        base_key = (check_type.pk, terms_key)
+        if base_key not in self.base_totals:
+            self.base_totals[base_key] = collect_check_modifiers(
+                self.sheet, check_type, extra_traits=extra_traits
+            ).total
+        extra = self.base_totals[base_key] + sum(c.value for c in contributions)
+        key = (*base_key, difficulty, extra)
         if key not in self.graded:
-            rank = preview_check_difficulty(self.sheet.character, check_type, difficulty, extra)
+            rank = preview_check_difficulty(
+                self.sheet.character, check_type, difficulty, extra, extra_traits=extra_traits
+            )
             self.graded[key] = difficulty_indicator_for_rank_difference(rank).value
         return self.graded[key]
 
@@ -355,9 +367,15 @@ def _display_techniques(viewer: CharacterSheet) -> list[DisplayTechniqueView]:
 
 
 def build_standoff_view(
-    encounter: CombatEncounter, viewer_sheet: CharacterSheet
+    encounter: CombatEncounter,
+    viewer_sheet: CharacterSheet,
+    technique: Technique | None = None,
 ) -> StandoffView | None:
     """The standoff as ``viewer_sheet`` may see it; None when there is no standoff.
+
+    ``technique`` is the technique the viewer means to display. A casting approach is
+    graded with that technique's skill term, the same term its press rolls with; without
+    one, or for any approach that casts nothing, no skill term is added.
 
     Everything a group needs is read once per (group, viewer) and shared by every
     approach and terms entry, so the query count follows the number of groups, not the
@@ -371,6 +389,7 @@ def build_standoff_view(
     all_terms = list(StandoffTerms.objects.all())
     capability_ids = [a.capability_id for a in approaches]
     grader = _Grader(viewer_sheet)
+    display_terms = display_cast_terms(viewer_sheet, technique) if technique is not None else ()
     view = StandoffView(
         place=encounter.room.db_key if encounter.room is not None else "",
         # Only a casting approach (a display of power) offers the technique picker.
@@ -391,6 +410,7 @@ def build_standoff_view(
             all_terms,
             config,
             grader,
+            display_terms,
         )
     return view
 
@@ -405,6 +425,7 @@ def _append_group_views(  # noqa: PLR0913 - inputs are the per-view and per-grou
     all_terms: list[StandoffTerms],
     config: StandoffConfig,
     grader: _Grader,
+    display_terms: Sequence[ExtraTraitTerm] = (),
 ) -> None:
     """Add one group's summary, approaches, and terms to the viewer's view."""
     reveals = list(group.reveals.select_related("drive", "faction_rule"))
@@ -445,7 +466,9 @@ def _append_group_views(  # noqa: PLR0913 - inputs are the per-view and per-grou
         terms=language_refusal(group, viewer, verbal=False, languages=languages),
         regard=regard_lever(group, ctx),
     )
-    _append_approaches(view, facts, group, viewer, ctx, approaches, targeted, grader, spoken)
+    _append_approaches(
+        view, facts, group, viewer, ctx, approaches, targeted, grader, spoken, display_terms
+    )
     _append_terms(view, facts, group, viewer, ctx, all_terms, config, grader, spoken)
 
 
@@ -479,15 +502,24 @@ def _append_approaches(  # noqa: PLR0913 - one approach-list build context
     targeted_by_capability: dict,
     grader: _Grader,
     spoken: _Spoken,
+    display_terms: Sequence[ExtraTraitTerm] = (),
 ) -> None:
     """Add all available approach grades for one group.
+
+    A casting approach is graded with ``display_terms``, the skill terms its display cast
+    rolls with; every other approach adds none.
 
     A verbal approach the language gate refuses is still listed and graded, with the
     reason, so the player sees why it is closed to them (#4373).
     """
     for approach in approaches:
         graded, hits, targeted = press_grade(group, viewer, approach, ctx, targeted_by_capability)
-        grade = grader.grade(approach.check_type, graded.difficulty, graded.contributions)
+        grade = grader.grade(
+            approach.check_type,
+            graded.difficulty,
+            graded.contributions,
+            display_terms if approach.casts_technique else (),
+        )
         levers, hits_drive = _levers(facts, hits, targeted)
         levers.extend(spoken.regard)
         view.approaches.append(

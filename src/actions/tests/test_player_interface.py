@@ -250,7 +250,7 @@ class TestGetPlayerActionsCombatBackend(django.test.TestCase):
         """#2014: when the caster is provisioned with a personal magic check,
         the COMBAT PlayerAction.check_type must be THEIR check, not the
         template's fallback — the action-picker UI must show the same check
-        the resolver actually rolls (resolve_cast_check_type)."""
+        the resolver actually rolls (resolve_cast_check)."""
         from evennia.accounts.models import AccountDB
 
         from actions.player_interface import get_player_actions
