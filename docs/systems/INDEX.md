@@ -2963,8 +2963,8 @@ Character lifecycle management with web-first applications and player anonymity.
   `entries/mine/` rows add `loan`, `npc_notes`, `is_crowd_voice`. Actions: `offer_npc`,
   `take_back_npc`, `answer_npc_loan`, `request_npc_borrow`. Copy sources are own NPCs,
   staff templates and any listed NPC; notes copy only for the owner or staff. An NPC's
-  owner reads its `entries/{id}/` and manages its gallery, a template included. Every
-  `Scene.finish_scene` ends the scene's loans. Who plays or owns is shown through
+  owner reads its `entries/{id}/` and manages its gallery (any story NPC they own).
+  `Scene.finish_scene` and `conclude_battle` both end the scene's loans. Who plays or owns is shown through
   `cast_list_services.player_names`. Details: [roster.md](roster.md)
 - **Models:** `Roster`, `RosterEntry`, `RosterTenure`, `RosterApplication`, `PlayerMail`
 - **Character slots (#3996, ADR-0317):** `services/slots.py` is the only counter —

@@ -426,7 +426,6 @@ class _CombatStakesCacheMixin:
         super().__init__(*args, **kwargs)
         self._gating_risk_by_pk: dict[int, str | None] = {}
         self._stakes_by_scene_id: dict[int, list[dict] | None] = {}
-        self._resist_by_pk: dict[int, tuple[bool, str | None]] = {}
 
     def _resist_subject(self, obj: Any) -> tuple[SceneActionRequest, Persona | None]:
         """The request a row shows, and the one target it is for (None: every target)."""
@@ -434,21 +433,19 @@ class _CombatStakesCacheMixin:
         raise NotImplementedError(msg)
 
     def _resist(self, obj: Any) -> tuple[bool, str | None]:
-        """Whether the row is resist-only, and the check the PC rolls, decided once per row.
+        """Whether the row is resist-only, and the check the PC rolls, computed per row.
 
         The check is the template's resist check, not the NPC's own check (#4418).
         """
-        if obj.pk not in self._resist_by_pk:
-            request, target_persona = self._resist_subject(obj)
-            resist_only = request_is_resist_only(request, target_persona)
-            template = request.action_template
-            check_name = (
-                template.resist_check_type.name
-                if resist_only and template is not None and template.resist_check_type_id
-                else None
-            )
-            self._resist_by_pk[obj.pk] = (resist_only, check_name)
-        return self._resist_by_pk[obj.pk]
+        request, target_persona = self._resist_subject(obj)
+        resist_only = request_is_resist_only(request, target_persona)
+        template = request.action_template
+        check_name = (
+            template.resist_check_type.name
+            if resist_only and template is not None and template.resist_check_type_id
+            else None
+        )
+        return resist_only, check_name
 
     def get_resist_only(self, obj: Any) -> bool:
         return self._resist(obj)[0]

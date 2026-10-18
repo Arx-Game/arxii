@@ -13,11 +13,15 @@ from rest_framework import status
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.models import RoomProfile
 from integration_tests.harness import JourneyCase
+from world.battles.constants import BattleOutcome
+from world.battles.factories import BattleFactory
+from world.battles.services import conclude_battle
 from world.checks.factories import CheckTypeFactory
 from world.events.constants import EventStatus
 from world.events.factories import EventFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_default_gm_level_caps
+from world.roster.constants import NPCLoanStatus
 from world.roster.factories import NPCLoanFactory
 from world.roster.models import NPCLoan, RosterEntry
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
@@ -141,6 +145,23 @@ class AGuidePlaysALentNpc(JourneyCase):
 
         said = self.telnet(self.ravenna, f"event complete {event.pk}")
         self.assertIn("is complete", said)
+        self.assertNotIn("Captain Vael", self._mine_names(self.guide))
+        self.assertIn("Captain Vael", self._mine_names(self.gm))
+
+    def test_concluding_a_battle_returns_the_lent_npc(self) -> None:
+        battle = BattleFactory()
+        loan = NPCLoanFactory(
+            roster_entry=self.entry,
+            borrower=self.guide,
+            offered_by=self.gm,
+            scene=battle.scene,
+            status=NPCLoanStatus.ACTIVE,
+        )
+
+        conclude_battle(battle=battle, outcome=BattleOutcome.ATTACKER_DECISIVE)
+
+        loan.refresh_from_db()
+        self.assertNotEqual(loan.status, NPCLoanStatus.ACTIVE)
         self.assertNotIn("Captain Vael", self._mine_names(self.guide))
         self.assertIn("Captain Vael", self._mine_names(self.gm))
 

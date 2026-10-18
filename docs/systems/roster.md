@@ -63,8 +63,9 @@ or a Guide plays one with an ordinary tenure or an active loan.
 
 - `services/npc_lending.py`: `offer_npc(entry, guide, scene, by)`,
   `request_borrow(entry, borrower)`, `answer_loan(loan, accept, by)`,
-  `end_loan(loan, by)`, `end_scene_loans(scene)` (called from `Scene.finish_scene`, so every finish, an
-  event's completion included, ends the scene's loans),
+  `end_loan(loan, by)`, `end_scene_loans(scene)` (called from `Scene.finish_scene` and from
+  `conclude_battle`, which writes the scene's end directly; so every finish, an event's
+  completion and a concluded battle included, ends the scene's loans),
   `may_end_loan`, `playable_entries`, `active_loans_touching`.
   Activation is race-safe, takes the NPC from its owner while lent (owner cannot play
   it), unpuppets the other side's sessions and clears any saved selection. Errors
@@ -86,10 +87,10 @@ or a Guide plays one with an ordinary tenure or an active loan.
   uncapped and never counts against the GM's story-NPC cap.
 - `services/gallery.py`: `_sync_npc_persona_portrait` sets both `Persona.thumbnail`
   and `Persona.thumbnail_url` from the worn look of a story NPC (PCs untouched).
-  `can_manage_gallery` also lets the story NPC's owner (`can_edit_npc_sheet`) dress a
-  template nobody holds; their upload there is character art they may delete again.
+  `can_manage_gallery` also lets the owner of a story NPC (`can_edit_npc_sheet`, held or
+  not, template or not) dress it; their upload there is character art they may delete again.
 - `RosterEntryViewSet` (`/api/roster/entries/`) shows a non-staff caller an NPC-shelf
-  entry they hold or own (`created_by_account`), so a GM reads their template's sheet.
+  entry they hold or own (`created_by_account`), so a GM reads the sheet of an NPC they own.
 
 **Availability seams.** NPC loans join `PlayerData.get_available_roster_entries`
 (through `PlayerData.cached_npc_loans`) and `Account.cached_roster_entries`, so the
@@ -594,7 +595,7 @@ story NPC's owner (`CanManageGallery`). Every write goes through `world.roster.s
   Character art the current player hid is left out for everyone but that player and staff
 - `POST` (multipart `roster_entry` + `images[]`) - Upload into the Gallery. A staff upload
   on a character they are not playing becomes character art, as does an NPC owner's
-  upload on their template
+  upload on a story NPC they own
 - `PATCH /{id}/` - `title`, `caption`, `is_nsfw`, `mood`, `crop` (`{x, y, width}` makes or
   re-frames a look; `null` makes it a plain picture), `wear`
 - `DELETE /{id}/` - The one Delete: deletes the file (freeing quota) unless another
