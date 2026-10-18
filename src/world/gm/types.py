@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from world.scenes.models import Scene
     from world.standoffs.models import StandoffGroup
     from world.stories.models import StakeOutcome
+    from world.worship.models import PledgeDetails
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,7 @@ class NarratableEvent:
     technique: Technique | None = None
     stake_outcome: StakeOutcome | None = None
     standoff_group: StandoffGroup | None = None
+    pledge_details: PledgeDetails | None = None
 
 
 @dataclass(frozen=True)

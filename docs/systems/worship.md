@@ -562,8 +562,8 @@ pledge progress (Ruling 9).
 ### Favor with beings: answers at the close (#4333, slice 3) [BUILT & WIRED]
 
 Spec and demo: issue #4333 (slice 3 is #4374; walkthrough A steps 3 and 4). Decision:
-ADR-4333-B (a vision written ahead may be released by a closing rite). Stewards (slice 4) and
-answering live (slice 5) are not built.
+ADR-4333-B (a vision written ahead may be released by a closing rite). Stewards are slice 4
+(below); answering live (slice 5) is not built.
 
 **Models**
 
@@ -625,6 +625,75 @@ answering live (slice 5) are not built.
   tiers and what they fall back to) and credit with Mark reviewed. Reached from the being's
   change form, the Being Service builder (per pledge type "N of 5 outcome tiers written")
   and the Deity Editor. `AnswerAdmin` and `PendingAnswerAdmin` are read-only.
+
+### Favor with beings: stewards (#4333, slice 4) [BUILT & WIRED]
+
+Spec and demo: issue #4333 (slice 4 is #4416; walkthrough C). Decision: ADR-4333-C (free text
+only from a being's steward). Answering live in a GM-run scene and `GMLevelCap.may_adapt_answers`
+are slice 5 and not built.
+
+**Models**
+
+- `BeingSteward` — (O2O being CASCADE, table FK `GMTable` PROTECT, assigned_at): the GM table that
+  answers for a being. `clean()` raises `steward_refusals`. Staff assign it on the being's admin
+  change form (`BeingStewardInline`, `OneRowPerFormSet`, at most one), which shows the table GM's
+  level, its active members, the other beings it stewards and the god signs checked.
+- `DevotionConfig.steward_answer_days` (default 3, example tuning): the window the table GM has.
+- `GMPrompt.pledge` (FK `PledgeDetails`, SET_NULL) and `GMPromptKind.BEING_ANSWER` /
+  `GMPromptGroup.BEING_ANSWER` ("Being answers"); BEING_ANSWER is a decision kind
+  (`DECISION_PROMPT_KINDS`): addressed to one GM, resolved by their own action, no default lines.
+  Migration 0243 is schema only.
+
+**Services** (`worship/steward_services.py`)
+
+- `god_signs(being, table)` — there is no god flag, so: a public codex entry
+  (`codex_entry.is_public`); any `WorshipDeclaration.public_being`; a Chosen (valence set, not
+  released) who is not an active member of `table`; an active `TempleDedication`. A secret faith
+  is not a sign. `steward_refusals(being, table)` adds a GM below `GMLevel.SENIOR` and an archived
+  table (Ruling 5).
+- `stewarded_refusal(sheet, being)` — "<being> answers only to the members of one GM table." for
+  anyone not seated at the steward table (an active `GMTableMembership` whose persona is the
+  sheet's). Asked by `take_pledge` (`StewardedBeingClosed`), `pray` (`PrayerError`),
+  `invocation_refusal` and the sacrifice site; a member's sacrifice to a named stewarded being needs
+  no shrine (`_sacrifice_site` returns site "", room line "<name> sacrifices <item> to <being>.").
+  `PledgeViewSet` lists a stewarded being's pledge types only to its members, its GM and staff.
+- `route_to_steward(details)` — called by `close_pledge` in place of the draw once the resolution
+  commits: a scene-less `BEING_ANSWER` prompt through `route_narratable_event` with the table GM as
+  the only candidate. A GM who muted the group, or who plays the closing character, is not prompted
+  and the answer is drawn as for any being. `AnswerDelivery.awaiting_steward`; the close message
+  adds "<being>'s answer will come later."
+- `answer_options(details)` — the being's active answers (this pledge type's and its general ones)
+  at or below the closing tier. `may_write_free_text(details)` — Success and Critical Success only.
+  `catalogue_clues(being)` — the clues its answers already link (fact or follow-up); staff create
+  clues.
+- `send_steward_answer(prompt, *, resolver, answer=None, text="", clue=None)` — one authored
+  option (delivered by `deliver_answer`, held while the pool is short) or the GM's own text
+  (`send_vision(sent_by=<GM>, reveal_source=True, prayer=...)`; a CODEX or SECRET clue rides the
+  vision's clue slot, any other is handed over by `find_clue`). Free text needs the pool to pay
+  now. The prompt is resolved (CONFIRMED) under a row lock before anything is sent.
+- `dismiss_being_answer(prompt, *, resolver)` — DISMISSED, then `deliver_pledge_answer` draws an
+  authored answer: never dropped. `dismiss_gm_prompt` routes the kind here, so the web queue's
+  Dismiss and telnet `gm prompt dismiss` both use it.
+- `expire_steward_prompts()` — the hourly tick `worship.steward_answer_timeout`: a prompt older
+  than `steward_answer_days` is closed the same way, with "No answer within N days: an authored
+  answer was drawn."
+
+**Surfaces**
+
+- Table page (`/tables/:id`, Beings tab, GM and staff; `?tab=beings` opens it): GM prompts with
+  Open and Dismiss, the answer panel (pledge, tier, sacrificed items, prayer, the answers at the
+  tier and below, Write free text, the catalogue clue picker, Send as <being>, time left in the
+  window); one card per stewarded being (what it favors, pledge types with favor target and span,
+  "N of 5 outcome tiers written"); Edit opens the pledge type form and the answer form by tier
+  with the coverage grid and the catalogue. API under `/api/worship/`: `stewarded-beings/`,
+  `steward-pledges/`, `steward-answers/`, `steward-sacrifice-lines/`, `steward-prompts/` (+
+  `answer/`, `dismiss/`), all scoped by `stewarded_beings_for(account)`; answers keep the tier
+  limits and take clues only from the catalogue; the GM's `PlayerData.contributor` is credited.
+- Scene GM queue: a being answer row (`GMPromptSerializer.being_answer_summary`,
+  `being_answer_table`) with Open (the table's Beings tab) and Dismiss.
+- Telnet: `gm prompts` lists it; `gm prompt answer <id>` lists the options, `answer=<id>` sends
+  one, `text=<words> [clue=<id>]` sends the GM's own; `gm prompt dismiss <id>`.
+- Admin: the Answer builder's rail names the steward ("None (staff-owned)").
 
 ### Miracles & Divine Intervention (#2360)
 

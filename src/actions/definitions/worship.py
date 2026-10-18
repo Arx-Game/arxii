@@ -595,6 +595,10 @@ class ClosePledgeAction(Action):
                 if outcome.award
                 else f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}."
             )
+        awaiting = outcome.delivery is not None and outcome.delivery.awaiting_steward
+        if awaiting:
+            # A stewarded being's table GM answers it (slice 4); the vision comes later.
+            message += f" {being}'s answer will come later."
         return ActionResult(
             success=True,
             message=message,
@@ -602,6 +606,7 @@ class ClosePledgeAction(Action):
                 "outcome": outcome.outcome_name,
                 "resolved": outcome.resolved,
                 "award": outcome.award,
+                "awaiting_steward": awaiting,
             },
         )
 
@@ -660,8 +665,13 @@ class SacrificeAction(Action):
             outcome = sacrifice_items(sheet, items, being=being)
         except PledgeError as exc:
             return ActionResult(success=False, message=exc.user_message)
+        where = (
+            f"at {outcome.being.name}'s {outcome.site}"
+            if outcome.site
+            else f"to {outcome.being.name}"
+        )
         lines = [
-            f"You sacrifice {item.name} at {outcome.being.name}'s {outcome.site}. "
+            f"You sacrifice {item.name} {where}. "
             f"{item.calculation} favor with {outcome.being.name}."
             for item in outcome.items
         ]
@@ -703,3 +713,78 @@ def _carried_items(actor: ObjectDB, kwargs: dict[str, Any]):
             return None, ActionResult(success=False, message=f"You carry no '{name}'.")
         items.append(instance)
     return items, None
+
+
+@dataclass
+class AnswerBeingPromptAction(Action):
+    """A stewarded being's table GM answers a closed pledge (#4333 slice 4).
+
+    Account-authorized like the other GM prompt actions: ``actor`` may be None
+    (the web dispatches with the request's account). Only the GM the prompt is
+    addressed to, or staff, may answer.
+
+    kwargs:
+        account: the answering GM's account.
+        prompt_id: the ``BEING_ANSWER`` prompt.
+        answer_id: one of the being's authored answers at or below the tier; or
+        text: the GM's own words (Success and Critical Success only), with
+        clue_id: optional, one of the clues the being's answers already link.
+    """
+
+    key: str = "gm_being_answer"
+    name: str = "Answer for a being"
+    icon: str = "sparkles"
+    category: str = "worship"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB | None, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+        from world.clues.models import Clue  # noqa: PLC0415
+        from world.gm.models import GMPrompt  # noqa: PLC0415
+        from world.worship.exceptions import StewardAnswerError  # noqa: PLC0415
+        from world.worship.models import Answer  # noqa: PLC0415
+        from world.worship.steward_services import send_steward_answer  # noqa: PLC0415
+
+        account = kwargs.get("account")
+        if account is None and actor is not None:
+            from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+
+            account = resolve_account_or_none(actor)
+        prompt = GMPrompt.objects.filter(pk=kwargs.get("prompt_id")).first()
+        not_yours = "That prompt is not addressed to you."
+        if prompt is None or account is None:
+            return ActionResult(success=False, message=not_yours)
+        if not is_staff_observer(account) and prompt.addressed_to_id != account.pk:
+            return ActionResult(success=False, message=not_yours)
+        answer, error = _optional_row(Answer, {"answer": kwargs.get("answer_id")}, "answer")
+        if error is not None:
+            return error
+        clue, error = _optional_row(Clue, {"clue": kwargs.get("clue_id")}, "clue")
+        if error is not None:
+            return error
+        try:
+            delivery = send_steward_answer(
+                prompt,
+                resolver=account,
+                answer=answer,
+                text=str(kwargs.get("text") or ""),
+                clue=clue,
+            )
+        except StewardAnswerError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        being = prompt.pledge.pledge.being.name
+        if delivery.held:
+            message = f"Sent. {being}'s worship pool is short; the vision goes out once it can pay."
+        else:
+            message = f"Sent as a vision from {being}."
+        return ActionResult(
+            success=True,
+            message=message,
+            data={
+                "prompt_id": prompt.pk,
+                "vision_id": delivery.vision.pk if delivery.vision is not None else None,
+                "held": delivery.held,
+            },
+        )

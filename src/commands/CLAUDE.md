@@ -632,7 +632,12 @@ actions, backends, and service functions.
   `moment confirm|dismiss <id>`, since `gm prompt` closes narration kinds only. A standoff
   proposal row (#4354) names `gm prompt confirm|hold <id>` and `gm prompt override <id>
   <reason>` (`gm_standoff_confirm`/`_hold`/`_override`), and `gm standoff shake|steady
-  <group id or name> <reason>` is the GM morale control (`gm_standoff_morale`). Bare
+  <group id or name> <reason>` is the GM morale control (`gm_standoff_morale`). A being answer
+  row (#4333 slice 4, a stewarded being's closed pledge) names `gm prompt answer <id>`: bare, it
+  lists the being's answers at or below the tier (`answer=<id>`), whether the GM's own text is
+  allowed (`text=<words> [clue=<id>]`, Success and above) and the catalogue clues;
+  `AnswerBeingPromptAction` (`gm_being_answer`) sends it. `gm prompt dismiss <id>` draws an
+  authored answer. Bare
   `standoff` outside the encounter shows a scene GM the GM view and anyone else the public
   summary.
   `gm suggest <kind>=<text>` (#2127 — `kind` one of

@@ -399,7 +399,8 @@ export type GMPromptKind =
   | 'miracle'
   | 'death'
   | 'stake_outcome'
-  | 'standoff_cause';
+  | 'standoff_cause'
+  | 'being_answer';
 
 /**
  * One row of the GM prompt queue (#4101; was the #2183 dramatic-moment
@@ -426,6 +427,9 @@ export interface GMPrompt {
   standoff_cause_label?: string;
   standoff_reason?: string;
   standoff_force?: string;
+  /** being_answer prompts (#4333): "<being> answers <name> (<tier>)." and the table whose page answers it. */
+  being_answer_summary?: string;
+  being_answer_table?: number | null;
   resolution_note?: string;
   room_text: string;
   private_text: string;
