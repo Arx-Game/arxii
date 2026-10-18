@@ -19,11 +19,8 @@ from world.roster.constants import NPCBorrowAudience, NPCLendPolicy, NPCSection
 from world.roster.models import NPCLoan, RosterEntry
 from world.roster.services.gallery import portrait_url
 from world.roster.services.npc_lending import OWNER_FALLBACK_NAME
-from world.societies.houses.constants import TitleSuffixMode
 
 DESCRIPTION_PREVIEW_LENGTH = 200
-# The primary persona field ``NPCDetailSerializer.title`` writes.
-_TITLE_SUFFIX_FIELD = "title_suffix"
 
 
 def source_entries_for(account) -> Q:
@@ -120,13 +117,6 @@ class NPCDetailSerializer(NPCRosterRowSerializer):
     )
     is_template = serializers.BooleanField(source="story_npc_settings.is_template", read_only=True)
     open_requests = serializers.SerializerMethodField()
-    # Which held titles trail the NPC's composed name (the primary persona's
-    # ``title_suffix``, #3261). A persona has no free-text title of its own.
-    title = serializers.ChoiceField(
-        source="character_sheet.primary_persona.title_suffix",
-        choices=TitleSuffixMode.choices,
-        required=False,
-    )
 
     class Meta:
         model = RosterEntry
@@ -136,7 +126,6 @@ class NPCDetailSerializer(NPCRosterRowSerializer):
             "notes_for_player",
             "is_template",
             "open_requests",
-            "title",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = (
             "id",
@@ -169,12 +158,6 @@ class NPCDetailSerializer(NPCRosterRowSerializer):
         return data
 
     def update(self, instance: RosterEntry, validated_data: dict[str, Any]) -> RosterEntry:
-        persona_changes = validated_data.get("character_sheet", {}).get("primary_persona", {})
-        title_suffix = persona_changes.get(_TITLE_SUFFIX_FIELD)
-        if title_suffix is not None:
-            persona = instance.character_sheet.primary_persona
-            persona.title_suffix = title_suffix
-            persona.save(update_fields=[_TITLE_SUFFIX_FIELD])
         changes = validated_data.get("story_npc_settings", {})
         settings = instance.story_npc_settings
         for field, value in changes.items():

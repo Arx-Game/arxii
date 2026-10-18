@@ -1,5 +1,5 @@
 """Journeys behind the GM's NPC form (#4418): place an NPC in a scene, save a template,
-pick what works on an NPC, and set how its name shows titles."""
+and pick what works on an NPC."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from world.roster.services.npc_lending import answer_loan, offer_npc
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 CAST_LIST = "/api/scenes/{}/cast-list/"
-NPCS = "/api/roster/npcs/"
 TRAITS = "/api/npc-services/personality-traits/"
 
 
@@ -133,18 +132,3 @@ class TheNpcFormsBackend(JourneyCase):
         player = self.make_player("Ysmay", room=self.gate)
         refused = self.api(self.account_of(player)).get(TRAITS)
         self.assertEqual(refused.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_the_owner_sets_how_titles_trail_the_npcs_name(self) -> None:
-        vael = self._mint("Captain Vael")
-        url = f"{NPCS}{vael.pk}/"
-        patched = self.api(self.gm).patch(url, {"title": "primary"}, format="json")
-        self.assertEqual(patched.status_code, status.HTTP_200_OK, patched.data)
-        self.assertEqual(patched.json()["title"], "primary")
-        persona = vael.character_sheet.primary_persona
-        persona.refresh_from_db()
-        self.assertEqual(persona.title_suffix, "primary")
-
-        refused = self.api(self.guide).patch(url, {"title": "all"}, format="json")
-        self.assertEqual(refused.status_code, status.HTTP_404_NOT_FOUND)
-        persona.refresh_from_db()
-        self.assertEqual(persona.title_suffix, "primary")
