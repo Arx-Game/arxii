@@ -891,6 +891,7 @@ def _dispatch_clash_contribution(
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.combat.services import declare_clash_contribution  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
 
     technique_id = kwargs.get("technique_id")
     if technique_id is None:
@@ -933,6 +934,7 @@ def _dispatch_clash_contribution(
             encounter=ctx.participant.encounter,
             technique_id=technique_id,
             target=clash.npc_opponent.objectdb,
+            cast_check=resolve_cast_check(sheet.character, technique),
         )
 
     declare_clash_contribution(

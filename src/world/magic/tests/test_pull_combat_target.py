@@ -178,7 +178,7 @@ class CastCommitCombatPullTargetWiringTests(TestCase):
             CastTechniqueAction._commit_combat_pull(
                 cast_pull,
                 ctx,
-                technique_id=1,
+                technique_id=TechniqueFactory().pk,
                 kwargs={"focused_opponent_target_id": opponent.pk},
             )
 
@@ -199,7 +199,7 @@ class CastCommitCombatPullTargetWiringTests(TestCase):
             CastTechniqueAction._commit_combat_pull(
                 cast_pull,
                 ctx,
-                technique_id=1,
+                technique_id=TechniqueFactory().pk,
                 kwargs={"focused_ally_target_id": ally_participant.pk},
             )
 
@@ -214,7 +214,7 @@ class CastCommitCombatPullTargetWiringTests(TestCase):
             CastTechniqueAction._commit_combat_pull(
                 cast_pull,
                 ctx,
-                technique_id=1,
+                technique_id=TechniqueFactory().pk,
                 kwargs={},
             )
 

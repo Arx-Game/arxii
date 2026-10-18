@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.covenants.perks.context import SituationContext
+    from world.magic.types.magic_skills import CastCheck
     from world.magic.types.pull import CastPullDeclaration
 
 
@@ -165,12 +166,13 @@ def resolve_pull_from_kwargs(
     return None
 
 
-def commit_combat_pull(
+def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belongs to
     cast_pull: CastPullDeclaration,
     participant: CombatParticipant,
     encounter: CombatEncounter,
     technique_id: int,
     target: ObjectDB | None = None,
+    cast_check: CastCheck | None = None,
 ) -> None:
     """Commit *cast_pull* as a ``CombatPull`` row for the current round.
 
@@ -203,6 +205,9 @@ def commit_combat_pull(
             ``None`` when the action has no resolvable target. Threaded through to
             ``PullActionContext.target``, which feeds ``court_regard_modulation``
             for COVENANT_ROLE pulls via ``resolve_pull_effects``.
+        cast_check: What the cast rolls, from ``resolve_cast_check`` (#4450). Its stat and
+            skill traits are the ``involved_traits`` a TRAIT thread is matched against;
+            without it no TRAIT thread is in the action.
 
     Raises:
         ActionDispatchError(PULL_ALREADY_COMMITTED): When the
@@ -216,11 +221,7 @@ def commit_combat_pull(
 
     from actions.errors import ActionDispatchError  # noqa: PLC0415
     from world.magic.exceptions import MagicError  # noqa: PLC0415
-    from world.magic.models import Technique  # noqa: PLC0415
-    from world.magic.services.magic_skills import (  # noqa: PLC0415
-        cast_involved_trait_ids,
-        resolve_cast_check,
-    )
+    from world.magic.services.magic_skills import cast_involved_trait_ids  # noqa: PLC0415
     from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
@@ -228,7 +229,6 @@ def commit_combat_pull(
 
     # The traits this cast rolls (#4450) are in its action, so a TRAIT thread on the
     # caster's stat, a skill or the technique skill can be pulled.
-    cast_check = resolve_cast_check(sheet.character, Technique.objects.get(pk=technique_id))
     action_context = PullActionContext(
         combat_encounter=encounter,
         participant=participant,

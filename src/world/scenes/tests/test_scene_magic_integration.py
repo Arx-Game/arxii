@@ -479,3 +479,37 @@ class TestEnhancedSocialActionTechniqueSkill(SceneMagicTestMixin, TestCase):
         assert main
         assert all(not r.get("extra_traits") for r in main)
         assert all(not c.get("extra_traits") for c in collected)
+
+    def test_enhanced_social_action_threads_see_template_stat_and_technique_skill(self) -> None:
+        from world.magic.services.cast_threads import applicable_threads_for_cast
+
+        skill = SkillFactory()
+        technique = TechniqueFactory(
+            name="Threaded Gaze", intensity=3, control=8, anima_cost=2, skill=skill
+        )
+        sheet = CharacterSheet.objects.get(character=self.initiator.character_sheet.character)
+        resonance = ResonanceFactory()
+        presence = Trait.objects.get(name="presence")
+        skill_thread = ThreadFactory(
+            owner=sheet, resonance=resonance, target_kind=TargetKind.TRAIT, target_trait=skill.trait
+        )
+        stat_thread = ThreadFactory(
+            owner=sheet, resonance=resonance, target_kind=TargetKind.TRAIT, target_trait=presence
+        )
+        ThreadFactory(
+            owner=sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TRAIT,
+            target_trait=SkillFactory().trait,
+        )
+        offered: list[list[int]] = []
+
+        def spy(*args, **kwargs):
+            threads = applicable_threads_for_cast(*args, **kwargs)
+            offered.append(sorted(a.thread.pk for a in threads))
+            return threads
+
+        with patch("world.magic.services.cast_threads.applicable_threads_for_cast", spy):
+            self._flirt_with(technique)
+
+        assert offered == [sorted([skill_thread.pk, stat_thread.pk])]

@@ -29,14 +29,24 @@ from world.combat.factories import (
 )
 from world.combat.services import resolve_round
 from world.fatigue.constants import EffortLevel
+from world.magic.constants import EffectKind, TargetKind
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
+    CharacterResonanceFactory,
     CharacterTechniqueFactory,
+    CharacterThreadWeavingUnlockFactory,
     EffectTypeFactory,
     GiftFactory,
+    ResonanceFactory,
     TechniqueFactory,
+    ThreadPullCostFactory,
+    ThreadPullEffectFactory,
+    ThreadWeavingUnlockFactory,
 )
+from world.magic.models import CharacterResonance
+from world.magic.services.threads import weave_thread
+from world.magic.types.pull import CastPullDeclaration
 from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.models import WeeklySkillUsage
 from world.scenes.constants import RoundStatus
@@ -94,13 +104,19 @@ class CastingWithATechniqueSkill(JourneyCase):
             )
         return character
 
-    def cast_and_read_the_roll(self, character) -> tuple[tuple[ExtraTraitTerm, ...], CheckResult]:
-        """Cast the technique on the web seam; return the terms the roll carried and its result."""
+    def cast_and_read_the_roll(
+        self, character, **cast_kwargs
+    ) -> tuple[tuple[ExtraTraitTerm, ...], CheckResult]:
+        """Cast the technique on the web seam; return the terms the roll carried and its result.
+
+        ``self.roll_modifiers`` is left holding the flat modifier the cast added to that roll.
+        """
         rolled: list[CheckResult] = []
 
         def spy(*args, **kwargs) -> CheckResult:
             result = perform_check(*args, **kwargs)
             rolled.append(result)
+            self.roll_modifiers = kwargs.get("extra_modifiers", 0)
             return result
 
         success = CheckOutcome.objects.get(name="Success")
@@ -108,7 +124,9 @@ class CastingWithATechniqueSkill(JourneyCase):
             force_check_outcome(success) as capture,
             patch("actions.services.perform_check", side_effect=spy),
         ):
-            outcome = self.web(character, "cast_technique", technique_id=self.technique.pk)
+            outcome = self.web(
+                character, "cast_technique", technique_id=self.technique.pk, **cast_kwargs
+            )
         self.assertTrue(outcome.detail.success, outcome.detail.message)
         self.assertEqual(len(rolled), 1)
         return capture.extra_traits, rolled[0]
@@ -119,6 +137,41 @@ class CastingWithATechniqueSkill(JourneyCase):
         self.assertEqual(terms, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),))
         _, untrained = self.cast_and_read_the_roll(self.hobb)
         self.assertEqual(result.trait_points - untrained.trait_points, SKILL_VALUE)
+
+    def test_thread_on_technique_skill_pulls_on_web_cast(self) -> None:
+        sheet = self.ysmay.sheet_data
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=sheet, resonance=resonance, balance=10, lifetime_earned=10
+        )
+        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TRAIT,
+            resonance=resonance,
+            tier=1,
+            flat_bonus_amount=3,
+            effect_kind=EffectKind.FLAT_BONUS,
+        )
+        CharacterThreadWeavingUnlockFactory(
+            character=sheet,
+            unlock=ThreadWeavingUnlockFactory(
+                target_kind=TargetKind.TRAIT, unlock_trait=self.skill.trait
+            ),
+        )
+        thread = weave_thread(
+            sheet, TargetKind.TRAIT, self.skill.trait, resonance, name="Occult Thread"
+        )
+        self.cast_and_read_the_roll(self.ysmay)
+        unpulled = self.roll_modifiers
+
+        self.cast_and_read_the_roll(
+            self.ysmay,
+            cast_pull=CastPullDeclaration(resonance=resonance, tier=1, threads=(thread,)),
+        )
+
+        self.assertEqual(self.roll_modifiers - unpulled, 3)
+        balance = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
+        self.assertEqual(balance.balance, 9)
 
 
 class FightingWithATechniqueSkill(JourneyCase):

@@ -158,7 +158,13 @@ class PaidPullContextTests(CastThreadTraitsBase):
         )
 
         with patch("world.magic.services.resonance.spend_resonance_for_pull") as spend:
-            commit_combat_pull(pull, participant, encounter, self.technique.pk)
+            commit_combat_pull(
+                pull,
+                participant,
+                encounter,
+                self.technique.pk,
+                cast_check=resolve_cast_check(self.sheet.character, self.technique),
+            )
 
         context = spend.call_args.kwargs["action_context"]
         self.assertEqual(
