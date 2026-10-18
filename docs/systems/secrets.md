@@ -284,6 +284,13 @@ two channels, one-shot:
   for killing its head). **Organization** victims get an `OrganizationReputation` delta
   (`severity`, or the level default from `DEFAULT_VICTIM_SEVERITY_BY_LEVEL`) via
   `societies.renown.bump_organization_reputation` — the first gameplay writer of org reputation.
+  Exposure and reversal each leave an `OrganizationReputationEvent` citing the secret
+  (`SECRET_EXPOSED` / `SECRET_REVERSED`, #4448).
+  **Producers (#4448):** staff add victims on the Secret admin page (`SecretVictimInline`:
+  organization or persona, no `severity`, so the reaction size is always the level default), and
+  a spy job's residue secret names the job's target (`tasking.spy_payouts._name_residue_victim`
+  via `secrets.services.add_secret_victim`): an organization target, a domain target's owning
+  organization, or a person target. The issuing organization is never its own victim.
 
 **Persona victims — the victim decides.** A persona victim's effect is **never auto-applied**
 (the relationship system is consent-gated and player-driven). Instead, when the victim *learns
