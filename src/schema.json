@@ -42758,6 +42758,109 @@ paths:
               schema:
                 $ref: '#/components/schemas/InvocationOptions'
           description: ''
+  /api/worship/live-answers/:
+    get:
+      operationId: worship_live_answers_list
+      description: 'Rites waiting on a scene GM''s live answer: the answer panel.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: scene
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLivePromptList'
+          description: ''
+  /api/worship/live-answers/{id}/:
+    get:
+      operationId: worship_live_answers_retrieve
+      description: 'Rites waiting on a scene GM''s live answer: the answer panel.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivePrompt'
+          description: ''
+  /api/worship/live-answers/{id}/answer/:
+    post:
+      operationId: worship_live_answers_answer_create
+      description: Send one of the being's answers, or one of its miracles.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiveSendRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardActionResult'
+          description: ''
+  /api/worship/live-answers/{id}/dismiss/:
+    post:
+      operationId: worship_live_answers_dismiss_create
+      description: 'Dismiss: nothing is sent.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardActionResult'
+          description: ''
   /api/worship/miracles/:
     get:
       operationId: worship_miracles_list
@@ -58558,6 +58661,12 @@ components:
           nullable: true
           description: The table whose page holds a being_answer prompt's answer panel.
           readOnly: true
+        being_answer_live:
+          type: boolean
+          description: |-
+            True for a being_answer prompt a rite in the scene raised (#4333 slice 5): its
+            panel opens in the queue instead of on a table page.
+          readOnly: true
         resolution_note:
           type: string
           readOnly: true
@@ -58583,6 +58692,7 @@ components:
           format: date-time
           readOnly: true
       required:
+      - being_answer_live
       - being_answer_summary
       - being_answer_table
       - character_sheet
@@ -64033,6 +64143,59 @@ components:
           description: When the weekly sweep last processed this post.
       required:
       - handler
+    LivePrompt:
+      type: object
+      description: A ``BEING_ANSWER`` prompt raised by a rite in the GM's scene, as
+        its panel reads it.
+      properties:
+        id:
+          type: integer
+        being_name:
+          type: string
+        rite_name:
+          type: string
+        subject_name:
+          type: string
+        outcome_tier_name:
+          type: string
+        answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/_LiveAnswer'
+        miracles:
+          type: array
+          items:
+            $ref: '#/components/schemas/_LiveMiracle'
+        may_adapt:
+          type: boolean
+        limit_reason:
+          type: string
+          description: Non-empty when nothing can be sent this week.
+      required:
+      - answers
+      - being_name
+      - id
+      - limit_reason
+      - may_adapt
+      - miracles
+      - outcome_tier_name
+      - rite_name
+      - subject_name
+    LiveSendRequest:
+      type: object
+      description: |-
+        The panel's send: one answer (with edited text only for a level that may
+        adapt answers), or one miracle.
+      properties:
+        answer:
+          type: integer
+          nullable: true
+        miracle:
+          type: integer
+          nullable: true
+        text:
+          type: string
+          default: ''
     LocationModeEnum:
       enum:
       - anywhere
@@ -72178,6 +72341,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ListenerPost'
+    PaginatedLivePromptList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LivePrompt'
     PaginatedMediaList:
       type: object
       required:
@@ -96584,6 +96770,48 @@ components:
       - body
       - id
       - title
+    _LiveAnswer:
+      type: object
+      properties:
+        id:
+          type: integer
+        outcome_tier_name:
+          type: string
+        delay_text:
+          type: string
+        answer_text:
+          type: string
+        onlooker_line:
+          type: string
+        used_count:
+          type: integer
+      required:
+      - answer_text
+      - delay_text
+      - id
+      - onlooker_line
+      - outcome_tier_name
+      - used_count
+    _LiveMiracle:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        favor_threshold:
+          type: integer
+        resonance_pool_cost:
+          type: integer
+        reason:
+          type: string
+          description: Why it is greyed out; empty when it may be sent.
+      required:
+      - favor_threshold
+      - id
+      - name
+      - reason
+      - resonance_pool_cost
     _NamedRow:
       type: object
       properties:

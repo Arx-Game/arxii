@@ -89,6 +89,13 @@
   worship declaration, a Chosen outside the table, a temple; a secret faith is not one). Only
   the table's members serve a stewarded being. _Avoid_: owner, patron (a patron is the being of
   a Chosen), custodian (stories' custody).
+- **Live route / live answer** — a GM running a scene answers a rite performed there (#4333
+  slice 5, `live_services`): one of the being's general answers at or below the rolled tier, or
+  one of its miracles, sent from a `BEING_ANSWER` prompt tied to the rite performance. Limit:
+  once per being and character per game week, answers and miracles together. A pledge's closing
+  rite never raises it (that is the **pledge route**). Dismissing sends nothing. Only a GM level
+  with `GMLevelCap.may_adapt_answers` edits an answer's text, and never its clue, cost or
+  follow-up. _Avoid_: prayer answer (a prayer is player-written text), ad-hoc boon.
 - **Catalogue clue** — a clue one of a being's answers already links (fact or follow-up,
   `catalogue_clues`): the only clues a steward attaches to their own text or to answers they
   write. Staff create clues.

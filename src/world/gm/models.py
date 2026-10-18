@@ -415,6 +415,13 @@ class GMLevelCap(SharedMemoryModel):
         default=False,
         help_text="May author ITEM stake reward lines (minting an item is world state) (#3566).",
     )
+    may_adapt_answers = models.BooleanField(
+        default=False,
+        help_text=(
+            "A GM at this level may edit an answer's text before sending it live to a rite "
+            "(#4333). Nobody edits its clue, cost or follow-up."
+        ),
+    )
 
     class Meta:
         verbose_name = "GM Level Cap"
@@ -1306,6 +1313,18 @@ class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
         help_text=(
             "The closed pledge a being_answer prompt asks its steward to answer (#4333); "
             "the tier is its closing rite's outcome."
+        ),
+    )
+    rite_performance = models.ForeignKey(
+        "arxii.WorshipRitePerformance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        help_text=(
+            "The rite performed in a GM-run scene that a being_answer prompt asks the GM to "
+            "answer live (#4333); the roll is its outcome. Empty on a stewarded close, which "
+            "names its pledge instead."
         ),
     )
     resolution_note = models.TextField(
