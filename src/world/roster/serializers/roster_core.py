@@ -220,8 +220,12 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
         return None
 
     def to_representation(self, instance: RosterEntry) -> dict:
-        """The row, with ``loan`` and ``npc_notes`` from a single loan lookup."""
-        from world.roster.services.npc_lending import account_character_name  # noqa: PLC0415
+        """The row, with ``loan`` and ``npc_notes`` from a single loan lookup.
+
+        ``context["loan_offered_names"]`` (``player_names`` of the requester's loans, read
+        once by the list) names who lent each NPC; a single row reads its one name.
+        """
+        from world.scenes.cast_list_services import player_names  # noqa: PLC0415
 
         data = super().to_representation(instance)
         loan = self._borrowed_loan(instance)
@@ -233,7 +237,9 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             {
                 "id": loan.pk,
                 "scene_title": loan.scene.name if loan.scene is not None else None,
-                "offered_by_name": account_character_name(loan.offered_by),
+                "offered_by_name": (
+                    self.context.get("loan_offered_names") or player_names([loan.offered_by_id])
+                )[loan.offered_by_id],
             }
         ).data
         try:

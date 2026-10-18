@@ -19,7 +19,11 @@ from world.npc_services.models import (
 from world.roster.constants import NPCBorrowAudience, NPCLendPolicy, NPCSection
 from world.roster.models import NPCLoan, RosterEntry
 from world.roster.services.gallery import portrait_url
-from world.roster.services.npc_lending import OWNER_FALLBACK_NAME
+from world.scenes.cast_list_services import (
+    FALLBACK_PLAYER_NAME,
+    player_names,
+    sheet_description,
+)
 
 DESCRIPTION_PREVIEW_LENGTH = 200
 
@@ -77,21 +81,11 @@ class NPCRosterRowSerializer(serializers.ModelSerializer):
         return portrait_url(obj)
 
     def get_description(self, obj: RosterEntry) -> str:
-        """What the character handler shows, read off rows the view selected.
-
-        The handler's own read get_or_creates a display row per NPC, which a list
-        must not do; the order is the handler's: a disguise overlay, the permanent
-        description, then the sheet's free text.
-        """
-        try:
-            display = obj.character_sheet.character.display_data
-            text = display.get_display_description()
-        except ObjectDoesNotExist:
-            text = ""
-        return (text or obj.character_sheet.additional_desc or "")[:DESCRIPTION_PREVIEW_LENGTH]
+        """The start of what the character handler shows (``sheet_description``)."""
+        return sheet_description(obj.character_sheet)[:DESCRIPTION_PREVIEW_LENGTH]
 
     def get_owner_name(self, obj: RosterEntry) -> str:
-        return self.context["owner_names"].get(obj.created_by_account_id, OWNER_FALLBACK_NAME)
+        return self.context["owner_names"].get(obj.created_by_account_id, FALLBACK_PLAYER_NAME)
 
     def get_can_borrow(self, obj: RosterEntry) -> bool:
         return self.context["viewer"].can_borrow(obj, obj.story_npc_settings)
@@ -218,9 +212,9 @@ class NPCDetailSerializer(NPCRosterRowSerializer):
         return NPCRegardReadSerializer(lines, many=True).data
 
     def get_owner_name(self, obj: RosterEntry) -> str:
-        from world.roster.views.npc_views import owner_names_for  # noqa: PLC0415
-
-        return owner_names_for([obj]).get(obj.created_by_account_id, OWNER_FALLBACK_NAME)
+        if obj.created_by_account_id is None:
+            return FALLBACK_PLAYER_NAME
+        return player_names([obj.created_by_account_id])[obj.created_by_account_id]
 
     def get_open_requests(self, obj: RosterEntry) -> list[dict[str, Any]]:
         if not self.context["viewer"].manages(obj):
@@ -347,7 +341,7 @@ class NPCOfferSerializer(serializers.ModelSerializer):
         return portrait_url(obj.roster_entry)
 
     def get_offered_by_name(self, obj: NPCLoan) -> str:
-        return self.context["offered_names"].get(obj.offered_by_id, OWNER_FALLBACK_NAME)
+        return self.context["offered_names"].get(obj.offered_by_id, FALLBACK_PLAYER_NAME)
 
     def get_notes_for_player(self, obj: NPCLoan) -> str:
         try:

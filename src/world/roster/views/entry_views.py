@@ -43,6 +43,7 @@ from world.roster.services.activity import (
 from world.roster.services.gallery import GalleryError, can_manage_gallery, wear_look
 from world.roster.services.presence import disconnect_everywhere
 from world.roster.services.selection import SelectionError, set_selected_entry
+from world.scenes.cast_list_services import player_names
 
 
 class RosterEntryPagination(PageNumberPagination):
@@ -143,6 +144,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             player_data = request.user.player_data
             available_characters = player_data.get_available_characters()
         except AttributeError:
+            player_data = None
             available_characters = []
 
         entries = (
@@ -173,7 +175,13 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             )
         )
         entry_list = list(entries)
-        attention = account_attention(account=cast(AccountDB, request.user), entries=entry_list)
+        account = cast(AccountDB, request.user)
+        attention = account_attention(account=account, entries=entry_list)
+        # Who lent each NPC the requester borrows, named in one pass for the whole list.
+        loans = player_data.cached_npc_loans if player_data is not None else []
+        loan_offered_names = player_names(
+            loan.offered_by_id for loan in loans if loan.borrower_id == account.pk
+        )
         serializer = self.get_serializer(
             entry_list,
             many=True,
@@ -181,6 +189,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                 **self.get_serializer_context(),
                 "character_attention": attention,
                 "crowd_voice_entry_ids": {e.pk for e in entry_list if e.is_crowd_voice},
+                "loan_offered_names": loan_offered_names,
             },
         )
         return Response(serializer.data)

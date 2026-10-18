@@ -25,7 +25,6 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE
 from world.gm.models import GuideProfile
 from world.npc_services.personality import set_npc_preferences
 from world.npc_services.regard import author_npc_regard
@@ -80,26 +79,6 @@ def npc_entries() -> QuerySet[RosterEntry]:
         .select_related(*_ROW_RELATIONS)
         .annotate(has_holder=Exists(held))
     )
-
-
-def owner_names_for(entries: list[RosterEntry]) -> dict[int, str]:
-    """Owner account id to the GM or Staff character name shown for it, in one query."""
-    account_ids = {e.created_by_account_id for e in entries if e.created_by_account_id}
-    names: dict[int, str] = {}
-    tenures = (
-        RosterTenure.objects.filter(
-            player_data__account_id__in=account_ids,
-            end_date__isnull=True,
-            roster_entry__character_sheet__character__db_typeclass_path__in=list(
-                TYPECLASS_TO_CHARACTER_TYPE
-            ),
-        )
-        .select_related("player_data", "roster_entry__character_sheet__character")
-        .order_by("-pk")
-    )
-    for tenure in tenures:
-        names[tenure.player_data.account_id] = tenure.roster_entry.character_sheet.character.db_key
-    return names
 
 
 class NPCRosterPagination(PageNumberPagination):
@@ -318,7 +297,9 @@ class StoryNPCViewSet(
     def _page_response(self, request: Request) -> Response:
         page = list(self.paginate_queryset(self.filter_queryset(self.get_queryset())) or [])
         context = self.get_serializer_context()
-        context["owner_names"] = owner_names_for(page)
+        context["owner_names"] = player_names(
+            entry.created_by_account_id for entry in page if entry.created_by_account_id
+        )
         serializer = NPCRosterRowSerializer(page, many=True, context=context)
         return self.get_paginated_response(serializer.data)
 

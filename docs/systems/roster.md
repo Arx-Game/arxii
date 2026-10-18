@@ -52,23 +52,28 @@ or a Guide plays one with an ordinary tenure or an active loan.
   requested, active, declined, ended), `created_at`, `started_at`, `ended_at`. A
   partial unique constraint allows one ACTIVE loan per entry.
 - Owner is `RosterEntry.created_by_account`. `mint_story_npc` stamps `GM_TABLE` plus the
-  creator. The roster shows the owner by the GM's character name, never an account
-  (`owner_display_name`; staff when the owner has no GM character).
+  creator. The roster shows the owner by the GM's character name, never an account:
+  `world.scenes.cast_list_services.player_names` is the one batched reader for how an
+  account is shown (a GM or Staff character's name, else the Guide's `display_name`,
+  else the role: "Guide", "GM" or "Staff"), used by the roster rows, the NPC detail,
+  offers, `mine`'s loan line and the cast list.
 - `GuideProfile` lives in `world.gm` (see `docs/systems/INDEX.md`, GM system).
 
 **Services:**
 
 - `services/npc_lending.py`: `offer_npc(entry, guide, scene, by)`,
   `request_borrow(entry, borrower)`, `answer_loan(loan, accept, by)`,
-  `end_loan(loan, by)`, `end_scene_loans(scene)` (called from `finish_scene_full`),
-  `may_end_loan`, `playable_entries`, `active_loans_touching`, `owner_display_name`.
+  `end_loan(loan, by)`, `end_scene_loans(scene)` (called from `Scene.finish_scene`, so every finish, an
+  event's completion included, ends the scene's loans),
+  `may_end_loan`, `playable_entries`, `active_loans_touching`.
   Activation is race-safe, takes the NPC from its owner while lent (owner cannot play
   it), unpuppets the other side's sessions and clears any saved selection. Errors
   raise `NPCLendingError` with a `user_message`.
-- `services/npc_copy.py`: `copy_npc_section(source, target, section)` for an
+- `services/npc_copy.py`: `copy_npc_section(source, target, section, by)` for an
   `NPCSection` (identity, description, background, powers, regard, preferences, all)
   and `copy_npc_as_new(source, by, name, as_template)`. Copying keeps the copier as
-  owner. Copied regard rows are a direct write plus one audit event; PC gauges are
+  owner. `all` carries `notes_for_player` only when `by` owns the source or is staff,
+  so a copy of another GM's listed NPC never has its notes. Copied regard rows are a direct write plus one audit event; PC gauges are
   never mirrored.
 - `services/npc_placement.py`: `place_npc_in_scene(entry, scene, by)` moves the NPC
   into the scene's room through the real move (hooks run); templates and other GMs'
@@ -81,6 +86,10 @@ or a Guide plays one with an ordinary tenure or an active loan.
   uncapped and never counts against the GM's story-NPC cap.
 - `services/gallery.py`: `_sync_npc_persona_portrait` sets both `Persona.thumbnail`
   and `Persona.thumbnail_url` from the worn look of a story NPC (PCs untouched).
+  `can_manage_gallery` also lets the story NPC's owner (`can_edit_npc_sheet`) dress a
+  template nobody holds; their upload there is character art they may delete again.
+- `RosterEntryViewSet` (`/api/roster/entries/`) shows a non-staff caller an NPC-shelf
+  entry they hold or own (`created_by_account`), so a GM reads their template's sheet.
 
 **Availability seams.** NPC loans join `PlayerData.get_available_roster_entries`
 (through `PlayerData.cached_npc_loans`) and `Account.cached_roster_entries`, so the
@@ -576,15 +585,16 @@ read needs an account (#3904 item 0, #4151).
 ### Gallery (`/api/roster/tenure-media/`, #4151)
 
 A character's Gallery: the current tenure's uploads plus the character's art, in order.
-Reads need an account; writes need the character's current player or staff
-(`CanManageGallery`). Every write goes through `world.roster.services.gallery`.
+Reads need an account; writes need the character's current player, staff, or the
+story NPC's owner (`CanManageGallery`). Every write goes through `world.roster.services.gallery`.
 
 - `GET ?roster_entry=<id>` (required) - The pictures (`GalleryPictureSerializer`: `url`,
   `look_url` (the 4:5 crop), `title`, `caption`, `is_nsfw`, `mood`/`mood_id`, `crop`,
   `is_look`, `is_character_art`, `is_worn`, `is_hidden`, `can_delete`, `also_on`).
   Character art the current player hid is left out for everyone but that player and staff
 - `POST` (multipart `roster_entry` + `images[]`) - Upload into the Gallery. A staff upload
-  on a character they are not playing becomes character art
+  on a character they are not playing becomes character art, as does an NPC owner's
+  upload on their template
 - `PATCH /{id}/` - `title`, `caption`, `is_nsfw`, `mood`, `crop` (`{x, y, width}` makes or
   re-frames a look; `null` makes it a plain picture), `wear`
 - `DELETE /{id}/` - The one Delete: deletes the file (freeing quota) unless another
@@ -620,8 +630,9 @@ Staff, GMs and active Guides (`IsGMOrGuide`). Web-only authoring and borrowing t
 - `PUT /{id}/regard/` - `{target_type, target_id, value, reason}` author one regard row
 - `PUT /{id}/preferences/` - `{preferences: [{trait, valence}]}` replace what works on the NPC
 - `POST /{id}/copy-section/` - `{source_entry, section}`; the source is an NPC the caller
-  owns or a staff-owned template (staff: any)
-- `POST /{id}/copy-as-new/` - `{name, as_template}`; 201 `{id}`, caller is the owner
+  owns, a staff-owned template, or any NPC listed on the roster (staff: any)
+- `POST /{id}/copy-as-new/` - `{name, as_template}`; 201 `{id}`, caller is the owner; works
+  on the same sources. A copy from an NPC the caller does not own leaves out its notes
 
 Owner-only writes (`regard`, `preferences`, `copy-section`, settings `PATCH`) are scoped to
 `created_by_account` (staff to all).
@@ -636,7 +647,7 @@ Related reads: `GET /api/gm/guides/` (GMs and staff, active Guides by `display_n
 | Permission Class | Used For | Rule |
 |-----------------|----------|------|
 | `IsOwnerOrStaff` | Media modification | `obj.player_data.account == request.user` or staff |
-| `CanManageGallery` | Gallery (`/tenure-media/`) | Reads: any account. Writes: the character's current player or staff (`can_manage_gallery`) |
+| `CanManageGallery` | Gallery (`/tenure-media/`) | Reads: any account. Writes: the character's current player, staff, or a story NPC's owner (`can_manage_gallery`) |
 | `IsPlayerOrStaff` | Roster entry modifications | Active tenure for the entry or staff |
 | `ReadOnlyOrOwner` | (no longer used by media; #4151 made media reads need an account) | Safe methods for all; write requires ownership |
 | `StaffOnlyWrite` | Roster management | Safe methods for all; write requires staff |

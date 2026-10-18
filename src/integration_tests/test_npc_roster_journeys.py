@@ -157,10 +157,10 @@ class OwnerNameIsACharacter(NpcRosterCase):
         self.assertEqual(results[0]["owner_name"], "Warden Osk")
         self.assertNotIn(self.owner.username, response.content.decode())
 
-    def test_owner_without_a_gm_character_reads_as_staff(self) -> None:
+    def test_owner_without_a_gm_character_reads_as_their_role(self) -> None:
         self._list_vael()
         results = self.api(self.other_gm).get(NPCS).json()["results"]
-        self.assertEqual(results[0]["owner_name"], "Staff")
+        self.assertEqual(results[0]["owner_name"], "GM")
 
 
 class AnOwnerAuthorsAnNpc(NpcRosterCase):

@@ -29,7 +29,6 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE
 from world.roster.constants import NPCBorrowAudience, NPCLendPolicy, NPCLoanStatus
 from world.roster.models import NPCLoan
 
@@ -40,8 +39,6 @@ if TYPE_CHECKING:
 
     from world.roster.models import RosterEntry, StoryNPCSettings
     from world.scenes.models import Scene
-
-OWNER_FALLBACK_NAME = "Staff"
 
 # Loans that still hold or may soon hold the NPC: what a scene's end closes.
 _OPEN_STATUSES = (NPCLoanStatus.OFFERED, NPCLoanStatus.REQUESTED, NPCLoanStatus.ACTIVE)
@@ -86,39 +83,6 @@ def _holder_account(entry: RosterEntry) -> AccountDB | None:
 def _holds(entry: RosterEntry, account: AccountDB) -> bool:
     holder = _holder_account(entry)
     return holder is not None and holder.pk == account.pk
-
-
-def account_character_name(account: AccountDB | None) -> str:
-    """The name of ``account``'s GM or Staff character, else ``"Staff"``.
-
-    A GM is shown to other players by their OOC GM character, never by their
-    account name. An account with no current tenure on a GM/Staff character reads
-    as staff.
-    """
-    if account is None:
-        return OWNER_FALLBACK_NAME
-    from world.roster.models import RosterTenure  # noqa: PLC0415
-
-    tenure = (
-        RosterTenure.objects.filter(
-            player_data__account=account,
-            end_date__isnull=True,
-            roster_entry__character_sheet__character__db_typeclass_path__in=list(
-                TYPECLASS_TO_CHARACTER_TYPE
-            ),
-        )
-        .select_related("roster_entry__character_sheet__character")
-        .order_by("pk")
-        .first()
-    )
-    if tenure is None:
-        return OWNER_FALLBACK_NAME
-    return tenure.roster_entry.character_sheet.character.db_key
-
-
-def owner_display_name(entry: RosterEntry) -> str:
-    """The NPC's owner as players see them: their GM/Staff character name, or "Staff"."""
-    return account_character_name(entry.created_by_account)
 
 
 # -- reading loans -------------------------------------------------------------

@@ -165,12 +165,12 @@ def _players(scene: Scene, entries: list[RosterEntry]) -> dict[int, _Player]:
     return players
 
 
-def _description(sheet: CharacterSheet) -> str:
+def sheet_description(sheet: CharacterSheet) -> str:
     """What the character handler shows, read only off rows the caller selected.
 
     The handler's own read get_or_creates a display row, which a GET must not do.
     The order is the handler's: a disguise overlay, the permanent description,
-    then the sheet's free text (as ``NPCRosterEntrySerializer.get_description``).
+    then the sheet's free text. The cast list and the NPC roster both read it.
     """
     try:
         text = sheet.character.display_data.get_display_description()
@@ -302,7 +302,7 @@ def _voiced_crowd(rows: list[CombatOpponent], player: _Player | None) -> CastLis
         tier=first.tier,
         count=sum(_bodies(row) for row in rows),
         opponent_ids=[row.pk for row in rows],
-        description=_description(voice.character_sheet) or first.description,
+        description=sheet_description(voice.character_sheet) or first.description,
     )
 
 
@@ -346,7 +346,7 @@ def scene_cast_list(scene: Scene) -> list[CastListEntry]:
                 tier=None,
                 count=None,
                 opponent_ids=[],
-                description=_description(entry.character_sheet),
+                description=sheet_description(entry.character_sheet),
             )
         )
     for rows in crowds:
