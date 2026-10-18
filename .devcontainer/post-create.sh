@@ -84,13 +84,12 @@ pnpm install --dir frontend
 # the CRLF shebang and `core.hooksPath` points at a non-existent Windows
 # path. Unset the stale config, wipe any stale hook files, then reinstall.
 #
-# The pre-commit hook is a shim running tools/githooks/pre-commit, which checks
-# staged files without clearing the worktree (#3814); install.sh also unsets
-# core.hooksPath. The pre-push hook is still pre-commit's own. Same two commands
-# as `just install-git-hooks`.
+# The pre-commit and pre-push hooks are shims running the tracked hooks in
+# tools/githooks/. The pre-commit one checks staged files without clearing the
+# worktree (#3814). Each resolves its pre-commit at run time, so nothing is baked
+# in (#4428). Same command as `just install-git-hooks`.
 rm -f .git/hooks/pre-commit .git/hooks/pre-push
 bash tools/githooks/install.sh
-uv run pre-commit install --hook-type pre-push
 
 # Wait for the db service (bounded — never hang first-run forever), then
 # build the schema.
