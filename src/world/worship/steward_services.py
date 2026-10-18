@@ -303,6 +303,12 @@ def prompt_summary(prompt: GMPrompt) -> str:
     """'<being> answers <name> (<tier>).': the queue's one line for the prompt."""
     from world.gm.prompt_services import prompt_subject_name  # noqa: PLC0415
 
+    performance = prompt.rite_performance
+    if performance is not None:
+        return (
+            f"{prompt_subject_name(prompt)}'s {performance.rite.name} to "
+            f"{performance.rite.being.name} ({performance.outcome_tier.name})."
+        )
     details = prompt.pledge
     tier = closing_tier(details) if details is not None else None
     if details is None or tier is None:
@@ -461,7 +467,16 @@ def dismiss_being_answer(
     """
     from world.gm.constants import GMPromptStatus  # noqa: PLC0415
     from world.worship.answer_services import deliver_pledge_answer  # noqa: PLC0415
+    from world.worship.live_services import (  # noqa: PLC0415
+        dismiss_live_prompt,
+        is_live_prompt,
+    )
 
+    if is_live_prompt(prompt):
+        # A rite waiting for a live answer has no pledge to draw for: dismissing
+        # sends nothing, and the rite's award has already landed.
+        dismiss_live_prompt(prompt, resolver=resolver)
+        return AnswerDelivery(answer=None, vision=None, held=False)
     details = _prompt_details(prompt)
     _resolve_prompt(prompt, status=GMPromptStatus.DISMISSED, resolver=resolver, note=note)
     return deliver_pledge_answer(details, closing_tier(details))
@@ -481,7 +496,10 @@ def expire_steward_prompts() -> int:
     days = get_devotion_config().steward_answer_days
     cutoff = timezone.now() - timedelta(days=days)
     overdue = GMPromptModel.objects.filter(
-        kind=GMPromptKind.BEING_ANSWER, status=GMPromptStatus.PENDING, created_at__lte=cutoff
+        kind=GMPromptKind.BEING_ANSWER,
+        status=GMPromptStatus.PENDING,
+        created_at__lte=cutoff,
+        rite_performance__isnull=True,  # a live prompt lives and dies with its scene
     ).select_related("pledge__pledge__being", "pledge__closing_performance__outcome_tier")
     closed = 0
     for prompt in overdue:

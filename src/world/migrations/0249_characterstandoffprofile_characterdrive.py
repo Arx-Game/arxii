@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0247_carry_route_frames_to_beginnings")]
+    dependencies = [("arxii", "0248_live_answers_rite_prompt")]
 
     operations = [
         migrations.CreateModel(

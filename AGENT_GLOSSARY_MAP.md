@@ -35,7 +35,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   ADR-4362): Pledge, Favor target, Deed, Sacrifice, Pledge credit, Closing rite, Lapse; and
   the answer terms (slice 3, ADR-4333-B): Answer, Sacrifice line, Held answer, and the
   amended Vision; and the steward terms (slice 4, ADR-4333-C): Steward, god sign, Catalogue
-  clue
+  clue; and the live route (slice 5): Live route / live answer
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333)

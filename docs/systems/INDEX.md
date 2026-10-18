@@ -9204,6 +9204,14 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `steward-sacrifice-lines/`, `steward-prompts/` (+ `answer/`, `dismiss/`); `GMPromptSerializer`
   gains `being_answer_summary`, `being_answer_table`. Telnet `gm prompt answer`. Admin:
   `BeingStewardInline` on the being's change form. Frontend: the table page's Beings tab.
+- **Answering live** (#4333 slice 5, completes #3298): `GMPrompt.rite_performance`,
+  `GMLevelCap.may_adapt_answers`; `worship/live_services.py` (`route_live_answer`,
+  `live_panel`, `send_live_answer`, `dismiss_live_prompt`, `live_limit_reason`,
+  `may_adapt_answers`); `answer_services.deliver_live_answer`; `services.miracle_ineligibility`
+  (the eligibility check shared with `fire_divine_intervention`). API:
+  `/api/worship/live-answers/` (+ `answer/`, `dismiss/`); `GMPromptSerializer.being_answer_live`.
+  Telnet `gm prompt answer <id> answer=|miracle=`. Frontend: `LiveAnswerPanel` in the scene GM
+  queue.
 - **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite
   Princess/Prince/Chosen achievement on top-favor reach/tie), `gods_favorite_achievement_for`;
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,
