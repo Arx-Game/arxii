@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 from actions.models import ActionEnhancement
 from evennia_extensions.factories import AccountFactory
@@ -27,6 +29,7 @@ from world.magic.factories import (
 )
 from world.magic.models import CharacterResonance
 from world.magic.types.pull import CastPullDeclaration
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes import action_services
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionPullDeclaration
@@ -37,7 +40,7 @@ from world.traits.factories import CheckSystemSetupFactory
 PULL_FLAT_BONUS = 5
 
 
-class TechniqueSocialPullTests(TestCase):
+class TechniqueSocialPullTests(APITestCase):
     """Declare a pull on a technique-enhanced flirt, accept, read the roll."""
 
     @classmethod
@@ -48,9 +51,23 @@ class TechniqueSocialPullTests(TestCase):
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
+        # Both sides are played by accounts, so the REST path can be driven as each.
         target_character = cls.target.character_sheet.character
-        target_character.db_account = AccountFactory()
+        cls.target_account = AccountFactory()
+        target_character.db_account = cls.target_account
         target_character.save(update_fields=["db_account"])
+        cls.initiator_account = AccountFactory()
+        initiator_character = cls.initiator.character_sheet.character
+        initiator_character.db_account = cls.initiator_account
+        initiator_character.save(update_fields=["db_account"])
+        for account, persona in (
+            (cls.initiator_account, cls.initiator),
+            (cls.target_account, cls.target),
+        ):
+            RosterTenureFactory(
+                player_data=PlayerDataFactory(account=account),
+                roster_entry=RosterEntryFactory(character_sheet=persona.character_sheet),
+            )
 
         cls.sheet = cls.initiator.character_sheet
         cls.technique = TechniqueFactory(intensity=3, control=8, anima_cost=2)
@@ -100,7 +117,7 @@ class TechniqueSocialPullTests(TestCase):
             return real(**kwargs)
 
         with (
-            patch("world.scenes.action_services.accrue"),
+            patch("world.scenes.action_services._accrue_engagement_for_primary"),
             patch.object(action_services, "start_action_resolution", side_effect=spy),
             # Fatigue from the first action would otherwise skew the second roll.
             patch("world.fatigue.services.get_fatigue_penalty", return_value=0),
@@ -135,3 +152,50 @@ class TechniqueSocialPullTests(TestCase):
         assert seen_plain == [0]
         assert seen_pulled == [PULL_FLAT_BONUS]
         assert total_pulled - total_plain == PULL_FLAT_BONUS
+
+    def test_pull_on_a_technique_flirt_through_the_rest_endpoints(self) -> None:
+        """The player's path: POST the request with technique and pull, the target accepts."""
+        self.client.force_authenticate(user=self.initiator_account)
+        created = self.client.post(
+            reverse("sceneactionrequest-list"),
+            {
+                "scene": self.scene.pk,
+                "initiator_persona": self.initiator.pk,
+                "target_persona": self.target.pk,
+                "action_key": "flirt",
+                "technique_id": self.technique.pk,
+                "pull": {
+                    "resonance_id": self.resonance.pk,
+                    "tier": 1,
+                    "thread_ids": [self.thread.pk],
+                },
+            },
+            format="json",
+        )
+        assert created.status_code == status.HTTP_201_CREATED, created.data
+
+        seen: list[int] = []
+        real = action_services.start_action_resolution
+
+        def spy(**kwargs):
+            seen.append(kwargs["extra_modifiers"])
+            return real(**kwargs)
+
+        self.client.force_authenticate(user=self.target_account)
+        with (
+            patch("world.scenes.action_services._accrue_engagement_for_primary"),
+            patch.object(action_services, "start_action_resolution", side_effect=spy),
+        ):
+            accepted = self.client.post(
+                reverse("sceneactionrequest-respond", kwargs={"pk": created.data["id"]}),
+                {"decision": ConsentDecision.ACCEPT},
+                format="json",
+            )
+        assert accepted.status_code == status.HTTP_200_OK, accepted.data
+        assert accepted.data["status"] == ActionRequestStatus.RESOLVED
+        assert accepted.data["result"]["technique_result"] is not None
+        assert seen == [PULL_FLAT_BONUS]
+        balance = CharacterResonance.objects.get(
+            character_sheet=self.sheet, resonance=self.resonance
+        ).balance
+        assert balance == 18
