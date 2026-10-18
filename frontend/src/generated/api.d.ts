@@ -38662,6 +38662,8 @@ export interface components {
       readonly open_requests: {
         [key: string]: unknown;
       }[];
+      readonly preferences: components['schemas']['NPCPreferenceRead'][];
+      readonly regard: components['schemas']['NPCRegardRead'][];
     };
     /** @description The owner's, an active borrower's, or staff's view of one NPC and its settings. */
     NPCDetailRequest: {
@@ -38698,6 +38700,12 @@ export interface components {
       readonly scene_title: string | null;
       readonly offered_by_name: string;
       readonly notes_for_player: string;
+    };
+    /** @description One trait the NPC likes or dislikes, as the NPC form shows it. */
+    NPCPreferenceRead: {
+      readonly trait_id: number;
+      readonly trait_name: string;
+      readonly valence: components['schemas']['ValenceAf9Enum'];
     };
     /** @description One SKILL line, named by the skill rather than its id (#3427). */
     NPCPresetSkillLine: {
@@ -38747,6 +38755,17 @@ export interface components {
       band_floor: number;
       /** @description The reaction text; <name> is replaced with the served character's presented name. */
       template: string;
+    };
+    /**
+     * @description One active opinion the NPC holds. ``target_name`` is a persona, organization or
+     *     society name, never an account name.
+     */
+    NPCRegardRead: {
+      readonly target_type: components['schemas']['TargetTypeFedEnum'];
+      readonly target_id: number;
+      readonly target_name: string;
+      readonly value: number;
+      readonly reason: string;
     };
     NPCRole: {
       readonly id: number;
@@ -47096,18 +47115,12 @@ export interface components {
       | 'npc_regard_at_least';
     PreferenceLine: {
       trait: number;
-      valence: components['schemas']['PreferenceLineValenceEnum'];
+      valence: components['schemas']['ValenceAf9Enum'];
     };
     PreferenceLineRequest: {
       trait: number;
-      valence: components['schemas']['PreferenceLineValenceEnum'];
+      valence: components['schemas']['ValenceAf9Enum'];
     };
-    /**
-     * @description * `likes` - Likes
-     *     * `dislikes` - Dislikes
-     * @enum {string}
-     */
-    PreferenceLineValenceEnum: 'likes' | 'dislikes';
     /** @description ``{preferences: [{trait, valence}]}``: replaces the NPC's likes and dislikes. */
     Preferences: {
       preferences: components['schemas']['PreferenceLine'][];
@@ -53601,6 +53614,12 @@ export interface components {
       basis: string;
       presumed_importance: number;
     };
+    /**
+     * @description * `likes` - Likes
+     *     * `dislikes` - Dislikes
+     * @enum {string}
+     */
+    ValenceAf9Enum: 'likes' | 'dislikes';
     /** @description Inline serializer for the viewer's capabilities in a covenant. */
     ViewerCapabilities: {
       can_invite: boolean;

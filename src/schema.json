@@ -68136,6 +68136,16 @@ components:
             type: object
             additionalProperties: {}
           readOnly: true
+        preferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/NPCPreferenceRead'
+          readOnly: true
+        regard:
+          type: array
+          items:
+            $ref: '#/components/schemas/NPCRegardRead'
+          readOnly: true
       required:
       - borrow_audience
       - can_borrow
@@ -68148,6 +68158,8 @@ components:
       - notes_for_player
       - open_requests
       - owner_name
+      - preferences
+      - regard
       - thumbnail_url
     NPCDetailRequest:
       type: object
@@ -68241,6 +68253,24 @@ components:
       - scene_id
       - scene_title
       - thumbnail_url
+    NPCPreferenceRead:
+      type: object
+      description: One trait the NPC likes or dislikes, as the NPC form shows it.
+      properties:
+        trait_id:
+          type: integer
+          readOnly: true
+        trait_name:
+          type: string
+          readOnly: true
+        valence:
+          allOf:
+          - $ref: '#/components/schemas/ValenceAf9Enum'
+          readOnly: true
+      required:
+      - trait_id
+      - trait_name
+      - valence
     NPCPresetSkillLine:
       type: object
       description: One SKILL line, named by the skill rather than its id (#3427).
@@ -68346,6 +68376,34 @@ components:
       - metric
       - role
       - template
+    NPCRegardRead:
+      type: object
+      description: |-
+        One active opinion the NPC holds. ``target_name`` is a persona, organization or
+        society name, never an account name.
+      properties:
+        target_type:
+          allOf:
+          - $ref: '#/components/schemas/TargetTypeFedEnum'
+          readOnly: true
+        target_id:
+          type: integer
+          readOnly: true
+        target_name:
+          type: string
+          readOnly: true
+        value:
+          type: integer
+          readOnly: true
+        reason:
+          type: string
+          readOnly: true
+      required:
+      - reason
+      - target_id
+      - target_name
+      - target_type
+      - value
     NPCRole:
       type: object
       properties:
@@ -82894,7 +82952,7 @@ components:
         trait:
           type: integer
         valence:
-          $ref: '#/components/schemas/PreferenceLineValenceEnum'
+          $ref: '#/components/schemas/ValenceAf9Enum'
       required:
       - trait
       - valence
@@ -82904,18 +82962,10 @@ components:
         trait:
           type: integer
         valence:
-          $ref: '#/components/schemas/PreferenceLineValenceEnum'
+          $ref: '#/components/schemas/ValenceAf9Enum'
       required:
       - trait
       - valence
-    PreferenceLineValenceEnum:
-      enum:
-      - likes
-      - dislikes
-      type: string
-      description: |-
-        * `likes` - Likes
-        * `dislikes` - Dislikes
     Preferences:
       type: object
       description: '``{preferences: [{trait, valence}]}``: replaces the NPC''s likes
@@ -96404,6 +96454,14 @@ components:
       - id
       - name
       - presumed_importance
+    ValenceAf9Enum:
+      enum:
+      - likes
+      - dislikes
+      type: string
+      description: |-
+        * `likes` - Likes
+        * `dislikes` - Dislikes
     ViewerCapabilities:
       type: object
       description: Inline serializer for the viewer's capabilities in a covenant.
