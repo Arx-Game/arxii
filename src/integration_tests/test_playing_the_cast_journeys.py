@@ -10,6 +10,7 @@ from world.battles.constants import BattleSideRole
 from world.battles.resolution import select_surrounded_terminal_pool
 from world.battles.services import add_place, add_side, create_battle, enlist_participant
 from world.checks.factories import CheckTypeFactory
+from world.consent.factories import SocialConsentCategoryFactory
 from world.progression.models import WeeklySocialEngagement
 from world.roster.factories import RosterFactory
 from world.roster.models.choices import RosterType
@@ -74,3 +75,65 @@ class APlayedNpcIsAnNpc(JourneyCase):
         pool = select_surrounded_terminal_pool(battle=battle, participant=isolated)
         self.assertEqual(pool.name, POOL_SURROUNDED_TERMINAL_ENEMY)
         self.assertEqual(pool, content["pools"]["surrounded_terminal_enemy"])
+
+
+class AnNpcActsOnAPc(JourneyCase):
+    """Hobb is a major NPC a GM plays; Ysmay is a player character he acts on."""
+
+    RESIST_ONLY_LINE = "You can resist this, but not refuse it."
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.room = self.make_room("The Lantern")
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.hobb = self.make_player("Hobb", room=self.room)
+        entry = self.hobb.sheet_data.roster_entry
+        entry.move_to_roster(RosterFactory(roster_type=RosterType.NPC))
+        self.scene = SceneFactory(room=self.room)
+        check_type = CheckTypeFactory(name="Persuasion")
+        self.deceive = ActionTemplateFactory(name="Deceive", check_type=check_type)
+        self.romantic = SocialConsentCategoryFactory(key="romantic", name="Romantic")
+        self.romantic.refusable_from_npcs = True
+        self.romantic.save()
+        self.flirt = ActionTemplateFactory(
+            name="Flirt", check_type=check_type, consent_category=self.romantic
+        )
+
+    def _npc_acts(self, action_key: str) -> dict:
+        response = self.api(self.account_of(self.hobb)).post(
+            "/api/action-requests/",
+            {
+                "scene": self.scene.pk,
+                "initiator_persona": persona_of(self.hobb).pk,
+                "target_persona": persona_of(self.ysmay).pk,
+                "action_key": action_key,
+            },
+            format="json",
+        )
+        self.assertIn(response.status_code, (status.HTTP_200_OK, status.HTTP_201_CREATED))
+        return response.json()
+
+    def _ysmay_responds(self, request_id: int, decision: str):
+        return self.api(self.account_of(self.ysmay)).post(
+            f"/api/action-requests/{request_id}/respond/",
+            {"decision": decision},
+            format="json",
+        )
+
+    def test_deny_is_refused_on_a_resist_only_request(self) -> None:
+        body = self._npc_acts("deceive")
+        self.assertEqual(body["status"], "pending")
+        self.assertIs(body["resist_only"], True)
+        response = self._ysmay_responds(body["id"], "deny")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json()["detail"], self.RESIST_ONLY_LINE)
+        told = self.telnet(self.ysmay, f"deny {body['id']}")
+        self.assertIn(self.RESIST_ONLY_LINE, told)
+
+    def test_a_romantic_action_still_asks(self) -> None:
+        body = self._npc_acts("flirt")
+        self.assertEqual(body["status"], "pending")
+        self.assertIs(body["resist_only"], False)
+        response = self._ysmay_responds(body["id"], "deny")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], "denied")

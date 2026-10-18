@@ -864,6 +864,43 @@ def _invoke_action_resolver(
         resolver(action_request, result)
 
 
+class ResistOnlyError(ValueError):
+    """DENY on a request the target may resist but not refuse (#4418)."""
+
+    user_message = "You can resist this, but not refuse it."
+
+
+def npc_acts_on_pc(
+    action_request: SceneActionRequest, target_persona: Persona | None = None
+) -> bool:
+    """True when a story NPC is the initiator and a player character the target (#4418).
+
+    ``target_persona`` names an additional-target row's persona; it defaults to the
+    request's primary target.
+    """
+    target = target_persona if target_persona is not None else action_request.target_persona
+    if target is None or _persona_is_npc(target):
+        return False
+    return _persona_is_npc(action_request.initiator_persona)
+
+
+def request_is_resist_only(
+    action_request: SceneActionRequest, target_persona: Persona | None = None
+) -> bool:
+    """True when a PC may resist but not refuse this request (#4418, ADR-4418).
+
+    An NPC acting on a PC is resist-only unless the action's consent category, or an
+    ancestor of it, is flagged ``refusable_from_npcs`` (romantic, for instance).
+    """
+    if not npc_acts_on_pc(action_request, target_persona):
+        return False
+    template = action_request.action_template
+    category = template.consent_category if template is not None else None
+    if category is None:
+        return True
+    return not any(node.refusable_from_npcs for node in category.ancestor_chain())
+
+
 def respond_to_action_request(
     *,
     action_request: SceneActionRequest,
@@ -895,6 +932,8 @@ def respond_to_action_request(
         instead of a check result (the #777 hostile consent-accept path).
 
     Raises:
+        ResistOnlyError: On DENY when an NPC acts on a PC in a category the PC cannot
+            refuse (#4418).
         ValueError: If the request is a non-standalone-cast with no action_template
             set (standalone cast requests resolve via the cast pipeline and do not
             require an action_template).
@@ -903,6 +942,8 @@ def respond_to_action_request(
         return None
 
     if decision == ConsentDecision.DENY:
+        if request_is_resist_only(action_request):
+            raise ResistOnlyError(ResistOnlyError.user_message)
         _deny_action_request(action_request, blacklist_actor)
         return None
 
@@ -1474,6 +1515,8 @@ def respond_to_action_target(
     if action_target.status != ActionRequestStatus.PENDING:
         return None
     if decision == ConsentDecision.DENY:
+        if request_is_resist_only(action_target.action_request, action_target.target_persona):
+            raise ResistOnlyError(ResistOnlyError.user_message)
         _deny_action_target(action_target, blacklist_actor)
         return None
     if decision == ConsentDecision.ACCEPT:

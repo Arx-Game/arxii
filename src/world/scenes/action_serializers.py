@@ -29,6 +29,7 @@ from world.scenes.action_constants import (
     DifficultyChoice,
 )
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
+from world.scenes.action_services import request_is_resist_only
 from world.worship.constants import FAVOR_INVOCATION_LINE_MAX_LENGTH
 
 if TYPE_CHECKING:
@@ -450,6 +451,19 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
     combat_risk_level = serializers.SerializerMethodField()
     combat_stakes = serializers.SerializerMethodField()
     boon = serializers.SerializerMethodField()
+    resist_only = serializers.SerializerMethodField()
+    resist_check_name = serializers.SerializerMethodField()
+
+    def get_resist_only(self, obj: SceneActionRequest) -> bool:
+        """True when the target may resist this request but not refuse it (#4418)."""
+        return request_is_resist_only(obj)
+
+    def get_resist_check_name(self, obj: SceneActionRequest) -> str | None:
+        """Name of the check the target resists with, for a resist-only request (#4418)."""
+        template = obj.action_template
+        if template is None or not request_is_resist_only(obj):
+            return None
+        return template.check_type.name
 
     def get_technique_name(self, obj: SceneActionRequest) -> str | None:
         """Human label for the enhancing technique (#892 — ConsentPrompt display)."""
@@ -530,6 +544,8 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
             "combat_risk_level",
             "combat_stakes",
             "boon",
+            "resist_only",
+            "resist_check_name",
             "created_at",
             "resolved_at",
         ]
@@ -539,6 +555,8 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
             "combat_risk_level",
             "combat_stakes",
             "boon",
+            "resist_only",
+            "resist_check_name",
             "resolved_difficulty",
             "result_interaction",
             "action_interaction",

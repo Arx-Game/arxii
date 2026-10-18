@@ -38,6 +38,7 @@ from world.scenes.action_serializers import (
     TechniqueCastCreateSerializer,
 )
 from world.scenes.action_services import (
+    ResistOnlyError,
     create_action_request,
     respond_to_action_request,
     respond_to_action_target,
@@ -107,6 +108,13 @@ def _build_boon_from_validated(validated_data: dict) -> BoonAsk | None:
         deed_text=boon_payload.get("deed_text", ""),
         material_category_id=boon_payload.get("material_category_id"),
     )
+
+
+def _respond_error_detail(exc: ValueError) -> str:
+    """The 400 detail for a refused consent response: a resist-only refusal says so (#4418)."""
+    if isinstance(exc, ResistOnlyError):
+        return exc.user_message
+    return "Unable to process this action request."
 
 
 class SceneActionRequestPagination(PageNumberPagination):
@@ -629,9 +637,9 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                     resist_effort=resist_effort,
                     blacklist_actor=blacklist_actor,
                 )
-            except ValueError:
+            except ValueError as exc:
                 return Response(
-                    {"detail": "Unable to process this action request."},
+                    {"detail": _respond_error_detail(exc)},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             action_target.refresh_from_db()
@@ -669,9 +677,9 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 resist_effort=resist_effort,
                 blacklist_actor=blacklist_actor,
             )
-        except ValueError as _exc:
+        except ValueError as exc:
             return Response(
-                {"detail": "Unable to process this action request."},
+                {"detail": _respond_error_detail(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
