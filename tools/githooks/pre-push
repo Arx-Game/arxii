@@ -4,7 +4,7 @@
 set -uo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=tools/githooks/lib.sh
+# shellcheck source=/dev/null  # lib.sh is linted as its own file in this hook set
 . "$here/lib.sh"
 
 if ! resolve_pre_commit; then

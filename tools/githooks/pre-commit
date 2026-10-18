@@ -41,7 +41,7 @@ if [ -n "$(git ls-files --unmerged)" ]; then
 fi
 
 # Resolved from this worktree at commit time, never from a path baked at install (#4428).
-# shellcheck source=tools/githooks/lib.sh
+# shellcheck source=/dev/null  # lib.sh is linted as its own file in this hook set
 . "$(git rev-parse --show-toplevel)/tools/githooks/lib.sh"
 if ! resolve_pre_commit; then
   say "pre-commit not found; run uv sync in this worktree or put pre-commit on PATH"
