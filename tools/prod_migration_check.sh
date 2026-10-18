@@ -257,7 +257,11 @@ gunzip -c "${WORK}/dump.sql.gz" | "${PSQL[@]}" -q -d "${SCRATCH_DB}" >"${WORK}/r
   || { tail -20 "${WORK}/restore.log" >&2; fail "restore failed"; }
 
 q() { "${PSQL[@]}" -d "${SCRATCH_DB}" -Atc "$1"; }
-applied_tip() { q "select name from django_migrations where app = '${APP_LABEL}' order by name desc limit 1"; }
+# The tip is the most recently APPLIED row, not the highest name: a dump can
+# carry rows from an older squashed generation (ADR-0276) whose names sort
+# above the migrations production actually ran last (#4422). `id` breaks ties
+# between rows applied in the same second.
+applied_tip() { q "select name from django_migrations where app = '${APP_LABEL}' order by applied desc, id desc limit 1"; }
 
 # Table counts for the report. A bare name falls back to the arxii_ prefix.
 count_tables() {
