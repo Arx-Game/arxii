@@ -50,8 +50,20 @@ class StaffMintError(Exception):
         self.user_message = message
 
 
-def _mint_character_working_set(account: AccountDB, name: str, typeclass: str) -> ObjectDB:
-    """Create Character + CharacterSheet + PRIMARY Persona + NPC-shelf tenure.
+def _mint_character_working_set(  # noqa: PLR0913 - one working set, each knob is a real axis
+    account: AccountDB,
+    name: str,
+    typeclass: str,
+    *,
+    provenance: str = "staff",
+    created_by: AccountDB | None = None,
+    with_tenure: bool = True,
+) -> ObjectDB:
+    """Create Character + CharacterSheet + PRIMARY Persona + NPC-shelf entry (+ tenure).
+
+    ``provenance`` / ``created_by`` stamp who authored the entry (a GM's NPC is
+    ``GM_TABLE`` owned by the GM, #4418). ``with_tenure=False`` mints an entry nobody
+    holds, which is what a template NPC is.
 
     Shared name-validation and working-set creation for both
     ``mint_gm_character`` (role-aware typeclass, one per account) and
@@ -94,8 +106,13 @@ def _mint_character_working_set(account: AccountDB, name: str, typeclass: str) -
     roster, _ = Roster.objects.get_or_create(roster_type=RosterType.NPC, defaults={"name": "NPCs"})
     # A GM or staff character is staff-authored, never a player's own (#3996).
     entry = RosterEntry.objects.create(
-        character_sheet=sheet, roster=roster, creation_provenance=CreationProvenance.STAFF
+        character_sheet=sheet,
+        roster=roster,
+        creation_provenance=CreationProvenance(provenance),
+        created_by_account=created_by,
     )
+    if not with_tenure:
+        return character
     player_data, _ = PlayerData.objects.get_or_create(account=account)
     RosterTenure.objects.create(
         player_data=player_data,
@@ -280,6 +297,7 @@ def mint_story_npc(
     name: str,
     description: str = "",
     preset: NPCStatlinePreset | None = None,
+    as_template: bool = False,
 ) -> ObjectDB:
     """Mint a Story NPC for a JUNIOR+ GM, tenure-bound to their account (#3426).
 
@@ -297,6 +315,10 @@ def mint_story_npc(
     ``apply_npc_preset`` (#3427) so the minted NPC can actually roll a check
     immediately, without a GM hand-inventing stat/skill values.
 
+    The entry is stamped ``GM_TABLE`` with ``created_by_account=gm_account`` and gets a
+    ``StoryNPCSettings`` row (#4418). ``as_template`` mints it with no tenure, so it
+    counts against no cap and nobody holds it; borrowers get copies.
+
     Raises:
         StaffMintError: missing GM trust, below JUNIOR, at/over cap, or (with
             a ``preset``) a preset-application refusal.
@@ -305,7 +327,20 @@ def mint_story_npc(
 
     check_story_npc_cap(gm_account)
 
-    character = _mint_character_working_set(gm_account, name, "typeclasses.characters.Character")
+    from world.roster.models import StoryNPCSettings  # noqa: PLC0415
+    from world.roster.models.choices import CreationProvenance  # noqa: PLC0415
+
+    character = _mint_character_working_set(
+        gm_account,
+        name,
+        "typeclasses.characters.Character",
+        provenance=CreationProvenance.GM_TABLE,
+        created_by=gm_account,
+        with_tenure=not as_template,
+    )
+    StoryNPCSettings.objects.create(
+        roster_entry=character.sheet_data.roster_entry, is_template=as_template
+    )
     if description:
         set_physical_description(character.sheet_data, description)
     if preset is not None:

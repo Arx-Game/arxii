@@ -95,4 +95,5 @@ class MintStoryNPCAction(Action):
         return ActionResult(
             success=True,
             message=f"{character.key} minted as a Story NPC (#{character.pk}).",
+            data={"roster_entry_id": character.sheet_data.roster_entry.pk},
         )

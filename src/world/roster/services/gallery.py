@@ -197,6 +197,26 @@ def _repick_worn(entry: RosterEntry) -> None:
     if entry.profile_picture_id != (replacement.pk if replacement else None):
         entry.profile_picture = replacement
         entry.save(update_fields=["profile_picture"])
+    _sync_npc_persona_portrait(entry)
+
+
+def _sync_npc_persona_portrait(entry: RosterEntry) -> None:
+    """A story NPC's primary persona wears the worn look as its portrait (#4418).
+
+    Poses read ``Persona.thumbnail_url`` and room state reads ``Persona.thumbnail``, so
+    both are set; both are cleared when no look is worn. A player character's persona
+    is left alone.
+    """
+    from world.roster.services.activity import is_story_npc  # noqa: PLC0415
+
+    sheet = entry.character_sheet
+    if not is_story_npc(sheet):
+        return
+    persona = sheet.primary_persona
+    link = worn_look(entry)
+    persona.thumbnail = link.media if link else None
+    persona.thumbnail_url = look_url(link) or ""
+    persona.save(update_fields=["thumbnail", "thumbnail_url"])
 
 
 def wear_look(entry: RosterEntry, link: TenureMedia) -> None:
@@ -207,6 +227,7 @@ def wear_look(entry: RosterEntry, link: TenureMedia) -> None:
     entry.profile_picture = link
     entry.full_clean()
     entry.save(update_fields=["profile_picture"])
+    _sync_npc_persona_portrait(entry)
 
 
 # ---------------------------------------------------------------- looks
