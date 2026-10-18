@@ -3,7 +3,9 @@
 Every action is gated by ``can_staff_edit_sheet`` (a 404 otherwise, as a non-owner
 finding a sheet's edit door should learn nothing), validates its family's input,
 calls the one service that writes that family, and answers with the refreshed
-sheet payload so the client replaces its cache. Each choice runs the grants CG
+sheet payload so the client replaces its cache. The seven actions that edit identity,
+stats, skills, path and magic of a story NPC answer to ``can_edit_npc_sheet`` instead:
+staff, or the GM who owns that NPC (#4418). Each choice runs the grants CG
 runs for it, so a staff-built sheet ends where CG would have left it.
 """
 
@@ -92,6 +94,12 @@ class StaffSheetRowsMixin:
         self._require_staff_edit(sheet)
         return sheet
 
+    def _npc_owner_sheet(self, request: Request) -> CharacterSheet:
+        """The sheet, for staff or the GM who owns this story NPC (#4418)."""
+        sheet = self.get_object()
+        self._require_npc_owner_edit(sheet)
+        return sheet
+
     def _validated(self, serializer_cls: Any, request: Request, sheet: CharacterSheet) -> Any:
         serializer = serializer_cls(data=request.data, context={"sheet": sheet})
         serializer.is_valid(raise_exception=True)
@@ -104,7 +112,7 @@ class StaffSheetRowsMixin:
     @action(detail=True, methods=[HTTPMethod.PATCH], url_path="staff-stats")
     def staff_stats(self, request: Request, pk: int | None = None) -> Response:
         """Set stats at display scale (1 to 5); missing rows are created."""
-        sheet = self._staff_sheet(request)
+        sheet = self._npc_owner_sheet(request)
         data = self._validated(StaffStatsSerializer, request, sheet)
         try:
             set_stat_values(sheet, data["stats"], source=TraitChangeSource.STAFF_EDIT)
@@ -117,7 +125,7 @@ class StaffSheetRowsMixin:
     @action(detail=True, methods=[HTTPMethod.PATCH], url_path="staff-skills")
     def staff_skills(self, request: Request, pk: int | None = None) -> Response:
         """Set skills and specializations within the configured caps; no point budget."""
-        sheet = self._staff_sheet(request)
+        sheet = self._npc_owner_sheet(request)
         data = self._validated(StaffSkillsSerializer, request, sheet)
         try:
             set_skill_values(
@@ -212,7 +220,7 @@ class StaffSheetRowsMixin:
         from world.progression.models import CharacterPathHistory  # noqa: PLC0415
         from world.progression.services.advancement import select_initial_path  # noqa: PLC0415
 
-        sheet = self._staff_sheet(request)
+        sheet = self._npc_owner_sheet(request)
         data = self._validated(StaffPathSerializer, request, sheet)
         path = data.get("path")
         if path is not None:
@@ -322,7 +330,7 @@ class StaffSheetRowsMixin:
         from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
         from world.magic.exceptions import MagicError  # noqa: PLC0415
 
-        sheet = self._staff_sheet(request)
+        sheet = self._npc_owner_sheet(request)
         data = self._validated(StaffMagicSerializer, request, sheet)
         tenure = sheet.roster_entry.current_tenure if sheet.roster_entry else None
         picks = MagicPicks(
@@ -353,7 +361,7 @@ class StaffSheetRowsMixin:
     @action(detail=True, methods=[HTTPMethod.GET], url_path="staff-magic-options")
     def staff_magic_options(self, request: Request, pk: int | None = None) -> Response:
         """What Grant magic offers, given ``?tradition=`` and ``?gift=`` picked so far."""
-        sheet = self._staff_sheet(request)
+        sheet = self._npc_owner_sheet(request)
         return Response(
             StaffMagicOptionsSerializer(
                 _magic_options(
@@ -368,7 +376,7 @@ class StaffSheetRowsMixin:
     @action(detail=True, methods=[HTTPMethod.GET], url_path="staff-options")
     def staff_options(self, request: Request, pk: int | None = None) -> Response:
         """What the row editors pick from: the catalogs and this species' form options."""
-        sheet = self._staff_sheet(request)
+        sheet = self._npc_owner_sheet(request)
         return Response(StaffOptionsSerializer(_staff_options(sheet)).data)
 
     @extend_schema(request=None, responses={200: CharacterSheetSerializer})
