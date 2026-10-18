@@ -181,6 +181,18 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 "scene",
                 "technique",
                 "technique__effect_type",
+                # #4418: resist_only / resist_check_name read these per row.
+                "initiator_persona__character_sheet",
+                "initiator_persona__character_sheet__character",
+                "initiator_persona__character_sheet__roster_entry__roster",
+                "target_persona__character_sheet__character",
+                "target_persona__character_sheet__roster_entry__roster",
+                "action_template",
+                "action_template__consent_category",
+                "action_template__check_type",
+                # get_boon reads the ask riding the request, one row per request.
+                "boon",
+                "boon__material_category",
             )
             .order_by("-created_at")
         )

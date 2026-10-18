@@ -235,6 +235,14 @@ class SocialConsentCategory(NaturalKeyMixin, SharedMemoryModel):
             node = node.parent
         return chain
 
+    def is_refusable_from_npcs(self) -> bool:
+        """True when this category or any ancestor is flagged ``refusable_from_npcs`` (#4418).
+
+        The flag is inherited down the tree, like the consent rules: a child of
+        ``romantic`` is as refusable as ``romantic`` itself.
+        """
+        return any(node.refusable_from_npcs for node in self.ancestor_chain())
+
 
 class SocialConsentPreference(SharedMemoryModel):
     """Per-tenure opt-out for social action targeting (#544, #1141).

@@ -1940,7 +1940,7 @@ def _social_consent_exclusions(character: ObjectDB, category: object | None) -> 
     # blocks below still apply (#4418).
     skip_consent = (
         category is not None
-        and not category.refusable_from_npcs
+        and not category.is_refusable_from_npcs()
         and actor_sheet is not None
         and is_story_npc(actor_sheet)
     )

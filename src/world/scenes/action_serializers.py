@@ -480,8 +480,9 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
         """
         from world.scenes.boon_models import Boon  # noqa: PLC0415
 
-        row = Boon.objects.filter(action_request=obj).select_related("material_category").first()
-        if row is None:
+        try:
+            row = obj.boon
+        except Boon.DoesNotExist:
             return None
         return {
             "kind": row.kind,
