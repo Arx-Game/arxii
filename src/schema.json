@@ -46502,7 +46502,11 @@ components:
             type: integer
         kept:
           type: boolean
+        allowance:
+          type: integer
+          nullable: true
       required:
+      - allowance
       - answer_offer_ids
       - beat_id
       - kept
@@ -46998,6 +47002,27 @@ components:
         description:
           type: string
           description: Worldbuilding text shown to players
+        frame:
+          type: string
+          description: The frame every character who starts here shares; shown at
+            the pick.
+        station:
+          type: string
+          description: The station this beginning starts a character at, in a few
+            words.
+          maxLength: 100
+        strikes_childhood:
+          type: boolean
+          description: 'Strike the Childhood stage out: its grids never show for this
+            beginning.'
+        strikes_youth:
+          type: boolean
+          description: 'Strike the Youth stage out: its grids never show for this
+            beginning.'
+        strikes_adulthood:
+          type: boolean
+          description: 'Strike the Before the Glimpse stage out: its grids never show
+            for this beginning.'
         art_image:
           type: string
           nullable: true
@@ -47056,6 +47081,27 @@ components:
           type: string
           minLength: 1
           description: Worldbuilding text shown to players
+        frame:
+          type: string
+          description: The frame every character who starts here shares; shown at
+            the pick.
+        station:
+          type: string
+          description: The station this beginning starts a character at, in a few
+            words.
+          maxLength: 100
+        strikes_childhood:
+          type: boolean
+          description: 'Strike the Childhood stage out: its grids never show for this
+            beginning.'
+        strikes_youth:
+          type: boolean
+          description: 'Strike the Youth stage out: its grids never show for this
+            beginning.'
+        strikes_adulthood:
+          type: boolean
+          description: 'Strike the Before the Glimpse stage out: its grids never show
+            for this beginning.'
         grants_species_languages:
           type: boolean
           description: If False, characters don't get species' racial language (Misbegotten)
@@ -94858,6 +94904,8 @@ components:
           type: integer
         name:
           type: string
+        distinction_name:
+          type: string
         player_line:
           type: string
         chapter:
@@ -94896,6 +94944,7 @@ components:
       - chapter
       - cost_per_rank
       - distinction_id
+      - distinction_name
       - effect_line
       - first_look
       - held

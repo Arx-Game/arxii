@@ -1,8 +1,9 @@
-"""The Backgrounds beat library at character creation (#4124).
+"""The Backgrounds beat library at character creation (#4124, #4395).
 
 A beat is a prompt over priced distinction offers, pooled per life stage for every
-Beginning that does not exclude it; its answers open when the beat is taken; a
-one-of beat refuses a second answer; a Sleeper-style Beginning keeps one beat.
+Beginning that does not exclude it or strike its stage out; its answers are open while
+it is in the pool; a one-of beat refuses a second answer and an age-scaled beat allows
+one more per decade; a Sleeper-style Beginning keeps one beat.
 """
 
 from django.test import TestCase
@@ -26,10 +27,11 @@ from world.character_creation.factories import (
 )
 from world.character_creation.models import CharacterOriginSlot
 from world.character_creation.offers import (
+    age_pick_allowance,
+    beat_pick_conflicts,
     beat_pool,
     beats_for,
     offers_for,
-    one_of_beat_conflicts,
     reconcile_offer_picks,
     visible_offers,
 )
@@ -78,6 +80,13 @@ class BeatPoolTests(TestCase):
     def test_no_beginning_no_pool(self):
         self.assertEqual(beat_pool(CharacterDraftFactory()), [])
 
+    def test_a_struck_stage_is_absent_from_the_pool(self):
+        """The Sleeper strikes the stages before the Glimpse (#4395): absent, not greyed."""
+        sleeper = BeginningsFactory(name="Sleeper", strikes_childhood=True, strikes_youth=True)
+        draft = CharacterDraftFactory(selected_beginnings=sleeper)
+        self.assertEqual([b.name for b in beat_pool(draft)], ["The work"])
+        self.assertEqual(sleeper.struck_stages(), {LifeStage.CHILDHOOD, LifeStage.YOUTH})
+
     def test_beats_for_reads_the_drafts_state(self):
         draft = CharacterDraftFactory(
             selected_beginnings=self.beginning,
@@ -95,6 +104,52 @@ class BeatPoolTests(TestCase):
         self.assertTrue(by_name["The court"].unknown)
         self.assertFalse(by_name["The work"].taken)
         self.assertEqual(by_name["The work"].selection, BeatSelection.ANY)
+        # A one-of beat allows one answer, an any-that-apply beat any number (#4395).
+        self.assertEqual(by_name["The household"].allowance, 1)
+        self.assertIsNone(by_name["The work"].allowance)
+
+    def test_a_pick_under_a_beat_takes_it(self):
+        """The grids never ask the player to add a beat first (#4395): a pick takes it."""
+        answer = _answer(self.household, "Spoiled", -10)
+        draft = CharacterDraftFactory(
+            selected_beginnings=self.beginning,
+            draft_data={
+                "distinctions": [
+                    {
+                        "distinction_id": answer.distinction_id,
+                        "distinction_name": "Spoiled",
+                        "rank": 1,
+                        "cost": -10,
+                        "offer_ids": [answer.pk],
+                        "sources": ["The household"],
+                        "arrivals": [OfferArrival.CHOICE],
+                    }
+                ]
+            },
+        )
+        by_name = {e.name: e for e in beats_for(draft)}
+        self.assertTrue(by_name["The household"].taken)
+        self.assertFalse(by_name["The court"].taken)
+
+    def test_an_age_scaled_beat_allows_one_more_per_decade(self):
+        """Nineteen is one "known for" pick, fifty is four (#4395)."""
+        self.assertEqual(
+            [age_pick_allowance(a) for a in (None, 19, 20, 29, 30, 50)], [1, 1, 1, 1, 2, 4]
+        )
+        known_for = LifeBeatFactory(
+            name="Known for",
+            life_stage=LifeStage.ADULTHOOD,
+            selection=BeatSelection.ANY,
+            picks_scale_with_age=True,
+        )
+        young = CharacterDraftFactory(selected_beginnings=self.beginning, age=19)
+        old = CharacterDraftFactory(selected_beginnings=self.beginning, age=50)
+        self.assertEqual({e.name: e.allowance for e in beats_for(young)}["Known for"], 1)
+        self.assertEqual({e.name: e.allowance for e in beats_for(old)}["Known for"], 4)
+        spied = _answer(known_for, "Spied for a house", 3)
+        killed = _answer(known_for, "Killed for coin", 3)
+        self.assertEqual(beat_pick_conflicts([spied, killed], age=19), [("Known for", 1)])
+        self.assertEqual(beat_pick_conflicts([spied, killed], age=50), [])
 
     def test_one_kept_beginning_takes_its_pool_by_itself(self):
         sleeper = BeginningsFactory(name="Sleeper", beat_mode=BeatMode.ONE_KEPT)
@@ -120,48 +175,50 @@ class BeatAnswerTests(TestCase):
         cls.efficient = _answer(cls.work, "Efficient", 10)
         cls.secretive = _answer(cls.work, "Secretive", 25)
 
-    def test_an_answer_opens_only_once_its_beat_is_taken(self):
+    def test_a_beats_answers_are_open_while_it_is_in_the_pool(self):
+        """A grid is open as soon as the Beginning offers it (#4395); no "add" first."""
         draft = CharacterDraftFactory(selected_beginnings=self.beginning)
-        self.assertEqual(offers_for(draft, OfferChapter.BACKGROUNDS), [])
-        draft.draft_data = {"beats": {str(self.household.pk): {"taken": True}}}
+        names = [o.name for o in offers_for(draft, OfferChapter.BACKGROUNDS)]
+        self.assertEqual(names, ["Spoiled", "Patient", "Efficient", "Secretive"])
+        self.assertEqual(
+            [o.distinction_name for o in offers_for(draft, OfferChapter.BACKGROUNDS)][:2],
+            ["Spoiled", "Patient"],
+        )
+        struck = BeginningsFactory(name="Sleeper", strikes_childhood=True)
+        draft.selected_beginnings = struck
         draft.save()
         names = [o.name for o in offers_for(draft, OfferChapter.BACKGROUNDS)]
-        self.assertEqual(names, ["Spoiled", "Patient"])
-        self.assertTrue(
-            all(
-                o.opener_key == f"beat:{self.household.pk}" and o.arrives_as == OfferArrival.CHOICE
-                for o in offers_for(draft, OfferChapter.BACKGROUNDS)
-            )
-        )
+        self.assertEqual(names, ["Efficient", "Secretive"])
+        draft.selected_beginnings = self.beginning
+        draft.save()
+        household = [
+            o
+            for o in offers_for(draft, OfferChapter.BACKGROUNDS)
+            if o.opener_key == f"beat:{self.household.pk}"
+        ]
+        self.assertEqual([o.name for o in household], ["Spoiled", "Patient"])
+        self.assertTrue(all(o.arrives_as == OfferArrival.CHOICE for o in household))
 
     def test_an_unknown_beat_opens_nothing(self):
         draft = CharacterDraftFactory(
             selected_beginnings=self.beginning,
             draft_data={"beats": {str(self.household.pk): {"taken": True, "unknown": True}}},
         )
-        self.assertEqual(offers_for(draft, OfferChapter.BACKGROUNDS), [])
+        names = [o.name for o in offers_for(draft, OfferChapter.BACKGROUNDS)]
+        self.assertEqual(names, ["Efficient", "Secretive"])
 
     def test_answers_group_by_beat_in_pool_order(self):
-        draft = CharacterDraftFactory(
-            selected_beginnings=self.beginning,
-            draft_data={
-                "beats": {
-                    str(self.work.pk): {"taken": True},
-                    str(self.household.pk): {"taken": True},
-                }
-            },
-        )
+        draft = CharacterDraftFactory(selected_beginnings=self.beginning)
         keys = [o.opener_key for o in offers_for(draft, OfferChapter.BACKGROUNDS)]
         self.assertEqual(
             keys,
             [f"beat:{self.household.pk}"] * 2 + [f"beat:{self.work.pk}"] * 2,
         )
 
-    def test_removing_a_beat_drops_its_picks(self):
+    def test_marking_a_beat_unknown_drops_its_picks(self):
         draft = CharacterDraftFactory(
             selected_beginnings=self.beginning,
             draft_data={
-                "beats": {str(self.household.pk): {"taken": True}},
                 "distinctions": [
                     {
                         "distinction_id": self.patient.distinction_id,
@@ -176,16 +233,18 @@ class BeatAnswerTests(TestCase):
             },
         )
         self.assertIn(self.patient.pk, visible_offers(draft))
-        draft.draft_data["beats"] = {}
+        draft.draft_data["beats"] = {str(self.household.pk): {"unknown": True}}
         draft.save()
         dropped = reconcile_offer_picks(draft)
         self.assertEqual(dropped, ["Patient"])
         self.assertEqual(draft.draft_data["distinctions"], [])
 
-    def test_one_of_conflicts_name_the_beat(self):
-        self.assertEqual(one_of_beat_conflicts([self.spoiled, self.patient]), ["The household"])
-        self.assertEqual(one_of_beat_conflicts([self.efficient, self.secretive]), [])
-        self.assertEqual(one_of_beat_conflicts([self.spoiled, self.efficient]), [])
+    def test_one_of_conflicts_name_the_beat_and_its_allowance(self):
+        self.assertEqual(
+            beat_pick_conflicts([self.spoiled, self.patient], age=None), [("The household", 1)]
+        )
+        self.assertEqual(beat_pick_conflicts([self.efficient, self.secretive], age=None), [])
+        self.assertEqual(beat_pick_conflicts([self.spoiled, self.efficient], age=None), [])
 
 
 class BeatsEndpointTests(TestCase):
@@ -219,6 +278,7 @@ class BeatsEndpointTests(TestCase):
                     "line": "",
                     "answer_offer_ids": [self.patient.pk, self.spoiled.pk],
                     "kept": False,
+                    "allowance": 1,
                 }
             ],
         )
@@ -240,7 +300,7 @@ class BeatsEndpointTests(TestCase):
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/", both, format="json"
         )
         self.assertEqual(resp.status_code, 400, resp.content)
-        self.assertIn("The household", resp.json()["detail"])
+        self.assertIn("one answer on The household", resp.json()["detail"])
         one = {"distinctions": both["distinctions"][:1]}
         resp = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/", one, format="json"
@@ -255,6 +315,33 @@ class BeatsEndpointTests(TestCase):
             e for e in self.draft.calculate_cg_points_breakdown() if e["category"] == "distinction"
         ]
         self.assertEqual(lines, [{"category": "distinction", "item": "Patient", "cost": 10}])
+
+    def test_the_sync_holds_an_age_scaled_beat_to_the_years_lived(self):
+        known_for = LifeBeatFactory(
+            name="Known for",
+            life_stage=LifeStage.ADULTHOOD,
+            selection=BeatSelection.ANY,
+            picks_scale_with_age=True,
+        )
+        spied = _answer(known_for, "Spied for a house", 3)
+        killed = _answer(known_for, "Killed for coin", 3)
+        both = {
+            "distinctions": [
+                {"id": spied.distinction_id, "rank": 1, "offer_id": spied.pk},
+                {"id": killed.distinction_id, "rank": 1, "offer_id": killed.pk},
+            ]
+        }
+        url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
+        self.draft.age = 19
+        self.draft.save(update_fields=["age"])
+        resp = self.client.put(url, both, format="json")
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("one answer on Known for", resp.json()["detail"])
+        self.draft.age = 50
+        self.draft.save(update_fields=["age"])
+        resp = self.client.put(url, both, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(len(resp.json()["distinctions"]), 2)
 
     def test_a_malformed_beats_map_is_refused(self):
         resp = self.client.patch(

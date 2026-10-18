@@ -29,14 +29,18 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
+    KIN_ROWS_KEY,
     STAT_DISPLAY_DIVISOR,
     TECHNIQUE_PERSONALIZATIONS_KEY,
     ApplicationStatus,
+    ChildFate,
     CommentType,
     FamilyPath,
+    KinRowKind,
     OriginStoryState,
     Parentage,
     QuestionKind,
+    SpouseFate,
     StartingAreaAccessLevel,
 )
 from world.character_creation.models import (
@@ -333,6 +337,8 @@ def finalize_character(
     # chosen pool, or self-serve a node for the new PC. Runs before draft
     # deletion (the claim FKs live on the draft).
     _bind_kinship_node(draft, sheet)
+    # The people seated beside the parents (#4395): a twin, a spouse, children.
+    _bind_kin_rows(draft, sheet)
 
     # Derived-name aliases (#3261): the bind above may attach a node whose
     # membership predates the sheet, so the add_membership choke point never
@@ -833,6 +839,94 @@ def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     _bind_invented_parents(draft, node)
     _mark_adoption(draft, node)
     _pin_heredity_back_inference(draft, node)
+
+
+def _bind_kin_rows(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Seat the draft's kin rows in the kinship graph (#4395).
+
+    A twin is a node sharing every parent edge the new PC has (and its family); a
+    spouse is a wedlock union, ended by death or divorce, the spouse marked missing
+    when fled; a child is a parentage edge from the PC, raised in the PC's family,
+    fostered away into none, lost when dead. Called after ``_bind_kinship_node`` so
+    the PC's node and parents exist. Best-effort like the bind: a kinship refusal
+    (no law of marriage seeded) logs and skips that row.
+    """
+    from world.roster.models import Kinsperson  # noqa: PLC0415
+    from world.roster.services.kinship import KinshipServiceError  # noqa: PLC0415
+
+    rows = draft.draft_data.get(KIN_ROWS_KEY) or []
+    if not rows:
+        return
+    node = Kinsperson.objects.filter(sheet=sheet).first()
+    if node is None:
+        return
+    seat = {
+        KinRowKind.TWIN: _seat_twin,
+        KinRowKind.SPOUSE: _seat_spouse,
+        KinRowKind.CHILD: _seat_child,
+    }
+    for row in rows:
+        seat_row = seat.get(row.get("kind"))
+        if seat_row is None:
+            continue
+        try:
+            seat_row(draft, node, row)
+        except KinshipServiceError:
+            logger.exception("Kin row %r on draft %s could not be seated; skipped.", row, draft.pk)
+
+
+def _seat_twin(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
+    """A twin shares the PC's family and every parent edge the PC has (#4395)."""
+    from world.roster.services.kinship import create_person, record_parentage  # noqa: PLC0415
+
+    twin = create_person(
+        name=str(row.get("name", "")).strip(),
+        family=node.family,
+        gender=_resolve_draft_gender(row.get("gender_id")),
+        age=draft.age,
+        created_by=draft.account,
+    )
+    for edge in ParentageEdge.objects.filter(child=node):
+        record_parentage(child=twin, parent=edge.parent, kind=edge.kind)
+
+
+def _seat_spouse(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
+    """A spouse is a wedlock union; death and divorce end it, fled marks them missing."""
+    from world.roster.services.kinship import (  # noqa: PLC0415
+        create_person,
+        end_union,
+        record_union,
+        wedlock_union_kind,
+    )
+
+    fate = row.get("fate", "")
+    spouse = create_person(
+        name=str(row.get("name", "")).strip(),
+        gender=_resolve_draft_gender(row.get("gender_id")),
+        is_deceased=fate == SpouseFate.DEAD,
+        created_by=draft.account,
+    )
+    union = record_union(kind=wedlock_union_kind(), members=[node, spouse])
+    if fate in (SpouseFate.DEAD, SpouseFate.DIVORCED):
+        end_union(union)
+    elif fate == SpouseFate.FLED:
+        spouse.is_missing = True
+        spouse.save(update_fields=["is_missing"])
+
+
+def _seat_child(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
+    """A child is the PC's: raised in the family, fostered away into none, lost when dead."""
+    from world.roster.services.kinship import create_person, record_parentage  # noqa: PLC0415
+
+    fate = row.get("fate", "")
+    child = create_person(
+        name=str(row.get("name", "")).strip(),
+        family=node.family if fate == ChildFate.RAISED else None,
+        gender=_resolve_draft_gender(row.get("gender_id")),
+        is_deceased=fate == ChildFate.LOST,
+        created_by=draft.account,
+    )
+    record_parentage(child=child, parent=node, kind=ParentageKind.BIOLOGICAL)
 
 
 def _draft_parentage(draft: CharacterDraft) -> str:
@@ -3190,6 +3284,37 @@ def clear_family_selection(draft: CharacterDraft) -> None:
     draft.served_house = None
     for key in _UPBRINGING_DRAFT_KEYS:
         draft.draft_data.pop(key, None)
+
+
+def route_for_beginning(beginning: Beginnings | None) -> OriginTemplate | None:
+    """The beginning's family route (#4395): its one active ``OriginTemplate``, or None.
+
+    The Upbringing pick retired with #4395; the route row stays as the beginning's
+    family-path record (which paths, the parentage, the path-scoped prompts) and is
+    assigned with the beginning. With several active rows the first by sort order
+    stands; with none the Lineage step reports the gap.
+    """
+    if beginning is None:
+        return None
+    return (
+        OriginTemplate.objects.filter(beginning=beginning, is_active=True)
+        .order_by("sort_order", "name", "id")
+        .first()
+    )
+
+
+def assign_route(draft: CharacterDraft) -> None:
+    """Point the draft at its beginning's route, clearing what hung on the old one (#4395).
+
+    Called when the beginning changes (``CharacterDraftSerializer.update``). Does not
+    save; the caller persists. The same pk is a no-op.
+    """
+    route = route_for_beginning(draft.selected_beginnings)
+    route_id = route.pk if route is not None else None
+    if draft.selected_origin_template_id == route_id:
+        return
+    draft.selected_origin_template = route
+    clear_family_selection(draft)
 
 
 def select_origin_template(draft: CharacterDraft, template: OriginTemplate) -> None:

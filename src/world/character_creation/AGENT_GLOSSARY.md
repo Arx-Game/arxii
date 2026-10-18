@@ -20,6 +20,37 @@ A beat the character took but does not remember; the sheet shows it blank and a 
 naming it (`resolves_beat`) fills it in when the subject learns it. _Avoid_: skipped,
 blank, amnesia flag.
 
+**Frame** (`Beginnings.frame`, #4395):
+The prose every character who starts from a beginning shares, read at the pick beside
+the beginning's **station** (`Beginnings.station`, one line of standing). It moved here
+from the route's `frame_narrative`. _Avoid_: upbringing frame, intro.
+
+**Strike** (`Beginnings.strikes_childhood` / `strikes_youth` / `strikes_adulthood`, #4395):
+A whole stage a beginning leaves out of the life grids; its beats are absent, not greyed
+(`struck_stages()`). A single beat is left out with a `LifeBeatExclusion` instead.
+_Avoid_: locked stage, hidden stage.
+
+**Route** (`OriginTemplate`, #3617, #4395):
+The beginning's family-path record (which paths, the parentage, the path-scoped prompts
+and priced answers), assigned with the beginning (`route_for_beginning`/`assign_route`).
+Staff still call it an Upbringing in the builder; a player never picks one. _Avoid_:
+Upbringing (as a player term), template (in player copy).
+
+**General write-in** (`questionnaire.is_general_write_in`, #4395):
+A free-text question asked on every family path with nothing to pick: retired from
+creation, never shown, left out of the route payload. _Avoid_: lore question, prompt
+(the kept kind).
+
+**Age allowance** (`LifeBeat.picks_scale_with_age`, `offers.age_pick_allowance`, #4395):
+How many answers an age-scaled beat allows: one at or under twenty, one more for every
+ten years lived past it (`AGE_PICKS_FROM_AGE`, `AGE_PICKS_YEARS_PER_PICK`); `beat_allowance`
+reads it, one-of or any otherwise. _Avoid_: age slots, experience picks.
+
+**Kin row** (`draft_data["kin_rows"]`, `KinRowKind`, #4395):
+A person seated beside the parents in the Lineage step: a twin, a spouse with a fate
+(`SpouseFate`), a child with a fate (`ChildFate`); finalize's `_bind_kin_rows` writes them
+into the kinship graph. _Avoid_: kin beat, family slot (that is a staff Vacancy).
+
 **Kept beat** (`Beginnings.beat_mode = ONE_KEPT`, #4124):
 The one beat a blank-slate Beginning (the Sleeper) takes by itself; every other beat
 stands unknown and nothing is addable. _Avoid_: forced beat, default beat.

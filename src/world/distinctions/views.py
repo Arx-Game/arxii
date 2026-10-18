@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from world.character_creation.constants import OfferArrival
 from world.character_creation.models import CharacterDraft, DistinctionOffer
 from world.character_creation.offers import (
-    one_of_beat_conflicts,
+    beat_pick_conflicts,
     opener_label,
     reconcile_offer_picks,
     visible_offers,
@@ -539,7 +539,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         self._check_species_innate_bulk(list(by_id.values()), draft)
 
         new_distinctions = self._build_sync_entries(distinction_entries, by_id, draft)
-        self._validate_one_of_beats(new_distinctions)
+        self._validate_beat_allowances(new_distinctions, draft)
 
         draft.draft_data["distinctions"] = new_distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
@@ -547,11 +547,13 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         return Response({"distinctions": draft.draft_data.get("distinctions", [])})
 
-    def _validate_one_of_beats(self, entries: list[dict]) -> None:
-        """A one-of beat takes one answer (#4124): two of its offers in one payload is refused.
+    def _validate_beat_allowances(self, entries: list[dict], draft) -> None:
+        """A beat takes no more answers than it allows (#4124, #4395): one on a one-of
+        beat, ``age_pick_allowance`` on a beat that scales with the draft's age; more of
+        its offers in one payload is refused.
 
         Called by ``sync`` after the entries resolve. Reads the offers the entries
-        name, so an any-that-apply beat and every other chapter pass untouched.
+        name, so an unbounded any-that-apply beat and every other chapter pass untouched.
         """
         offer_ids = {
             offer_id
@@ -564,11 +566,13 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         offers = DistinctionOffer.objects.filter(
             pk__in=offer_ids, beat__isnull=False
         ).select_related("beat")
-        conflicts = one_of_beat_conflicts(offers)
+        conflicts = beat_pick_conflicts(offers, age=draft.age)
         if conflicts:
-            raise ValidationError(
-                {"detail": f"One answer on {', '.join(conflicts)}: pick one, not several."}
-            )
+            lines = [
+                f"one answer on {name}" if allowance == 1 else f"{allowance} answers on {name}"
+                for name, allowance in conflicts
+            ]
+            raise ValidationError({"detail": f"At most {', '.join(lines)}: fewer, not more."})
 
     def _parse_sync_payload(self, raw_distinctions: object) -> list[dict]:
         """Validate the sync request shape and normalize each entry.

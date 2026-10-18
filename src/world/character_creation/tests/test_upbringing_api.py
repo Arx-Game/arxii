@@ -51,7 +51,10 @@ class UpbringingListTest(TestCase):
         """
         client = APIClient()
         client.force_authenticate(self.account)
-        doomed = OriginTemplateSlotFactory(template=self.template, name="Doomed", sort_order=9)
+        # Path-scoped (#4395): a write-in on every path is retired from creation.
+        doomed = OriginTemplateSlotFactory(
+            template=self.template, name="Doomed", sort_order=9, applies_to=FamilyPath.CLAIMED
+        )
         url = f"/api/character-creation/origin-templates/?beginning={self.template.beginning_id}"
 
         first = client.get(url)

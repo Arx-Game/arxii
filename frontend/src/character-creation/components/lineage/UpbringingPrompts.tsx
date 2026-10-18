@@ -1,8 +1,9 @@
 /**
- * Upbringing prompts (#3617, extended into typed lineage questions #3660).
+ * Route prompts (#3617, extended into typed lineage questions #3660).
  *
  * Slot prompts scoped to the resolved family path (`applies_to`) and to the
- * shown/follow-up rules mirrored in `types.ts` (`shownSlotIds`). Each kind
+ * shown/follow-up rules mirrored in `types.ts` (`shownSlotIds`); a general
+ * write-in never renders (#4395), a pick-list on every path still does. Each kind
  * PATCHes a different draft_data bucket: 'text' -> origin_slots, 'pick' ->
  * origin_choices, 'group' -> origin_anchors (+ origin_choices when the
  * question also offers a stance), 'person' -> origin_figures. Pick/group
@@ -43,7 +44,7 @@ interface Props {
   path: FamilyPath | '';
   influence: number;
   copy: CGExplanations | undefined;
-  /** 'any' renders prompts for every path; 'path' renders only this path's prompts. */
+  /** 'any' renders the pick-lists asked on every path; 'path' renders this path's prompts. */
   scope: 'any' | 'path';
 }
 

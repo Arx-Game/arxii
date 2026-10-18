@@ -35,9 +35,12 @@ def _draft_for(template, **extra):
 
 
 class LineagePathValidationTest(TestCase):
-    def test_no_upbringing_is_the_first_error(self):
+    def test_a_beginning_without_a_route_is_the_first_error(self):
+        """The route is the beginning's own (#4395); none authored is a staff gap."""
         draft = CharacterDraftFactory(selected_beginnings=BeginningsFactory())
-        assert get_lineage_errors(draft) == ["Choose your upbringing"]
+        assert get_lineage_errors(draft) == [
+            "The family paths for this beginning are not set up yet"
+        ]
 
     def test_several_paths_require_a_choice(self):
         template = OriginTemplateFactory(
@@ -113,7 +116,10 @@ class LineagePathValidationTest(TestCase):
 class PromptValidationTest(TestCase):
     def test_required_prompt_on_the_chosen_path_blocks(self):
         template = OriginTemplateFactory()
-        slot = OriginTemplateSlotFactory(template=template, name="Duty", is_required=True)
+        # Path-scoped (#4395): a write-in on every path is retired from creation.
+        slot = OriginTemplateSlotFactory(
+            template=template, name="Duty", is_required=True, applies_to=FamilyPath.NAMED
+        )
         draft = _draft_for(template, draft_data={"new_family_name": "Vale"})
         assert get_lineage_errors(draft) == ["Duty is required"]
         draft.draft_data["origin_slots"] = {str(slot.id): "We kept the cisterns."}

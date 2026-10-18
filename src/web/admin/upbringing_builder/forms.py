@@ -14,7 +14,7 @@ from django.forms.models import BaseInlineFormSet
 from django.http import QueryDict
 
 from web.admin.authoring.offers import DistinctionOfferFormSetMixin
-from world.character_creation.constants import OfferArrival, OfferChapter
+from world.character_creation.constants import FamilyPath, OfferArrival, OfferChapter
 from world.character_creation.models import (
     DistinctionOffer,
     OriginTemplate,
@@ -126,6 +126,17 @@ class QuestionForm(forms.ModelForm):
             if template
             else OriginTemplateSlot.objects.none()
         )
+        # A write-in asked on every path never shows in creation (#4395): the choice
+        # says so where staff pick it; a pick-list on every path still shows.
+        self.fields["applies_to"].choices = [
+            (
+                value,
+                "Every path (a pick-list shows; a write-in here never does)"
+                if value == FamilyPath.ANY
+                else label,
+            )
+            for value, label in self.fields["applies_to"].choices
+        ]
         self.fields["same_anchor_as"].queryset = siblings
         self.fields["follow_up_to"].queryset = siblings
         self.fields["shown_for_choices"].queryset = OriginTemplateSlotChoice.objects.filter(

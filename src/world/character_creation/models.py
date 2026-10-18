@@ -330,6 +330,39 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "every other beat standing unknown (the Sleeper)."
         ),
     )
+    #: #4395: a beginning is a frame, a station and a strike-list. ``frame`` is the prose
+    #: every character who starts here shares (it moved here from the route's
+    #: ``frame_narrative``); ``station`` is the one line of standing the player reads
+    #: beside it; a struck stage is absent from the life grids for this beginning, not
+    #: greyed (the Sleeper strikes the three stages before the Glimpse).
+    frame = models.TextField(
+        blank=True,
+        default="",
+        help_text="The frame every character who starts here shares; shown at the pick.",
+    )
+    station = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="The station this beginning starts a character at, in a few words.",
+    )
+    strikes_childhood = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Strike the Childhood stage out: its grids never show for this beginning.",
+    )
+    strikes_youth = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Strike the Youth stage out: its grids never show for this beginning.",
+    )
+    strikes_adulthood = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "Strike the Before the Glimpse stage out: its grids never show for this beginning."
+        ),
+    )
     heritage = models.ForeignKey(
         "arxii.Heritage",
         null=True,
@@ -448,6 +481,17 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     # No ``is_accessible_by``: ``is_active`` is the only thing that gates a
     # Beginnings now, and every consumer already filters on it (#3726).
+
+    def struck_stages(self) -> set[str]:
+        """The ``LifeStage`` values this beginning strikes out of the life grids (#4395)."""
+        struck: set[str] = set()
+        if self.strikes_childhood:
+            struck.add(LifeStage.CHILDHOOD)
+        if self.strikes_youth:
+            struck.add(LifeStage.YOUTH)
+        if self.strikes_adulthood:
+            struck.add(LifeStage.ADULTHOOD)
+        return struck
 
     def get_available_species(self) -> models.QuerySet:
         """
@@ -1174,6 +1218,17 @@ class LifeBeat(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMe
     )
     sort_order = models.PositiveSmallIntegerField(default=0)
     is_active = models.BooleanField(default=True, help_text="Inactive beats are offered nowhere.")
+    #: #4395: "what you were known for" grows with the years lived. On, the number of
+    #: answers this beat allows is ``offers.age_pick_allowance(age)`` (one at twenty, one
+    #: more per decade); off, ``selection`` alone governs (one, or any).
+    picks_scale_with_age = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "An older character takes more: one answer at twenty, one more for every "
+            "ten years after. Off: one of, or any that apply."
+        ),
+    )
 
     objects = LifeBeatManager()
 

@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 from django.db.models import Q
 
 from world.character_creation.constants import (
+    AGE_PICKS_FROM_AGE,
+    AGE_PICKS_YEARS_PER_PICK,
     ActorSheetPrompt,
     BeatMode,
     BeatSelection,
@@ -125,20 +127,60 @@ def beat_pool(draft: CharacterDraft) -> list[LifeBeat]:
     """Every active library beat this draft's Beginning offers, stage by stage (#4124).
 
     The library applies to every Beginning unless a ``LifeBeatExclusion`` says
-    otherwise; with no Beginning picked there is no pool. Called by ``beats_for``
+    otherwise, or the Beginning strikes the beat's whole stage out (#4395: the
+    Sleeper strikes the three stages before the Glimpse; a struck stage is absent,
+    not greyed). With no Beginning picked there is no pool. Called by ``beats_for``
     and ``_context``.
     """
     beginning_id = draft.selected_beginnings_id
     if beginning_id is None:
         return []
+    struck = draft.selected_beginnings.struck_stages()
     excluded = set(
         LifeBeatExclusion.objects.filter(beginning_id=beginning_id).values_list(
             "beat_id", flat=True
         )
     )
-    beats = [b for b in LifeBeat.objects.filter(is_active=True) if b.pk not in excluded]
+    beats = [
+        b
+        for b in LifeBeat.objects.filter(is_active=True)
+        if b.pk not in excluded and b.life_stage not in struck
+    ]
     beats.sort(key=lambda b: (LIFE_STAGE_ORDER.get(b.life_stage, 99), b.sort_order, b.pk))
     return beats
+
+
+def age_pick_allowance(age: int | None) -> int:
+    """How many answers an age-scaled beat allows (#4395).
+
+    One pick at or under ``AGE_PICKS_FROM_AGE``, one more for every
+    ``AGE_PICKS_YEARS_PER_PICK`` years lived past it: nineteen is one "known for"
+    pick, fifty is four. No age yet reads as the floor.
+    """
+    if age is None or age <= AGE_PICKS_FROM_AGE:
+        return 1
+    return 1 + (age - AGE_PICKS_FROM_AGE) // AGE_PICKS_YEARS_PER_PICK
+
+
+def beat_allowance(beat: LifeBeat, age: int | None) -> int | None:
+    """How many answers ``beat`` allows a character of ``age``; None is any number (#4395).
+
+    A beat whose picks scale with age reads ``age_pick_allowance``; otherwise one-of
+    allows one and any-that-apply allows any.
+    """
+    if beat.picks_scale_with_age:
+        return age_pick_allowance(age)
+    return 1 if beat.selection == BeatSelection.ONE_OF else None
+
+
+def picked_offer_ids(draft: CharacterDraft) -> set[int]:
+    """Every offer id the draft's distinction picks name."""
+    return {
+        offer_id
+        for entry in draft.draft_data.get("distinctions", [])
+        for offer_id in entry.get("offer_ids", [])
+        if isinstance(offer_id, int)
+    }
 
 
 def _draft_beat_states(draft: CharacterDraft) -> dict[int, dict]:
@@ -170,9 +212,23 @@ def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
         draft.selected_beginnings_id is not None
         and draft.selected_beginnings.beat_mode == BeatMode.ONE_KEPT
     )
+    picked = picked_offer_ids(draft)
     out: list[BeatPoolEntry] = []
     for beat in pool:
         state = states.get(beat.pk, {})
+        answer_ids = [offer.pk for offer in beat.answers]
+        line = str(state.get("line") or "")
+        unknown = bool(state.get("unknown"))
+        # A beat is taken by a pick under it, a line, or the unknown mark (#4395: the
+        # grids never ask the player to "add" a beat first); the Beginning's kept beat
+        # and an explicit taken flag still count.
+        taken = (
+            kept
+            or bool(state.get("taken"))
+            or unknown
+            or bool(line)
+            or any(offer_id in picked for offer_id in answer_ids)
+        )
         out.append(
             BeatPoolEntry(
                 beat_id=beat.pk,
@@ -180,36 +236,51 @@ def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
                 prompt=beat.prompt,
                 life_stage=beat.life_stage,
                 selection=beat.selection,
-                taken=kept or bool(state.get("taken")),
-                unknown=bool(state.get("unknown")),
-                line=str(state.get("line") or ""),
-                answer_offer_ids=[offer.pk for offer in beat.answers],
+                taken=taken,
+                unknown=unknown,
+                line=line,
+                answer_offer_ids=answer_ids,
                 kept=kept,
+                allowance=beat_allowance(beat, draft.age),
             )
         )
     return out
 
 
 def taken_beat_ids(draft: CharacterDraft) -> set[int]:
-    """Ids of the beats whose answers are open to this draft: taken, and not unknown."""
+    """Ids of the beats the draft has taken and not marked unknown."""
     return {e.beat_id for e in beats_for(draft) if e.taken and not e.unknown}
 
 
-def one_of_beat_conflicts(offers: Iterable[DistinctionOffer]) -> list[str]:
-    """Names of the one-of beats that ``offers`` would answer more than once (#4124).
+def open_beat_ids(draft: CharacterDraft) -> set[int]:
+    """Ids of the beats whose answers are open to this draft (#4395): in the pool and
+    not marked unknown. A grid is open as soon as the Beginning offers it."""
+    return {e.beat_id for e in beats_for(draft) if not e.unknown}
 
-    Called by the distinctions sync view before it saves: a ``BeatSelection.ONE_OF``
-    beat takes one answer, so two of its offers in one payload is a refused pick,
-    not a reconcile. Offers on any-that-apply beats never conflict.
+
+def beat_pick_conflicts(
+    offers: Iterable[DistinctionOffer], *, age: int | None
+) -> list[tuple[str, int]]:
+    """``(beat name, allowance)`` for each beat ``offers`` would answer past its allowance.
+
+    Called by the distinctions sync view before it saves (#4124, #4395): a one-of beat
+    takes one answer and an age-scaled beat ``age_pick_allowance(age)``, so more of its
+    offers in one payload is a refused pick, not a reconcile. Offers on an unbounded
+    any-that-apply beat never conflict.
     """
     by_beat: dict[int, set[int]] = defaultdict(set)
-    names: dict[int, str] = {}
+    beats: dict[int, LifeBeat] = {}
     for offer in offers:
-        if offer.beat_id is None or offer.beat.selection != BeatSelection.ONE_OF:
+        if offer.beat_id is None:
             continue
         by_beat[offer.beat_id].add(offer.distinction_id)
-        names[offer.beat_id] = offer.beat.name
-    return [names[beat_id] for beat_id, dists in by_beat.items() if len(dists) > 1]
+        beats[offer.beat_id] = offer.beat
+    out: list[tuple[str, int]] = []
+    for beat_id, dists in by_beat.items():
+        allowance = beat_allowance(beats[beat_id], age)
+        if allowance is not None and len(dists) > allowance:
+            out.append((beats[beat_id].name, allowance))
+    return out
 
 
 def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
@@ -238,9 +309,9 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
             return offer.enemy_reason_id == ctx["enemy_reason_id"]
         return bool(offer.enemy_degree) and offer.enemy_degree == ctx["enemy_degree"]
     if chapter == OfferChapter.BACKGROUNDS:
-        # A beat's answers open when the beat is taken and not unknown (#4124); a
-        # removed beat closes them, and reconcile drops the picks.
-        return offer.beat_id in ctx["taken_beat_ids"]
+        # A beat's answers are open while the beat is in the pool and not unknown
+        # (#4124, #4395); marking it unknown closes them, and reconcile drops the picks.
+        return offer.beat_id in ctx["open_beat_ids"]
     return False
 
 
@@ -259,8 +330,8 @@ def _context(draft: CharacterDraft) -> dict:
         # The enemy chapter's two openers (#3709): the reason picked, the degree picked.
         "enemy_reason_id": enemy.get("reason_id"),
         "enemy_degree": enemy.get("degree", ""),
-        # The Backgrounds chapter's opener (#4124): the beats the draft has taken.
-        "taken_beat_ids": taken_beat_ids(draft),
+        # The Backgrounds chapter's opener (#4124, #4395): the beats open to the draft.
+        "open_beat_ids": open_beat_ids(draft),
     }
 
 
@@ -470,6 +541,7 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
                 offer_id=offer.id,
                 distinction_id=dist.id,
                 name=offer.name,
+                distinction_name=dist.name,
                 player_line=offer.player_line,
                 chapter=offer.chapter,
                 arrives_as=offer.arrives_as,

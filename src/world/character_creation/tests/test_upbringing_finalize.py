@@ -25,7 +25,10 @@ class NamedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
 
     def test_named_family_is_created_and_bound(self) -> None:
         template = OriginTemplateFactory(beginning=self.beginnings)
-        slot = OriginTemplateSlotFactory(template=template, name="Duty")
+        # Path-scoped (#4395): a write-in on every path is retired from creation.
+        slot = OriginTemplateSlotFactory(
+            template=template, name="Duty", applies_to=FamilyPath.NAMED
+        )
         draft = self._create_base_draft(new_family_name="Cisternwrights")
         draft.selected_origin_template = template
         draft.draft_data["origin_slots"] = {str(slot.id): "We kept the cisterns."}

@@ -3,6 +3,7 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from world.character_creation.constants import FamilyPath
 from world.character_creation.models import (
     Beginnings,
     OriginTemplate,
@@ -29,11 +30,13 @@ class CGOriginTemplateAPITest(TestCase):
             frame_narrative="Your story begins with escape.",
             allows_no_family=True,
         )
+        # Path-scoped (#4395): a write-in on every path is retired from creation.
         self.slot = OriginTemplateSlot.objects.create(
             template=self.template,
             name="Who helped?",
             prompt="Who aided your flight?",
             example="My sister Mira.",
+            applies_to=FamilyPath.NONE,
         )
         self.inactive_template = OriginTemplate.objects.create(
             beginning=self.beginning,
@@ -84,6 +87,7 @@ class CGOriginTemplateAPITest(TestCase):
             template=other_template,
             name="Who wronged you?",
             prompt="Who left the deepest mark?",
+            applies_to=FamilyPath.NONE,
         )
 
         url = "/api/character-creation/origin-templates/"

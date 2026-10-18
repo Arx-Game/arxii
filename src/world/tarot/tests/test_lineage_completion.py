@@ -148,4 +148,6 @@ class LineageCompletionTests(TestCase):
             selected_area=self.area,
             draft_data={},
         )
-        assert get_lineage_errors(draft) == ["Choose your upbringing"]
+        assert get_lineage_errors(draft) == [
+            "The family paths for this beginning are not set up yet"
+        ]

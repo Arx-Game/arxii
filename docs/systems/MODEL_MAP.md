@@ -1564,6 +1564,7 @@
 - `age_bounds(species: 'Species | None', beginnings: 'Beginnings | None', ic_now: 'datetime | None') -> 'AgeBounds' - The one place the CG age rule lives (#3663).`
 - `approve_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str' = '') -> 'None' - Approve an application and finalize the character.`
 - `assemble_origin_prose(sheet: 'CharacterSheet') -> 'str' - Compose the frame narrative + slot answers into prose.`
+- `assign_route(draft: 'CharacterDraft') -> 'None' - Point the draft at its beginning's route, clearing what hung on the old one (#4395).`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `can_create_character(account: 'AbstractBaseUser | AnonymousUser') -> 'tuple[bool, str]' - Check if an account can create a new character.`
 - `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' - Claim a submitted application for staff review.`
@@ -1584,6 +1585,7 @@
 - `require_draft_complete(draft: 'CharacterDraft') -> 'None' - Raise DraftIncompleteError unless every non-Review stage is complete.`
 - `resolve_fallback_starting_room() -> 'ObjectDB | None' - The canonical fallback starting room, or ``None`` if it was never seeded (#3818).`
 - `resubmit_draft(application: 'DraftApplication', *, comment: 'str' = '') -> 'None' - Resubmit a draft application after revisions.`
+- `route_for_beginning(beginning: 'Beginnings | None') -> 'OriginTemplate | None' - The beginning's family route (#4395): its one active ``OriginTemplate``, or None.`
 - `select_origin_template(draft: 'CharacterDraft', template: 'OriginTemplate') -> 'None' - Choose the draft's Upbringing; a change resets everything downstream of it (#3617).`
 - `set_family_path(draft: 'CharacterDraft', path: 'str') -> 'None' - Pick the family path when the Upbringing allows more than one (#3617).`
 - `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str', choice: 'OriginTemplateSlotChoice | None' = None, *, organization: 'Organization | None | _Keep' = <world.character_creation.services._Keep object>, figure_name: 'str | _Keep' = <world.character_creation.services._Keep object>) -> 'None' - Upsert a character's answer (text, picked choice, anchor, person), then refresh state.`

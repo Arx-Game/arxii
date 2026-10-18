@@ -126,6 +126,7 @@ function visibleOffer(tag: GlimpseTagOption, overrides: Partial<VisibleOffer> = 
     offer_id: catalogOffer.offer_id,
     distinction_id: catalogOffer.distinction_id,
     name: catalogOffer.name,
+    distinction_name: catalogOffer.name,
     player_line: catalogOffer.player_line,
     chapter: 'glimpse',
     arrives_as: 'choice',

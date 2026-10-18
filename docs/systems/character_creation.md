@@ -38,8 +38,8 @@ from world.character_creation.types import (
 |-------|---------|------------|
 | `CGPointBudget` | Global CG point budget config | `name`, `starting_points`, `is_active`, `xp_conversion_rate` |
 | `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level` (ALL or STAFF_ONLY) |
-| `Beginnings` | Worldbuilding paths per area | `name`, `starting_area` (FK), `description`, `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank` |
-| `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `parentage` (`Parentage`: known/unknown/adoptive, #4024; `clean()` ties it to the family flags: unknown offers only no family, adoptive needs claim or name and no no-family path; finalize writes no parents for unknown, and for adoptive turns the PC's BORN membership into ADOPTED and every parent edge into ADOPTIVE, so the #3261 name display wears the taken-in particle), `parentage_note` (prose the player reads about their parents; blank shows nothing), `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `max_claim_tier` (`TitleTier`, blank = any: the highest seat a founder raised here may define, #3983; editable in the Upbringing Builder's Family paths since #4202), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648), `closed_distinctions` (M2M `Distinction`; this route never offers these, in any chapter, #3675), `closed_reason` (the line a player reads where a closed one would have shown, #3675) |
+| `Beginnings` | Worldbuilding paths per area; since #4395 a frame, a station and a strike-list | `name`, `starting_area` (FK), `description`, `frame` (the prose every character who starts here shares, shown at the pick; carried from the route's `frame_narrative` by migration 0244), `station` (one line of standing), `strikes_childhood`/`strikes_youth`/`strikes_adulthood` (a struck stage is absent from the life grids, `struck_stages()`), `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank`, `beat_mode` |
+| `OriginTemplate` | The beginning's family route (#3617; since #4395 assigned with the beginning, `services.route_for_beginning`/`assign_route`, never a player pick: "Upbringing" is retired as a player term) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `parentage` (`Parentage`: known/unknown/adoptive, #4024; `clean()` ties it to the family flags: unknown offers only no family, adoptive needs claim or name and no no-family path; finalize writes no parents for unknown, and for adoptive turns the PC's BORN membership into ADOPTED and every parent edge into ADOPTIVE, so the #3261 name display wears the taken-in particle), `parentage_note` (prose the player reads about their parents; blank shows nothing), `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `max_claim_tier` (`TitleTier`, blank = any: the highest seat a founder raised here may define, #3983; editable in the Upbringing Builder's Family paths since #4202), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648), `closed_distinctions` (M2M `Distinction`; this route never offers these, in any chapter, #3675), `closed_reason` (the line a player reads where a closed one would have shown, #3675) |
 | `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617, #3660) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text`, `kind` (`QuestionKind`: text/pick/group/person), `connection_kind` (`ConnectionKind`, GROUP tag), `life_stage` (`LifeStage`, GROUP tag), `anchor_source` (`AnchorSource`: pool/listed/same_as/served_house/own_family), `anchor_org_type` (FK `OrganizationType`, POOL), `anchor_society` (FK `Society`, POOL), `anchor_orgs` (M2M `Organization`, LISTED), `exclude_covert`, `same_anchor_as` (FK self; SAME_AS's source question, or a PERSON's group), `follow_up_to` (FK self), `shown_for_choices` (M2M `OriginTemplateSlotChoice`; empty = any answer) |
 | `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617, #3660) and, optionally, how a new family starts (`family_standing`, #4060) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `reputation_seed` (int, -1000 to 1000; GROUP only), `is_active`, `sort_order`. A choice bundles a Distinction via a `DistinctionOffer` row pointed at it (#3675), not a field of its own -- see `DistinctionOffer` below. |
 
@@ -89,7 +89,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 |---|-------|-------------------|
 | 1 | Origin | `selected_area` is set |
 | 2 | Heritage | Beginnings, species, gender selected; family/tarot complete; CG points >= 0; species allowed by beginnings |
-| 3 | Lineage | Upbringing chosen and accessible; family path resolved (claim: playable family of an offered kind in the area's realm; name: unique name; none: tarot card; with claim and name both offered and nothing chosen, the path resolves to name, #4024); every required prompt on that path answered (`get_lineage_errors`, #3617). The beats (#4124) are never required: a stage with none taken is a quiet one |
+| 3 | Lineage | The beginning's route exists (assigned with the beginning, #4395; none authored names the staff gap); family path resolved (claim: playable family of an offered kind in the area's realm; name: unique name; none: tarot card; with claim and name both offered and nothing chosen, the path resolves to name, #4024); every required shown prompt on that path answered (`get_lineage_errors`, #3617; a general write-in never shows, #4395). The life grids (#4124, #4395) and the kin rows are never required: a stage with nothing picked is a quiet one |
 | 5 | Path | Path selected (`get_path_errors`) |
 | 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
 | 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
@@ -633,28 +633,52 @@ route-level `closed_distinctions`/`closed_reason` module, and a `GlimpseTag` cha
 See `src/web/admin/CLAUDE.md`'s "Distinction Builder", "Tradition Slate", and "Glimpse Tag Admin
 Offers" sections.
 
-## Lineage step (#3617, #3648)
+## Lineage step (#3617, #3648, #4395)
 
-Per-beginning Upbringings replaced the old single family-known/orphan split: each
-`OriginTemplate` carries its own CG cost and choice of family paths
-(claim a staff-authored family, name a new one, or none), with typed prompts
+Each beginning carries one family route (`OriginTemplate`) with its CG cost and choice
+of family paths (claim a staff-authored family, name a new one, or none), typed prompts
 (`OriginTemplateSlot`) and costed pick-list choices (`OriginTemplateSlotChoice`)
-authored underneath it. See the authoring recipes in
+authored underneath it. **The route comes with the beginning (#4395, ADR-4395-A):** the
+Upbringing pick retired; `services.route_for_beginning` is the beginning's one active
+route and `assign_route` points the draft at it when the beginning changes (the
+serializer's `update`), clearing what hung on the old one. Production had one route per
+beginning, so no choice was lost; a beginning with none authored makes the Lineage step
+report "The family paths for this beginning are not set up yet". A **general write-in**
+(`applies_to` ANY, a free-text question with nothing to pick: `questionnaire
+.is_general_write_in`) never shows and leaves the route payload, because creation asks no
+free-form lore question; path-scoped prompts and pick-lists on every path stay. See the authoring recipes in
 [family-authoring-recipes.md](family-authoring-recipes.md), ADR-0268 (family standing
 uses existing organisation mechanisms), ADR-0269 (Upbringings price standing as
 family influence x position), and ADR-0273 (family entry is a Vacancy).
 
-**Page order (#4124):** Upbringing picker, the family block (path picker when the
-Upbringing allows more than one path, then the path body: the house and the parents
-come first), `scope: 'any'` prompts, `scope: 'path'` prompts, then the beats
-(`BeatsBlock`), then the record.
+**Page order (#4124, #4395):** the family block (path picker when the route allows more
+than one path, then the path body: the house and the parents come first), the
+pick-lists asked on every path, the path's prompts, the kin rows (`KinRows`), then the
+life grids (`LifeGrids`), then the record.
+
+**Kin rows (#4395).** The people seated beside the parents: `draft_data["kin_rows"]`, a
+list of `{kind, name, gender_id, fate}` (`KinRowKind` twin / spouse / child, `SpouseFate`
+alive / dead / divorced / fled, `ChildFate` raised / fostered away / lost; one twin at
+most, `KIN_ROWS_MAX` rows; `_validate_kin_rows`). Finalize's `_bind_kin_rows`, after
+`_bind_kinship_node`, seats them in the kinship graph: a twin is a `Kinsperson` in the
+PC's family sharing every parent edge the PC has; a spouse is a wedlock `Union`
+(`wedlock_union_kind`), ended by death or divorce, the spouse `is_missing` when fled; a
+child is a parentage edge from the PC, in the PC's family when raised, in none when
+fostered away, `is_deceased` when lost. Best-effort like the bind: a kinship refusal logs
+and skips the row.
 
 ### Backgrounds: the beats of a life (#4124)
 
 A character's background is written as **beats** across the stages of a life
 (`LifeStage`: childhood, youth, before the Glimpse, at the Glimpse, since), from one
 shared library (`LifeBeat`, a content model) that every Beginning offers unless a
-`LifeBeatExclusion` says otherwise. A beat is a prompt over priced distinction offers:
+`LifeBeatExclusion` says otherwise or the Beginning **strikes the stage out** (#4395:
+`strikes_childhood`/`strikes_youth`/`strikes_adulthood`; the Sleeper strikes all three
+and meets the Glimpse row and "what you carry" alone; a struck stage is absent, not
+greyed). The Lineage leaf shows each stage as **grids** (`LifeGrids`, reading A of the
+#4395 demo): a beat is a grid of its answers picked straight from the cards, each card
+the offer's own label and, when that is the author's own words, the distinction under it
+(`VisibleOffer.distinction_name`), at its price. A beat is a prompt over priced distinction offers:
 its answers are `DistinctionOffer` rows in `OfferChapter.BACKGROUNDS`, opened by the
 beat (`DistinctionOffer.beat`, `opener_key` `beat:<id>`), every one
 `OfferArrival.CHOICE` at the distinction's own price. **A beat grants nothing free**, so
@@ -666,12 +690,20 @@ a second pick on it, `offers.one_of_beat_conflicts`) or any-that-apply (drawn do
 The draft's state lives at `draft_data["beats"]`: `{"<beat_id>": {"taken", "unknown",
 "line"}}`, the whole map replaced on each PATCH (`_validate_beats`);
 `GET drafts/<id>/beats/` returns the pool as the draft meets it (`offers.beats_for`,
-`BeatPoolEntry`: taken, unknown, the line, the answers' offer ids, `kept`). A beat's
-answers open only while it is taken and not unknown (`_opener_satisfied`), so removing a
-beat drops its picks through `reconcile_offer_picks`. `Beginnings.beat_mode`
+`BeatPoolEntry`: taken, unknown, the line, the answers' offer ids, `kept`, and since
+#4395 `allowance`). A beat's answers are open while it is in the pool and not unknown
+(`open_beat_ids`, `_opener_satisfied`); a pick under it, a line, or the unknown mark is
+what takes it (the grids never ask the player to add a beat first), and marking it
+unknown drops its picks through `reconcile_offer_picks`. **Allowance (#4395):**
+`beat_allowance` is one answer on a one-of beat, any number on any-that-apply, and on a
+beat whose `picks_scale_with_age` is on `age_pick_allowance(age)`: one at or under
+`AGE_PICKS_FROM_AGE` (20) and one more per `AGE_PICKS_YEARS_PER_PICK` (10) years lived
+past it, so nineteen is one "known for" pick and fifty four. The distinctions sync
+refuses more picks than the allowance (`beat_pick_conflicts`); the leaf disables the
+rest at it. `Beginnings.beat_mode`
 `ONE_KEPT` (the Sleeper) takes the one unexcluded beat itself and marks nothing else
-addable; every other beat stands unknown. Nothing counts beats by age: the purse is
-the only governor.
+addable; every other beat stands unknown. Apart from an age-scaled beat's allowance,
+nothing counts beats by age: the purse is the only governor.
 
 At finalize (`_finalize_beats`) each taken beat becomes a `CharacterOriginSlot` row with
 `beat` set (`slot` null; exactly one of the two), its `unknown` state and its line; the

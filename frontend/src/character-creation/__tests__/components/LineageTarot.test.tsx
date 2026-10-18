@@ -24,7 +24,6 @@ import { createTestQueryClient, renderWithCharacterCreationProviders } from '../
 // Mock the API module
 vi.mock('../../api', () => ({
   getFamilies: vi.fn(),
-  getOriginTemplates: vi.fn().mockResolvedValue([]),
   getClaimableTitles: vi.fn().mockResolvedValue([]),
   getHouseClaim: vi.fn().mockResolvedValue(null),
   submitHouseClaim: vi.fn(),
@@ -113,7 +112,6 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
   beforeEach(() => {
     mockOnStageSelect.mockClear();
     vi.mocked(api.getFamilies).mockResolvedValue([]);
-    vi.mocked(api.getOriginTemplates).mockResolvedValue([]);
     vi.mocked(api.getTarotCards).mockResolvedValue([]);
     vi.mocked(api.getNamingRitualConfig).mockResolvedValue({
       flavor_text: '',

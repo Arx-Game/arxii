@@ -48,6 +48,8 @@ PROSE_FIELD_NAMES = frozenset(
         "fit_notes",
         "flavor_text",
         "followon_message",
+        # #4395: a Beginning's frame paragraph, the first thing a player reads of it.
+        "frame",
         "frame_narrative",
         "goal",
         "guidance_text",
@@ -124,6 +126,8 @@ NON_PROSE_TEXT_FIELDS = frozenset(
         "reward_value",
         "service_function_path",
         "slug",
+        # #4395: a Beginning's station is a one-word standing ("Noble"), a label.
+        "station",
         "stream_kind",
         "target_object_name",
         "title",
