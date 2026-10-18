@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.magic.models import Thread
+from world.magic.services.magic_skills import cast_involved_trait_ids
 from world.magic.services.power_terms import ApplicableThread
 from world.magic.services.resonance import (
     _anchor_ambiently_active,
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Technique
+    from world.magic.types.magic_skills import CastCheck
     from world.magic.types.pull import CastPullDeclaration
 
 
@@ -32,6 +34,7 @@ def applicable_threads_for_cast(
     technique: Technique | None,
     *,
     cast_pull: CastPullDeclaration | None = None,
+    cast_check: CastCheck | None = None,
 ) -> list[ApplicableThread] | None:
     """Resolve a caster's applicable threads for an out-of-combat cast.
 
@@ -39,6 +42,7 @@ def applicable_threads_for_cast(
     ``CharacterSheet`` and current room from the ObjectDB ``character``, then
     delegates to :func:`build_cast_applicable_threads`. Returns ``None`` for an
     NPC without a sheet (so ``use_technique`` falls back to its baseline path).
+    ``cast_check`` is the check the caller already resolved for this cast (#4450).
     """
     from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
 
@@ -48,7 +52,7 @@ def applicable_threads_for_cast(
     location = character.location
     location_id = location.pk if location is not None else None
     return build_cast_applicable_threads(
-        sheet, technique, location_id=location_id, cast_pull=cast_pull
+        sheet, technique, location_id=location_id, cast_pull=cast_pull, cast_check=cast_check
     )
 
 
@@ -119,16 +123,22 @@ def build_cast_applicable_threads(
     *,
     location_id: int | None = None,
     cast_pull: CastPullDeclaration | None = None,
+    cast_check: CastCheck | None = None,
 ) -> list[ApplicableThread]:
     """Return merged ApplicableThreads (passive tier-0 + declared pull). Charge-free.
 
-    Cast path only — always the paid-pull predicate (``ambient=False``). Behaviour is
-    byte-identical to pre-#2708; this is now a thin wrapper over
-    :func:`build_applicable_threads`.
+    Cast path only — always the paid-pull predicate (``ambient=False``). A thin wrapper
+    over :func:`build_applicable_threads`.
+
+    ``cast_check`` is what the cast rolls (#4450): its check type's traits and skill terms
+    become the context's ``involved_traits``, so a TRAIT thread on the caster's stat, a
+    personal skill or the technique skill is in the cast's action. Without it no trait is
+    involved, as before.
     """
     ctx = PullActionContext(
         combat_encounter=None,
         involved_techniques=(technique.pk,) if technique is not None else (),
         involved_objects=(location_id,) if location_id is not None else (),
+        involved_traits=cast_involved_trait_ids(cast_check),
     )
     return build_applicable_threads(sheet, ctx, ambient=False, cast_pull=cast_pull)

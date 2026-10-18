@@ -216,15 +216,24 @@ def commit_combat_pull(
 
     from actions.errors import ActionDispatchError  # noqa: PLC0415
     from world.magic.exceptions import MagicError  # noqa: PLC0415
+    from world.magic.models import Technique  # noqa: PLC0415
+    from world.magic.services.magic_skills import (  # noqa: PLC0415
+        cast_involved_trait_ids,
+        resolve_cast_check,
+    )
     from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
     sheet = participant.character_sheet
 
+    # The traits this cast rolls (#4450) are in its action, so a TRAIT thread on the
+    # caster's stat, a skill or the technique skill can be pulled.
+    cast_check = resolve_cast_check(sheet.character, Technique.objects.get(pk=technique_id))
     action_context = PullActionContext(
         combat_encounter=encounter,
         participant=participant,
         involved_techniques=(technique_id,),
+        involved_traits=cast_involved_trait_ids(cast_check),
         target=target,
     )
 

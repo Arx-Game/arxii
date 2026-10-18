@@ -218,7 +218,9 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
 
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
-    applicable_threads = applicable_threads_for_cast(character, technique, cast_pull=cast_pull)
+    applicable_threads = applicable_threads_for_cast(
+        character, technique, cast_pull=cast_pull, cast_check=cast_check
+    )
 
     # Signature-motif bonus (#1582): a flat intensity delta on the signed technique's
     # thread folds into the cast's power derivation (no-op / 0 when unsigned).

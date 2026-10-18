@@ -1591,8 +1591,18 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     from world.magic.services import use_technique  # noqa: PLC0415
     from world.magic.services.cast_threads import applicable_threads_for_cast  # noqa: PLC0415
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
+    from world.magic.types.magic_skills import CastCheck  # noqa: PLC0415
 
-    applicable_threads = applicable_threads_for_cast(character, technique, cast_pull=cast_pull)
+    # The pull context follows what this action rolls: the template's check traits plus the
+    # technique skill term, not the caster's personal check (#4450).
+    applicable_threads = applicable_threads_for_cast(
+        character,
+        technique,
+        cast_pull=cast_pull,
+        cast_check=CastCheck(
+            check_type=action_template.check_type, extra_traits=tuple(extra_traits)
+        ),
+    )
 
     fury_res = run_fury_for_action(
         character=character,

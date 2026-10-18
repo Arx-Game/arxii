@@ -976,6 +976,10 @@ def _charge_cast_pull(
     """
     from world.combat.pull_helpers import _resolve_emergency_draw  # noqa: PLC0415
     from world.magic.constants import EffectKind  # noqa: PLC0415
+    from world.magic.services.magic_skills import (  # noqa: PLC0415
+        cast_involved_trait_ids,
+        resolve_cast_check,
+    )
     from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
@@ -1000,6 +1004,9 @@ def _charge_cast_pull(
         PullActionContext(
             combat_encounter=None,
             involved_techniques=(technique.pk,),
+            # The traits the cast rolls (#4450): a TRAIT thread on the caster's stat or
+            # skills, or on the technique skill, is in this action.
+            involved_traits=cast_involved_trait_ids(resolve_cast_check(character, technique)),
             target=target,
         ),
         beseech_bonus_thread_id=beseech_bonus_thread_id,

@@ -113,3 +113,14 @@ def involved_trait_ids(
     # check_type.traits is the reverse FK manager from CheckTypeTrait.
     type_ids = check_type.traits.values_list("trait_id", flat=True)  # type: ignore[attr-defined]
     return tuple(dict.fromkeys([*type_ids, *(term.trait.pk for term in extra_traits)]))
+
+
+def cast_involved_trait_ids(cast_check: CastCheck | None) -> tuple[int, ...]:
+    """Trait ids a cast rolls, for the thread pulls that cast can use; empty without a check.
+
+    A TRAIT thread is in a cast's action when its trait is one of these, so the cast's stat,
+    its skills and its technique skill all count. One query: call it once per cast.
+    """
+    if cast_check is None:
+        return ()
+    return involved_trait_ids(cast_check.check_type, cast_check.extra_traits)
