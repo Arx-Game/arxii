@@ -733,7 +733,17 @@ and the model for any later per-target menu (items, room objects, exits).
    edited app runs in — running only your new test module passes locally, so
    run the whole `actions` suite (`arx test actions --sqlite`) after adding an
    Action or telnet command, not just your new module.
-6. Write tests in `tests/`
+6. Write its journey (#3657): a test in `integration_tests/` that types the telnet line
+   through the handler or sends the web dispatch (`JourneyCase.telnet` / `.web`) and
+   asserts what the player was told and what the rows hold. A unit test in `tests/`
+   is for a shape no journey can reach (a prerequisite's branch, an effect handler's
+   internals), never a second copy of the player path: the ledger
+   `docs/testing/ledger/actions.csv` records which `tests/` modules were folded into
+   the journeys and removed (tranche 6 began with the covenant, org vault, market
+   sale, event, coin, trade and condition modules), and a new `tests/test_<verb>.py`
+   that only calls `.run()` down the happy path is the shape that gets removed next.
+   Never patch the room's `msg_contents` to keep a test quiet: `secure` raised on its
+   room line, after setting the policy, behind exactly that patch.
 7. (Optional) Create a telnet command in `commands/` that delegates to the action
 
 **Concurrent-PR conflict on the registry:** when several "telnet journey" PRs
