@@ -13,6 +13,8 @@ refused up front the way Django refuses any protected delete.
 - Staff delete a mission assist pattern a helper used: refused; it is retired with
   ``is_active`` instead.
 - Staff delete two bonded allies a surge was about: the surges go with them.
+- A project that paid a contributor resonance cannot be deleted; nothing deletes one
+  today, so this pins the PROTECT for whoever adds the first delete.
 
 Tagged ``postgres``: SQLite does not reproduce the rejected UPDATE the way the
 production database does.
@@ -21,6 +23,7 @@ production database does.
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
+from django.db.models import ProtectedError
 from django.test import tag
 from django.urls import reverse
 
@@ -36,9 +39,16 @@ from world.combat.factories import CombatEncounterFactory, CombatParticipantFact
 from world.combat.models import DramaticSurgeRecord
 from world.journals.factories import JournalEntryFactory, PraiseFactory
 from world.journals.models import JournalEntry
+from world.magic.constants import GainSource
+from world.magic.factories import ResonanceFactory
+from world.magic.models import ResonanceGrant
 from world.missions.factories import MissionSupportDeclarationFactory
 from world.missions.models import MissionAssistPattern, MissionSupportDeclaration
-from world.scenes.factories import InteractionFactory, SceneFactory
+from world.projects.constants import ContributionKind, ProjectKind, ProjectStatus
+from world.projects.factories import ProjectFactory
+from world.projects.models import Project, ProjectKindResonanceAward
+from world.projects.services import add_contribution
+from world.scenes.factories import InteractionFactory, PersonaFactory, SceneFactory
 from world.scenes.models import Interaction
 
 
@@ -162,3 +172,30 @@ class StaffDeleteTwoAlliesASurgeWasAbout(JourneyCase):
             self.assertEqual(response.status_code, 302, response.content[:2000])
 
         self.assertFalse(DramaticSurgeRecord.objects.filter(pk__in=[s.pk for s in self.surges]))
+
+
+@tag("postgres")
+class AProjectThatPaidResonanceIsKept(JourneyCase):
+    def test_deleting_it_is_refused_and_the_grant_keeps_its_project(self) -> None:
+        project = ProjectFactory(
+            kind=ProjectKind.ORGANIZATION_CAPABILITY,
+            status=ProjectStatus.ACTIVE,
+            resonance=ResonanceFactory(),
+        )
+        ProjectKindResonanceAward.objects.create(
+            kind=ProjectKind.ORGANIZATION_CAPABILITY, resonance_award_amount=5
+        )
+        add_contribution(
+            project=project,
+            contributor_persona=PersonaFactory(),
+            kind=ContributionKind.AP,
+            ap_amount=3,
+        )
+        grant = ResonanceGrant.objects.get(source=GainSource.PROJECT_CONTRIBUTION)
+
+        with self.assertRaises(ProtectedError):
+            project.delete()
+
+        self.assertTrue(Project.objects.filter(pk=project.pk).exists())
+        grant.refresh_from_db()
+        self.assertEqual(grant.source_project_id, project.pk)
