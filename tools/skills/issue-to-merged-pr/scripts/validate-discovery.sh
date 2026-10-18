@@ -138,8 +138,8 @@ for field in "${required_fields[@]}"; do
 done
 
 # A slice of an approved spec declares its parent with one `Slice N of #M` line
-# before spec:start. More than one such line is ambiguous, so it fails closed.
-parent_lines=$(grep -E '^[[:space:]]*Slice [0-9]+ of #[0-9]+[[:space:]]*$' <<<"$prefix" || true)
+# before spec:start (trailing prose on that line is fine). More than one such line is ambiguous, so it fails closed.
+parent_lines=$(grep -E '^[[:space:]]*Slice [0-9]+ of #[0-9]+([^0-9].*)?$' <<<"$prefix" || true)
 parent_count=$(grep -c . <<<"$parent_lines" || true)
 if [[ "$parent_count" -gt 1 ]]; then
   echo "discovery: more than one 'Slice N of #M' parent line before spec:start" >&2
@@ -150,7 +150,7 @@ if has_label status:implementing && ! has_label spec:approved; then
   if [[ "$lane" == lightweight && "$state" == complete ]]; then
     :
   elif [[ "$parent_count" -eq 1 ]]; then
-    parent=$(grep -Eo '#[0-9]+' <<<"$parent_lines")
+    parent=$(grep -Eo '#[0-9]+' <<<"$parent_lines" | head -n1)
     parent="${parent#\#}"
     if [[ "$parent" == "$issue" ]]; then
       echo "discovery: issue $issue names itself as its parent" >&2

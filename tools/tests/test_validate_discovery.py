@@ -192,6 +192,11 @@ class DiscoveryValidatorTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("could not fetch parent", result.stderr)
 
+    def test_parent_line_may_carry_trailing_prose(self) -> None:
+        body = HEAVYWEIGHT_SLICE.replace("#4333", "#4333; spec and demo live there.")
+        result = self.slice_run(body, "spec:approved", "open")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_two_parent_lines_fail(self) -> None:
         body = HEAVYWEIGHT_SLICE.replace(
             "Slice 5 of #4333\n", "Slice 5 of #4333\nSlice 2 of #4343\n"
