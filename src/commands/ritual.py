@@ -6,6 +6,8 @@ session path).
 
 Single-actor path (SERVICE/CEREMONY kind):
     ``ritual <name>``                       — perform a ritual by name
+    ``ritual anima``                        — perform your personal anima ritual in the
+        scene you stand in (also ``ritual <its name>``); once per scene (#4451)
     ``ritual <name> key=value [key=value]``  — with ritual parameters (numeric only,
         e.g. ``thread=<id>``/``tradition_id=<id>``)
     ``ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>``
@@ -46,6 +48,9 @@ if TYPE_CHECKING:
 
 _THREAD_KWARG = "thread"
 _THREAD_ID_KEY = "thread_id"
+#: ``ritual anima`` performs the caller's own personal anima ritual (#4451), whatever
+#: its authored name is.
+_ANIMA_SHORTHAND = "anima"
 _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
 
 #: Rite of Honors (#3466) telnet tokens — every one may run to multiple words
@@ -167,6 +172,8 @@ class CmdRitual(ArxCommand):
         ``ritual <name>``
         ``ritual <name> key=value [key=value]``
         Example: ``ritual Rite of Imbuing thread=5``
+        ``ritual anima`` - perform your personal anima ritual in the scene you
+            are in (once per scene; it eases Soulfray, then restores anima)
 
     **Multi-participant session lifecycle:**
         ``ritual sessions``                              - list pending sessions
@@ -463,18 +470,24 @@ class CmdRitual(ArxCommand):
         """Parse ``ritual <name> [k=v ...]`` into action kwargs."""
         from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
         from world.magic.models import Ritual, Thread  # noqa: PLC0415
+        from world.magic.services.anima import get_character_anima_ritual  # noqa: PLC0415
         from world.societies.honors import HONORS_SERVICE_PATH  # noqa: PLC0415
 
         args = self.require_args("Perform which ritual?")
         name, rest = self._split_name_and_rest(args)
 
+        # A SCENE_ACTION ritual is somebody's personal anima ritual (#4451): only its
+        # author can find it here, so another player's ritual name never resolves.
         ritual = Ritual.objects.filter(
+            Q(execution_kind__in=[RitualExecutionKind.SERVICE, RitualExecutionKind.CEREMONY])
+            | Q(
+                execution_kind=RitualExecutionKind.SCENE_ACTION,
+                author_account=self.caller.db_account,
+            ),
             name__iexact=name,
-            execution_kind__in=[
-                RitualExecutionKind.SERVICE,
-                RitualExecutionKind.CEREMONY,
-            ],
         ).first()
+        if ritual is None and name.lower() == _ANIMA_SHORTHAND:
+            ritual = get_character_anima_ritual(self.caller)
         if ritual is None:
             msg = f"You don't know how to perform '{name}'."
             raise CommandError(msg)

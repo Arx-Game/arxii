@@ -94,6 +94,9 @@ class PerformRitualAction(Action):
         if not ritual_visible_to(sheet, ritual):
             return ActionResult(success=False, message=HedgeInaccessibleError.user_message)
 
+        if ritual.execution_kind == RitualExecutionKind.SCENE_ACTION:
+            return self._perform_anima_ritual(sheet, ritual)
+
         try:
             with transaction.atomic():
                 self._validate_components(ritual, components, sheet)
@@ -159,6 +162,50 @@ class PerformRitualAction(Action):
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _perform_anima_ritual(self, sheet: Any, ritual: Any) -> ActionResult:
+        """Perform the actor's personal anima ritual in the scene they stand in (#4451).
+
+        A SCENE_ACTION ritual has no service function or flow to dispatch: it is the
+        once-per-scene roll ``perform_anima_ritual`` runs. It only ever acts on the
+        performer's own ritual, so a ritual that is not theirs is refused rather
+        than silently swapped for theirs.
+        """
+        from world.magic.exceptions import (  # noqa: PLC0415
+            CharacterEngagedForRitual,
+            NoRitualConfigured,
+            RitualAlreadyPerformedThisScene,
+            RitualScenePrerequisiteFailed,
+        )
+        from world.magic.services.anima import (  # noqa: PLC0415
+            get_character_anima_ritual,
+            perform_anima_ritual,
+        )
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+        own = get_character_anima_ritual(sheet.character)
+        if own is None or own.pk != ritual.pk:
+            return ActionResult(success=False, message=NoRitualConfigured.user_message)
+
+        scene = get_active_scene(sheet.character.location)
+        if scene is None:
+            return ActionResult(success=False, message=RitualScenePrerequisiteFailed.user_message)
+
+        try:
+            outcome = perform_anima_ritual(character_sheet=sheet, scene=scene)
+        except (
+            NoRitualConfigured,
+            CharacterEngagedForRitual,
+            RitualScenePrerequisiteFailed,
+            RitualAlreadyPerformedThisScene,
+        ) as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=_anima_ritual_message(ritual, outcome),
+            data={"execution_kind": ritual.execution_kind, "result": outcome},
+        )
+
     def _validate_components(
         self, ritual: Any, components: list[Any], performer_sheet: Any
     ) -> None:
@@ -193,3 +240,15 @@ class PerformRitualAction(Action):
         return resolve_pool_gate(
             ritual=ritual, performer_sheet=performer_sheet, pool=contribution.amount
         )
+
+
+def _anima_ritual_message(ritual: Any, outcome: Any) -> str:
+    """The performer's line: what the roll came to, then what it did for them."""
+    parts = [f"You perform {ritual.name}: {outcome.outcome.name}."]
+    if outcome.severity_reduced:
+        parts.append(f"Your Soulfray eases by {outcome.severity_reduced}.")
+    if outcome.soulfray_resolved:
+        parts.append("The Soulfray is gone.")
+    if outcome.anima_recovered:
+        parts.append(f"You recover {outcome.anima_recovered} anima.")
+    return " ".join(parts)

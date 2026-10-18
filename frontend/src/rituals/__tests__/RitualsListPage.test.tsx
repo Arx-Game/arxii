@@ -21,8 +21,18 @@ import type { RitualWithSchema } from '../types';
 // ---------------------------------------------------------------------------
 
 const mockUseRituals = vi.fn();
+// The personal anima ritual's Perform button posts through this mutation (#4451).
+const mockPerformMutate = vi.fn();
+const mockPerformState: {
+  isPending: boolean;
+  isSuccess: boolean;
+  isError: boolean;
+  data?: { message?: string };
+  error?: Error;
+} = { isPending: false, isSuccess: false, isError: false };
 vi.mock('@/rituals/queries', () => ({
   useRituals: () => mockUseRituals(),
+  usePerformRitual: () => ({ mutate: mockPerformMutate, ...mockPerformState }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -170,6 +180,11 @@ describe('RitualsListPage', () => {
     mockDialogProps.ritual = undefined;
     mockDialogProps.characterSheetId = undefined;
     currentAuthState = defaultAuthState;
+    mockPerformState.isPending = false;
+    mockPerformState.isSuccess = false;
+    mockPerformState.isError = false;
+    mockPerformState.data = undefined;
+    mockPerformState.error = undefined;
   });
 
   // 1. Renders all rituals from useRituals()
@@ -311,8 +326,8 @@ describe('RitualsListPage', () => {
     expect(screen.getByText(/active character/i)).toBeInTheDocument();
   });
 
-  // 7. SCENE_ACTION ritual shows "Manage" button, not "Perform"
-  it('renders a Manage button for SCENE_ACTION rituals', () => {
+  // 7. SCENE_ACTION ritual shows both Perform and Manage (#4451)
+  it('renders Perform and Manage buttons for SCENE_ACTION rituals', () => {
     mockUseRituals.mockReturnValue({
       isLoading: false,
       data: { results: [authoredRitual] },
@@ -326,7 +341,74 @@ describe('RitualsListPage', () => {
     );
 
     expect(screen.getByRole('button', { name: /manage/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /perform/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId('ritual-perform-button')).toBeInTheDocument();
+  });
+
+  // 7b. Perform on the anima ritual posts it for the active character and opens no dialog
+  it('performs the anima ritual straight from its card', async () => {
+    mockUseRituals.mockReturnValue({
+      isLoading: false,
+      data: { results: [authoredRitual] },
+    });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <RitualsListPage />
+      </Wrapper>
+    );
+
+    await userEvent.click(screen.getByTestId('ritual-perform-button'));
+
+    expect(mockPerformMutate).toHaveBeenCalledWith({
+      ritual_id: authoredRitual.id,
+      character_sheet_id: expect.any(Number),
+      kwargs: {},
+    });
+    expect(screen.queryByTestId('mock-ritual-perform-dialog')).not.toBeInTheDocument();
+  });
+
+  // 7c. The card tells the player what the roll did, or why it was refused
+  it('shows the outcome line after the anima ritual is performed', () => {
+    mockUseRituals.mockReturnValue({
+      isLoading: false,
+      data: { results: [authoredRitual] },
+    });
+    mockPerformState.isSuccess = true;
+    mockPerformState.data = {
+      message: 'You perform My Anima Ritual: Success. You recover 4 anima.',
+    };
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <RitualsListPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByTestId('ritual-perform-result')).toHaveTextContent(
+      'You perform My Anima Ritual: Success. You recover 4 anima.'
+    );
+  });
+
+  it('shows the refusal when the anima ritual cannot be performed', () => {
+    mockUseRituals.mockReturnValue({
+      isLoading: false,
+      data: { results: [authoredRitual] },
+    });
+    mockPerformState.isError = true;
+    mockPerformState.error = new Error("You've already performed your ritual in this scene.");
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <RitualsListPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "You've already performed your ritual in this scene."
+    );
   });
 
   // 8. Mixed list: both sections render with headers
