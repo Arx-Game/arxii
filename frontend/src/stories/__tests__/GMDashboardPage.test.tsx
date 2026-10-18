@@ -74,7 +74,9 @@ vi.mock('@/roster/queries', () => ({
 // it is covered by gm/npcs/__tests__/NpcForm.test.tsx, so it is stubbed here and
 // never shifts the ordered apiFetch mocks below.
 vi.mock('@/gm/npcs/NpcForm', () => ({
-  NpcForm: ({ mode }: { mode?: string }) => <div data-testid="npc-form" data-mode={mode} />,
+  NpcForm: ({ mode, sceneId }: { mode?: string; sceneId?: number | null }) => (
+    <div data-testid="npc-form" data-mode={mode} data-scene={String(sceneId)} />
+  ),
 }));
 
 // GMPromptFilterCard (#4101) fetches its own settings on mount; mock its
@@ -90,13 +92,13 @@ vi.mock('@/scenes/gmPromptQueries', () => ({
 import { apiFetch } from '@/evennia_replacements/api';
 import { useAccount } from '@/store/hooks';
 
-function withProviders(children: ReactNode) {
+function withProviders(children: ReactNode, path = '/gm/dashboard') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return (
     <QueryClientProvider client={client}>
-      <MemoryRouter>{children}</MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>{children}</MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -342,7 +344,19 @@ describe('GMDashboardPage new NPC form (#4418)', () => {
 
     const form = await screen.findByTestId('npc-form');
     expect(form).toHaveAttribute('data-mode', 'quick');
+    expect(form).toHaveAttribute('data-scene', 'null');
     expect(screen.getByRole('link', { name: 'NPC roster' })).toHaveAttribute('href', '/gm/npcs');
     expect(screen.queryByRole('button', { name: 'Mint Story NPC' })).not.toBeInTheDocument();
+  });
+
+  it("passes the cast panel's scene to the form", async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDashboard),
+    } as Response);
+
+    render(withProviders(<GMDashboardPage />, '/gm/dashboard?scene=4'));
+
+    expect(await screen.findByTestId('npc-form')).toHaveAttribute('data-scene', '4');
   });
 });

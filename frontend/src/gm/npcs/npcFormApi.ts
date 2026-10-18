@@ -23,36 +23,25 @@ export type NpcSettingsPatch = components['schemas']['PatchedNPCDetailRequest'];
 export type LendPolicy = components['schemas']['LendPolicyEnum'];
 export type BorrowAudience = components['schemas']['BorrowAudienceEnum'];
 
-/** `world.roster.constants.NPCSection`: the parts `copy-section` copies. */
-export type NpcSection =
-  | 'identity'
-  | 'description'
-  | 'background'
-  | 'powers'
-  | 'regard'
-  | 'preferences';
+type Schemas = components['schemas'];
+type CopySectionRequest = Schemas['CopySectionRequest'];
+type CopyAsNewRequest = Schemas['CopyAsNewRequest'];
+type RegardRequest = Schemas['RegardRequest'];
+type PreferencesRequest = Schemas['PreferencesRequest'];
+export type PersonalityTrait = Schemas['PersonalityTrait'];
+type PersonalityTraitPage = Schemas['PaginatedPersonalityTraitList'];
 
-/** `world.npc_services.constants.RegardTargetType`. */
-export type RegardTargetType = 'persona' | 'organization' | 'society';
+/** The parts `copy-section` copies one at a time (every `SectionEnum` but `all`). */
+export type NpcSection = Exclude<CopySectionRequest['section'], 'all'>;
 
-/** One line of "Who they favor and oppose": a signed regard of one target. */
-export interface RegardLine {
-  target_type: RegardTargetType;
-  target_id: number;
-  /** Shown on the line; not sent. */
-  target_name: string;
-  /** Signed, -1000 to 1000 (`world.npc_services.models.REGARD_MIN`/`REGARD_MAX`). */
-  value: number;
-  reason: string;
-}
+export type RegardTargetType = RegardRequest['target_type'];
 
-/** `world.npc_services.models.PreferenceValence`: a like eases checks, a dislike hardens. */
-export type PreferenceValence = 'likes' | 'dislikes';
+/** One line of "Who they favor and oppose": the regard as sent, plus the name shown. */
+export type RegardLine = RegardRequest & { target_name: string };
 
-export interface PreferenceLine {
-  trait: number;
-  valence: PreferenceValence;
-}
+/** A like eases checks against the NPC, a dislike hardens them. */
+export type PreferenceLine = PreferencesRequest['preferences'][number];
+export type PreferenceValence = PreferenceLine['valence'];
 
 /** A source for "Copy from": an NPC or template the GM may copy. */
 export interface NpcCopySource {
@@ -80,6 +69,18 @@ export async function fetchStatlinePresets(): Promise<StatlinePreset[]> {
   return body.results;
 }
 
+/** Every active personality trait, for "What works on them" (every page). */
+export async function fetchPersonalityTraits(): Promise<PersonalityTrait[]> {
+  const traits: PersonalityTrait[] = [];
+  for (let page = 1; ; page += 1) {
+    const res = await apiFetch(`/api/npc-services/personality-traits/?page=${page}`);
+    if (!res.ok) await throwApiError(res, 'Failed to load the personality traits');
+    const body = (await res.json()) as PersonalityTraitPage;
+    traits.push(...body.results);
+    if (!body.next) return traits;
+  }
+}
+
 /** The sheet behind a roster entry (the sheet id is the character id). */
 export async function fetchSheetIdForEntry(entryId: number): Promise<number> {
   const entry = await fetchRosterEntry(entryId);
@@ -90,14 +91,15 @@ export async function fetchSheetIdForEntry(entryId: number): Promise<number> {
 // Writes
 // ---------------------------------------------------------------------------
 
-/** Mint through `mint_story_npc`; answers the new roster entry's id. */
+/** Mint through `mint_story_npc` (a template when asked); answers the new entry's id. */
 export async function mintNpc(
   characterId: number,
-  kwargs: { name: string; description: string; preset: string }
+  kwargs: { name: string; description: string; preset: string; asTemplate: boolean }
 ): Promise<number> {
-  const sent: Record<string, string> = { name: kwargs.name };
+  const sent: Record<string, string | boolean> = { name: kwargs.name };
   if (kwargs.description) sent.description = kwargs.description;
   if (kwargs.preset) sent.preset = kwargs.preset;
+  if (kwargs.asTemplate) sent.as_template = true;
   const result = await postDispatchAction(characterId, {
     ref: { backend: 'registry', registry_key: 'mint_story_npc' },
     kwargs: sent,
@@ -106,6 +108,19 @@ export async function mintNpc(
   const entryId = result.data?.roster_entry_id;
   if (typeof entryId !== 'number') throw new Error('The NPC was not created.');
   return entryId;
+}
+
+/** Put a story NPC into the scene's room through `place_npc_in_scene`. */
+export async function placeNpcInScene(
+  characterId: number,
+  entryId: number,
+  sceneId: number
+): Promise<void> {
+  const result = await postDispatchAction(characterId, {
+    ref: { backend: 'registry', registry_key: 'place_npc_in_scene' },
+    kwargs: { roster_entry_id: entryId, scene_id: sceneId },
+  });
+  if (isDispatchFailure(result)) throw new Error(result.message ?? 'Not added to the scene.');
 }
 
 async function sendNpc(
@@ -127,7 +142,7 @@ export async function copyNpcSection(
   await sendNpc(
     `/api/roster/npcs/${targetEntryId}/copy-section/`,
     'POST',
-    { source_entry: sourceEntryId, section },
+    { source_entry: sourceEntryId, section } satisfies CopySectionRequest,
     'The section was not copied.'
   );
 }
@@ -141,10 +156,10 @@ export async function copyNpcAsNew(
   const res = await sendNpc(
     `/api/roster/npcs/${sourceEntryId}/copy-as-new/`,
     'POST',
-    { name, as_template: asTemplate },
+    { name, as_template: asTemplate } satisfies CopyAsNewRequest,
     'The copy was not made.'
   );
-  const body = (await res.json()) as { id: number };
+  const body = (await res.json()) as Schemas['CreatedNPC'];
   return body.id;
 }
 
@@ -157,7 +172,7 @@ export async function putNpcRegard(entryId: number, line: RegardLine): Promise<v
       target_id: line.target_id,
       value: line.value,
       reason: line.reason,
-    },
+    } satisfies RegardRequest,
     'Who they favor and oppose was not saved.'
   );
 }
@@ -166,7 +181,7 @@ export async function putNpcPreferences(entryId: number, lines: PreferenceLine[]
   await sendNpc(
     `/api/roster/npcs/${entryId}/preferences/`,
     'PUT',
-    { preferences: lines },
+    { preferences: lines } satisfies PreferencesRequest,
     'What works on them was not saved.'
   );
 }
@@ -288,19 +303,34 @@ function pick(sheet: StaffEditBody, keys: readonly string[]): StaffEditBody {
 /**
  * Mint, copy, then write what was filled in on top. Answers the new roster entry's id.
  *
- * ``mintedId`` is an NPC an earlier attempt already minted: the mint is skipped and
+ * With ``mintedId`` (an NPC an earlier attempt already minted) the mint is skipped and
  * every later step runs again (each one replaces or upserts, so running it twice is
- * safe). ``onMinted`` hears the id the moment the mint succeeds. A failed later step
- * throws ``NpcStepError`` naming it.
+ * safe). A failed later step throws ``NpcStepError`` naming it. With ``sceneId`` the
+ * NPC is put into that scene last; a template never is.
  *
  * The typed description rides the mint unless the description is being copied, in
  * which case it is written after the copy so it lands on top.
  */
+export interface CreateNpcOptions {
+  /** An NPC an earlier attempt already minted; the mint is skipped. */
+  mintedId?: number | null;
+  /** Hears the id the moment the mint succeeds. */
+  onMinted?: (entryId: number) => void;
+  /** Mint a template instead of an NPC the GM holds. */
+  asTemplate?: boolean;
+  /** The scene to put the new NPC into, last. */
+  sceneId?: number | null;
+}
+
 export async function createNpc(
   characterId: number,
   draft: NpcFormDraft,
-  mintedId: number | null = null,
-  onMinted: (entryId: number) => void = () => {}
+  {
+    mintedId = null,
+    onMinted = () => {},
+    asTemplate = false,
+    sceneId = null,
+  }: CreateNpcOptions = {}
 ): Promise<number> {
   const copies = plannedCopies(draft);
   const descriptionCopied = copies.some(([section]) => section === 'description');
@@ -310,6 +340,7 @@ export async function createNpc(
       name: draft.name.trim(),
       description: descriptionCopied ? '' : draft.description,
       preset: draft.preset,
+      asTemplate,
     });
     onMinted(entryId);
   }
@@ -342,6 +373,9 @@ export async function createNpc(
   }
   if (Object.keys(draft.settings).length > 0) {
     await step('saving the notes and lending', () => patchNpcSettings(id, draft.settings));
+  }
+  if (sceneId !== null && !asTemplate) {
+    await step('adding them to the scene', () => placeNpcInScene(characterId, id, sceneId));
   }
   return id;
 }

@@ -277,7 +277,7 @@ export function CastListPanel({ sceneId, sceneName }: { sceneId: number; sceneNa
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-display text-sm">{sceneName ? `Cast \u00b7 ${sceneName}` : 'Cast'}</h3>
         <Button asChild size="sm" variant="outline">
-          <Link to="/gm/dashboard">+ Add NPC</Link>
+          <Link to={`/gm/dashboard?scene=${sceneId}`}>+ Add NPC</Link>
         </Button>
       </div>
       {castQuery.isPending && <p className="py-2 text-sm text-muted-foreground">Loading cast...</p>}

@@ -10,7 +10,9 @@
  * Quick never sends a section the GM filled in Detailed and then closed by switching.
  *
  * "Create NPC" mints through `mint_story_npc` and then writes the copies and the filled
- * sections (see `createNpc`). The minted id is kept the moment the mint succeeds, so a
+ * sections (see `createNpc`); opened from a scene's cast panel (`sceneId`), it reads
+ * "Create and add to scene" and puts the NPC into that scene last. "Save as template"
+ * mints a template the same way, with no NPC held. The minted id is kept the moment the mint succeeds, so a
  * failed later step is retried without a second mint. The portrait and the powers
  * editors need the NPC to exist, so they open on the created NPC.
  */
@@ -38,9 +40,9 @@ import {
   BACKGROUND_KEYS,
   IDENTITY_KEYS,
   NpcStepError,
-  copyNpcAsNew,
   createNpc,
   fetchNpcTemplates,
+  fetchPersonalityTraits,
   fetchSheetIdForEntry,
   fetchStatlinePresets,
   type BorrowAudience,
@@ -191,9 +193,17 @@ function ChoiceField({
 interface CreatedNpc {
   entryId: number;
   name: string;
+  isTemplate: boolean;
 }
 
-export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode }) {
+export function NpcForm({
+  mode: initialMode = 'quick',
+  sceneId = null,
+}: {
+  mode?: NpcFormMode;
+  /** The scene the GM came from: "Create" then also puts the NPC into it. */
+  sceneId?: number | null;
+}) {
   const queryClient = useQueryClient();
   const identity = useBrowsingIdentity();
   const actorId = identity.entry?.character_id ?? null;
@@ -209,10 +219,9 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
   const [regard, setRegard] = useState<RegardLine[]>([]);
   const [preferences, setPreferences] = useState<PreferenceLine[]>([]);
   const [settings, setSettings] = useState<NpcSettingsPatch>({});
-  /** An NPC this form already minted, kept so a retry never mints a second one. */
-  const [mintedId, setMintedId] = useState<number | null>(null);
+  /** What this form already minted, kept so a retry never mints a second one. */
+  const [minted, setMinted] = useState<{ id: number; asTemplate: boolean } | null>(null);
   const [created, setCreated] = useState<CreatedNpc | null>(null);
-  const [templateName, setTemplateName] = useState<string | null>(null);
 
   const { data: templates = [] } = useQuery({
     queryKey: ['npc-templates'],
@@ -226,6 +235,13 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
     retry: false,
   });
   const { data: myEntries = [] } = useMyRosterEntriesQuery();
+  const { data: traits = [] } = useQuery({
+    queryKey: ['npc-personality-traits'],
+    queryFn: fetchPersonalityTraits,
+    enabled: mode === 'detailed' || expanded.has('preferences'),
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
 
   const sources: NpcCopySource[] = [
     ...templates.map((row) => ({ id: row.id, label: `${row.name} (template)` })),
@@ -305,40 +321,31 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
     };
   };
 
-  const afterCreate = (entryId: number) => {
-    setCreated({ entryId, name: name.trim() });
-    void queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] });
+  const finish = (entryId: number, isTemplate: boolean) => {
+    setCreated({ entryId, name: name.trim(), isTemplate });
+    void queryClient.invalidateQueries({
+      queryKey: isTemplate ? ['npc-templates'] : ['my-roster-entries'],
+    });
   };
-  const onMinted = (entryId: number) => {
-    setMintedId(entryId);
-    void queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] });
-  };
-  const runCreate = () => {
+  const runCreate = (asTemplate: boolean) => {
     if (actorId === null) {
       return Promise.reject(new Error('Puppet a character to create an NPC.'));
     }
-    return createNpc(actorId, draft(), mintedId, onMinted);
+    return createNpc(actorId, draft(), {
+      mintedId: minted?.id ?? null,
+      onMinted: (id) => setMinted({ id, asTemplate }),
+      asTemplate,
+      sceneId,
+    });
   };
 
-  const create = useMutation({ mutationFn: runCreate, onSuccess: afterCreate });
-
+  const create = useMutation({
+    mutationFn: () => runCreate(false),
+    onSuccess: (entryId) => finish(entryId, false),
+  });
   const saveTemplate = useMutation({
-    mutationFn: async (asName: string) => {
-      let entryId = created?.entryId ?? null;
-      if (entryId === null) {
-        entryId = await runCreate();
-        afterCreate(entryId);
-      }
-      try {
-        await copyNpcAsNew(entryId, asName, true);
-      } catch (failure) {
-        throw new NpcStepError('saving the template', failure);
-      }
-    },
-    onSuccess: () => {
-      setTemplateName(null);
-      void queryClient.invalidateQueries({ queryKey: ['npc-templates'] });
-    },
+    mutationFn: () => runCreate(true),
+    onSuccess: (entryId) => finish(entryId, true),
   });
 
   const reset = () => {
@@ -351,9 +358,8 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
     setRegard([]);
     setPreferences([]);
     setSettings({});
-    setMintedId(null);
+    setMinted(null);
     setCreated(null);
-    setTemplateName(null);
     setExpanded(new Set());
     create.reset();
     saveTemplate.reset();
@@ -361,8 +367,8 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
 
   const busy = create.isPending || saveTemplate.isPending;
   const error = (create.error ?? saveTemplate.error) as Error | null;
-  const shownName = created?.name ?? name.trim();
-  let submitLabel = mode === 'quick' ? 'Create and add to scene' : 'Create NPC';
+  const shownName = name.trim();
+  let submitLabel = sceneId !== null ? 'Create and add to scene' : 'Create NPC';
   if (create.isPending) submitLabel = 'Creating…';
   const lendPolicy = settings.lend_policy ?? DEFAULT_SETTINGS.lend_policy;
   const ownerName = identity.name ? `${identity.name} (you, the creator)` : 'You, the creator';
@@ -376,45 +382,8 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
       />
     );
 
-  const templateRow =
-    templateName !== null ? (
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          aria-label="Template name"
-          className="max-w-xs"
-          value={templateName}
-          onChange={(event) => setTemplateName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return;
-            event.preventDefault();
-            if (templateName.trim() !== '' && !busy) saveTemplate.mutate(templateName.trim());
-          }}
-        />
-        <Button
-          type="button"
-          size="sm"
-          disabled={templateName.trim() === '' || busy}
-          onClick={() => saveTemplate.mutate(templateName.trim())}
-        >
-          {saveTemplate.isPending ? 'Saving…' : 'Save template'}
-        </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={() => setTemplateName(null)}>
-          Cancel
-        </Button>
-      </div>
-    ) : null;
-
   if (created) {
-    return (
-      <CreatedNpcPanel
-        created={created}
-        templateRow={templateRow}
-        templateSaved={saveTemplate.isSuccess}
-        error={error ? failureText(error, created.name) : null}
-        onSaveAsTemplate={() => setTemplateName(`${created.name} template`)}
-        onNew={reset}
-      />
-    );
+    return <CreatedNpcPanel created={created} onNew={reset} />;
   }
 
   const nameField = (
@@ -422,7 +391,7 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
       <Input
         id="npc-name"
         value={name}
-        disabled={mintedId !== null}
+        disabled={minted !== null}
         onChange={(e) => setName(e.target.value)}
       />
     </Field>
@@ -599,7 +568,7 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
 
       {shown('preferences') && (
         <FormSection title="What works on them" copy={copyFor('preferences', 'What works on them')}>
-          <NpcPreferenceEditor traits={[]} lines={preferences} onChange={setPreferences} />
+          <NpcPreferenceEditor traits={traits} lines={preferences} onChange={setPreferences} />
         </FormSection>
       )}
 
@@ -761,19 +730,18 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
           {failureText(error, shownName)}
         </p>
       )}
-      {templateRow}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={name.trim() === '' || busy}>
+        <Button type="submit" disabled={name.trim() === '' || busy || minted?.asTemplate === true}>
           {submitLabel}
         </Button>
         {mode === 'detailed' && (
           <Button
             type="button"
             variant="outline"
-            disabled={name.trim() === '' || busy || templateName !== null}
-            onClick={() => setTemplateName(`${name.trim()} template`)}
+            disabled={name.trim() === '' || busy || minted?.asTemplate === false}
+            onClick={() => saveTemplate.mutate()}
           >
-            Save as template
+            {saveTemplate.isPending ? 'Saving…' : 'Save as template'}
           </Button>
         )}
       </div>
@@ -781,21 +749,7 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
   );
 }
 
-function CreatedNpcPanel({
-  created,
-  templateRow,
-  templateSaved,
-  error,
-  onSaveAsTemplate,
-  onNew,
-}: {
-  created: CreatedNpc;
-  templateRow: ReactNode;
-  templateSaved: boolean;
-  error: string | null;
-  onSaveAsTemplate: () => void;
-  onNew: () => void;
-}) {
+function CreatedNpcPanel({ created, onNew }: { created: CreatedNpc; onNew: () => void }) {
   const [addingPortrait, setAddingPortrait] = useState(false);
   const { data: sheetId } = useQuery({
     queryKey: ['roster-entry-sheet', created.entryId],
@@ -811,13 +765,7 @@ function CreatedNpcPanel({
         </Avatar>
         <h2 className="flex-1 font-display text-lg">{created.name}</h2>
       </div>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      {templateSaved && <p className="text-sm">Saved as a template.</p>}
-      {templateRow}
+      {created.isTemplate && <p className="text-sm">Saved as a template.</p>}
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" onClick={() => setAddingPortrait(true)}>
           Add portrait
@@ -825,11 +773,6 @@ function CreatedNpcPanel({
         <Button asChild variant="outline">
           <Link to={`/characters/${created.entryId}`}>Open sheet</Link>
         </Button>
-        {!templateSaved && (
-          <Button type="button" variant="outline" onClick={onSaveAsTemplate}>
-            Save as template
-          </Button>
-        )}
         <Button type="button" onClick={onNew}>
           New NPC
         </Button>

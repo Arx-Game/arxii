@@ -13,7 +13,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -123,6 +123,10 @@ export function GMDashboardPage() {
 function GMDashboardContent() {
   const account = useAccount();
   const queryClient = useQueryClient();
+  // The cast panel's "+ Add NPC" arrives with ?scene=<id> (#4418).
+  const [searchParams] = useSearchParams();
+  const sceneParam = Number(searchParams.get('scene'));
+  const sceneId = Number.isInteger(sceneParam) && sceneParam > 0 ? sceneParam : null;
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['gm-dashboard'],
     queryFn: getGMDashboard,
@@ -252,7 +256,7 @@ function GMDashboardContent() {
           </ul>
         )}
         <div className="mt-4 border-t pt-4" id="new-npc">
-          <NpcForm mode="quick" />
+          <NpcForm mode="quick" sceneId={sceneId} />
         </div>
       </section>
 

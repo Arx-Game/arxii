@@ -29,6 +29,9 @@ function route(url: string, init?: RequestInit) {
   if (url === '/api/roster/npcs/templates/') {
     return ok({ count: 1, results: [{ id: 12, name: 'Veteran gate officer' }] });
   }
+  if (url.startsWith('/api/npc-services/personality-traits/')) {
+    return ok({ count: 1, next: null, results: [{ id: 4, name: 'Flattery', description: '' }] });
+  }
   if (url === '/api/roster/npc-presets/') {
     return ok({ count: 1, results: [{ id: 3, name: 'Guardsman', description: '' }] });
   }
@@ -53,12 +56,12 @@ function writes() {
     }));
 }
 
-function renderForm(mode: 'quick' | 'detailed') {
+function renderForm(mode: 'quick' | 'detailed', sceneId: number | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <NpcForm mode={mode} />
+        <NpcForm mode={mode} sceneId={sceneId} />
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -71,7 +74,7 @@ beforeEach(() => {
 
 describe('NpcForm', () => {
   it('quick mode asks only for a name, a Copy from and a description', async () => {
-    renderForm('quick');
+    renderForm('quick', 3);
     const textboxes = screen.getAllByRole('textbox');
     expect(textboxes.map((box) => box.getAttribute('id'))).toEqual(['npc-name', 'npc-description']);
     expect(screen.getByLabelText('Name')).toBe(textboxes[0]);
@@ -161,21 +164,63 @@ describe('NpcForm', () => {
     ]);
   });
 
-  it('Save as template creates the NPC, then copies it as a template', async () => {
+  it('Save as template mints a template and holds no NPC', async () => {
     const user = userEvent.setup();
     renderForm('detailed');
-    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await user.type(screen.getByLabelText('Name'), 'Gate captain');
     await user.click(screen.getByRole('button', { name: 'Save as template' }));
-    const templateName = screen.getByLabelText('Template name');
-    await user.clear(templateName);
-    await user.type(templateName, 'Gate captain');
-    await user.click(screen.getByRole('button', { name: 'Save template' }));
+
+    expect(await screen.findByText('Saved as a template.')).toBeInTheDocument();
+    expect(writes()).toEqual([
+      {
+        method: 'POST',
+        url: '/api/actions/characters/7/dispatch/',
+        body: {
+          ref: { backend: 'registry', registry_key: 'mint_story_npc' },
+          kwargs: { name: 'Gate captain', as_template: true },
+        },
+      },
+    ]);
+  });
+
+  it('opened from a scene, Create and add to scene puts the NPC into it last', async () => {
+    const user = userEvent.setup();
+    renderForm('quick', 3);
+    await user.type(screen.getByLabelText('Name'), 'Sergeant Rook');
+    await user.click(screen.getByRole('button', { name: 'Create and add to scene' }));
 
     await waitFor(() => expect(writes()).toHaveLength(2));
     expect(writes()[1]).toEqual({
       method: 'POST',
-      url: `/api/roster/npcs/${NEW_ENTRY}/copy-as-new/`,
-      body: { name: 'Gate captain', as_template: true },
+      url: '/api/actions/characters/7/dispatch/',
+      body: {
+        ref: { backend: 'registry', registry_key: 'place_npc_in_scene' },
+        kwargs: { roster_entry_id: NEW_ENTRY, scene_id: 3 },
+      },
+    });
+  });
+
+  it('without a scene, the button reads Create NPC', () => {
+    renderForm('quick');
+    expect(screen.getByRole('button', { name: 'Create NPC' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create and add to scene' })).toBeNull();
+  });
+
+  it('What works on them picks from the personality traits', async () => {
+    const user = userEvent.setup();
+    renderForm('detailed');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Flattery' })).toBeTruthy());
+    await user.selectOptions(screen.getByLabelText('Easier or harder'), 'dislikes');
+    await user.selectOptions(screen.getByLabelText('Trait'), '4');
+    await user.click(screen.getByRole('button', { name: 'Add trait' }));
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
+
+    await waitFor(() => expect(writes()).toHaveLength(2));
+    expect(writes()[1]).toEqual({
+      method: 'PUT',
+      url: `/api/roster/npcs/${NEW_ENTRY}/preferences/`,
+      body: { preferences: [{ trait: 4, valence: 'dislikes' }] },
     });
   });
 
@@ -208,7 +253,7 @@ describe('NpcForm', () => {
     await user.type(screen.getByLabelText('Vocation'), 'Soldier');
     await user.click(screen.getByLabelText('List on the NPC roster'));
     await user.click(screen.getByRole('button', { name: 'Quick' }));
-    await user.click(screen.getByRole('button', { name: 'Create and add to scene' }));
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
 
     await waitFor(() => expect(screen.getByRole('region', { name: 'Vael' })).toBeInTheDocument());
     expect(writes()).toHaveLength(1);
@@ -220,10 +265,10 @@ describe('NpcForm', () => {
     renderForm('quick');
     await user.type(screen.getByLabelText('Name'), 'Vael');
     await user.click(screen.getByRole('button', { name: '+ Who they are' }));
-    expect(screen.getByRole('button', { name: 'Create and add to scene' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Quick' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByRole('button', { name: '+ Who they are' })).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('Vocation'), 'Soldier');
-    await user.click(screen.getByRole('button', { name: 'Create and add to scene' }));
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
 
     await waitFor(() => expect(writes()).toHaveLength(2));
     expect(writes()[1]).toEqual({
@@ -305,13 +350,9 @@ describe('NpcForm', () => {
     await user.type(screen.getByLabelText('Born (IC year)'), '980{Enter}');
     await user.type(screen.getByLabelText('Reason'), 'Sold the grain{Enter}');
     await user.type(screen.getByLabelText('Name'), '{Enter}');
+    // A submit would have dispatched by now; give it the chance.
+    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(writes()).toEqual([]);
     expect(screen.getByRole('form', { name: 'New NPC' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Save as template' }));
-    await user.type(screen.getByLabelText('Template name'), '{Enter}');
-
-    await waitFor(() => expect(writes().length).toBeGreaterThan(0));
-    // The only write is the one the template name's Enter asked for: its mint.
-    expect(writes().filter((call) => call.url.endsWith('/dispatch/'))).toHaveLength(1);
   });
 });

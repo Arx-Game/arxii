@@ -114,7 +114,7 @@ describe('CastListPanel', () => {
     expect(screen.getByText('Cast · The Siege')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '+ Add NPC' })).toHaveAttribute(
       'href',
-      '/gm/dashboard'
+      '/gm/dashboard?scene=3'
     );
   });
 

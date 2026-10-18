@@ -3,8 +3,7 @@
  * against the NPC easier (a like) or harder (a dislike). Written through
  * `PUT /api/roster/npcs/{id}/preferences/`, which replaces the whole list.
  *
- * The traits to pick from are passed in. No endpoint lists `PersonalityTrait` rows yet,
- * so the form passes none and this section is filled only by its "Copy from" for now.
+ * The traits to pick from are passed in (`GET /api/npc-services/personality-traits/`).
  */
 
 import { useState } from 'react';
@@ -99,7 +98,14 @@ export function NpcPreferenceEditor({ traits, lines, onChange }: NpcPreferenceEd
             </option>
           ))}
         </select>
-        <Button type="button" size="sm" variant="outline" disabled={!trait} onClick={add}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label="Add trait"
+          disabled={!trait}
+          onClick={add}
+        >
           Add
         </Button>
       </div>
