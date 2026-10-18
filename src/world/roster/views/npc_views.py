@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from http import HTTPMethod
 from typing import Any
 
-from django.db.models import Q, QuerySet
+from django.db.models import Exists, OuterRef, Q, QuerySet
+from django.shortcuts import get_object_or_404
 import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
@@ -23,6 +24,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE
 from world.gm.models import GuideProfile
 from world.npc_services.personality import set_npc_preferences
 from world.npc_services.regard import author_npc_regard
@@ -49,6 +51,7 @@ from world.roster.services.npc_lending import (
 from world.roster.services.staff_characters import StaffMintError
 
 _ROW_RELATIONS = (
+    "character_sheet__character__display_data",
     "story_npc_settings",
     "created_by_account",
     "profile_picture__media",
@@ -56,6 +59,39 @@ _ROW_RELATIONS = (
     "character_sheet__character",
 )
 _OWNER_ACTIONS = ("partial_update", "update", "regard", "preferences", "copy_section")
+
+
+def npc_entries() -> QuerySet[RosterEntry]:
+    """Every NPC with lending settings, with what a row reads already selected.
+
+    ``has_holder`` is whether someone currently holds the NPC (an open tenure).
+    """
+    held = RosterTenure.objects.filter(roster_entry=OuterRef("pk"), end_date__isnull=True)
+    return (
+        RosterEntry.objects.filter(story_npc_settings__isnull=False)
+        .select_related(*_ROW_RELATIONS)
+        .annotate(has_holder=Exists(held))
+    )
+
+
+def owner_names_for(entries: list[RosterEntry]) -> dict[int, str]:
+    """Owner account id to the GM or Staff character name shown for it, in one query."""
+    account_ids = {e.created_by_account_id for e in entries if e.created_by_account_id}
+    names: dict[int, str] = {}
+    tenures = (
+        RosterTenure.objects.filter(
+            player_data__account_id__in=account_ids,
+            end_date__isnull=True,
+            roster_entry__character_sheet__character__db_typeclass_path__in=list(
+                TYPECLASS_TO_CHARACTER_TYPE
+            ),
+        )
+        .select_related("player_data", "roster_entry__character_sheet__character")
+        .order_by("-pk")
+    )
+    for tenure in tenures:
+        names[tenure.player_data.account_id] = tenure.roster_entry.character_sheet.character.db_key
+    return names
 
 
 class NPCRosterPagination(PageNumberPagination):
@@ -101,6 +137,8 @@ class NPCViewer:
     def can_borrow(self, entry: RosterEntry, settings: StoryNPCSettings) -> bool:
         """Mirrors the refusals ``request_borrow`` makes, without raising."""
         if settings.lend_policy == NPCLendPolicy.NOT_LENT or settings.is_template:
+            return False
+        if not settings.listed_on_npc_roster or not entry.has_holder:
             return False
         guide_ok = settings.borrow_audience == NPCBorrowAudience.GMS_AND_GUIDES and self.is_guide
         if not (self.account.is_staff or self.is_gm or guide_ok):
@@ -157,9 +195,7 @@ class StoryNPCViewSet(
 
     def get_queryset(self) -> QuerySet[RosterEntry]:
         account = self.request.user
-        base = RosterEntry.objects.filter(story_npc_settings__isnull=False).select_related(
-            *_ROW_RELATIONS
-        )
+        base = npc_entries()
         if self.action in _OWNER_ACTIONS:
             scope = Q() if account.is_staff else Q(created_by_account=account)
         elif self.action == "retrieve":
@@ -261,13 +297,19 @@ class StoryNPCViewSet(
             return self._refused(exc)
         return Response({"id": new_entry.pk}, status=status.HTTP_201_CREATED)
 
+    def _page_response(self, request: Request) -> Response:
+        page = self.paginate_queryset(self.filter_queryset(self.get_queryset()))
+        context = self.get_serializer_context()
+        context["owner_names"] = owner_names_for(page)
+        serializer = NPCRosterRowSerializer(page, many=True, context=context)
+        return self.get_paginated_response(serializer.data)
+
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        return self._page_response(request)
+
     @action(detail=False, methods=[HTTPMethod.GET])
     def templates(self, request: Request) -> Response:
-        queryset = self.paginate_queryset(self.filter_queryset(self.get_queryset()))
-        serializer = NPCRosterRowSerializer(
-            queryset, many=True, context=self.get_serializer_context()
-        )
-        return self.get_paginated_response(serializer.data)
+        return self._page_response(request)
 
     # -- borrowing -----------------------------------------------------------
 
@@ -284,9 +326,17 @@ class StoryNPCViewSet(
     def answer(self, request: Request) -> Response:
         serializer = AnswerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        account = request.user
+        # Only the NPC's owner, staff, or the borrower of the loan may even see it.
+        scope = Q(borrower=account) | Q(roster_entry__created_by_account=account)
+        loans = NPCLoan.objects.select_related("roster_entry", "scene")
+        loan = get_object_or_404(
+            loans if account.is_staff else loans.filter(scope),
+            pk=serializer.validated_data["loan_id"],
+        )
         try:
             loan = answer_loan(
-                loan=serializer.validated_data["loan"],
+                loan=loan,
                 accept=serializer.validated_data["accept"],
                 by=request.user,
             )

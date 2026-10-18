@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.utils import timezone
 from rest_framework import status
 
 from integration_tests.harness import JourneyCase
@@ -80,6 +81,13 @@ class AGmBorrowsAListedNpc(NpcRosterCase):
         )
         self.assertEqual(refused.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(refused.json()["detail"], "Only the NPC's owner can answer that request.")
+
+        third = self.make_player("Cade", room=self.room)
+        GMProfileFactory(account=self.account_of(third), level=GMLevel.JUNIOR)
+        hidden = self.api(self.account_of(third)).post(
+            f"{NPCS}answer/", {"loan_id": loan_id, "accept": True}, format="json"
+        )
+        self.assertEqual(hidden.status_code, status.HTTP_404_NOT_FOUND)
 
         answered = self.api(self.owner).post(
             f"{NPCS}answer/", {"loan_id": loan_id, "accept": True}, format="json"
@@ -199,3 +207,118 @@ class AnOwnerAuthorsAnNpc(NpcRosterCase):
         )
         self.assertEqual(stolen.status_code, 404)
         self.assertEqual(other.get(f"{NPCS}templates/").json()["results"], [])
+
+
+class AnOwnerDeclinesAndTemplatesList(NpcRosterCase):
+    def test_owner_declines_a_request(self) -> None:
+        self._list_vael(policy="on_request")
+        loan_id = self.api(self.other_gm).post(f"{self.url}borrow/").json()["id"]
+        detail = self.api(self.owner).get(self.url).json()
+        self.assertEqual(detail["open_requests"], [{"id": loan_id, "status": "requested"}])
+        declined = self.api(self.owner).post(
+            f"{NPCS}answer/", {"loan_id": loan_id, "accept": False}, format="json"
+        )
+        self.assertEqual(declined.status_code, status.HTTP_200_OK, declined.data)
+        self.assertEqual(declined.json()["status"], "declined")
+        mine = [r["name"] for r in self.api(self.other_gm).get(MINE).json()]
+        self.assertNotIn("Captain Vael", mine)
+
+    def test_templates_lists_own_and_staff_templates_only(self) -> None:
+        client = self.api(self.owner)
+        made = client.post(
+            f"{self.url}copy-as-new/", {"name": "Vael Pattern", "as_template": True}, format="json"
+        )
+        self.assertEqual(made.status_code, status.HTTP_201_CREATED, made.data)
+        listed = client.get(f"{NPCS}templates/").json()["results"]
+        self.assertEqual([row["name"] for row in listed], ["Vael Pattern"])
+        self.assertEqual(self._names(self.owner), [])
+        self.assertEqual(self.api(self.other_gm).get(f"{NPCS}templates/").json()["results"], [])
+
+
+class TheListCostsTheSameForAnyCast(NpcRosterCase):
+    def test_query_count_does_not_grow_with_rows_or_owners(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        self._list_vael()
+
+        def cost() -> int:
+            self.api(self.other_gm).get(NPCS)  # warm per-process caches
+            with CaptureQueriesContext(connection) as queries:
+                response = self.api(self.other_gm).get(NPCS)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            return len(queries)
+
+        one = cost()
+        for index in range(3):
+            maker = self.make_player(f"Maker{index}", room=self.room)
+            account = self.account_of(maker)
+            GMProfileFactory(account=account, level=GMLevel.JUNIOR)
+            mint_gm_character(account, f"Warden {index}")
+            minted = self.web(maker, "mint_story_npc", name=f"Extra {index}")
+            entry = RosterEntry.objects.get(pk=minted.detail.data["roster_entry_id"])
+            settings = entry.story_npc_settings
+            settings.listed_on_npc_roster = True
+            settings.lend_policy = "on_request"
+            settings.save()
+        self.assertEqual(len(self._names(self.other_gm)), 4)
+        self.assertEqual(cost(), one)
+
+
+class CanBorrowAgreesWithRequestBorrow(NpcRosterCase):
+    def test_matrix(self) -> None:
+        from world.roster.services.npc_lending import (
+            NPCLendingError,
+            request_borrow,
+        )
+        from world.roster.views.npc_views import NPCViewer, npc_entries
+
+        staff_player = self.make_player("Staffer", room=self.room)
+        staff = self.account_of(staff_player)
+        staff.is_staff = True
+        staff.save()
+        viewers = {"gm": self.other_gm, "guide": self.guide, "owner": self.owner, "staff": staff}
+
+        def agreement(label: str) -> None:
+            for who, account in viewers.items():
+                entry = npc_entries().get(pk=self.entry.pk)
+                predicted = NPCViewer.for_account(account).can_borrow(
+                    entry, entry.story_npc_settings
+                )
+                try:
+                    loan = request_borrow(entry=self.entry, borrower=account)
+                except NPCLendingError:
+                    actual = False
+                else:
+                    actual = True
+                    loan.delete()
+                self.assertEqual(predicted, actual, f"{label} / {who}")
+
+        def configure(**fields) -> None:
+            settings = self.entry.story_npc_settings
+            for key, value in fields.items():
+                setattr(settings, key, value)
+            settings.save()
+
+        configure(listed_on_npc_roster=True, lend_policy="not_lent")
+        agreement("not lent")
+        configure(lend_policy="on_request", borrow_audience="gms")
+        agreement("gms only")
+        configure(borrow_audience="gms_and_guides")
+        agreement("gms and guides")
+        configure(listed_on_npc_roster=False)
+        agreement("unlisted")
+        configure(listed_on_npc_roster=True)
+        NPCLoan.objects.create(
+            roster_entry=self.entry,
+            borrower=self.other_gm,
+            offered_by=self.owner,
+            status="requested",
+        )
+        agreement("existing request")
+        NPCLoan.objects.all().delete()
+        tenure = self.entry.current_tenure
+        tenure.end_date = timezone.now()
+        tenure.save()
+        self.entry.invalidate_tenure_cache()
+        agreement("unheld")

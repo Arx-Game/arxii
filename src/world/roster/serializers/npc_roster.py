@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 from rest_framework import serializers
 
@@ -17,7 +18,7 @@ from world.npc_services.models import (
 from world.roster.constants import NPCBorrowAudience, NPCLendPolicy, NPCSection
 from world.roster.models import NPCLoan, RosterEntry
 from world.roster.services.gallery import portrait_url
-from world.roster.services.npc_lending import account_character_name
+from world.roster.services.npc_lending import OWNER_FALLBACK_NAME
 
 DESCRIPTION_PREVIEW_LENGTH = 200
 
@@ -66,14 +67,21 @@ class NPCRosterRowSerializer(serializers.ModelSerializer):
         return portrait_url(obj)
 
     def get_description(self, obj: RosterEntry) -> str:
-        item_data = obj.character_sheet.character.item_data
-        return (item_data.get_display_description() or "")[:DESCRIPTION_PREVIEW_LENGTH]
+        """What the character handler shows, read off rows the view selected.
+
+        The handler's own read get_or_creates a display row per NPC, which a list
+        must not do; the order is the handler's: a disguise overlay, the permanent
+        description, then the sheet's free text.
+        """
+        try:
+            display = obj.character_sheet.character.display_data
+            text = display.get_display_description()
+        except ObjectDoesNotExist:
+            text = ""
+        return (text or obj.character_sheet.additional_desc or "")[:DESCRIPTION_PREVIEW_LENGTH]
 
     def get_owner_name(self, obj: RosterEntry) -> str:
-        owner_names = self.context["owner_names"]
-        if obj.created_by_account_id not in owner_names:
-            owner_names[obj.created_by_account_id] = account_character_name(obj.created_by_account)
-        return owner_names[obj.created_by_account_id]
+        return self.context["owner_names"].get(obj.created_by_account_id, OWNER_FALLBACK_NAME)
 
     def get_can_borrow(self, obj: RosterEntry) -> bool:
         return self.context["viewer"].can_borrow(obj, obj.story_npc_settings)
@@ -130,6 +138,11 @@ class NPCDetailSerializer(NPCRosterRowSerializer):
             "open_requests",
         )
 
+    def get_owner_name(self, obj: RosterEntry) -> str:
+        from world.roster.views.npc_views import owner_names_for  # noqa: PLC0415
+
+        return owner_names_for([obj]).get(obj.created_by_account_id, OWNER_FALLBACK_NAME)
+
     def get_open_requests(self, obj: RosterEntry) -> list[dict[str, Any]]:
         if not self.context["viewer"].manages(obj):
             return []
@@ -178,9 +191,7 @@ class CopyAsNewSerializer(serializers.Serializer):
 class AnswerSerializer(serializers.Serializer):
     """``{loan_id, accept}``."""
 
-    loan_id = serializers.PrimaryKeyRelatedField(
-        source="loan", queryset=NPCLoan.objects.select_related("roster_entry", "scene")
-    )
+    loan_id = serializers.IntegerField()
     accept = serializers.BooleanField()
 
 
