@@ -353,7 +353,10 @@ Key service functions for scene round lifecycle:
   crash on `req.challenge_instance.location`, and deleting a Succor row early would erase
   `SceneActionDeclaration.succor_resolution`'s cache before `get_cover_for` (called from the END
   tick) can ever read it. A leftover Succor or Interpose row from a past round is harmless —
-  `round_number` advances every round and both readers only match the current one. (a `start_reason==DANGER` round COMPLETES once
+  `round_number` advances every round and both readers only match the current one, and
+  `set_scene_round_mode`'s out-of-STRICT guard counts the current round's deferred declarations
+  only for the same reason (#3657 tranche 5: counting every row on the round, a strict round
+  that had seen one Succor or Interpose could never leave STRICT after a force-resolve). (a `start_reason==DANGER` round COMPLETES once
   `_danger_persists` is False — no ACTIVE participant still carries an acute danger condition). **AFK
   own-peril skip (#1480):** a present `can_act` participant who did NOT declare this round (swept as an
   implicit pass by quorum completion) is excluded from the END-tick target set, so their OWN acute

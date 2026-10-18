@@ -599,7 +599,11 @@ def _section_visible(access: int, visibility: str) -> bool:
 
 
 def _resolve_presented_identity(
-    sheet: CharacterSheet, active: Persona | None, user: Any, privileged: bool
+    sheet: CharacterSheet,
+    active: Persona | None,
+    user: Any,
+    privileged: bool,
+    viewer_sheet: CharacterSheet | None,
 ) -> tuple[str, bool]:
     """``(display_name, reveal_identity)`` for the presented face, per viewer (#1109).
 
@@ -607,7 +611,8 @@ def _resolve_presented_identity(
     for the PRIMARY public face, and to a viewer who has discovered an anonymous face's link. A
     named alt (hidden link) or an undiscovered mask keeps the character's primary identity hidden.
     The discovery lookup happens only in the anonymous-and-non-privileged branch (one query).
-    The reveal rule itself is ``identity_revealed_to_viewer``, shared with ``look`` (#4030).
+    The reveal rule itself is ``identity_revealed_to_viewer``, shared with ``look`` (#4030), and
+    its viewer is ``viewer_sheet``, the one character the caller is on (#4413).
     """
     if active is None:
         return sheet.character.db_key, True
@@ -627,23 +632,12 @@ def _resolve_presented_identity(
     if not active.is_fake_name:
         # Named face: render its own name; reveal the character bio only for the PRIMARY (the
         # main public identity). A named ESTABLISHED alt keeps its link to the primary hidden.
-        return active.name, identity_revealed_to_viewer(
-            active, viewer_persona_ids=set(), viewer_sheet_ids=set()
-        )
+        return active.name, identity_revealed_to_viewer(active, viewer_sheet=None)
 
-    from world.roster.models import RosterEntry  # noqa: PLC0415
     from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415
 
-    viewer_sheet_ids: set[int] = set()
-    if user is not None and user.is_authenticated:
-        viewer_sheet_ids = set(
-            RosterEntry.objects.for_account(user).values_list("character_sheet_id", flat=True)
-        )
     return resolve_display_for_viewer(
-        active,
-        viewer_persona_ids=set(),
-        viewer_sheet_ids=viewer_sheet_ids,
-        is_staff=bool(user and user.is_staff),
+        active, viewer_sheet=viewer_sheet, is_staff=bool(user and user.is_staff)
     )
 
 
@@ -2195,7 +2189,19 @@ class CharacterSheetSerializer(serializers.Serializer):
         # staff, or the viewer's account currently plays this character (query-free, prefetched).
         privileged = _viewer_is_privileged(sheet, user)
         active = _resolve_active_persona(sheet)
-        display_name, reveal_identity = _resolve_presented_identity(sheet, active, user, privileged)
+        # #3957 — the ties block's one read, shared by the cast and the weekly AP total
+        # below. Both consumers take the evaluated list, so neither fires a query of its
+        # own and a sheet with no ties pays for this lookup alone.
+        tie_sides = _active_tie_sides(sheet)
+        # Who is looking, as which of their own characters (#3957, #4413): the one sheet whose
+        # discoveries and sight decide what a mask reveals, and whose audience each tie card
+        # takes. Read only when something asks: a mask to a non-privileged viewer, or a tie;
+        # a plain face with no ties never reads the viewer's player data.
+        masked = active is not None and active.is_fake_name and not privileged
+        viewer_sheet = resolve_viewer_sheet(request) if masked or tie_sides else None
+        display_name, reveal_identity = _resolve_presented_identity(
+            sheet, active, user, privileged, viewer_sheet
+        )
         # #1271: player-controlled visibility tier per mechanical section. ``access`` is the
         # viewer's openness level (SELF=2 privileged, FRIENDS=1 allow-list, PUBLIC=0); a
         # section shows when access meets its tier. Defaults are SELF, so this preserves the
@@ -2213,14 +2219,6 @@ class CharacterSheetSerializer(serializers.Serializer):
         # #1270 — bio (concept/quote/story) reads from the presented face's profile: the real
         # one when revealed, a cover persona's own when presenting one, else blank.
         bio_profile = _presented_bio_profile(sheet, active, reveal_identity=reveal_identity)
-        # #3957 — the ties block's one read, shared by the cast and the weekly AP total
-        # below. Both consumers take the evaluated list, so neither fires a query of its
-        # own and a sheet with no ties pays for this lookup alone.
-        tie_sides = _active_tie_sides(sheet)
-        # Who is looking, as which of their own characters, decides each card's audience.
-        # ``character_for_request`` reads the account's player data, so a sheet with no
-        # ties never asks; the audience question has nothing to shape.
-        viewer_sheet = resolve_viewer_sheet(request) if tie_sides else None
 
         return {
             "id": sheet.pk,

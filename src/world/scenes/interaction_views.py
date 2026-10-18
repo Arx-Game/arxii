@@ -18,6 +18,7 @@ from rest_framework.serializers import BaseSerializer
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
 from world.magic.models import CharacterResonance, PoseEndorsement, SceneEntryEndorsement
+from world.relationships.reads import resolve_viewer_sheet
 from world.scenes.block_services import flag_blocked_contact_attempt, hidden_persona_ids_for_viewer
 from world.scenes.constants import (
     InteractionMode,
@@ -282,6 +283,10 @@ class InteractionViewSet(
         # The viewer's own character sheets — who their PersonaDiscovery rows belong to,
         # for per-viewer persona-name resolution (#1109).
         context["viewer_sheet_ids"] = {e.character_sheet_id for e in entries} if entries else set()
+        # The reveal rule's viewer is ONE character (#4413): the account's durable selection,
+        # which login and ``@ic`` keep in step with the puppet. Masks the account's other
+        # characters discovered or see through stay masks here.
+        context["viewer_sheet"] = resolve_viewer_sheet(self.request)
         # #1279 — staff are universal discoverers: they see real identities behind masks
         # everywhere, not just in the report detail serializer.
         context["is_staff"] = self.request.user.is_staff

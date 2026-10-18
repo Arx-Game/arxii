@@ -27,8 +27,6 @@ from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 from world.societies.constants import FameTier
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
-
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.scenes.models import Persona, PersonaDiscovery
@@ -190,15 +188,15 @@ def presented_disguise_kind(persona: Persona) -> str | None:
     return DisguiseKind.MUNDANE
 
 
-def pierced_disguise_kinds(viewer_sheet_ids: Iterable[int]) -> set[str]:
-    """The disguise kinds the viewer's characters see through (#4396).
+def pierced_disguise_kinds(viewer_sheet: CharacterSheet | None) -> set[str]:
+    """The disguise kinds the viewing character sees through (#4396).
 
     One ``disguise_sight`` lever target per kind (``world.mechanics.constants``); a positive
     total on it, from a distinction, a condition or anything else that writes a modifier,
     reveals who is behind a disguise of that kind without the identification check. The
-    rows are content: an unauthored target reads as 0 and nothing is pierced.
+    rows are content: an unauthored target reads as 0 and nothing is pierced. The sight is
+    the one character's (#4413): what the account's other characters see through is theirs.
     """
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.mechanics.constants import (  # noqa: PLC0415
         DISGUISE_SIGHT_CATEGORY_NAME,
         DISGUISE_SIGHT_TARGET_NAMES,
@@ -206,8 +204,7 @@ def pierced_disguise_kinds(viewer_sheet_ids: Iterable[int]) -> set[str]:
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
-    ids = set(viewer_sheet_ids)
-    if not ids:
+    if viewer_sheet is None:
         return set()
     # One lookup for every kind's target; with none authored the walk never starts.
     targets = list(
@@ -218,10 +215,9 @@ def pierced_disguise_kinds(viewer_sheet_ids: Iterable[int]) -> set[str]:
     if not targets:
         return set()
     pierced: set[str] = set()
-    for sheet in CharacterSheet.objects.filter(pk__in=ids):
-        for target in targets:
-            if target.name not in pierced and get_modifier_total(sheet, target) > 0:
-                pierced.add(target.name)
+    for target in targets:
+        if get_modifier_total(viewer_sheet, target) > 0:
+            pierced.add(target.name)
     return pierced
 
 

@@ -23,8 +23,8 @@ from world.covenants.factories import (
 from world.covenants.models import CharacterCovenantRole
 from world.covenants.treasury import covenant_treasury
 from world.currency.services import get_or_create_purse, get_or_create_treasury, transfer
-from world.events.constants import InvitationResponse
-from world.events.models import Event, EventInvitation
+from world.events.constants import EventStatus, InvitationResponse
+from world.events.models import Event, EventGrandeurContribution, EventInvitation
 from world.events.services import create_event
 from world.items.factories import (
     ItemInstanceFactory,
@@ -119,6 +119,22 @@ class HostingAGathering(JourneyCase):
             Interaction.objects.filter(scene=gala_scene, content="Welcome, all of you.").exists()
         )
 
+        # Grandeur comes out of the host's own purse; an empty purse buys none.
+        self.assertIn("Usage: event grandeur <id>", self.telnet(self.ysmay, "event grandeur"))
+        self.assertIn(
+            "You cannot afford that much grandeur investment.",
+            self.telnet(self.ysmay, f"event grandeur {self.gala.pk} category=venue amount=4000"),
+        )
+        self.assertFalse(EventGrandeurContribution.objects.filter(event=self.gala).exists())
+        give_coppers(self.ysmay, 10_000)
+        self.assertIn(
+            "You invest in the venue of 'The Grand Gala'.",
+            self.telnet(self.ysmay, f"event grandeur {self.gala.pk} category=venue amount=4000"),
+        )
+        spent = EventGrandeurContribution.objects.get(event=self.gala)
+        self.assertEqual((spent.category, spent.amount_spent), ("venue", 4000))
+        self.assertEqual(purse_balance(self.ysmay), 6000)
+
         told = self.telnet(self.hobb, f"event rsvp {invitation.pk} decline")
         self.assertIn("Cannot RSVP to an invitation for an active or finished event.", told)
 
@@ -147,6 +163,8 @@ class HostingAGathering(JourneyCase):
         self.assertIn("Only the event host or staff can invite.", told)
         told = self.telnet(self.hobb, f"event cancel {self.gala.pk}")
         self.assertIn("Only the event host or staff can do that.", told)
+        self.gala.refresh_from_db()
+        self.assertEqual(self.gala.status, EventStatus.DRAFT)
 
         told = self.telnet(self.ysmay, f"event cancel {self.gala.pk}")
         self.assertIn("'The Grand Gala' has been cancelled.", told)
@@ -158,6 +176,8 @@ class HostingAGathering(JourneyCase):
         invitation = self.invitation_for(self.hobb)
         told = self.telnet(self.ysmay, f"event rsvp {invitation.pk} accept")
         self.assertIn("That invitation is not yours to respond to.", told)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.response, InvitationResponse.PENDING)
         told = self.telnet(self.ysmay, f"event invite {self.gala.pk} persona=Hobb")
         self.assertIn("This target is already invited.", told)
 

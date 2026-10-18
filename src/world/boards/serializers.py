@@ -49,23 +49,13 @@ class BoardPostSerializer(serializers.ModelSerializer):
         ]
 
     def get_author_display(self, obj: BoardPost) -> str:
-        from world.scenes.persona_display import (  # noqa: PLC0415
-            resolve_display_for_viewer,
-            viewer_context_for_account,
-        )
+        from world.relationships.reads import resolve_viewer_sheet  # noqa: PLC0415
+        from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415
 
         request = self.context.get("request")
         user = request.user if request is not None else None
-        viewer_persona_ids: set[int] = set()
-        viewer_sheet_ids: set[int] = set()
-        is_staff = False
-        if user is not None and user.is_authenticated:
-            viewer_persona_ids, viewer_sheet_ids = viewer_context_for_account(user)
-            is_staff = bool(user.is_staff)
+        is_staff = bool(user is not None and user.is_authenticated and user.is_staff)
         name, _ = resolve_display_for_viewer(
-            obj.author_persona,
-            viewer_persona_ids=viewer_persona_ids,
-            viewer_sheet_ids=viewer_sheet_ids,
-            is_staff=is_staff,
+            obj.author_persona, viewer_sheet=resolve_viewer_sheet(request), is_staff=is_staff
         )
         return name

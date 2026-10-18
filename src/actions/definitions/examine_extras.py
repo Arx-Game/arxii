@@ -187,24 +187,15 @@ def _maybe_render_location_board_posts(room_profile, looker) -> str | None:
         return None
 
     from core_management.permissions import is_staff_observer  # noqa: PLC0415
-    from world.scenes.persona_display import (  # noqa: PLC0415
-        resolve_display_for_viewer,
-        viewer_context_for_account,
-    )
+    from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415
 
-    viewer_persona_ids: set[int] = set()
-    viewer_sheet_ids: set[int] = set()
-    if account is not None:
-        viewer_persona_ids, viewer_sheet_ids = viewer_context_for_account(account)
+    viewer_sheet = looker.character_sheet if looker is not None else None
     is_staff = is_staff_observer(looker)
 
     lines: list[str] = ["", f"|w{board.name}|n", ""]
     for i, post in enumerate(posts, start=1):
         author_name, _ = resolve_display_for_viewer(
-            post.author_persona,
-            viewer_persona_ids=viewer_persona_ids,
-            viewer_sheet_ids=viewer_sheet_ids,
-            is_staff=is_staff,
+            post.author_persona, viewer_sheet=viewer_sheet, is_staff=is_staff
         )
         lines.append(f"  |c{i}|n. {post.title} |x(by {author_name})|n")
     lines.append("")
@@ -290,10 +281,7 @@ def _maybe_render_ranking_display(obj, looker) -> str | None:
 def _presented_captive_name(observer: ObjectDB, captive_sheet: CharacterSheet) -> str:
     """The captive's presented face for this observer, never the real key under a mask (#4030)."""
     from world.scenes.models import Persona  # noqa: PLC0415
-    from world.scenes.persona_display import (  # noqa: PLC0415
-        resolve_display_for_viewer,
-        viewer_context_for_account,
-    )
+    from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     try:
@@ -301,13 +289,9 @@ def _presented_captive_name(observer: ObjectDB, captive_sheet: CharacterSheet) -
     except Persona.DoesNotExist:
         return captive_sheet.character.key
     account = observer.db_account
-    viewer_persona_ids, viewer_sheet_ids = (
-        viewer_context_for_account(account) if account is not None else (set(), set())
-    )
     name, _discovered = resolve_display_for_viewer(
         persona,
-        viewer_persona_ids=viewer_persona_ids,
-        viewer_sheet_ids=viewer_sheet_ids,
+        viewer_sheet=observer.character_sheet,
         is_staff=bool(account and account.is_staff),
     )
     return name

@@ -147,7 +147,12 @@ def set_scene_round_mode(
     """
     from world.scenes.models import SceneActionDeclaration  # noqa: PLC0415
 
-    # Guard — switching away from STRICT with pending deferred declarations.
+    # Guard — switching away from STRICT with pending deferred declarations. Only the
+    # current round's count: a Succor or Interpose declaration from an earlier round
+    # stays on the row by design (``_resolve_scene_declarations`` leaves them for the
+    # end-of-round readers), and until #3657's journey asked, those leftovers kept the
+    # guard raised after every force-resolve, so a round that had seen one such
+    # declaration could never leave STRICT again.
     leaving_strict = (
         scene_round.mode == SceneRoundMode.STRICT
         and mode is not None
@@ -156,7 +161,9 @@ def set_scene_round_mode(
     if (
         leaving_strict
         and SceneActionDeclaration.objects.filter(
-            scene_round=scene_round, is_immediate=False
+            scene_round=scene_round,
+            round_number=scene_round.round_number,
+            is_immediate=False,
         ).exists()
     ):
         msg = "Resolve the current declarations first (force-resolve), then change the mode."

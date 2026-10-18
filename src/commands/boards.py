@@ -105,20 +105,11 @@ class CmdBoard(ArxCommand):
 
     def _author_display(self, post: BoardPost) -> str:
         from core_management.permissions import is_staff_observer  # noqa: PLC0415
-        from world.scenes.persona_display import (  # noqa: PLC0415
-            resolve_display_for_viewer,
-            viewer_context_for_account,
-        )
+        from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415
 
-        account = self.caller.account
-        viewer_persona_ids: set[int] = set()
-        viewer_sheet_ids: set[int] = set()
-        if account is not None:
-            viewer_persona_ids, viewer_sheet_ids = viewer_context_for_account(account)
         name, _ = resolve_display_for_viewer(
             post.author_persona,
-            viewer_persona_ids=viewer_persona_ids,
-            viewer_sheet_ids=viewer_sheet_ids,
+            viewer_sheet=self.caller.character_sheet,
             is_staff=is_staff_observer(self.caller),
         )
         return name

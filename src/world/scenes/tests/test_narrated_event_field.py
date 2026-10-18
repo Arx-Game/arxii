@@ -67,8 +67,9 @@ class NarratedEventFieldTest(APITestCase):
         # 24, not 25 (#4101 fix round 3): subject_persona is now a plain FK on
         # GMPrompt, batched via select_related("prompt__subject_persona") on the
         # SAME Prefetch -- the round-2 nested cached_primary_persona to_attr
-        # Prefetch (an extra query) is gone.
-        with self.assertNumQueries(24):
+        # Prefetch (an extra query) is gone. 25 (#4413): the viewer's selected
+        # character, Account.cached_selected_entry, paid once on a cold account.
+        with self.assertNumQueries(25):
             resp = self.client.get(url, {"scene": self.scene.pk})
         self.assertEqual(resp.status_code, 200, resp.data)
         rows = {row["id"]: row for row in resp.data["results"]}
