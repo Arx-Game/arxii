@@ -328,9 +328,10 @@ class Character(ObjectParent, DefaultCharacter):
         While a story NPC is lent (#4418), the person playing it is the borrower, so
         the ACTIVE loan's borrower answers here, not the tenure holder: a Guide playing
         a lent NPC never inherits its owner's GM standing, and consent asks, page
-        blocks and presence follow the borrower. Not cached: the loan is read from
-        the database on each call, and only for an NPC-shelf entry, so ending a loan
-        flips this back at once.
+        blocks and presence follow the borrower. The loan is read from the holder's
+        ``PlayerData.cached_npc_loans`` (no query once warm; cleared by every
+        ``NPCLoan`` save through ``NPCLoan.related_cache_fields``), and only for an
+        NPC-shelf entry, so ending a loan flips this back at once.
 
         Returns:
             Account | None: The controlling account, if any.
@@ -341,16 +342,15 @@ class Character(ObjectParent, DefaultCharacter):
             entry = self.sheet_data.roster_entry
         except ObjectDoesNotExist:
             return None
-        if entry.roster.roster_type == RosterType.NPC:
-            from world.roster.services.npc_lending import active_loan_for
-
-            loan = active_loan_for(entry)
-            if loan is not None:
-                return loan.borrower
         tenure = entry.current_tenure
         if not tenure or not tenure.player_data:
             return None
-        return tenure.player_data.account
+        player_data = tenure.player_data
+        if entry.roster.roster_type == RosterType.NPC:
+            for loan in player_data.cached_npc_loans:
+                if loan.roster_entry_id == entry.pk:
+                    return loan.borrower
+        return player_data.account
 
     def active_covenant_ids(self) -> frozenset[int]:
         """Return the frozenset of covenant PKs where this character is currently active.

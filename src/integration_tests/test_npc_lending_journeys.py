@@ -20,6 +20,7 @@ from world.roster.models import NPCLoan, RosterEntry
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 MINE = "/api/roster/entries/mine/"
+SELECT = "/api/roster/entries/select/"
 SUBMIT_POSE = "/api/interactions/submit-pose/"
 NO_ACCESS = "You don't have access to that character."
 
@@ -161,8 +162,12 @@ class AGuidePlaysALentNpc(JourneyCase):
         # Acting as Vael, Ilsa is Ilsa: not the scene's owner, not a GM.
         finish = self.web(self.vael, "finish_scene")
         self.assertFalse(finish.detail.success)
+        self.assertEqual(
+            finish.detail.message, "Only the scene's GM or an owner can finish the scene."
+        )
         mint = self.web(self.vael, "mint_story_npc", name="Corporal Brann", description="Young.")
         self.assertFalse(mint.detail.success)
+        self.assertEqual(mint.detail.message, "GM trust required.")
         self.assertFalse(
             RosterEntry.objects.filter(character_sheet__character__db_key="Corporal Brann").exists()
         )
@@ -176,6 +181,37 @@ class AGuidePlaysALentNpc(JourneyCase):
         # The owner, on her own character, still runs her scene.
         finished = self.web(self.ravenna, "finish_scene")
         self.assertTrue(finished.detail.success, finished.detail.message)
+
+    def test_a_saved_selection_does_not_outlive_who_plays_the_npc(self) -> None:
+        apparent = "/api/forms/character-forms/apparent/"
+        # Ravenna had Vael taken up on the website; lending him drops that selection.
+        ravenna_web = self.api(self.gm)
+        self.assertEqual(
+            ravenna_web.post(SELECT, {"entry_id": self.entry.pk}, format="json").status_code,
+            status.HTTP_200_OK,
+        )
+        loan_id = self._lend()
+        self.assertIsNone(self.gm.player_data.selected_entry_id)
+
+        # Ilsa takes Vael up; a page that reads her selection now acts as Vael.
+        ilsa_web = self.api(self.guide)
+        selected = ilsa_web.post(SELECT, {"entry_id": self.entry.pk}, format="json")
+        self.assertEqual(selected.status_code, status.HTTP_200_OK, selected.data)
+        self.assertNotEqual(ilsa_web.get(apparent).status_code, status.HTTP_400_BAD_REQUEST)
+
+        taken = self.web(self.ravenna, "take_back_npc", loan_id=loan_id)
+        self.assertTrue(taken.detail.success, taken.detail.message)
+        self.assertIsNone(self.guide.player_data.selected_entry_id)
+        after = ilsa_web.get(apparent)
+        self.assertEqual(after.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(after.json()["detail"], "No active character")
+
+    def test_accept_takes_a_string_yes(self) -> None:
+        offered = self._offer()
+        loan_id = offered.detail.data["loan_id"]
+        accepted = self.web(self.ilsa, "answer_npc_loan", loan_id=loan_id, accept="true")
+        self.assertTrue(accepted.detail.success, accepted.detail.message)
+        self.assertEqual(NPCLoan.objects.get(pk=loan_id).status, "active")
 
     def test_only_a_guide_may_accept(self) -> None:
         # Ysmay is no Guide: she cannot be offered the NPC.

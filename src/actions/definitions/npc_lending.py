@@ -35,6 +35,16 @@ def _acting_account(actor: ObjectDB) -> AccountDB | None:
     return actor.account or resolve_account_or_none(actor)
 
 
+# Spellings of "yes" a web or typed caller may send, as ``npc_services._truthy`` reads them.
+_TRUTHY_VALUES = frozenset({"yes", "y", "true", "1"})
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return value is not None and str(value).strip().lower() in _TRUTHY_VALUES
+
+
 def _int_kwarg(kwargs: dict[str, Any], name: str) -> int | None:
     try:
         return int(kwargs.get(name))
@@ -151,7 +161,7 @@ class AnswerNPCLoanAction(_NPCLendingAction):
         loan = _loan(kwargs)
         if loan is None:
             return ActionResult(success=False, message=NO_SUCH_LOAN_MESSAGE)
-        accept = kwargs.get("accept") is True
+        accept = _truthy(kwargs.get("accept"))
         try:
             loan = answer_loan(loan=loan, accept=accept, by=account)
         except NPCLendingError as exc:

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -148,6 +148,7 @@ def active_loans_touching(account: AccountDB, entry_ids: Iterable[int]) -> list[
             "roster_entry__story_npc_settings",
             "scene",
             "offered_by",
+            "borrower",
         )
         .order_by("pk")
     )
@@ -325,17 +326,74 @@ def request_borrow(*, entry: RosterEntry, borrower: AccountDB) -> NPCLoan:
     return loan
 
 
+JUST_LENT_MESSAGE = "That NPC was just lent to someone else."
+
+
+def _lock_status(loan: NPCLoan) -> None:
+    """Lock ``loan``'s row and bring its status up to date with the database.
+
+    Read as a value, never as an instance: the identity map would hand back the
+    cached object as it was. A concurrent answer or take-back that landed first is
+    then seen here, inside this transaction.
+    """
+    fresh = (
+        NPCLoan.objects.select_for_update()
+        .filter(pk=loan.pk)
+        .values_list("status", flat=True)
+        .first()
+    )
+    if fresh is None:
+        msg = "That loan no longer exists."
+        raise NPCLendingError(msg)
+    if fresh != loan.status:
+        loan.refresh_from_db()
+
+
+def _clear_selection(account: AccountDB | None, entry: RosterEntry) -> None:
+    """Drop ``account``'s saved selection of ``entry`` once they no longer play it."""
+    if account is None:
+        return
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.roster.services.selection import set_selected_entry  # noqa: PLC0415
+
+    player_data = PlayerData.objects.filter(account=account).first()
+    if player_data is not None and player_data.selected_entry_id == entry.pk:
+        set_selected_entry(player_data, None)
+
+
 def _activate(loan: NPCLoan) -> None:
     """Make ``loan`` the NPC's one ACTIVE loan; the previous borrower and the holder
-    stop playing it."""
-    for other in NPCLoan.objects.filter(
-        roster_entry_id=loan.roster_entry_id, status=NPCLoanStatus.ACTIVE
-    ).exclude(pk=loan.pk):
+    stop playing it.
+
+    Runs inside the caller's transaction. The NPC's ACTIVE loans are locked before
+    they are ended. The activation itself is written as a raw UPDATE in a savepoint,
+    so the cached ``loan`` is only changed once the database has accepted it; a
+    competing ACTIVE row the lock could not see becomes a refusal, and every loan
+    touched here is dropped from the identity map because the refusal rolls it back.
+    """
+    others = list(
+        NPCLoan.objects.select_for_update()
+        .filter(roster_entry_id=loan.roster_entry_id, status=NPCLoanStatus.ACTIVE)
+        .exclude(pk=loan.pk)
+    )
+    for other in others:
         end_loan(other, by=None)
+    started_at = timezone.now()
+    try:
+        with transaction.atomic():
+            NPCLoan.objects.filter(pk=loan.pk).update_with_reason(
+                reason="activate an NPC loan; the cached instance is set once this lands",
+                status=NPCLoanStatus.ACTIVE,
+                started_at=started_at,
+            )
+    except IntegrityError:
+        for stale in [*others, loan]:
+            NPCLoan.flush_cached_instance(stale, force=True)
+        raise NPCLendingError(JUST_LENT_MESSAGE) from None
     loan.status = NPCLoanStatus.ACTIVE
-    loan.started_at = timezone.now()
-    loan.save(update_fields=["status", "started_at"])
+    loan.started_at = started_at
     _clear_loan_caches(loan)
+    _clear_selection(_holder_account(loan.roster_entry), loan.roster_entry)
     _make_playable(loan.roster_entry)
     _unpuppet_sessions(loan.roster_entry, keep=loan.borrower)
 
@@ -345,8 +403,10 @@ def answer_loan(*, loan: NPCLoan, accept: bool, by: AccountDB) -> NPCLoan:
     """Accept or decline a waiting loan.
 
     An offer is answered by the Guide it was offered to; a request by the NPC's
-    owner (or staff).
+    owner (or staff). The loan is locked and re-read first, so an answer racing
+    another answer or a take-back sees the result of whichever landed first.
     """
+    _lock_status(loan)
     if loan.status == NPCLoanStatus.OFFERED:
         if by.pk != loan.borrower_id:
             msg = "That offer wasn't made to you."
@@ -387,14 +447,17 @@ def may_end_loan(loan: NPCLoan, account: AccountDB) -> bool:
     )
 
 
+@transaction.atomic
 def end_loan(loan: NPCLoan, *, by: AccountDB | None) -> None:
     """End ``loan``: the borrower stops playing the NPC and its holder plays it again.
 
     ``by`` is None for a system end (the scene finished, a newer loan replaced it).
+    The borrower's saved selection of the NPC is cleared with it.
     """
     if by is not None and not may_end_loan(loan, by):
         msg = "That isn't your loan to end."
         raise NPCLendingError(msg)
+    _lock_status(loan)
     if loan.status in (NPCLoanStatus.ENDED, NPCLoanStatus.DECLINED):
         return
     was_active = loan.status == NPCLoanStatus.ACTIVE
@@ -403,6 +466,7 @@ def end_loan(loan: NPCLoan, *, by: AccountDB | None) -> None:
     loan.save(update_fields=["status", "ended_at"])
     _clear_loan_caches(loan)
     if was_active:
+        _clear_selection(loan.borrower, loan.roster_entry)
         _unpuppet_sessions(loan.roster_entry, keep=_holder_account(loan.roster_entry))
 
 

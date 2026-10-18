@@ -5,7 +5,6 @@ Roster and RosterEntry serializers for the roster system.
 from typing import ClassVar
 
 from django.core.exceptions import ObjectDoesNotExist
-from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from web.api.character_type import derive_character_type
@@ -167,8 +166,10 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # #4418: a borrowed NPC. ``loan`` names the scene and who lent it (by their GM
     # character, never an account); ``npc_notes`` is what the owner wrote for whoever
     # plays it. Both null on every character the account holds itself.
-    loan = serializers.SerializerMethodField()
-    npc_notes = serializers.SerializerMethodField()
+    # Filled in by ``to_representation`` from one loan lookup per row; as declared
+    # fields they read None off the entry (it has no such attributes).
+    loan = MyNPCLoanSerializer(read_only=True, allow_null=True)
+    npc_notes = serializers.CharField(read_only=True, allow_null=True)
 
     class Meta:
         model = RosterEntry
@@ -213,32 +214,29 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
                 return loan
         return None
 
-    @extend_schema_field(MyNPCLoanSerializer(allow_null=True))
-    def get_loan(self, obj: RosterEntry) -> dict | None:
-        """The loan this NPC is played under, or None for the account's own characters."""
+    def to_representation(self, instance: RosterEntry) -> dict:
+        """The row, with ``loan`` and ``npc_notes`` from a single loan lookup."""
         from world.roster.services.npc_lending import account_character_name  # noqa: PLC0415
 
-        loan = self._borrowed_loan(obj)
+        data = super().to_representation(instance)
+        loan = self._borrowed_loan(instance)
         if loan is None:
-            return None
-        return MyNPCLoanSerializer(
+            data["loan"] = None
+            data["npc_notes"] = None
+            return data
+        data["loan"] = MyNPCLoanSerializer(
             {
                 "id": loan.pk,
                 "scene_title": loan.scene.name if loan.scene is not None else None,
                 "offered_by_name": account_character_name(loan.offered_by),
             }
         ).data
-
-    def get_npc_notes(self, obj: RosterEntry) -> str | None:
-        """The owner's notes for whoever plays this borrowed NPC, or None."""
-        loan = self._borrowed_loan(obj)
-        if loan is None:
-            return None
         try:
             notes = loan.roster_entry.story_npc_settings.notes_for_player
         except ObjectDoesNotExist:
-            return None
-        return notes or None
+            notes = ""
+        data["npc_notes"] = notes or None
+        return data
 
     def get_character_type(self, obj: RosterEntry) -> str:
         return derive_character_type(obj.character_sheet.character)
