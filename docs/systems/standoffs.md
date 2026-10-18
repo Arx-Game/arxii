@@ -557,7 +557,7 @@ affiliation brings, and the predicate widget for each rule's test.
   playing the character now, by current tenure; a stranger gets 404) and the
   `StandoffProfilePanel` on the sheet's Growth tab (a consent switch, the cause select and the
   drive rows; locked with the reason while the character stands in a standoff).
-- **Migration** `0247` (schema only: the two new play-state tables).
+- **Migration** `0248` (schema only: the two new play-state tables).
 
 ## Later slices
 
