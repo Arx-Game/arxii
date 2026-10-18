@@ -75,15 +75,20 @@ class TechniqueSocialPullTests(TestCase):
             flat_bonus_amount=PULL_FLAT_BONUS,
         )
 
-    def _accept_with_pull(self) -> list[int]:
-        """Accept a technique flirt that declares a pull; return roll modifiers seen."""
+    def _accept(self, *, with_pull: bool) -> tuple[list[int], int]:
+        """Accept a technique flirt; return (roll modifiers seen, roll total points)."""
+        pull = (
+            CastPullDeclaration(resonance=self.resonance, tier=1, threads=(self.thread,))
+            if with_pull
+            else None
+        )
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
             target_persona=self.target,
             action_key="flirt",
             technique=self.technique,
-            pull=CastPullDeclaration(resonance=self.resonance, tier=1, threads=(self.thread,)),
+            pull=pull,
         )
         request.action_template = self.flirt_template
         request.save(update_fields=["action_template"])
@@ -97,6 +102,8 @@ class TechniqueSocialPullTests(TestCase):
         with (
             patch("world.scenes.action_services.accrue"),
             patch.object(action_services, "start_action_resolution", side_effect=spy),
+            # Fatigue from the first action would otherwise skew the second roll.
+            patch("world.fatigue.services.get_fatigue_penalty", return_value=0),
         ):
             result = respond_to_action_request(
                 action_request=request, decision=ConsentDecision.ACCEPT
@@ -105,10 +112,12 @@ class TechniqueSocialPullTests(TestCase):
         assert result.technique_result is not None
         request.refresh_from_db()
         assert request.status == ActionRequestStatus.RESOLVED
-        return seen
+        main_result = result.action_resolution.main_result
+        assert main_result is not None
+        return seen, main_result.check_result.total_points
 
     def test_declared_pull_bonus_reaches_the_technique_roll(self) -> None:
-        seen = self._accept_with_pull()
+        seen, _total = self._accept(with_pull=True)
 
         decl = SceneActionPullDeclaration.objects.get()
         assert decl.charged_flat_bonus == PULL_FLAT_BONUS
@@ -117,3 +126,12 @@ class TechniqueSocialPullTests(TestCase):
         ).balance
         assert balance == 18  # charged exactly once
         assert seen == [PULL_FLAT_BONUS]
+
+    def test_roll_total_differs_by_the_pull_bonus(self) -> None:
+        """Same character, same technique: the pulled roll totals PULL_FLAT_BONUS more."""
+        seen_plain, total_plain = self._accept(with_pull=False)
+        seen_pulled, total_pulled = self._accept(with_pull=True)
+
+        assert seen_plain == [0]
+        assert seen_pulled == [PULL_FLAT_BONUS]
+        assert total_pulled - total_plain == PULL_FLAT_BONUS
