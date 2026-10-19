@@ -30,6 +30,7 @@ from world.magic.factories import (
 from world.magic.models import SignatureMotifBonus, Thread
 from world.magic.models.signature import SignatureMotifBonusDamageProfile
 from world.magic.services.signature import set_signature_bonus
+from world.magic.types import CastCheck
 from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
 
@@ -95,7 +96,7 @@ class SignatureCombatDamageE2ETests(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )
 

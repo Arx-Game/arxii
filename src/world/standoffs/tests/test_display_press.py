@@ -1,5 +1,6 @@
 """Display of power: a casting press, terms eased by morale, and the view fields (#4147)."""
 
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -9,7 +10,9 @@ from django.test.utils import CaptureQueriesContext
 from actions.constants import ActionBackend
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
+from world.checks.services import collect_check_modifiers, preview_check_difficulty
 from world.checks.social_target import SocialDifficulty
+from world.checks.types import ExtraTraitTerm
 from world.combat.constants import FALTER_MORALE_THRESHOLD, SpectacleKind
 from world.combat.models import SpectacleRecord
 from world.combat.morale import OpponentMoraleState, morale_state_for
@@ -22,8 +25,10 @@ from world.magic.factories import (
 )
 from world.magic.models import CharacterAnima
 from world.magic.types.techniques import SoulfrayWarning
+from world.skills.factories import SkillFactory
 from world.standoffs.factories import StandoffApproachFactory, StandoffTermsFactory
 from world.standoffs.models import StandoffConfig
+from world.standoffs.serializers import StandoffViewSerializer
 from world.standoffs.services.verbs import standoff_press, terms_difficulty
 from world.standoffs.services.view import build_standoff_view
 from world.standoffs.tests.test_verbs import CHECK, SOCIAL, VerbBase, forced
@@ -121,6 +126,73 @@ class DisplayPressTests(DisplayPressBase):
         self.assertFalse(result.success)
         self.assertEqual(self.group.terms_ease, 0)
         self.assertEqual(result.morale_line, "")
+
+
+class DisplayTechniqueSkillTests(DisplayPressBase):
+    """The display cast adds the technique skill, and the preview shows the same term (#4450)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.skill = SkillFactory()
+        self.technique.skill = self.skill
+        self.technique.save(update_fields=["skill"])
+        self.term = ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00"))
+
+    @staticmethod
+    def _terms_for(mock, check_type) -> list[tuple]:
+        return [
+            tuple(call.kwargs.get("extra_traits", ()))
+            for call in mock.call_args_list
+            if call.args[1] == check_type
+        ]
+
+    def test_standoff_display_cast_preview_matches_roll(self) -> None:
+        plain = StandoffApproachFactory()
+
+        with (
+            patch(
+                "world.standoffs.services.view.preview_check_difficulty",
+                wraps=preview_check_difficulty,
+            ) as previewed,
+            patch(
+                "world.standoffs.services.view.collect_check_modifiers",
+                wraps=collect_check_modifiers,
+            ) as gathered,
+        ):
+            view = build_standoff_view(self.encounter, self.sheet)
+        with (
+            patch(CHECK, return_value=forced(1)) as rolled,
+            patch(
+                "world.standoffs.services.verbs.collect_check_modifiers",
+                wraps=collect_check_modifiers,
+            ) as press_gathered,
+        ):
+            standoff_press(self.participant, self.group, self.approach, self.technique)
+
+        casting = self.approach.check_type
+        self.assertEqual(tuple(rolled.call_args.kwargs["extra_traits"]), (self.term,))
+        self.assertEqual(self._terms_for(press_gathered, casting), [(self.term,)])
+        # The preview grades the casting approach once without a pick and once per technique,
+        # the latter with the very terms the press rolled with.
+        self.assertEqual(self._terms_for(previewed, casting), [(), (self.term,)])
+        self.assertEqual(self._terms_for(gathered, casting), [(), (self.term,)])
+        by_id = {a.approach_id: a for a in view.approaches}
+        self.assertEqual(
+            [g.technique_id for g in by_id[self.approach.pk].technique_grades],
+            [self.technique.pk],
+        )
+        # An approach that casts nothing takes no technique and no term.
+        self.assertEqual(by_id[plain.pk].technique_grades, [])
+        self.assertEqual(self._terms_for(previewed, plain.check_type), [()])
+
+    def test_the_serializer_exposes_the_grade_per_technique(self) -> None:
+        view = build_standoff_view(self.encounter, self.sheet)
+        data = StandoffViewSerializer(view).data
+        approach = next(a for a in data["approaches"] if a["approach_id"] == self.approach.pk)
+        (entry,) = approach["technique_grades"]
+        self.assertEqual(entry["technique_id"], self.technique.pk)
+        self.assertTrue(entry["grade"])
+        self.assertTrue(entry["grade_label"])
 
 
 class DisplayRefusalTests(DisplayPressBase):

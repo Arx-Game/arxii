@@ -6,6 +6,7 @@ weighted consequences using select_consequence() + apply_resolution().
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from world.checks.models import Consequence
@@ -21,16 +22,18 @@ if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePool
     from actions.types import WeightedConsequence
     from world.checks.models import CheckType, Consequence
-    from world.checks.types import CheckResult, ResolutionContext
+    from world.checks.types import CheckResult, ExtraTraitTerm, ResolutionContext
     from world.traits.models import CheckOutcome
 
 
-def select_consequence(
+def select_consequence(  # noqa: PLR0913 - keyword-only extra_traits mirrors perform_check
     character: ObjectDB,
     check_type: CheckType,
     target_difficulty: int,
     consequences: list[Consequence],
     extra_modifiers: int = 0,
+    *,
+    extra_traits: Sequence[ExtraTraitTerm] = (),
 ) -> PendingResolution:
     """Perform a check and select a consequence from the pool.
 
@@ -39,9 +42,12 @@ def select_consequence(
 
     The caller assembles the consequence list — this function does not know
     about challenge templates, approaches, or any domain-specific structure.
-    It always applies character loss filtering.
+    It always applies character loss filtering. ``extra_traits`` adds skill terms to the
+    roll (#4450).
     """
-    check_result = perform_check(character, check_type, target_difficulty, extra_modifiers)
+    check_result = perform_check(
+        character, check_type, target_difficulty, extra_modifiers, extra_traits=extra_traits
+    )
 
     outcome = check_result.outcome
     tier_consequences = [c for c in consequences if c.outcome_tier == outcome]

@@ -41,6 +41,7 @@ from world.magic.services.condition_application import (
     remove_technique_conditions,
 )
 from world.magic.services.hostility import is_allegiance_renewal, is_technique_hostile
+from world.magic.services.magic_skills import resolve_cast_check
 from world.magic.services.signature_effects import apply_signature_bonus_conditions
 from world.magic.services.targeting import (
     InvalidCastTarget,
@@ -189,15 +190,15 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     if no fury).
     """
     from world.magic.services import use_technique  # noqa: PLC0415
-    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
     from world.magic.services.cast_threads import applicable_threads_for_cast  # noqa: PLC0415
 
     action_template = technique.action_template
     context = ResolutionContext(character=character, target=target)
 
     # The cast rolls the CASTER'S personal magic check, falling back to the
-    # template's own check — the shared rule every cast path uses (ADR-0096).
-    cast_check = resolve_cast_check_type(character, action_template)
+    # template's own check — the shared rule every cast path uses (ADR-0096) — plus
+    # the technique's skill term, when one resolves (#4450).
+    cast_check = resolve_cast_check(character, technique)
 
     # Fold condition / rollmod / scene / equipment / fashion modifiers into the
     # cast's check roll through the shared seam — the same one combat
@@ -209,12 +210,17 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     check_modifier_total = 0
     if cast_check is not None and character_sheet is not None:
         check_modifier_total = collect_check_modifiers(
-            character_sheet, cast_check, scene=scene
+            character_sheet,
+            cast_check.check_type,
+            scene=scene,
+            extra_traits=cast_check.extra_traits,
         ).extra_modifiers_total
 
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
-    applicable_threads = applicable_threads_for_cast(character, technique, cast_pull=cast_pull)
+    applicable_threads = applicable_threads_for_cast(
+        character, technique, cast_pull=cast_pull, cast_check=cast_check
+    )
 
     # Signature-motif bonus (#1582): a flat intensity delta on the signed technique's
     # thread folds into the cast's power derivation (no-op / 0 when unsigned).
@@ -243,8 +249,9 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
             template=action_template,
             target_difficulty=difficulty,
             context=context,
-            check_type=cast_check,
+            check_type=cast_check.check_type if cast_check is not None else None,
             extra_modifiers=extra_modifiers + check_modifier_total,
+            extra_traits=cast_check.extra_traits if cast_check is not None else (),
         )
 
     technique_result = use_technique(
@@ -256,6 +263,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         applicable_threads=applicable_threads,
         cast_pull=cast_pull,
         pull_target=target,
+        cast_check=cast_check,
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
         apply_variant=apply_variant,

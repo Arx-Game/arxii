@@ -64,6 +64,7 @@ from world.magic.models import (
     IntensityTier,
     KnownUltimate,
     LevelPowerConfig,
+    MagicActivitySkill,
     MagicProgressionMilestone,
     MishapPoolTier,
     Motif,
@@ -536,7 +537,7 @@ class TechniqueAdmin(admin.ModelAdmin):
     filter_horizontal = ["restrictions", "target_prerequisites"]
     search_fields = ["name", "description"]
     readonly_fields = ["get_tier", "get_effect_summary"]
-    autocomplete_fields = ["creator", "effect_type", "gift"]
+    autocomplete_fields = ["creator", "effect_type", "gift", "skill"]
     list_select_related = ["gift", "effect_type"]
     inlines = [
         TechniqueAppliedConditionInline,
@@ -873,6 +874,7 @@ class GiftAdminForm(forms.ModelForm):
             "creator",
             "codex_entry",
             "style",
+            "technique_skill",
             "resonances",
             "ultimate_techniques",
             "written_by",
@@ -900,7 +902,7 @@ class GiftAdminForm(forms.ModelForm):
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
     form = GiftAdminForm
-    autocomplete_fields = ["creator", "parent"]
+    autocomplete_fields = ["creator", "parent", "technique_skill"]
     list_display = ["name", "kind", "parent", "get_technique_count"]
     list_filter = ["kind"]
     search_fields = ["name", "description"]
@@ -1303,6 +1305,20 @@ class AudereThresholdAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+
+@admin.register(MagicActivitySkill)
+class MagicActivitySkillAdmin(admin.ModelAdmin):
+    """Which skills each kind of magical roll adds (#4450).
+
+    An activity with no row adds nothing; the Required content dashboard lists those.
+    """
+
+    list_display = ["activity", "skill", "weight"]
+    list_editable = ["weight"]
+    list_filter = ["activity"]
+    list_select_related = ["skill__trait"]
+    autocomplete_fields = ["skill"]
 
 
 @admin.register(SoulfrayConfig)

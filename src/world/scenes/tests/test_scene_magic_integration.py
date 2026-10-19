@@ -15,25 +15,37 @@ from actions.factories import ConsequencePoolFactory
 from actions.models import ActionEnhancement
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.models import CharacterSheet
-from world.checks.factories import create_social_action_templates
+from world.checks.factories import CheckTypeTraitFactory, create_social_action_templates
+from world.checks.types import ExtraTraitTerm, ResolutionContext
 from world.conditions.factories import (
     SoulfrayTemplateFactory,
 )
-from world.magic.constants import TargetKind
+from world.magic.constants import RitualExecutionKind, TargetKind
 from world.magic.factories import (
     CharacterAnimaFactory,
+    CharacterResonanceFactory,
     CharacterTechniqueFactory,
     MishapPoolTierFactory,
     ResonanceFactory,
+    RitualCheckConfigFactory,
     SoulfrayConfigFactory,
     TechniqueFactory,
     ThreadFactory,
+    ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
+from world.magic.models.rituals import Ritual
+from world.magic.services.magic_skills import resolve_cast_check
+from world.magic.types.pull import CastPullDeclaration
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
-from world.scenes.action_services import create_action_request, respond_to_action_request
+from world.scenes.action_services import (
+    _resolve_enhanced_action,
+    create_action_request,
+    respond_to_action_request,
+)
 from world.scenes.factories import PersonaFactory, SceneFactory
-from world.traits.factories import CheckSystemSetupFactory
+from world.skills.factories import SkillFactory
+from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import CharacterTraitValue, Trait
 
 
@@ -402,3 +414,180 @@ class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
         # or the pool existed but no matching entry was selected. Either way the action
         # resolved and technique_result is present, confirming the mishap path was reached.
         assert result.action_resolution is not None
+
+
+class TestEnhancedSocialActionTechniqueSkill(SceneMagicTestMixin, TestCase):
+    """A technique-enhanced social action keeps the template check and adds the technique skill.
+
+    The Flirt template's own check type is what rolls; the technique's skill rides along as a
+    single ``ExtraTraitTerm`` on both the modifier collection and the roll (#4450).
+    """
+
+    def _flirt_with(self, technique):
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name=f"Skilled Flirt {technique.pk}",
+            source_type="technique",
+            technique=technique,
+        )
+        sheet = CharacterSheet.objects.get(character=self.initiator.character_sheet.character)
+        CharacterTechniqueFactory(character=sheet, technique=technique)
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="flirt",
+            technique=technique,
+        )
+        request.action_template = self.flirt_template
+        request.save(update_fields=["action_template"])
+
+        from world.checks.services import collect_check_modifiers, perform_check
+
+        rolls: list[dict] = []
+        collected: list[dict] = []
+
+        def spy_roll(character, check_type, *args, **kwargs):
+            rolls.append({"check_type": check_type, **kwargs})
+            return perform_check(character, check_type, *args, **kwargs)
+
+        def spy_collect(sheet, check_type, **kwargs):
+            collected.append({"check_type": check_type, **kwargs})
+            return collect_check_modifiers(sheet, check_type, **kwargs)
+
+        with (
+            patch("actions.services.perform_check", side_effect=spy_roll),
+            patch("world.checks.services.collect_check_modifiers", side_effect=spy_collect),
+        ):
+            respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+        return rolls, collected
+
+    def test_enhanced_social_action_keeps_template_check_adds_technique_term(self) -> None:
+        skill = SkillFactory()
+        technique = TechniqueFactory(
+            name="Skilled Gaze", intensity=3, control=8, anima_cost=2, skill=skill
+        )
+
+        rolls, collected = self._flirt_with(technique)
+
+        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        main = [r for r in rolls if "extra_traits" in r]
+        assert len(main) == 1
+        assert main[0]["check_type"] == self.flirt_template.check_type
+        assert tuple(main[0]["extra_traits"]) == (term,)
+        modifiers = [c for c in collected if c.get("extra_traits")]
+        assert len(modifiers) == 1
+        assert modifiers[0]["check_type"] == self.flirt_template.check_type
+        assert tuple(modifiers[0]["extra_traits"]) == (term,)
+
+    def test_enhanced_social_action_without_a_technique_skill_adds_no_term(self) -> None:
+        technique = TechniqueFactory(name="Plain Gaze", intensity=3, control=8, anima_cost=2)
+
+        rolls, collected = self._flirt_with(technique)
+
+        main = [r for r in rolls if r["check_type"] == self.flirt_template.check_type]
+        assert main
+        assert all(not r.get("extra_traits") for r in main)
+        assert collected
+        assert all(not c.get("extra_traits") for c in collected)
+
+    def test_enhanced_social_action_threads_see_template_stat_and_technique_skill(self) -> None:
+        from world.magic.services.cast_threads import applicable_threads_for_cast
+
+        skill = SkillFactory()
+        technique = TechniqueFactory(
+            name="Threaded Gaze", intensity=3, control=8, anima_cost=2, skill=skill
+        )
+        sheet = CharacterSheet.objects.get(character=self.initiator.character_sheet.character)
+        resonance = ResonanceFactory()
+        presence = Trait.objects.get(name="presence")
+        skill_thread = ThreadFactory(
+            owner=sheet, resonance=resonance, target_kind=TargetKind.TRAIT, target_trait=skill.trait
+        )
+        stat_thread = ThreadFactory(
+            owner=sheet, resonance=resonance, target_kind=TargetKind.TRAIT, target_trait=presence
+        )
+        ThreadFactory(
+            owner=sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TRAIT,
+            target_trait=SkillFactory().trait,
+        )
+        offered: list[list[int]] = []
+
+        def spy(*args, **kwargs):
+            threads = applicable_threads_for_cast(*args, **kwargs)
+            offered.append(sorted(a.thread.pk for a in threads))
+            return threads
+
+        with patch("world.magic.services.cast_threads.applicable_threads_for_cast", spy):
+            self._flirt_with(technique)
+
+        assert offered == [sorted([skill_thread.pk, stat_thread.pk])]
+
+
+class TestEnhancedActionPaidPullFollowsTheActionCheck(SceneMagicTestMixin, TestCase):
+    """A paid pull on an enhanced social action sees the traits the action rolls (#4450).
+
+    The action rolls its template's check; a caster with a personal cast check must not
+    change which TRAIT threads that action's paid pull can use.
+    """
+
+    def test_trait_thread_on_the_template_trait_pulls_for_a_caster_with_a_personal_check(
+        self,
+    ) -> None:
+        sheet = self.initiator.character_sheet
+        character = sheet.character
+        account = AccountFactory()
+        character.db_account = account
+        character.save(update_fields=["db_account"])
+        ritual = Ritual.objects.create(
+            name="enhanced_pull_personal_check",
+            author_account=account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        )
+        personal_config = RitualCheckConfigFactory(ritual=ritual)
+        CheckTypeTraitFactory(
+            check_type=personal_config.check_type, trait=StatTraitFactory(), weight=1
+        )
+        presence = Trait.objects.get(name="presence")
+        # Premise: the personal check wins for a plain cast, and it does not roll presence.
+        personal = resolve_cast_check(character, self.charm_technique)
+        assert personal.check_type == personal_config.check_type
+        assert presence.pk not in personal.check_type.traits.values_list("trait_id", flat=True)
+
+        resonance = ResonanceFactory()
+        thread = ThreadFactory(
+            owner=sheet, resonance=resonance, target_kind=TargetKind.TRAIT, target_trait=presence
+        )
+        character_resonance = CharacterResonanceFactory(
+            character_sheet=sheet, resonance=resonance, balance=10, lifetime_earned=10
+        )
+        ThreadPullCostFactory(tier=1, resonance_cost=3, anima_per_thread=1, label="firm")
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TRAIT, resonance=resonance, tier=1, flat_bonus_amount=1
+        )
+        pull = CastPullDeclaration(resonance=resonance, tier=1, threads=(thread,))
+
+        from world.magic.services.resonance import spend_resonance_for_pull
+
+        with patch(
+            "world.magic.services.resonance.spend_resonance_for_pull",
+            wraps=spend_resonance_for_pull,
+        ) as spend:
+            _resolve_enhanced_action(
+                character=character,
+                technique=self.charm_technique,
+                action_template=self.flirt_template,
+                action_key="flirt",
+                difficulty=10,
+                context=ResolutionContext(
+                    character=character, target=self.target.character_sheet.character
+                ),
+                cast_pull=pull,
+            )
+
+        context = spend.call_args.args[4]
+        assert presence.pk in context.involved_traits
+        character_resonance.refresh_from_db()
+        assert character_resonance.balance == 7

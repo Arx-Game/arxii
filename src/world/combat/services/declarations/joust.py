@@ -115,20 +115,22 @@ def _joust_offense_check(participant: CombatParticipant, action: CombatRoundActi
     a normal attack (both jousters are validated Mounted+LANCE at declare
     time, so the unmounted-lance penalty never actually fires here).
     """
-    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
 
     technique = action.focused_action
-    template = technique.action_template
-    if template is None:
+    if technique.action_template is None:
         raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
-    offense_check_type = resolve_cast_check_type(participant.character_sheet.character, template)
+    cast_check = resolve_cast_check(participant.character_sheet.character, technique)
+    if cast_check is None:
+        raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
     resolver = CombatTechniqueResolver(
         participant=participant,
         action=action,
         pull_flat_bonus=0,
         fatigue_category=action.focused_category or ActionCategory.PHYSICAL,
-        offense_check_type=offense_check_type,
+        offense_check_type=cast_check.check_type,
         offense_check_fn=None,
+        offense_extra_traits=cast_check.extra_traits,
     )
     return resolver._roll_check()  # noqa: SLF001 - same-module reuse of the shared roll seam
 

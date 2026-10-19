@@ -23,6 +23,7 @@ from world.locations.services import effective_value
 from world.magic.constants import (
     ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME,
     AffinityInteractionKind,
+    MagicActivity,
     ResonanceDirection,
     ResonanceValence,
 )
@@ -30,6 +31,7 @@ from world.magic.models import AffinityInteraction, ResonanceEnvironmentConfig
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.aura import CharacterAura
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
+from world.magic.services.magic_skills import activity_skill_terms
 from world.magic.types.aura import AffinityType
 
 if TYPE_CHECKING:
@@ -777,7 +779,12 @@ def resonance_environment_for_cast(
 
     # Perform the endurance check at the config-derived difficulty.
     check_type = _get_endure_hallowed_ground_check_type()
-    check_result = perform_check_with_modifiers(caster, check_type, effect.backfire_difficulty)
+    check_result = perform_check_with_modifiers(
+        caster,
+        check_type,
+        effect.backfire_difficulty,
+        extra_traits=activity_skill_terms(MagicActivity.ENDURING_HOSTILE_RESONANCE),
+    )
 
     # Select from the pool using the existing check result (pool holds WeightedConsequence).
     weighted_consequences = pool.cached_consequences

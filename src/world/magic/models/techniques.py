@@ -642,6 +642,18 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         related_name="techniques",
         help_text="Resolution spec for using this technique outside challenge contexts.",
     )
+    skill = models.ForeignKey(
+        "arxii.Skill",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="override_techniques",
+        help_text=(
+            "Overrides the technique skill for this one technique (#4450). Blank = use "
+            "the caster's Path technique skill (Major Gift) or the Gift's technique "
+            "skill (Minor Gift)."
+        ),
+    )
     applied_conditions = models.ManyToManyField(
         _CONDITION_TEMPLATE_MODEL,
         through="arxii.TechniqueAppliedCondition",

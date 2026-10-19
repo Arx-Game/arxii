@@ -650,10 +650,11 @@ def _combat_actions(
     # Soulfray + fury declaration context (#1543). One soulfray lookup per
     # character; fury tiers are a small authored catalog; anchors are the
     # caster's consented relationships with a non-zero bond.
-    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+    from world.magic.services.anima import get_character_cast_check  # noqa: PLC0415
     from world.magic.services.capability_requirements import (  # noqa: PLC0415
         technique_performable,
     )
+    from world.magic.services.magic_skills import cast_check_type  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
     from world.magic.services.targeting import (  # noqa: PLC0415
         position_target_shape,
@@ -679,14 +680,16 @@ def _combat_actions(
     soulfray_warning = get_soulfray_warning(character)
     eligible_fury_anchors = _eligible_fury_anchors(character, sheet)
 
+    # The caster's personal magic check is the same for every technique: read it once.
+    personal_check = get_character_cast_check(character)
     result: list[PlayerAction] = []
     for technique in techniques:
         if not technique_performable(character, technique):
             continue
         template = technique.action_template  # guaranteed non-None: filtered above
         # #2014: the caster's own provisioned magic check wins over the template's
-        # fallback (ADR-0096) — mirrors what the resolver actually rolls at dispatch.
-        check_type = resolve_cast_check_type(character, template)
+        # fallback (ADR-0096), the same rule resolve_cast_check rolls at dispatch.
+        check_type = cast_check_type(personal_check, technique)
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
             technique_id=technique.pk,
@@ -889,6 +892,7 @@ def _dispatch_clash_contribution(
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.combat.services import declare_clash_contribution  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
 
     technique_id = kwargs.get("technique_id")
     if technique_id is None:
@@ -931,6 +935,7 @@ def _dispatch_clash_contribution(
             encounter=ctx.participant.encounter,
             technique_id=technique_id,
             target=clash.npc_opponent.objectdb,
+            cast_check=resolve_cast_check(sheet.character, technique),
         )
 
     declare_clash_contribution(

@@ -35,10 +35,14 @@ from world.progression.models.rewards import (
 from world.progression.types import DevelopmentSource, ProgressionReason
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
+    from world.checks.types import ExtraTraitTerm
+    from world.traits.models import Trait
 
 logger = logging.getLogger("world.progression.skill_development")
 
@@ -81,6 +85,8 @@ def award_check_development(
     check_type: CheckType,
     effort_level: str | None,
     path_level: int,
+    *,
+    extra_traits: Sequence[ExtraTraitTerm] = (),
 ) -> list[tuple[str, int, int]]:
     """Award dp to traits used in a check.
 
@@ -93,6 +99,9 @@ def award_check_development(
         check_type: The :class:`CheckType` that was resolved.
         effort_level: The :class:`EffortLevel` value, or ``None`` if no effort.
         path_level: The character's current path/class level.
+        extra_traits: (#4450) call-time skill terms. Each term's trait earns dp like a
+            trait on the check type; a trait that appears more than once (on the check
+            type and as a term, or as two terms) earns once per roll.
 
     Returns:
         List of ``(trait_name, old_level, new_level)`` for each level-up.
@@ -107,9 +116,7 @@ def award_check_development(
     game_week = get_current_game_week()
     level_ups: list[tuple[str, int, int]] = []
 
-    for check_trait in check_type.traits.select_related("trait").all():
-        trait = check_trait.trait
-
+    for trait in _developing_traits(check_type, extra_traits):
         # Upsert WeeklySkillUsage with atomic F() increments.
         # Try to create first; if a concurrent insert wins the race, fall
         # back to an atomic UPDATE with F() expressions.
@@ -142,6 +149,22 @@ def award_check_development(
             level_ups.append((trait.name, old_lvl, new_lvl))
 
     return level_ups
+
+
+def _developing_traits(
+    check_type: CheckType, extra_traits: Sequence[ExtraTraitTerm]
+) -> list[Trait]:
+    """The traits a roll develops: the check type's, then each term's, each trait once.
+
+    Points count a trait on both sides twice, but development is per roll, and
+    ``WeeklySkillUsage`` has one row per character, trait and week.
+    """
+    by_pk: dict[int, Trait] = {}
+    for check_trait in check_type.traits.select_related("trait").all():
+        by_pk.setdefault(check_trait.trait.pk, check_trait.trait)
+    for term in extra_traits:
+        by_pk.setdefault(term.trait.pk, term.trait)
+    return list(by_pk.values())
 
 
 def apply_skill_rust(

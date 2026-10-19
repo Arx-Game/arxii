@@ -118,20 +118,6 @@ def get_character_cast_check(character):  # noqa: OBJECTDB_PARAM — Evennia cha
     return ritual.check_config.check_type
 
 
-def resolve_cast_check_type(character, template):  # noqa: OBJECTDB_PARAM — Evennia character
-    """The CheckType a technique cast rolls, for EVERY cast path (ADR-0096).
-
-    Precedence: the caster's provisioned personal magic check always wins;
-    an ActionTemplate's ``check_type`` is a fallback, never an override.
-    Returns None only when the caster is unprovisioned AND ``template`` is None
-    (callers that require a concrete check guard ``template is None`` first).
-    """
-    personal = get_character_cast_check(character)
-    if personal is not None:
-        return personal
-    return template.check_type if template is not None else None
-
-
 @transaction.atomic
 def perform_anima_ritual(
     character_sheet: CharacterSheet,
@@ -144,6 +130,7 @@ def perform_anima_ritual(
     with leftover budget. Crit always tops anima to max regardless.
     """
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.exceptions import (  # noqa: PLC0415
         CharacterEngagedForRitual,
         NoRitualConfigured,
@@ -151,6 +138,7 @@ def perform_anima_ritual(
         RitualScenePrerequisiteFailed,
     )
     from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
     character = character_sheet.character
@@ -176,6 +164,7 @@ def perform_anima_ritual(
         check_type=config.check_type,
         target_difficulty=config.target_difficulty,
         scene=scene,
+        extra_traits=activity_skill_terms(MagicActivity.ANIMA_RITUAL),
     )
     outcome = check_result.outcome
 

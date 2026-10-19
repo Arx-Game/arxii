@@ -30,7 +30,12 @@ import logging
 from typing import TYPE_CHECKING
 
 from world.checks.services import level_opposition, perform_check_with_modifiers
-from world.magic.constants import CAST_DETECTION_ATTRIBUTION_LEVEL, DETECT_CAST_CHECK_NAME
+from world.magic.constants import (
+    CAST_DETECTION_ATTRIBUTION_LEVEL,
+    DETECT_CAST_CHECK_NAME,
+    MagicActivity,
+)
+from world.magic.services.magic_skills import activity_skill_terms
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -261,11 +266,17 @@ def _roll_cast_audience(
     # -- but each observer needs their OWN independent roll, so this can't collapse into
     # a single batched query without breaking per-observer independence. Bounded by room
     # population; do not "optimize" this into one query.
+    sensing_terms = activity_skill_terms(MagicActivity.SENSING_MAGIC)
     for observer in _observers_in_room(caster):
         persona = _persona_for(observer)
         if persona is None:
             continue
-        result = perform_check_with_modifiers(observer, check_type, target_difficulty=difficulty)
+        result = perform_check_with_modifiers(
+            observer,
+            check_type,
+            target_difficulty=difficulty,
+            extra_traits=sensing_terms,
+        )
         if result.success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL:
             full.append(persona)
         elif result.success_level >= 1:

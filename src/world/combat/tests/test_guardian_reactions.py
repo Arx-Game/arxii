@@ -276,7 +276,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
     drives the REAL dispatch path: `apply_damage_to_participant` ->
     `_try_interpose` -> (`action.focused_action_id` is set) ->
     `_try_technique_interpose`, which rolls the guardian's own cast check
-    (`resolve_cast_check_type`) instead of a capability-reaction challenge and
+    (`resolve_cast_check`) instead of a capability-reaction challenge and
     pays anima instead of fatigue.
 
     `perform_check` is mocked at the seam `_try_technique_interpose` actually
@@ -394,7 +394,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         from world.combat.services import apply_damage_to_participant
         from world.magic.effect_palette_content import FORCE_FIELD_TECHNIQUE_NAME
         from world.magic.models import Technique
-        from world.magic.services.anima import resolve_cast_check_type
+        from world.magic.services.magic_skills import resolve_cast_check
 
         starting_anima = 10
         ally_participant, ally_vitals, anima, expected_cost, _encounter = (
@@ -403,7 +403,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         guardian = anima.character.character
         aegis_field = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
 
-        expected_check_type = resolve_cast_check_type(guardian, aegis_field.action_template)
+        expected_check_type = resolve_cast_check(guardian, aegis_field).check_type
         captured_check_types: list = []
 
         def _fake_perform_check(character, check_type, *args, **kwargs):
@@ -440,6 +440,36 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
             100,
             "a forced clean success must zero the damage reaching the ally",
         )
+
+    def test_interception_adds_technique_term(self) -> None:
+        """The guardian's protective cast rolls her cast check plus the technique skill (#4450)."""
+        from decimal import Decimal
+
+        from world.checks.types import ExtraTraitTerm
+        from world.combat.services import apply_damage_to_participant
+        from world.magic.effect_palette_content import FORCE_FIELD_TECHNIQUE_NAME
+        from world.magic.models import Technique
+        from world.skills.factories import SkillFactory
+
+        ally_participant, _vitals, _anima, _cost, _encounter = self._build_guardian_and_ally(
+            starting_anima=10, confirm=False
+        )
+        skill = SkillFactory()
+        aegis_field = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
+        aegis_field.skill = skill
+        aegis_field.save(update_fields=["skill"])
+        rolls: list[dict] = []
+
+        def _fake_perform_check(character, check_type, *args, **kwargs):
+            rolls.append({"check_type": check_type, **kwargs})
+            return SimpleNamespace(success_level=2)
+
+        with patch("world.combat.services.perform_check", side_effect=_fake_perform_check):
+            apply_damage_to_participant(ally_participant, 40)
+
+        self.assertEqual(len(rolls), 1)
+        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        self.assertEqual(tuple(rolls[0]["extra_traits"]), (term,))
 
     def test_situation_ctx_threaded_with_live_round_context(self) -> None:
         """#2536 Task 5 review fix: `_try_technique_interpose` must thread a

@@ -94,6 +94,8 @@ def reconcile_moon_pull_safely(character) -> None:
 def _control_holds(character, sheet: CharacterSheet, pull: int, level: int) -> bool:
     """Roll the moon control check. Fail-open when the check type is missing."""
     from world.checks.services import perform_check  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
     check_type = _ensure_moon_control_check_type()
     if check_type is None:
@@ -106,7 +108,12 @@ def _control_holds(character, sheet: CharacterSheet, pull: int, level: int) -> b
         - level * MOON_CONTROL_RELIEF_PER_LEVEL
         - _thread_relief(sheet),
     )
-    result = perform_check(character, check_type, difficulty)
+    result = perform_check(
+        character,
+        check_type,
+        difficulty,
+        extra_traits=activity_skill_terms(MagicActivity.MOON_CONTROL),
+    )
     return result.success_level > 0
 
 

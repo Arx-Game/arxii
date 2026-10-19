@@ -146,3 +146,7 @@ INVOCATION `FavorOutcomeAward` for the invocation check's outcome tier. It chang
 only when it moves the total across a rank threshold. Shown only in the acting player's
 breakdown, never in a room line.
 _Avoid_: "pull" (a thread pull's flat bonus), "boon"
+
+**Extra trait term** (#4450, ADR-4450):
+An `ExtraTraitTerm(trait, weight)` a caller adds to one roll through `extra_traits=`, on top of the check type's own `CheckTypeTrait` rows. It scores like one more row (value times weight, through the skill conversion table), earns check-based development once per roll, and counts as involved for capability and thread matching. A system uses it to put a skill into a roll without authoring a check type per character and skill.
+_Avoid_: bonus skill, injected trait, synthetic check type (the rejected alternative)

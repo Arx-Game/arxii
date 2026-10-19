@@ -240,7 +240,9 @@ class TrapHitKnockoutTests(TestCase):
             detect_difficulty=20,
         )
 
-    def _always_fail(self, _character, check_type, _target_difficulty, _extra_modifiers=0):
+    def _always_fail(
+        self, _character, check_type, _target_difficulty, _extra_modifiers=0, **_kwargs
+    ):
         return CheckResult(
             check_type=check_type,
             outcome=self.failure_outcome,
@@ -312,7 +314,9 @@ class TrapHitBleedOutTests(TestCase):
             detect_difficulty=20,
         )
 
-    def _always_fail(self, _character, check_type, _target_difficulty, _extra_modifiers=0):
+    def _always_fail(
+        self, _character, check_type, _target_difficulty, _extra_modifiers=0, **_kwargs
+    ):
         return CheckResult(
             check_type=check_type,
             outcome=self.failure_outcome,

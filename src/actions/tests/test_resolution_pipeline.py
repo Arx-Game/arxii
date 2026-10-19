@@ -1,5 +1,6 @@
 """Tests for the action resolution pipeline state machine."""
 
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -13,7 +14,8 @@ from actions.factories import (
 )
 from actions.services import advance_resolution, start_action_resolution
 from world.checks.factories import ConsequenceFactory
-from world.checks.types import CheckResult, ResolutionContext
+from world.checks.types import CheckResult, ExtraTraitTerm, ResolutionContext
+from world.skills.factories import SkillFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -490,3 +492,64 @@ class TestRunMainStepNullPool(TestCase):
         assert result.applied_effect_ids is None
         assert result.consequence_pool_id is None
         mock_check.assert_called_once()
+
+
+class GatedResumeExtraTraitsTests(TestCase):
+    """A GATED pipeline paused for confirmation resumes with the same skill terms (#4450)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.outcome = CheckOutcomeFactory(name="Success", success_level=1)
+        main_pool = ConsequencePoolFactory(name="Resume Terms Main Pool")
+        ConsequencePoolEntryFactory(
+            pool=main_pool,
+            consequence=ConsequenceFactory(
+                outcome_tier=cls.outcome, label="Resume Main", weight=10
+            ),
+        )
+        gate_pool = ConsequencePoolFactory(name="Resume Terms Gate Pool")
+        cls.loss_consequence = ConsequenceFactory(
+            outcome_tier=cls.outcome, label="Resume Death", weight=1, character_loss=True
+        )
+        ConsequencePoolEntryFactory(pool=gate_pool, consequence=cls.loss_consequence)
+        cls.template = ActionTemplateFactory(
+            name="Resume Terms Spell", pipeline=Pipeline.GATED, consequence_pool=main_pool
+        )
+        ActionTemplateGateFactory(
+            action_template=cls.template,
+            consequence_pool=gate_pool,
+            failure_aborts=True,
+            step_order=0,
+        )
+        cls.term = ExtraTraitTerm(trait=SkillFactory().trait, weight=Decimal("1.00"))
+
+    @patch("actions.services.apply_resolution", return_value=[])
+    @patch("actions.services.select_consequence_from_result")
+    @patch("actions.services.perform_check")
+    def test_gated_resume_carries_extra_traits(
+        self, mock_check: MagicMock, mock_select: MagicMock, mock_apply: MagicMock
+    ) -> None:
+        from world.checks.types import PendingResolution
+
+        success_result = _make_check_result()
+        mock_check.return_value = success_result
+        mock_select.return_value = PendingResolution(
+            check_result=success_result, selected_consequence=self.loss_consequence
+        )
+        character = MagicMock()
+        character.pk = 1
+        context = MagicMock(spec=ResolutionContext)
+        context.challenge_instance = None
+        context.character = character
+
+        pending = start_action_resolution(
+            character, self.template, 10, context, extra_traits=(self.term,)
+        )
+        assert pending.awaiting_confirmation is True
+        assert pending.extra_traits == (self.term,)
+
+        advance_resolution(pending, context, player_decision=PlayerDecision.CONFIRM)
+
+        main_calls = [c for c in mock_check.call_args_list if "extra_traits" in c.kwargs]
+        assert len(main_calls) == 1
+        assert tuple(main_calls[0].kwargs["extra_traits"]) == (self.term,)

@@ -282,6 +282,8 @@ def perform_worship_rite(
     award is not paid; the pledge pays its closing award instead.
     """
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
     if not rite.is_active or not rite.being.is_active:
         raise RiteNotAvailable
@@ -298,6 +300,7 @@ def perform_worship_rite(
             rite.check_type,
             specialization=rite.being.tradition.rites_specialization,
             scene=scene,
+            extra_traits=activity_skill_terms(MagicActivity.WORSHIP_RITE),
         )
         if not pay_award:
             return record_unpaid_performance(character_sheet, rite, result.outcome, scene=scene)

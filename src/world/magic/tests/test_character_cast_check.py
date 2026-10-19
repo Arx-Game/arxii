@@ -409,30 +409,34 @@ class GetCharacterCastCheckTests(TestCase):
         self.assertEqual(ct.name, character_magic_check_type_name(sheet))
 
 
-class ResolveCastCheckTypeTests(TestCase):
+class ResolveCastCheckTests(TestCase):
     """Precedence: personal check -> template check -> None (ADR-0096)."""
 
     @classmethod
     def setUpTestData(cls):
         from actions.factories import ActionTemplateFactory
+        from world.magic.factories import TechniqueFactory
 
         cls.sheet = CharacterSheetFactory()
         cls.template = ActionTemplateFactory()
+        cls.technique = TechniqueFactory(action_template=cls.template)
 
     def test_unprovisioned_falls_back_to_template_check(self):
-        from world.magic.services.anima import resolve_cast_check_type
+        from world.magic.services.magic_skills import resolve_cast_check
 
-        ct = resolve_cast_check_type(self.sheet.character, self.template)
-        self.assertEqual(ct, self.template.check_type)
+        cast_check = resolve_cast_check(self.sheet.character, self.technique)
+        self.assertEqual(cast_check.check_type, self.template.check_type)
 
     def test_no_template_and_unprovisioned_returns_none(self):
-        from world.magic.services.anima import resolve_cast_check_type
+        from world.magic.factories import TechniqueFactory
+        from world.magic.services.magic_skills import resolve_cast_check
 
-        self.assertIsNone(resolve_cast_check_type(self.sheet.character, None))
+        templateless = TechniqueFactory(action_template=None)
+        self.assertIsNone(resolve_cast_check(self.sheet.character, templateless))
 
     def test_provisioned_personal_check_wins_over_template(self):
         from world.magic.factories import RitualCheckConfigFactory
-        from world.magic.services.anima import resolve_cast_check_type
+        from world.magic.services.magic_skills import resolve_cast_check
 
         account = AccountDB.objects.create(username=f"resolve_cc_{id(self)}")
         ritual = Ritual.objects.create(
@@ -444,6 +448,6 @@ class ResolveCastCheckTypeTests(TestCase):
         self.sheet.character.db_account = account
         self.sheet.character.save(update_fields=["db_account"])
 
-        ct = resolve_cast_check_type(self.sheet.character, self.template)
-        self.assertEqual(ct, config.check_type)
-        self.assertNotEqual(ct, self.template.check_type)
+        cast_check = resolve_cast_check(self.sheet.character, self.technique)
+        self.assertEqual(cast_check.check_type, config.check_type)
+        self.assertNotEqual(cast_check.check_type, self.template.check_type)

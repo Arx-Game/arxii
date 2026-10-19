@@ -256,13 +256,20 @@ casting never hard-fails with "no template." The resolution chain:
   (`seeds_checks.py`) synthesizes a `CheckType` named after the character (pattern
   `character_magic_check_type_name(character_sheet)`) that weights the character's
   personal stat + skill. `get_character_cast_check(character)` (`services/anima.py`)
-  resolves this check type for use by the cast pipeline. `resolve_cast_check_type(character,
-  template)` (`services/anima.py`) is the single resolver every cast path calls: it
-  returns the personal check when the caster is provisioned, else falls back to
-  `template.check_type` (ADR-0096) — standalone casts, combat round casts, clash
+  resolves this check type for use by the cast pipeline. `resolve_cast_check(character,
+  technique)` (`services/magic_skills.py`) is the single resolver every cast path calls: it
+  returns a `CastCheck` whose `check_type` is the personal check when the caster is
+  provisioned, else falls back to `template.check_type` (ADR-0096), and whose
+  `extra_traits` carries the technique skill term (#4450) — standalone casts, combat round casts, clash
   contributions, and battle technique resolution (`world/battles/resolution.py`)
   all go through it, so none of them can silently roll the shared template check
   for a provisioned caster.
+  The same `CastCheck` feeds thread pulls (#4450): `cast_involved_trait_ids(cast_check)`
+  (`services/magic_skills.py`) gives the cast's `PullActionContext.involved_traits`, so a TRAIT
+  thread on the caster's stat, a personal skill or the technique skill is in the cast's action,
+  both as a passive tier-0 thread (`build_cast_applicable_threads(cast_check=)`) and as a declared
+  pull (`_charge_cast_pull`, `commit_combat_pull(cast_check=)`). A technique-enhanced social action
+  passes the template check plus the technique term, since that is what it rolls.
 - **Anima ritual alignment** — `provision_player_anima_ritual` (`services/anima.py`)
   points the anima ritual's `RitualCheckConfig.check_type` at the same per-character
   check type, so the anima ritual and technique casts always roll the same personal check.
@@ -280,9 +287,11 @@ casting never hard-fails with "no template." The resolution chain:
   `target_type` as the shared template — only `consequence_pool` differs) so
   the flavor pick cannot affect the rolled check: **every** cast path (standalone,
   combat, clash, battle technique resolution in `world/battles/resolution.py`)
-  resolves the check via `resolve_cast_check_type` (personal check first, template
-  fallback — ADR-0096) — as does the combat availability descriptor
-  (`actions/player_interface.py`), so the action-picker UI shows the same check
+  resolves the check via `resolve_cast_check` (personal check first, template
+  fallback — ADR-0096). The combat availability descriptor
+  (`actions/player_interface.py`) reads the personal check once per caster and
+  calls `cast_check_type(personal_check, technique)`, the same precedence
+  helper `resolve_cast_check` uses, so the action-picker UI shows the same check
   the resolver rolls — and none of them read
   `technique.action_template.check_type` directly anymore. Resolution:
   `technique_builder.resolve_cast_action_template()`.
@@ -313,6 +322,30 @@ attachments (both the primary persona's authored identity tags and runtime
 `get_effective_capability_value(sheet, capability_type) > 0` — and backs the new
 `has_capability` DSL op (both in `flows/filters/evaluator.py` /
 `typeclasses/characters.py`).
+
+### Magical skills (#4450, ADR-4450)
+
+Every magical roll adds skills staff chose in admin; no skill is named in code. Full reference:
+`docs/systems/magic.md` "Magical skills".
+
+- **Models:** `MagicActivity` (`constants.py`, 18 kinds of roll), `MagicActivitySkill`
+  (`models/magic_activity.py`: activity, skill, weight; unique per pair), `Path.technique_skill`,
+  `Gift.technique_skill` (Minor only, DB constraint plus `clean()`), `Technique.skill` (override),
+  `ConditionCategory.adds_loss_of_self_skills`.
+- **Services (`services/magic_skills.py`):** `activity_skill_terms(activity)`,
+  `technique_skill_term(character, technique)` / `technique_skill_term_for_path(technique, path)`,
+  `cast_check_type(personal_check, technique)` (ADR-0096 precedence, once), `resolve_cast_check`, `involved_trait_ids`, `cast_involved_trait_ids`. `loss_of_self_terms(template)`
+  is in `world/conditions/services.py`. Terms ride the check engine's `extra_traits`.
+- **Technique skill order:** technique override, else the caster's current Path (Major Gift),
+  else the Gift (Minor Gift). Inactive skills give no term.
+- **Adding a magical roll:** add a `MagicActivity` member and pass
+  `extra_traits=activity_skill_terms(MagicActivity.X)` at the roll. Import it inside the
+  function when the caller is `world.conditions` or `world.species` (they sit below magic). A
+  member with no `MagicActivitySkill` row adds nothing, and the Required content dashboard lists
+  it until staff map one.
+- **A new cast path** calls `resolve_cast_check(character, technique)` and passes both the
+  `check_type` and `extra_traits` to the roll, and the `CastCheck` to its thread pull context.
+- **Anima Check:** the character-creation pick excludes MAGIC-category skills.
 
 ### Dispel / Cleanse (#1585)
 

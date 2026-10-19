@@ -785,7 +785,7 @@ class NonAttackPCActionRoutingTests(TestCase):
 
         # Build encounter / participant / technique (no base_power => non-attack)
         # action_template with check_type is required — _resolve_pc_action derives
-        # offense_check_type via resolve_cast_check_type, which falls back to
+        # offense_check_type via resolve_cast_check, which falls back to
         # technique.action_template.check_type for this unprovisioned caster
         # (ADR-0096).
         check_type = CheckTypeFactory()
@@ -827,8 +827,8 @@ class NonAttackPCActionRoutingTests(TestCase):
         call_kwargs = mock_resolve.call_args.kwargs
         self.assertIs(call_kwargs["participant"], participant)
         self.assertIs(call_kwargs["action"], action)
-        # offense_check_type is sourced from the technique's action_template
-        self.assertIs(call_kwargs["offense_check_type"], check_type)
+        # the cast check is sourced from the technique's action_template
+        self.assertIs(call_kwargs["cast_check"].check_type, check_type)
         # outcome is returned cleanly (no exception)
         self.assertIsNotNone(outcome)
 
@@ -881,7 +881,7 @@ class NonAttackPCActionRoutingTests(TestCase):
             _resolve_pc_action(participant=participant, action=action, offense_check_fn=None)
 
         call_kwargs = mock_resolve.call_args.kwargs
-        self.assertIs(call_kwargs["offense_check_type"], catalog_template.check_type)
+        self.assertIs(call_kwargs["cast_check"].check_type, catalog_template.check_type)
 
 
 class ApplyDamageWithProfilesTests(EvenniaTestCase):

@@ -118,6 +118,7 @@ class GiftAdminFormTests(TestCase):
             "style",
             "resonances",
             "ultimate_techniques",
+            "technique_skill",
             "written_by",
             "written_on",
             "reviewed_by",

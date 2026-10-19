@@ -181,12 +181,19 @@ def run_fury_for_action(
         return None
 
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
     cfg = _config()
     check_type = _ensure_fury_check_type(cfg.check_trait)
     ease = provocation_ease(character, fury_anchor)
     target_diff = max(fury_commitment.base_check_difficulty - ease, 0)
-    check = perform_check_with_modifiers(character, check_type, target_difficulty=target_diff)
+    check = perform_check_with_modifiers(
+        character,
+        check_type,
+        target_difficulty=target_diff,
+        extra_traits=activity_skill_terms(MagicActivity.FURY_CONTROL),
+    )
     fury_res = resolve_fury(
         character=character, tier=fury_commitment, anchor=fury_anchor, check_result=check
     )

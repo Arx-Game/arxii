@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from world.checks.models import CheckType
-    from world.checks.types import CheckResult
+    from world.checks.types import CheckResult, ExtraTraitTerm
     from world.combat.types import WeaponContribution
     from world.conditions.models import DamageType
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
@@ -74,6 +74,8 @@ class CombatTechniqueResolver:
     fatigue_category: str
     offense_check_type: CheckType
     offense_check_fn: PerformCheckFn | None
+    # Skill terms the cast adds to the offense roll (the technique skill, #4450).
+    offense_extra_traits: tuple[ExtraTraitTerm, ...] = ()
 
     def _roll_check(self) -> CheckResult:
         """Roll the offense check with effort + pull-bonus modifiers."""
@@ -177,6 +179,7 @@ class CombatTechniqueResolver:
             self.offense_check_type,
             scene=self.participant.encounter.scene,
             extra_contributions=extra_contributions,
+            extra_traits=self.offense_extra_traits,
         )
         extra_modifiers = breakdown.extra_modifiers_total
 
@@ -224,6 +227,7 @@ class CombatTechniqueResolver:
             fatigue_penalty=penalty,
             situation_ctx=situation_ctx,
             stat_override=stat_override,
+            extra_traits=self.offense_extra_traits,
         )
         from world.magic.services.ultimates import floor_ultimate_check  # noqa: PLC0415
 
@@ -638,6 +642,9 @@ class CombatTechniqueResolver:
 
         caster = self.participant.character_sheet.character
         pen_check_type = get_penetration_check_type()
+        # The penetration roll keeps its own check type and adds only the cast's skill
+        # terms (the technique skill), the same terms the offense roll carries.
+        pen_extra_traits = self.offense_extra_traits
         # Mirror _roll_check: route through the shared modifier seam so the
         # penetration contest honors condition / rollmod / equipment
         # and CHARACTER (#767, e.g. "+penetration vs warded foes") sources.
@@ -646,6 +653,7 @@ class CombatTechniqueResolver:
             self.participant.character_sheet,
             pen_check_type,
             scene=self.participant.encounter.scene,
+            extra_traits=pen_extra_traits,
         )
         # #2536 Task 5 review fix: thread the same live round context the
         # offense check gets (_roll_check) — same class, same self.participant,
@@ -671,6 +679,7 @@ class CombatTechniqueResolver:
             + level_opposition(pen_check_type, level=target.level, character=target.objectdb),
             extra_modifiers=pen_breakdown.extra_modifiers_total,
             situation_ctx=situation_ctx,
+            extra_traits=pen_extra_traits,
         )
         factor = get_penetration_factor(pen_result.success_level)
         builder = PowerLedgerBuilder.from_ledger(combat_ledger)

@@ -485,13 +485,16 @@ class RemoveFlightHandlerTests(TestCase):
 
 
 def _make_capability_source(capability_id: int) -> CapabilitySource:
-    """Build a minimal CapabilitySource for resolve_challenge calls."""
+    """Build a minimal CapabilitySource for resolve_challenge calls.
+
+    A trait source: a technique source must name a real Technique (#4450).
+    """
     return CapabilitySource(
         capability_name="fly",
         capability_id=capability_id,
         value=10,
-        source_type=CapabilitySourceType.TECHNIQUE,
-        source_name="Test Technique",
+        source_type=CapabilitySourceType.TRAIT,
+        source_name="Test Trait",
         source_id=1,
     )
 

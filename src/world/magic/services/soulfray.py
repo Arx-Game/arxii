@@ -419,7 +419,9 @@ def _fire_stage_consequence_pool(
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.checks.types import ModifierContribution, ResolutionContext  # noqa: PLC0415
     from world.conditions.models import ConditionCheckModifier  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.models import TechniqueOutcomeModifier  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
     if not current_stage or not current_stage.consequence_pool_id:
         return None, None, None
@@ -480,6 +482,7 @@ def _fire_stage_consequence_pool(
         check_type=soulfray_config.resilience_check_type,
         target_difficulty=soulfray_config.base_check_difficulty,
         extra_contributions=soulfray_contributions or None,
+        extra_traits=activity_skill_terms(MagicActivity.SOULFRAY_RESILIENCE),
     )
 
     # Select and apply consequence

@@ -66,6 +66,7 @@ const STANDOFF: StandoffView = {
       hits_revealed_drive: true,
       casts_technique: false,
       refusal: '',
+      technique_grades: [],
     },
     {
       approach_id: 22,
@@ -78,6 +79,7 @@ const STANDOFF: StandoffView = {
       hits_revealed_drive: false,
       casts_technique: false,
       refusal: '',
+      technique_grades: [],
     },
   ],
   terms: [
@@ -420,6 +422,31 @@ describe('StandoffCard', () => {
       ref: { backend: 'registry', registry_key: 'standoff_press' },
       kwargs: { group_id: 11, approach_id: 22, technique_id: 77 },
     });
+  });
+
+  it('swaps the approach grade for the picked technique grade', async () => {
+    const user = userEvent.setup();
+    const standoff = withDisplay([
+      { technique_id: 77, name: 'Test technique' },
+      { technique_id: 78, name: 'Other technique' },
+    ]);
+    standoff.approaches[0] = {
+      ...standoff.approaches[0],
+      technique_grades: [
+        { technique_id: 77, grade: 'easy', grade_label: 'Easy' },
+        { technique_id: 78, grade: 'hard', grade_label: 'Hard' },
+      ],
+    };
+    renderCard(standoff);
+    const button = screen.getByRole('button', { name: /Plain approach/ });
+    expect(within(button).getByTestId('standoff-grade')).toHaveTextContent('Very Hard');
+    await user.click(button);
+    await user.click(screen.getByRole('combobox', { name: 'Technique to display' }));
+    await user.click(await screen.findByRole('option', { name: 'Test technique' }));
+    expect(within(button).getByTestId('standoff-grade')).toHaveTextContent('Easy');
+    await user.click(screen.getByRole('combobox', { name: 'Technique to display' }));
+    await user.click(await screen.findByRole('option', { name: 'Other technique' }));
+    expect(within(button).getByTestId('standoff-grade')).toHaveTextContent('Hard');
   });
 
   it('shows a Soulfray refusal in the picker and re-presses accepting the risk', async () => {

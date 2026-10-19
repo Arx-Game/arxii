@@ -127,6 +127,8 @@ class RevealConditionAction(Action):
     ) -> ActionResult:
         from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
         from world.conditions.models import ConditionInstance  # noqa: PLC0415
+        from world.magic.constants import MagicActivity  # noqa: PLC0415
+        from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
         from world.progression.services.skill_development import (  # noqa: PLC0415
             get_character_path_level,
         )
@@ -162,7 +164,18 @@ class RevealConditionAction(Action):
             caster_level = get_character_path_level(caster)
             difficulty += level_opposition(check_type, level=caster_level, character=caster)
 
-        result = perform_check(actor, check_type, target_difficulty=difficulty)
+        # Spotting a loss of self (corruption, atavism, possession) is sensing magic.
+        sensing = (
+            activity_skill_terms(MagicActivity.SENSING_MAGIC)
+            if template.category.adds_loss_of_self_skills
+            else ()
+        )
+        result = perform_check(
+            actor,
+            check_type,
+            target_difficulty=difficulty,
+            extra_traits=sensing,
+        )
         if result.success_level > 0:
             instance.is_aware = True
             instance.save(update_fields=["is_aware"])
@@ -242,7 +255,11 @@ class RallyAction(Action):
             caster_level = get_character_path_level(caster)
             difficulty += level_opposition(check_type, level=caster_level, character=caster)
 
-        result = perform_check(actor, check_type, target_difficulty=difficulty)
+        result = perform_check(
+            actor,
+            check_type,
+            target_difficulty=difficulty,
+        )
         sl = result.success_level
 
         crit_threshold = 2

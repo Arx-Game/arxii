@@ -62,6 +62,36 @@ class PenetrationContestTests(TestCase):
         )
         self.assertEqual(mock_pen.call_args.kwargs["target_difficulty"], expected)
 
+    def test_penetration_adds_technique_term(self) -> None:
+        """The penetration roll keeps its own check type and adds the technique skill (#4450).
+
+        The resolver carries the cast's technique term as ``offense_extra_traits``; the
+        penetration contest reuses it rather than resolving the skill again.
+        """
+        from dataclasses import replace
+
+        from world.checks.types import ExtraTraitTerm
+        from world.skills.factories import SkillFactory
+
+        skill = SkillFactory()
+        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        resolver = replace(_build_resolver(barrier_strength=7), offense_extra_traits=(term,))
+        with (
+            patch("world.combat.services.perform_check") as mock_pen,
+            patch("world.combat.services.collect_check_modifiers") as mock_collect,
+        ):
+            mock_pen.return_value = MagicMock(success_level=1)
+            mock_collect.return_value = MagicMock(total=0)
+            resolver(power=20, ledger=_ledger(20))
+
+        self.assertEqual(mock_pen.call_args.args[1], get_penetration_check_type())
+        self.assertEqual(tuple(mock_pen.call_args.kwargs["extra_traits"]), (term,))
+        pen_collects = [
+            c for c in mock_collect.call_args_list if c.args[1] == get_penetration_check_type()
+        ]
+        self.assertEqual(len(pen_collects), 1)
+        self.assertEqual(tuple(pen_collects[0].kwargs["extra_traits"]), (term,))
+
     def test_situation_ctx_threaded_with_live_round_context(self) -> None:
         """#2536 Task 5 review fix: _apply_penetration must thread a
         SituationContext into perform_check — the same class/participant as

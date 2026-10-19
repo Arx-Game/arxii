@@ -443,6 +443,8 @@ def record_speech(
     _require_open(ceremony)
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
 
     check_type = CheckType.objects.filter(name=SPEECH_CHECK_TYPE_NAME).first()
@@ -456,6 +458,7 @@ def record_speech(
             speaker_persona.character_sheet.character,
             check_type,
             specialization=oratory,
+            extra_traits=activity_skill_terms(MagicActivity.CEREMONY),
         )
         if result.outcome is not None:
             success_level = result.outcome.success_level
@@ -505,6 +508,8 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
         _require_wedding_consent(ceremony)
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
     from world.worship.services import bump_devotion  # noqa: PLC0415
     from world.worship.types import FavorSource  # noqa: PLC0415
@@ -522,6 +527,7 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
             officiant_sheet.character,
             check_type,
             specialization=ceremony.being.tradition.rites_specialization,
+            extra_traits=activity_skill_terms(MagicActivity.CEREMONY),
         )
         if result.outcome is not None:
             rites_outcome = result.outcome

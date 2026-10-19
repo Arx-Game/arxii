@@ -9,6 +9,7 @@ Submodules:
 - ``threads``     — thread axis enum and Imbuing / XP-lock result types
 - ``techniques``  — runtime stats, anima cost, soulfray, mishap, use-technique results
 - ``alterations`` — Mage Scar exception classes and pending/resolution results
+- ``magic_skills`` — CastCheck: a cast's check type plus its skill terms (#4450)
 - ``pull``        — resonance-pull action context and resolved / preview results
 - ``ultimates``   — Audere ultimate reveal cards/groups and owner-facing state (#4098)
 """
@@ -26,6 +27,7 @@ from world.magic.types.gain import (
     ResonanceWeeklySettlementSummary,
     SettlementResult,
 )
+from world.magic.types.magic_skills import CastCheck
 from world.magic.types.pull import (
     PullActionContext,
     PullPreviewResult,
@@ -73,6 +75,7 @@ __all__ = [
     "AudereUltimateState",
     "AuraDrift",
     "AuraPercentages",
+    "CastCheck",
     "MishapResult",
     "PendingAlterationResult",
     "PendingAlterationTierReduction",

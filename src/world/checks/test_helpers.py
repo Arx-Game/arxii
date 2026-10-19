@@ -16,7 +16,10 @@ import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.checks.models import CheckType
+    from world.checks.types import ExtraTraitTerm
     from world.traits.models import CheckOutcome
 
 
@@ -29,6 +32,7 @@ class CheckCapture:
 
     check_type: CheckType | None = None
     target_difficulty: int | None = None
+    extra_traits: tuple[ExtraTraitTerm, ...] = ()
 
 
 def _consume_forced_outcome() -> CheckOutcome | None:
@@ -39,13 +43,19 @@ def _consume_forced_outcome() -> CheckOutcome | None:
     return outcome
 
 
-def _record_capture(*, check_type: CheckType, target_difficulty: int | None) -> None:
+def _record_capture(
+    *,
+    check_type: CheckType,
+    target_difficulty: int | None,
+    extra_traits: Sequence[ExtraTraitTerm] = (),
+) -> None:
     """Write into the active CheckCapture, if any. No-op outside a force context."""
     # Suppression justified: threading.local attr absent until a force context sets it.
     capture: CheckCapture | None = getattr(_local, "capture", None)  # noqa: GETATTR_LITERAL
     if capture is not None:
         capture.check_type = check_type
         capture.target_difficulty = target_difficulty
+        capture.extra_traits = tuple(extra_traits)
 
 
 @contextmanager

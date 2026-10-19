@@ -768,3 +768,30 @@ class PreparedByRole(models.TextChoices):
 
     STAFF = "staff", "Staff"
     TABLE_GM = "table_gm", "Table GM"
+
+
+class MagicActivity(models.TextChoices):
+    """A kind of magical roll that adds staff-chosen skills (#4450).
+
+    Staff map each member to skills in ``MagicActivitySkill``. A new magical roll
+    joins by adding a member here and passing its terms; no skill is named in code.
+    """
+
+    ANIMA_RITUAL = "anima_ritual", "Anima ritual"
+    TECHNIQUE_LEARNING = "technique_learning", "Technique learning"
+    RITUAL_WORKING = "ritual_working", "Ritual working"
+    SUSTAINING_MAGIC = "sustaining_magic", "Sustaining magic"
+    DISPELLING = "dispelling", "Dispelling"
+    MAGICAL_TREATMENT = "magical_treatment", "Magical treatment"
+    SOULFRAY_RESILIENCE = "soulfray_resilience", "Soulfray resilience"
+    RESISTING_LOSS_OF_SELF = "resisting_loss_of_self", "Resisting loss of self"
+    SOUL_TETHER_RESCUE = "soul_tether_rescue", "Soul tether rescue"
+    COURT_PETITION = "court_petition", "Court petition"
+    FURY_CONTROL = "fury_control", "Fury control"
+    MOON_CONTROL = "moon_control", "Moon control"
+    ENDURING_HOSTILE_RESONANCE = "enduring_hostile_resonance", "Enduring hostile resonance"
+    FEEDING_RESTRAINT = "feeding_restraint", "Feeding restraint"
+    SENSING_MAGIC = "sensing_magic", "Sensing magic"
+    WORSHIP_RITE = "worship_rite", "Worship rite"
+    INVOCATION = "invocation", "Invocation"
+    CEREMONY = "ceremony", "Ceremony"

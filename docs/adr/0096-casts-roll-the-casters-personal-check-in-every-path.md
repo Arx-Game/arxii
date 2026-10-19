@@ -21,3 +21,5 @@ per-template divergence, and an override rule would silently re-homogenize
 casters again. Calibration note: the Monte Carlo tuning simulator's synthetic
 party is unprovisioned and unaffected; live provisioned PCs may see win-rate
 drift.
+
+> **Amended by ADR-4450 (#4450, 2026-10-18):** `resolve_cast_check_type` was replaced by `resolve_cast_check` (`world/magic/services/magic_skills.py`), which keeps this precedence and also returns the technique skill term.

@@ -171,13 +171,15 @@ def _resolve_treatment_request(
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from actions.models.action_templates import ActionTemplate
     from actions.types import PendingActionResolution, StepResult
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType, Consequence
-    from world.checks.types import CheckResult
+    from world.checks.types import CheckResult, ExtraTraitTerm
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
     from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
@@ -967,8 +969,9 @@ def _charge_social_pull(
 
     Returns ``0`` when no declaration exists on the request.
 
-    Resolves ``involved_traits`` from the check type's trait weights so TRAIT
-    threads can be validated as anchor-in-action. Waives anima cost when the
+    Resolves ``involved_traits`` from the check type's trait weights (plus the technique
+    skill term when the request carries a technique) so TRAIT threads can be validated
+    as anchor-in-action. Waives anima cost when the
     scene is not high-stakes (no active combat encounter or DANGER round).
 
     **Idempotent (#1919):** on first call, charges via
@@ -983,6 +986,10 @@ def _charge_social_pull(
             (``respond_to_action_request``) catches these to degrade to a fizzle.
     """
     from world.magic.constants import EffectKind, TargetKind  # noqa: PLC0415
+    from world.magic.services.magic_skills import (  # noqa: PLC0415
+        involved_trait_ids,
+        technique_skill_term,
+    )
     from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
@@ -1003,7 +1010,14 @@ def _charge_social_pull(
     if action_request.target_persona is not None:
         target = action_request.target_persona.character_sheet.character
 
-    involved_traits = tuple(check_type.traits.values_list("trait_id", flat=True))
+    # A technique-enhanced action also rolls the technique skill (#4450), so a TRAIT thread
+    # on that skill is in the action: the involved traits are the template's check traits
+    # plus the technique term.
+    technique_terms: tuple[ExtraTraitTerm, ...] = ()
+    if action_request.technique is not None:
+        skill_term = technique_skill_term(sheet.character, action_request.technique)
+        technique_terms = (skill_term,) if skill_term is not None else ()
+    involved_traits = involved_trait_ids(check_type, technique_terms)
 
     # Anima waiver: waived (zeroed) when no active combat or DANGER round.
     anima_cost_override = 0 if not _scene_is_high_stakes(action_request) else None
@@ -1073,6 +1087,7 @@ def _resolve_action_against_persona(
     from actions.constants import ActionCategory  # noqa: PLC0415
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue, get_fatigue_penalty  # noqa: PLC0415
+    from world.magic.services.magic_skills import technique_skill_term  # noqa: PLC0415
     from world.npc_services.social_disposition import (  # noqa: PLC0415
         apply_social_disposition_delta,
     )
@@ -1132,13 +1147,19 @@ def _resolve_action_against_persona(
         # the technique branch's check roll through the shared seam — the plain
         # branch already does this at line 930. Without this, conditions are
         # structurally invisible to technique-enhanced social actions (#2697).
+        #
+        # The template's own check type still rolls; the technique's skill (#4450) rides
+        # along as one extra term on both the modifier collection and the roll.
         tech_check_type = action_template.check_type
+        skill_term = technique_skill_term(character, action_request.technique)
+        technique_terms = (skill_term,) if skill_term is not None else ()
         technique_check_modifiers = 0
         if tech_check_type is not None:
             technique_check_modifiers = collect_check_modifiers(
                 action_request.initiator_persona.character_sheet,
                 tech_check_type,
                 scene=action_request.scene,
+                extra_traits=technique_terms,
             ).extra_modifiers_total
         result = _resolve_enhanced_action(
             character=character,
@@ -1154,6 +1175,7 @@ def _resolve_action_against_persona(
             strain_commitment=action_request.strain_commitment,
             fury_commitment=action_request.fury_commitment,
             fury_anchor=action_request.fury_anchor,
+            extra_traits=technique_terms,
         )
     else:
         # Plain (non-technique) actions do not use the fury lever; fury is a
@@ -1543,6 +1565,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
+    extra_traits: Sequence[ExtraTraitTerm] = (),
 ) -> EnhancedSceneActionResult:
     """Resolve a technique-enhanced social action via use_technique().
 
@@ -1571,6 +1594,8 @@ def _resolve_enhanced_action(  # noqa: PLR0913
             calculation accounts for the strain.
         fury_commitment: Optional FuryTier the player declared.
         fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
+        extra_traits: Skill terms the action's main check adds (#4450), passed to
+            start_action_resolution. The caller collects the matching modifiers.
 
     Returns:
         EnhancedSceneActionResult with both action_resolution and technique_result.
@@ -1578,8 +1603,16 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     from world.magic.services import use_technique  # noqa: PLC0415
     from world.magic.services.cast_threads import applicable_threads_for_cast  # noqa: PLC0415
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
+    from world.magic.types.magic_skills import CastCheck  # noqa: PLC0415
 
-    applicable_threads = applicable_threads_for_cast(character, technique, cast_pull=cast_pull)
+    # The pull context follows what this action rolls: the template's check traits plus the
+    # technique skill term, not the caster's personal check (#4450).
+    action_cast_check = CastCheck(
+        check_type=action_template.check_type, extra_traits=tuple(extra_traits)
+    )
+    applicable_threads = applicable_threads_for_cast(
+        character, technique, cast_pull=cast_pull, cast_check=action_cast_check
+    )
 
     fury_res = run_fury_for_action(
         character=character,
@@ -1598,12 +1631,15 @@ def _resolve_enhanced_action(  # noqa: PLR0913
             context=context,
             extra_modifiers=effort_modifier + extra_modifiers,
             effort_level=effort_level,
+            extra_traits=extra_traits,
         ),
         confirm_soulfray_risk=True,
         strain_commitment=strain_commitment,
         applicable_threads=applicable_threads,
         cast_pull=cast_pull,
         pull_target=context.target,
+        # The pull's involved traits follow this action's roll, not the personal check.
+        cast_check=action_cast_check,
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
         strain_power_enabled=False,

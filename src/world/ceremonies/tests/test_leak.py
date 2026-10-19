@@ -34,6 +34,7 @@ class TwistedRiteLeakTests(TestCase):
                 check_type=self.check_type,
                 difficulty=1,
                 worship_secret=self.secret,
+                sensing_terms=(),
             )
 
         self.assertTrue(sensed)
@@ -58,6 +59,7 @@ class TwistedRiteLeakTests(TestCase):
                 check_type=self.check_type,
                 difficulty=1,
                 worship_secret=self.secret,
+                sensing_terms=(),
             )
 
         held = CharacterClue.objects.get(roster_entry=self.observer_entry)

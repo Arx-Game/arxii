@@ -9,7 +9,9 @@ from django.test import TestCase
 
 from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.services import collect_check_modifiers
 from world.checks.test_helpers import force_check_outcome
+from world.checks.types import ExtraTraitTerm
 from world.combat import clash as clash_module
 from world.combat.clash import commit_to_clash, outcome_to_delta
 from world.combat.constants import RiskLevel
@@ -18,6 +20,7 @@ from world.combat.types import ClashContributionResult
 from world.conditions.factories import SoulfrayTemplateFactory
 from world.magic.factories import CharacterAnimaFactory, SoulfrayConfigFactory, TechniqueFactory
 from world.mechanics.factories import CharacterEngagementFactory
+from world.skills.factories import SkillFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -91,6 +94,36 @@ class CommitToClashTests(TestCase):
         )
         self.assertEqual(result.progress_delta, expected_delta)
         self.assertIsNotNone(result.technique_use_result)
+
+    def test_clash_adds_technique_term(self) -> None:
+        skill = SkillFactory()
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
+        template = ActionTemplateFactory(check_type=self.check_type)
+        technique = TechniqueFactory(
+            intensity=5, control=10, anima_cost=3, action_template=template, skill=skill
+        )
+
+        with (
+            force_check_outcome(self.success_outcome) as capture,
+            patch(
+                "world.checks.services.collect_check_modifiers",
+                wraps=collect_check_modifiers,
+            ) as collected,
+        ):
+            commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=self.clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        self.assertEqual(capture.check_type, self.check_type)
+        self.assertEqual(capture.extra_traits, (term,))
+        self.assertEqual(tuple(collected.call_args.kwargs["extra_traits"]), (term,))
 
     # -------------------------------------------------------------------------
     # 2. Strain routes to power (not check modifier)

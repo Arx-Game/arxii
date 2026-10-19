@@ -225,12 +225,15 @@ def resolve_pool_gate(
         )
 
     from world.checks.services import perform_check  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
     difficulty_bump = -(-3 * deficit // requirement)  # ceil; PLACEHOLDER scaling
     result = perform_check(
         performer_sheet.character,
         config.check_type,
         config.target_difficulty + difficulty_bump,
+        extra_traits=activity_skill_terms(MagicActivity.RITUAL_WORKING),
     )
     if result.success_level > 0:
         return PoolGateResult(True, False, deficit, "The rite holds together despite the want.")

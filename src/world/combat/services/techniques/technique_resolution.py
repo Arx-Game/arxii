@@ -18,10 +18,9 @@ from world.combat.types import CombatTechniqueResolution, CombatTechniqueResult
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from world.checks.models import CheckType
     from world.checks.types import CheckResult
     from world.magic.models import FuryTier
-    from world.magic.types import TechniqueUseResult
+    from world.magic.types import CastCheck, TechniqueUseResult
 
     PerformCheckFn = Callable[..., CheckResult]
 
@@ -62,7 +61,7 @@ def resolve_combat_technique(
     participant: CombatParticipant,
     action: CombatRoundAction,
     fatigue_category: str,
-    offense_check_type: CheckType,
+    cast_check: CastCheck,
     offense_check_fn: PerformCheckFn | None,
 ) -> CombatTechniqueResult:
     """Route a damage-path combat technique through use_technique.
@@ -72,6 +71,9 @@ def resolve_combat_technique(
     PRE_CAST/CAST events, reactive scar interception, and corruption.
     The resolver does the offense check + damage application inside
     that envelope.
+
+    ``cast_check`` is the caster's resolved cast: the check type the offense roll uses and
+    the skill terms (the technique skill) it adds (#4450).
 
     Soulfray warning is auto-confirmed at round resolution time —
     frontend handles preview before submission.
@@ -97,8 +99,9 @@ def resolve_combat_technique(
         action=action,
         pull_flat_bonus=pull_flat_bonus,
         fatigue_category=fatigue_category,
-        offense_check_type=offense_check_type,
+        offense_check_type=cast_check.check_type,
         offense_check_fn=offense_check_fn,
+        offense_extra_traits=cast_check.extra_traits,
     )
 
     targets = _build_affected_targets(participant, action)
@@ -130,6 +133,7 @@ def resolve_combat_technique(
         strain_commitment=action.strain_commitment,
         targets=targets,
         lethal=encounter.is_lethal,
+        cast_check=cast_check,
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=(
             (fury_res.intensity_bonus if fury_res else 0)

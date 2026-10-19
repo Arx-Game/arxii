@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.covenants.perks.context import SituationContext
+    from world.magic.types.magic_skills import CastCheck
     from world.magic.types.pull import CastPullDeclaration
 
 
@@ -165,12 +166,13 @@ def resolve_pull_from_kwargs(
     return None
 
 
-def commit_combat_pull(
+def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belongs to
     cast_pull: CastPullDeclaration,
     participant: CombatParticipant,
     encounter: CombatEncounter,
     technique_id: int,
     target: ObjectDB | None = None,
+    cast_check: CastCheck | None = None,
 ) -> None:
     """Commit *cast_pull* as a ``CombatPull`` row for the current round.
 
@@ -203,6 +205,9 @@ def commit_combat_pull(
             ``None`` when the action has no resolvable target. Threaded through to
             ``PullActionContext.target``, which feeds ``court_regard_modulation``
             for COVENANT_ROLE pulls via ``resolve_pull_effects``.
+        cast_check: What the cast rolls, from ``resolve_cast_check`` (#4450). Its stat and
+            skill traits are the ``involved_traits`` a TRAIT thread is matched against;
+            without it no TRAIT thread is in the action.
 
     Raises:
         ActionDispatchError(PULL_ALREADY_COMMITTED): When the
@@ -216,15 +221,19 @@ def commit_combat_pull(
 
     from actions.errors import ActionDispatchError  # noqa: PLC0415
     from world.magic.exceptions import MagicError  # noqa: PLC0415
+    from world.magic.services.magic_skills import cast_involved_trait_ids  # noqa: PLC0415
     from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
     sheet = participant.character_sheet
 
+    # The traits this cast rolls (#4450) are in its action, so a TRAIT thread on the
+    # caster's stat, a skill or the technique skill can be pulled.
     action_context = PullActionContext(
         combat_encounter=encounter,
         participant=participant,
         involved_techniques=(technique_id,),
+        involved_traits=cast_involved_trait_ids(cast_check),
         target=target,
     )
 
@@ -309,7 +318,8 @@ def _resolve_emergency_draw(
     )
     from world.covenants.models import Covenant  # noqa: PLC0415
     from world.covenants.services import get_court_grant_config  # noqa: PLC0415
-    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.constants import MagicActivity, TargetKind  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.npc_services.models import NPCStanding  # noqa: PLC0415
     from world.npc_services.services import incur_npc_debt  # noqa: PLC0415
 
@@ -351,6 +361,7 @@ def _resolve_emergency_draw(
         target_difficulty=config.petition_base_difficulty,
         extra_modifiers=ease,
         situation_ctx=situation_ctx,
+        extra_traits=activity_skill_terms(MagicActivity.COURT_PETITION),
     )
     # CheckResult.success_level (world.checks.types) safely returns 0 when
     # outcome is None — no separate None-check needed.

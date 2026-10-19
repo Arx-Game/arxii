@@ -17,6 +17,7 @@ from world.combat.factories import (
 )
 from world.combat.services import declare_action
 from world.magic.factories import CharacterAnimaFactory
+from world.magic.types import CastCheck
 from world.scenes.constants import RoundStatus
 
 
@@ -120,7 +121,7 @@ class StrainResolutionForwardingTests(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category="physical",
-                offense_check_type=CheckTypeFactory(),
+                cast_check=CastCheck(check_type=CheckTypeFactory(), extra_traits=()),
                 offense_check_fn=None,
             )
 

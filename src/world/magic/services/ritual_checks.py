@@ -39,7 +39,9 @@ def perform_ritual_check(
     - the ritual has no config row or the config has no check_type (seed gap)
     """
     from world.checks.services import perform_check  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.models import Ritual  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
     try:
         ritual = Ritual.objects.select_related("check_config__check_type").get(name=ritual_name)
@@ -67,6 +69,7 @@ def perform_ritual_check(
         character,
         check_type=config.check_type,
         target_difficulty=difficulty,
+        extra_traits=activity_skill_terms(MagicActivity.RITUAL_WORKING),
     )
     success_level = int(check_result.outcome.success_level)
     return RitualCheckRoll(check_result=check_result, success_level=success_level)

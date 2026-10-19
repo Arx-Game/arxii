@@ -557,7 +557,8 @@ def _try_technique_interpose(
        fires regardless of affordability, running the pool into deficit and
        accruing Soulfray (point 3 below).
     2. **The roll is the guardian's own cast check**
-       (:func:`~world.magic.services.anima.resolve_cast_check_type`), rolled
+       (:func:`~world.magic.services.magic_skills.resolve_cast_check`: the check
+       type plus the technique skill term), rolled
        against the same authored difficulty as the mundane Interpose challenge
        (:data:`~world.combat.interpose_content.INTERPOSE_CHALLENGE_NAME`'s
        ``ChallengeTemplate.severity``) — a technique guardian's protection is
@@ -599,7 +600,7 @@ def _try_technique_interpose(
     """
     from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
     from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
-    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
     from world.magic.services.targeting import (  # noqa: PLC0415
         PROTECTIVE_FLAVOR_BLINK,
         PROTECTIVE_FLAVOR_REDIRECT,
@@ -641,8 +642,8 @@ def _try_technique_interpose(
         # above — no roll, no cost, damage proceeds unchanged.
         return False
     severity = severity_template.severity
-    check_type = resolve_cast_check_type(interposer, technique.action_template)
-    if check_type is None:
+    cast_check = resolve_cast_check(interposer, technique)
+    if cast_check is None:
         # Unprovisioned caster + template-less technique (clash.py guards the
         # same pairing) — fail safe like the resolved-is-None branch above:
         # no roll, no cost, damage proceeds to the next protection layer.
@@ -665,10 +666,11 @@ def _try_technique_interpose(
     )
     check_result = _svc.perform_check(
         interposer,
-        check_type,
+        cast_check.check_type,
         target_difficulty=severity,
         extra_modifiers=extra_modifiers,
         situation_ctx=situation_ctx,
+        extra_traits=cast_check.extra_traits,
     )
 
     # Debit on fire (any non-fizzle resolution) - anima, not fatigue. A consented

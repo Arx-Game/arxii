@@ -1328,7 +1328,7 @@ def _resolve_peril_via_pool(
         select_consequence,
     )
     from world.checks.types import ResolutionContext  # noqa: PLC0415
-    from world.conditions.services import remove_condition  # noqa: PLC0415
+    from world.conditions.services import loss_of_self_terms, remove_condition  # noqa: PLC0415
 
     stage = instance.current_stage
     source_character = instance.source_character
@@ -1344,6 +1344,7 @@ def _resolve_peril_via_pool(
         stage.resist_check_type,
         stage.resist_difficulty,
         candidates,
+        extra_traits=loss_of_self_terms(instance.condition),
     )
     apply_resolution(
         pending,
@@ -1490,7 +1491,10 @@ def _advance_staged_peril_condition(
         True if the character died during this call, else False.
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
-    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.conditions.services import (  # noqa: PLC0415
+        get_active_conditions,
+        loss_of_self_terms,
+    )
 
     if character_sheet is None:
         return False
@@ -1531,6 +1535,7 @@ def _advance_staged_peril_condition(
             character,
             stage.resist_check_type,
             target_difficulty=stage.resist_difficulty,
+            extra_traits=loss_of_self_terms(template),
         )
 
         if int(result.success_level) < 0:

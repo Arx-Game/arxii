@@ -34,6 +34,7 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueFactory,
 )
+from world.magic.types import CastCheck
 from world.mechanics.factories import CharacterEngagementFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
@@ -104,7 +105,7 @@ class CombatTechniqueStillReachesTheDeathSeamTests(TestCase):
                 participant=participant,
                 action=action,
                 fatigue_category=ActionCategory.PHYSICAL,
-                offense_check_type=MagicMock(),
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
                 offense_check_fn=None,
             )
 

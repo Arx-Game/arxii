@@ -23,6 +23,9 @@ import {
 import type { CharacterDraft } from '../../types';
 import type { GiftFormValues } from '../GiftStage';
 
+/** `TraitCategory.MAGIC` on the server: the skills magical rolls add as terms. */
+const MAGIC_SKILL_CATEGORY = 'magic';
+
 interface AnimaCheckStepProps {
   draft: CharacterDraft;
   /** GiftStage's shared react-hook-form register — a single beforeLeave save
@@ -63,12 +66,14 @@ export function AnimaCheckStep({ draft, register }: AnimaCheckStepProps) {
     return [suggestedStat, ...statDefinitions.filter((stat) => stat.id !== suggestedStat.id)];
   }, [statDefinitions, suggestedStat]);
 
+  // Magical rolls add magic-category skills as terms (#4450), so one is never the
+  // Anima Check pick; the server validator refuses it too.
   const sortedSkills = useMemo(() => {
-    if (!skills) return [];
-    if (suggestedSkillId == null) return skills;
-    const suggested = skills.find((skill) => skill.id === suggestedSkillId);
-    if (!suggested) return skills;
-    return [suggested, ...skills.filter((skill) => skill.id !== suggestedSkillId)];
+    const pickable = (skills ?? []).filter((skill) => skill.category !== MAGIC_SKILL_CATEGORY);
+    if (suggestedSkillId == null) return pickable;
+    const suggested = pickable.find((skill) => skill.id === suggestedSkillId);
+    if (!suggested) return pickable;
+    return [suggested, ...pickable.filter((skill) => skill.id !== suggestedSkillId)];
   }, [skills, suggestedSkillId]);
 
   const handleStatChange = (value: number | null) => {

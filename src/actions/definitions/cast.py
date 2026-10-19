@@ -347,6 +347,8 @@ class CastTechniqueAction(Action):
         """
         from world.combat.pull_helpers import commit_combat_pull  # noqa: PLC0415
         from world.combat.round_context import resolve_focused_target_objectdb  # noqa: PLC0415
+        from world.magic.models import Technique  # noqa: PLC0415
+        from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
 
         participant = ctx.participant
         encounter = participant.encounter
@@ -357,4 +359,7 @@ class CastTechniqueAction(Action):
             encounter=encounter,
             technique_id=technique_id,
             target=target,
+            cast_check=resolve_cast_check(
+                participant.character_sheet.character, Technique.objects.get(pk=technique_id)
+            ),
         )

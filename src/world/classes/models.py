@@ -74,6 +74,18 @@ class Path(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "cast time. Null = the path imposes no style (pathless/NPC casters likewise)."
         ),
     )
+    technique_skill = models.ForeignKey(
+        "arxii.Skill",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="technique_skill_paths",
+        help_text=(
+            "The skill added to every cast of a Major Gift technique by a character on "
+            "this Path (#4450). A technique's own skill, if set, wins; a Minor Gift "
+            "technique uses the Gift's skill instead. Blank = this Path adds no skill."
+        ),
+    )
 
     # Evolution hierarchy - which lower-stage paths can evolve into this
     parent_paths = models.ManyToManyField(

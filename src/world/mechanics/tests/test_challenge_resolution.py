@@ -47,13 +47,17 @@ def _make_source(
     capability_id: int = 1,
     value: int = 10,
 ) -> CapabilitySource:
-    """Helper to build a CapabilitySource for tests."""
+    """Helper to build a CapabilitySource for tests.
+
+    A trait source: a technique source names a real Technique, whose skill the roll adds
+    (#4450, covered by ``TechniqueSkillTermTests``).
+    """
     return CapabilitySource(
         capability_name=capability_name,
         capability_id=capability_id,
         value=value,
-        source_type=CapabilitySourceType.TECHNIQUE,
-        source_name="Test Technique",
+        source_type=CapabilitySourceType.TRAIT,
+        source_name="Test Trait",
         source_id=1,
     )
 
@@ -953,3 +957,141 @@ class EffectiveSeverityTests(TestCase):
                 severity_adjustment=DIFFICULTY_BAND_STEP + 1,
                 adjustment_reason="a little bit harder",
             )
+
+
+class TechniqueSkillTermTests(TestCase):
+    """A challenge met with a technique adds that technique's skill to the roll (#4450)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.magic.factories import TechniqueFactory
+        from world.skills.factories import SkillFactory
+
+        cls.character = CharacterSheetFactory(character__db_key="SkillTermChar").character
+        cls.location = ObjectDBFactory(db_key="SkillTermRoom")
+        cls.capability = CapabilityTypeFactory(name="fire_skill_term")
+        cls.application = ApplicationFactory(
+            name="BurnSkillTerm",
+            capability=cls.capability,
+            target_property=PropertyFactory(name="flammable_skill_term"),
+        )
+        cls.outcome = CheckOutcomeFactory(name="Success_skill_term", success_level=1)
+        cls.template = ChallengeTemplateFactory(name="Thornwall", severity=5)
+        cls.approach = ChallengeApproachFactory(
+            challenge_template=cls.template,
+            application=cls.application,
+            display_name="Burn the thornwall",
+        )
+        cls.skill = SkillFactory()
+        cls.technique = TechniqueFactory(skill=cls.skill)
+
+    def _challenge(self) -> ChallengeInstance:
+        return ChallengeInstance.objects.create(
+            template=self.template,
+            location=self.location,
+            target_object=self.location,
+            is_active=True,
+            is_revealed=True,
+        )
+
+    def _source(self, source_type: CapabilitySourceType, source_id: int) -> CapabilitySource:
+        return CapabilitySource(
+            capability_name=self.capability.name,
+            capability_id=self.capability.id,
+            value=10,
+            source_type=source_type,
+            source_name="Source",
+            source_id=source_id,
+        )
+
+    def _expected(self) -> tuple:
+        from decimal import Decimal
+
+        from world.checks.types import ExtraTraitTerm
+
+        return (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),)
+
+    def _resolve(self, source: CapabilitySource):
+        """Resolve and return (terms the roll carried, terms the recorded breakdown used)."""
+        from world.checks import services as check_services
+        from world.checks.test_helpers import force_check_outcome
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        real_collect = check_services.collect_check_modifiers
+        with (
+            force_check_outcome(self.outcome) as capture,
+            patch(
+                "world.checks.services.collect_check_modifiers", side_effect=real_collect
+            ) as collect,
+        ):
+            resolve_challenge(self.character, self._challenge(), self.approach, source)
+        recorded = collect.call_args_list[-1].kwargs.get("extra_traits")
+        return capture.extra_traits, recorded
+
+    def test_a_technique_source_adds_the_technique_skill(self) -> None:
+        rolled, recorded = self._resolve(
+            self._source(CapabilitySourceType.TECHNIQUE, self.technique.pk)
+        )
+
+        self.assertEqual(rolled, self._expected())
+        self.assertEqual(tuple(recorded), self._expected())
+
+    def test_a_trait_source_adds_nothing(self) -> None:
+        rolled, recorded = self._resolve(
+            self._source(CapabilitySourceType.TRAIT, self.technique.pk)
+        )
+
+        self.assertEqual(rolled, ())
+        self.assertEqual(tuple(recorded), ())
+
+    def _previewed_terms(self, source: CapabilitySource) -> tuple:
+        """The terms the difficulty indicator was previewed with when the approach was offered."""
+        from world.mechanics.services import get_available_actions
+
+        self.template.properties.add(self.application.target_property)
+        self._challenge()
+        with (
+            patch("world.mechanics.services.preview_check_difficulty", return_value=0) as preview,
+            patch("world.mechanics.services.chart_has_success_outcomes", return_value=True),
+        ):
+            actions = get_available_actions(
+                self.character, self.location, capability_sources=[source]
+            )
+        self.assertEqual(len(actions), 1)
+        preview.assert_called_once()
+        return tuple(preview.call_args.kwargs["extra_traits"])
+
+    def test_the_difficulty_preview_carries_the_terms_the_roll_does(self) -> None:
+        source = self._source(CapabilitySourceType.TECHNIQUE, self.technique.pk)
+
+        previewed = self._previewed_terms(source)
+        rolled, _ = self._resolve(source)
+
+        self.assertEqual(previewed, rolled)
+        self.assertEqual(rolled, self._expected())
+
+    def test_the_difficulty_preview_of_a_trait_source_carries_nothing(self) -> None:
+        source = self._source(CapabilitySourceType.TRAIT, self.technique.pk)
+
+        self.assertEqual(self._previewed_terms(source), ())
+
+    def test_the_action_template_path_adds_the_technique_skill(self) -> None:
+        from actions.factories import ActionTemplateFactory
+        from world.checks.test_helpers import force_check_outcome
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        self.approach.action_template = ActionTemplateFactory(check_type=self.approach.check_type)
+        self.approach.save()
+        try:
+            with force_check_outcome(self.outcome) as capture:
+                resolve_challenge(
+                    self.character,
+                    self._challenge(),
+                    self.approach,
+                    self._source(CapabilitySourceType.TECHNIQUE, self.technique.pk),
+                )
+        finally:
+            self.approach.action_template = None
+            self.approach.save()
+
+        self.assertEqual(capture.extra_traits, self._expected())

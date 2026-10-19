@@ -51,6 +51,12 @@ class LeverViewSerializer(serializers.Serializer):
     is_angle = serializers.BooleanField()
 
 
+class TechniqueGradeSerializer(serializers.Serializer):
+    technique_id = serializers.IntegerField()
+    grade = serializers.CharField()
+    grade_label = serializers.CharField()
+
+
 class ApproachViewSerializer(serializers.Serializer):
     approach_id = serializers.IntegerField()
     group_id = serializers.IntegerField()
@@ -62,6 +68,7 @@ class ApproachViewSerializer(serializers.Serializer):
     hits_revealed_drive = serializers.BooleanField()
     casts_technique = serializers.BooleanField()
     refusal = serializers.CharField(allow_blank=True)
+    technique_grades = TechniqueGradeSerializer(many=True)
 
 
 class AngleViewSerializer(serializers.Serializer):

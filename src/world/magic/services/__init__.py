@@ -33,7 +33,12 @@ from world.magic.services.anima import (
     get_character_anima_ritual,
     get_character_cast_check,
     provision_player_anima_ritual,
-    resolve_cast_check_type,
+)
+from world.magic.services.magic_skills import (
+    activity_skill_terms,
+    involved_trait_ids,
+    resolve_cast_check,
+    technique_skill_term,
 )
 from world.magic.services.resonance import (
     _anchor_in_action,  # external: world.magic.tests.test_pull_service
@@ -90,6 +95,8 @@ __all__ = [
     "_typeclass_path_in_registry",
     # threads
     "accept_thread_weaving_unlock",
+    # magic_skills
+    "activity_skill_terms",
     "apply_damage_reduction_from_threads",
     # touchstones
     "attune_touchstone",
@@ -120,13 +127,14 @@ __all__ = [
     "grant_resonance",
     "has_pending_alterations",
     "imbue_ready_threads",
+    "involved_trait_ids",
     "near_xp_lock_threads",
     "preview_resonance_pull",
     "provision_player_anima_ritual",
     "recompute_max_health_with_threads",
     "reconcile_ritual_knowledge",
     "resolve_and_consume_ritual_components",
-    "resolve_cast_check_type",
+    "resolve_cast_check",
     "resolve_pending_alteration",
     "resolve_pull_effects",
     "seed_thread_survivability_tuning",
@@ -137,6 +145,7 @@ __all__ = [
     "strain_to_intensity",
     "survivability_baseline",
     "survivability_save_baselines",
+    "technique_skill_term",
     "threads_blocked_by_cap",
     "update_thread_narrative",
     "use_technique",

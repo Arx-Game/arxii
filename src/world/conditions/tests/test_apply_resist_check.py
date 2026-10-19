@@ -40,6 +40,7 @@ class ApplyConditionResistCheckTest(TestCase):
             character=self.target,
             check_type=resist_check,
             target_difficulty=15,
+            extra_traits=(),
         )
         self.assertFalse(result.success)
         self.assertIsNone(result.instance)

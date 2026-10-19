@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.standoffs.models import StandoffGroup
     from world.standoffs.services.gm_view import GMGroupView, GMStandoffView
-    from world.standoffs.services.view import GroupView, LeverView, StandoffView
+    from world.standoffs.services.view import ApproachView, GroupView, LeverView, StandoffView
 
 _SUBVERBS: dict[str, str] = {
     "read": "standoff_read",
@@ -576,13 +576,9 @@ def _render_group(view: StandoffView, group: GroupView) -> list[str]:
         for angle in view.shared_angles
         if angle.group_id == group.group_id and angle.text
     )
-    lines.extend(
-        f"    press {approach.name}: {approach.grade_label}"
-        + _lever_suffix(approach.levers)
-        + _refusal_suffix(approach.refusal)
-        for approach in view.approaches
-        if approach.group_id == group.group_id
-    )
+    for approach in view.approaches:
+        if approach.group_id == group.group_id:
+            lines.extend(_render_approach(view, approach))
     lines.extend(
         f"    terms {terms.name}: {terms.grade_label}"
         + (f" (on a critical: {terms.critical_label})" if terms.critical_label else "")
@@ -592,6 +588,22 @@ def _render_group(view: StandoffView, group: GroupView) -> list[str]:
         if terms.group_id == group.group_id
     )
     return lines
+
+
+def _render_approach(view: StandoffView, approach: ApproachView) -> list[str]:
+    """The press line(s) for one approach.
+
+    A casting approach reads differently per technique (its skill joins the roll), so it
+    prints one line per display technique; any other approach prints the single grade.
+    """
+    suffix = _lever_suffix(approach.levers) + _refusal_suffix(approach.refusal)
+    if not approach.technique_grades:
+        return [f"    press {approach.name}: {approach.grade_label}{suffix}"]
+    names = {t.technique_id: t.name for t in view.display_techniques}
+    return [
+        f"    press {approach.name} with {names[grade.technique_id]}: {grade.grade_label}{suffix}"
+        for grade in approach.technique_grades
+    ]
 
 
 def _refusal_suffix(refusal: str) -> str:

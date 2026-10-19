@@ -528,7 +528,8 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
        available technique without an action template is rejected as unfinished.
     4. Must have selected_gift_resonance_id (anchors the latent GIFT thread, #1620).
     5. Must have a valid anima_check_stat_id (a Trait with trait_type=STAT) and a
-       valid anima_check_skill_id (an active Skill) — the character's Anima Check.
+       valid anima_check_skill_id (an active Skill outside the magic category, which
+       magical rolls add as terms) — the character's Anima Check.
     """
     from world.magic.models import Resonance  # noqa: PLC0415
     from world.magic.services.cg_catalog import (  # noqa: PLC0415
@@ -537,7 +538,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
         get_technique_options,
     )
     from world.skills.models import Skill  # noqa: PLC0415
-    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
     if not draft.selected_tradition:
         return ["Select a tradition"]
@@ -594,7 +595,14 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     stat_valid = (
         bool(stat_id) and Trait.objects.filter(pk=stat_id, trait_type=TraitType.STAT).exists()
     )
-    skill_valid = bool(skill_id) and Skill.objects.filter(pk=skill_id, is_active=True).exists()
+    # A magic-category skill is never the Anima Check pick: magical rolls add those
+    # skills as terms, so choosing one here would count it twice (#4450).
+    skill_valid = (
+        bool(skill_id)
+        and Skill.objects.filter(pk=skill_id, is_active=True)
+        .exclude(trait__category=TraitCategory.MAGIC)
+        .exists()
+    )
     if not (stat_valid and skill_valid):
         return ["Choose the stat and skill your magic rolls (your Anima Check)"]
 

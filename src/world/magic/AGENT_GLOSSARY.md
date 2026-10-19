@@ -21,7 +21,7 @@ A character's pool of magical energy (current / maximum). It governs the *safety
 _Avoid_: mana, magic points.
 
 **Anima Check**:
-The stat + skill pair every one of a character's casts rolls, chosen explicitly during the CG Gift stage (closing the Tradition → Gift → Technique funnel alongside a ritual name) instead of the old silent Willpower + highest-skill default. Embodied as the character's personal `RitualCheckConfig` on their `CharacterAnimaRitual`, provisioned by `provision_player_anima_ritual`. Deliberately **not** called "Signature" — ADR-0072 already owns that term for the Motif-flourish mechanic. (#2426, ADR-0136.)
+The stat + skill pair every one of a character's casts rolls, chosen explicitly during the CG Gift stage (closing the Tradition → Gift → Technique funnel alongside a ritual name) instead of the old silent Willpower + highest-skill default. Embodied as the personal `RitualCheckConfig` on the character's anima ritual (a `Ritual` row), provisioned by `provision_player_anima_ritual`. The skill pick never offers a MAGIC-category skill, because a cast also adds the technique skill and the staff-mapped skills (see **Technique skill**) and would count it twice (#4450). Deliberately **not** called "Signature" — ADR-0072 already owns that term for the Motif-flourish mechanic. (#2426, ADR-0136.)
 
 **Gift**:
 The kind of magic a character works: a thematic collection of Techniques (e.g. Pyromancy, Shadow Majesty), associated with a set of Resonances. A character acquires a Gift to gain access to its Techniques. The Gift says what the magic is; it does not say how it is wielded (see **Technique** for the other half of that pairing).
@@ -485,3 +485,11 @@ that has no `CharacterTechnique`. It holds only while the character's bond to th
 (active patronage, or their own unreleased companion of the archetype) holds. Set by GM or
 staff.
 _Avoid_: manifest choice, summon binding, bonded summon.
+
+**Magic Activity** (#4450, ADR-4450):
+A kind of magical roll that adds staff-chosen skills, one `MagicActivity` member each: the anima ritual, technique learning, ritual working, sustaining magic, dispelling, magical treatment, Soulfray resilience, resisting loss of self, Soul Tether rescue, Court petition, Fury control, moon control, enduring hostile resonance, feeding restraint, sensing magic, worship rite, invocation and ceremony. Staff map an activity to skills with `MagicActivitySkill` rows (a skill and a weight each); the roll keeps its own check type and adds those skills as terms. An activity with no row adds nothing. A technique cast is not an activity; its skill is the **Technique skill**. A new magical roll joins by adding a member and passing `activity_skill_terms(<member>)`.
+_Avoid_: magic check type, roll category, skill bundle.
+
+**Technique skill** (#4450, ADR-4450):
+The one skill a technique cast adds to its roll, on top of the caster's Anima Check. Resolved in order: the technique's own `skill` override; otherwise, for a Major Gift technique, the caster's current Path's `technique_skill`; otherwise, for a Minor Gift technique, the Gift's `technique_skill` (set on Minor Gifts only). It enters the roll at weight 1.00 as an `ExtraTraitTerm`. A technique has no Path of its own, so after a Crossing the new Path's skill applies and a Path never inherits its parent's. With none set, or an inactive skill, the cast adds nothing. Resolved by `technique_skill_term` / `resolve_cast_check`.
+_Avoid_: casting skill, path skill (it is the Path's setting, but the Gift and the technique can set it too), spell skill.

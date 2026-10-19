@@ -35,7 +35,7 @@ from world.vitals.models import CharacterVitals
 
 def _build_technique():
     """A minimal combat-ready technique — action_template is required by
-    _resolve_pc_action (resolve_cast_check_type falls back to
+    _resolve_pc_action (resolve_cast_check falls back to
     template.check_type for an unprovisioned caster, ADR-0096)."""
     return TechniqueFactory(
         gift=GiftFactory(),
