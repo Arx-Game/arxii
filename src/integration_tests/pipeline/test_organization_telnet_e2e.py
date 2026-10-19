@@ -127,7 +127,7 @@ class OrganizationLifecycleE2EJourneyTest(TestCase):
     def test_invite_creates_pending_invite(self) -> None:
         """org invite <person> in <org> → PENDING OrganizationMembershipOffer (INVITE)."""
         cmd = _run(self.officer_char, f"invite Outsider in {self.org.name}")
-        cmd.caller.search = MagicMock(return_value=self.outsider_char)
+        cmd.caller.search = MagicMock(return_value=[self.outsider_char])
         cmd.func()
 
         offer = OrganizationMembershipOffer.objects.filter(
@@ -145,7 +145,7 @@ class OrganizationLifecycleE2EJourneyTest(TestCase):
         """org join <org> → active membership at base rank (tier 5)."""
         # First, officer invites the outsider.
         cmd = _run(self.officer_char, f"invite Outsider in {self.org.name}")
-        cmd.caller.search = MagicMock(return_value=self.outsider_char)
+        cmd.caller.search = MagicMock(return_value=[self.outsider_char])
         cmd.func()
 
         # Outsider accepts via join.
@@ -174,7 +174,7 @@ class OrganizationLifecycleE2EJourneyTest(TestCase):
     def test_promote_moves_member_up_one_tier(self) -> None:
         """org promote <person> in <org> → rank tier 5 → 4."""
         cmd = _run(self.officer_char, f"promote Member in {self.org.name}")
-        cmd.caller.search = MagicMock(return_value=self.member_char)
+        cmd.caller.search = MagicMock(return_value=[self.member_char])
         cmd.func()
 
         self.member_membership.refresh_from_db()
@@ -195,7 +195,7 @@ class OrganizationLifecycleE2EJourneyTest(TestCase):
         promote_member(self.member_membership, self.officer_membership)
 
         cmd = _run(self.officer_char, f"demote Member in {self.org.name}")
-        cmd.caller.search = MagicMock(return_value=self.member_char)
+        cmd.caller.search = MagicMock(return_value=[self.member_char])
         cmd.func()
 
         self.member_membership.refresh_from_db()
@@ -214,7 +214,7 @@ class OrganizationLifecycleE2EJourneyTest(TestCase):
     def test_expel_deactivates_membership_with_exile(self) -> None:
         """org expel <person> in <org> → membership left_at + exiled_at set."""
         cmd = _run(self.officer_char, f"expel Member in {self.org.name}")
-        cmd.caller.search = MagicMock(return_value=self.member_char)
+        cmd.caller.search = MagicMock(return_value=[self.member_char])
         cmd.func()
 
         self.member_membership.refresh_from_db()
