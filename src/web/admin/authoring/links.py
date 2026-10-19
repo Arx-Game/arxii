@@ -116,7 +116,7 @@ def admin_change_url(model_label: str, pk: object) -> str | None:
     reach everything else on the row (sort orders, flags, foreign keys).
 
     Not every credited model has a registered ``ModelAdmin`` (inline-only
-    payload rows such as ``ConsequenceEffect`` never get one) - so checking
+    payload rows such as ``magic.TechniqueDamageProfile`` never get one) - so checking
     ``admin.site._registry`` first keeps
     an unregistered model from ever reaching ``reverse()``. The
     ``NoReverseMatch`` catch is defense in depth for any other reason

@@ -358,11 +358,60 @@ Every change to an organization's reputation of a persona is recorded. `bump_org
 | `CHARACTER_CREATION` | nothing | character creation's questionnaire and enemy seeds |
 | `GANG_TURF` | nothing | `gang_turf.complete_gang_turf` |
 | `STAFF_ADJUSTMENT` | nothing | `OrganizationReputationAdmin.save_model` and the staff estate editor |
-| `DEED_NAMED` / `RELATED_ORGANIZATION` | `legend_entry` or `mission_deed` / `source_event` | slice 2 of #4339 (columns exist, no writer yet) |
+| `DEED_NAMED` | `legend_entry` (story/scene deed) or `mission_deed` (mission award) | `named_organizations.react_to_named_organizations` (#4473, below) |
+| `RELATED_ORGANIZATION` | `source_event` | `renown._ripple_to_related_organizations` (#4473, below) |
 
 `OrganizationReputationAdmin.save_model` routes an edited `value` through the writer as `STAFF_ADJUSTMENT` (no admin edit skips the record); the change history is a read-only inline.
 
-**Reason lines.** `societies/reputation_reasons.py` builds what a player reads: the tier after the change plus staff-authored copy per cause (`OrganizationReputationReasonLine`, one row per cause, tokens `{tier}` `{title}` `{organization}`; a bracketed placeholder until authored; the Required-content panel lists the live causes still unauthored). A leader declaration shows the leader's own public citation. A secret's reason never names the secret or who spread it. The sheet payload carries up to three lines per organization (`standing.reputations[].reasons`) for the owner and staff only; a friend allowed to see the tier gets none. A tier change on a player-run persona sends a RENOWN narrative message (`notifications.notify_reputation_tier_change`), except for a character-creation seed. `explain_leaf_for_staff` adds up to three recent causes to a reputation leaf's staff reason, one per line: the tier line, then "Moved by: ...", then "Earlier: ...". It is read by the Faction Rules page's "Test a character" rail and, since #4448, by the standoff GM panel's "Why" column (`GMFactionRuleView.why`, built in `standoffs/services/gm_view.py`; the panel showed no Why column before).
+**Reason lines.** `societies/reputation_reasons.py` builds what a player reads: the tier after the change plus staff-authored copy per cause (`OrganizationReputationReasonLine`, one row per cause, tokens `{tier}` `{title}` `{organization}` `{other_tier}` (the other organization's tier after its own change, for a related-organization change); a bracketed placeholder until authored; the Required-content panel lists the live causes still unauthored). A leader declaration shows the leader's own public citation. A secret's reason never names the secret or who spread it. The sheet payload carries up to three lines per organization (`standing.reputations[].reasons`) for the owner and staff only; a friend allowed to see the tier gets none. A tier change on a player-run persona sends a RENOWN narrative message (`notifications.notify_reputation_tier_change`), except for a character-creation seed. `explain_leaf_for_staff` adds up to three recent causes to a reputation leaf's staff reason, one per line: the tier line, then "Moved by: ...", then "Earlier: ...". It is read by the Faction Rules page's "Test a character" rail and, since #4448, by the standoff GM panel's "Why" column (`GMFactionRuleView.why`, built in `standoffs/services/gm_view.py`; the panel showed no Why column before).
+
+### Deeds name organizations; rivals and allies react (#4473, slice 2 of #4339)
+
+**Naming.** Authors name the organizations an act harmed or helped where the act is defined:
+`NamedOrganization` rows (one table, exactly one owner, as `FactionRule`) on a
+`MissionRenownAward` (inline on its admin page) or on a `LEGEND_AWARD` `ConsequenceEffect` (inline
+on the new `ConsequenceEffectAdmin` page, linked from the Consequence's effect rows). A row has
+`organization`, `role` (`NamedOrganizationRole` HARMED/HELPED), `only_if_exposed` (harmed rows only;
+a CHECK and `clean()` refuse it on a helped row) and, on consequence rows only, `base_amount`. The
+inline shows each organization's effective principles and an estimate (staff only).
+
+**Size.** `named_organizations.reaction_total`: `sign * base + adjustment`, never across zero.
+`base` is `RenownMagnitudeAward.named_organization_award` for the award's magnitude (blank = the
+`MAGNITUDE_NAMED_ORGANIZATION_AWARDS` default) on a mission, or the row's `base_amount` times
+`_tier_multiplier(outcome success level)` on a consequence. The adjustment is the deed's archetype
+vectors against the organization's *effective* principles (`Organization.get_effective_principle`:
+override, else society, else 0 for a standalone organization; `_archetype_dot_product` reused
+through an adapter), times `NAMED_ORG_PRINCIPLE_SCALE`, signed toward approval and capped at half
+the base. The organization's current opinion of the character never changes the size, and a
+reputation change never makes the character associated with the organization.
+
+**When it reacts.** One phase, `renown._apply_named_organization_reputation`, runs in
+`_apply_renown_award` beside the archetype phase (a mission award never goes through the scene's
+reach check, so it reacts at once). `create_legend_event(named_reactions=...)` runs the same
+`react_to_named_organizations` per entry once `route_deed_reach` has decided the act
+(`DeedReachResult.contained` / `.kept_private`, mapped to `NamedActReach`):
+
+| Act | Harmed organization | Helped organization |
+|---|---|---|
+| Open (news, a leaked scandal, or any mission award, or no scene) | reacts at once, citing the deed (`DEED_NAMED`) | reacts at once |
+| Harmed row with `only_if_exposed` | a victim on a new secret about the actor, severity = the size the act carried, level the largest default that fits | n/a |
+| Contained (the reach check minted a secret) | a victim on that secret, level default (`copy_harmed_organizations_to_secret`, called by `_mint_contained_secret`) | does not react |
+| Kept private (private, unremarkable, no secret) | a victim on a new secret about the actor | does not react |
+
+`DeedOrganization` stores which organizations a deed named (a `LegendEntry` for a scene or story
+deed, a `MissionDeedRecord` for a mission award, since an award with no risk mints no legend
+entry); the contained-secret copy reads it.
+
+**Rivals and allies.** `OrganizationRelation` (`organization` reacts to `toward`; `kind`
+RIVAL/ALLY; `share_percent` 1 to 50, default 25; one-directional, unique per pair) is authored on
+the Organization admin page ("Reacts to changes with", plus a read-only list of the organizations
+that react to this one). After `bump_organization_reputation` records a change from play it
+applies each follower's share of the amount actually applied (same way for an ally, opposite for a
+rival, rounded) through the same writer as `RELATED_ORGANIZATION` citing the source event, not
+scaled again by the gain lever. One step only: `NON_RIPPLING_CAUSES` (a ripple, a character-creation
+seed, a staff adjustment) never ripple. `OrgPact` is not read (player diplomacy, made and broken in
+play). The reason line reads "because {organization} ..." from the source event, and the GM "Why"
+shows the source change, its tier move and the relation's share.
 
 ### LegendEntry
 

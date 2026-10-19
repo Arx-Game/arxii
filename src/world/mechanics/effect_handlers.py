@@ -688,6 +688,15 @@ def _legend_award(
         else "Legendary deed"
     )
     description = effect.legend_description_template or fallback_text
+    # #4473: the organizations the authored effect names, each sized by the outcome tier.
+    from world.societies.named_organizations import consequence_reactions  # noqa: PLC0415
+
+    tier_multiplier = (
+        _tier_multiplier(context.outcome_tier.success_level)
+        if context.outcome_tier is not None
+        else 1.0
+    )
+    named_reactions = consequence_reactions(effect, tier_multiplier)
     # LegendEvent.title has max_length=200 (AbstractLegendRecord).
     title = description[:200]
 
@@ -711,6 +720,7 @@ def _legend_award(
         # mints a crime-tagged deed (heat as word spreads, WITNESS window when
         # public and interaction-anchored).
         crime_kinds=list(effect.crime_kinds.all()) or None,
+        named_reactions=named_reactions,
     )
     return AppliedEffect(
         effect_type=EffectType.LEGEND_AWARD,
