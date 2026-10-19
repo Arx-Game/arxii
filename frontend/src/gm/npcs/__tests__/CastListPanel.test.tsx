@@ -121,6 +121,17 @@ describe('CastListPanel', () => {
     );
   });
 
+  it('renders the full name on its own line with the controls stacked under it', async () => {
+    renderPanel();
+    const name = await screen.findByText('Captain Vael \u00b7 Ilsa (Guide)');
+    expect(name).not.toHaveClass('truncate');
+    expect(name).toHaveClass('break-words');
+    const select = screen.getByLabelText('Play Captain Vael');
+    // The select is not in the name's row, so it cannot squeeze the name in a narrow column.
+    expect(name.parentElement).not.toContainElement(select);
+    expect(name.parentElement?.parentElement).toContainElement(select);
+  });
+
   it('takes back a lent NPC by loan id', async () => {
     renderPanel();
     const [first] = await screen.findAllByRole('button', { name: 'Take back' });

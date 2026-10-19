@@ -108,10 +108,10 @@ function PlayedBy({ entry, guides, busy, onRun }: RunProps & { entry: CastEntry 
   const lent = hasLoan && entry.loan_status !== 'offered';
   const value = hasLoan ? 'current' : 'me';
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <select
         aria-label={`Play ${entry.name}`}
-        className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+        className="h-8 max-w-full rounded-md border border-input bg-transparent px-2 text-sm"
         value={value}
         disabled={busy}
         onChange={(e) => {
@@ -163,8 +163,8 @@ function NpcRow({ entry, ...run }: RunProps & { entry: CastEntry }) {
     <li className="flex items-start gap-3 py-2" data-testid="cast-row-npc">
       <Portrait entry={entry} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 font-medium">
-          <span className="truncate">
+        <div className="flex flex-wrap items-center gap-x-2 font-medium">
+          <span className="break-words">
             {entry.name}
             {entry.played_by && ` \u00b7 ${playedByText(entry)}`}
           </span>
@@ -172,9 +172,11 @@ function NpcRow({ entry, ...run }: RunProps & { entry: CastEntry }) {
             NPC
           </span>
         </div>
+        <div className="mt-1">
+          <PlayedBy entry={entry} {...run} />
+        </div>
         <Description text={entry.description} />
       </div>
-      <PlayedBy entry={entry} {...run} />
     </li>
   );
 }
@@ -200,14 +202,16 @@ function CrowdRow({ entry, ...run }: RunProps & { entry: CastEntry }) {
         <CrowdStack entry={entry} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 font-medium">
-            <span>{entry.name}</span>
+            <span className="break-words">{entry.name}</span>
             <span className="rounded-full border px-2 text-xs text-muted-foreground">
               {crowdChip(entry)}
             </span>
           </div>
+          <div className="mt-1">
+            <PlayedBy entry={entry} {...run} />
+          </div>
           <Description text={entry.description} />
         </div>
-        <PlayedBy entry={entry} {...run} />
       </div>
       <div className="mt-2 flex gap-2">
         {unvoiced && mode !== 'voice' && (
