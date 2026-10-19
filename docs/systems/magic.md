@@ -3364,7 +3364,8 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
   `_maybe_grant_project_contribution_resonance` (`world/projects/services.py`), runs
   at the end of every `add_contribution` call regardless of `ContributionKind`;
   it reads resonance off `Project.resonance` (the typed source FK is
-  `ResonanceGrant.source_project`) and is exception-guarded so a payout failure
+  `ResonanceGrant.source_project`, `PROTECT` since #4464: the shape constraint requires it,
+  and a project is retired by `status`, never deleted) and is exception-guarded so a payout failure
   never rolls back the contribution itself. Uncapped by design — every
   contribution to an opted-in project's kind pays out again.
 - `ENTRY_FLOURISH` — see "Entry-Flourish Declaration" above.

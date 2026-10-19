@@ -353,6 +353,15 @@ earlier equal-slice prism wheel; slice angles are proportional to each face's `w
 existing API exposes the action source id and includes it in scene-scoped visibility. A tier
 with one effective consequence is applied directly without a second wheel.
 
+**A deleted pose keeps its outcome (#4464):** a writer may delete their own pose within
+`DELETION_WINDOW_DAYS` (`scenes.interaction_services.delete_interaction`). Both Interaction
+FKs are `SET_NULL`, so the outcome survives with a null link, and
+`consequence_outcome_exactly_one_source` keys the source kind on the
+`combat_interaction_timestamp` / `action_interaction_timestamp` companions, which stay. A
+second check, `consequence_outcome_interaction_has_timestamp`, requires a timestamp
+whenever an Interaction FK is set. Readers that need the source kind read the timestamp, not
+the FK.
+
 ## Internal Service Functions
 
 ```python
