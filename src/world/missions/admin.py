@@ -146,6 +146,35 @@ class MissionRenownAwardAdmin(admin.ModelAdmin):
     filter_horizontal = ["archetypes"]
     inlines = [MissionAwardNamedOrganizationInline]
 
+    def get_form(self, request, obj=None, **kwargs):
+        """The approved page's help lines, and what the magnitude currently pays."""
+        from world.societies.constants import RenownMagnitude  # noqa: PLC0415
+        from world.societies.named_organizations import named_organization_base  # noqa: PLC0415
+        from world.societies.renown import _magnitude_awards  # noqa: PLC0415
+
+        form = super().get_form(request, obj, **kwargs)
+        fields = form.base_fields
+        fields["route"].help_text = (
+            "One route per outcome tier. Author a smaller reaction on the partial-success "
+            "route, or none."
+        )
+        fields[
+            "magnitude"
+        ].help_text = "Drives fame, prestige and the base of each named organization's reaction."
+        fields["archetypes"].help_text = (
+            "Read through each society's principles (as today) and through each named "
+            "organization's own principles."
+        )
+        if obj is not None and obj.magnitude:
+            fame, prestige = _magnitude_awards(obj.magnitude)
+            label = RenownMagnitude(obj.magnitude).label
+            fields["magnitude"].help_text += (
+                f" {label} currently pays: fame {fame}, prestige {prestige}, named "
+                f"organization {named_organization_base(obj.magnitude)} "
+                "(from Renown magnitude awards)."
+            )
+        return form
+
 
 @admin.register(MissionAssistPattern)
 class MissionAssistPatternAdmin(admin.ModelAdmin):

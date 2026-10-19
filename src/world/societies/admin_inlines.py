@@ -35,6 +35,7 @@ class MissionAwardNamedOrganizationInline(NamedOrganizationInline):
     """On a mission renown award the base comes from the award's magnitude."""
 
     fk_name = "mission_award"
+    template = "admin/societies/named_org_mission_inline.html"
     fields = ["organization", "role", "only_if_exposed", "estimate"]
 
 
@@ -42,4 +43,5 @@ class ConsequenceNamedOrganizationInline(NamedOrganizationInline):
     """On a LEGEND_AWARD consequence effect each row carries its own base amount."""
 
     fk_name = "consequence_effect"
+    template = "admin/societies/named_org_consequence_inline.html"
     fields = ["organization", "role", "base_amount", "only_if_exposed", "estimate"]

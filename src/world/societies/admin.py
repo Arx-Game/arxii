@@ -334,8 +334,14 @@ class OrganizationRelationInline(admin.TabularInline):
     formset = OneRowPerFormSet
     extra = 0
     verbose_name_plural = "Reacts to changes with"
+    template = "admin/societies/organization_relation_inline.html"
     fields = ("toward", "kind", "share_percent")
     autocomplete_fields = ("toward",)
+
+    def get_formset(self, request: HttpRequest, obj: object = None, **kwargs):
+        """The demo's column names: the other organization, and the share in percent."""
+        kwargs["labels"] = {"toward": "Other organization", "share_percent": "Share (%)"}
+        return super().get_formset(request, obj, **kwargs)
 
 
 class ReactingOrganizationInline(admin.TabularInline):
@@ -345,9 +351,19 @@ class ReactingOrganizationInline(admin.TabularInline):
     fk_name = "toward"
     extra = 0
     can_delete = False
-    verbose_name_plural = "Organizations that react to this one (read only)"
-    fields = ("organization", "kind", "share_percent")
+    template = "admin/societies/reacting_organization_inline.html"
+    fields = ("organization", "kind", "share")
     readonly_fields = fields
+
+    @admin.display(description="Share (%)")
+    def share(self, obj: OrganizationRelation) -> int:
+        return obj.share_percent
+
+    def get_formset(self, request: HttpRequest, obj: object = None, **kwargs):
+        """The heading names the organization, as the demo's does."""
+        name = obj.name if obj is not None else "this organization"
+        self.verbose_name_plural = f"Organizations that react to {name} (read only)"
+        return super().get_formset(request, obj, **kwargs)
 
     def has_add_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
         return False
@@ -414,7 +430,6 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
         OrganizationRelationInline,
         ReactingOrganizationInline,
     ]
-    readonly_fields = ["effective_principles"]
 
     fieldsets = (
         (None, {"fields": ("name", "society", "org_type", "tradition", "description")}),
@@ -425,7 +440,6 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
                     ("mercy_override", "method_override"),
                     ("status_override", "change_override"),
                     ("allegiance_override", "power_override"),
-                    "effective_principles",
                 ),
                 "description": (
                     "Leave blank to inherit from the society. Values range from -5 to +5. "
@@ -450,20 +464,21 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
         ),
     )
 
-    @admin.display(description="Effective principles")
-    def effective_principles(self, obj) -> str:
-        """Each principle's value as a deed that names this organization reads it."""
-        if obj.pk is None:
-            return "Save to see the effective principles."
-        parts = []
-        for name in PRINCIPLE_FIELD_NAMES:
-            source = (
-                "override"
-                if getattr(obj, f"{name}_override") is not None
-                else ("society" if obj.society_id else "default")
-            )
-            parts.append(f"{name} {obj.get_effective_principle(name)} ({source})")
-        return ", ".join(parts)
+    def get_form(self, request: HttpRequest, obj=None, **kwargs):
+        """Under each override: the society's value and the effective one a deed reads."""
+        form = super().get_form(request, obj, **kwargs)
+        if obj is not None:
+            for name in PRINCIPLE_FIELD_NAMES:
+                society = (
+                    f"{obj.society.name} value: {getattr(obj.society, name)}. "
+                    if obj.society_id
+                    else "No society. "
+                )
+                form.base_fields[f"{name}_override"].help_text = (
+                    f"Blank = use the society's value. {society}"
+                    f"Effective: {obj.get_effective_principle(name)}."
+                )
+        return form
 
     def member_count(self, obj):
         """Return the number of members in this organization."""
