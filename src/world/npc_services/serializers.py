@@ -1,5 +1,7 @@
 """DRF serializers for the unified NPC service framework."""
 
+from typing import ClassVar
+
 from rest_framework import serializers
 
 from world.clues.models import Clue
@@ -14,6 +16,7 @@ from world.npc_services.models import (
     OfferCooldown,
     OfferSummons,
     PermitOfferDetails,
+    PersonalityTrait,
     RecordedProfile,
     StaffingProfile,
     StaffingProfileLine,
@@ -368,3 +371,14 @@ class StaffingProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = StaffingProfile
         fields = ["id", "building_kind", "building_kind_name", "lines"]
+
+
+class PersonalityTraitSerializer(serializers.ModelSerializer):
+    """An active personality trait for the GM's "what works on them" picker (#4418)."""
+
+    eased_check = serializers.CharField(source="eased_check.name", read_only=True, allow_null=True)
+
+    class Meta:
+        model = PersonalityTrait
+        fields: ClassVar[tuple[str, ...]] = ("id", "name", "description", "eased_check")
+        read_only_fields: ClassVar[tuple[str, ...]] = fields

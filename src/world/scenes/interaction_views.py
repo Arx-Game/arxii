@@ -252,7 +252,10 @@ def _record_submitted_pose(  # noqa: PLR0913
         )
     if not result.replayed:
         caller_state = SceneDataManager().initialize_state_for_object(character)
-        message_location(caller_state, content)
+        # Tagged as the pose's echo (#4418 bug E): telnet prints it, and the web
+        # client drops it because the Interaction pushed above is the render.
+        # Untagged, every web viewer in the room got the pose twice.
+        message_location(caller_state, content, echo_of=InteractionMode.POSE)
 
     response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
     interaction = result.interaction

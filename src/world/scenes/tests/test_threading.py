@@ -341,7 +341,7 @@ class TestInvolvementMarkTelnetParity(TestCase):
         telnet_session = MagicMock()
         telnet_session.protocol_key = "telnet"
         web_session = MagicMock()
-        web_session.protocol_key = "webclient/websocket"
+        web_session.protocol_key = "websocket"
         sessions_by_pk = {bob.pk: [telnet_session], dave.pk: [web_session]}
 
         def _fake_all(handler: ObjectSessionHandler) -> list[object]:
@@ -406,7 +406,7 @@ class TestInvolvementMarkTelnetParity(TestCase):
         telnet_session = MagicMock()
         telnet_session.protocol_key = "telnet"
         web_session = MagicMock()
-        web_session.protocol_key = "webclient/websocket"
+        web_session.protocol_key = "websocket"
         sessions_by_pk = {eve.pk: [telnet_session, web_session]}
 
         def _fake_all(handler: ObjectSessionHandler) -> list[object]:

@@ -12,4 +12,9 @@ is exempt from the hold/abandonment logic — a fall is environmental and self-c
 descent always advances; we rejected pulling it into the same involved-party-hold model as Bleeding Out
 because no "hostile party" or "rescuer" concept applies to gravity.
 
+**Amended (2026-10-18, ADR-4418):** the death gate is no longer "any PC source refuses death".
+`death_is_permitted` refuses a PC source only against a PvP-protected victim (a player
+character, or any non-story-NPC character with a roster entry); a PC can kill a story NPC,
+whoever plays it, and `select_abandonment_pool` uses the enemy pool for that victim.
+
 > Status: accepted · Source: #1479 · Extends: ADR-0023, ADR-0004

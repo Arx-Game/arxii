@@ -31,7 +31,11 @@ from commands.pull_parsing import PullParsingMixin
 from commands.utils.invocation import invocation_choice_for, split_invocation
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
-from world.scenes.action_services import create_action_request, respond_to_action_request
+from world.scenes.action_services import (
+    ResistOnlyError,
+    create_action_request,
+    respond_to_action_request,
+)
 from world.scenes.interaction_services import get_active_scene
 from world.scenes.services import active_persona_for_sheet
 
@@ -276,12 +280,15 @@ class _RespondCommand(ArxCommand):
         blacklist_actor = self.decision == ConsentDecision.DENY and bool(
             _BLACKLIST_SWITCHES & set(switches)
         )
-        respond_to_action_request(
-            action_request=request,
-            decision=self.decision,
-            difficulty=difficulty,
-            blacklist_actor=blacklist_actor,
-        )
+        try:
+            respond_to_action_request(
+                action_request=request,
+                decision=self.decision,
+                difficulty=difficulty,
+                blacklist_actor=blacklist_actor,
+            )
+        except ResistOnlyError as err:
+            raise CommandError(err.user_message) from err
         verb = "accept" if self.decision == ConsentDecision.ACCEPT else "deny"
         message = f"You {verb} the action against you."
         if blacklist_actor:

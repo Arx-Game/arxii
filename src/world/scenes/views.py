@@ -9,7 +9,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from evennia.accounts.models import AccountDB
 from rest_framework import mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import BasePermission, IsAuthenticatedOrReadOnly
 from rest_framework.request import Request
@@ -46,6 +46,7 @@ from world.scenes.scenario_services import build_scene_scenario_payload
 from world.scenes.scene_admin_services import finish_scene_full
 from world.scenes.serializers import (
     ActivePersonaResultSerializer,
+    CastListEntrySerializer,
     CreateEstablishedPersonaRequestSerializer,
     CreateMaskRequestSerializer,
     HighlightReelSerializer,
@@ -130,6 +131,9 @@ class SceneViewSet(viewsets.ModelViewSet):
         # entry.character_sheet.character.db_key — the second character_sheet
         # hop hits the SharedMemoryModel identity map for free, so we only
         # need to chain as far as roster_entry plus the character ObjectDB.
+        if self.action == "cast_list":
+            # The cast list reads no interactions or drama tags (#4418).
+            return super().get_queryset()
         queryset = (
             super()
             .get_queryset()
@@ -246,6 +250,10 @@ class SceneViewSet(viewsets.ModelViewSet):
             # filters interactions through Interaction.visible_to, so individual poses
             # are gated even where scene-level access is granted.
             permission_classes = [IsAuthenticatedOrReadOnly, ReadOnlyOrSceneParticipant]
+        elif self.action == "cast_list":
+            # #4418: the scene's GM, co-owner or staff; the action itself answers
+            # everyone else 404, so the cast list's existence is never confirmed.
+            permission_classes = [permissions.IsAuthenticated]
         elif self.action in ["scenario", "gm_rail", "stakes_summary"]:
             # #3565 fix round 1 (CRITICAL): these composed reads previously fell
             # through to the `else` branch's bare IsAuthenticatedOrReadOnly, which has
@@ -460,6 +468,25 @@ class SceneViewSet(viewsets.ModelViewSet):
         # is documentation-only (see its module docstring); re-running the payload
         # through it here would double-serialize those already-flat dicts.
         return Response(payload)
+
+    @extend_schema(responses=CastListEntrySerializer(many=True), tags=["scenes"])
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="cast-list", pagination_class=None)
+    def cast_list(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/scenes/{id}/cast-list/ (#4418) - the scene's named story NPCs and
+        crowds, and who plays each.
+
+        Derived read (``world.scenes.cast_list_services.scene_cast_list``). Gated by
+        ``can_create_encounter_for_scene`` (staff, the scene's GM or co-owner), the
+        same accounts the web "Start encounter" button shows to; anyone else gets 404.
+        """
+        from world.combat.permissions import can_create_encounter_for_scene  # noqa: PLC0415
+        from world.scenes.cast_list_services import scene_cast_list  # noqa: PLC0415
+
+        scene = self.get_object()
+        if not can_create_encounter_for_scene(request.user, scene):
+            raise NotFound
+        entries = scene_cast_list(scene)
+        return Response(CastListEntrySerializer(entries, many=True).data)
 
     @extend_schema(responses=SceneScenarioSerializer, tags=["scenes"])
     @action(detail=True, methods=[HTTPMethod.GET], url_path="scenario")

@@ -20,6 +20,7 @@ from world.roster.views import (
     RosterViewSet,
 )
 from world.roster.views.gallery_views import GalleryPictureViewSet
+from world.roster.views.npc_views import StoryNPCViewSet
 from world.roster.views.settings_views import VisibilitySettingsView
 
 app_name = "roster"
@@ -34,6 +35,7 @@ router.register("media", MediaViewSet, basename="media")
 router.register("tenure-media", GalleryPictureViewSet, basename="tenure-media")
 router.register("mail", PlayerMailViewSet, basename="mail")
 router.register("tenures", RosterTenureViewSet, basename="tenures")
+router.register("npcs", StoryNPCViewSet, basename="npcs")
 router.register("npc-presets", NPCStatlinePresetViewSet, basename="npc-presets")
 
 urlpatterns = [

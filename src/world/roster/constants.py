@@ -118,3 +118,40 @@ class MaritalStatus(models.TextChoices):
     MARRIED = "married", "Married"
     WIDOWED = "widowed", "Widowed"
     DIVORCED = "divorced", "Divorced"
+
+
+class NPCLendPolicy(models.TextChoices):
+    """Whether the player holding a major NPC lends it out (#4418)."""
+
+    NOT_LENT = "not_lent", "Not lent"
+    ON_REQUEST = "on_request", "On request"
+    WITHOUT_ASKING = "without_asking", "Without asking"
+
+
+class NPCBorrowAudience(models.TextChoices):
+    """Who may borrow a lent major NPC (#4418)."""
+
+    GMS = "gms", "GMs"
+    GMS_AND_GUIDES = "gms_and_guides", "GMs and Guides"
+
+
+class NPCLoanStatus(models.TextChoices):
+    """Where a loan of a major NPC stands (#4418)."""
+
+    OFFERED = "offered", "Offered"
+    REQUESTED = "requested", "Requested"
+    ACTIVE = "active", "Active"
+    DECLINED = "declined", "Declined"
+    ENDED = "ended", "Ended"
+
+
+class NPCSection(models.TextChoices):
+    """A part of a major NPC's sheet a holder can show or hide (#4418)."""
+
+    IDENTITY = "identity", "Identity"
+    DESCRIPTION = "description", "Description"
+    BACKGROUND = "background", "Background"
+    POWERS = "powers", "Powers"
+    REGARD = "regard", "Regard"
+    PREFERENCES = "preferences", "Preferences"
+    ALL = "all", "All"

@@ -626,7 +626,8 @@ def _victory_outcome_clauses(
         ]
         clauses.append(f"{join_labels(parts)}.")
     if active_labels:
-        clauses.append(f"{join_labels(active_labels)} stand victorious.")
+        verb = "stands" if len(active_labels) == 1 else "stand"
+        clauses.append(f"{join_labels(active_labels)} {verb} victorious.")
     return clauses
 
 

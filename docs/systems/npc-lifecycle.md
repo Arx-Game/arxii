@@ -218,6 +218,31 @@ condition that made it friendly is lifted. An ephemeral nameless NPC (never on t
 since it carries no `CharacterSheet`) is deleted instead, through the same identity-map-safe guard
 the lapse sweep uses.
 
+## Playing major NPCs (#4418, ADR-4418)
+
+The mint above now makes an NPC a GM *owns* and can lend, not just one the GM holds:
+
+- `mint_story_npc` stamps `CreationProvenance.GM_TABLE` and `created_by_account`, creates a
+  `StoryNPCSettings` row, and gives the character a `can_play()` puppet lock
+  (`ensure_playable_lock`). `as_template=True` mints it with no tenure and no cap count
+  (a copy source, never lent); the `mint_story_npc` action takes `as_template`.
+- NPC-ness follows the character: `is_story_npc` (NPC shelf, minus GM and Staff OOC
+  typeclasses). A held or lent NPC gets no consent prompts and no PvP protection, and a PC
+  can kill it (`is_pvp_protected_victim`, `death_is_permitted`; see `vitals/CLAUDE.md`).
+- A GM or Guide plays it as a tab; a Guide borrows it by loan (`NPCLoan`), and
+  `Character.active_account` is the borrower during a loan. Lending, the NPC roster and the
+  cast list are in `docs/systems/roster.md` and `docs/systems/scenes.md`.
+- The owner authors what the NPC feels and what works on it through `PUT
+  /api/roster/npcs/{id}/regard/` and `/preferences/`:
+  `world.npc_services.regard.author_npc_regard` sets the persona, organization or society
+  regard (clamped to `REGARD_MIN`/`REGARD_MAX`); a persona target is a direct write plus one
+  `GM_MANUAL_ADJUSTMENT` event and never moves the PC's relationship gauges (the PC
+  experienced nothing). `personality.set_npc_preferences` replaces the persona's
+  `NpcPreference` rows. `GET /api/npc-services/personality-traits/` lists active
+  `PersonalityTrait`s for the picker (GM, Guide or staff).
+- `copy_npc_section` copies sheet identity, prose, powers (traits, skills, path, gifts and
+  techniques), regard and preferences between NPCs.
+
 ## Deliberately not here
 
 Tier-0 *consumers* (mob formation, stealth publicness, venue economics) are

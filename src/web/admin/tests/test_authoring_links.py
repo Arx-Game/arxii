@@ -13,15 +13,13 @@ def unregistered_for_the_test(test: TestCase, model: type) -> None:
 
     No credited model is reliably admin-less any more (``ConsequenceEffect`` gained a page
     of its own for the organizations a legend award names, #4473), so the "no ModelAdmin"
-    behavior is exercised by removing one.
+    behavior is exercised by removing one. The cleanup restores the registered instance
+    itself: a fresh ``register`` would build a new one without the ``save_as`` that
+    ``web.admin.apps`` set at ready(), failing the Save-as-new test that runs after it.
     """
-    # Put the registered INSTANCE back, not a fresh one of its class: the registry-wide
-    # extras ready() set on the instance (save_as, the credit column) are what the
-    # save-as-new guard reads, and a re-registered class would arrive without them and
-    # fail it for whichever test runs after this one (#3657 tranche 13).
-    instance = admin.site._registry[model]
+    model_admin = admin.site._registry[model]
     admin.site.unregister(model)
-    test.addCleanup(admin.site._registry.__setitem__, model, instance)
+    test.addCleanup(admin.site._registry.__setitem__, model, model_admin)
 
 
 class WorkbenchEditorUrlTests(TestCase):

@@ -680,6 +680,47 @@ Delivered:
 narration needs a new `GMPromptKind` + `GMPromptGroup` mapping + event-source call site;
 the queue, filter, and composer surfaces are already generic over `kind`.
 
+### Phase 11: Playing the Cast, Guides and the NPC Roster ✅ (#4418, ADR-4418)
+
+**What was built.** A GM plays a scene's major NPCs the way a player plays a PC, and can lend
+them to a Guide.
+
+- **Guide role.** `GuideProfile` (staff-granted in admin, `display_name` as the public handle,
+  `is_active`); `GET /api/gm/guides/` for a GM choosing who to lend to; `is_guide` on the
+  account payload. A Guide gets no GM panel and no GM powers.
+- **Ownership and lending.** `mint_story_npc` stamps `GM_TABLE` plus `created_by_account` and creates
+  `StoryNPCSettings`; `NPCLoan` (offer, request, answer, take back; scene-scoped loans end with the
+  scene). While a loan is ACTIVE the borrower plays the NPC and `Character.active_account` is the
+  borrower. Minted NPCs carry a `can_play()` puppet lock.
+- **NPC roster.** `/gm/npcs` and `/api/roster/npcs/`: browse listed NPCs, ask to borrow, owner approves,
+  copy as new or as a template, copy one section.
+- **GM NPC form** on the GM dashboard, Quick and Detailed: name, portrait, description, stats via
+  preset, powers, favors and opposes (`NpcRegard`), what works on them (`NpcPreference`), notes for
+  whoever plays them, lending and listing. The owner edits identity, prose, stats, skills, path and
+  magic through `can_edit_npc_sheet`.
+- **Cast panel** on the scene page: named NPCs and crowds, who plays each, offer, take back, give a
+  crowd a voice, rename and describe a crowd, place an NPC in the scene.
+- **Guide play UI**: NPC and crowd tabs beside their own characters, GM notes, a pending-offer card
+  (`GET /api/roster/npcs/offers/`), a response card when an action lands on the NPC.
+
+**Rules changed.** NPC-ness is the character's, not who plays it (`is_story_npc`): no consent prompts,
+no PvP protection either way. A PC can kill a Story NPC, and a Story NPC can kill a PC; PC against
+PC stays non-lethal (`is_pvp_protected_victim`, narrowed `death_is_permitted`). When an NPC acts on a
+PC with a contested social template the PC rolls the template's `resist_check_type` and cannot refuse
+unless the category is `refusable_from_npcs` (romantic only).
+
+**Staff content to author.** Set `resist_check_type` on every single-target social ActionTemplate and
+a `consent_category` on each (the `npc-resist-checks` Required content row lists the gaps). Until then
+an NPC cannot use that template on a PC; Seduce is untagged today, so NPCs cannot seduce until staff
+tag it romantic. Grant the Guide role and a `display_name` to each Guide. Regard strengths on the form
+(Mild 300, Strong 700) are example values to tune after play.
+
+**Not built (deliberate).** Languages on the NPC form (they come from species and are read-only); a
+free-text Title field (no title column is modelled; GMs write titles into name or description);
+"+ Add crowd" on the cast panel (opponents are added in the encounter controls); no GM panel or
+co-GM powers for Guides; no player-facing NPC browsing. Crowd voices do not count against the GM's
+Story NPC cap and are bounded only by the encounters the GM runs.
+
 ## Cross-System Dependencies
 
 - **Stories app** — needs GM role relations and permission checks added as it grows

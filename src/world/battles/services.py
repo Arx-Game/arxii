@@ -1036,6 +1036,12 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     scene.date_finished = timezone.now()
     scene.save(update_fields=["is_active", "date_finished"])
 
+    # An NPC lent for this scene goes back to its holder (#4418); the direct write above
+    # bypasses Scene.finish_scene, which does this for every other way a scene ends.
+    from world.roster.services.npc_lending import end_scene_loans  # noqa: PLC0415
+
+    end_scene_loans(scene)
+
     # scene.is_active=False above doesn't bust the room's in-memory
     # _active_scene_cache (mirrors finish_scene_full's identical step,
     # world/scenes/scene_admin_services.py) — without this, a stale cache

@@ -151,6 +151,94 @@ def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a di
     return event
 
 
+def author_npc_regard(
+    *,
+    holder_persona: Persona,
+    target: Persona | Organization | Society,
+    value: int,
+    reason: str = "",
+) -> NpcRegard:
+    """Set ``holder_persona``'s active regard toward ``target`` to ``value`` (#4418).
+
+    A GM or owner authoring an NPC's opinion, not play moving it. A persona target goes
+    writes the row directly with one GM_MANUAL_ADJUSTMENT event for the net change and never
+    moves the PC's relationship gauges; an organization or society target updates or creates
+    the active row. Values are clamped to REGARD_MIN/REGARD_MAX.
+    """
+    from world.npc_services.constants import (  # noqa: PLC0415
+        RegardTargetType,
+    )
+    from world.npc_services.models import REGARD_MAX, REGARD_MIN, NpcRegard  # noqa: PLC0415
+    from world.scenes.models import Persona as PersonaModel  # noqa: PLC0415
+    from world.societies.models import Organization as OrganizationModel  # noqa: PLC0415
+
+    value = max(REGARD_MIN, min(REGARD_MAX, value))
+    if isinstance(target, PersonaModel):
+        return _author_persona_regard(holder_persona, target, value, reason)
+
+    if isinstance(target, OrganizationModel):
+        target_type, column = RegardTargetType.ORGANIZATION, "target_organization"
+    else:
+        target_type, column = RegardTargetType.SOCIETY, "target_society"
+    regard, created = NpcRegard.objects.get_or_create(
+        holder_persona=holder_persona,
+        target_type=target_type,
+        ended_at__isnull=True,
+        **{column: target},
+        defaults={"value": value, "reason": reason},
+    )
+    if not created:
+        regard.value = value
+        update_fields = ["value"]
+        if reason:
+            regard.reason = reason
+            update_fields.append("reason")
+        regard.save(update_fields=update_fields)
+    return regard
+
+
+def _author_persona_regard(
+    holder_persona: Persona, target: Persona, value: int, reason: str
+) -> NpcRegard:
+    """Write a persona-target opinion directly, with one audit event for the net change.
+
+    Authoring is not something the PC lived through, so this skips the per-event cap, the
+    relationship-gauge mirror and the reactivity hook that ``record_npc_regard_event`` runs.
+    """
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.npc_services.constants import (  # noqa: PLC0415
+        NpcRegardEventReason,
+        RegardTargetType,
+    )
+    from world.npc_services.models import NpcRegard, NpcRegardEvent  # noqa: PLC0415
+
+    with transaction.atomic():
+        regard, _ = NpcRegard.objects.get_or_create(
+            holder_persona=holder_persona,
+            target_type=RegardTargetType.PERSONA,
+            target_persona=target,
+            ended_at__isnull=True,
+            defaults={"value": 0},
+        )
+        delta = value - regard.value
+        regard.value = value
+        update_fields = ["value"]
+        if reason:
+            regard.reason = reason
+            update_fields.append("reason")
+        regard.save(update_fields=update_fields)
+        if delta:
+            event = NpcRegardEvent(
+                regard=regard,
+                reason=NpcRegardEventReason.GM_MANUAL_ADJUSTMENT,
+                amount=delta,
+            )
+            event.full_clean()
+            event.save()
+    return regard
+
+
 def reconcile_distinction_regard_seeds(character_distinction: CharacterDistinction) -> None:
     """Materialize a CharacterDistinction's DistinctionRegardSeed rows into real state (#2039).
 

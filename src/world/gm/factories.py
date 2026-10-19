@@ -25,6 +25,7 @@ from world.gm.models import (
     GMRosterInvite,
     GMTable,
     GMTableMembership,
+    GuideProfile,
     SituationDifficultyGuide,
     SituationKind,
     StoryArea,
@@ -46,6 +47,16 @@ class GMProfileFactory(factory_django.DjangoModelFactory):
     level = GMLevel.STARTING
     approved_at = factory.LazyFunction(timezone.now)
     approved_by = factory.SubFactory(AccountFactory)
+
+
+class GuideProfileFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = GuideProfile
+
+    account = factory.SubFactory(AccountFactory)
+    granted_by = factory.SubFactory(AccountFactory)
+    granted_at = factory.LazyFunction(timezone.now)
+    display_name = factory.Sequence(lambda n: f"Guide {n}")
 
 
 class AreaBuildGrantFactory(factory_django.DjangoModelFactory):

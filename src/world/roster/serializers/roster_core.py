@@ -4,12 +4,15 @@ Roster and RosterEntry serializers for the roster system.
 
 from typing import ClassVar
 
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from web.api.character_type import derive_character_type
-from world.roster.models import Roster, RosterEntry
+from world.roster.models import NPCLoan, Roster, RosterEntry
+from world.roster.models.choices import RosterType
 from world.roster.serializers.characters import CharacterSerializer
 from world.roster.serializers.tenures import RosterTenureSerializer
+from world.roster.services.activity import entry_is_story_npc
 from world.roster.services.gallery import portrait_url
 from world.roster.services.presence import room_name, session_count
 
@@ -90,6 +93,14 @@ class RosterEntrySerializer(serializers.ModelSerializer):
             return ""
 
 
+class MyNPCLoanSerializer(serializers.Serializer):
+    """The loan an account plays a borrowed NPC under (#4418)."""
+
+    id = serializers.IntegerField(read_only=True)
+    scene_title = serializers.CharField(read_only=True, allow_null=True)
+    offered_by_name = serializers.CharField(read_only=True)
+
+
 class MyRosterEntrySerializer(serializers.ModelSerializer):
     """Serialize a summary of a roster entry for account menus."""
 
@@ -135,6 +146,10 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # mapping the account payload's AvailableCharacterSerializer uses. Lets the
     # GM-profile UI distinguish its own GM character from ordinary PCs.
     character_type = serializers.SerializerMethodField()
+    # #4418: a story NPC (``is_story_npc``), the test the frontend's NPC tag needs.
+    # The GM's own GM or Staff character is on the NPC shelf too, so ``roster_type``
+    # alone mislabels it. Read off the already-loaded roster and character.
+    is_story_npc = serializers.SerializerMethodField()
     # Character slots (#3996). The Hall decides a card's action from these:
     # PLAYER provenance freezes and thaws, anything else is given up; a frozen
     # character shows its thaw date and does not count against the slots.
@@ -153,6 +168,18 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # session puppets the character, whatever location Evennia left it in.
     session_count = serializers.SerializerMethodField()
     room_name = serializers.SerializerMethodField()
+    # #4418: a borrowed NPC. ``loan`` names the scene and who lent it (as
+    # ``player_names`` shows an account, never by account name); ``npc_notes`` is what
+    # the owner wrote for whoever plays it. Both null on every character the account
+    # holds itself. ``to_representation`` fills them from one loan lookup per row; they
+    # are declared here for the schema, and ``allow_null`` makes DRF read the missing
+    # entry attribute as None before that overwrite.
+    loan = MyNPCLoanSerializer(read_only=True, allow_null=True)
+    npc_notes = serializers.CharField(read_only=True, allow_null=True)
+    # #4418: this character voices a crowd in combat. A list view passes the ids it
+    # already knows in ``context["crowd_voice_entry_ids"]``; a single-entry path
+    # (selected entry, freeze, thaw) asks once for its one entry.
+    is_crowd_voice = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
@@ -170,17 +197,80 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "lifecycle_state",
             "roster_type",
             "character_type",
+            "is_story_npc",
             "activity_state",
             "activity_requirement",
             "creation_provenance",
             "thaw_available_at",
             "session_count",
             "room_name",
+            "loan",
+            "npc_notes",
+            "is_crowd_voice",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 
+    def _borrowed_loan(self, obj: RosterEntry) -> NPCLoan | None:
+        """The requester's ACTIVE loan of ``obj``, from their cached loans.
+
+        Only an NPC-shelf row can be borrowed, so nothing is read for any other row.
+        """
+        if obj.roster.roster_type != RosterType.NPC:
+            return None
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        if user is None or not user.is_authenticated:
+            return None
+        for loan in user.player_data.cached_npc_loans:
+            if loan.roster_entry_id == obj.pk and loan.borrower_id == user.pk:
+                return loan
+        return None
+
+    def to_representation(self, instance: RosterEntry) -> dict:
+        """The row, with ``loan`` and ``npc_notes`` from a single loan lookup.
+
+        ``context["loan_offered_names"]`` (``player_names`` of the requester's loans, read
+        once by the list) names who lent each NPC; a single row reads its one name.
+        """
+        from world.scenes.cast_list_services import player_names  # noqa: PLC0415
+
+        data = super().to_representation(instance)
+        loan = self._borrowed_loan(instance)
+        if loan is None:
+            data["loan"] = None
+            data["npc_notes"] = None
+            return data
+        data["loan"] = MyNPCLoanSerializer(
+            {
+                "id": loan.pk,
+                "scene_title": loan.scene.name if loan.scene is not None else None,
+                "offered_by_name": (
+                    self.context.get("loan_offered_names") or player_names([loan.offered_by_id])
+                )[loan.offered_by_id],
+            }
+        ).data
+        try:
+            notes = loan.roster_entry.story_npc_settings.notes_for_player
+        except ObjectDoesNotExist:
+            notes = ""
+        data["npc_notes"] = notes or None
+        return data
+
     def get_character_type(self, obj: RosterEntry) -> str:
         return derive_character_type(obj.character_sheet.character)
+
+    def get_is_story_npc(self, obj: RosterEntry) -> bool:
+        return entry_is_story_npc(obj)
+
+    def get_is_crowd_voice(self, obj: RosterEntry) -> bool:
+        known = self.context.get("crowd_voice_entry_ids")
+        if known is not None:
+            return obj.pk in known
+        from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+        return CombatOpponent.objects.filter(
+            voice_persona__character_sheet_id=obj.character_sheet_id
+        ).exists()
 
     def get_session_count(self, obj: RosterEntry) -> int:
         """Sessions puppeting the character right now (#4321); 0 means not in the world."""

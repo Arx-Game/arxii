@@ -47,6 +47,38 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: prefetch-to-attr-shadow
+        name: Block a Prefetch whose to_attr repeats its own relation
+        entry: uv run python tools/lint_prefetch_to_attr_shadow.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/
+        # #4418: `Prefetch("trait_lines", to_attr="trait_lines")` makes Django raise
+        # `to_attr=... conflicts with a field`, so the endpoint is a 500 no unit test
+        # sees. Only the repeats-its-own-relation shape is checked; a collision with
+        # another field needs the model (see identity-map-write-reviewer).
+      - id: webclient-protocol-key
+        name: Block the dead webclient/websocket protocol-key literals
+        entry: uv run python tools/lint_webclient_protocol_key.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/
+        # #4418: a live web session's protocol_key is "websocket" or "ajax/comet";
+        # "webclient/websocket" is overwritten at session creation. A classifier or a
+        # test fake using it passes against fakes and fails against every real browser.
+      - id: msg-beside-push
+        name: Block an untargeted .msg beside a structured interaction push
+        entry: uv run python tools/lint_msg_beside_push.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/
+        exclude: /tests/
+        # #4418 bug K: a bare `.msg(text)` reaches every session, so a function that
+        # pushes the row to the web and also calls it shows the line twice on /game.
+        # Use send_text_to_non_web (world.scenes.interaction_services).
       - id: cached-property-import
         name: Forbid functools.cached_property in src/
         entry: uv run python tools/lint_cached_property_import.py

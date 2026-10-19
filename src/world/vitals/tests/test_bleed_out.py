@@ -24,6 +24,7 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionInstance
 from world.mechanics.factories import DeathDeferredPropertyFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import CharacterLifeState
 from world.vitals.factories import CharacterVitalsFactory, create_bleed_out_terminal_pool
@@ -255,6 +256,7 @@ class AdvanceBleedOutTerminalPoolTests(TestCase):
     def test_pc_source_failed_terminal_survives(self) -> None:
         """PC source + Failure roll → die filtered; victim survives, Bleeding-Out cleared."""
         sheet = self._dying_victim(source_character=_make_pc_source())
+        RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=sheet), end_date=None)
 
         with force_check_outcome(self.failure_outcome):
             died = advance_bleed_out(sheet)

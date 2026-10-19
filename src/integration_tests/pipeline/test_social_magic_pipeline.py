@@ -14,6 +14,7 @@ from evennia_extensions.factories import AccountFactory
 from integration_tests.game_content.characters import CharacterContent
 from integration_tests.game_content.social import SocialContent
 from world.conditions.services import has_condition
+from world.progression.seeds import seed_social_engagement_kudos_category
 from world.scenes.action_constants import ConsentDecision
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import SceneFactory
@@ -25,6 +26,8 @@ class SocialMagicConsequenceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        # A PC-on-PC accept accrues good-sport credit, which reads this row (#4418).
+        seed_social_engagement_kudos_category()
         cls.content = SocialContent.create_all()
         cls.magic = MagicContent.create_all()
         cls.scene = SceneFactory()
@@ -40,6 +43,10 @@ class SocialMagicConsequenceTests(TestCase):
         # not auto-resolve inside create_action_request itself.
         cls.target_char.db_account = AccountFactory()
         cls.target_char.save(update_fields=["db_account"])
+        # Corvus is a PC too: an unheld initiator reads as a story NPC acting on a PC,
+        # which this PC-on-PC pipeline does not model (#4418).
+        cls.initiator_char.db_account = AccountFactory()
+        cls.initiator_char.save(update_fields=["db_account"])
         MagicContent.grant_techniques_to_character(
             cls.initiator_char, list(cls.magic.techniques.values())
         )

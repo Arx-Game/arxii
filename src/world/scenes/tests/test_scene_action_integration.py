@@ -18,6 +18,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.npc_services.models import NPCStanding
+from world.progression.seeds import seed_social_engagement_kudos_category
 from world.scenes.action_constants import (
     ActionRequestStatus,
     ConsentDecision,
@@ -30,7 +31,7 @@ from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
 from world.traits.models import CharacterTraitValue, Trait
 
 
-def _make_target_pc(persona) -> None:
+def _make_pc(persona) -> None:
     """Wire an existing PersonaFactory-built persona to a real player account.
 
     ``PersonaFactory`` leaves the underlying character without ``db_account``,
@@ -38,7 +39,9 @@ def _make_target_pc(persona) -> None:
     ``create_action_request`` auto-resolve the request immediately instead of
     leaving it PENDING. These tests exercise the explicit consent (accept/deny)
     flow via a manual ``respond_to_action_request`` call, so the target must be
-    a genuine PC to stay PENDING until the test responds itself. Mirrors
+    a genuine PC to stay PENDING until the test responds itself. The initiator is
+    wired the same way: these tests model PC-on-PC play, and an unheld initiator
+    reads as a story NPC acting on a PC (#4418). Mirrors
     ``test_action_services.py``'s ``_make_pc_persona()`` pattern, applied to an
     already-built persona rather than a fresh one.
     """
@@ -54,6 +57,8 @@ class _BaseActionIntegrationTest(TestCase):
         """Mock accrue for all tests in this class."""
         self.accrue_patcher = patch("world.scenes.action_services.accrue")
         self.mock_accrue = self.accrue_patcher.start()
+        # A PC-on-PC accept accrues good-sport credit, which reads this row (#4418).
+        seed_social_engagement_kudos_category()
 
     def tearDown(self) -> None:
         """Stop mocking accrue."""
@@ -77,6 +82,7 @@ class TestSceneActionIntegration(_BaseActionIntegrationTest):
         # Scene + personas with characters
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
+        _make_pc(cls.initiator)
         cls.target = PersonaFactory()
 
         # Give the initiator character some presence so checks aren't all zero
@@ -89,7 +95,7 @@ class TestSceneActionIntegration(_BaseActionIntegrationTest):
 
     def test_deny_flow(self) -> None:
         """Deny produces no result and no interaction."""
-        _make_target_pc(self.target)  # PC target: exercises the explicit deny path.
+        _make_pc(self.target)  # PC target: exercises the explicit deny path.
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
@@ -111,7 +117,7 @@ class TestSceneActionIntegration(_BaseActionIntegrationTest):
 
     def test_accept_resolves_with_real_check(self) -> None:
         """Accept runs perform_check against real traits and produces an interaction."""
-        _make_target_pc(self.target)  # PC target: exercises the explicit accept path.
+        _make_pc(self.target)  # PC target: exercises the explicit accept path.
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
@@ -146,7 +152,7 @@ class TestSceneActionIntegration(_BaseActionIntegrationTest):
         """The defender's plausibility band at consent maps to a higher target difficulty."""
         # PC target: the defender authors difficulty at consent, which requires
         # the request to still be PENDING when this test calls respond_to_action_request.
-        _make_target_pc(self.target)
+        _make_pc(self.target)
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
@@ -241,11 +247,12 @@ class TestTechniqueEnhancementValidation(_BaseActionIntegrationTest):
 
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
+        _make_pc(cls.initiator)
         cls.target = PersonaFactory()
         # PC target: these tests validate technique attachment/rejection at creation
         # time, not resolution — an NPC target would auto-resolve at creation (#2214)
         # and attempt to actually run the (here unconfigured) technique pipeline.
-        _make_target_pc(cls.target)
+        _make_pc(cls.target)
 
         # PersonaFactory ensures a CharacterSheet exists for its character.
         cls.initiator_sheet = cls.initiator.character_sheet
@@ -322,12 +329,13 @@ class TestMundaneActionConsequences(_BaseActionIntegrationTest):
 
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
+        _make_pc(cls.initiator)
         cls.target = PersonaFactory()
         # PC target: this test drives the explicit accept flow, expecting the
         # request to still be PENDING after creation (#2214 — an NPC target would
         # auto-resolve at creation, and the later respond_to_action_request call
         # would just return None).
-        _make_target_pc(cls.target)
+        _make_pc(cls.target)
 
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(
@@ -368,12 +376,13 @@ class TestEnhancedActionResolution(_BaseActionIntegrationTest):
 
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
+        _make_pc(cls.initiator)
         cls.target = PersonaFactory()
         # PC target: these tests drive the explicit accept flow, expecting the
         # request to still be PENDING after creation (#2214 — an NPC target would
         # auto-resolve at creation, and the later respond_to_action_request call
         # would just return None).
-        _make_target_pc(cls.target)
+        _make_pc(cls.target)
 
         from world.magic.factories import (
             CharacterTechniqueFactory,

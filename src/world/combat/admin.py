@@ -101,7 +101,7 @@ class BreakBarContributionInline(admin.TabularInline):
 
 @admin.register(CombatOpponent)
 class CombatOpponentAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["objectdb", "persona", "summoned_by", "reinforces"]
+    autocomplete_fields = ["objectdb", "persona", "voice_persona", "summoned_by", "reinforces"]
     search_fields = ["name"]
     list_display = [
         "name",

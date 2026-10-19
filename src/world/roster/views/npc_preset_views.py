@@ -33,25 +33,19 @@ class NPCStatlinePresetViewSet(ReadOnlyModelViewSet):
     telnet counterpart (``gm npc ... preset=<name>``).
     """
 
-    # to_attr deliberately reuses each relation's own related_name: Django
-    # replaces the reverse-FK manager on prefetched instances with a plain
-    # list under that name, and DRF's nested-serializer field (see
-    # NPCStatlinePresetSerializer) handles a plain list exactly like a
-    # manager (it only calls .all() when the attribute IS a Manager) — so
-    # the serializer needs no prefetch-aware branching, unlike
-    # CreatureTemplateSerializer's getattr(..., "cached_phase_templates")
-    # (a distinct name, since that field renders a derived bool, not a
-    # nested list).
+    # Each line list lands on its PrunedCachedProperty (``cached_trait_lines`` /
+    # ``cached_skill_lines``), never on the relation's own name: Django refuses a
+    # to_attr that names a field, which made this list a 500 (#4418 bug 7).
     queryset = NPCStatlinePreset.objects.all().prefetch_related(
         Prefetch(
             "trait_lines",
             queryset=NPCPresetTraitLine.objects.select_related("trait"),
-            to_attr="trait_lines",
+            to_attr="cached_trait_lines",
         ),
         Prefetch(
             "skill_lines",
             queryset=NPCPresetSkillLine.objects.select_related("skill", "skill__trait"),
-            to_attr="skill_lines",
+            to_attr="cached_skill_lines",
         ),
     )
     serializer_class = NPCStatlinePresetSerializer

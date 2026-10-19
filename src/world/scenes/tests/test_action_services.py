@@ -773,7 +773,8 @@ class MultiTargetE2ETests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.scene = SceneFactory()
-        cls.initiator = PersonaFactory()
+        # A PC initiator: a PC's targets may deny, where an NPC's are resist-only (#4418).
+        cls.initiator, _initiator_account = _make_pc_persona()
         cls.primary_target = PersonaFactory()  # FK target; not under test here
         cls.action_template = ActionTemplateFactory()
 

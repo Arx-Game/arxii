@@ -227,7 +227,8 @@ def _finish_event_scenes(event: Event) -> None:
     ``finish_scene_full`` (no clock-close/hazard-teardown/broadcast) and stays
     that way -- expiring prompts is the one piece of that orchestration an event
     scene must not skip, since skipping it would silently drop a GM's pending
-    Crossing vision or miracle outcome.
+    Crossing vision or miracle outcome. ``finish_scene()`` itself ends the scene's
+    NPC loans (#4418), so a Guide's lent NPC goes back here too.
     """
     from world.gm.prompt_services import expire_scene_prompts  # noqa: PLC0415
 

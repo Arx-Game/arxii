@@ -1070,7 +1070,8 @@ def mark_fed_to_death(victim_sheet: CharacterSheet) -> bool:
     """Kill an NPC drained past empty by feeding (#2853). Returns True on death.
 
     The narrow public seam for the appetite arc's gorge-kill: guards that the
-    victim is genuinely an NPC (no active RosterTenure -- not just "no live
+    victim is genuinely an NPC (a story NPC on the NPC shelf even while a GM or
+    Guide plays it, #4418 ADR-4418; otherwise no active RosterTenure -- not just "no live
     account": Evennia clears ``db_account`` the instant an OFFLINE PC
     disconnects, #4091 task 12 fix round 3) and not already dead, ensures
     a vitals row exists (instantiated NPCs are provisioned lazily), zeroes
@@ -1437,7 +1438,7 @@ def resolve_abandonment(character_sheet: CharacterSheet | None) -> bool:
         return False
 
     try:
-        pool = select_abandonment_pool(instance.source_character)
+        pool = select_abandonment_pool(instance.source_character, victim_sheet=character_sheet)
     except ConsequencePool.DoesNotExist:
         # Seeding gap — hold the victim rather than resolving ungated (#1479).
         return False

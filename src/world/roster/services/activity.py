@@ -11,6 +11,7 @@ services are wired into views / commands at the call-site layer.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -205,34 +206,107 @@ def sweep_activity_states() -> dict[str, int]:
     }
 
 
+def is_story_npc(sheet: CharacterSheet) -> bool:
+    """Whether this character is a story NPC: one on the NPC shelf, whoever plays it (#4418).
+
+    NPC-ness is a property of the character, never of who is at the keyboard. A major
+    NPC a GM or Guide plays keeps no consent prompts and no PvP protection, exactly as
+    when nobody plays it. The shelf is the ruling: ``RosterType.NPC``.
+
+    A GM or Staff OOC character also sits on the NPC shelf but is a person's own
+    character, not a story NPC, so a typeclass in ``TYPECLASS_TO_CHARACTER_TYPE``
+    (``GMCharacter`` / ``StaffCharacter``) is excluded. See ADR-4418.
+
+    One query via ``current_roster_entry`` (the shelf is read off the entry).
+    """
+    entry = current_roster_entry(sheet)
+    return entry is not None and entry_is_story_npc(entry)
+
+
+def entry_is_story_npc(entry: RosterEntry) -> bool:
+    """``is_story_npc`` for a roster entry already in hand, with no query of its own (#4418).
+
+    The same rule, read off the entry's roster and its character's typeclass, both
+    loaded with the entry wherever a list serializes it.
+    """
+    from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE  # noqa: PLC0415
+    from world.roster.models.choices import RosterType  # noqa: PLC0415
+
+    if entry.roster.roster_type != RosterType.NPC:
+        return False
+    return entry.character_sheet.character.db_typeclass_path not in TYPECLASS_TO_CHARACTER_TYPE
+
+
+def story_npc_sheet_ids(sheet_ids: Iterable[int]) -> set[int]:
+    """The subset of ``sheet_ids`` that are story NPCs, in one query (#4418).
+
+    The batched form of ``is_story_npc`` for callers that already hold many sheets
+    (a battle's opposing participants). Same rule: on the NPC shelf and not a GM or
+    Staff OOC typeclass. ``RosterEntry.character_sheet`` is the sheet's pk, so the
+    sheet id is read off the entry directly.
+    """
+    from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.roster.models.choices import RosterType  # noqa: PLC0415
+
+    return set(
+        RosterEntry.objects.filter(
+            character_sheet_id__in=list(sheet_ids),
+            roster__roster_type=RosterType.NPC,
+        )
+        .exclude(
+            character_sheet__character__db_typeclass_path__in=list(TYPECLASS_TO_CHARACTER_TYPE)
+        )
+        .values_list("character_sheet_id", flat=True)
+    )
+
+
 def is_player_character(sheet: CharacterSheet) -> bool:
     """Whether this character counts as a player character for PC/NPC rulings
-    (#4091): True when EITHER of these holds.
+    (#4091, #4418).
+
+    A story NPC (``is_story_npc``) is never a player character, even while a GM or
+    Guide plays it: the ruling follows the character, not who holds it (ADR-4418).
+    Otherwise True when EITHER of these holds:
 
     1. **It is held by an account** -- an active ``RosterTenure`` on its current
        ``RosterEntry``. This is the offline-safe half: Evennia's
        ``unpuppet_object`` clears ``character.db_account`` the instant nobody is
        connected (``del obj.account`` -- ``evennia/accounts/accounts.py``), so an
-       OFFLINE player's character would otherwise read as an NPC. "Held" covers a
-       player's own PC and a GM's Story NPC (``mint_story_npc`` / the
-       ``claim_as_npc`` branch), both of which mint an active tenure. A bare
+       OFFLINE player's character would otherwise read as an NPC. A bare
        ``RosterEntry`` without a tenure does not count -- major NPCs are rostered
        too (see ``RosterEntry``'s own docstring).
     2. **Someone is puppeting it right now** -- ``character.db_account`` is set.
-       This was the pre-#4091 test at every call site, so keeping it means no
-       character that used to count as a PC stops counting as one; the only
-       widening is offline PCs. A puppeted NPC therefore still reads True, exactly
-       as it always has.
+       This was the pre-#4091 test at every call site, so no character that used
+       to count as a PC stops counting as one, short of the story-NPC exclusion.
 
-    The puppet check is free (no query); the tenure half costs one query via
-    ``current_roster_entry`` plus one (cached) via ``RosterEntry.current_tenure``
-    -- safe to call once per check; batch callers should fetch tenures themselves
-    rather than loop this.
+    The puppet check is free (no query); the shelf and tenure halves cost one query
+    via ``current_roster_entry`` plus one (cached) via ``RosterEntry.current_tenure``
+    -- safe to call once per check; batch callers should use ``story_npc_sheet_ids``
+    and fetch tenures themselves rather than loop this.
     """
+    if is_story_npc(sheet):
+        return False
     if sheet.character.db_account is not None:
         return True
     entry = current_roster_entry(sheet)
     return entry is not None and entry.current_tenure is not None
+
+
+def is_pvp_protected_victim(sheet: CharacterSheet) -> bool:
+    """Whether the PvP wall (ADR-0023) protects this character as a victim (#4418).
+
+    Deliberately conservative on the victim side: a story NPC (``is_story_npc``) is
+    never protected, whoever plays it, and anything else is protected when it is a
+    player character (``is_player_character``) OR it has a roster entry at all, on
+    any non-NPC shelf -- Available, Pending, Restricted, Frozen with no tenure, or
+    a GM/Staff OOC character on the NPC shelf. Only a character with no roster
+    entry and nobody puppeting it is an NPC victim. A released or unheld roster
+    character is someone's character, so a PC cannot kill it. See ADR-4418.
+    """
+    if is_story_npc(sheet):
+        return False
+    return sheet.character.db_account is not None or current_roster_entry(sheet) is not None
 
 
 def is_original_character(sheet: CharacterSheet) -> bool:

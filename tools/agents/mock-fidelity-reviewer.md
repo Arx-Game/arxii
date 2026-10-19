@@ -1,6 +1,6 @@
 ---
 name: mock-fidelity-reviewer
-description: Checks whether a test's doubles are faithful enough to fail, and whether the code under test calls its collaborators with the signature those collaborators actually have. Use when a diff calls a framework hook or another object's method, when it adds or changes tests that stand a Mock/MagicMock in for a real collaborator or set by hand an attribute the framework would set (a command's `switches`, a request's `user`), and when frontend tests hand-write a double of a browser API (WebSocket, observers, storage) or stub the layout jsdom does not have (scroll and size numbers). Catches the call that is green in every test and raises on every real request.
+description: Checks whether a test's doubles are faithful enough to fail, and whether the code under test calls its collaborators with the signature those collaborators actually have. Use when a diff calls a framework hook or another object's method, when it adds or changes tests that stand a Mock/MagicMock in for a real collaborator or set by hand an attribute the framework would set (a command's `switches`, a request's `user`), and when frontend tests hand-write a double of a browser API (WebSocket, observers, storage) or stub the layout jsdom does not have (scroll and size numbers), and when a frontend call to a mutating endpoint is covered only by a mocked request. Catches the call that is green in every test and raises on every real request.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -128,6 +128,41 @@ rule in a file is not a gate; you are the gate.
   that fix passed its unit tests and one browser run, then failed
   Chronological three runs in six: the virtualised list moved the scroll
   position itself and the hook took it for the reader scrolling away.
+- **A frontend call whose request body drifted from the endpoint's required
+  contract, hidden by a mocked request.** A component test that mocks the api
+  module (`vi.mock("../api")`, a stubbed `fetch`, an MSW handler returning 200 for
+  any body) asserts that the call happened, never that the server would accept it.
+  The /game persona menu's social actions POSTed `/api/action-requests/` without
+  `initiator_persona`, which the serializer has required since #2228, so every
+  click got `400 {"detail":"initiator_persona is required."}` and the UI showed
+  nothing. Each test mocked the request, so none saw the 400 (#4418, real-testing
+  round 2, bug D). For every frontend call in the diff to a mutating endpoint:
+  open the serializer and list its required fields and their types; compare them
+  with the body the code builds (and with the generated API type, if the call is
+  typed from it; a hand-written body type is the same hand-written double);
+  check the mock returns what the real endpoint returns, including its 4xx; and
+  check the failure path shows the player something, since a swallowed 400 is
+  why this one stayed silent. Ask for one test that asserts the exact request
+  body against the required fields, and a journey or Playwright run that clicks
+  through to the real endpoint. No mechanical check: matching a body object to a
+  serializer needs both sides read.
+- **A fake built from a framework value the framework never produces.** The double is
+  type-correct and arity-correct, and its data is invented. `non_web_sessions` decided a
+  session was a browser by a `"webclient"` key prefix, and every test faked sessions
+  with `"webclient/websocket"`. Evennia's portal sets that key in `__init__`, then
+  `init_session("websocket", ...)` overwrites it (`evennia/server/portal/webclient.py`),
+  so a live browser's `protocol_key` is `"websocket"` (`"ajax/comet"` for the fallback).
+  Every real browser counted as non-web, every telnet-only line (involvement marks,
+  check result lines, GM prompt copies) reached browsers as notes, and the suite stayed
+  green because the fake and the classifier agreed on a key no session has (#4418,
+  real-testing round 4, bug G). For every fake session, request, message or event the
+  diff builds: take the keys, constants and shapes from the real source (the portal's
+  protocol registry, the framework's constants, `WEB_PROTOCOL_KEYS`), never from a
+  typed literal; read the framework code that finally sets the value, not the line that
+  first sets it; and ask for one test that builds the object the way the framework
+  builds it. Mechanical half: `tools/lint_webclient_protocol_key.py`
+  (`webclient-protocol-key` hook) rejects the two dead literals; any other invented
+  framework value is yours to find.
 
 ## How to report
 

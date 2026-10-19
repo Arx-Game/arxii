@@ -14,6 +14,7 @@ from world.justice.constants import HUMILIATION_MARK_EXPLANATION
 from world.justice.serializers import HumiliationMarkSerializer
 from world.missions.serializers import GroupBallotStateSerializer, GroupBeatResultSerializer
 from world.scenes.constants import (
+    PlayedByRole,
     ScenePrivacyMode,
     SceneRoundMode,
     SceneRoundStartReason,
@@ -605,6 +606,35 @@ class HighlightReelSerializer(serializers.Serializer):
 
     featured = HighlightReelFeaturedSerializer(allow_null=True)
     index = HighlightReelEntrySerializer(many=True)
+
+
+class CastListEntrySerializer(serializers.Serializer):
+    """One row of a scene's cast list (#4418): a named NPC or a crowd, and who plays it.
+
+    Serializes ``world.scenes.cast_list_services.CastListEntry``. ``played_by`` is a
+    character name, never an account name; blank for a crowd nobody voices yet.
+    ``count`` is the crowd's bodies (null for a named NPC); ``tier`` is the crowd's
+    opponent tier. ``roster_entry_id``/``persona_id`` are null for an unvoiced crowd.
+    ``opponent_ids`` are the crowd's ``CombatOpponent`` rows (what ``voice_crowd``
+    takes); empty for a named NPC.
+    """
+
+    kind = serializers.ChoiceField(choices=["npc", "crowd"])
+    name = serializers.CharField()
+    roster_entry_id = serializers.IntegerField(allow_null=True)
+    persona_id = serializers.IntegerField(allow_null=True)
+    thumbnail_url = serializers.CharField(allow_blank=True)
+    played_by = serializers.CharField(allow_blank=True)
+    # The role the player plays in (``PlayedByRole``): staff, GM or Guide, from their
+    # standing, so a GM who borrowed from the roster is not shown as a Guide. Null
+    # for nobody, or an account with none of those standings.
+    played_by_role = serializers.ChoiceField(choices=PlayedByRole.choices, allow_null=True)
+    loan_id = serializers.IntegerField(allow_null=True)
+    loan_status = serializers.CharField(allow_null=True)
+    tier = serializers.CharField(allow_null=True)
+    count = serializers.IntegerField(allow_null=True)
+    description = serializers.CharField(allow_blank=True)
+    opponent_ids = serializers.ListField(child=serializers.IntegerField())
 
 
 class SceneSummaryRevisionSerializer(serializers.ModelSerializer):

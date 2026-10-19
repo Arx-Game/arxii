@@ -229,6 +229,7 @@ def _nearest_npc_sheet(character: ObjectDB, room: ObjectDB) -> CharacterSheet | 
     the canonical, offline-safe PC test is ``is_player_character`` (an active
     RosterTenure or a live puppet), not ``db_account`` alone (#4091): an offline
     PC's ``db_account`` reads ``None``, which would have let a rampage target them.
+    A story NPC a GM or Guide plays is still a valid target (#4418, ADR-4418).
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 

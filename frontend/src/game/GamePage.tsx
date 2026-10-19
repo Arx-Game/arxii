@@ -25,7 +25,8 @@ import { JournalTab } from '@/journals/components/JournalTab';
 import { StatusPanel } from '@/status/components/StatusPanel';
 import { InventorySidebarPanel } from '@/inventory/components/InventorySidebarPanel';
 import { VoyagePanel } from '@/travel/components/VoyagePanel';
-import { actingPersonaId } from '@/roster/persona';
+import { actingPersonaId, isStoryNpc } from '@/roster/persona';
+import type { MyRosterEntry } from '@/roster/types';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -54,6 +55,12 @@ import { normalizeFind } from './feedFind';
 import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
 import { threadToComposerMode, tabKeyToComposerMode } from '@/scenes/hooks/threadToComposerMode';
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
+import { NpcOfferCard } from '@/gm/npcs/NpcOfferCard';
+import { NpcNotesCard } from '@/gm/npcs/NpcNotesCard';
+import { NpcResponseCard } from '@/gm/npcs/NpcResponseCard';
+import { pendingNpcResponse, poseCarryingAction } from '@/gm/npcs/pendingNpcResponse';
+import { useNpcOffersQuery } from '@/gm/npcs/queries';
+import { useLoanEndFallback } from '@/gm/npcs/useLoanEndFallback';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
 import { PlaceBar } from '@/scenes/components/PlaceBar';
 import { TavernGameWidget } from '@/scenes/components/TavernGameWidget';
@@ -337,6 +344,49 @@ function useSceneThreadStateSync({
   }, [sceneId, active, allInteractions, ambientInteractions, activeThreadTab, dispatch]);
 }
 
+interface NpcPlayCardsProps {
+  activeEntry: MyRosterEntry | null;
+  interactions: Interaction[];
+  onPoseAs: (interaction: Interaction) => void;
+}
+
+/**
+ * The Guide's play cards (#4418): offers waiting for an answer, the GM's notes for
+ * the NPC being played, and the latest action aimed at that NPC with no reply yet.
+ */
+function NpcPlayCards({ activeEntry, interactions, onPoseAs }: NpcPlayCardsProps) {
+  const { data: offers = [] } = useNpcOffersQuery();
+  const { data: characters = [] } = useMyRosterEntriesQuery();
+  // Offers are the account's, not a character's: they show with no character selected, and
+  // the answer goes out as the account's own PC, never as a lent NPC (the server refuses).
+  const actor = characters.find((c) => !isStoryNpc(c)) ?? null;
+  const isNpc = isStoryNpc(activeEntry);
+  const npcPersonaId = isNpc ? actingPersonaId(activeEntry) : null;
+  const pending = useMemo(
+    () => (npcPersonaId === null ? null : pendingNpcResponse(interactions, npcPersonaId)),
+    [interactions, npcPersonaId]
+  );
+
+  if (!actor) return null;
+  if (offers.length === 0 && !isNpc) return null;
+  return (
+    <div className="space-y-2 border-b p-2">
+      {offers.map((offer) => (
+        <NpcOfferCard key={offer.loan_id} loan={offer} characterId={actor.character_id} />
+      ))}
+      {isNpc && activeEntry && <NpcNotesCard entry={activeEntry} />}
+      {pending && activeEntry && (
+        <NpcResponseCard
+          interaction={pending}
+          excerpt={poseCarryingAction(interactions, pending)}
+          npcName={activeEntry.name}
+          onPoseAs={onPoseAs}
+        />
+      )}
+    </div>
+  );
+}
+
 interface GameCenterProps {
   sceneId?: string;
   accountId: number;
@@ -358,16 +408,20 @@ export function GamePage() {
   const account = useAccount();
   const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useAppDispatch();
-  const { connect, resume } = useGameSocket();
+  const { connect, resume, disconnect } = useGameSocket();
   // #3774 -- the game screen is the one place that polls this. Focus and the
   // 60s timer are what make a badge clear on this device after the player read
   // the poses on another one; nothing pushes read state.
   const { data: characters = [] } = useMyRosterEntriesQuery({
-    refetchInterval: 60_000,
+    // Also how an ended NPC loan reaches this page (#4418): nothing pushes it.
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
   const { sessions, active } = useAppSelector((state) => state.game);
+  const dropSession = useCallback((name: string) => disconnect(name), [disconnect]);
+  const hasSession = useCallback((name: string) => Boolean(sessions[name]), [sessions]);
+  useLoanEndFallback(characters, active, hasSession, dropSession);
 
   // Enter-the-world auto-start (#3412): a fresh hydration (reload survival,
   // or arriving here via the header's docked chip) sets `active` with no
@@ -1068,6 +1122,13 @@ export function GamePage() {
         }
         sidebar={
           <PlaySidebar
+            npcCards={
+              <NpcPlayCards
+                activeEntry={activeEntry}
+                interactions={allInteractions}
+                onPoseAs={handleReply}
+              />
+            }
             accountId={account?.id}
             mode={sidebarMode}
             onModeChange={setSidebarMode}

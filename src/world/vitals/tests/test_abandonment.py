@@ -69,6 +69,12 @@ def _make_offline_pc_source():
     return character
 
 
+def _hold(sheet):
+    """Seat a player on ``sheet`` (active tenure): the victim is a player character."""
+    RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=sheet), end_date=None)
+    return sheet
+
+
 class ResolveAbandonmentTests(TestCase):
     """Unit tests for resolve_abandonment()."""
 
@@ -132,6 +138,7 @@ class ResolveAbandonmentTests(TestCase):
     def test_pc_source_failed_survives(self) -> None:
         """PC source + Failure roll → die filtered (ADR-0023); victim survives, cleared."""
         sheet = self._dying_victim(source_character=_make_pc_source())
+        _hold(sheet)
 
         with force_check_outcome(self.failure_outcome):
             died = resolve_abandonment(sheet)
@@ -152,6 +159,7 @@ class ResolveAbandonmentTests(TestCase):
         offline_pc = _make_offline_pc_source()
         self.assertIsNone(offline_pc.db_account)
         sheet = self._dying_victim(source_character=offline_pc)
+        _hold(sheet)
 
         with force_check_outcome(self.failure_outcome):
             died = resolve_abandonment(sheet)

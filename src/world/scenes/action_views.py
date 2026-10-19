@@ -38,6 +38,7 @@ from world.scenes.action_serializers import (
     TechniqueCastCreateSerializer,
 )
 from world.scenes.action_services import (
+    ResistOnlyError,
     create_action_request,
     respond_to_action_request,
     respond_to_action_target,
@@ -109,6 +110,13 @@ def _build_boon_from_validated(validated_data: dict) -> BoonAsk | None:
     )
 
 
+def _respond_error_detail(exc: ValueError) -> str:
+    """The 400 detail for a refused consent response: a resist-only refusal says so (#4418)."""
+    if isinstance(exc, ResistOnlyError):
+        return exc.user_message
+    return "Unable to process this action request."
+
+
 class SceneActionRequestPagination(PageNumberPagination):
     page_size = 20
 
@@ -173,6 +181,18 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 "scene",
                 "technique",
                 "technique__effect_type",
+                # #4418: resist_only / resist_check_name read these per row.
+                "initiator_persona__character_sheet",
+                "initiator_persona__character_sheet__character",
+                "initiator_persona__character_sheet__roster_entry__roster",
+                "target_persona__character_sheet__character",
+                "target_persona__character_sheet__roster_entry__roster",
+                "action_template",
+                "action_template__consent_category",
+                "action_template__resist_check_type",
+                # get_boon reads the ask riding the request, one row per request.
+                "boon",
+                "boon__material_category",
             )
             .order_by("-created_at")
         )
@@ -629,9 +649,9 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                     resist_effort=resist_effort,
                     blacklist_actor=blacklist_actor,
                 )
-            except ValueError:
+            except ValueError as exc:
                 return Response(
-                    {"detail": "Unable to process this action request."},
+                    {"detail": _respond_error_detail(exc)},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             action_target.refresh_from_db()
@@ -669,9 +689,9 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 resist_effort=resist_effort,
                 blacklist_actor=blacklist_actor,
             )
-        except ValueError as _exc:
+        except ValueError as exc:
             return Response(
-                {"detail": "Unable to process this action request."},
+                {"detail": _respond_error_detail(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1031,6 +1051,15 @@ class SceneActionTargetViewSet(viewsets.ReadOnlyModelViewSet):
                 "action_request__technique__effect_type",
                 "target_persona",
                 "target_persona__character_sheet",
+                # #4418: resist_only / resist_check_name read these per row.
+                "action_request__action_template",
+                "action_request__action_template__consent_category",
+                "action_request__action_template__resist_check_type",
+                "action_request__initiator_persona__character_sheet",
+                "action_request__initiator_persona__character_sheet__character",
+                "action_request__initiator_persona__character_sheet__roster_entry__roster",
+                "target_persona__character_sheet__character",
+                "target_persona__character_sheet__roster_entry__roster",
             )
             .order_by("-action_request__created_at", "id")
         )

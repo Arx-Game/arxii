@@ -66,6 +66,24 @@ describe('actionQueries', () => {
       expect(result).toEqual(responseData);
     });
 
+    it('sends the persona-menu body the server requires, initiator included', async () => {
+      vi.mocked(apiFetch).mockResolvedValue(mockOkResponse({ status: 'resolved' }));
+
+      await createActionRequest('1', {
+        action_key: 'persuade',
+        target_persona_id: 7,
+        initiator_persona: 33,
+      });
+
+      const [, init] = vi.mocked(apiFetch).mock.calls[0];
+      expect(JSON.parse(init?.body as string)).toEqual({
+        scene: 1,
+        action_key: 'persuade',
+        target_persona: 7,
+        initiator_persona: 33,
+      });
+    });
+
     it('omits target_persona when target_persona_id is undefined', async () => {
       vi.mocked(apiFetch).mockResolvedValue(mockOkResponse({ status: 'pending' }));
 

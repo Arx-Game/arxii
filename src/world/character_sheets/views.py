@@ -40,6 +40,7 @@ from world.character_sheets.serializers import (
 from world.character_sheets.services import (
     StaffEditError,
     can_edit_character_sheet,
+    can_edit_npc_sheet,
     can_staff_edit_sheet,
     restore_profile_text_version,
     staff_edit_sheet,
@@ -398,6 +399,11 @@ class CharacterSheetViewSet(StaffSheetRowsMixin, RetrieveModelMixin, GenericView
         if not can_staff_edit_sheet(self.request.user, sheet):
             raise Http404
 
+    def _require_npc_owner_edit(self, sheet: CharacterSheet) -> None:
+        """404 unless this account is staff or the GM who owns this story NPC (#4418)."""
+        if not can_edit_npc_sheet(self.request.user, sheet):
+            raise Http404
+
     def _fresh_payload(self, request: Request, pk: int | None) -> Response:
         """The refreshed sheet payload, read the way GET reads it."""
         sheet = get_character_sheet_queryset().get(pk=pk)
@@ -413,7 +419,7 @@ class CharacterSheetViewSet(StaffSheetRowsMixin, RetrieveModelMixin, GenericView
         sheet payload.
         """
         sheet = self.get_object()
-        self._require_staff_edit(sheet)
+        self._require_npc_owner_edit(sheet)
         serializer = StaffEditSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:

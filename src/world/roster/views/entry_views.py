@@ -5,7 +5,7 @@ RosterEntry views and related functionality.
 from http import HTTPMethod
 from typing import cast
 
-from django.db.models import Count, Prefetch, Q, QuerySet
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
@@ -18,6 +18,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from world.combat.models import CombatOpponent
 from world.roster.filters import RosterEntryFilterSet
 from world.roster.models import RosterEntry, RosterTenure, TenureMedia
 from world.roster.models.choices import RosterType
@@ -42,6 +43,7 @@ from world.roster.services.activity import (
 from world.roster.services.gallery import GalleryError, can_manage_gallery, wear_look
 from world.roster.services.presence import disconnect_everywhere
 from world.roster.services.selection import SelectionError, set_selected_entry
+from world.scenes.cast_list_services import player_names
 
 
 class RosterEntryPagination(PageNumberPagination):
@@ -66,7 +68,8 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
 
         NPC-shelf entries are excluded from general visibility (#3426): staff
         always see every entry; a non-staff caller sees an NPC-shelf entry
-        only when they hold an active tenure on it (their own Story NPC).
+        only when they hold an active tenure on it, or own it
+        (``created_by_account``: a GM's story NPC, a template included, #4418).
         ``RosterViewSet`` already hides the NPC *shelf itself*
         (``Roster.is_public=False``) from anonymous/non-staff shelf listings
         (#2728) -- this closes the companion gap where individual
@@ -109,6 +112,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                     end_date__isnull=True,
                 ).values_list("roster_entry_id", flat=True)
                 hidden_npc_entries &= ~Q(pk__in=own_npc_entry_ids)
+            hidden_npc_entries &= ~Q(created_by_account=user)
         return queryset.exclude(hidden_npc_entries)
 
     def get_serializer_class(self) -> type[BaseSerializer]:
@@ -140,6 +144,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             player_data = request.user.player_data
             available_characters = player_data.get_available_characters()
         except AttributeError:
+            player_data = None
             available_characters = []
 
         entries = (
@@ -156,6 +161,11 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                 "profile_picture__tenure",
             )
             .annotate(
+                is_crowd_voice=Exists(
+                    CombatOpponent.objects.filter(
+                        voice_persona__character_sheet_id=OuterRef("character_sheet_id")
+                    )
+                ),
                 unread_narrative_count=Count(
                     "character_sheet__narrative_message_deliveries",
                     filter=Q(
@@ -165,11 +175,22 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             )
         )
         entry_list = list(entries)
-        attention = account_attention(account=cast(AccountDB, request.user), entries=entry_list)
+        account = cast(AccountDB, request.user)
+        attention = account_attention(account=account, entries=entry_list)
+        # Who lent each NPC the requester borrows, named in one pass for the whole list.
+        loans = player_data.cached_npc_loans if player_data is not None else []
+        loan_offered_names = player_names(
+            loan.offered_by_id for loan in loans if loan.borrower_id == account.pk
+        )
         serializer = self.get_serializer(
             entry_list,
             many=True,
-            context={**self.get_serializer_context(), "character_attention": attention},
+            context={
+                **self.get_serializer_context(),
+                "character_attention": attention,
+                "crowd_voice_entry_ids": {e.pk for e in entry_list if e.is_crowd_voice},
+                "loan_offered_names": loan_offered_names,
+            },
         )
         return Response(serializer.data)
 

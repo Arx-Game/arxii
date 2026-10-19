@@ -52,6 +52,12 @@ def _make_offline_pc_character():
     return character
 
 
+def _hold(sheet):
+    """Seat a player on ``sheet`` (active tenure): the victim is a player character."""
+    RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=sheet), end_date=None)
+    return sheet
+
+
 def _make_npc_character():
     """Return a character with no CharacterSheet/roster tenure at all (NPC)."""
     return CharacterFactory()
@@ -107,12 +113,20 @@ class DeathIsPermittedTests(TestCase):
     def setUp(self) -> None:
         self.victim_sheet = CharacterSheetFactory()
 
-    def test_pc_source_returns_false(self) -> None:
-        """ADR-0023: PvP is structurally non-lethal — death never permitted from a PC."""
+    def test_pc_source_against_pc_victim_returns_false(self) -> None:
+        """ADR-0023: PvP is structurally non-lethal — a PC never kills a PC."""
         from world.vitals.peril_resolution import death_is_permitted
 
         pc = _make_pc_character()
+        _hold(self.victim_sheet)
         self.assertFalse(death_is_permitted(victim_sheet=self.victim_sheet, source_character=pc))
+
+    def test_pc_source_against_npc_victim_returns_true(self) -> None:
+        """ADR-4418: a PC can kill an NPC; the victim is not a player character."""
+        from world.vitals.peril_resolution import death_is_permitted
+
+        pc = _make_pc_character()
+        self.assertTrue(death_is_permitted(victim_sheet=self.victim_sheet, source_character=pc))
 
     def test_offline_pc_source_returns_false(self) -> None:
         """#4091 task 12 fix round 3: an offline PC source must still block death
@@ -121,6 +135,7 @@ class DeathIsPermittedTests(TestCase):
         from world.vitals.peril_resolution import death_is_permitted
 
         pc = _make_offline_pc_character()
+        _hold(self.victim_sheet)
         self.assertFalse(death_is_permitted(victim_sheet=self.victim_sheet, source_character=pc))
 
     def test_npc_source_no_flags_returns_true(self) -> None:

@@ -76,6 +76,16 @@ class Mailbox:
     def text(self) -> str:
         return "\n".join(self.lines)
 
+    @property
+    def rows(self) -> list[str]:
+        """The ``content`` of each interaction row pushed to the object's browser
+        (``msg(interaction=...)``), which carries no plain text of its own."""
+        return [
+            kwargs["interaction"][1]["content"]
+            for _args, kwargs in self.calls
+            if "interaction" in kwargs
+        ]
+
 
 @tag("postgres")
 class JourneyCase(TestCase):
@@ -155,6 +165,17 @@ class JourneyCase(TestCase):
         told = self.said(obj)
         if needle not in told:
             self.fail(f"{obj.key} was never told {needle!r}. Told:\n{told}")
+
+    def assertShownRow(self, obj: ObjectDB, needle: str) -> None:  # noqa: N802
+        """``obj``'s browser was pushed an interaction row containing ``needle``.
+
+        A line the web reads as a pushed row reaches telnet as text only on a
+        telnet session (``send_text_to_non_web``); a journey character has no
+        session, so the row is what it was shown.
+        """
+        rows = self.mailbox(obj).rows
+        if not any(needle in row for row in rows):
+            self.fail(f"{obj.key} was never pushed a row with {needle!r}. Rows:\n{rows}")
 
     def assertNotTold(self, obj: ObjectDB, needle: str) -> None:  # noqa: N802
         """``obj`` was told nothing containing ``needle``."""

@@ -684,6 +684,33 @@ def _probe_allegiance_break_checks() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_npc_resist_checks() -> ProbeResult:
+    """Every single-target social template names a resist check and a consent category (#4418).
+
+    An NPC's action on a player character rolls the flipped check against the player's
+    resist check, and a template with no consent category cannot be told apart from
+    romance, so it is blocked from NPC actors too. One query.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from actions.constants import ActionCategory, ActionTargetType  # noqa: PLC0415
+
+    model = apps.get_model("arxii", "ActionTemplate")
+    missing = tuple(
+        model.objects.filter(category=ActionCategory.SOCIAL, target_type=ActionTargetType.SINGLE)
+        .filter(Q(resist_check_type__isnull=True) | Q(consent_category__isnull=True))
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail="Social templates with no resist check or no consent category.",
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_ultimates_have_action_template() -> ProbeResult:
     """Every `is_ultimate=True` Technique carries an `action_template` (#4098 final
     review item 4).
@@ -2188,6 +2215,21 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_ultimates_have_action_template),
             admin_model="Technique",
+        ),
+        ContentDependency(
+            key="npc-resist-checks",
+            label="Resist checks for NPC-started actions",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/scenes/action_services.py _resolve_action_against_persona (flipped roll)"
+            ),
+            consequence=(
+                "An NPC cannot use this action on a player character; the action is not "
+                "offered to whoever plays an NPC. A template with no consent category is "
+                "blocked the same way, so romance cannot slip through as resist-only."
+            ),
+            probe=CustomProbe(fn=_probe_npc_resist_checks),
+            admin_model="ActionTemplate",
         ),
         ContentDependency(
             key="soulfray-condition",

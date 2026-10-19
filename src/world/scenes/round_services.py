@@ -13,6 +13,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
+from world.roster.services.activity import is_story_npc
 from world.scenes.constants import (
     ACTIVE_SCENE_ROUND_STATUSES,
     RoundStatus,
@@ -598,6 +599,9 @@ def maybe_finish_empty_scene(
 ) -> None:
     """Finish ``room``'s active scene if no PC other than ``leaving`` remains there.
 
+    An unplayed story NPC standing in the room does not count (#4418); one somebody
+    is puppeting does.
+
     Mirrors ``resolve_solo_abandoned_victims``'s early-return and
     exclude-the-departing-id pattern (#1361). Called from ``Room.at_object_leave``
     (movement — fires before the mover actually leaves ``room.contents``, hence
@@ -634,10 +638,14 @@ def maybe_finish_empty_scene(
         if obj.pk == exclude_id:
             continue
         try:
-            obj.sheet_data  # noqa: B018 — attribute access guards NPC/prop skip
+            sheet = obj.sheet_data
         except (AttributeError, ObjectDoesNotExist):
             continue
-        return  # a PC remains — scene stays active
+        # A story NPC stays in the room unplayed (#4418), so it keeps the scene open
+        # only while someone is puppeting it; otherwise nobody is there to play.
+        if not obj.sessions.all() and is_story_npc(sheet):
+            continue
+        return  # someone with a player behind them remains: the scene stays active
 
     finish_scene_full(scene)
 

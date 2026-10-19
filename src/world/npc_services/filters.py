@@ -11,6 +11,7 @@ from world.npc_services.models import (
     NPCStanding,
     OfferCooldown,
     PermitOfferDetails,
+    PersonalityTrait,
     RecordedProfile,
     StaffingProfile,
     StaffingProfileLine,
@@ -121,4 +122,14 @@ class StaffingProfileLineFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = StaffingProfileLine
+        fields: list[str] = []
+
+
+class PersonalityTraitFilterSet(django_filters.FilterSet):
+    """Filter personality traits by name (case-insensitive contains)."""
+
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+
+    class Meta:
+        model = PersonalityTrait
         fields: list[str] = []

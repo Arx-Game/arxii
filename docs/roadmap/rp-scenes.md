@@ -472,6 +472,20 @@ combat action records whom it targeted.
   Block and IC Mute controls, with neutral copy and no client-visible moderation state.
   See ADR-0293 and issue #3827.
 
+### Played NPCs: no consent, flipped roll, cast list - DONE (#4418, ADR-4418)
+
+A Story NPC (a character on the NPC shelf, not a GM or Staff OOC character) is an NPC in the rules
+whoever plays it. Built: actions aimed at a played NPC resolve at once; when an NPC acts on a PC with
+a contested social template the PC rolls `ActionTemplate.resist_check_type` against the NPC's own
+rating (`start_resisted_action_resolution`, `mirrored_outcome`) and the wheel spins the PC's own roll;
+DENY is refused (`ResistOnlyError`, `resist_only` on request and target rows) unless the category is
+`SocialConsentCategory.refusable_from_npcs` (romantic). Poses carry the NPC's portrait
+(`_sync_npc_persona_portrait`). The cast list (`GET /api/scenes/{id}/cast-list/`) feeds the scene
+page's cast panel; crowds pose through `CombatOpponent.voice_persona`. Scene finish ends scene-scoped
+NPC loans. Details: `docs/systems/scenes.md`, `docs/roadmap/gm-system.md` Phase 11.
+
+Not built: NPC rolls against PCs; changes to combat's NPC attacks; a second resist check per template.
+
 ### Relationship Integration
 - (superseded by #3957) `RelationshipUpdate` and its `linked_interaction` FK / `reference_mode` are gone; prose about a tie is a journal entry about the other character, and a scene both parties posed in credits tie depth via `credit_scene_depth`
 

@@ -18,6 +18,7 @@
 ### ActionTemplate
 **Foreign Keys:**
   - check_type -> checks.CheckType [FK]
+  - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
   - consent_category -> consent.SocialConsentCategory [FK] (nullable)
 **Pointed to by:**
@@ -92,10 +93,12 @@
 - `apply_resolution(pending: 'PendingResolution', context: 'ResolutionContext') -> 'list[AppliedEffect]' - Apply all effects from the selected consequence.`
 - `get_effective_consequences(pool: 'ConsequencePool') -> 'list[WeightedConsequence]' - Resolve pool inheritance into a flat list of weighted consequences.`
 - `merge_pool_entries(own_entries: 'list[ConsequencePoolEntry]', parent_entries: 'list[ConsequencePoolEntry] | None') -> 'list[WeightedConsequence]' - Single-depth pool inheritance over already-fetched entries; runs no query.`
+- `mirrored_outcome(outcome: 'CheckOutcome') -> 'CheckOutcome | None' - The outcome on the other side of a resisted roll (#4418).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Main check resolution function.`
 - `resolve_scene_action(*, character: 'ObjectDB', action_template: 'ActionTemplate | None', action_key: 'str', difficulty: 'int') -> 'SceneActionResult' - Resolve a scene-based action check using an ActionTemplate.`
 - `select_consequence_from_result(character: 'ObjectDB', check_result: 'CheckResult', consequences: 'list[WeightedConsequence]') -> 'PendingResolution' - Select a consequence using an existing check result.`
 - `start_action_resolution(character: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext', extra_modifiers: 'int' = 0, *, check_type: 'CheckType | None' = None, effort_level: 'str | None' = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> 'PendingActionResolution' - Start an action resolution pipeline and run it to completion or pause.`
+- `start_resisted_action_resolution(*, initiator: 'ObjectDB', resister: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext', effort_level: 'str | None', extra_modifiers: 'int' = 0) -> 'PendingActionResolution' - Resolve an action whose target rolls instead of its actor (#4418).`
 
 
 ## behaviors
@@ -1894,7 +1897,8 @@
 
 ### Service Functions
 - `can_edit_character_sheet(user: 'AbstractBaseUser | AnonymousUser', roster_entry: 'RosterEntry') -> 'bool' - True if the user is the original creator (player_number=1) or staff.`
-- `can_staff_edit_sheet(user: 'AbstractBaseUser | AnonymousUser', sheet: 'CharacterSheet') -> 'bool' - Whether this account may edit this sheet in place (#3988).`
+- `can_edit_npc_sheet(user: 'AbstractBaseUser | AnonymousUser', sheet: 'CharacterSheet') -> 'bool' - Staff, or the GM who owns this story NPC (#4418).`
+- `can_staff_edit_sheet(user: 'AbstractBaseUser | AnonymousUser', sheet: 'CharacterSheet') -> 'bool' - Whether this account may edit this sheet in place (#3988). Staff only.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `ensure_true_profile(sheet: 'CharacterSheet') -> 'Profile' - The sheet's true profile, created empty if an older character has none (#3988).`
 - `rename_character(sheet: 'CharacterSheet', name: 'str') -> 'None' - Rename a character: its key and its primary persona's name together (#3988).`
@@ -1935,6 +1939,7 @@
   - owner_sheet -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
   - action_templates <- actions.ActionTemplate
+  - resisted_action_templates <- actions.ActionTemplate
   - action_template_gates <- actions.ActionTemplateGate
   - consequence_outcomes <- checks.ConsequenceOutcome
   - traits <- checks.CheckTypeTrait
@@ -2052,6 +2057,7 @@
 - `get_character_path_level(character: 'ObjectDB') -> 'int' - Return the character's primary class level (or highest, or 1).`
 - `get_rollmod(character: 'ObjectDB') -> int - Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing entity of *level* adds to *check_type* (#2707).`
+- `mirrored_outcome(outcome: 'CheckOutcome') -> 'CheckOutcome | None' - The outcome on the other side of a resisted roll (#4418).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Main check resolution function.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
@@ -2428,6 +2434,7 @@
   - threat_pool -> combat.ThreatPool [FK] (nullable)
   - creature_template -> combat.CreatureTemplate [FK] (nullable)
   - persona -> scenes.Persona [FK] (nullable)
+  - voice_persona -> scenes.Persona [FK] (nullable)
   - portrait -> evennia_extensions.Media [FK] (nullable)
   - objectdb -> evennia.ObjectDB [FK] (nullable)
   - organization -> societies.Organization [FK] (nullable)
@@ -4375,6 +4382,11 @@
 **Foreign Keys:**
   - gm_profile -> gm.GMProfile [OneToOne]
   - game_week -> game_clock.GameWeek [FK] (nullable)
+
+### GuideProfile
+**Foreign Keys:**
+  - account -> evennia.AccountDB [OneToOne]
+  - granted_by -> evennia.AccountDB [FK]
 
 ### ProfileTextRequestDetails
 **Foreign Keys:**
@@ -8348,6 +8360,13 @@
   - trait -> forms.FormTrait [FK]
   - option -> forms.FormTraitOption [FK]
 
+### NPCLoan
+**Foreign Keys:**
+  - roster_entry -> roster.RosterEntry [FK]
+  - borrower -> evennia.AccountDB [FK]
+  - offered_by -> evennia.AccountDB [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+
 ### NPCPresetSkillLine
 **Foreign Keys:**
   - preset -> roster.NPCStatlinePreset [FK]
@@ -8401,6 +8420,8 @@
   - created_by_account -> evennia.AccountDB [FK] (nullable)
   - created_for_table -> gm.GMTable [FK] (nullable)
 **Pointed to by:**
+  - story_npc_settings <- roster.StoryNPCSettings
+  - npc_loans <- roster.NPCLoan
   - character_art <- roster.TenureMedia
   - tenures <- roster.RosterTenure
   - clues_held <- clues.CharacterClue
@@ -8462,6 +8483,10 @@
   - soul -> roster.Soul [FK]
   - kinsperson -> roster.Kinsperson [FK]
   - secret -> secrets.Secret [FK] (nullable)
+
+### StoryNPCSettings
+**Foreign Keys:**
+  - roster_entry -> roster.RosterEntry [OneToOne]
 
 ### TenureDisplaySettings
 **Foreign Keys:**
@@ -8669,6 +8694,7 @@
   - stylepresentationendorsement_set <- magic.StylePresentationEndorsement
   - covenant_roles_sworn <- covenants.CharacterCovenantRole
   - combat_opponents <- combat.CombatOpponent
+  - voiced_opponents <- combat.CombatOpponent
   - org_contributions <- currency.ContributionRecord
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
@@ -8823,6 +8849,7 @@
   - running_beat -> stories.Beat [FK] (nullable)
   - participants -> evennia.AccountDB [M2M]
 **Pointed to by:**
+  - npc_loans <- roster.NPCLoan
   - check_calls <- checks.CheckCall
   - treatment_attempts <- conditions.TreatmentAttempt
   - situation_instances <- mechanics.SituationInstance

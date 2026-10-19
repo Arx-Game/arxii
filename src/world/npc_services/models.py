@@ -1292,7 +1292,9 @@ class NpcRegardEvent(SharedMemoryModel):
     )
     amount = models.SmallIntegerField(
         help_text=(
-            "Signed delta applied to NpcRegard.value. Clamped to RegardEventConfig.max_event_delta."
+            "Signed delta applied to NpcRegard.value. Clamped to "
+            "RegardEventConfig.max_event_delta for an event a PC lived through; a "
+            "GM-authored event records the net change, uncapped."
         ),
     )
     source_pc_combat_action = models.ForeignKey(

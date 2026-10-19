@@ -15,7 +15,8 @@ term is chosen and the rest are listed under `_Avoid_`.
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
   Personalized name; and Prepared Text (#4101)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
-- [scenes](src/world/scenes/AGENT_GLOSSARY.md)
+- [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
+  Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
 - [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
   Settled round; and (ADR-4147) Spectacle, Spectacle kind
@@ -61,9 +62,10 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [companions](src/world/companions/AGENT_GLOSSARY.md) - also holds Savaged (#3652),
   the companion-defeat pool's condition for surviving a lethal mauling
 - [gm](src/world/gm/AGENT_GLOSSARY.md) - also holds the GM Prompt Queue terms (#4101):
-  GM Prompt, Narratable Event, GM Prompt Filter, Prompt Narration
+  GM Prompt, Narratable Event, GM Prompt Filter, Prompt Narration; and Guide (#4418, ADR-4418;
+  _Avoid_: helper, co-GM, assistant GM)
 - [flows](src/flows/AGENT_GLOSSARY.md) - the authoring-API vocabulary (#3417); root Flow/Trigger/Event terms stay in this file's Architecture seam section
-- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - character slots, original vs roster character, freeze / give up (#3996); the family page, the roll, the tree name, no tier words on player kin surfaces (#4209); also holds the CG Lineage-step
+- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - the #4418 playing-major-NPCs terms (ADR-4418): Story NPC, NPC roster, Loan, Owner, Template (_Avoid_: major NPC, held NPC); character slots, original vs roster character, freeze / give up (#3996); the family page, the roll, the tree name, no tier words on player kin surfaces (#4209); also holds the CG Lineage-step
   terms (#3617): Upbringing, Family Path, Prompt (Upbringing), Choice (Upbringing), Family
   Kind, Influence, plus (#3648) Family Template, Vacancy, Importance / Presumed importance,
   Served house, (#3660) Connection, Anchor, Stance, Follow-up, Question kind, (#3675)

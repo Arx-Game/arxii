@@ -170,9 +170,11 @@ def is_pc_source(source_character: "ObjectDB | None") -> bool:  # noqa: OBJECTDB
     connected, so an offline PC source used to read as an NPC here and could
     kill, breaking ADR-0023's PvP-is-non-lethal rule). ``is_player_character``
     also counts a puppeted character (``db_account`` set), so nothing the old
-    test called a PC stops being one. Returns False for a None source; a source
-    with no CharacterSheet (e.g. an ephemeral combat mook) is a PC only while
-    someone is puppeting it, the same answer the pre-#4091 test gave.
+    test called a PC stops being one, except a story NPC a GM or Guide plays,
+    which stays an NPC and so can kill (#4418, ADR-4418). Returns False for a
+    None source; a source with no CharacterSheet (e.g. an ephemeral combat
+    mook) is a PC only while someone is puppeting it, the same answer the
+    pre-#4091 test gave.
     """
     from world.roster.services.activity import is_player_character  # noqa: PLC0415
 
@@ -193,19 +195,25 @@ def death_is_permitted(
 
     Returns False (not permitted) when ANY of:
     - source_character is None (absent/non-lethal environmental context).
-    - source_character is a PC (ADR-0023: PvP is non-lethal).
+    - source_character is a PC AND the victim is PvP-protected
+      (``is_pvp_protected_victim``: ADR-0023, PvP is non-lethal). That covers a
+      player character and, conservatively, any character with a roster entry
+      that is not a story NPC (an unheld Available character, a GM/Staff OOC
+      character). A PC source against a story NPC is permitted, whoever is
+      playing it: NPC-ness follows the character (ADR-4418).
     - The victim carries an active death_deferred condition.
     - The victim is story-critical and the source is not a participant (#1874).
 
-    Returns True only for a non-PC source with no active death_deferred on
-    the victim and no story-criticality protection (i.e. a significant-NPC
-    attacker in a lethal encounter, where the victim is not load-bearing
-    for any active story).
+    Returns True otherwise: a non-PC attacker, or a PC attacker against an NPC
+    victim, with no active death_deferred on the victim and no story-criticality
+    protection.
     """
     if source_character is None:
         return False
 
-    if is_pc_source(source_character):
+    from world.roster.services.activity import is_pvp_protected_victim  # noqa: PLC0415
+
+    if is_pc_source(source_character) and is_pvp_protected_victim(victim_sheet):
         return False
 
     from world.conditions.services import has_death_deferred  # noqa: PLC0415
@@ -225,11 +233,15 @@ def death_is_permitted(
 
 def select_abandonment_pool(
     source_character: "ObjectDB | None",  # noqa: OBJECTDB_PARAM
+    *,
+    victim_sheet: "CharacterSheet",
 ) -> "ConsequencePool":
     """Return the abandonment ConsequencePool appropriate for the source type.
 
     Routes to one of three pre-authored pools by source character kind:
-    - PC source → ``abandonment_pvp`` pool (ADR-0023: die row filtered at runtime).
+    - PC source and a PvP-protected victim → ``abandonment_pvp`` pool (ADR-0023: die
+      row filtered at runtime). A PC abandoning a dying story NPC uses the enemy
+      pool instead (ADR-4418), as ``death_is_permitted`` allows that death.
     - Non-PC (NPC) source → ``abandonment_enemy`` pool.
     - None source → ``abandonment_environmental`` pool.
 
@@ -239,13 +251,14 @@ def select_abandonment_pool(
     named pool is absent — treat that as a seeding gap, not a logic error.
     """
     from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.roster.services.activity import is_pvp_protected_victim  # noqa: PLC0415
     from world.vitals.constants import (  # noqa: PLC0415
         POOL_ABANDONMENT_ENEMY,
         POOL_ABANDONMENT_ENVIRONMENTAL,
         POOL_ABANDONMENT_PVP,
     )
 
-    if is_pc_source(source_character):
+    if is_pc_source(source_character) and is_pvp_protected_victim(victim_sheet):
         pool_name = POOL_ABANDONMENT_PVP
     elif source_character is not None:
         pool_name = POOL_ABANDONMENT_ENEMY

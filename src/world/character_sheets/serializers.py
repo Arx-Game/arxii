@@ -30,7 +30,7 @@ from world.character_sheets.models import (
     ProfileTextVersion,
     Pronouns,
 )
-from world.character_sheets.services import can_edit_character_sheet, can_staff_edit_sheet
+from world.character_sheets.services import can_edit_character_sheet, can_edit_npc_sheet
 from world.character_sheets.types import (
     SHEET_VISIBILITY_RANK,
     ActorSheetSection,
@@ -2241,7 +2241,7 @@ class CharacterSheetSerializer(serializers.Serializer):
                 sheet, reveal_identity=reveal_identity, privileged=privileged
             ),
             # #3988 — the stored values staff edit mode edits; None for anyone else.
-            "staff_edit": _build_staff_edit(sheet) if can_staff_edit_sheet(user, sheet) else None,
+            "staff_edit": _build_staff_edit(sheet) if can_edit_npc_sheet(user, sheet) else None,
             "stats": _build_stats(sheet) if show_stats else {},
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),

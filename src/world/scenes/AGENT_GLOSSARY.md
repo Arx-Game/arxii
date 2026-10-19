@@ -148,3 +148,26 @@ _Avoid_: request id, idempotency key (client_request_id is the specific field/co
 **Connection generation** (#3760):
 A monotonic counter `useGameSocket` stamps onto each WebSocket connection it opens, so a stale connection's message handler — still running after a reconnect replaces it — can tell it belongs to a superseded generation and no-op instead of processing a frame meant for the new connection. Distinct from `PoseSubmission`/`client_request_id` (which dedupe a *dispatch*, not a *connection*); the two mechanisms compose: a reconnect flips generation, then the stored-draft reconciliation pass resolves whatever the old generation left pending.
 _Avoid_: session generation, socket epoch (generation is the term this codebase's reconnect logic already uses)
+
+**Cast list** (#4418):
+The derived list of a scene's Story NPCs and crowds with who plays each (`cast_list_services.scene_cast_list`,
+`GET /api/scenes/<id>/cast-list/`). No table of its own. Readable by the scene's GM, a co-owner and staff.
+"Cast" alone means a technique cast (`cast_services`), so this one always carries "list".
+_Avoid_: cast (alone), cast panel as the data (the panel is the GM's UI over the list), NPC list.
+
+**Crowd voice** (#4418):
+A Story NPC minted for a crowd of combat opponents, referenced by `CombatOpponent.voice_persona`, so the
+crowd poses under one name and portrait and can be lent like any Story NPC. It carries no combat identity
+(unlike `CombatOpponent.persona`), counts against no GM's Story NPC cap, and goes back to being an ordinary
+Story NPC when its fight is over.
+_Avoid_: crowd persona, mook voice, crowd NPC.
+
+**Resist card** (#4418):
+What the target of an NPC's contested social action sees: roll to resist, or, in a category flagged
+`refusable_from_npcs`, also refuse. Driven by the request's `resist_only` and the template's `resist_check_type`.
+A card with only Roll and Believe is resist-only. _Avoid_: consent prompt (the ask-and-deny flow between two PCs), save.
+
+**Flipped roll** (#4418):
+When a Story NPC uses a contested social template on a PC, the PC rolls the template's `resist_check_type`
+against a difficulty from the NPC's own rating in the action; the NPC never rolls. The PC's outcome is mirrored
+only to pick consequences. _Avoid_: NPC roll, reverse roll, opposed roll (that is the combat defender term).

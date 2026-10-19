@@ -10586,6 +10586,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/guides/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Active Guides, for a GM choosing who to lend an NPC to (#4418).
+     *
+     *     GMs and staff only. Each row is ``{account_id, display_name}``: a Guide is
+     *     shown by the name staff gave them, never an account or character name.
+     */
+    get: operations['gm_guides_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/invites/': {
     parameters: {
       query?: never;
@@ -18229,6 +18251,48 @@ export interface paths {
     patch: operations['npc_services_permit_details_partial_update'];
     trace?: never;
   };
+  '/api/npc-services/personality-traits/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Active personality traits, for a GM or Guide picking what works on an NPC (#4418).
+     *
+     *     Read-only; staff author the traits in the admin.
+     */
+    get: operations['npc_services_personality_traits_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/personality-traits/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Active personality traits, for a GM or Guide picking what works on an NPC (#4418).
+     *
+     *     Read-only; staff author the traits in the admin.
+     */
+    get: operations['npc_services_personality_traits_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/npc-services/reaction-lines/': {
     parameters: {
       query?: never;
@@ -21525,6 +21589,200 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/npcs/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    get: operations['roster_npcs_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/npcs/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    get: operations['roster_npcs_retrieve'];
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    put: operations['roster_npcs_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    patch: operations['roster_npcs_partial_update'];
+    trace?: never;
+  };
+  '/api/roster/npcs/{id}/borrow/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    post: operations['roster_npcs_borrow_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/npcs/{id}/copy-as-new/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    post: operations['roster_npcs_copy_as_new_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/npcs/{id}/copy-section/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    post: operations['roster_npcs_copy_section_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/npcs/{id}/preferences/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    put: operations['roster_npcs_preferences_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/npcs/{id}/regard/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    put: operations['roster_npcs_regard_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/npcs/answer/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    post: operations['roster_npcs_answer_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/npcs/offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The NPC offers waiting for the requesting Guide to answer. */
+    get: operations['roster_npcs_offers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/npcs/power-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description What the NPC form's Powers section picks from, before the NPC has a sheet.
+     *
+     *     The same catalog and narrowing as staff-magic-options, given ``?path=``,
+     *     ``?tradition=`` and ``?gift=`` picked so far.
+     */
+    get: operations['roster_npcs_power_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/npcs/templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
+    get: operations['roster_npcs_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/rosters/': {
     parameters: {
       query?: never;
@@ -21763,6 +22021,30 @@ export interface paths {
     };
     /** @description #745 — The scene room's current activity band (qualitative, time-aware). */
     get: operations['scenes_activity_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/scenes/{id}/cast-list/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/scenes/{id}/cast-list/ (#4418) - the scene's named story NPCs and
+     *     crowds, and who plays each.
+     *
+     *     Derived read (``world.scenes.cast_list_services.scene_cast_list``). Gated by
+     *     ``can_create_encounter_for_scene`` (staff, the scene's GM or co-owner), the
+     *     same accounts the web "Start encounter" button shows to; anyone else gets 404.
+     */
+    get: operations['scenes_cast_list_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -27620,6 +27902,11 @@ export interface components {
       text: string;
       shared: boolean;
     };
+    /** @description ``{loan_id, accept}``. */
+    AnswerRequest: {
+      loan_id: number;
+      accept: boolean;
+    };
     /**
      * @description Request serializer for POST /api/magic/applicable-pulls/.
      *
@@ -28964,6 +29251,12 @@ export interface components {
       label: string;
       coppers: number;
     };
+    /**
+     * @description * `gms` - GMs
+     *     * `gms_and_guides` - GMs and Guides
+     * @enum {string}
+     */
+    BorrowAudienceEnum: 'gms' | 'gms_and_guides';
     /** @description Frontend supplies ``reporter_persona``; ``location`` is server-derived. */
     BugReportCreate: {
       reporter_persona: number;
@@ -29330,6 +29623,39 @@ export interface components {
       readonly name: string;
       readonly description: string;
     };
+    /**
+     * @description One row of a scene's cast list (#4418): a named NPC or a crowd, and who plays it.
+     *
+     *     Serializes ``world.scenes.cast_list_services.CastListEntry``. ``played_by`` is a
+     *     character name, never an account name; blank for a crowd nobody voices yet.
+     *     ``count`` is the crowd's bodies (null for a named NPC); ``tier`` is the crowd's
+     *     opponent tier. ``roster_entry_id``/``persona_id`` are null for an unvoiced crowd.
+     *     ``opponent_ids`` are the crowd's ``CombatOpponent`` rows (what ``voice_crowd``
+     *     takes); empty for a named NPC.
+     */
+    CastListEntry: {
+      kind: components['schemas']['CastListEntryKindEnum'];
+      name: string;
+      roster_entry_id: number | null;
+      persona_id: number | null;
+      thumbnail_url: string;
+      played_by: string;
+      played_by_role:
+        | (components['schemas']['PlayedByRoleEnum'] | components['schemas']['NullEnum'])
+        | null;
+      loan_id: number | null;
+      loan_status: string | null;
+      tier: string | null;
+      count: number | null;
+      description: string;
+      opponent_ids: number[];
+    };
+    /**
+     * @description * `npc` - npc
+     *     * `crowd` - crowd
+     * @enum {string}
+     */
+    CastListEntryKindEnum: 'npc' | 'crowd';
     /** @description Nested pull declaration on the cast endpoint (#854). */
     CastPullRequestRequest: {
       resonance_id: number;
@@ -31057,6 +31383,21 @@ export interface components {
       /** Format: date-time */
       created_at: string;
     };
+    /** @description ``{name, as_template}``: a copy of the NPC under a new name. */
+    CopyAsNewRequest: {
+      name: string;
+      /** @default false */
+      as_template: boolean;
+    };
+    /** @description ``{source_entry, section}``: replace one section of the target with the source's. */
+    CopySectionRequest: {
+      source_entry: number;
+      section: components['schemas']['SectionEnum'];
+    };
+    /** @description What ``POST copy-section`` answers: the section copied. */
+    CopySectionResult: {
+      section: components['schemas']['SectionEnum'];
+    };
     /** @description Read-only serializer for Covenant identity, type, level, and lifecycle state. */
     Covenant: {
       readonly id: number;
@@ -31354,6 +31695,10 @@ export interface components {
     /** @description POST body for the #1127 create-mask endpoint — a temporary anonymous face. */
     CreateMaskRequestRequest: {
       name: string;
+    };
+    /** @description What ``POST copy-as-new`` answers: the new NPC's roster entry id. */
+    CreatedNPC: {
+      id: number;
     };
     /**
      * @description * `staff` - Staff-created
@@ -34868,6 +35213,16 @@ export interface components {
     GroupVoteRequestRequest: {
       option_id: number;
     };
+    /**
+     * @description An active Guide as a GM picks them to lend an NPC (#4418).
+     *
+     *     ``display_name`` only: never the account name or any of the Guide's characters.
+     */
+    Guide: {
+      readonly account_id: number;
+      /** @description The name GMs see this Guide by when lending them an NPC. Never the account name or one of their characters' names. */
+      readonly display_name: string;
+    };
     HeightBand: {
       readonly id: number;
       /** @description Internal key */
@@ -36525,6 +36880,13 @@ export interface components {
       readonly journal: components['schemas']['_JournalSummary'];
     };
     /**
+     * @description * `not_lent` - Not lent
+     *     * `on_request` - On request
+     *     * `without_asking` - Without asking
+     * @enum {string}
+     */
+    LendPolicyEnum: 'not_lent' | 'on_request' | 'without_asking';
+    /**
      * @description * `1` - Uncommon Knowledge
      *     * `2` - Whispers
      *     * `3` - Carefully Kept
@@ -38152,6 +38514,12 @@ export interface components {
       readonly effective_band: string;
       readonly temporary_sources: string[];
     };
+    /** @description The loan an account plays a borrowed NPC under (#4418). */
+    MyNPCLoan: {
+      readonly id: number;
+      readonly scene_title: string | null;
+      readonly offered_by_name: string;
+    };
     /** @description Serialize a summary of a roster entry for account menus. */
     MyRosterEntry: {
       readonly id: number;
@@ -38218,6 +38586,7 @@ export interface components {
       readonly lifecycle_state: string;
       readonly roster_type: string;
       readonly character_type: string;
+      readonly is_story_npc: boolean;
       readonly activity_state: string;
       readonly activity_requirement: string;
       readonly creation_provenance: string;
@@ -38227,6 +38596,9 @@ export interface components {
       readonly session_count: number;
       /** @description The room the character stands in while puppeted (#4321), else None. */
       readonly room_name: string | null;
+      readonly loan: components['schemas']['MyNPCLoan'] | null;
+      readonly npc_notes: string | null;
+      readonly is_crowd_voice: boolean;
     };
     /**
      * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
@@ -38293,6 +38665,100 @@ export interface components {
      * @enum {string}
      */
     NPCAssetStatusEnum: 'active' | 'compromised' | 'lost' | 'dismissed';
+    /** @description The owner's, an active borrower's, or staff's view of one NPC and its settings. */
+    NPCDetail: {
+      readonly id: number;
+      readonly name: string;
+      readonly thumbnail_url: string | null;
+      /** @description The start of what the character handler shows (``sheet_description``). */
+      readonly description: string;
+      readonly owner_name: string;
+      lend_policy: components['schemas']['LendPolicyEnum'];
+      borrow_audience: components['schemas']['BorrowAudienceEnum'];
+      readonly can_borrow: boolean;
+      listed_on_npc_roster: boolean;
+      notes_for_player: string;
+      readonly is_template: boolean;
+      readonly open_requests: components['schemas']['NPCOpenRequest'][];
+      readonly preferences: components['schemas']['NPCPreferenceRead'][];
+      readonly regard: components['schemas']['NPCRegardRead'][];
+    };
+    /** @description The owner's, an active borrower's, or staff's view of one NPC and its settings. */
+    NPCDetailRequest: {
+      lend_policy: components['schemas']['LendPolicyEnum'];
+      borrow_audience: components['schemas']['BorrowAudienceEnum'];
+      listed_on_npc_roster: boolean;
+      notes_for_player: string;
+    };
+    NPCLoan: {
+      readonly id: number;
+      readonly roster_entry: number;
+      readonly status: components['schemas']['NPCLoanStatusEnum'];
+    };
+    /**
+     * @description * `offered` - Offered
+     *     * `requested` - Requested
+     *     * `active` - Active
+     *     * `declined` - Declined
+     *     * `ended` - Ended
+     * @enum {string}
+     */
+    NPCLoanStatusEnum: 'offered' | 'requested' | 'active' | 'declined' | 'ended';
+    /**
+     * @description One OFFERED loan, as the Guide it was offered to reads it.
+     *
+     *     ``context["offered_names"]`` maps the offering account's id to the name shown.
+     */
+    NPCOffer: {
+      readonly loan_id: number;
+      readonly roster_entry_id: number;
+      readonly name: string;
+      readonly thumbnail_url: string | null;
+      readonly scene_id: number | null;
+      readonly scene_title: string | null;
+      readonly offered_by_name: string;
+      readonly notes_for_player: string;
+    };
+    /**
+     * @description A borrow request waiting on the owner, and who asked (#4418).
+     *
+     *     ``requester_name`` is shown the way ``player_names`` shows any account: a GM or
+     *     Staff character's name, a Guide's display name, or the role, never the account
+     *     name.
+     */
+    NPCOpenRequest: {
+      id: number;
+      status: components['schemas']['NPCLoanStatusEnum'];
+      requester_name: string;
+    };
+    /**
+     * @description What the NPC form's Powers section picks from before the NPC exists (#4418).
+     *
+     *     Staff edit mode's Grant magic options (``staff-magic-options``), read with no
+     *     sheet: the path comes from ``?path=`` instead of the sheet's own, and there is
+     *     no species. ``paths`` lists every Path to pick it from. ``all_stats`` and
+     *     ``all_skills`` are staff-options' full Stats and Skills catalogs (inactive skills
+     *     too), for the form's stat and skill overrides; ``stats`` and ``skills`` stay the
+     *     Grant magic lists.
+     */
+    NPCPowerOptions: {
+      traditions: components['schemas']['StaffOption'][];
+      gifts: components['schemas']['StaffOption'][];
+      techniques: components['schemas']['StaffOption'][];
+      resonances: components['schemas']['StaffOption'][];
+      stats: components['schemas']['StaffOption'][];
+      skills: components['schemas']['StaffOption'][];
+      technique_limit: number;
+      paths: components['schemas']['StaffOption'][];
+      all_stats: components['schemas']['StaffOption'][];
+      all_skills: components['schemas']['StaffOption'][];
+    };
+    /** @description One trait the NPC likes or dislikes, as the NPC form shows it. */
+    NPCPreferenceRead: {
+      readonly trait_id: number;
+      readonly trait_name: string;
+      readonly valence: components['schemas']['PreferenceValenceEnum'];
+    };
     /** @description One SKILL line, named by the skill rather than its id (#3427). */
     NPCPresetSkillLine: {
       readonly skill_name: string;
@@ -38342,6 +38808,17 @@ export interface components {
       /** @description The reaction text; <name> is replaced with the served character's presented name. */
       template: string;
     };
+    /**
+     * @description One active opinion the NPC holds. ``target_name`` is a persona, organization or
+     *     society name, never an account name.
+     */
+    NPCRegardRead: {
+      readonly target_type: components['schemas']['TargetTypeFedEnum'];
+      readonly target_id: number;
+      readonly target_name: string;
+      readonly value: number;
+      readonly reason: string;
+    };
     NPCRole: {
       readonly id: number;
       /** @description Display name; e.g., 'Builders Guild Clerk', 'Town Guard'. */
@@ -38370,6 +38847,23 @@ export interface components {
       faction_affiliation?: number | null;
       /** @description Master on/off switch for the role (#686). When False, no offer on this role is eligible in available_offers, regardless of per-offer state. Staff use this to disable a role without deleting it; migrated value from the legacy `MissionGiver.is_active`. */
       is_active?: boolean;
+    };
+    /**
+     * @description One listed NPC for a GM or Guide browsing the roster.
+     *
+     *     ``context`` carries what the view read once for the page: ``viewer`` (the
+     *     ``NPCViewer`` for the request), ``owner_names`` (account id to character name).
+     */
+    NPCRosterRow: {
+      readonly id: number;
+      readonly name: string;
+      readonly thumbnail_url: string | null;
+      /** @description The start of what the character handler shows (``sheet_description``). */
+      readonly description: string;
+      readonly owner_name: string;
+      readonly lend_policy: string;
+      readonly borrow_audience: string;
+      readonly can_borrow: boolean;
     };
     NPCServiceOffer: {
       readonly id: number;
@@ -40951,6 +41445,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['GroupStoryRequest'][];
     };
+    PaginatedGuideList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Guide'][];
+    };
     PaginatedHeldClueList: {
       /** @example 123 */
       count: number;
@@ -41378,6 +41887,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['NPCAsset'][];
     };
+    PaginatedNPCOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['NPCOffer'][];
+    };
     PaginatedNPCReactionLineList: {
       /** @example 123 */
       count: number;
@@ -41407,6 +41931,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['NPCRole'][];
+    };
+    PaginatedNPCRosterRowList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['NPCRosterRow'][];
     };
     PaginatedNPCServiceOfferList: {
       /** @example 123 */
@@ -41776,6 +42315,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Persona'][];
+    };
+    PaginatedPersonalityTraitList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PersonalityTrait'][];
     };
     PaginatedPetitionList: {
       /** @example 123 */
@@ -44213,6 +44767,13 @@ export interface components {
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
       availability_rule?: unknown;
     };
+    /** @description The owner's, an active borrower's, or staff's view of one NPC and its settings. */
+    PatchedNPCDetailRequest: {
+      lend_policy?: components['schemas']['LendPolicyEnum'];
+      borrow_audience?: components['schemas']['BorrowAudienceEnum'];
+      listed_on_npc_roster?: boolean;
+      notes_for_player?: string;
+    };
     /** @description Staff CRUD for banded NPC reaction lines (#2632). */
     PatchedNPCReactionLineRequest: {
       /** @description The role these lines belong to. */
@@ -45906,6 +46467,13 @@ export interface components {
      * @enum {string}
      */
     PersonaTypeEnum: 'primary' | 'established' | 'temporary' | 'alternate';
+    /** @description An active personality trait for the GM's "what works on them" picker (#4418). */
+    PersonalityTrait: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly eased_check: string | null;
+    };
     /**
      * @description Shop-window payload for a holder's perspective entries (#3281, ADR-0224).
      *
@@ -46026,6 +46594,13 @@ export interface components {
       source: string;
       level: number;
     };
+    /**
+     * @description * `gm` - GM
+     *     * `guide` - Guide
+     *     * `staff` - Staff
+     * @enum {string}
+     */
+    PlayedByRoleEnum: 'gm' | 'guide' | 'staff';
     /**
      * @description Read-only serializer for PlayerAction — the homogeneous availability descriptor.
      *
@@ -46576,6 +47151,28 @@ export interface components {
       | 'outcome_tier'
       | 'faction_standing_at_least'
       | 'npc_regard_at_least';
+    PreferenceLine: {
+      trait: number;
+      valence: components['schemas']['PreferenceValenceEnum'];
+    };
+    PreferenceLineRequest: {
+      trait: number;
+      valence: components['schemas']['PreferenceValenceEnum'];
+    };
+    /**
+     * @description * `likes` - Likes
+     *     * `dislikes` - Dislikes
+     * @enum {string}
+     */
+    PreferenceValenceEnum: 'likes' | 'dislikes';
+    /** @description ``{preferences: [{trait, valence}]}``: replaces the NPC's likes and dislikes. */
+    Preferences: {
+      preferences: components['schemas']['PreferenceLine'][];
+    };
+    /** @description ``{preferences: [{trait, valence}]}``: replaces the NPC's likes and dislikes. */
+    PreferencesRequest: {
+      preferences: components['schemas']['PreferenceLineRequest'][];
+    };
     /**
      * @description A character's own prepared Audere Majora crossing text (#4101).
      *
@@ -47200,6 +47797,20 @@ export interface components {
      * @enum {string}
      */
     ReferencedMilestoneTypeEnum: 'story_resolved' | 'chapter_reached' | 'episode_reached';
+    /** @description ``{target_type, target_id, value, reason}``: the NPC's opinion of one target. */
+    RegardRequest: {
+      target_type: components['schemas']['TargetTypeFedEnum'];
+      target_id: number;
+      value: number;
+      /** @default  */
+      reason: string;
+    };
+    /** @description What ``PUT regard`` answers: the regard now set. */
+    RegardResult: {
+      target_type: components['schemas']['TargetTypeFedEnum'];
+      target_id: number;
+      value: number;
+    };
     RegionMap: {
       readonly id: number;
       readonly name: string;
@@ -48217,6 +48828,8 @@ export interface components {
       readonly boon: {
         [key: string]: unknown;
       } | null;
+      readonly resist_only: boolean;
+      readonly resist_check_name: string | null;
       /** Format: date-time */
       readonly created_at: string;
       /**
@@ -48289,6 +48902,8 @@ export interface components {
       readonly strain_commitment: number;
       /** Format: date-time */
       readonly created_at: string;
+      readonly resist_only: boolean;
+      readonly resist_check_name: string | null;
     };
     /** @description A scene room's current activity band (shown before a teller commits). */
     SceneActivity: {
@@ -48574,6 +49189,24 @@ export interface components {
       /** @description Staff note on what belongs here. */
       description?: string;
     };
+    /**
+     * @description * `identity` - Identity
+     *     * `description` - Description
+     *     * `background` - Background
+     *     * `powers` - Powers
+     *     * `regard` - Regard
+     *     * `preferences` - Preferences
+     *     * `all` - All
+     * @enum {string}
+     */
+    SectionEnum:
+      | 'identity'
+      | 'description'
+      | 'background'
+      | 'powers'
+      | 'regard'
+      | 'preferences'
+      | 'all';
     /**
      * @description POST body for the #3412 character-selection endpoint.
      *
@@ -67769,6 +68402,32 @@ export interface operations {
       };
     };
   };
+  gm_guides_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /** @description Search by display name */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGuideList'];
+        };
+      };
+    };
+  };
   gm_invites_list: {
     parameters: {
       query?: {
@@ -78178,6 +78837,53 @@ export interface operations {
       };
     };
   };
+  npc_services_personality_traits_list: {
+    parameters: {
+      query?: {
+        name?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPersonalityTraitList'];
+        };
+      };
+    };
+  };
+  npc_services_personality_traits_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this personality trait. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PersonalityTrait'];
+        };
+      };
+    };
+  };
   npc_services_reaction_lines_list: {
     parameters: {
       query?: {
@@ -83088,6 +83794,327 @@ export interface operations {
       };
     };
   };
+  roster_npcs_list: {
+    parameters: {
+      query?: {
+        lendable_to_me?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedNPCRosterRowList'];
+        };
+      };
+    };
+  };
+  roster_npcs_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCDetail'];
+        };
+      };
+    };
+  };
+  roster_npcs_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NPCDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCDetail'];
+        };
+      };
+    };
+  };
+  roster_npcs_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedNPCDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCDetail'];
+        };
+      };
+    };
+  };
+  roster_npcs_borrow_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCLoan'];
+        };
+      };
+    };
+  };
+  roster_npcs_copy_as_new_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CopyAsNewRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CreatedNPC'];
+        };
+      };
+    };
+  };
+  roster_npcs_copy_section_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CopySectionRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CopySectionResult'];
+        };
+      };
+    };
+  };
+  roster_npcs_preferences_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PreferencesRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Preferences'];
+        };
+      };
+    };
+  };
+  roster_npcs_regard_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RegardRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RegardResult'];
+        };
+      };
+    };
+  };
+  roster_npcs_answer_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AnswerRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCLoan'];
+        };
+      };
+    };
+  };
+  roster_npcs_offers_list: {
+    parameters: {
+      query?: {
+        lendable_to_me?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedNPCOfferList'];
+        };
+      };
+    };
+  };
+  roster_npcs_power_options_retrieve: {
+    parameters: {
+      query?: {
+        gift?: number;
+        path?: number;
+        tradition?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCPowerOptions'];
+        };
+      };
+    };
+  };
+  roster_npcs_templates_list: {
+    parameters: {
+      query?: {
+        lendable_to_me?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedNPCRosterRowList'];
+        };
+      };
+    };
+  };
   roster_rosters_list: {
     parameters: {
       query?: never;
@@ -83595,6 +84622,37 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneActivity'];
+        };
+      };
+    };
+  };
+  scenes_cast_list_list: {
+    parameters: {
+      query?: {
+        finished_after?: string;
+        gm?: string;
+        is_active?: boolean;
+        location?: number;
+        participant?: number;
+        player?: string;
+        privacy_mode?: string;
+        status?: string;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CastListEntry'][];
         };
       };
     };

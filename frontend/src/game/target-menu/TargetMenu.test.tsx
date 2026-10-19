@@ -127,6 +127,7 @@ describe('TargetMenu', () => {
         character_slots: { total: 1, used: 0, activity_total: 0, activity_used: 0, holders: [] },
         is_staff: false,
         is_gm: false,
+        is_guide: false,
         available_characters: [
           {
             id: 7,

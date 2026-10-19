@@ -10,8 +10,11 @@ despise and it hardens. Aligned with ADR-0058's durable disposition tier
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import random
 from typing import TYPE_CHECKING
+
+from django.db import transaction
 
 from world.npc_services.models import NpcPreference, PersonalityTrait, PreferenceValence
 
@@ -62,3 +65,20 @@ def preference_modifier(npc_persona: Persona | None, check_type: CheckType | Non
         magnitude = row.trait.ease_magnitude
         total += magnitude if row.valence == PreferenceValence.LIKES else -magnitude
     return total
+
+
+def set_npc_preferences(persona: Persona, choices: Sequence[tuple[PersonalityTrait, str]]) -> None:
+    """Replace ``persona``'s likes and dislikes with ``choices`` (trait, valence) (#4418).
+
+    The owner's authoring seam for what works on a major NPC; a trait listed twice keeps
+    its last valence.
+    """
+    wanted = dict(choices)
+    with transaction.atomic():
+        NpcPreference.objects.filter(persona=persona).delete()
+        NpcPreference.objects.bulk_create(
+            [
+                NpcPreference(persona=persona, trait=trait, valence=valence)
+                for trait, valence in wanted.items()
+            ]
+        )

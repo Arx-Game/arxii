@@ -233,8 +233,8 @@ def create_abandonment_pools() -> dict[str, ConsequencePool]:
     - ``abandonment_enemy``: NPC (enemy) source abandons the downed victim.
       Higher die weight reflects greater peril from a hostile NPC context.
       Task 6 will add a ``captured_alive`` consequence to this pool.
-    - ``abandonment_pvp``: PC source abandons the victim.  ADR-0023: PvP is
-      non-lethal, so the ``die`` row exists but is filtered by
+    - ``abandonment_pvp``: PC source abandons a PvP-protected victim.  ADR-0023:
+      PvP is non-lethal, so the ``die`` row exists but is filtered by
       filter_character_loss + death_is_permitted at resolution time.
     - ``abandonment_environmental``: No source (environmental hazard, etc.).
       Moderate danger.
@@ -268,7 +268,8 @@ def create_abandonment_pools() -> dict[str, ConsequencePool]:
         },
         POOL_ABANDONMENT_PVP: {
             "description": (
-                "Abandonment resolution when the source is a player character."
+                "Abandonment resolution when the source is a player character and the victim"
+                " is PvP-protected."
                 " ADR-0023: die row exists but is filtered by death_is_permitted."
             ),
             "consequences": [
@@ -318,8 +319,8 @@ def create_dream_peril_pool():
       severe persistent Madness condition (behavior-altering).
     - ``die`` (Failure tier, weight=1, character_loss=True): physical death
       — the dreamer's body dies. Only reachable when death_is_permitted
-      (environmental/deep-dreaming sources; excluded for PC sources per
-      ADR-0023).
+      (environmental/deep-dreaming sources; excluded for a PC source against a
+      PvP-protected victim per ADR-0023, ADR-4418).
 
     Returns the ConsequencePool instance (safe to call multiple times —
     uses get_or_create throughout).

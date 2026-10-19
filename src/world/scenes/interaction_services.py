@@ -9,6 +9,8 @@ import uuid
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
+from django.db.models import F, IntegerField, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from world.scenes.block_services import social_control_excluded_target_ids
@@ -600,6 +602,15 @@ def _target_character_ids(target_persona_ids: list[int] | None) -> frozenset[int
     )
 
 
+# The protocol keys Evennia's web transports give a session. ``init_session`` sets
+# them: "websocket" (``portal/webclient.py``, and this repo's SecureWebSocketClient,
+# which subclasses it) and "ajax/comet" (``portal/webclient_ajax.py``). The
+# "webclient/websocket" a protocol instance carries before ``init_session`` runs is
+# overwritten, so no live session ever has it; testing for that prefix sent every
+# telnet-only line to every web session as well (#4418 real-testing bug G).
+WEB_PROTOCOL_KEYS = frozenset({"websocket", "ajax/comet"})
+
+
 def non_web_sessions(obj: ObjectDB | AccountDB) -> list[Any]:
     """Sessions on ``obj`` that do NOT already receive the structured payload.
 
@@ -608,19 +619,14 @@ def non_web_sessions(obj: ObjectDB | AccountDB) -> list[Any]:
     ``addressed_to`` account, #4101), since both expose the same
     ``.sessions.all()`` handler.
 
-    Evennia's webclient protocols stamp ``session.protocol_key`` as
-    ``"webclient/websocket"`` or ``"webclient/ajax"`` (see
-    ``evennia/server/portal/webclient*.py``); telnet, telnet/ssl and ssh use
-    ``"telnet"``/``"telnet/ssl"``/``"ssh"``. This mirrors the existing
-    telnet-vs-web discriminator in ``server/conf/inputfuncs.py``'s ``text()``
-    (``protocol_key.startswith("telnet")``), inverted and widened to "not
-    webclient" so ssh sessions -- which also never receive the ``interaction=``
-    outputfunc -- get the mark too.
+    A web session is one whose ``protocol_key`` is in ``WEB_PROTOCOL_KEYS``;
+    telnet, telnet/ssl and ssh sessions are the rest, and only they get the plain
+    text lines (the involvement mark, an outcome's text, a check's result line).
     """
     return [
         session
         for session in obj.sessions.all()
-        if not str(session.protocol_key or "").startswith("webclient")
+        if str(session.protocol_key or "") not in WEB_PROTOCOL_KEYS
     ]
 
 
@@ -638,9 +644,20 @@ def _send_involvement_mark(obj: ObjectDB) -> None:
     character (no non-web session) gets skipped entirely rather than sent
     with an empty list.
     """
+    send_text_to_non_web(obj, _INVOLVEMENT_MARK_TEXT)
+
+
+def send_text_to_non_web(obj: ObjectDB | AccountDB, text: str) -> None:
+    """Send ``text`` to ``obj``'s telnet and ssh sessions only (``non_web_sessions``).
+
+    For the plain-text twin of a line the web already gets as a structured frame,
+    so a browser never shows it twice. Passing ``session=`` an empty list would
+    fall back to every session (Evennia's ``session or self.sessions.all()``), so a
+    web-only character is skipped rather than sent an empty list.
+    """
     non_web = non_web_sessions(obj)
     if non_web:
-        obj.msg(_INVOLVEMENT_MARK_TEXT, session=non_web)
+        obj.msg(text, session=non_web)
 
 
 def _send_to_objects(
@@ -771,9 +788,27 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         attributed_companion_name=attributed_companion_name,
         reply_to=reply_to,
         narrates=narrates,
+        action_links=[],
     )
     payload["line"] = _line_for(payload, content)
     return payload
+
+
+def _action_links_payload(interaction: Interaction) -> list[dict[str, Any]]:
+    """The actions a POSE carries, serialized as the REST feed serializes them (#4418).
+
+    Read off ``cached_action_links``, which the pose's ``on_created`` hook filled
+    before this push, so it costs no query on a submitted pose. Other modes carry
+    no actions.
+    """
+    from world.scenes.interaction_serializers import (  # noqa: PLC0415
+        InteractionActionLinkSerializer,
+    )
+
+    if interaction.mode != InteractionMode.POSE:
+        return []
+    links = interaction.cached_action_links
+    return list(InteractionActionLinkSerializer(links, many=True).data) if links else []
 
 
 def _root_thread_id(interaction: Interaction) -> str | None:
@@ -1069,6 +1104,7 @@ def push_interaction(
         reply_to=_reply_parent_payload(interaction),
         narrates=_narrates_for(interaction),
     )
+    payload["action_links"] = _action_links_payload(interaction)
 
     if receiver_scoped:
         # Receiver-scoped modes (whisper, place-scoped, escalated visibility) keep
@@ -1312,24 +1348,16 @@ def _get_account_for_persona(persona: Persona) -> int | None:
 
 
 def accounts_for_personas(personas: list[Persona]) -> dict[int, int]:
-    """Map persona pk -> current account id for a batch of personas, in one query (#1219).
+    """Map persona pk -> the account playing it now, for a batch of personas, in one query.
 
     The batched form of ``_get_account_for_persona`` — used when pinning receiver accounts at
     interaction creation so a place-scoped (whole-room) interaction stays O(1) queries.
     Personas whose character has no current tenure are simply absent from the map. Public
     (#2710) so callers outside this module — e.g. concealing a cast's ACTION interaction in
     ``world.scenes.cast_services`` — can pin receiver accounts without reaching for an
-    underscore-prefixed name.
+    underscore-prefixed name. Who plays it follows ``playing_accounts_for_sheets``.
     """
-    from world.roster.models import RosterTenure  # noqa: PLC0415
-
-    sheet_ids = {p.character_sheet_id for p in personas}
-    sheet_to_account = dict(
-        RosterTenure.objects.filter(
-            roster_entry__character_sheet_id__in=sheet_ids,
-            end_date__isnull=True,
-        ).values_list("roster_entry__character_sheet_id", "player_data__account_id")
-    )
+    sheet_to_account = playing_accounts_for_sheets({p.character_sheet_id for p in personas})
     return {
         p.pk: sheet_to_account[p.character_sheet_id]
         for p in personas
@@ -1337,19 +1365,39 @@ def accounts_for_personas(personas: list[Persona]) -> dict[int, int]:
     }
 
 
-def _get_account_for_character(character_id: int) -> int | None:
-    """Get the account ID for a character via roster tenure."""
-    from world.roster.models import RosterEntry  # noqa: PLC0415
+def playing_accounts_for_sheets(sheet_ids: Iterable[int]) -> dict[int, int]:
+    """Map character sheet id -> the account playing that character, in one query (#4418).
 
-    try:
-        entry = RosterEntry.objects.get(character_sheet_id=character_id)
-        tenure = entry.tenures.filter(end_date__isnull=True).first()
-        if tenure is None:
-            return None
-        player_data = tenure.player_data
-        return player_data.account_id
-    except RosterEntry.DoesNotExist:
-        return None
+    The tenure holder, except while a story NPC is lent: then the ACTIVE loan's
+    borrower plays it, the same rule as ``Character.active_account``. Every "who
+    wrote / who heard this" pin (``Interaction.writer_account``, a receiver's
+    account, scene participation) reads it, so a Guide's whisper as a lent NPC is
+    the Guide's, never the owner's, and the owner's again once the loan ends.
+    Sheets with no current tenure are absent.
+    """
+    from world.roster.constants import NPCLoanStatus  # noqa: PLC0415
+    from world.roster.models import NPCLoan, RosterTenure  # noqa: PLC0415
+
+    borrower = NPCLoan.objects.filter(
+        roster_entry_id=OuterRef("roster_entry_id"), status=NPCLoanStatus.ACTIVE
+    ).values("borrower_id")[:1]
+    return dict(
+        RosterTenure.objects.filter(
+            roster_entry__character_sheet_id__in=list(sheet_ids),
+            end_date__isnull=True,
+        )
+        .annotate(
+            playing_id=Coalesce(
+                Subquery(borrower), F("player_data__account_id"), output_field=IntegerField()
+            )
+        )
+        .values_list("roster_entry__character_sheet_id", "playing_id")
+    )
+
+
+def _get_account_for_character(character_id: int) -> int | None:
+    """Get the account ID playing a character (see ``playing_accounts_for_sheets``)."""
+    return playing_accounts_for_sheets([character_id]).get(character_id)
 
 
 def ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
@@ -1917,7 +1965,8 @@ def narrate_privately(
     - The WS payload goes ONLY to ``character`` via ``_send_to_objects``, never
       ``push_interaction`` (which resolves delivery off the WRITER persona's
       location, and the Narrator has none).
-    - A direct ``character.msg(text)`` telnet companion (HARD telnet parity).
+    - The same text to the character's telnet sessions (``send_text_to_non_web``),
+      HARD telnet parity; web sessions read the pushed row instead.
 
     No-op when the character has no sheet or no primary persona.
 
@@ -1963,7 +2012,8 @@ def narrate_privately(
         target_persona_ids=[persona.pk],
     )
     _send_to_objects([character], payload)
-    character.msg(text)
+    # The web reads the pushed row; only telnet needs the line as text (#4418).
+    send_text_to_non_web(character, text)
     return interaction
 
 
