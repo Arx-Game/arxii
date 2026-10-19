@@ -446,8 +446,17 @@ threat pool for mooks, else one row each; a swarm is one row with a body count),
 `loan_status`, `tier`, `count`, `description`, `opponent_ids`. `played_by` is the
 borrower of this scene's ACTIVE or OFFERED loan, else any ACTIVE loan, else the tenure
 holder, shown as a GM or Staff character name, a Guide's `display_name`, or a role label;
-never an account name or a PC's name. Only the scene's GM, a co-owner or staff may read
-it (everyone else gets 404). The query count does not grow with the rows.
+never an account name or a PC's name. `played_by_role` (`PlayedByRole`: `gm`, `guide`,
+`staff`, or null) is the role that player plays in, from the same lookup
+(`shown_players`; staff first, then GM, then Guide). The response is a plain list, not
+paginated. Only the scene's GM, a co-owner or staff may read it (everyone else gets
+404). The query count does not grow with the rows.
+
+**Web or telnet** (`interaction_services.non_web_sessions`). The plain text lines for
+telnet (the involvement mark, an outcome's text, a check's result line) go only to
+sessions whose `protocol_key` is not in `WEB_PROTOCOL_KEYS` (`websocket`,
+`ajax/comet`, the keys Evennia's `init_session` gives a live browser session). The
+`webclient/...` value on a protocol instance is overwritten before any session exists.
 
 **Cast panel tools** (`actions/definitions/npc_lending.py`, `npc_cast.py`), all gated by
 `RunsScenePrerequisite`, which takes the `scene_id` the panel names (the GM may be
