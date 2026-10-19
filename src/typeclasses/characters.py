@@ -693,6 +693,12 @@ class Character(ObjectParent, DefaultCharacter):
         Evennia's ``at_pre_puppet`` (which only moves a location-less character) does
         not move it on the next puppet. Player characters, and GM and Staff OOC
         characters, still leave the grid.
+
+        Staying also skips the rest of the off-grid cleanup in ``at_post_unpuppet``,
+        on purpose: the encounter, battle and mission pause-on-disconnect protects
+        PCs (AFK never kills a PC), so a story NPC whose player disconnects pauses
+        nothing. Its room's scene is not checked for emptiness here either; an
+        unplayed story NPC never holds a scene open (``maybe_finish_empty_scene``).
         """
         from world.roster.services.activity import is_story_npc
 

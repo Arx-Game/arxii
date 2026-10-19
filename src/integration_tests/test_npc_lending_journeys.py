@@ -26,7 +26,7 @@ from world.roster.factories import NPCLoanFactory
 from world.roster.models import NPCLoan, RosterEntry
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
-from world.scenes.models import Interaction, Scene
+from world.scenes.models import Interaction, Scene, SceneParticipation
 
 MINE = "/api/roster/entries/mine/"
 SELECT = "/api/roster/entries/select/"
@@ -389,6 +389,52 @@ class AGuidePlaysALentNpc(JourneyCase):
         self.assertEqual(latest.writer_account_id, self.gm.pk)
         # The Guide's own whisper stays theirs to read once the loan is over.
         self.assertIn(whisper, Interaction.objects.visible_to(self.guide))
+
+    def test_a_whisper_to_a_lent_npc_reaches_its_borrower(self) -> None:
+        self._lend()
+        lantern = self.make_room("The Lantern")
+        elsewhere = SceneFactory(room=lantern, name="Elsewhere")
+        self.assertFalse(
+            SceneParticipation.objects.filter(scene=self.scene, account=self.guide).exists()
+        )
+
+        self.telnet(self.ysmay, "whisper Captain Vael=Let me through.")
+        whisper = Interaction.objects.get(mode=InteractionMode.WHISPER)
+        self.assertEqual(
+            list(whisper.receivers.values_list("account_id", flat=True)), [self.guide.pk]
+        )
+
+        # The Guide takes part in the scene they posed in as Vael, and only that one.
+        self._pose_as_vael(self.guide)
+        joined = SceneParticipation.objects.filter(account=self.guide)
+        self.assertEqual(list(joined.values_list("scene_id", flat=True)), [self.scene.pk])
+        self.assertFalse(joined.filter(scene=elsewhere).exists())
+
+    def _leave_the_gate_to(self, *characters) -> None:
+        lantern = self.make_room("The Lantern")
+        for character in characters:
+            character.move_to(lantern, quiet=True)
+
+    def test_the_scene_ends_when_only_an_unplayed_npc_is_left(self) -> None:
+        # Round 2: Vael stays in the room unplayed, and must not hold the scene open.
+        loan_id = self._lend()
+        self._leave_the_gate_to(self.ilsa, self.ysmay, self.ravenna)
+
+        self.scene.refresh_from_db()
+        self.assertFalse(self.scene.is_active)
+        self.assertEqual(NPCLoan.objects.get(pk=loan_id).status, NPCLoanStatus.ENDED)
+        self.assertEqual(self.vael.location, self.room)
+
+    def test_a_played_npc_keeps_the_scene_open(self) -> None:
+        self._lend()
+        self._leave_the_gate_to(self.ilsa, self.ysmay)
+        session = self._signed_in(self.ilsa, sessid=4423)
+        self.assertIn("Now controlling Captain Vael.", self.telnet(self.ilsa, "@ic Captain Vael"))
+        self.assertIs(session.puppet, self.vael)
+
+        self._leave_the_gate_to(self.ravenna)
+        self.scene.refresh_from_db()
+        self.assertTrue(self.scene.is_active)
 
     def test_a_scene_ends_with_an_unplayed_npc_in_the_room(self) -> None:
         self.assertIsNone(self.vael.account)
