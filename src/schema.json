@@ -34949,6 +34949,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedNPCOfferList'
           description: ''
+  /api/roster/npcs/power-options/:
+    get:
+      operationId: roster_npcs_power_options_retrieve
+      description: |-
+        What the NPC form's Powers section picks from, before the NPC has a sheet.
+
+        The same catalog and narrowing as staff-magic-options, given ``?path=``,
+        ``?tradition=`` and ``?gift=`` picked so far.
+      parameters:
+      - in: query
+        name: gift
+        schema:
+          type: integer
+      - in: query
+        name: path
+        schema:
+          type: integer
+      - in: query
+        name: tradition
+        schema:
+          type: integer
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCPowerOptions'
+          description: ''
   /api/roster/npcs/templates/:
     get:
       operationId: roster_npcs_templates_list
@@ -68260,6 +68292,67 @@ components:
       - id
       - requester_name
       - status
+    NPCPowerOptions:
+      type: object
+      description: |-
+        What the NPC form's Powers section picks from before the NPC exists (#4418).
+
+        Staff edit mode's Grant magic options (``staff-magic-options``), read with no
+        sheet: the path comes from ``?path=`` instead of the sheet's own, and there is
+        no species. ``paths`` lists every Path to pick it from. ``all_stats`` and
+        ``all_skills`` are staff-options' full Stats and Skills catalogs (inactive skills
+        too), for the form's stat and skill overrides; ``stats`` and ``skills`` stay the
+        Grant magic lists.
+      properties:
+        traditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        gifts:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        techniques:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        resonances:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        technique_limit:
+          type: integer
+        paths:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        all_stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        all_skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+      required:
+      - all_skills
+      - all_stats
+      - gifts
+      - paths
+      - resonances
+      - skills
+      - stats
+      - technique_limit
+      - techniques
+      - traditions
     NPCPreferenceRead:
       type: object
       description: One trait the NPC likes or dislikes, as the NPC form shows it.

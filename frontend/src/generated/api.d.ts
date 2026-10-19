@@ -21744,6 +21744,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/npcs/power-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description What the NPC form's Powers section picks from, before the NPC has a sheet.
+     *
+     *     The same catalog and narrowing as staff-magic-options, given ``?path=``,
+     *     ``?tradition=`` and ``?gift=`` picked so far.
+     */
+    get: operations['roster_npcs_power_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/npcs/templates/': {
     parameters: {
       query?: never;
@@ -38705,6 +38727,28 @@ export interface components {
       id: number;
       status: components['schemas']['NPCLoanStatusEnum'];
       requester_name: string;
+    };
+    /**
+     * @description What the NPC form's Powers section picks from before the NPC exists (#4418).
+     *
+     *     Staff edit mode's Grant magic options (``staff-magic-options``), read with no
+     *     sheet: the path comes from ``?path=`` instead of the sheet's own, and there is
+     *     no species. ``paths`` lists every Path to pick it from. ``all_stats`` and
+     *     ``all_skills`` are staff-options' full Stats and Skills catalogs (inactive skills
+     *     too), for the form's stat and skill overrides; ``stats`` and ``skills`` stay the
+     *     Grant magic lists.
+     */
+    NPCPowerOptions: {
+      traditions: components['schemas']['StaffOption'][];
+      gifts: components['schemas']['StaffOption'][];
+      techniques: components['schemas']['StaffOption'][];
+      resonances: components['schemas']['StaffOption'][];
+      stats: components['schemas']['StaffOption'][];
+      skills: components['schemas']['StaffOption'][];
+      technique_limit: number;
+      paths: components['schemas']['StaffOption'][];
+      all_stats: components['schemas']['StaffOption'][];
+      all_skills: components['schemas']['StaffOption'][];
     };
     /** @description One trait the NPC likes or dislikes, as the NPC form shows it. */
     NPCPreferenceRead: {
@@ -84009,6 +84053,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PaginatedNPCOfferList'];
+        };
+      };
+    };
+  };
+  roster_npcs_power_options_retrieve: {
+    parameters: {
+      query?: {
+        gift?: number;
+        path?: number;
+        tradition?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCPowerOptions'];
         };
       };
     };
