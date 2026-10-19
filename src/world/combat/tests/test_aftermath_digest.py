@@ -4,6 +4,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
+from evennia.objects.objects import ObjectSessionHandler
 from evennia.utils.test_resources import EvenniaTestCase
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
@@ -343,8 +344,19 @@ class DeliverAftermathDigestsTests(_CompletionSeamTestBase):
 
         for participant in (active_one, active_two, fled, removed):
             participant.character_sheet.character.msg = MagicMock()
+        # Each character plays from a telnet client and a browser at once.
+        sessions = {
+            participant.character_sheet.character.pk: [
+                MagicMock(protocol_key="telnet"),
+                MagicMock(protocol_key="websocket"),
+            ]
+            for participant in (active_one, active_two, fled, removed)
+        }
 
-        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+        with patch.object(
+            ObjectSessionHandler, "all", lambda handler: sessions.get(handler.obj.pk, [])
+        ):
+            complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
 
         narrator = get_or_create_narrator_persona()
         private_interactions = Interaction.objects.filter(
@@ -370,14 +382,20 @@ class DeliverAftermathDigestsTests(_CompletionSeamTestBase):
         self.assertEqual(actual_persona_ids, expected_persona_ids)
 
         # Each ACTIVE/FLED character gets two msg calls: the WebSocket interaction
-        # push (_send_to_objects) and the plain-text telnet line. Both carry the
-        # same digest text, so the plain-text call is the same across all three.
+        # push (_send_to_objects), and the plain-text line sent to its telnet
+        # session only (send_text_to_non_web, #4418): the browser reads the row, so
+        # the text never reaches it. Both carry the same digest text.
         texts = set()
         for participant in (active_one, active_two, fled):
             character = participant.character_sheet.character
             self.assertEqual(character.msg.call_count, 2)
+            pushes = [c for c in character.msg.call_args_list if "interaction" in c.kwargs]
+            self.assertEqual(len(pushes), 1)
             plain_calls = [c for c in character.msg.call_args_list if c.args]
             self.assertEqual(len(plain_calls), 1)
+            telnet, _browser = sessions[character.pk]
+            self.assertEqual(plain_calls[0].kwargs, {"session": [telnet]})
+            self.assertEqual(plain_calls[0].args[0], pushes[0].kwargs["interaction"][1]["content"])
             texts.add(plain_calls[0].args[0])
         self.assertEqual(len(texts), 1)
         self.assertTrue(next(iter(texts)).startswith("Aftermath: Victory"))
