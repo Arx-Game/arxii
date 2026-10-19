@@ -579,6 +579,59 @@ class AGuidePlaysALentNpc(JourneyCase):
             telnet_lines,
         )
 
+    def test_a_live_pose_names_the_action_it_carries(self) -> None:
+        # Bug I: a pose carrying an action reached other web sessions with no
+        # action_links, so the NPC response card never found the pose.
+        frames = Mock()
+        handler = evennia.SESSION_HANDLER
+        for name, stub in (("data_out", frames), ("disconnect", Mock())):
+            patcher = patch.object(handler, name, stub)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self._lend()
+        as_vael = self._web_signed_in(self.ilsa, 4450, puppet=self.vael)
+        ActionTemplateFactory(name="Persuade", check_type=CheckTypeFactory(name="Persuasion"))
+        ysmay_web = self.api(self.account_of(self.ysmay))
+        with self.captureOnCommitCallbacks(execute=True):
+            persuaded = ysmay_web.post(
+                "/api/action-requests/",
+                {
+                    "scene": self.scene.pk,
+                    "initiator_persona": persona_of(self.ysmay).pk,
+                    "target_persona": persona_of(self.vael).pk,
+                    "action_key": "persuade",
+                },
+                format="json",
+            )
+        self.assertEqual(persuaded.json()["status"], "resolved", persuaded.data)
+        action = Interaction.objects.filter(mode=InteractionMode.ACTION).latest("pk")
+        frames.reset_mock()
+
+        posed = ysmay_web.post(
+            SUBMIT_POSE,
+            {
+                "persona_id": persona_of(self.ysmay).pk,
+                "scene_id": self.scene.pk,
+                "content": "holds up the forged orders.",
+                "action_link_ids": [action.pk],
+                "client_request_id": str(uuid.uuid4()),
+            },
+            format="json",
+        )
+        self.assertEqual(posed.status_code, status.HTTP_201_CREATED, posed.data)
+
+        live = [
+            call.kwargs["interaction"][1]
+            for call in frames.call_args_list
+            if call.args[0] is as_vael and "interaction" in call.kwargs
+        ]
+        self.assertEqual(len(live), 1, live)
+        self.assertEqual(
+            [link["action_interaction"]["id"] for link in live[0]["action_links"]], [action.pk]
+        )
+        # The live frame names the same links the REST feed does for that pose.
+        self.assertEqual(live[0]["action_links"], posed.json()["action_links"])
+
     def test_a_scene_ends_with_an_unplayed_npc_in_the_room(self) -> None:
         self.assertIsNone(self.vael.account)
         finished = self.web(self.ravenna, "finish_scene")

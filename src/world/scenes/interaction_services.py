@@ -773,9 +773,27 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         attributed_companion_name=attributed_companion_name,
         reply_to=reply_to,
         narrates=narrates,
+        action_links=[],
     )
     payload["line"] = _line_for(payload, content)
     return payload
+
+
+def _action_links_payload(interaction: Interaction) -> list[dict[str, Any]]:
+    """The actions a POSE carries, serialized as the REST feed serializes them (#4418).
+
+    Read off ``cached_action_links``, which the pose's ``on_created`` hook filled
+    before this push, so it costs no query on a submitted pose. Other modes carry
+    no actions.
+    """
+    from world.scenes.interaction_serializers import (  # noqa: PLC0415
+        InteractionActionLinkSerializer,
+    )
+
+    if interaction.mode != InteractionMode.POSE:
+        return []
+    links = interaction.cached_action_links
+    return list(InteractionActionLinkSerializer(links, many=True).data) if links else []
 
 
 def _root_thread_id(interaction: Interaction) -> str | None:
@@ -1071,6 +1089,7 @@ def push_interaction(
         reply_to=_reply_parent_payload(interaction),
         narrates=_narrates_for(interaction),
     )
+    payload["action_links"] = _action_links_payload(interaction)
 
     if receiver_scoped:
         # Receiver-scoped modes (whisper, place-scoped, escalated visibility) keep
