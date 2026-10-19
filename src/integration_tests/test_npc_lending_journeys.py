@@ -425,6 +425,23 @@ class AGuidePlaysALentNpc(JourneyCase):
         self.assertEqual(NPCLoan.objects.get(pk=loan_id).status, NPCLoanStatus.ENDED)
         self.assertEqual(self.vael.location, self.room)
 
+    def test_the_scene_ends_when_the_last_player_was_playing_an_npc(self) -> None:
+        # Round 3: Ilsa, playing Vael, is the last player in Low Gate and disconnects.
+        loan_id = self._lend()
+        self._leave_the_gate_to(self.ilsa, self.ysmay)
+        session = self._signed_in(self.ilsa, sessid=4424)
+        self.assertIn("Now controlling Captain Vael.", self.telnet(self.ilsa, "@ic Captain Vael"))
+        self._leave_the_gate_to(self.ravenna)
+        self.scene.refresh_from_db()
+        self.assertTrue(self.scene.is_active)
+
+        session.account.unpuppet_object(session)
+
+        self.scene.refresh_from_db()
+        self.assertFalse(self.scene.is_active)
+        self.assertEqual(NPCLoan.objects.get(pk=loan_id).status, NPCLoanStatus.ENDED)
+        self.assertEqual(self.vael.location, self.room)
+
     def test_a_played_npc_keeps_the_scene_open(self) -> None:
         self._lend()
         self._leave_the_gate_to(self.ilsa, self.ysmay)

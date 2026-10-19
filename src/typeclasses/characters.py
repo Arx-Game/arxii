@@ -697,8 +697,9 @@ class Character(ObjectParent, DefaultCharacter):
         Staying also skips the rest of the off-grid cleanup in ``at_post_unpuppet``,
         on purpose: the encounter, battle and mission pause-on-disconnect protects
         PCs (AFK never kills a PC), so a story NPC whose player disconnects pauses
-        nothing. Its room's scene is not checked for emptiness here either; an
-        unplayed story NPC never holds a scene open (``maybe_finish_empty_scene``).
+        nothing. Its room's scene is still checked for emptiness: an unplayed story
+        NPC never holds a scene open (``maybe_finish_empty_scene``), so the last
+        player leaving, even one who was playing a story NPC, finishes it.
         """
         from world.roster.services.activity import is_story_npc
 
@@ -1196,8 +1197,15 @@ class Character(ObjectParent, DefaultCharacter):
             # Another window still has this character (#3812): closing one of
             # two tabs is not going offline, and the character stays on the grid.
             return
-        if not self._stays_when_unplayed():
+        stays = self._stays_when_unplayed()
+        if not stays:
             self._leave_the_grid(reason=kwargs.get("reason", ""))
+        elif origin is not None:
+            # An unplayed story NPC stays in the room but no longer holds its scene
+            # open, so its player leaving may have emptied it (#4418).
+            from world.scenes.round_services import maybe_finish_empty_scene
+
+            maybe_finish_empty_scene(origin)
 
         # Clear presence-tied resonance buff on logout; character is no longer present.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):
