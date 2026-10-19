@@ -11,12 +11,20 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.urls import reverse
+from rest_framework import status
+
 from actions.constants import ActionBackend
 from actions.factories import ActionTemplateFactory
+from actions.models import ActionEnhancement
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
 from integration_tests.harness import JourneyCase
-from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
+from world.checks.factories import (
+    CheckTypeFactory,
+    CheckTypeTraitFactory,
+    create_social_action_templates,
+)
 from world.checks.services import perform_check
 from world.checks.test_helpers import CheckCapture, force_check_outcome
 from world.checks.types import CheckResult, ExtraTraitTerm
@@ -56,7 +64,7 @@ from world.magic.factories import (
 from world.magic.models import CharacterResonance
 from world.magic.services.threads import weave_thread
 from world.magic.types.pull import CastPullDeclaration
-from world.progression.factories import CharacterPathHistoryFactory
+from world.progression.factories import CharacterPathHistoryFactory, KudosSourceCategoryFactory
 from world.progression.models import WeeklySkillUsage
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
@@ -183,6 +191,119 @@ class CastingWithATechniqueSkill(JourneyCase):
         self.assertEqual(self.roll_modifiers - unpulled, 3)
         balance = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
         self.assertEqual(balance.balance, 9)
+
+
+class FlirtingWithATechniqueSkill(JourneyCase):
+    """Ysmay flirts with Hobb through a technique and pulls a thread on its skill (#4450).
+
+    The technique-enhanced flirt rolls the flirt's own check plus the technique skill, so a
+    thread on either is in the action. How much the pull adds to that roll is a separate
+    matter (#4466); these journeys read the charge and the fizzle note over REST.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        KudosSourceCategoryFactory(name="social_engagement")
+        self.skill = SkillFactory()
+        self.parlor = self.make_room("The Parlor")
+        self.scene = SceneFactory(room=self.parlor)
+        templates = create_social_action_templates()
+        self.flirt = next(t for t in templates if t.name == "Flirt")
+        self.ysmay = self.make_player("Ysmay", room=self.parlor)
+        self.hobb = self.make_player("Hobb", room=self.parlor)
+        sheet = self.ysmay.sheet_data
+        CharacterPathHistoryFactory(character=sheet, path=PathFactory(technique_skill=self.skill))
+        CharacterTraitValue.objects.create(character=sheet, trait=self.skill.trait, value=30)
+        self.technique = TechniqueFactory(
+            name="Mesmerizing Gaze", intensity=3, control=8, anima_cost=2, gift=GiftFactory()
+        )
+        CharacterTechniqueFactory(character=sheet, technique=self.technique)
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name="Enchanted Flirt",
+            source_type="technique",
+            technique=self.technique,
+        )
+        self.resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=sheet, resonance=self.resonance, balance=10, lifetime_earned=10
+        )
+        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TRAIT,
+            resonance=self.resonance,
+            tier=1,
+            flat_bonus_amount=3,
+            effect_kind=EffectKind.FLAT_BONUS,
+        )
+
+    def thread_on(self, trait):
+        sheet = self.ysmay.sheet_data
+        CharacterThreadWeavingUnlockFactory(
+            character=sheet,
+            unlock=ThreadWeavingUnlockFactory(target_kind=TargetKind.TRAIT, unlock_trait=trait),
+        )
+        return weave_thread(sheet, TargetKind.TRAIT, trait, self.resonance, name="Anchor")
+
+    def balance(self) -> int:
+        return CharacterResonance.objects.get(
+            character_sheet=self.ysmay.sheet_data, resonance=self.resonance
+        ).balance
+
+    def flirt_with_a_pull_on(self, thread) -> dict:
+        """Ysmay asks with the pull declared, Hobb accepts; return the accepted result."""
+        created = self.api(self.account_of(self.ysmay)).post(
+            reverse("sceneactionrequest-list"),
+            {
+                "scene": self.scene.pk,
+                "initiator_persona": self.ysmay.sheet_data.primary_persona.pk,
+                "target_persona": self.hobb.sheet_data.primary_persona.pk,
+                "action_key": "flirt",
+                "technique_id": self.technique.pk,
+                "pull": {
+                    "resonance_id": self.resonance.pk,
+                    "tier": 1,
+                    "thread_ids": [thread.pk],
+                },
+            },
+            format="json",
+            headers={"X-Character-ID": str(self.ysmay.pk)},
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        accepted = self.api(self.account_of(self.hobb)).post(
+            reverse("sceneactionrequest-respond", args=[created.data["id"]]),
+            {"decision": "accept"},
+            format="json",
+            headers={"X-Character-ID": str(self.hobb.pk)},
+        )
+        self.assertEqual(accepted.status_code, status.HTTP_200_OK, accepted.data)
+        return accepted.data["result"]
+
+    def test_thread_on_technique_skill_is_in_the_flirt(self) -> None:
+        thread = self.thread_on(self.skill.trait)
+
+        result = self.flirt_with_a_pull_on(thread)
+
+        self.assertIsNone(result["fizzle_note"])
+        self.assertEqual(self.balance(), 9)
+
+    def test_thread_on_the_flirts_own_stat_is_still_in_the_flirt(self) -> None:
+        stat = self.flirt.check_type.traits.first().trait
+        thread = self.thread_on(stat)
+
+        result = self.flirt_with_a_pull_on(thread)
+
+        self.assertIsNone(result["fizzle_note"])
+        self.assertEqual(self.balance(), 9)
+
+    def test_thread_on_a_skill_the_flirt_does_not_roll_fizzles(self) -> None:
+        thread = self.thread_on(SkillFactory().trait)
+
+        result = self.flirt_with_a_pull_on(thread)
+
+        self.assertEqual(result["fizzle_note"], "Thread anchor is not involved in this action.")
+        self.assertEqual(self.balance(), 10)
 
 
 class FightingWithATechniqueSkill(JourneyCase):

@@ -969,8 +969,9 @@ def _charge_social_pull(
 
     Returns ``0`` when no declaration exists on the request.
 
-    Resolves ``involved_traits`` from the check type's trait weights so TRAIT
-    threads can be validated as anchor-in-action. Waives anima cost when the
+    Resolves ``involved_traits`` from the check type's trait weights (plus the technique
+    skill term when the request carries a technique) so TRAIT threads can be validated
+    as anchor-in-action. Waives anima cost when the
     scene is not high-stakes (no active combat encounter or DANGER round).
 
     **Idempotent (#1919):** on first call, charges via
@@ -985,6 +986,10 @@ def _charge_social_pull(
             (``respond_to_action_request``) catches these to degrade to a fizzle.
     """
     from world.magic.constants import EffectKind, TargetKind  # noqa: PLC0415
+    from world.magic.services.magic_skills import (  # noqa: PLC0415
+        involved_trait_ids,
+        technique_skill_term,
+    )
     from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
@@ -1005,7 +1010,14 @@ def _charge_social_pull(
     if action_request.target_persona is not None:
         target = action_request.target_persona.character_sheet.character
 
-    involved_traits = tuple(check_type.traits.values_list("trait_id", flat=True))
+    # A technique-enhanced action also rolls the technique skill (#4450), so a TRAIT thread
+    # on that skill is in the action: the involved traits are the template's check traits
+    # plus the technique term.
+    technique_terms: tuple[ExtraTraitTerm, ...] = ()
+    if action_request.technique is not None:
+        skill_term = technique_skill_term(sheet.character, action_request.technique)
+        technique_terms = (skill_term,) if skill_term is not None else ()
+    involved_traits = involved_trait_ids(check_type, technique_terms)
 
     # Anima waiver: waived (zeroed) when no active combat or DANGER round.
     anima_cost_override = 0 if not _scene_is_high_stakes(action_request) else None
