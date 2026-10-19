@@ -153,17 +153,22 @@ They do not use the command system, dispatchers, or handlers.
   `RelationshipBumpAction` (`"relationship_bump"`, #1699, unchanged) — the ambient +/-1 nudge;
   `progression_rewards.py` (#1348) — the 7 progression-reward verbs, all REGISTRY backend,
   `target_type=SELF`: `ClaimKudosAction` (key `"claim_kudos"`; wraps `claim_kudos_for_xp`),
-  `CastVoteAction` / `RemoveVoteAction` (keys `"cast_vote"` / `"remove_vote"`; wrap
-  `cast_vote` / `remove_vote` in `services.voting`),
+  `NominateAction` / `WithdrawNominationAction` (keys `"nominate"` / `"withdraw_nomination"`;
+  wrap `nominate` / `withdraw_nomination` in `services.nominations`, #3738, which replaced
+  the vote budget),
   `ClaimRandomSceneAction` / `RerollRandomSceneAction` (keys `"claim_random_scene"` /
   `"reroll_random_scene"`; wrap `claim_random_scene` / `reroll_random_scene_target` in
   `services.random_scene`), `SetPathIntentAction` / `ClearPathIntentAction` (keys
   `"set_path_intent"` / `"clear_path_intent"`; wrap `set_path_intent` / `clear_path_intent`
   in the new `world.progression.services.path_intent` module). Shared by telnet
-  `CmdKudos` (`kudos`) / `CmdVote` (`vote`) / `CmdRandomScene` (`randomscene`, alias `rscene`) /
-  `CmdPathIntent` (`pathintent`) and the web `ClaimKudosView` / `VoteViewSet` /
-  `RandomSceneViewSet` / `PathIntentViewSet`; closes the ADR-0001 "web bypasses actions" gap
-  for these reward capabilities;
+  `CmdKudos` (`kudos`) / `CmdNominate` (`nominate`) / `CmdRandomScene` (`randomscene`, alias
+  `rscene`) / `CmdPathIntent` (`pathintent`) and the web `ClaimKudosView` / the nomination
+  views / `RandomSceneViewSet` / `PathIntentViewSet`; closes the ADR-0001 "web bypasses
+  actions" gap for these reward capabilities. Every one is typed through the handler in
+  `integration_tests/test_earning_your_keep_journeys.py` (#3657 tranche 12), as are
+  `progression.py`'s `ManageTrainingAction` / `PurchaseUnlockAction`, whose unknown-id
+  refusals are now sentences of their own rather than the ORM's "matching query does not
+  exist";
   `scene_reactions.py` (#1341) — the three "upvote an interaction" REGISTRY actions, all
   `target_type=SELF`: `ToggleFavoriteAction` (key `"toggle_interaction_favorite"`, wraps
   `world.scenes.reaction_toggle_services.toggle_interaction_favorite`),

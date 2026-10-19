@@ -177,16 +177,20 @@ def claim_kudos_for_xp(
     """
     from world.progression.services.awards import award_xp
 
+    # Refuse a claim that would pay nothing BEFORE the claim writes anything. The
+    # rollback this used to rely on undid the rows but not the idmapper-shared
+    # KudosPointsData instance, which kept the claimed amount and showed the player
+    # a balance short by it until the cache next flushed (#3657 tranche 12).
+    if claim_category.calculate_reward(amount) <= 0:
+        msg = f"Kudos amount {amount} is not enough for any XP with this conversion rate"
+        raise ValueError(msg)
+
     claim_result = claim_kudos(
         account=account,
         amount=amount,
         claim_category=claim_category,
         description=description or f"Claimed {amount} kudos for XP",
     )
-
-    if claim_result.reward_amount <= 0:
-        msg = f"Kudos amount {amount} is not enough for any XP with this conversion rate"
-        raise ValueError(msg)
 
     xp_transaction = award_xp(
         account=account,

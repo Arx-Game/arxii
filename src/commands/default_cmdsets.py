@@ -106,7 +106,7 @@ from commands.evennia_overrides.items import (
 )
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
-from commands.evennia_overrides.system import CmdNoMatch
+from commands.evennia_overrides.system import CmdAccounts, CmdNoMatch
 from commands.events import CmdEvent
 from commands.expulsion import CmdExpel  # #2989
 from commands.fashion import CmdJudgePresentation
@@ -253,6 +253,11 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             "@set",
             "@spawn",
             "@copy",
+            # #3657 tranche 12: Evennia's @accounts carries an @account alias, and
+            # a merge treats any shared key or alias as the same command, so it
+            # swallowed the player's `account` (account cmdset, lower priority).
+            # CmdAccounts below is the same listing without the alias.
+            "@accounts",
         ):
             self.remove(cmdname)
 
@@ -266,6 +271,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # instead of an untyped line it cannot place. Same wording as
             # Evennia's own fallback, suggestions included.
             CmdNoMatch,
+            CmdAccounts,
             CmdGet,
             CmdDrop,
             CmdGive,
