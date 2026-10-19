@@ -139,19 +139,17 @@ def _holds_evidence(character: ObjectDB, evidence: CrimeEvidence) -> bool:
 
 
 def _destroy_evidence_item(evidence: CrimeEvidence) -> None:
-    """Delete the evidence's physical item.
+    """Destroy the evidence's physical item by the destroy rule (#4474).
 
-    Deleting the game object can cascade to the ItemInstance row (its FK), which
-    zeroes the cached instance's pk — guard before the row delete.
+    An item with provenance is soft-destroyed and keeps its history; a bare one is
+    removed with its game object. Either way the evidence stops pointing at it.
     """
+    from world.items.services.usage import destroy_consumed_item_instance  # noqa: PLC0415
+
     instance = evidence.item_instance
     if instance is None:
         return
-    game_object = instance.game_object
-    if game_object is not None:
-        game_object.delete()
-    if instance.pk is not None:
-        instance.delete()
+    destroy_consumed_item_instance(instance, note="Evidence disposed of.")
     evidence.item_instance = None
 
 

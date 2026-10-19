@@ -585,12 +585,12 @@ class VaultAccessEntry(DiscriminatorMixin, SharedMemoryModel):
         constraints = [
             UniqueConstraint(
                 fields=["vault_details", "holder_persona"],
-                condition=Q(holder_type="PERSONA"),
+                condition=Q(holder_type=HolderType.PERSONA),
                 name="vault_access_persona_unique",
             ),
             UniqueConstraint(
                 fields=["vault_details", "holder_organization"],
-                condition=Q(holder_type="ORGANIZATION"),
+                condition=Q(holder_type=HolderType.ORGANIZATION),
                 name="vault_access_org_unique",
             ),
         ]

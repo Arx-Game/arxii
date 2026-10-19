@@ -27,6 +27,11 @@ class StoryStatus(Enum):
 - Native Django integration
 - Better IDE support and type checking
 
+In a constraint `condition=`/`check=`, compare a choices field to the member
+(`Q(holder_type=HolderType.PERSONA)`), never a typed string: the stored value is
+lower case, a wrong-case literal never matches a row, and the index then enforces
+nothing (#4476). `world/tests/test_constraint_choice_literals.py` fails on any such literal.
+
 ## Migration Management for a New Subsystem
 
 **#2906 collapsed every first-party app into one** (package `world`, label

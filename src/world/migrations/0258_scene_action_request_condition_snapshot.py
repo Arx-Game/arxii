@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0256_gift_technique_skill_minor_only"),
+        ("arxii", "0257_vault_access_uniqueness_applies"),
     ]
 
     operations = [

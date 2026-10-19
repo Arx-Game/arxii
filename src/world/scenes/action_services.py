@@ -1097,8 +1097,9 @@ def _resolve_action_against_persona(
             from ``action_request.difficulty_choice``. Task 4 (plausibility
             defender) supplies per-target values via this seam.
         pull_flat_bonus: FLAT_BONUS from a charged social pull (#1919), folded
-            into the plain-action check's ``extra_modifiers``. 0 when no pull
-            was declared or the pull fizzled.
+            into the check's ``extra_modifiers`` on both the plain and the
+            technique-enhanced branch. 0 when no pull was declared or the pull
+            fizzled.
 
     Returns:
         (result, result_interaction, difficulty) — difficulty is returned so
@@ -1192,7 +1193,10 @@ def _resolve_action_against_persona(
             difficulty=difficulty,
             context=context,
             effort_modifier=(
-                fatigue_penalty + technique_check_modifiers + (favor.value if favor else 0)
+                fatigue_penalty
+                + technique_check_modifiers
+                + (favor.value if favor else 0)
+                + pull_flat_bonus
             ),
             effort_level=effort_level,
             strain_commitment=action_request.strain_commitment,

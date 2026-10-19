@@ -26,7 +26,7 @@ def snapshot_treated_conditions(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0257_scene_action_request_condition_snapshot"),
+        ("arxii", "0258_scene_action_request_condition_snapshot"),
     ]
 
     operations = [

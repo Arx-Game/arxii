@@ -336,13 +336,17 @@ def redeem_instrument(
 ) -> CurrencyTransfer:
     """Convert a physical coin back into ledger money (fee-free).
 
-    Consumes the instrument (the coin is melted back into the books) —
-    including its physical ObjectDB, when one exists, via the established
-    consumption pattern (``usage.hard_delete_item_instance`` precedent:
-    delete the game_object, CASCADE removes the ItemInstance row; ownership
-    events survive via SET_NULL). Without this a redeemed coin would linger
-    as a ghost object in the depositor's inventory (#1909).
+    Consumes the instrument (the coin is melted back into the books) by the destroy
+    rule (#4474, ``usage.destroy_consumed_item_instance``): a coin that changed hands is
+    soft-destroyed and keeps its history, a bare one is removed with its physical
+    ObjectDB. Without this a redeemed coin would linger as a ghost object in the
+    depositor's inventory (#1909). A destroyed coin cannot be redeemed again.
     """
+    from world.items.services.usage import destroy_consumed_item_instance  # noqa: PLC0415
+
+    if instance.destroyed_at is not None:
+        msg = "That coin has already been redeemed."
+        raise ValidationError(msg)
     details = CurrencyInstrumentDetails.objects.get(item_instance=instance)
     with transaction.atomic():
         row = transfer(
@@ -351,14 +355,10 @@ def redeem_instrument(
             to_purse=to_purse,
             to_treasury=to_treasury,
         )
-        game_object = instance.game_object
-        holder = game_object.location if game_object is not None else None
-        if game_object is not None:
-            game_object.delete()  # CASCADE removes the ItemInstance row
-        else:
-            instance.delete()
-        if holder is not None and hasattr(holder, "carried_items"):
-            holder.carried_items.invalidate()
+        destroy_consumed_item_instance(instance, note=f"Redeemed for {details.face_value}c.")
+        # The coin's value is back in the books: a soft-destroyed coin must not keep
+        # counting as money in circulation.
+        CurrencyInstrumentDetails.objects.filter(pk=details.pk).delete()
     return row
 
 

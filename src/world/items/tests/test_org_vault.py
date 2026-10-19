@@ -2,9 +2,11 @@
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 
 from world.items.constants import OrgVaultEventKind
-from world.items.factories import ItemInstanceFactory
+from world.items.factories import ItemTemplateFactory
+from world.items.models import ItemInstance
 from world.items.org_vault_models import OrgVaultEvent, VaultHolding
 from world.items.services.org_vault import (
     can_access_vault,
@@ -12,8 +14,19 @@ from world.items.services.org_vault import (
     get_or_create_org_vault,
     withdraw_item_from_vault,
 )
+from world.magic.tests.price_cost_helpers import carry
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+
+
+def _real_held_item(persona) -> ItemInstance:
+    """An item held the way play makes one: a game object in the holder's inventory plus
+    the holder pointer (#4474; a factory item with no object never reached the object
+    branch of deposit)."""
+    item = carry(persona.character_sheet.character, ItemTemplateFactory())
+    item.holder_character_sheet = persona.character_sheet
+    item.save(update_fields=["holder_character_sheet"])
+    return item
 
 
 class OrgVaultServiceTests(TestCase):
@@ -27,7 +40,8 @@ class OrgVaultServiceTests(TestCase):
         OrganizationMembershipFactory(persona=cls.grunt, organization=cls.org, rank=5)
 
     def _held_item(self, persona):
-        return ItemInstanceFactory(holder_character_sheet=persona.character_sheet)
+        """A real item: it has a game object in the holder's inventory (#4474)."""
+        return _real_held_item(persona)
 
     def test_any_member_deposits_and_custody_moves_to_the_org(self) -> None:
         item = self._held_item(self.grunt)
@@ -39,6 +53,50 @@ class OrgVaultServiceTests(TestCase):
         self.assertEqual(holding.deposited_by, self.grunt)
         event = OrgVaultEvent.objects.get(kind=OrgVaultEventKind.DEPOSIT)
         self.assertEqual(event.actor_persona, self.grunt)
+
+    def test_deposit_keeps_the_item_row_and_drops_only_its_object(self) -> None:
+        item = self._held_item(self.grunt)
+        item.custom_name = "Grandmother's locket"
+        item.save(update_fields=["custom_name"])
+        game_object_pk = item.game_object_id
+        deposit_item_to_vault(organization=self.org, persona=self.grunt, item_instance=item)
+        kept = ItemInstance.objects.get(pk=item.pk)
+        self.assertEqual(kept.custom_name, "Grandmother's locket")
+        self.assertIsNone(kept.game_object_id)
+        self.assertFalse(ObjectDB.objects.filter(pk=game_object_pk).exists())
+        self.assertEqual(list(self.grunt.character_sheet.character.carried_items), [])
+
+    def test_a_worn_item_is_taken_off_when_deposited(self) -> None:
+        from world.items.factories import EquippedItemFactory
+        from world.items.models import EquippedItem
+
+        item = self._held_item(self.grunt)
+        EquippedItemFactory(character=self.grunt.character_sheet, item_instance=item)
+        deposit_item_to_vault(organization=self.org, persona=self.grunt, item_instance=item)
+        self.assertFalse(EquippedItem.objects.filter(item_instance=item).exists())
+
+    def test_a_deposited_pouch_spills_its_contents_to_the_holder(self) -> None:
+        pouch = carry(self.grunt.character_sheet.character, ItemTemplateFactory(is_container=True))
+        pouch.holder_character_sheet = self.grunt.character_sheet
+        pouch.save(update_fields=["holder_character_sheet"])
+        coin_purse_item = self._held_item(self.grunt)
+        coin_purse_item.contained_in = pouch
+        coin_purse_item.save(update_fields=["contained_in"])
+        coin_purse_item.game_object.location = pouch.game_object
+        deposit_item_to_vault(organization=self.org, persona=self.grunt, item_instance=pouch)
+        coin_purse_item.refresh_from_db()
+        self.assertIsNone(coin_purse_item.contained_in)
+        self.assertEqual(coin_purse_item.game_object.location, self.grunt.character_sheet.character)
+        self.assertEqual(coin_purse_item.holder_character_sheet, self.grunt.character_sheet)
+
+    def test_withdraw_puts_the_item_back_in_the_recipients_inventory(self) -> None:
+        item = self._held_item(self.grunt)
+        deposit_item_to_vault(organization=self.org, persona=self.grunt, item_instance=item)
+        withdraw_item_from_vault(organization=self.org, persona=self.head, item_instance=item)
+        back = ItemInstance.objects.get(pk=item.pk)
+        self.assertIsNotNone(back.game_object)
+        self.assertEqual(back.game_object.location, self.head.character_sheet.character)
+        self.assertEqual(list(self.head.character_sheet.character.carried_items), [back])
 
     def test_outsider_cannot_deposit(self) -> None:
         item = self._held_item(self.outsider)
@@ -109,10 +167,7 @@ class VaultTransitTests(TestCase):
         OrganizationMembershipFactory(persona=self.carrier, organization=self.org, rank=3)
         OrganizationMembershipFactory(persona=self.head, organization=self.org, rank=1)
         self.vault = get_or_create_org_vault(self.org)
-        self.stones = [
-            ItemInstanceFactory(holder_character_sheet=self.carrier.character_sheet)
-            for _ in range(3)
-        ]
+        self.stones = [_real_held_item(self.carrier) for _ in range(3)]
         for stone in self.stones:
             VaultTransit.objects.create(
                 vault=self.vault,
@@ -169,6 +224,8 @@ class VaultTransitTests(TestCase):
             3,
         )
         self.assertFalse(self._transits.objects.filter(resolved_at__isnull=True).exists())
+        for stone in self.stones:  # custody is the row: every stone survives, object-less
+            self.assertIsNone(ItemInstance.objects.get(pk=stone.pk).game_object_id)
 
     def test_npc_carrier_never_skims(self) -> None:
         self._seed_embezzlement(self._consent_modes.EVERYONE)
