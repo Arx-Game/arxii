@@ -94,6 +94,29 @@ def _describe_treatment_outcome(
     return " ".join(lines)
 
 
+def settle_treatment_requests_for_condition(instance: ConditionInstance) -> None:
+    """Settle every treat request aimed at ``instance`` before play deletes it (#4475).
+
+    A request still open (pending or accepted) is expired, because the wound it offered
+    to treat is gone and there is nothing left to resolve it against. Every request, open
+    or resolved, gets its template and name snapshot filled in if the save-time snapshot
+    missed it (rows the previous release wrote carry none), so the history still says
+    what was treated once the instance row is gone.
+    """
+    open_statuses = (ActionRequestStatus.PENDING, ActionRequestStatus.ACCEPTED)
+    for request in SceneActionRequest.objects.filter(target_condition_instance=instance):
+        fields: list[str] = []
+        if not request.target_condition_name:
+            request.target_condition_template = instance.condition
+            request.target_condition_name = instance.condition.name
+            fields += ["target_condition_template", "target_condition_name"]
+        if request.status in open_statuses:
+            request.status = ActionRequestStatus.EXPIRED
+            fields.append("status")
+        if fields:
+            request.save(update_fields=fields)
+
+
 def _resolve_treatment_request(
     action_request: SceneActionRequest,
 ) -> EnhancedSceneActionResult | None:

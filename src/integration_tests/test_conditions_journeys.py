@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from django.test import tag
+
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import BreakFreeMode, TreatmentTargetKind
@@ -26,9 +28,12 @@ from world.magic.factories import (
     BerserkConditionTemplateFactory,
     RestoreToSenseActionTemplateFactory,
 )
+from world.scenes.action_constants import ActionRequestStatus
+from world.scenes.action_models import SceneActionRequest
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction, Scene
 from world.traits.factories import CheckSystemSetupFactory
+from world.vitals.constants import SLEEPING_CONDITION_NAME
 
 # A roll of 95 lands in the top band of every chart CheckSystemSetupFactory builds.
 ROLL_WELL = patch("world.checks.services.random.randint", return_value=95)
@@ -268,3 +273,80 @@ class AGMAppliesAConditionAtTheTable(JourneyCase):
         )
         self.assertFalse(refused.detail.success)
         self.assertFalse(ConditionInstance.objects.filter(target=self.ravenna).exists())
+
+
+@tag("postgres")
+class WakingFromASleepSomeoneOfferedToTreat(JourneyCase):
+    """A condition that a treat offer points at can still go away (#4475).
+
+    The request kept the condition instance with PROTECT, so removing the condition
+    (here Ysmay waking, which removes Sleeping) raised ProtectedError. The request now
+    keeps what it treated by name and template; an offer still open when the condition
+    goes is closed as expired.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        fresh_check_system()
+        self.room = self.make_room("The Clinic")
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.scene = SceneFactory(
+            room=self.room,
+            participants=[self.account_of(self.hobb), self.account_of(self.ysmay)],
+        )
+        sleeping = ConditionTemplateFactory(name=SLEEPING_CONDITION_NAME)
+        TreatmentTemplateFactory(
+            name="Smelling Salts",
+            target_condition=sleeping,
+            target_kind=TreatmentTargetKind.PRIMARY,
+        )
+        self.sleep = ConditionInstanceFactory(target=self.ysmay, condition=sleeping, severity=5)
+        self.watch(self.ysmay)
+
+    def _offer(self) -> SceneActionRequest:
+        self.telnet(self.hobb, "treat Ysmay 1")
+        return SceneActionRequest.objects.get(
+            initiator_persona__character_sheet=self.hobb.sheet_data
+        )
+
+    def test_waking_closes_an_offer_still_open_and_keeps_what_it_treated(self) -> None:
+        offer = self._offer()
+        self.assertEqual(offer.status, ActionRequestStatus.PENDING)
+
+        told = self.telnet(self.ysmay, "wake")
+
+        self.assertIn("You wake from your dream.", told)
+        self.assertFalse(ConditionInstance.objects.filter(pk=self.sleep.pk).exists())
+        offer = SceneActionRequest.objects.get(pk=offer.pk)
+        self.assertEqual(offer.status, ActionRequestStatus.EXPIRED)
+        self.assertIsNone(offer.target_condition_instance_id)
+        self.assertEqual(offer.target_condition_name, SLEEPING_CONDITION_NAME)
+        self.assertEqual(offer.target_condition_template.name, SLEEPING_CONDITION_NAME)
+        self.assertEqual(offer.treatment.name, "Smelling Salts")
+
+    def test_waking_after_a_treatment_took_hold_keeps_the_resolved_record(self) -> None:
+        offer = self._offer()
+        with ROLL_WELL:
+            self.telnet(self.ysmay, "accept")
+        self.assertEqual(
+            SceneActionRequest.objects.get(pk=offer.pk).status, ActionRequestStatus.RESOLVED
+        )
+
+        self.telnet(self.ysmay, "wake")
+
+        offer = SceneActionRequest.objects.get(pk=offer.pk)
+        self.assertEqual(offer.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNone(offer.target_condition_instance_id)
+        self.assertEqual(offer.target_condition_name, SLEEPING_CONDITION_NAME)
+
+    def test_an_offer_closed_by_the_wake_cannot_be_accepted_later(self) -> None:
+        offer = self._offer()
+        self.telnet(self.ysmay, "wake")
+
+        late = self.telnet(self.ysmay, f"accept {offer.pk}")
+
+        self.assertNotIn("Traceback", late)
+        self.assertEqual(
+            SceneActionRequest.objects.get(pk=offer.pk).status, ActionRequestStatus.EXPIRED
+        )
