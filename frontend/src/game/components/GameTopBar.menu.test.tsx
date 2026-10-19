@@ -52,6 +52,7 @@ const aria: MyRosterEntry = {
   loan: null,
   npc_notes: null,
   is_crowd_voice: false,
+  is_story_npc: false,
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 0,

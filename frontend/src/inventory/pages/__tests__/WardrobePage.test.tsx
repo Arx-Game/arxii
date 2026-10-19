@@ -102,6 +102,7 @@ function makeRosterEntry(overrides: Partial<MyRosterEntry> = {}): MyRosterEntry 
     loan: null,
     npc_notes: null,
     is_crowd_voice: false,
+    is_story_npc: false,
     primary_persona_id: null,
     active_persona_id: null,
     unread_narrative_count: 0,
