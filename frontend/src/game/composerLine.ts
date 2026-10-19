@@ -122,6 +122,30 @@ function heldForWord(word: string, settled: boolean): ComposerLine {
   };
 }
 
+/** A list addresses people only: every name must be present. */
+function readTargetList(trimmed: string, names: string[], people: Set<string>): ComposerLine {
+  const missing = names.filter((name) => !people.has(name.toLowerCase()));
+  if (missing.length === 0) return prose(trimmed, trimmed, uniqueNames(names));
+  return {
+    kind: 'held',
+    reason: `Nobody called ${joinWithOr(missing)} is here.`,
+    hint: DRAFT_KEPT,
+    settled: true,
+  };
+}
+
+/** With no known audience, @ can select a command but cannot name someone absent. */
+function readUnscopedAtLine(
+  trimmed: string,
+  word: string,
+  names: string[] | null,
+  context: ComposerLineContext
+): ComposerLine {
+  if (context.commandNames.includes(word.toLowerCase()) && (names?.length ?? 1) === 1)
+    return { kind: 'command', line: trimmed };
+  return prose(trimmed, trimmed, context.addressing && names ? uniqueNames(names) : []);
+}
+
 function readAtLine(trimmed: string, context: ComposerLineContext): ComposerLine {
   const commands = new Set(context.commandNames);
   const isCommand = (name: string) => commands.has(name.toLowerCase());
@@ -135,19 +159,11 @@ function readAtLine(trimmed: string, context: ComposerLineContext): ComposerLine
   if (!word) return prose(trimmed);
 
   if (!people) {
-    if (isCommand(word) && (names?.length ?? 1) === 1) return { kind: 'command', line: trimmed };
-    return prose(trimmed, trimmed, context.addressing && names ? uniqueNames(names) : []);
+    return readUnscopedAtLine(trimmed, word, names, context);
   }
 
   if (names && names.length > 1) {
-    const missing = names.filter((name) => !isPerson(name));
-    if (missing.length === 0) return prose(trimmed, trimmed, uniqueNames(names));
-    return {
-      kind: 'held',
-      reason: `Nobody called ${joinWithOr(missing)} is here.`,
-      hint: DRAFT_KEPT,
-      settled: true,
-    };
+    return readTargetList(trimmed, names, people);
   }
   if (isPerson(word)) return prose(trimmed, trimmed, names ? [word] : []);
   if (isCommand(word)) return { kind: 'command', line: trimmed };

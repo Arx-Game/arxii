@@ -183,6 +183,18 @@ Three other ways an item leaves play also go through it:
   TRANSFERRED event to no receiver (`event_type=`), so the trail survives for the
   deferred reclamation of fenced goods.
 
+**Never delete an item's game object either (#4474).** The cascade means that
+`item.game_object.delete()` deletes the item row and its history. An item that is used up
+goes through `destroy_consumed_item_instance`. Custody that keeps the item and needs no
+physical object calls `dematerialize_item_instance(item_instance)`, which detaches the
+object and saves the row before deleting the object. The org vault and the boon fallback
+(an object that cannot follow the item) use it; `withdraw_item_from_vault` materializes
+a fresh object in the recipient's inventory. Evidence disposal (`dispose_evidence`),
+coin redemption (`redeem_instrument`, which then refuses a destroyed coin) and lost
+gem stones in a collection use the destroy helper. The `item-deletes` pre-commit hook
+(`tools/lint_item_deletes.py`) rejects a `.game_object.delete()` or an `ItemInstance`
+queryset delete outside `usage.py`, and `item-destroy-reviewer` covers the rest.
+
 **Never call `ItemInstance.delete()` to use up an item.** `game_object` cascades from
 the game object to the row, not back, so a bare row delete leaves the item's
 `ObjectDB` on the character as a ghost. `consume_materials` did exactly this until
@@ -889,7 +901,9 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
   and vogue momentum (`SilhouetteVogueMomentum` / `StyleVogueMomentum`,
   global v1, decayed BEFORE settlement) move only on the engagement legs.
   Engagement signal: `create_style_presentation_endorsement` bumps the
-  endorsee's unsettled showing (`record_showing_engagement`).
+  endorsee's unsettled showing (`record_showing_engagement`), which flushes
+  and refreshes the cached `FashionShowing` after its `F()` update so the
+  weekly settlement (same identity-map object) pays on the true count (#4476).
 
 ### Coverage & concealment: the layer walk + show/conceal (#2985, ADR-0199; refines ADR-0194)
 

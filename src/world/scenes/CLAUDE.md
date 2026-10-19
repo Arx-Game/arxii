@@ -245,6 +245,13 @@ the unified Persona identity system, and non-combat scene rounds.
   `deliver_outcome_interaction`, run immediately rather than on commit, for a caller that
   pushes the payload synchronously itself (combat's encounter OUTCOME line, which must land
   before the aftermath digest, #4091). Same recipients as the push; webclient sessions skipped.
+- **`broadcast_scene_emit(..., scene_scoped_push=True)`** (the GM prompt release path, #4101):
+  its live push into the scene's own room now also sends the text line
+  `send_outcome_text_to_non_web` sends, to the same recipients (#3657 tranche 11). Before, the
+  scene-scoped branch pushed only the structured web frame, so a prompt's authored room line
+  released on close (`gm prompt dismiss`, or `send` with the room leg uncovered) reached the
+  web feed and no telnet onlooker. The record-only branches (no location, scene not live) are
+  unchanged, and so is the default non-scoped push every other caller uses.
 - **`push_interaction(..., *, location=None)`**: gained an optional `location` kwarg (#3807).
   Omitted, it resolves from the writer persona's own character location, byte-identical to
   before. A caller passes it explicitly for a Narrator-authored row, since the Narrator's

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -141,11 +141,36 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
     )
     target_condition_instance = models.ForeignKey(
         "arxii.ConditionInstance",
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="treatment_action_requests",
-        help_text="Condition instance being treated, when applicable.",
+        help_text=(
+            "Condition instance being treated, when applicable. Play deletes the instance "
+            "(healing, expiry, waking, a bulk clear), so this goes null then and "
+            "target_condition_name / target_condition_template say what it was (#4475)."
+        ),
+    )
+    target_condition_template = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Snapshot of the treated instance's template, taken the first time the request "
+            "is saved with an instance. Outlives the instance (#4475)."
+        ),
+    )
+    target_condition_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        db_default="",
+        help_text=(
+            "Snapshot of the treated condition's name. Outlives the instance and the "
+            "template (#4475)."
+        ),
     )
     target_pending_alteration = models.ForeignKey(
         "arxii.PendingAlteration",
@@ -301,6 +326,18 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
             models.Index(fields=["scene", "status"]),
             models.Index(fields=["initiator_persona", "created_at"]),
         ]
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Snapshot the treated condition's template and name the first time it is set."""
+        if self.target_condition_instance_id and not self.target_condition_name:
+            self.snapshot_target_condition()
+        super().save(*args, **kwargs)
+
+    def snapshot_target_condition(self) -> None:
+        """Copy the live treated instance's template and name onto this request."""
+        template = self.target_condition_instance.condition
+        self.target_condition_template = template
+        self.target_condition_name = template.name
 
     def __str__(self) -> str:
         target = self.target_persona.name if self.target_persona_id else "room"

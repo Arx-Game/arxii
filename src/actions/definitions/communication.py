@@ -43,6 +43,7 @@ def _parse_reply_target(kwargs: dict[str, Any]) -> tuple[ReplyTarget | None, Act
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from flows.object_states.base_state import BaseState
     from world.gm.models import GMPrompt
     from world.scenes.models import Interaction, Persona, Scene
     from world.scenes.place_models import Place
@@ -958,6 +959,38 @@ class PemitAction(Action):
         return linker.result() if linker is not None else ActionResult(success=True)
 
 
+def _deliver_whisper(
+    caller_state: BaseState,
+    target_state: BaseState,
+    text: str,
+    language: Language | None,
+) -> None:
+    """Deliver the private telnet line and the sender's echo once."""
+    # Direct message: Evennia msg() to the target only, for telnet clients.
+    # Web clients receive this as a TEXT message but should prefer the
+    # structured INTERACTION payload from push_interaction. Receiver-scoped
+    # trust (#2993): the chosen audience always gets the full text, never garbled.
+    language_name = None if language is None or language.is_universal else language.name
+    send_message(
+        target_state,
+        render_line(
+            caller_state.get_display_name(looker=target_state),
+            InteractionMode.WHISPER,
+            text,
+            language_name=language_name,
+        ),
+        echo_of=InteractionMode.WHISPER,
+    )
+    # The whisperer's own echo (#3657: telnet showed them nothing; the web
+    # drops it as an echo of the row it already has).
+    spoken_in = f" in {language_name}" if language_name else ""
+    send_message(
+        caller_state,
+        f'You whisper to {target_state.get_display_name(looker=caller_state)}{spoken_in}, "{text}"',
+        echo_of=InteractionMode.WHISPER,
+    )
+
+
 @dataclass
 class WhisperAction(Action):
     """Whisper to a specific target."""
@@ -994,32 +1027,6 @@ class WhisperAction(Action):
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
         target_state = sdm.initialize_state_for_object(target)
-
-        def _broadcast() -> None:
-            # Direct message: Evennia msg() to the target only, for telnet clients.
-            # Web clients receive this as a TEXT message but should prefer the
-            # structured INTERACTION payload from push_interaction. Receiver-scoped
-            # trust (#2993): the chosen audience always gets the full text, never garbled.
-            language_name = None if language is None or language.is_universal else language.name
-            send_message(
-                target_state,
-                render_line(
-                    caller_state.get_display_name(looker=target_state),
-                    InteractionMode.WHISPER,
-                    text,
-                    language_name=language_name,
-                ),
-                echo_of=InteractionMode.WHISPER,
-            )
-            # The whisperer's own echo (#3657: telnet showed them nothing; the web
-            # drops it as an echo of the row it already has).
-            spoken_in = f" in {language_name}" if language_name else ""
-            send_message(
-                caller_state,
-                f"You whisper to {target_state.get_display_name(looker=caller_state)}"
-                f'{spoken_in}, "{text}"',
-                echo_of=InteractionMode.WHISPER,
-            )
 
         client_request_id = kwargs.get("client_request_id")
         if client_request_id is not None:
@@ -1069,11 +1076,11 @@ class WhisperAction(Action):
             # fix as submit_pose (#3760): a retry must not double-deliver even
             # though the DB side is correctly deduped.
             if not result.replayed:
-                _broadcast()
+                _deliver_whisper(caller_state, target_state, text, language)
         else:
             # Record + push: creates DB record and sends structured WebSocket payload.
             # Web clients use this for the scene feed display.
-            _broadcast()
+            _deliver_whisper(caller_state, target_state, text, language)
             record_whisper_interaction(
                 character=actor,
                 target=target,

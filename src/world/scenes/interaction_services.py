@@ -251,6 +251,10 @@ def broadcast_scene_emit(
         receiver_characters=[],
         location=scene.room,
     )
+    # The web push above carries only the structured frame; a telnet onlooker in the
+    # scene's room heard nothing of a released authored room line (#3657 tranche 11).
+    # Same text line ``deliver_outcome_interaction`` sends, to the same recipients.
+    send_outcome_text_to_non_web(interaction, location=scene.room)
 
 
 def reassign_persona_interactions(

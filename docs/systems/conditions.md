@@ -608,6 +608,24 @@ pair that evades scene, engagement, or bond gating.
 
 See ADR-0048 for the rationale behind the custom-action-resolver registry.
 
+### When the treated condition goes away (#4475)
+
+A treat request points at the `ConditionInstance` it offered to treat, and play deletes
+instances (healing to nothing, expiry, decay, waking, a successful removal check, a
+bulk clear, combat upkeep). The FK is `SET_NULL`, and the request snapshots
+`target_condition_template` and `target_condition_name` the first time it is saved
+with an instance, so the scene's treatment history still says what was treated.
+`ConditionInstance.delete()` calls
+`world.scenes.action_services.settle_treatment_requests_for_condition` first, so every
+removal path is covered: a request still `PENDING` or `ACCEPTED` becomes `EXPIRED`
+(the wound is gone, nothing left to treat), a `RESOLVED` one keeps its status, and any
+request without a snapshot (written by the previous release during a deploy) gets one.
+Queryset `.delete()` and parent cascades skip the override; they still pass (SET_NULL)
+but leave an open request unsettled. `SceneActionRequest.treatment` stays PROTECT
+(staff-authored template); `thread_used` (threads are retired with `retired_at`, never
+deleted) and `target_pending_alteration` (status-driven, never deleted by play) stay
+PROTECT.
+
 ---
 
 ## Design Principles

@@ -175,6 +175,20 @@ class KinRowsValidationTests(TestCase):
             res = self._patch(rows)
             self.assertEqual(res.status_code, 400, (rows, res.content))
 
+    def test_malformed_kin_row_does_not_replace_saved_people(self):
+        rows = [{"kind": "child", "name": "Pip", "fate": "raised"}]
+        self.assertEqual(self._patch(rows).status_code, 200)
+        for invalid in (
+            "Pip",
+            {"kind": "child", "name": 17},
+            {"kind": "child", "name": "Pip", "gender_id": "unknown"},
+        ):
+            with self.subTest(row=invalid):
+                res = self._patch([invalid])
+                self.assertEqual(res.status_code, 400, res.content)
+                self.draft.refresh_from_db()
+                self.assertEqual(self.draft.draft_data["kin_rows"], rows)
+
 
 class KinRowsFinalizeTests(FinalizationTestMixin, TestCase):
     """The seated people reach the kinship graph at finalize (#4395)."""

@@ -121,13 +121,21 @@ class CmdOutfit(ArxCommand):
             raise CommandError(msg)
         return outfit
 
-    # `use_dbref=True` is required below: Evennia's `search()` gates dbref
-    # (`#123`) lookups behind a Builder-permission lock by default
-    # (`use_dbref=None` → checks `perm(Builder)`), so a bare `#{id}` search
-    # would silently fail to match for ordinary players. It's safe here
-    # because `location=self.caller` already scopes the search to items the
-    # caller physically holds — this can't be used to reference another
-    # player's or room's objects by id.
+    def _held_by_id(self, object_id: str) -> Any | None:
+        """The game object with this id in the caller's hands, or None.
+
+        `use_dbref=True` is required: Evennia's `search()` gates dbref (`#123`)
+        lookups behind a Builder-permission lock by default (`use_dbref=None`
+        checks `perm(Builder)`), so a bare `#{id}` search would silently fail to
+        match for ordinary players. It is safe here because `location=self.caller`
+        scopes the search to things the caller physically holds; another player's
+        or a room's objects cannot be named by id this way. Quiet, so a miss is
+        answered once, by the caller's own line (#3657 tranche 10).
+        """
+        matches = self.caller.search(
+            f"#{object_id}", location=self.caller, use_dbref=True, quiet=True
+        )
+        return matches[0] if len(matches) == 1 else None
 
     def _do_save(self, rest: str) -> None:
         kwargs = _parse_kwargs(rest)
@@ -135,8 +143,8 @@ class CmdOutfit(ArxCommand):
         wardrobe_id = kwargs.get("wardrobe", "")
         if not name or not wardrobe_id.isdigit():
             raise CommandError(_USAGE)
-        wardrobe_obj = self.caller.search(f"#{wardrobe_id}", location=self.caller, use_dbref=True)
-        if not wardrobe_obj:
+        wardrobe_obj = self._held_by_id(wardrobe_id)
+        if wardrobe_obj is None:
             msg = "You aren't holding that wardrobe."
             raise CommandError(msg)
         wardrobe_instance = resolve_item_instance(wardrobe_obj)
@@ -180,8 +188,8 @@ class CmdOutfit(ArxCommand):
         layer = kwargs.get("layer", "")
         if not item_id.isdigit() or not region or not layer:
             raise CommandError(_USAGE)
-        item_obj = self.caller.search(f"#{item_id}", location=self.caller, use_dbref=True)
-        if not item_obj:
+        item_obj = self._held_by_id(item_id)
+        if item_obj is None:
             msg = "You aren't holding that item."
             raise CommandError(msg)
         item_instance = resolve_item_instance(item_obj)

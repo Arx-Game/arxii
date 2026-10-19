@@ -360,6 +360,22 @@ repos:
         # and container, unequips, spills contents and writes the exit OwnershipEvent.
         # Tests are excluded: they stage destroyed rows on purpose. Suppress with
         # `# noqa: DESTROYED_AT <reason>`; a bare token is still a finding.
+      - id: item-deletes
+        name: Reject deleting an item's game object or ItemInstance outside the usage helpers
+        entry: uv run python tools/lint_item_deletes.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/.*\.py$
+        exclude: (/tests/|/migrations/)
+        # #4474 (2026-10-19): `ItemInstance.game_object` cascades, so deleting an item's
+        # game object deletes the item row and its history. Vault deposit, vault transit,
+        # evidence disposal and coin redemption each did it by hand, skipping the destroy
+        # rules (soft-delete for an item with a design or provenance). Only
+        # `dematerialize_item_instance` (keep the item) and `destroy_consumed_item_instance`
+        # (destroy it), both in src/world/items/services/usage.py, may delete. Tests are
+        # excluded. Suppress with `# noqa: ITEM_DELETE <reason>`; a bare token is still a
+        # finding.
       - id: evennia-desc-attribute
         name: Reject Evennia's desc Attribute (nothing renders it)
         entry: uv run python tools/lint_evennia_desc_attribute.py

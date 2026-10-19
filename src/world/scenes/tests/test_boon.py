@@ -625,6 +625,36 @@ class BoonResolverE2ETests(TestCase):
         boon.refresh_from_db()
         self.assertIsNone(boon.fulfilled_at)
 
+    def test_a_held_item_whose_object_cannot_move_keeps_its_row(self) -> None:
+        """#4474: when the object will not move to the asker, only the object goes; the
+        item row (custody is the row) survives and changes hands."""
+        from evennia.objects.models import ObjectDB
+
+        from world.items.factories import ItemTemplateFactory
+        from world.items.models import ItemInstance
+        from world.magic.tests.price_cost_helpers import carry
+        from world.scenes.boon_services import fulfill_boon
+
+        item = carry(self.npc_target.character_sheet.character, ItemTemplateFactory())
+        item.holder_character_sheet = self.npc_target.character_sheet
+        item.save(update_fields=["holder_character_sheet"])
+        game_object_pk = item.game_object_id
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.asker,
+            target_persona=self.npc_target,
+            action_key="boon",
+        )
+        boon = Boon.objects.create(
+            action_request=request, kind=BoonKind.HELD_ITEM, item_instance=item
+        )
+        with patch.object(type(item.game_object), "move_to", return_value=False):
+            fulfill_boon(boon)
+        kept = ItemInstance.objects.get(pk=item.pk)
+        self.assertEqual(kept.holder_character_sheet, self.asker.character_sheet)
+        self.assertIsNone(kept.game_object_id)
+        self.assertFalse(ObjectDB.objects.filter(pk=game_object_pk).exists())
+
     def test_a_fenced_item_cannot_be_granted_as_a_boon(self) -> None:
         """#4099: an item fenced (soft-deleted) between ask and accept is held by nobody,
         so the held-item boon cannot hand it over."""

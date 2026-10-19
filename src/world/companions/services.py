@@ -8,7 +8,8 @@ from django.db import transaction
 from django.utils import timezone
 from evennia.utils.create import create_object
 
-from world.magic.constants import EffectKind, TargetKind
+from world.magic.constants import EffectKind, MagicActivity, TargetKind
+from world.magic.services.magic_skills import activity_skill_terms
 from world.magic.services.pull_effects import get_pull_effects_for_thread
 
 if TYPE_CHECKING:
@@ -681,7 +682,12 @@ def promote_summon_to_companion(
 
     # --- Roll the bind check ---
     check_type = CheckType.objects.get(name=BIND_ATTEMPT_CHECK_NAME)
-    result = perform_check(caster_character, check_type, target_difficulty=bind_difficulty)
+    result = perform_check(
+        caster_character,
+        check_type,
+        target_difficulty=bind_difficulty,
+        extra_traits=activity_skill_terms(MagicActivity.COMPANION_BINDING),
+    )
     if result.outcome is None or result.outcome.success_level < 0:
         msg = f"The {archetype.name} resists your attempt to bind it."
         raise PromoteSummonError(msg, msg)

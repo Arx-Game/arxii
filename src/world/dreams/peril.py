@@ -58,6 +58,8 @@ def resolve_dream_peril_collapse(
         select_consequence,
     )
     from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.vitals.constants import POOL_DREAM_PERIL  # noqa: PLC0415
     from world.vitals.peril_resolution import death_is_permitted  # noqa: PLC0415
     from world.vitals.services import _mark_dead  # noqa: PLC0415
@@ -99,6 +101,7 @@ def resolve_dream_peril_collapse(
         config.resist_check_type,
         config.resist_difficulty,
         candidates,
+        extra_traits=activity_skill_terms(MagicActivity.DREAM_PERIL),
     )
 
     apply_resolution(

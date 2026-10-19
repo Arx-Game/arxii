@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0259_guideprofile_display_name")]
+    dependencies = [("arxii", "0263_guideprofile_display_name")]
 
     operations = [
         migrations.AlterField(

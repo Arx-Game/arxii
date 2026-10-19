@@ -10,7 +10,7 @@ import evennia_extensions.mixins
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0256_gift_technique_skill_minor_only"),
+        ("arxii", "0260_alter_magicactivityskill_activity"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

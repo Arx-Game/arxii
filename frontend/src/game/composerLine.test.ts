@@ -185,6 +185,17 @@ describe('readComposerLine (#4346)', () => {
       });
     });
 
+    it('keeps a multi-name list as prose even when its first name is a command', () => {
+      const line = '@who,@Nyx,@nyx waves';
+      expect(readComposerLine(line, roomUnknown)).toEqual({
+        kind: 'prose',
+        socketText: line,
+        spoken: line,
+        targets: ['who', 'Nyx'],
+      });
+      expect(readComposerLine(line, page)).toMatchObject({ kind: 'prose', targets: [] });
+    });
+
     it('still reads @command as the command', () => {
       expect(readComposerLine('@who', roomUnknown)).toEqual({ kind: 'command', line: '@who' });
     });

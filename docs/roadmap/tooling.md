@@ -150,7 +150,50 @@ web, which cannot place Evennia's untyped line; `ArxCommand.search_or_raise` now
 quietly and raises once, wording several matches as Evennia's numbered list in the
 command's own typed error. The hand-built command tests that mock `caller.search` return a
 list now, as the quiet search does. The parity schema was also stale behind #4463
-(`just build-test-schema`).
+(`just build-test-schema`). Tranche 9 (2026-10-19) rules the first commands group: the
+hand-built `test_dispatchers` (46 tests), `test_friends_commands`, `test_covenant_command`,
+`test_gm_ops_command` and `test_gm_ops_catalog` are removed, and `test_consent_commands`
+keeps only its action-key registry and pull-token parsing classes. Their lines moved onto
+the harness: `look <name>'s <thing>`, `look <thing> in <bag>`, hidden bearers and
+`wear outfit` (`LookingAtThings`, `DressingAndPacking`), `home`/`home/set`/`recall`
+(`test_coming_home_journeys.py`), `friend`/`friends`/`unfriend`/`friend/all`
+(`KeepingAFriendsList`), `intimidate`/`accept`/`deny`/`accept/<band>`/`deny/blacklist`
+(`PressingSomeoneInAScene`), the covenant usages and `gm dashboard`/`gm claim`/`gmidle` in
+the gathering journey, and `gm suggest` in the staging journey. One fix in place: a plain
+`look <absent name>` still answered "Could not find" twice (the plain-look branch ran
+Evennia's loud search before raising its own error; the tranche 8 fix had reached every
+other verb), and `CmdLook` now resolves a plain look through `search_or_raise`. The
+journeys recorded two consent gaps on #3657 (the blacklist bar holds only on the web
+picker, and a telnet target is never told a request opened), and the parity schema was
+stale again behind #4471. Tranche 10 (2026-10-19) rules the second commands group, the
+hand-built modules whose verbs a journey already named: `test_setsituation_command`,
+`test_grant_item`, `test_cmd_presence`, `test_social_consent_e2e`, `test_outfit` (every
+action's `run` mocked) and `test_relationships_command` (29 tests) are removed. Their lines
+moved onto the harness: the `outfit` namespace in full (`KeepingAWardrobe`, in the handling
+journey) and the `relationship` namespace in full (a new
+`integration_tests/test_keeping_ties_journeys.py`), `afk` and the unrostered `hide` in the
+faces journey, `setsituation find` by kind and bare in the staging journey, a plain object
+handed to `grant_item` in the handling journey. Three fixes in place, all the loud-search
+shape: `CmdRelationship` resolved its target and its `show` argument loudly (two "Could not
+find" lines), `CmdOutfit` searched its wardrobe and item dbrefs loudly ("Could not find
+'#id'." before its own refusal), and `GrantItemAction` searched loudly and answered nothing
+of its own, so the web got only Evennia's bare line. Each now searches quietly and the
+journeys assert the one typed line. Tranche 11 (2026-10-19) rules the GM desk group:
+`test_gm_prompt_commands` (15, with `get_active_scene` and `narrate_privately` patched),
+`test_gmtrust_command` (17, every caller a `MagicMock`), `test_gmtable_command` (14),
+`test_moment_command` (22) and `test_gemit_command` (5) are removed. A new journey module,
+`integration_tests/test_minding_the_gm_desk_journeys.py`, types `gmtable` (create, list,
+members, invite, kick, archive, transfer, every gate), `gmtrust` (show, evidence, promote with
+the level-change row), `gm prompts` / `gm prompt send|dismiss|done` with `emit/prompt` and
+`pemit/prompt` against the real scene and the real on-commit release, `moment`
+(suggestions, confirm, dismiss, tag, tag list, the mute, the cap) and `gemit` behind the real
+`perm(Admin)` lock. Two fixes in place: a prompt's authored room line released on close
+reached the web feed only (`broadcast_scene_emit`'s scene-scoped push sent no text line;
+a telnet onlooker heard nothing, the `callcheck` shape again), and `moment` sent every refusal
+as a bare untyped line the web cannot place (its `func` override skipped the base command's
+typed `error` and structured frame) while `moment tag <absent name>` sent only Evennia's bare
+line (the loud-search shape); the override now refuses the way the base does and the search
+is quiet.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

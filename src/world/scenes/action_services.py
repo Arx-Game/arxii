@@ -96,6 +96,29 @@ def _describe_treatment_outcome(
     return " ".join(lines)
 
 
+def settle_treatment_requests_for_condition(instance: ConditionInstance) -> None:
+    """Settle every treat request aimed at ``instance`` before play deletes it (#4475).
+
+    A request still open (pending or accepted) is expired, because the wound it offered
+    to treat is gone and there is nothing left to resolve it against. Every request, open
+    or resolved, gets its template and name snapshot filled in if the save-time snapshot
+    missed it (rows the previous release wrote carry none), so the history still says
+    what was treated once the instance row is gone.
+    """
+    open_statuses = (ActionRequestStatus.PENDING, ActionRequestStatus.ACCEPTED)
+    for request in SceneActionRequest.objects.filter(target_condition_instance=instance):
+        fields: list[str] = []
+        if not request.target_condition_name:
+            request.target_condition_template = instance.condition
+            request.target_condition_name = instance.condition.name
+            fields += ["target_condition_template", "target_condition_name"]
+        if request.status in open_statuses:
+            request.status = ActionRequestStatus.EXPIRED
+            fields.append("status")
+        if fields:
+            request.save(update_fields=fields)
+
+
 def _resolve_treatment_request(
     action_request: SceneActionRequest,
 ) -> EnhancedSceneActionResult | None:
@@ -181,7 +204,7 @@ if TYPE_CHECKING:
     from actions.types import PendingActionResolution, StepResult
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType, Consequence
-    from world.checks.types import CheckResult, ExtraTraitTerm
+    from world.checks.types import CheckResult, ExtraTraitTerm, ModifierContribution
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
     from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
@@ -1230,6 +1253,31 @@ def _resolve_pc_resisting(
     )
 
 
+def _social_check_contributions(
+    action_request: SceneActionRequest,
+    target_persona: Persona,
+    favor: ModifierContribution | None,
+    *,
+    settles_allegiance: bool,
+) -> list[ModifierContribution]:
+    """Combine the directed relationship, allegiance and declared favor modifiers."""
+    from world.relationships.services import relationship_gated_contributions  # noqa: PLC0415
+
+    gated = relationship_gated_contributions(
+        perceiver=target_persona.character_sheet,
+        perceived=action_request.initiator_persona.character_sheet,
+    )
+    if settles_allegiance:
+        from world.npc_services.allegiance_outcomes import (  # noqa: PLC0415
+            settle_contributions,
+        )
+
+        gated = [*gated, *settle_contributions(target_persona.character_sheet.character)]
+    if favor is not None:
+        gated = [*gated, favor]
+    return gated
+
+
 def _resolve_action_against_persona(
     action_request: SceneActionRequest,
     target_persona: Persona,
@@ -1271,7 +1319,6 @@ def _resolve_action_against_persona(
     from world.npc_services.social_disposition import (  # noqa: PLC0415
         apply_social_disposition_delta,
     )
-    from world.relationships.services import relationship_gated_contributions  # noqa: PLC0415
     from world.scenes.favor_invocation import declared_invocation_contribution  # noqa: PLC0415
 
     difficulty = (
@@ -1392,18 +1439,12 @@ def _resolve_action_against_persona(
         # initiator's gated modifier (allure) in as a directed contribution — once per gating
         # condition, so "Very Attracted" stacks the double. Empty until #1697 seeds the
         # conditions + Flirt/Seduction wiring.
-        gated = relationship_gated_contributions(
-            perceiver=target_persona.character_sheet,
-            perceived=action_request.initiator_persona.character_sheet,
+        gated = _social_check_contributions(
+            action_request,
+            target_persona,
+            favor,
+            settles_allegiance=action_template.settles_allegiance,
         )
-        if action_template.settles_allegiance:
-            from world.npc_services.allegiance_outcomes import (  # noqa: PLC0415
-                settle_contributions,
-            )
-
-            gated = [*gated, *settle_contributions(target_character)]
-        if favor is not None:
-            gated = [*gated, favor]
         breakdown = collect_check_modifiers(
             action_request.initiator_persona.character_sheet,
             action_template.check_type,
