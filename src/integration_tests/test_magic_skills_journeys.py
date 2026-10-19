@@ -15,11 +15,14 @@ from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 
-from actions.constants import ActionBackend
-from actions.factories import ActionTemplateFactory
-from actions.models import ActionEnhancement
+from actions.constants import ActionBackend, EnhancementSourceType
+from actions.effects.registry import apply_effects
+from actions.factories import ActionEnhancementFactory, ActionTemplateFactory
+from actions.models import ActionEnhancement, RemoveConditionOnCheckConfig
 from actions.player_interface import dispatch_player_action
-from actions.types import ActionRef
+from actions.registry import get_action
+from actions.types import ActionContext, ActionRef
+from flows.scene_data_manager import SceneDataManager
 from integration_tests.harness import JourneyCase
 from world.checks.factories import (
     CheckTypeFactory,
@@ -53,6 +56,8 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
 )
 from world.conditions.services import apply_condition
+from world.dreams.conditions import ensure_dream_conditions
+from world.dreams.peril import get_dream_peril_config, resolve_dream_peril_collapse
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import EffectKind, MagicActivity, TargetKind
 from world.magic.factories import (
@@ -86,7 +91,9 @@ from world.standoffs.factories import StandoffApproachFactory
 from world.standoffs.services.state import open_standoff
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import CharacterTraitValue, CheckOutcome, PointConversionRange, TraitType
+from world.vitals.factories import create_dream_peril_pool
 from world.vitals.models import CharacterVitals
+from world.vitals.seeds import seed_survivability_content
 
 SKILL_VALUE = 30
 
@@ -591,3 +598,99 @@ class BindingASummonedCompanion(JourneyCase):
 
         self.assertTrue(result.success, result.message)
         self.assertEqual(capture.extra_traits, ())
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class SurvivingADreamsPeril(JourneyCase):
+    """A dreamer collapses and resists the dream's peril; staff mapped a skill to it (#4477).
+
+    ``resolve_dream_peril_collapse`` runs with the check engine unpatched; the forced outcome
+    only fixes the die, and the capture reads back what the roll was made with.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        self.skill = SkillFactory()
+        seed_survivability_content()
+        ensure_dream_conditions()
+        create_dream_peril_pool()
+        config = get_dream_peril_config()
+        config.resist_check_type = CheckTypeFactory()
+        config.save(update_fields=["resist_check_type"])
+        self.dreamer = self.make_player("Ysmay", room=self.make_room("The Dreamside"))
+
+    def collapse(self) -> CheckCapture:
+        success = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(success) as capture:
+            resolve_dream_peril_collapse(self.dreamer.sheet_data)
+        self.assertIsNotNone(capture.check_type, "the collapse made no resist roll")
+        return capture
+
+    def test_the_mapped_skill_joins_the_resist_roll(self) -> None:
+        MagicActivitySkillFactory(
+            activity=MagicActivity.DREAM_PERIL, skill=self.skill, weight=Decimal("0.50")
+        )
+
+        capture = self.collapse()
+
+        self.assertEqual(
+            capture.extra_traits, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),)
+        )
+
+    def test_an_unmapped_peril_rolls_without_a_skill(self) -> None:
+        self.assertEqual(self.collapse().extra_traits, ())
+
+
+class AnEnhancedActionsConditionEffect(JourneyCase):
+    """An action enhanced by a technique fires a remove-condition effect; its roll is read back.
+
+    The effects registry dispatches the enhancement's config (the path ``restore_sense``
+    takes) with the check engine unpatched; the forced outcome only fixes the die.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        self.skill = SkillFactory()
+        room = self.make_room("The Quiet Room")
+        self.ysmay = self.make_player("Ysmay", room=room)
+        self.hobb = self.make_player("Hobb", room=room)
+
+    def fire(self, enhancement: ActionEnhancement) -> CheckCapture:
+        RemoveConditionOnCheckConfig.objects.create(
+            enhancement=enhancement,
+            check_type=CheckTypeFactory(),
+            condition=ConditionTemplateFactory(),
+            target_difficulty=10,
+        )
+        context = ActionContext(
+            action=get_action("restore_sense"),
+            actor=self.ysmay,
+            target=self.hobb,
+            kwargs={},
+            scene_data=SceneDataManager(),
+        )
+        success = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(success) as capture:
+            apply_effects(enhancement, context)
+        self.assertIsNotNone(capture.check_type, "the effect made no roll")
+        return capture
+
+    def test_a_technique_source_adds_its_skill(self) -> None:
+        enhancement = ActionEnhancementFactory(technique=TechniqueFactory(skill=self.skill))
+
+        capture = self.fire(enhancement)
+
+        self.assertEqual(
+            capture.extra_traits, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),)
+        )
+
+    def test_a_condition_source_adds_nothing(self) -> None:
+        enhancement = ActionEnhancementFactory(
+            source_type=EnhancementSourceType.CONDITION,
+            technique=None,
+            condition=ConditionTemplateFactory(),
+        )
+
+        self.assertEqual(self.fire(enhancement).extra_traits, ())
