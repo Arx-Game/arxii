@@ -5,8 +5,9 @@ organization is gone. The constraint swap that makes the delete itself succeed i
 later step; these tests cover only what is written and kept.
 """
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
+from django.utils import timezone
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.currency.constants import HolderKind
@@ -56,3 +57,18 @@ class HolderSnapshotTests(TestCase):
     def test_a_transfer_with_no_end_at_all_is_still_refused(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
             CurrencyTransfer.objects.create(amount=5, reason="void")
+
+    def test_the_previous_release_can_still_insert_a_transfer(self) -> None:
+        """The old release's INSERT names none of the snapshot columns (deploy window)."""
+        purse = get_or_create_purse(CharacterSheetFactory())
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO arxii_currencytransfer (to_purse_id, amount, reason, created_at) "
+                "VALUES (%s, 5, 'old release', %s)",
+                [purse.pk, timezone.now()],
+            )
+            cursor.execute(
+                "SELECT from_holder_kind, to_holder_kind, to_holder_name "
+                "FROM arxii_currencytransfer WHERE reason = 'old release'"
+            )
+            self.assertEqual(cursor.fetchone(), ("", "", ""))

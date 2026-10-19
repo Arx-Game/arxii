@@ -19,6 +19,7 @@ class Migration(migrations.Migration):
                     ("treasury", "Organization treasury"),
                 ],
                 default="",
+                db_default="",
                 help_text="What the source was. Blank for a mint. Outlives the source purse or treasury.",
                 max_length=16,
             ),
@@ -29,6 +30,7 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 blank=True,
                 default="",
+                db_default="",
                 help_text="The source holder's name when the transfer happened. Outlives the holder.",
                 max_length=255,
             ),
@@ -43,6 +45,7 @@ class Migration(migrations.Migration):
                     ("treasury", "Organization treasury"),
                 ],
                 default="",
+                db_default="",
                 help_text="What the destination was. Blank for a sink. Outlives the destination.",
                 max_length=16,
             ),
@@ -53,6 +56,7 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 blank=True,
                 default="",
+                db_default="",
                 help_text="The destination holder's name when the transfer happened. Outlives the holder.",
                 max_length=255,
             ),

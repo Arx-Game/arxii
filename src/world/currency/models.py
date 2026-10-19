@@ -145,12 +145,14 @@ class CurrencyTransfer(SharedMemoryModel):
         choices=HolderKind.choices,
         blank=True,
         default="",
+        db_default="",
         help_text="What the source was. Blank for a mint. Outlives the source purse or treasury.",
     )
     from_holder_name = models.CharField(
         max_length=255,
         blank=True,
         default="",
+        db_default="",
         help_text="The source holder's name when the transfer happened. Outlives the holder.",
     )
     to_holder_kind = models.CharField(
@@ -158,12 +160,14 @@ class CurrencyTransfer(SharedMemoryModel):
         choices=HolderKind.choices,
         blank=True,
         default="",
+        db_default="",
         help_text="What the destination was. Blank for a sink. Outlives the destination.",
     )
     to_holder_name = models.CharField(
         max_length=255,
         blank=True,
         default="",
+        db_default="",
         help_text="The destination holder's name when the transfer happened. Outlives the holder.",
     )
     amount = models.PositiveBigIntegerField(help_text="Coppers moved.")
