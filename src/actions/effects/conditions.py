@@ -7,10 +7,28 @@ from typing import TYPE_CHECKING
 from actions.effects.base import apply_immunity_on_fail, resolve_target_difficulty
 from world.checks.services import perform_check
 from world.conditions.services import apply_condition, has_condition, remove_condition
+from world.magic.services.magic_skills import technique_skill_term
 
 if TYPE_CHECKING:
     from actions.models import ConditionOnCheckConfig, RemoveConditionOnCheckConfig
     from actions.types import ActionContext
+    from world.checks.types import ExtraTraitTerm
+
+
+def _technique_skill_terms(
+    context: ActionContext, config: ConditionOnCheckConfig | RemoveConditionOnCheckConfig
+) -> tuple[ExtraTraitTerm, ...]:
+    """The roll's technique skill term when the effect's enhancement source is a technique.
+
+    The source is the config's ``ActionEnhancement`` (its ``technique`` FK is set exactly
+    when ``source_type`` is TECHNIQUE, by a DB constraint). A distinction or condition source
+    adds nothing, and so does a technique with no resolvable skill (#4477).
+    """
+    technique = config.enhancement.technique
+    if technique is None or context.actor is None:
+        return ()
+    term = technique_skill_term(context.actor, technique)
+    return (term,) if term is not None else ()
 
 
 def handle_condition_on_check(context: ActionContext, config: ConditionOnCheckConfig) -> None:
@@ -39,7 +57,12 @@ def handle_condition_on_check(context: ActionContext, config: ConditionOnCheckCo
     )
 
     # Step 3: Roll
-    result = perform_check(context.actor, config.check_type, target_difficulty=target_difficulty)
+    result = perform_check(
+        context.actor,
+        config.check_type,
+        target_difficulty=target_difficulty,
+        extra_traits=_technique_skill_terms(context, config),
+    )
 
     # Step 4: Apply condition or immunity
     if result.success_level > 0:
@@ -81,7 +104,12 @@ def handle_remove_condition_on_check(
     )
 
     # Roll
-    result = perform_check(context.actor, config.check_type, target_difficulty=target_difficulty)
+    result = perform_check(
+        context.actor,
+        config.check_type,
+        target_difficulty=target_difficulty,
+        extra_traits=_technique_skill_terms(context, config),
+    )
 
     # Remove condition on success; remove_condition returns False if absent (graceful)
     if result.success_level > 0:
