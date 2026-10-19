@@ -1,9 +1,23 @@
 """Tests for the shared workbench deep-link builder (#3020)."""
 
+from django.contrib import admin
 from django.test import TestCase
 from django.urls import reverse
 
 from web.admin.authoring.links import admin_change_url, workbench_editor_url
+from world.checks.models import ConsequenceEffect
+
+
+def unregistered_for_the_test(test: TestCase, model: type) -> None:
+    """Take ``model``'s ModelAdmin out of the registry for one test, then put it back.
+
+    No credited model is reliably admin-less any more (``ConsequenceEffect`` gained a page
+    of its own for the organizations a legend award names, #4473), so the "no ModelAdmin"
+    behavior is exercised by removing one.
+    """
+    model_admin = admin.site._registry[model].__class__
+    admin.site.unregister(model)
+    test.addCleanup(admin.site.register, model, model_admin)
 
 
 class WorkbenchEditorUrlTests(TestCase):
@@ -26,6 +40,7 @@ class AdminChangeUrlTests(TestCase):
 
     def test_returns_none_for_a_model_with_no_registered_admin(self) -> None:
         """Not every credited model has a ModelAdmin; callers render nothing rather than 500."""
+        unregistered_for_the_test(self, ConsequenceEffect)
         self.assertIsNone(admin_change_url("checks.ConsequenceEffect", 7))
 
     def test_returns_none_for_an_unresolvable_label(self) -> None:

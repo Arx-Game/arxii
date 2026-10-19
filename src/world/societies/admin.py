@@ -349,6 +349,7 @@ class ReactingOrganizationInline(admin.TabularInline):
 
     model = OrganizationRelation
     fk_name = "toward"
+    formset = OneRowPerFormSet
     extra = 0
     can_delete = False
     template = "admin/societies/reacting_organization_inline.html"
