@@ -170,7 +170,7 @@ class ApplyCompanionBattleOutcomeTests(TestCase):
 
         with (
             mock.patch("world.scenes.interaction_services._send_to_objects") as send_to_objects,
-            mock.patch.object(owner_character, "msg") as owner_msg,
+            mock.patch("world.scenes.interaction_services.send_text_to_non_web") as owner_msg,
         ):
             apply_companion_battle_outcome(battle)
 
@@ -178,7 +178,8 @@ class ApplyCompanionBattleOutcomeTests(TestCase):
         sent_recipients = list(send_to_objects.call_args.args[0])
         self.assertIn(owner_character, sent_recipients)
         self.assertTrue(owner_msg.called)
-        msg_text = owner_msg.call_args.args[0]
+        self.assertEqual(owner_msg.call_args.args[0], owner_character)
+        msg_text = owner_msg.call_args.args[1]
         self.assertIn(deployment.companion.name, msg_text)
 
     def test_encounter_death_still_broadcasts_to_room_only(self):

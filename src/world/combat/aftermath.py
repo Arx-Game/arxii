@@ -311,4 +311,4 @@ def deliver_aftermath_digests(
             send_text_to_non_web(character, text)
         else:
             # No row to push without a persona, so every session gets the text.
-            character.msg(text)
+            character.msg(text)  # noqa: MSG_BESIDE_PUSH

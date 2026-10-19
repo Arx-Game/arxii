@@ -68,6 +68,17 @@ repos:
         # #4418: a live web session's protocol_key is "websocket" or "ajax/comet";
         # "webclient/websocket" is overwritten at session creation. A classifier or a
         # test fake using it passes against fakes and fails against every real browser.
+      - id: msg-beside-push
+        name: Block an untargeted .msg beside a structured interaction push
+        entry: uv run python tools/lint_msg_beside_push.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/
+        exclude: /tests/
+        # #4418 bug K: a bare `.msg(text)` reaches every session, so a function that
+        # pushes the row to the web and also calls it shows the line twice on /game.
+        # Use send_text_to_non_web (world.scenes.interaction_services).
       - id: cached-property-import
         name: Forbid functools.cached_property in src/
         entry: uv run python tools/lint_cached_property_import.py

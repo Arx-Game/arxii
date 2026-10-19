@@ -500,7 +500,7 @@ def narrate_companion_loss(companion_name: str, scene, *, fallback_recipients=No
     - there is no room to broadcast to. When scene.location is None and
     fallback_recipients (a list of character ObjectDBs) is given, the same
     payload is delivered straight to those recipients instead, plus a plain
-    character.msg(text) for telnet - the same websocket-plus-msg pairing
+    text to the telnet sessions only (send_text_to_non_web) - the same websocket-plus-text pairing
     deliver_aftermath_digests uses (world/combat/aftermath.py). When
     scene.location is None and no fallback_recipients are given, the line is
     still persisted but not delivered anywhere, rather than raising.
@@ -515,6 +515,7 @@ def narrate_companion_loss(companion_name: str, scene, *, fallback_recipients=No
         _build_interaction_payload,
         _send_to_objects,
         create_interaction,
+        send_text_to_non_web,
     )
 
     narrator = get_or_create_narrator_persona()
@@ -543,8 +544,9 @@ def narrate_companion_loss(companion_name: str, scene, *, fallback_recipients=No
         return
 
     _send_to_objects(fallback_recipients, payload)
+    # The web reads the pushed row; only telnet needs the line as text.
     for character in fallback_recipients:
-        character.msg(interaction.content)
+        send_text_to_non_web(character, interaction.content)
 
 
 class PromoteSummonError(Exception):
