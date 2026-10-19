@@ -572,6 +572,7 @@ def _fulfill_held_item(boon: Boon, request: SceneActionRequest) -> None:
     from world.items.constants import OwnershipEventType  # noqa: PLC0415
     from world.items.models import ItemInstance, OwnershipEvent  # noqa: PLC0415
     from world.items.services.equip import unequip_item  # noqa: PLC0415
+    from world.items.services.usage import dematerialize_item_instance  # noqa: PLC0415
 
     target_sheet = request.target_persona.character_sheet
     asker_sheet = request.initiator_persona.character_sheet
@@ -586,10 +587,9 @@ def _fulfill_held_item(boon: Boon, request: SceneActionRequest) -> None:
     if item.game_object is not None:
         asker_character = asker_sheet.character
         if not item.game_object.move_to(asker_character, quiet=True):
-            item.game_object.delete()
-            item.game_object = None
+            dematerialize_item_instance(item)
     item.holder_character_sheet = asker_sheet
-    item.save(update_fields=["holder_character_sheet", "game_object"])
+    item.save(update_fields=["holder_character_sheet"])
     OwnershipEvent.objects.create(
         item_instance=item,
         event_type=OwnershipEventType.TRANSFERRED,

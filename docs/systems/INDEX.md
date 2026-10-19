@@ -7029,7 +7029,8 @@ holder is never notified a claim exists.
   analogue for items; how embezzlement gets discovered). Services (sole mutators):
   `get_or_create_org_vault`, `can_access_vault` (active membership at tier <=
   `withdraw_rank_max`), `deposit_item_to_vault` (any active member, must hold the item; holder
-  goes null + `game_object` dematerialized — custody is the row, not the prop),
+  goes null + `game_object` dematerialized via `usage.dematerialize_item_instance` — custody is the
+  row, not the prop; withdraw materializes a fresh object),
   `withdraw_item_from_vault` (rank-gated; `to_persona` directs the item elsewhere — the
   VAULT_ITEM boon shape, its first live caller). **Collection return leg (#2540 ruling
   2026-07-20):** `VaultTransit` — collection is a mission; `collect_org_gems` mints one
@@ -7138,6 +7139,8 @@ holder is never notified a claim exists.
     consumables spend a charge and are destroyed at 0 (soft- or hard-delete); non-consumable
     usable items are reusable (no charge spent, `ACTIVATED` event logged). Raises `ItemNotUsable`
     (no `on_use_pool`) or `NoChargesRemaining` (consumable at 0 charges)
+  - `dematerialize_item_instance(item_instance) -> None` (`world/items/services/usage.py`) — drops
+    only the game object and keeps the item row (#4474); never delete `game_object` directly.
   - `hard_delete_item_instance(item_instance) -> None` (`world/items/services/usage.py`) —
     deletes the whole footprint: ledger rows then game_object/instance; no dangling FKs
   - `destroy_consumed_item_instance(item_instance, *, preserve=None, note, event_type=CONSUMED) -> None`

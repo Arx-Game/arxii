@@ -1,1 +1,1 @@
-0257_alter_magicactivityskill_activity
+0258_alter_magicactivityskill_activity

@@ -121,6 +121,40 @@ class InstrumentTests(TestCase):
         assert purse.balance == face
         assert not CurrencyInstrumentDetails.objects.filter(pk=details.pk).exists()
 
+    def test_redeeming_a_coin_that_changed_hands_soft_destroys_it_once(self) -> None:
+        """#4474: the destroy rule keeps a coin with provenance out of play, not deleted,
+        and a destroyed coin cannot be redeemed a second time."""
+        from django.core.exceptions import ValidationError
+        from evennia.objects.models import ObjectDB
+
+        from world.items.constants import OwnershipEventType
+        from world.items.models import ItemInstance, OwnershipEvent
+
+        purse = get_or_create_purse(self.sheet)
+        transfer(amount=1_010, reason="grant", to_purse=purse)
+        coin = mint_instrument(
+            denomination=Denomination.GOLD_KNIGHT, holder_sheet=self.sheet, from_purse=purse
+        )
+        OwnershipEvent.objects.create(
+            item_instance=coin,
+            event_type=OwnershipEventType.GIVEN,
+            to_character_sheet=self.sheet,
+        )
+        game_object_pk = coin.game_object_id
+
+        redeem_instrument(instance=coin, to_purse=purse)
+
+        coin = ItemInstance.objects.get(pk=coin.pk)
+        assert coin.destroyed_at is not None
+        assert not CurrencyInstrumentDetails.objects.filter(item_instance=coin).exists()
+        assert ObjectDB.objects.get(pk=game_object_pk).location is None
+        purse.refresh_from_db()
+        assert purse.balance == 1_000
+        with self.assertRaises(ValidationError):
+            redeem_instrument(instance=coin, to_purse=purse)
+        purse.refresh_from_db()
+        assert purse.balance == 1_000
+
     def test_mint_requires_funds(self) -> None:
         purse = get_or_create_purse(self.sheet)
         with self.assertRaises(ValidationError):

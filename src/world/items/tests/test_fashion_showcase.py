@@ -14,6 +14,7 @@ from world.items.models import (
 from world.items.services.fashion_showcase import (
     get_or_create_wallet,
     record_showcase_showing,
+    record_showing_engagement,
     settle_fashion_showings,
 )
 
@@ -130,6 +131,24 @@ class SettlementLadderTests(TestCase):
             character_sheet=self.sheet
         )
         assert stored == 2  # the stake was already spent; no refund
+
+    def test_engagement_recorded_on_cached_instance_is_paid_at_settlement(self):
+        """Production holds the showing in the identity map across both calls.
+
+        ``record_showing_engagement`` writes with an F() update; settlement
+        iterates ``filter(settled=False)``, which hands back the cached object.
+        The test keeps the instance referenced the whole time (a fresh fetch
+        would hide the stale count).
+        """
+        showing = self._showing(roll_success=True, engagement=0)
+        cached = FashionShowing.objects.get(pk=showing.pk)
+        assert cached is showing  # one pk, one object
+        record_showing_engagement(cached)
+        settle_fashion_showings()
+        stored = FashionShowing.objects.get(pk=showing.pk)
+        assert stored.settled
+        assert stored.payout == 2  # refund plus the engagement leg
+        assert stored.engagement_count == 1
 
 
 class ShowcaseActionTests(TestCase):

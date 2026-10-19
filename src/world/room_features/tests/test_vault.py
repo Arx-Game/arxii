@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from django.test import TestCase
+from django.db import IntegrityError, transaction
+from django.test import TestCase, tag
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from flows.object_states.character_state import CharacterState
@@ -26,6 +27,7 @@ from world.items.constants import OwnershipEventType
 from world.items.exceptions import VaultAccessDenied, VaultFull
 from world.items.factories import ItemInstanceFactory
 from world.items.models import OwnershipEvent
+from world.locations.constants import HolderType
 from world.room_features.constants import (
     VAULT_MAX_ITEMS_PER_LEVEL,
     RoomFeatureServiceStrategy,
@@ -43,6 +45,7 @@ from world.room_features.vault_services import (
     vault_for_room,
 )
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.societies.factories import OrganizationFactory
 
 
 class VaultTestCase(TestCase):
@@ -312,6 +315,40 @@ class VaultAccessListTests(VaultTestCase):
             vault_details=self.vault, holder_persona=self.authorized_persona
         ).count()
         self.assertEqual(count, 1)
+
+    @tag("postgres")
+    def test_database_rejects_duplicate_persona_grant(self) -> None:
+        """A raw second grant is refused by the partial unique index itself."""
+        VaultAccessEntry.objects.create(
+            vault_details=self.vault,
+            holder_type=HolderType.PERSONA,
+            holder_persona=self.authorized_persona,
+            added_by=self.founder_persona,
+        )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            VaultAccessEntry.objects.create(
+                vault_details=self.vault,
+                holder_type=HolderType.PERSONA,
+                holder_persona=self.authorized_persona,
+                added_by=self.founder_persona,
+            )
+
+    @tag("postgres")
+    def test_database_rejects_duplicate_organization_grant(self) -> None:
+        org = OrganizationFactory()
+        VaultAccessEntry.objects.create(
+            vault_details=self.vault,
+            holder_type=HolderType.ORGANIZATION,
+            holder_organization=org,
+            added_by=self.founder_persona,
+        )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            VaultAccessEntry.objects.create(
+                vault_details=self.vault,
+                holder_type=HolderType.ORGANIZATION,
+                holder_organization=org,
+                added_by=self.founder_persona,
+            )
 
     def test_remove_persona_access(self) -> None:
         add_vault_access(

@@ -97,6 +97,22 @@ class GemCollectionTests(TestCase):
         )
         self.assertEqual(pool.uncollected_value, 0)  # the gems are simply gone
 
+    def test_lost_stones_leave_no_ghost_object(self) -> None:
+        """#4474: a lost stone goes by the destroy rule, so a stone with a game object
+        does not leave that object behind."""
+        from evennia.objects.models import ObjectDB
+
+        from evennia_extensions.factories import ObjectDBFactory
+
+        objects = []
+        for stone in self.stones:
+            obj = ObjectDBFactory(db_typeclass_path="typeclasses.objects.Object")
+            stone.game_object = obj
+            stone.save(update_fields=["game_object"])
+            objects.append(obj.pk)
+        self._collect(-2)
+        self.assertFalse(ObjectDB.objects.filter(pk__in=objects).exists())
+
     def test_coin_and_gems_ride_the_same_dispatch(self) -> None:
         # Accrue coin too; one dispatch lands both under the same band + graft.
         accrue_income_stream(self.stream)  # gross 100 → uncollected_pool 100
