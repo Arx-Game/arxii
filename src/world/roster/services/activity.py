@@ -219,13 +219,22 @@ def is_story_npc(sheet: CharacterSheet) -> bool:
 
     One query via ``current_roster_entry`` (the shelf is read off the entry).
     """
+    entry = current_roster_entry(sheet)
+    return entry is not None and entry_is_story_npc(entry)
+
+
+def entry_is_story_npc(entry: RosterEntry) -> bool:
+    """``is_story_npc`` for a roster entry already in hand, with no query of its own (#4418).
+
+    The same rule, read off the entry's roster and its character's typeclass, both
+    loaded with the entry wherever a list serializes it.
+    """
     from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE  # noqa: PLC0415
     from world.roster.models.choices import RosterType  # noqa: PLC0415
 
-    entry = current_roster_entry(sheet)
-    if entry is None or entry.roster.roster_type != RosterType.NPC:
+    if entry.roster.roster_type != RosterType.NPC:
         return False
-    return sheet.character.db_typeclass_path not in TYPECLASS_TO_CHARACTER_TYPE
+    return entry.character_sheet.character.db_typeclass_path not in TYPECLASS_TO_CHARACTER_TYPE
 
 
 def story_npc_sheet_ids(sheet_ids: Iterable[int]) -> set[int]:

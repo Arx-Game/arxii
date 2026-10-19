@@ -12,6 +12,7 @@ from world.roster.models import NPCLoan, Roster, RosterEntry
 from world.roster.models.choices import RosterType
 from world.roster.serializers.characters import CharacterSerializer
 from world.roster.serializers.tenures import RosterTenureSerializer
+from world.roster.services.activity import entry_is_story_npc
 from world.roster.services.gallery import portrait_url
 from world.roster.services.presence import room_name, session_count
 
@@ -145,6 +146,10 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # mapping the account payload's AvailableCharacterSerializer uses. Lets the
     # GM-profile UI distinguish its own GM character from ordinary PCs.
     character_type = serializers.SerializerMethodField()
+    # #4418: a story NPC (``is_story_npc``), the test the frontend's NPC tag needs.
+    # The GM's own GM or Staff character is on the NPC shelf too, so ``roster_type``
+    # alone mislabels it. Read off the already-loaded roster and character.
+    is_story_npc = serializers.SerializerMethodField()
     # Character slots (#3996). The Hall decides a card's action from these:
     # PLAYER provenance freezes and thaws, anything else is given up; a frozen
     # character shows its thaw date and does not count against the slots.
@@ -192,6 +197,7 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "lifecycle_state",
             "roster_type",
             "character_type",
+            "is_story_npc",
             "activity_state",
             "activity_requirement",
             "creation_provenance",
@@ -252,6 +258,9 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
 
     def get_character_type(self, obj: RosterEntry) -> str:
         return derive_character_type(obj.character_sheet.character)
+
+    def get_is_story_npc(self, obj: RosterEntry) -> bool:
+        return entry_is_story_npc(obj)
 
     def get_is_crowd_voice(self, obj: RosterEntry) -> bool:
         known = self.context.get("crowd_voice_entry_ids")

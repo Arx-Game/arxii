@@ -231,6 +231,22 @@ class AnOwnerAuthorsAnNpc(NpcRosterCase):
         self.assertEqual(other.get(f"{NPCS}{twin.pk}/").json()["notes_for_player"], "")
 
 
+class TheSwitcherTellsStoryNpcsFromAGmsOwnCharacter(NpcRosterCase):
+    def test_mine_marks_only_story_npcs(self) -> None:
+        # Demo fidelity F3: the GM's own GM character sits on the NPC shelf too, and
+        # was tagged NPC. Corvin borrows Vael; only Vael is a story NPC.
+        mint_gm_character(self.other_gm, "Corvin")
+        self._list_vael(policy="without_asking")
+        borrowed = self.api(self.other_gm).post(f"{self.url}borrow/")
+        self.assertEqual(borrowed.json()["status"], "active", borrowed.data)
+
+        rows = {row["name"]: row for row in self.api(self.other_gm).get(MINE).json()}
+        self.assertEqual(rows["Corvin"]["roster_type"], "NPC")
+        self.assertIs(rows["Corvin"]["is_story_npc"], False)
+        self.assertIs(rows["Captain Vael"]["is_story_npc"], True)
+        self.assertIs(rows["Bram"]["is_story_npc"], False)
+
+
 class AnOwnerDeclinesAndTemplatesList(NpcRosterCase):
     def test_owner_declines_a_request(self) -> None:
         self._list_vael(policy="on_request")
