@@ -107,6 +107,19 @@ function NpcTag({ entry }: { entry: MyRosterEntry }) {
   );
 }
 
+/** Where a puppeted character stands, under its name on the tab (demo Screen 3). */
+function RoomCaption({ entry }: { entry: MyRosterEntry }) {
+  if (!entry.room_name) return null;
+  return (
+    <span
+      data-testid="tab-room"
+      className="block max-w-28 truncate text-[10px] leading-tight text-muted-foreground"
+    >
+      {entry.room_name}
+    </span>
+  );
+}
+
 /**
  * Urgent, dismissable "in combat" strip (#3761) — full-width, rendered below
  * the main bar so it doesn't compete for space in the already-crowded
@@ -318,6 +331,7 @@ export function GameTopBar({
               </Avatar>
             </button>
             <NpcTag entry={activeCharacter} />
+            <RoomCaption entry={activeCharacter} />
             <PersonaSwitcher
               characterSheetId={activeCharacter.character_id}
               activePersonaId={activeCharacter.active_persona_id}
@@ -375,6 +389,7 @@ export function GameTopBar({
                 </Avatar>
                 <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
                 <NpcTag entry={char} />
+                <RoomCaption entry={char} />
               </button>
             );
           })}

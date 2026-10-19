@@ -61,6 +61,19 @@ describe('NPC play UI', () => {
     expect(tags).toEqual(['NPC', 'CROWD']);
   });
 
+  it('shows the room a puppeted character stands in under its tab', () => {
+    store.dispatch(startSession('Captain Vael'));
+    store.dispatch(setActiveSession('Captain Vael'));
+    const ilsa = { ...vael, id: 12, name: 'Ilsa', is_story_npc: false, room_name: 'The Lantern' };
+    renderWithProviders(
+      <GameTopBar characters={[{ ...vael, room_name: 'Low Gate' } as MyRosterEntry, ilsa]} />
+    );
+    expect(screen.getAllByTestId('tab-room').map((el) => el.textContent)).toEqual([
+      'Low Gate',
+      'The Lantern',
+    ]);
+  });
+
   it('gives a GM character on the NPC shelf no tag', () => {
     const gmCharacter = { ...vael, id: 11, name: 'Ravenna', loan: null, is_story_npc: false };
     renderWithProviders(<GameTopBar characters={[vael, gmCharacter]} />);

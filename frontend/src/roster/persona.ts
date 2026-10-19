@@ -45,7 +45,6 @@ export function useViewerPersonaId(): number | null {
  * A GM or Staff character also sits on the NPC shelf but is a player character, so the
  * shelf (`roster_type`) is not the test; the server's `is_story_npc` flag is.
  */
-// Typed off `object` until the regenerated `MyRosterEntry` carries `is_story_npc` itself.
-export function isStoryNpc(entry: object | null | undefined): boolean {
-  return (entry as { is_story_npc?: boolean } | null | undefined)?.is_story_npc === true;
+export function isStoryNpc(entry: Pick<MyRosterEntry, 'is_story_npc'> | null | undefined): boolean {
+  return entry?.is_story_npc === true;
 }
