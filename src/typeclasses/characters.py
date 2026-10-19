@@ -684,6 +684,21 @@ class Character(ObjectParent, DefaultCharacter):
             mapping={"name": self},
         )
 
+    def _stays_when_unplayed(self) -> bool:
+        """Whether this character keeps its place when its last session leaves (#4418).
+
+        A story NPC (``is_story_npc``) is meant to stand in its scene unplayed, so a
+        disconnect, a loan ending or a take-back leaves it in the room and on the cast
+        list. Because it never leaves, ``prelogout_location`` is not written, and
+        Evennia's ``at_pre_puppet`` (which only moves a location-less character) does
+        not move it on the next puppet. Player characters, and GM and Staff OOC
+        characters, still leave the grid.
+        """
+        from world.roster.services.activity import is_story_npc
+
+        sheet = self.character_sheet
+        return sheet is not None and is_story_npc(sheet)
+
     def _leave_the_grid(self, *, reason: str = "") -> None:
         """Take the character off the grid when its last session leaves (#4336).
 
@@ -1175,7 +1190,8 @@ class Character(ObjectParent, DefaultCharacter):
             # Another window still has this character (#3812): closing one of
             # two tabs is not going offline, and the character stays on the grid.
             return
-        self._leave_the_grid(reason=kwargs.get("reason", ""))
+        if not self._stays_when_unplayed():
+            self._leave_the_grid(reason=kwargs.get("reason", ""))
 
         # Clear presence-tied resonance buff on logout; character is no longer present.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):

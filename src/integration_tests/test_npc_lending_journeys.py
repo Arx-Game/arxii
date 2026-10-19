@@ -315,6 +315,30 @@ class AGuidePlaysALentNpc(JourneyCase):
         self.assertIn("Now controlling Captain Vael.", told)
         self.assertIs(session.puppet, self.vael)
 
+    def test_a_lent_npc_stays_in_the_scene_when_its_player_lets_go(self) -> None:
+        # The ruling (#4418, bug 10): an unplayed story NPC still stands in the scene.
+        loan_id = self._lend()
+        session = self._signed_in(self.ilsa, sessid=4420)
+        self.assertIn("Now controlling Captain Vael.", self.telnet(self.ilsa, "@ic Captain Vael"))
+        self.assertIs(session.puppet, self.vael)
+
+        taken = self.web(self.ravenna, "take_back_npc", loan_id=loan_id)
+        self.assertTrue(taken.detail.success, taken.detail.message)
+        self.assertIsNot(session.puppet, self.vael)
+        self.assertEqual(self.vael.location, self.room)
+        cast = self.api(self.gm).get(f"/api/scenes/{self.scene.pk}/cast-list/")
+        self.assertEqual(cast.status_code, status.HTTP_200_OK, cast.data)
+        self.assertIn("Captain Vael", [row["name"] for row in cast.json()])
+
+        # Taken up again later, Vael is where he stood, not wherever he was before.
+        self.vael.db.prelogout_location = self.make_room("Somewhere Stale")
+        owner_session = self._signed_in(self.ravenna, sessid=4421)
+        self.assertIn(
+            "Now controlling Captain Vael.", self.telnet(self.ravenna, "@ic Captain Vael")
+        )
+        self.assertIs(owner_session.puppet, self.vael)
+        self.assertEqual(self.vael.location, self.room)
+
     def test_a_scene_ends_with_an_unplayed_npc_in_the_room(self) -> None:
         self.assertIsNone(self.vael.account)
         finished = self.web(self.ravenna, "finish_scene")
