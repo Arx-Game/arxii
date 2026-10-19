@@ -59,3 +59,7 @@ _Avoid_: wipe, reset, tax
 **Opening balance**:
 A `PurseDrainWeek` holder's purse balance captured in the `SNAPSHOT` band at week start, *before* weekly income lands — the baseline the `DRAIN` band drains down to (minus the week's outflows). Persists between the two cron bands and doubles as the drain's audit row.
 _Avoid_: starting money, snapshot balance (field-adjacent only)
+
+**Holder snapshot**:
+The `*_holder_kind` and `*_holder_name` columns on `CurrencyTransfer`, written when the row is saved (a character's primary persona name, or an organization's name). They keep the ledger readable after a character sheet or organization is deleted (the purse or treasury FK goes null, the snapshot stays; #4467). A blank kind means that side never had a holder: a mint has no source, a sink no destination.
+_Avoid_: calling a transfer with a deleted holder a mint or a sink

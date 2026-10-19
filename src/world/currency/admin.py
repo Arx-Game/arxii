@@ -32,14 +32,12 @@ class CurrencyTransferAdmin(admin.ModelAdmin):
     list_display = (
         "amount",
         "reason",
-        "from_purse",
-        "from_treasury",
-        "to_purse",
-        "to_treasury",
+        "from_holder_name",
+        "to_holder_name",
         "created_at",
     )
     list_filter = ("created_at",)
-    search_fields = ("reason",)
+    search_fields = ("reason", "from_holder_name", "to_holder_name")
     raw_id_fields = ("from_purse", "from_treasury", "to_purse", "to_treasury")
     date_hierarchy = "created_at"
 
