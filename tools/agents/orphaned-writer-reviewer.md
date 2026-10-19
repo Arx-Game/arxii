@@ -1,6 +1,6 @@
 ---
 name: orphaned-writer-reviewer
-description: Checks that runtime or derived state a reader depends on (an `ndb` value, a cached attribute, a per-object memo, a broadcast-filled field) has a writer on every path that can make it true, not on one path that a later change can replace. Use when a diff reads such state, adds a writer for it, or moves a flow onto a new action or service, and when reviewing one. Catches the reader that quietly sees nothing once the only writer is bypassed.
+description: Checks that runtime or derived state a reader depends on (an `ndb` value, a cached attribute, a per-object memo, a broadcast-filled field) has a writer on every path that can make it true, not on one path that a later change can replace. Use when a diff reads such state, adds a writer for it, or moves a flow onto a new action or service, and when reviewing one. Also covers the mirror shape: a second entry point to the same operation that misses a tag or side effect the first applies. Catches the reader that quietly sees nothing once the only writer is bypassed, and the operation that behaves differently depending on which door it came through.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -66,6 +66,39 @@ writer. A single writer beside one entry point is neither.**
    preferred fix is deriving from the database with a cache that is invalidated or
    re-checked on read; a second writer is acceptable only when no source of truth
    exists to derive from.
+## Sibling entry points that miss a tag or side effect
+
+The same miss runs the other way: the operation has several doors, one door gets the
+tag, the others never do. Worked example (#4418, real-testing bug E):
+`POST /api/interactions/submit-pose/` (`_record_submitted_pose`) called
+`message_location(caller_state, content)` with no `echo_of`. #3933 had tagged the pose
+action's own broadcast (`_broadcast_pose` passes `echo_of=InteractionMode.POSE`), so the
+web client drops the plain-text echo of a line it already received as a structured
+`interaction` push. The REST door was missed, so every web session in the room, PC or
+lent NPC, got the pose twice: the push and an untagged text frame that
+`useGameSocket.dispatchLegacyText` renders as a "✦" note. It sat on `main` until a live
+pass counted frames at the delivery seam.
+
+When a diff adds or changes one door to an operation that persists a row and also
+broadcasts a line:
+
+1. **List every door.** Grep the callers of the broadcaster (`message_location`,
+   `msg_contents`, `broadcast_*`) and the creators of the row
+   (`create_interaction`, `record_interaction`). For poses that is the pose action,
+   `submit-pose`, say, whisper, emit, and GM and NPC voicing paths.
+2. **Read what the tagged door passes.** `echo_of=`, the persisted-row flag, the
+   audience, the writer persona. Write the list of arguments that exist to stop a
+   double or a leak.
+3. **Check each other door passes the same.** Persisted-and-pushed operations must tag
+   their text echo; a plain environmental line (a door opening, an item taken) has no
+   structured twin and rightly passes none. The test is whether the same fact also
+   reaches the client as an `interaction` push.
+4. **Ask for the delivery-seam test.** Mock `SESSION_HANDLER.data_out` with a real web
+   session and count frames per door: one `interaction`, no untagged `text`.
+
+No lint: nearly every `message_location` call correctly omits `echo_of`, so a
+missing keyword is not a signal without knowing whether a structured twin exists.
+
 
 ## What not to flag
 
