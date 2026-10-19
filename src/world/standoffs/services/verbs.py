@@ -273,7 +273,9 @@ def standoff_read(
         sheet.character,
         config.read_check_type,
         target_difficulty=difficulty,
-        extra_modifiers=collect_check_modifiers(sheet, config.read_check_type).total,
+        extra_modifiers=collect_check_modifiers(
+            sheet, config.read_check_type
+        ).extra_modifiers_total,
     )
     tier = result.success_level
     if tier < 0:
@@ -542,7 +544,7 @@ def _press_check(
                 target_difficulty=graded.difficulty,
                 extra_modifiers=collect_check_modifiers(
                     sheet, approach.check_type, extra_contributions=graded.contributions
-                ).total,
+                ).extra_modifiers_total,
             ),
             None,
         )
@@ -556,7 +558,7 @@ def _press_check(
             extra_modifiers=extra_modifiers
             + collect_check_modifiers(
                 sheet, approach.check_type, extra_contributions=graded.contributions
-            ).total,
+            ).extra_modifiers_total,
         )
         captured["check"] = floor_ultimate_check(check, technique)
         return DisplayCast(check_result=captured["check"])
@@ -802,7 +804,7 @@ def standoff_terms(
         target_difficulty=graded.difficulty,
         extra_modifiers=collect_check_modifiers(
             sheet, config.terms_check_type, extra_contributions=graded.contributions
-        ).total,
+        ).extra_modifiers_total,
     )
     if result.outcome is None:
         return _refuse(_MSG_UNCONFIGURED)

@@ -169,7 +169,9 @@ class _Grader:
         contributions: list[ModifierContribution],
     ) -> str:
         if check_type.pk not in self.base_totals:
-            self.base_totals[check_type.pk] = collect_check_modifiers(self.sheet, check_type).total
+            self.base_totals[check_type.pk] = collect_check_modifiers(
+                self.sheet, check_type
+            ).extra_modifiers_total
         extra = self.base_totals[check_type.pk] + sum(c.value for c in contributions)
         key = (check_type.pk, difficulty, extra)
         if key not in self.graded:

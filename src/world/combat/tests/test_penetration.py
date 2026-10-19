@@ -334,7 +334,7 @@ class PenetrationModifierSeamTests(TestCase):
             patch("world.combat.services.perform_check") as mock_pen,
             patch("world.combat.services.collect_check_modifiers") as mock_collect,
         ):
-            mock_collect.return_value = MagicMock(total=4)
+            mock_collect.return_value = MagicMock(extra_modifiers_total=4)
             mock_pen.return_value = MagicMock(success_level=1)
             resolver(power=20, ledger=_ledger(20))
         # collect_check_modifiers called for the penetration check type...

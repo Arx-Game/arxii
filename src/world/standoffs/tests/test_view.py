@@ -294,7 +294,7 @@ class GradeAndTermsTests(ViewBase):
             patch(CHART, return_value=True),
             patch(
                 "world.standoffs.services.view.collect_check_modifiers",
-                return_value=SimpleNamespace(total=7),
+                return_value=SimpleNamespace(extra_modifiers_total=7),
             ),
         ):
             view = self.view_for(self.sheet_b)

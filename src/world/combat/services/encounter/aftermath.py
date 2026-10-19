@@ -71,7 +71,7 @@ def _apply_aftermath_rules(
             rule.check_type,
             rule.base_difficulty,
             consequences,
-            extra_modifiers=breakdown.total,
+            extra_modifiers=breakdown.extra_modifiers_total,
         )
         try:
             participants_ctx = [sheet.primary_persona]

@@ -1,7 +1,7 @@
 """Tests for perform_check_with_modifiers() — the sheet-resolving wrapper.
 
 Verifies that the helper resolves CharacterSheet, guards None for sheet-less
-actors, calls collect_check_modifiers, and forwards breakdown.total
+actors, calls collect_check_modifiers, and forwards breakdown.extra_modifiers_total
 additively to perform_check.
 """
 
@@ -33,7 +33,7 @@ class PerformCheckWithModifiersTest(TestCase):
             patch("world.checks.services.collect_check_modifiers") as mock_collect,
             patch("world.checks.services.perform_check") as mock_perform,
         ):
-            mock_collect.return_value.total = 5
+            mock_collect.return_value.extra_modifiers_total = 5
             perform_check_with_modifiers(
                 self.target,
                 self.check_type,
@@ -85,7 +85,7 @@ class PerformCheckWithModifiersTest(TestCase):
             patch("world.checks.services.collect_check_modifiers") as mock_collect,
             patch("world.checks.services.perform_check"),
         ):
-            mock_collect.return_value.total = 0
+            mock_collect.return_value.extra_modifiers_total = 0
             perform_check_with_modifiers(self.target, self.check_type, scene=scene)
             mock_collect.assert_called_once_with(
                 self.sheet,
@@ -105,7 +105,7 @@ class PerformCheckWithModifiersTest(TestCase):
             patch("world.checks.services.collect_check_modifiers") as mock_collect,
             patch("world.checks.services.perform_check") as mock_perform,
         ):
-            mock_collect.return_value.total = 0
+            mock_collect.return_value.extra_modifiers_total = 0
             perform_check_with_modifiers(
                 self.target,
                 self.check_type,

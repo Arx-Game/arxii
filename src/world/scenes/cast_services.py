@@ -210,7 +210,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     if cast_check is not None and character_sheet is not None:
         check_modifier_total = collect_check_modifiers(
             character_sheet, cast_check, scene=scene
-        ).total
+        ).extra_modifiers_total
 
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 

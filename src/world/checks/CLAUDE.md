@@ -20,7 +20,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 
 ### `services.py`
 - **`perform_check(character, check_type, target_difficulty, extra_modifiers)`**: Main resolution function. Returns CheckResult.
-- **`perform_check_with_modifiers(character, check_type, ..., *, scene=None, extra_contributions=None, skip_fashion=False)`** (#2750, #2758): Thin wrapper around `perform_check` that resolves `character.character_sheet`, guards `None` for sheet-less actors (GM puppets, companions — sums `extra_contributions` `.value` into `extra_modifiers` on this path so caller modifiers aren't lost), calls `collect_check_modifiers`, and forwards `breakdown.total` additively to `perform_check`. Use this for any check that should honor conditions, equipment, fashion, capability, and distinction modifiers. Mirrors `perform_check`'s exact signature plus keyword-only `scene`, `extra_contributions` (caller-supplied labeled contributions forwarded to the aggregator), and `skip_fashion` (suppress the aggregator's location-derived FASHION block when the caller supplies fashion via `extra_contributions`).
+- **`perform_check_with_modifiers(character, check_type, ..., *, scene=None, extra_contributions=None, skip_fashion=False)`** (#2750, #2758): Thin wrapper around `perform_check` that resolves `character.character_sheet`, guards `None` for sheet-less actors (GM puppets, companions — sums `extra_contributions` `.value` into `extra_modifiers` on this path so caller modifiers aren't lost), calls `collect_check_modifiers`, and forwards `breakdown.extra_modifiers_total` (the non-CAPABILITY part; the roll counts capability itself, #4453) additively to `perform_check`. Use this for any check that should honor conditions, equipment, fashion, capability, and distinction modifiers. Mirrors `perform_check`'s exact signature plus keyword-only `scene`, `extra_contributions` (caller-supplied labeled contributions forwarded to the aggregator), and `skip_fashion` (suppress the aggregator's location-derived FASHION block when the caller supplies fashion via `extra_contributions`).
 - **`get_rollmod(character)`**: Public function that sums character and account rollmod values. Used by both checks and attempts apps.
 
 ### `consequence_resolution.py`
@@ -166,7 +166,13 @@ per-row-truncated `int(0.5)==0`s gives `0`), then allocates that single truncate
 total back across rows by **largest remainder** (each row floored toward zero, the
 leftover units handed to the rows with the largest fractional remainder, tie-broken
 by capability name) so the recorded per-row contributions always sum EXACTLY to what
-moved `total_points`. Zero-value rows are dropped only after this allocation. Pass
+moved `total_points`. Zero-value rows are dropped only after this allocation. **CAPABILITY is
+recorded here but counted once, by the roll path** (#4453): `perform_check` already adds
+`_calculate_capability_points` to `total_points`, so a caller feeding the breakdown into
+`extra_modifiers` MUST use `ModifierBreakdown.extra_modifiers_total` (everything but the
+CAPABILITY kind), never `.total`. `.total` is the full recorded shift, used for provenance
+(`record_consequence_outcome`'s `modifier_total`). Feeding `.total` into `extra_modifiers`
+counted authored capability twice. Pass
 `scene=` to enable the **perception-relative fashion bonus**: `_character_and_equipment_contributions` resolves the perceiving
 societies via `world.areas.services.societies_for_scene(scene)`
 (`Area.dominant_society`, else all societies sharing the realm) and takes the

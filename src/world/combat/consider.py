@@ -383,7 +383,7 @@ def consider_opponent(participant: CombatParticipant, opponent: CombatOpponent) 
         character,
         check_type,
         target_difficulty=difficulty,
-        extra_modifiers=modifier_breakdown.total,
+        extra_modifiers=modifier_breakdown.extra_modifiers_total,
     )
     success_level = result.success_level
 
