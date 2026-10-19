@@ -21,10 +21,9 @@ vi.mock('@/store/hooks', () => ({
   useAccount: vi.fn(() => null),
 }));
 
-// The mint dialog's statline preset picker (#3427) — a Radix Select. jsdom
-// can't drive Radix's real pointer-capture popover, so this is stubbed as a
-// plain native <select> (the established pattern; see
-// boundaries/__tests__/PlayerBoundaryFormDialog.test.tsx).
+// Radix Select, for any picker on the page. jsdom can't drive Radix's real
+// pointer-capture popover, so this is stubbed as a plain native <select> (the
+// established pattern; see boundaries/__tests__/PlayerBoundaryFormDialog.test.tsx).
 vi.mock('@/components/ui/select', () => ({
   Select: ({
     value,
@@ -71,9 +70,24 @@ vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: vi.fn(() => ({ data: [] })),
 }));
 
+// The new-NPC form (#4418) reads its own templates and dispatches its own mint;
+// it is covered by gm/npcs/__tests__/NpcForm.test.tsx, so it is stubbed here and
+// never shifts the ordered apiFetch mocks below.
+vi.mock('@/gm/npcs/NpcOwnerPanel', () => ({
+  NpcOwnerPanel: ({ entryId }: { entryId: number }) => (
+    <div data-testid="npc-owner-panel" data-entry={entryId} />
+  ),
+}));
+
+vi.mock('@/gm/npcs/NpcForm', () => ({
+  NpcForm: ({ mode, sceneId }: { mode?: string; sceneId?: number | null }) => (
+    <div data-testid="npc-form" data-mode={mode} data-scene={String(sceneId)} />
+  ),
+}));
+
 // GMPromptFilterCard (#4101) fetches its own settings on mount; mock its
 // hooks directly for the same reason — this page's tests assert on an
-// ordered sequence of apiFetch calls (dashboard, presets, dispatch) that
+// ordered sequence of apiFetch calls (dashboard, dispatch) that
 // the card's own fetch would otherwise shift. GMPromptFilterCard's own
 // behaviour is covered by GMPromptFilterCard.test.tsx.
 vi.mock('@/scenes/gmPromptQueries', () => ({
@@ -84,13 +98,13 @@ vi.mock('@/scenes/gmPromptQueries', () => ({
 import { apiFetch } from '@/evennia_replacements/api';
 import { useAccount } from '@/store/hooks';
 
-function withProviders(children: ReactNode) {
+function withProviders(children: ReactNode, path = '/gm/dashboard') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return (
     <QueryClientProvider client={client}>
-      <MemoryRouter>{children}</MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>{children}</MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -324,104 +338,77 @@ describe('GMDashboardPage claim rejection (#3155)', () => {
   });
 });
 
-/**
- * Mint dialog preset picker (#3427) — selecting a statline preset must land
- * on the dispatch payload's `kwargs.preset`, and omitting one must not send
- * the key at all (matching `mint_story_npc`'s optional keyword-only param).
- */
-describe('GMDashboardPage mint dialog preset picker (#3427)', () => {
-  beforeEach(() => {
-    vi.mocked(useAccount).mockReturnValue({
-      available_characters: [{ id: 42, currently_puppeted_in_session: true }],
-    } as unknown as ReturnType<typeof useAccount>);
-  });
-
-  function mockDashboardFetch() {
-    return {
+/** The My NPCs block (#4418): the new-NPC form in quick mode, and the NPC roster's door. */
+describe('GMDashboardPage new NPC form (#4418)', () => {
+  it('mounts the NPC form in quick mode and links to the NPC roster', async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve(mockDashboard),
-    } as Response;
-  }
-
-  function mockPresetsFetch() {
-    return {
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          results: [{ id: 1, name: 'Guard', description: 'A trained watchman.' }],
-        }),
-    } as Response;
-  }
-
-  function mockDispatchFetch() {
-    return {
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          backend: 'registry',
-          deferred: false,
-          success: true,
-          message: 'Guardsman minted as a Story NPC (#7).',
-          data: null,
-        }),
-    } as Response;
-  }
-
-  it('sends the selected preset name as kwargs.preset on mint', async () => {
-    const user = userEvent.setup();
-    // Calls accumulate across `it` blocks in this file (no global mock reset),
-    // so index the dispatch call relative to this test's own start rather
-    // than an absolute position.
-    const callsBefore = vi.mocked(apiFetch).mock.calls.length;
-    vi.mocked(apiFetch)
-      .mockResolvedValueOnce(mockDashboardFetch())
-      .mockResolvedValueOnce(mockPresetsFetch())
-      .mockResolvedValueOnce(mockDispatchFetch());
+    } as Response);
 
     render(withProviders(<GMDashboardPage />));
 
-    await waitFor(() => expect(screen.getByText('GM Dashboard')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Mint Story NPC' }));
-
-    const presetOption = await screen.findByRole('option', { name: 'Guard' });
-    const select = presetOption.closest('select');
-    if (!select) throw new Error('preset select not found');
-    await user.selectOptions(select, 'Guard');
-
-    await user.type(screen.getByLabelText('Name *'), 'Guardsman');
-    await user.click(screen.getByRole('button', { name: 'Mint' }));
-
-    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.length).toBe(callsBefore + 3));
-    const dispatchCall = vi.mocked(apiFetch).mock.calls[callsBefore + 2];
-    const body = JSON.parse((dispatchCall[1] as RequestInit).body as string) as {
-      kwargs: Record<string, unknown>;
-    };
-    expect(body.kwargs.preset).toBe('Guard');
-    expect(body.kwargs.name).toBe('Guardsman');
+    const form = await screen.findByTestId('npc-form');
+    expect(form).toHaveAttribute('data-mode', 'quick');
+    expect(form).toHaveAttribute('data-scene', 'null');
+    expect(screen.getByRole('link', { name: 'NPC roster' })).toHaveAttribute('href', '/gm/npcs');
+    expect(screen.queryByRole('button', { name: 'Mint Story NPC' })).not.toBeInTheDocument();
   });
 
-  it('omits kwargs.preset entirely when no preset is selected', async () => {
-    const user = userEvent.setup();
-    const callsBefore = vi.mocked(apiFetch).mock.calls.length;
-    vi.mocked(apiFetch)
-      .mockResolvedValueOnce(mockDashboardFetch())
-      .mockResolvedValueOnce(mockPresetsFetch())
-      .mockResolvedValueOnce(mockDispatchFetch());
+  it("passes the cast panel's scene to the form", async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDashboard),
+    } as Response);
+
+    render(withProviders(<GMDashboardPage />, '/gm/dashboard?scene=4'));
+
+    expect(await screen.findByTestId('npc-form')).toHaveAttribute('data-scene', '4');
+  });
+});
+
+/** The owner's panel (#4418): only an NPC the viewer owns can be managed, not a borrowed one. */
+describe('GMDashboardPage owner panel (#4418)', () => {
+  it('offers Manage on an owned NPC and not on a borrowed one', async () => {
+    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+      data: [
+        { id: 9, name: 'Captain Vael', roster_type: 'NPC', loan: null },
+        { id: 10, name: 'Sergeant Mira', roster_type: 'NPC', loan: { id: 4 } },
+      ],
+    } as unknown as ReturnType<typeof useMyRosterEntriesQuery>);
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDashboard),
+    } as Response);
 
     render(withProviders(<GMDashboardPage />));
 
-    await waitFor(() => expect(screen.getByText('GM Dashboard')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Mint Story NPC' }));
-    await screen.findByRole('option', { name: 'Guard' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Manage Captain Vael' }));
+    expect(screen.getByTestId('npc-owner-panel')).toHaveAttribute('data-entry', '9');
+    expect(screen.queryByRole('button', { name: 'Manage Sergeant Mira' })).not.toBeInTheDocument();
+  });
+});
 
-    await user.type(screen.getByLabelText('Name *'), 'Blank Slate');
-    await user.click(screen.getByRole('button', { name: 'Mint' }));
+/** My NPCs (#4418 bug 6): the GM's own GM character is not one of their story NPCs. */
+describe('GMDashboardPage My NPCs list (#4418)', () => {
+  it("leaves out the GM's own GM character", async () => {
+    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+      data: [
+        { id: 8, name: 'Ravenna', roster_type: 'NPC', character_type: 'GM', loan: null },
+        { id: 9, name: 'Captain Vael', roster_type: 'NPC', character_type: 'PC', loan: null },
+      ],
+    } as unknown as ReturnType<typeof useMyRosterEntriesQuery>);
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDashboard),
+    } as Response);
 
-    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.length).toBe(callsBefore + 3));
-    const dispatchCall = vi.mocked(apiFetch).mock.calls[callsBefore + 2];
-    const body = JSON.parse((dispatchCall[1] as RequestInit).body as string) as {
-      kwargs: Record<string, unknown>;
-    };
-    expect(body.kwargs.preset).toBeUndefined();
+    render(withProviders(<GMDashboardPage />));
+
+    expect(await screen.findByRole('heading', { name: 'My NPCs (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Manage Captain Vael' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manage Ravenna' })).not.toBeInTheDocument();
   });
 });

@@ -36,6 +36,8 @@ export function wsPayloadToInteraction(
     root_thread_id: payload.root_thread_id ?? null,
     reply_to: payload.reply_to ?? null,
     narrates: payload.narrates ?? null,
+    // The generated link narrows `mode` to the enum; the feed type keeps it a string.
+    action_links: (payload.action_links ?? []) as Interaction['action_links'],
     attributed_companion:
       payload.attributed_companion_id != null
         ? { id: payload.attributed_companion_id, name: payload.attributed_companion_name ?? '' }

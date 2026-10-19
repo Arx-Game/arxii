@@ -528,3 +528,26 @@ closes by field on `OriginTemplate`, never by matching a distinction's name.
   selected entry and the sheet's Kin block never print `definition_tier`; a
   played person's name is a link, and that is the only distinction a reader
   needs. Staff keep the tier in admin and the Almanach.
+
+## Playing major NPCs (#4418, ADR-4418)
+
+- **Story NPC** - a character on the NPC shelf (`RosterType.NPC`) that is not a GM
+  or Staff OOC character (`is_story_npc`). Whether a character is a Story NPC is a
+  property of the character, never of who plays it: a Story NPC a GM or Guide plays
+  gets no consent prompts and no PvP protection, and a PC can kill it. _Avoid:_ major
+  NPC, held NPC, piloted NPC, "an NPC is a PC while someone holds it".
+- **NPC roster** - the opt-in browse list of Story NPCs (`StoryNPCSettings.listed_on_npc_roster`)
+  that GMs and Guides can ask to borrow or copy, at `/gm/npcs` and `/api/roster/npcs/`.
+  Not the NPC shelf: the shelf holds every Story NPC, listed or not, and is never publicly
+  listed. _Avoid:_ NPC directory, NPC library.
+- **Loan** - an `NPCLoan`: one lending of a Story NPC to a borrower, scoped to a scene
+  (the GM offered it and it ends with the scene) or standing (a borrow from the NPC roster).
+  OFFERED, REQUESTED, ACTIVE, DECLINED, ENDED; one ACTIVE per NPC. While it is ACTIVE the
+  borrower plays the NPC and the owner cannot. It is not a tenure: the owner's tenure and
+  `player_number` history stay as they were. _Avoid:_ transfer, hand-off as a noun, share.
+- **Owner** - the account that made a Story NPC (`RosterEntry.created_by_account`), kept
+  through listing, lending and loans. The owner edits it and decides whether it is lent.
+  Shown to other GMs by their GM character's name, never an account name. _Avoid:_ holder
+  (the holder is whoever has the tenure, which may be the owner), creator.
+- **Template** - a Story NPC with `StoryNPCSettings.is_template`: held by nobody, counted
+  against no cap, copied for a borrower instead of lent. _Avoid:_ blueprint.

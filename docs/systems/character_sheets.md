@@ -325,6 +325,15 @@ level band) and announcing nothing to another character. Other characters are se
 (less the onboarding missions and point conversion) on a bare `mint_gm_character` sheet
 through the staff endpoints alone.
 
+**GMs edit the NPCs they own (#4418, ADR-4418).** `can_edit_npc_sheet(user, sheet)` is staff,
+or the account that is `RosterEntry.created_by_account` of a story NPC (`is_story_npc`). It
+gates exactly seven actions: `staff-edit`, `staff-stats`, `staff-skills`, `staff-path`,
+`staff-magic`, `staff-magic-options` and `staff-options` (identity, prose, stats, skills,
+path and magic), and the sheet payload's `staff_edit` block follows it. Anyone else gets a 404.
+`can_staff_edit_sheet` stays staff-only, so houses, titles, kinship, group fit and the rest
+of the rows band are still staff's. A borrower during a loan is not the owner and edits
+nothing.
+
 ## Web Sheet Mechanics Display (#3042)
 
 The `stats`/`skills` sections of `CharacterSheetSerializer` were always built (`_build_stats`/

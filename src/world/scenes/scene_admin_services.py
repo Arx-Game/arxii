@@ -158,7 +158,9 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     1. ``expire_scene_prompts(scene)`` (#4101) — dismisses any pending narration
        GMPrompt for this scene while it is still active, so a room-text release
        still has a live scene to broadcast into.
-    2. ``scene.finish_scene()`` — sets ``date_finished`` + ``is_active=False``.
+    2. ``scene.finish_scene()`` — sets ``date_finished`` + ``is_active=False``, and
+       ends the loans made for the scene (``end_scene_loans``, #4418): NPCs lent for
+       the scene go back.
     3. ``close_scene_clocks(scene, SceneClockClosedReason.SCENE_ENDED)`` (#3567) —
        clocks opened in this scene stop with it; a battle scene running the same
        beat has its own row and keeps the GM scene's clock alive.

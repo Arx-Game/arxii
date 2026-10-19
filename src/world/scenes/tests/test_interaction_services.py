@@ -801,6 +801,7 @@ class TestPushInteraction(TestCase):
             "attributed_companion_name": None,
             "reply_to": None,
             "narrates": None,
+            "action_links": [],
         }
         mock_a.assert_called_once_with(interaction=((), expected_payload))
         mock_b.assert_called_once_with(interaction=((), expected_payload))

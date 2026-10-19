@@ -215,18 +215,34 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         """List of currently active tenures for this player (uses cached data)."""
         return [tenure for tenure in self.cached_tenures if tenure.is_current]
 
+    @cached_property
+    def cached_npc_loans(self) -> list:
+        """ACTIVE NPC loans this player borrows or has lent out (#4418).
+
+        One query, then free until cleared. The loan services in
+        ``world.roster.services.npc_lending`` clear it (and the account's caches)
+        on every loan change; a tenure save clears it with the tenures.
+        """
+        from world.roster.services.npc_lending import active_loans_touching  # noqa: PLC0415
+
+        entry_ids = [tenure.roster_entry_id for tenure in self.cached_active_tenures]
+        return active_loans_touching(self.account, entry_ids)
+
     def get_available_roster_entries(self):
         """Roster entries this player is actively playing, using cached tenures.
 
         #2287: retired (released) dead characters are excluded; the ghost
         interlude ends at retire, and the character can never be logged into
         again. Dead-but-unretired characters stay available (spectator ghost).
+
+        #4418: an NPC lent to someone else drops out, and an NPC lent to this
+        player joins (``npc_lending.playable_entries``).
         """
-        return [
-            tenure.roster_entry
-            for tenure in self.cached_active_tenures
-            if is_available_roster_entry(tenure.roster_entry)
-        ]
+        from world.roster.services.npc_lending import playable_entries  # noqa: PLC0415
+
+        tenure_entries = [tenure.roster_entry for tenure in self.cached_active_tenures]
+        entries = playable_entries(self.account, tenure_entries, self.cached_npc_loans)
+        return [entry for entry in entries if is_available_roster_entry(entry)]
 
     def get_available_characters(self):
         """Return characters this player is actively playing using cached data."""

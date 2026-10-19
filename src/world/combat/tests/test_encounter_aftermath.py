@@ -104,6 +104,23 @@ class RenderEncounterOutcomeNarrationTests(TestCase):
         self.assertIn("Alaric and Bryn", narration)
         self.assertIn("Gravewight", narration)
 
+    def test_one_victor_stands_and_several_stand(self) -> None:
+        # Round 7: "Ysmay stand victorious." read wrong for one victor.
+        alone = render_encounter_outcome_narration(
+            outcome=EncounterOutcome.VICTORY,
+            active_labels=["Ysmay"],
+            fled_labels=[],
+            defeated_opponent_labels=["Sergeant Mira"],
+        )
+        self.assertIn("Ysmay stands victorious.", alone)
+        together = render_encounter_outcome_narration(
+            outcome=EncounterOutcome.VICTORY,
+            active_labels=["Alaric", "Bryn"],
+            fled_labels=[],
+            defeated_opponent_labels=[],
+        )
+        self.assertIn("Alaric and Bryn stand victorious.", together)
+
     def test_fled_outcome_names_the_scattered(self) -> None:
         narration = render_encounter_outcome_narration(
             outcome=EncounterOutcome.FLED,

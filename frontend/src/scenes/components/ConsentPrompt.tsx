@@ -54,11 +54,14 @@ interface ConsentCardProps {
   combatStakes?: StakesSummary[] | null;
   /** The structured ask on a boon request (#2540) — what granting costs you. */
   boon?: BoonReadPayload | null;
+  /** Resist-only: no refusal, just an effort choice and Roll / Believe {initiatorName} (#4418). */
+  resistOnly?: boolean;
+  resistCheckName?: string | null;
   resistEffort: string;
   onResistChange: (v: string) => void;
   onDeny: () => void;
   onDenyBlock: () => void;
-  onAccept: (difficulty: string) => void;
+  onAccept: (difficulty: string, effortOverride?: string) => void;
   isPending: boolean;
 }
 
@@ -70,6 +73,8 @@ function ConsentCard({
   combatRiskLevel,
   combatStakes,
   boon,
+  resistOnly = false,
+  resistCheckName,
   resistEffort,
   onResistChange,
   onDeny,
@@ -81,10 +86,54 @@ function ConsentCard({
   const vaultSuffix = boon?.kind === 'vault_item' ? ' from your vault' : '';
   const materialPrefix = boon?.sum_tier ? `a ${boon.sum_tier} amount of ` : '';
 
+  const effortSelect = (
+    <Select value={resistEffort} onValueChange={onResistChange}>
+      <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="Dig in (costs stamina)">
+        <SelectValue placeholder="Dig in (costs stamina)" />
+      </SelectTrigger>
+      <SelectContent>
+        {RESIST_EFFORT_OPTIONS.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  if (resistOnly) {
+    const heading = `${initiatorName} acts against you. Resist?`;
+    return (
+      <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
+        <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
+        <div className="min-w-0 flex-1 basis-56">
+          <p className="text-sm font-semibold">{heading}</p>
+          {resistCheckName && (
+            <p className="mt-1 text-xs text-muted-foreground">You roll {resistCheckName}.</p>
+          )}
+        </div>
+        <div data-testid="consent-actions" className="flex flex-wrap items-center gap-1.5">
+          {effortSelect}
+          <Button size="sm" onClick={() => onAccept('normal')} disabled={isPending}>
+            Roll
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onAccept('normal', 'low')}
+            disabled={isPending}
+          >
+            Believe {initiatorName}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
+    <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
       <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
-      <div className="flex-1">
+      <div className="min-w-0 flex-1 basis-56">
         <p className="text-sm font-medium">
           <span className="font-semibold">{initiatorName}</span> wants to use{' '}
           <span className="font-semibold">
@@ -137,19 +186,8 @@ function ConsentCard({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1.5">
-        <Select value={resistEffort} onValueChange={onResistChange}>
-          <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="Dig in (costs stamina)">
-            <SelectValue placeholder="Dig in (costs stamina)" />
-          </SelectTrigger>
-          <SelectContent>
-            {RESIST_EFFORT_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div data-testid="consent-actions" className="flex flex-wrap items-center gap-1.5">
+        {effortSelect}
         <Button size="sm" variant="outline" onClick={onDeny} disabled={isPending}>
           <X className="mr-1 h-3.5 w-3.5" />
           Deny
@@ -294,18 +332,21 @@ export function ConsentPrompt({ sceneId, viewerKey }: Props) {
             combatRiskLevel={req.combat_risk_level}
             combatStakes={req.combat_stakes}
             boon={req.boon}
+            resistOnly={req.resist_only}
+            resistCheckName={req.resist_check_name}
             resistEffort={selectedResist}
             onResistChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
             onDeny={() => respond.mutate({ requestId: req.id, accept: false })}
             onDenyBlock={() =>
               respond.mutate({ requestId: req.id, accept: false, blacklist_actor: true })
             }
-            onAccept={(difficulty) =>
+            onAccept={(difficulty, effortOverride) =>
               respond.mutate({
                 requestId: req.id,
                 accept: true,
-                difficulty,
-                resist_effort: selectedResist !== '' ? selectedResist : undefined,
+                difficulty: req.resist_only ? undefined : difficulty,
+                resist_effort:
+                  effortOverride ?? (selectedResist !== '' ? selectedResist : undefined),
               })
             }
             isPending={respond.isPending}
@@ -324,6 +365,8 @@ export function ConsentPrompt({ sceneId, viewerKey }: Props) {
             strainCommitment={t.strain_commitment}
             combatRiskLevel={t.combat_risk_level}
             combatStakes={t.combat_stakes}
+            resistOnly={t.resist_only}
+            resistCheckName={t.resist_check_name}
             resistEffort={selectedResist}
             onResistChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
             onDeny={() =>
@@ -341,13 +384,14 @@ export function ConsentPrompt({ sceneId, viewerKey }: Props) {
                 blacklist_actor: true,
               })
             }
-            onAccept={(difficulty) =>
+            onAccept={(difficulty, effortOverride) =>
               respondTarget.mutate({
                 requestId: t.action_request_id,
                 targetPersonaId: t.target_persona_id,
                 accept: true,
-                difficulty,
-                resist_effort: selectedResist !== '' ? selectedResist : undefined,
+                difficulty: t.resist_only ? undefined : difficulty,
+                resist_effort:
+                  effortOverride ?? (selectedResist !== '' ? selectedResist : undefined),
               })
             }
             isPending={respondTarget.isPending}

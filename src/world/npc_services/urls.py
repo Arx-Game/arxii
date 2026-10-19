@@ -14,6 +14,7 @@ from world.npc_services.views import (
     OfferCooldownViewSet,
     OfferSummonsViewSet,
     PermitOfferDetailsViewSet,
+    PersonalityTraitViewSet,
     RecordedProfileViewSet,
     StaffingProfileLineViewSet,
     StaffingProfileViewSet,
@@ -34,6 +35,8 @@ router.register(r"reaction-lines", NPCReactionLineViewSet, basename="npc-reactio
 
 router.register(r"staffing-profiles", StaffingProfileViewSet, basename="staffing-profile")
 router.register(r"staffing-lines", StaffingProfileLineViewSet, basename="staffing-profile-line")
+
+router.register(r"personality-traits", PersonalityTraitViewSet, basename="personality-trait")
 
 router.register(r"lifecycle", NpcLifecycleViewSet, basename="npc-lifecycle")
 

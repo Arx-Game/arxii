@@ -1,8 +1,9 @@
 """Tests for peril consequence pools + select_abandonment_pool (Task 4, #1479).
 
 Covers:
-- select_abandonment_pool: NPC → abandonment_enemy; PC → abandonment_pvp;
-  None → abandonment_environmental.
+- select_abandonment_pool: NPC source → abandonment_enemy; PC source and a
+  PvP-protected victim → abandonment_pvp (a story NPC victim → abandonment_enemy,
+  ADR-4418); None → abandonment_environmental.
 - bleed_out_terminal factory yields a die (character_loss=True) row and a
   recover row.
 - All four pools (bleed_out_terminal, abandonment_enemy, abandonment_pvp,
@@ -26,6 +27,13 @@ from world.vitals.factories import (
 )
 
 
+def _pc_victim():
+    """A sheet with an active tenure: a player character, so the PvP wall protects it."""
+    sheet = CharacterSheetFactory()
+    RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=sheet), end_date=None)
+    return sheet
+
+
 class SelectAbandonmentPoolTests(TestCase):
     """select_abandonment_pool routes to the correct pool by source type."""
 
@@ -37,7 +45,7 @@ class SelectAbandonmentPoolTests(TestCase):
         from world.vitals.peril_resolution import select_abandonment_pool
 
         npc = CharacterFactory()  # no CharacterSheet/roster tenure → NPC
-        pool = select_abandonment_pool(npc)
+        pool = select_abandonment_pool(npc, victim_sheet=_pc_victim())
         self.assertEqual(pool.name, "abandonment_enemy")
 
     def test_pc_source_returns_pvp_pool(self) -> None:
@@ -52,7 +60,7 @@ class SelectAbandonmentPoolTests(TestCase):
         sheet = CharacterSheetFactory(character=pc)
         entry = RosterEntryFactory(character_sheet=sheet)
         RosterTenureFactory(roster_entry=entry, end_date=None)
-        pool = select_abandonment_pool(pc)
+        pool = select_abandonment_pool(pc, victim_sheet=_pc_victim())
         self.assertEqual(pool.name, "abandonment_pvp")
 
     def test_offline_pc_source_returns_pvp_pool(self) -> None:
@@ -66,13 +74,30 @@ class SelectAbandonmentPoolTests(TestCase):
         entry = RosterEntryFactory(character_sheet=sheet)
         RosterTenureFactory(roster_entry=entry, end_date=None)
         self.assertIsNone(pc.db_account)
-        pool = select_abandonment_pool(pc)
+        pool = select_abandonment_pool(pc, victim_sheet=_pc_victim())
         self.assertEqual(pool.name, "abandonment_pvp")
+
+    def test_pc_source_abandoning_a_story_npc_returns_enemy_pool(self) -> None:
+        """ADR-4418: death_is_permitted lets a PC kill a story NPC, so the pool is not PvP."""
+        from world.roster.factories import RosterFactory
+        from world.roster.models.choices import RosterType
+        from world.vitals.peril_resolution import select_abandonment_pool
+
+        pc = CharacterFactory()
+        sheet = CharacterSheetFactory(character=pc)
+        RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=sheet), end_date=None)
+        npc = CharacterSheetFactory()
+        npc_entry = RosterEntryFactory(
+            character_sheet=npc, roster=RosterFactory(roster_type=RosterType.NPC)
+        )
+        RosterTenureFactory(roster_entry=npc_entry, end_date=None)
+        pool = select_abandonment_pool(pc, victim_sheet=npc)
+        self.assertEqual(pool.name, "abandonment_enemy")
 
     def test_none_source_returns_environmental_pool(self) -> None:
         from world.vitals.peril_resolution import select_abandonment_pool
 
-        pool = select_abandonment_pool(None)
+        pool = select_abandonment_pool(None, victim_sheet=_pc_victim())
         self.assertEqual(pool.name, "abandonment_environmental")
 
 

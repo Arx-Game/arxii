@@ -64,6 +64,11 @@ class MagicHooks:
     after_aura: Callable[[CharacterAura], None] | None = None
 
 
+# Starting techniques before any distinction adds to them (a sheet with none, or an
+# NPC the form has not made yet, #4418).
+BASE_TECHNIQUE_PICKS = 1
+
+
 def technique_pick_limit(sheet: CharacterSheet) -> int:
     """How many starting techniques a sheet may hold: 1 plus its distinctions' bonus.
 
@@ -82,13 +87,13 @@ def technique_pick_limit(sheet: CharacterSheet) -> int:
     ):
         ranks.setdefault(distinction_id, []).append(rank)
     if not ranks:
-        return 1
+        return BASE_TECHNIQUE_PICKS
     effects = DistinctionEffect.objects.filter(
         distinction_id__in=list(ranks),
         target__name=STARTING_TECHNIQUE_PICKS_TARGET,
         target__category__name=CG_MODIFIER_CATEGORY,
     )
-    return 1 + sum(
+    return BASE_TECHNIQUE_PICKS + sum(
         effect.get_value_at_rank(rank)
         for effect in effects
         for rank in ranks[effect.distinction_id]

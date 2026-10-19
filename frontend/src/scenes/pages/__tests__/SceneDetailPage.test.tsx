@@ -149,6 +149,11 @@ const mockUseBattleForSceneQuery = vi.fn(
   })
 );
 
+// The cast panel (#4418) has its own tests; here it would fetch the real network.
+vi.mock('@/gm/npcs/CastListPanel', () => ({
+  CastListPanel: () => <div data-testid="cast-panel" />,
+}));
+
 vi.mock('@/battles/queries', () => ({
   useBattleForSceneQuery: () => mockUseBattleForSceneQuery(),
 }));
@@ -295,6 +300,7 @@ let mockGameActive: string | null = null;
 // shape when `connect()` has never been called on this page (the exact
 // condition that triggered the bug: nothing on `/scenes/:id` ever connects a
 // socket, so `sessions` never gains an entry for the active character here).
+let mockAccountFlags: { is_staff?: boolean; is_gm?: boolean } = {};
 let mockGameSessions: Record<string, { isConnected: boolean }> | undefined = undefined;
 
 vi.mock('@/store/hooks', () => ({
@@ -314,6 +320,7 @@ vi.mock('@/store/hooks', () => ({
     id: 1,
     username: 'testuser',
     available_characters: [],
+    ...mockAccountFlags,
   })),
 }));
 
@@ -495,6 +502,42 @@ describe('SceneDetailPage', () => {
     // Reset the mocked game.sessions selector to default (no session at all —
     // the common case on this page, since nothing here ever calls connect()).
     mockGameSessions = undefined;
+    mockAccountFlags = {};
+  });
+
+  describe('cast panel gating (#4418)', () => {
+    function renderScene() {
+      mockSceneData = {
+        id: '1',
+        name: 'Test Scene',
+        is_active: true,
+        description: '',
+        viewer_can_gm: true,
+      };
+      return renderWithProviders(
+        <Routes>
+          <Route path="/scenes/:id" element={<SceneDetailPage />} />
+        </Routes>,
+        { initialEntries: ['/scenes/1'] }
+      );
+    }
+
+    it('shows the cast panel to a GM who can run the scene', () => {
+      mockAccountFlags = { is_gm: true };
+      renderScene();
+      expect(screen.getByTestId('cast-panel')).toBeInTheDocument();
+    });
+
+    it('shows it to staff', () => {
+      mockAccountFlags = { is_staff: true };
+      renderScene();
+      expect(screen.getByTestId('cast-panel')).toBeInTheDocument();
+    });
+
+    it('hides it from a plain player who co-owns the scene', () => {
+      renderScene();
+      expect(screen.queryByTestId('cast-panel')).not.toBeInTheDocument();
+    });
   });
 
   it('renders without crashing', () => {

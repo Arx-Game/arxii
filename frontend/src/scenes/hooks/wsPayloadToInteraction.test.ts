@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InteractionWsPayload } from '@/hooks/types';
+import { poseCarryingAction } from '@/gm/npcs/pendingNpcResponse';
 import { wsPayloadToInteraction } from './useSceneInteractions';
 
 const payload: InteractionWsPayload = {
@@ -68,5 +69,52 @@ describe('wsPayloadToInteraction (#3858)', () => {
 
   it('defaults narrates to null when the payload carries none', () => {
     expect(wsPayloadToInteraction(payload).narrates).toBeNull();
+  });
+});
+
+// A live pose frame shaped as the backend journey test builds it (interaction_services
+// serializes the pose's cached links the way the REST feed's action_links does).
+describe('wsPayloadToInteraction action_links (#4418)', () => {
+  const actionRow = wsPayloadToInteraction({
+    ...payload,
+    id: 900,
+    mode: 'action',
+    content: 'Ysmay attempts to persuade Captain Vael',
+    target_persona_ids: [70],
+    action_links: [],
+  });
+  const poseFrame: InteractionWsPayload = {
+    ...payload,
+    id: 902,
+    persona: { id: 5, name: 'Ysmay', thumbnail_url: '' },
+    content: 'holds up the forged orders.',
+    action_links: [
+      {
+        id: 31,
+        ordering: 0,
+        action_interaction: {
+          id: 900,
+          content: 'Ysmay attempts to persuade Captain Vael',
+          mode: 'action',
+          timestamp: '2026-09-15T02:00:30Z',
+        },
+        has_critical_effect: false,
+      },
+    ],
+  };
+
+  it('keeps the links the pose carries on the stored row', () => {
+    const row = wsPayloadToInteraction(poseFrame);
+    expect(row.action_links).toHaveLength(1);
+    expect(row.action_links?.[0].action_interaction.id).toBe(900);
+  });
+
+  it('gives a frame from before the field, or another mode, an empty list', () => {
+    expect(wsPayloadToInteraction(payload).action_links).toEqual([]);
+  });
+
+  it('lets the NPC response card find the pose that carried the action', () => {
+    const pose = wsPayloadToInteraction(poseFrame);
+    expect(poseCarryingAction([actionRow, pose], actionRow)).toBe(pose);
   });
 });

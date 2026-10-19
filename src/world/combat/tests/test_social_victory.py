@@ -327,7 +327,7 @@ class SocialVictoryTests(TestCase):
         """
         a = CombatOpponentFactory(encounter=self.enc, name="Bandit")
         self._win_over(a, self.charm)
-        character, web_session = self._place_pc_with_session("webclient/websocket")
+        character, web_session = self._place_pc_with_session("websocket")
 
         with (
             _patch_sessions({character.pk: [web_session]}),

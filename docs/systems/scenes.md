@@ -405,6 +405,72 @@ guarded by a resolvability check so a request with no real resolution path — n
 matching `ActionTemplate`, no custom resolver, not a standalone cast — stays PENDING
 instead of raising).
 
+### Played NPCs: no consent, a flipped roll, and the cast list (#4418, ADR-4418)
+
+`_persona_is_npc` reads `not is_player_character(sheet)`, and `is_player_character`
+is False for a story NPC (a character on the NPC shelf) whoever plays it. So an
+action aimed at a GM- or Guide-played NPC is auto-accepted like one aimed at an
+unheld NPC.
+
+**When an NPC acts on a PC** (`npc_acts_on_pc`; primary and extra targets alike):
+
+- Only a *contested social template* (`is_contested_social_template`: category social,
+  single target) is changed. Other templates an NPC uses keep today's path.
+- `ActionTemplate.resist_check_type` (nullable FK to `CheckType`) is the check the PC
+  rolls. `_pc_resists` is true when the template has one. The NPC never rolls. The PC's
+  roll runs through `start_resisted_action_resolution` against a difficulty from the
+  NPC's own rating in the template's `check_type` (`_resisted_difficulty`, shifted by
+  `difficulty_tier_modifier`), at the effort the PC picked, which costs social fatigue.
+  The PC's outcome is mirrored (`checks.services.mirrored_outcome`) only to choose the
+  template's consequences; the wheel the PC sees spins their own roll.
+- `request_is_resist_only` is true for such a request unless the template's
+  `consent_category`, or an ancestor, has `refusable_from_npcs` (romantic and children;
+  `SocialConsentCategory.is_refusable_from_npcs`). A resist-only request stays PENDING
+  until the PC picks an effort; DENY raises `ResistOnlyError` on every seam (REST answers
+  400, telnet `consent` answers in words). The request and target serializers expose
+  `resist_only` and, when set, the template's resist check, so the response card offers
+  Roll or Believe and no refusal.
+- `_refuse_untagged_npc_action_on_pc` refuses at creation when the template has no
+  `resist_check_type` or no `consent_category` ("That action can't be used by an NPC on a
+  player character yet."), so an untagged template (Seduce today) can never become
+  resist-only. `actions.player_interface` also stops offering such a template to whoever
+  plays an NPC. The Required content dashboard lists those templates under
+  `npc-resist-checks`.
+
+**Cast list** (`cast_list_services.scene_cast_list`, `GET /api/scenes/{id}/cast-list/`).
+Derived, no table. Rows are `CastListEntry`: `kind` `npc` (a story NPC standing in the
+scene's room, not a template, not a crowd's voice) or `crowd` (non-persona opponents of
+the scene's unfinished encounters still active, grouped by `voice_persona`, else by
+threat pool for mooks, else one row each; a swarm is one row with a body count), plus
+`name`, `roster_entry_id`, `persona_id`, `thumbnail_url`, `played_by`, `loan_id`,
+`loan_status`, `tier`, `count`, `description`, `opponent_ids`. `played_by` is the
+borrower of this scene's ACTIVE or OFFERED loan, else any ACTIVE loan, else the tenure
+holder, shown as a GM or Staff character name, a Guide's `display_name`, or a role label;
+never an account name or a PC's name. `played_by_role` (`PlayedByRole`: `gm`, `guide`,
+`staff`, or null) is the role that player plays in, from the same lookup
+(`shown_players`; staff first, then GM, then Guide). The response is a plain list, not
+paginated. Only the scene's GM, a co-owner or staff may read it (everyone else gets
+404). The query count does not grow with the rows.
+
+**Web or telnet** (`interaction_services.non_web_sessions`). The plain text lines for
+telnet (the involvement mark, an outcome's text, a check's result line) go only to
+sessions whose `protocol_key` is not in `WEB_PROTOCOL_KEYS` (`websocket`,
+`ajax/comet`, the keys Evennia's `init_session` gives a live browser session). The
+`webclient/...` value on a protocol instance is overwritten before any session exists.
+
+**Cast panel tools** (`actions/definitions/npc_lending.py`, `npc_cast.py`), all gated by
+`RunsScenePrerequisite`, which takes the `scene_id` the panel names (the GM may be
+standing elsewhere): `offer_npc`, `take_back_npc`, `voice_crowd` (a crowd gets a minted
+voice character and `CombatOpponent.voice_persona`, so its poses are ordinary
+interactions), `describe_crowd` (rename and describe a crowd, renaming its voice) and
+`place_npc_in_scene` (the GM's NPC joins the scene's room). `answer_npc_loan` and
+`request_npc_borrow` use `IsGuidePrerequisite(or_gm=True)`.
+
+**Guide play.** A Guide who accepts an offer gets the NPC as a tab beside their own
+characters. `GET /api/roster/entries/mine/` rows carry the `loan`, the owner's `npc_notes`
+and `is_crowd_voice`. Open response cards follow `Character.active_account`, which
+returns the borrower during a loan. `finish_scene_full` ends the scene's loans.
+
 ### Key Service Functions
 
 ```python

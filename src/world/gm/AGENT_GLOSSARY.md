@@ -151,3 +151,11 @@ number of times, no cap by design, so this is `(prompt, interaction)`, not a
 one-to-one. Release of a prompt's authored defaults is computed from these rows at
 close time, never from the prompt's own status alone.
 _Avoid_: GM reply, prompt response.
+
+**Guide** (#4418):
+A player staff have named a helper, identified by a `GuideProfile` (one per account, `granted_by`,
+`granted_at`, `is_active`, and `display_name`). A Guide may borrow Story NPCs lent to GMs and Guides
+and play them as a tab beside their own characters; they get no GM panel and no GM powers, and a
+loan never gives them its owner's standing. GMs see a Guide by `display_name`, never by an account
+or character name. Staff grant and remove the role in the admin. Not a rung on the `GMLevel` ladder.
+_Avoid_: helper, co-GM, assistant GM, player GM.

@@ -76,6 +76,8 @@ const MOCK_REQUEST: ActionRequest = {
   technique_name: null,
   created_at: '2026-03-22T12:00:00Z',
   strain_commitment: 0,
+  resist_only: false,
+  resist_check_name: null,
 };
 
 const MOCK_REQUEST_WITH_TECHNIQUE: ActionRequest = {
@@ -87,6 +89,8 @@ const MOCK_REQUEST_WITH_TECHNIQUE: ActionRequest = {
   technique_name: 'Mind Whisper',
   created_at: '2026-03-22T12:05:00Z',
   strain_commitment: 0,
+  resist_only: false,
+  resist_check_name: null,
 };
 
 describe('ConsentPrompt', () => {
@@ -119,6 +123,16 @@ describe('ConsentPrompt', () => {
       expect(screen.getByText('Darth Maul')).toBeInTheDocument();
     });
     expect(screen.getByText('Intimidate')).toBeInTheDocument();
+  });
+
+  it('lets the answer buttons wrap inside a narrow feed column', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    const actions = await screen.findByTestId('consent-actions');
+    expect(actions).toHaveClass('flex-wrap');
+    expect(actions.parentElement).toHaveClass('flex-wrap');
   });
 
   it('displays initiator name and action name', async () => {
@@ -394,6 +408,8 @@ describe('ConsentPrompt', () => {
     technique_name: null,
     pose_text: 'Morgan raises a hand.',
     strain_commitment: 0,
+    resist_only: false,
+    resist_check_name: null,
     created_at: '2026-03-22T12:10:00Z',
   };
 
@@ -462,6 +478,8 @@ describe('ConsentPrompt', () => {
           technique_name: 'Firestorm',
           pose_text: '',
           strain_commitment: 0,
+          resist_only: false,
+          resist_check_name: null,
           combat_risk_level: 'lethal',
           created_at: '2026-06-20T00:00:00Z',
         },
@@ -678,5 +696,139 @@ describe('ConsentPrompt', () => {
       expect(respondToRequest).toHaveBeenCalled();
     });
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  describe('resist-only card (#4418)', () => {
+    const RESIST_REQUEST: ActionRequest = {
+      ...MOCK_REQUEST,
+      id: 11,
+      initiator_name: 'Vael',
+      action_key: 'Deceive',
+      resist_only: true,
+      resist_check_name: 'Read people',
+    };
+
+    it('offers no refusal when resist_only', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [RESIST_REQUEST] });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+      await waitFor(() =>
+        expect(screen.getByText('Vael acts against you. Resist?')).toBeInTheDocument()
+      );
+      expect(screen.getByText('You roll Read people.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Roll' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Believe Vael' })).toBeInTheDocument();
+      expect(screen.queryByText('Deny')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Deny & block/)).not.toBeInTheDocument();
+      expect(screen.queryByText('It works')).not.toBeInTheDocument();
+      expect(screen.queryByText('No way')).not.toBeInTheDocument();
+    });
+
+    it('Roll sends the chosen effort', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [RESIST_REQUEST] });
+      vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Roll' })).toBeInTheDocument());
+      fireEvent.change(screen.getByTestId('mock-resist-select'), { target: { value: 'high' } });
+      await userEvent.click(screen.getByRole('button', { name: 'Roll' }));
+
+      await waitFor(() =>
+        expect(respondToRequest).toHaveBeenCalledWith('42', 11, {
+          accept: true,
+          resist_effort: 'high',
+        })
+      );
+    });
+
+    it('Believe accepts at low effort', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [RESIST_REQUEST] });
+      vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Believe Vael' })).toBeInTheDocument()
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Believe Vael' }));
+
+      await waitFor(() =>
+        expect(respondToRequest).toHaveBeenCalledWith('42', 11, {
+          accept: true,
+          resist_effort: 'low',
+        })
+      );
+    });
+
+    it('extra-target resist card has no refusal and Roll sends the chosen effort', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
+      vi.mocked(fetchPendingTargets).mockResolvedValue({
+        results: [
+          {
+            action_target_id: 51,
+            action_request_id: 13,
+            target_persona_id: 99,
+            status: 'pending',
+            initiator_persona: 3,
+            initiator_name: 'Vael',
+            scene: 42,
+            action_key: 'Deceive',
+            action_template: 1,
+            technique: null,
+            technique_name: null,
+            pose_text: 'Vael smiles.',
+            strain_commitment: 0,
+            resist_only: true,
+            resist_check_name: 'Read people',
+            created_at: '2026-03-22T12:10:00Z',
+          },
+        ],
+      });
+      vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Roll' })).toBeInTheDocument());
+      expect(screen.queryByText('Deny')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Deny & block/)).not.toBeInTheDocument();
+      fireEvent.change(screen.getByTestId('mock-resist-select'), { target: { value: 'high' } });
+      await userEvent.click(screen.getByRole('button', { name: 'Roll' }));
+
+      await waitFor(() =>
+        expect(respondToRequest).toHaveBeenCalledWith('42', 13, {
+          accept: true,
+          resist_effort: 'high',
+          target_persona_id: 99,
+        })
+      );
+    });
+
+    it('extra-target Believe accepts at low effort for that target', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
+      vi.mocked(fetchPendingTargets).mockResolvedValue({
+        results: [{ ...MOCK_TARGET, initiator_name: 'Vael', resist_only: true }],
+      });
+      vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Believe Vael' })).toBeInTheDocument()
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Believe Vael' }));
+
+      await waitFor(() =>
+        expect(respondToRequest).toHaveBeenCalledWith('42', 12, {
+          accept: true,
+          resist_effort: 'low',
+          target_persona_id: 99,
+        })
+      );
+    });
+
+    it('keeps Allow/Refuse for a request that is not resist_only', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({
+        results: [MOCK_REQUEST],
+      });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByText('Deny')).toBeInTheDocument());
+    });
   });
 });

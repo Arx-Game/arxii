@@ -259,14 +259,33 @@ def restore_profile_text_version(
 
 
 def can_staff_edit_sheet(user: AbstractBaseUser | AnonymousUser, sheet: CharacterSheet) -> bool:
-    """Whether this account may edit this sheet in place (#3988).
+    """Whether this account may edit this sheet in place (#3988). Staff only.
 
-    The one predicate every staff-edit endpoint checks. Staff only in this piece;
-    a later piece widens it to GMs editing the NPC sheets they own (``sheet`` is
-    taken now so that widening changes nothing but this body).
+    The gate for every staff-edit action that stays staff-only. The GM who owns a
+    story NPC gets the narrower ``can_edit_npc_sheet`` on the seven actions that
+    edit identity, prose, stats, skills, path and magic (#4418); nothing else widens.
     """
     del sheet
     return bool(user.is_authenticated and user.is_staff)
+
+
+def can_edit_npc_sheet(user: AbstractBaseUser | AnonymousUser, sheet: CharacterSheet) -> bool:
+    """Staff, or the GM who owns this story NPC (#4418).
+
+    Ownership is the roster entry's ``created_by_account`` (set to the GM when the
+    NPC is minted), compared by account pk. A borrower during an NPC loan is not the
+    owner and edits nothing.
+    """
+    if not user.is_authenticated:
+        return False
+    if user.is_staff:
+        return True
+    from world.roster.services.activity import is_story_npc  # noqa: PLC0415
+
+    entry = sheet.roster_entry_or_none
+    if entry is None or entry.created_by_account_id != user.pk:
+        return False
+    return is_story_npc(sheet)
 
 
 class StaffEditError(ValueError):

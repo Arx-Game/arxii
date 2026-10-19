@@ -121,9 +121,12 @@ class CharmAssetAction(Action):
                 success=False,
                 message="There's no one there to charm into service.",
             )
-        # A played character (has an account) or an actively-piloted NPC is never
-        # auto-acquired — they retain full agency (ADR-0024).
-        if target_character.db_account is not None or target_character.sessions.count() > 0:
+        # A player character is never auto-acquired -- they retain full agency
+        # (ADR-0024). A story NPC is acquirable even while a GM or Guide plays it:
+        # NPC-ness follows the character, not who holds it (#4418, ADR-4418).
+        from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+        if is_player_character(target_persona.character_sheet):
             return _ActionResult(
                 success=False,
                 message="They're being played; you can't charm them into service.",

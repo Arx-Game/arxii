@@ -346,6 +346,9 @@ def broadcast_scene_message(scene: Scene, action: ActionType) -> None:
             account = obj.account
         except AttributeError:
             continue
+        # Nobody to tell: an exit, a prop, or a story NPC standing in the room unplayed (#4418).
+        if account is None:
+            continue
         is_owner = scene.is_owner(account)
         payload = {
             "action": action,

@@ -534,6 +534,11 @@ SPECTACULAR_SETTINGS = {
         # standing declarations' favor/disfavor `direction`; pinned so neither is renamed.
         "StaffTieDirectionEnum": "world.character_sheets.types.StaffTieDirection.choices",
         "DirectionEnum": "world.societies.constants.StandingDirection.choices",
+        # An NPC preference's likes/dislikes `valence` (#4418) collides with other
+        # `valence` fields; pinned so it is not a hash-suffixed name (ValenceAf9Enum).
+        "PreferenceValenceEnum": "world.npc_services.models.PreferenceValence.choices",
+        # An NPC loan's `status` (#4418) collides with other `status` fields; pinned likewise.
+        "NPCLoanStatusEnum": "world.roster.constants.NPCLoanStatus.choices",
     },
 }
 

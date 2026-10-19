@@ -134,3 +134,19 @@ class CanManageGallery(permissions.BasePermission):
         if not isinstance(obj, TenureMedia):
             return False
         return can_manage_gallery(cast(AccountDB, request.user), entry_of(obj))
+
+
+class IsGMOrGuide(permissions.BasePermission):
+    """Pass for staff, GMs and active Guides: the people who may browse and borrow NPCs."""
+
+    message = "You must be a GM or a Guide to use this endpoint."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if user.is_staff or user.gm_profile_or_none is not None:
+            return True
+        from world.gm.models import GuideProfile  # noqa: PLC0415
+
+        return GuideProfile.objects.filter(account=user, is_active=True).exists()

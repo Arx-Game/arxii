@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.constants import ActionCategory
+from actions.kwarg_parsing import truthy_kwarg
 from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionResult, TargetType
 from world.gm.constants import GMLevel
@@ -38,7 +39,8 @@ class MintStoryNPCAction(Action):
     """Mint a Story NPC and bind it to the caller's account.
 
     Kwargs: ``name``, ``description``, optional ``preset`` (an
-    ``NPCStatlinePreset`` natural-key name, #3427).
+    ``NPCStatlinePreset`` natural-key name, #3427), optional ``as_template`` (#4418:
+    a template the GM copies from, held by nobody and not counted against the cap).
     """
 
     key: str = "mint_story_npc"
@@ -88,6 +90,7 @@ class MintStoryNPCAction(Action):
                 name=npc_name,
                 description=kwargs.get("description") or "",
                 preset=preset,
+                as_template=truthy_kwarg(kwargs.get("as_template")),
             )
         except StaffMintError as exc:
             return ActionResult(success=False, message=exc.user_message)
@@ -95,4 +98,5 @@ class MintStoryNPCAction(Action):
         return ActionResult(
             success=True,
             message=f"{character.key} minted as a Story NPC (#{character.pk}).",
+            data={"roster_entry_id": character.sheet_data.roster_entry.pk},
         )

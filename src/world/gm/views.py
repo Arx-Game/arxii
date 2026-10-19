@@ -44,6 +44,7 @@ from world.gm.filters import (
     GMPromptQueueFilter,
     GMTableFilter,
     GMTableMembershipFilter,
+    GuideFilter,
     TableUpdateRequestFilter,
 )
 from world.gm.models import (
@@ -56,6 +57,7 @@ from world.gm.models import (
     GMSummonOffer,
     GMTable,
     GMTableMembership,
+    GuideProfile,
     TableUpdateRequest,
 )
 from world.gm.permissions import CanViewGMPromptQueue, IsGM, IsGMOrStaff
@@ -85,6 +87,7 @@ from world.gm.serializers import (
     GMSummonOfferSerializer,
     GMTableMembershipSerializer,
     GMTableSerializer,
+    GuideSerializer,
     MintGMCharacterRequestSerializer,
     MintGMCharacterResultSerializer,
     NarrateGMPromptSerializer,
@@ -293,6 +296,21 @@ class GMProfileViewSet(
             ).data,
             status=201,
         )
+
+
+class GuideViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """Active Guides, for a GM choosing who to lend an NPC to (#4418).
+
+    GMs and staff only. Each row is ``{account_id, display_name}``: a Guide is
+    shown by the name staff gave them, never an account or character name.
+    """
+
+    queryset = GuideProfile.objects.filter(is_active=True).order_by("display_name", "pk")
+    serializer_class = GuideSerializer
+    permission_classes = [IsGMOrStaff]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = GuideFilter
+    pagination_class = StandardResultsSetPagination
 
 
 class GMTableViewSet(viewsets.ModelViewSet):

@@ -1,6 +1,6 @@
 ---
 name: outcome-delivery-reviewer
-description: Checks that a diff writing a player-facing outcome row (an Interaction, a resolution-theater payload) actually delivers it live to the audience its own scoping names. Use when a diff writes to Interaction or a similar outcome model, and when reviewing one. Catches a persisted row nobody ever sees.
+description: Checks that a diff writing a player-facing outcome row (an Interaction, a resolution-theater payload) actually delivers it live to the audience its own scoping names. Use when a diff writes to Interaction or a similar outcome model, and when reviewing one. Also checks that the REST feed and the live push carry the same fields for the same row. Catches a persisted row nobody ever sees, and a live frame that lacks what the refetch has.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -105,6 +105,43 @@ different model entirely) repeats the same mistake outside the linter's reach.
 7. **Any spec, follow-up, or issue that frames "should we show the player the
    result of their own action" as an open design question is itself a
    finding.** Quote the sentence. The only open question is audience.
+8. **Shape parity between the two delivery paths.** The same row reaches a client
+   two ways: the REST feed (`InteractionListSerializer`) and the live push
+   (`InteractionPayload`, built by `push_interaction`). Worked example (#4418,
+   real-testing bug I): the REST serializer served `action_links` and the live frame
+   never had the key. `on_created` wrote the links before the push, but the payload
+   had no field for them, so only the poster, who renders the REST response to their
+   own submit, saw a pose's attached-action chip; every other viewer's live feed and
+   the Guide's NPC response card (`poseCarryingAction` reads `action_links`) missed
+   it. The frontend's websocket type, `InteractionWsPayload`, is hand-written, so no
+   generated type flagged the drift. For a diff that adds or changes a field on
+   either side: confirm the other side carries it, serialized by the same serializer
+   rather than a second hand-built dict; or confirm it is named in `REST_ONLY` or
+   `PUSH_ONLY` in `world/scenes/tests/test_push_payload_parity.py` with a reason that
+   holds (viewer-specific data cannot ride a frame sent to a whole room). Check the
+   write ordering too: the field's cache must be filled before the push runs. Ask for
+   a journey that compares the live frame to the REST response for the same row.
+   Mechanical half: that parity test fails on any field present on one side only. Its
+   `_UNTRIAGED` entries are known unreviewed gaps; do not let a diff add to them.
+9. **A plain-text twin beside a structured push.** A function that pushes the row to
+   the web and also calls `character.msg(text)` shows the line twice on `/game`: a bare
+   `msg` has no `session=`, so it reaches every session, the browser included.
+   Worked example (#4418, real-testing bug K): `deliver_aftermath_digests` pushed each
+   participant's digest as a Narrator OUTCOME row (`_send_to_objects`) and then called
+   `character.msg(text)`, so `/game` showed "Aftermath: Victory." as a row and again as
+   a note. `narrate_privately` (#3574) had the same shape for every private Narrator
+   line, such as a covenant's dormant-vow line. The round-5 `non_web_sessions` fix did
+   not cover it because the call never went through that helper. Review pass found two
+   more with the identical shape, `narrate_companion_loss` and `_narrate_gm_condition`.
+   The check: every plain-text send next to a structured push goes through
+   `send_text_to_non_web(obj, text)` (or `session=non_web_sessions(obj)`), never an
+   untargeted `msg`. Never pass an empty `session=` list: Evennia treats it as every
+   session, which is why `send_text_to_non_web` skips a web-only character instead. A
+   branch that pushes no row (no persona to attribute it to) may send to every session,
+   and says so. Mechanical half: `tools/lint_msg_beside_push.py` (`msg-beside-push`
+   hook) flags a bare `.msg(...)` in a function that also calls a push seam; a branch
+   that really has no row carries `# noqa: MSG_BESIDE_PUSH`. It is per function, not per
+   branch, so it errs toward flagging.
 
 ## What to report
 

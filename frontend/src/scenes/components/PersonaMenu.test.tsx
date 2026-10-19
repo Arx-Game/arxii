@@ -21,8 +21,8 @@ vi.mock('@/roster/queries', () => ({
         name: 'TestChar',
         character_id: 42,
         profile_picture_url: null,
-        primary_persona_id: null,
-        active_persona_id: null,
+        primary_persona_id: 33,
+        active_persona_id: 33,
       },
     ],
   })),
@@ -650,7 +650,11 @@ describe('PersonaMenu', () => {
     await waitFor(() => {
       expect(createActionRequest).toHaveBeenCalledWith(
         '7',
-        expect.objectContaining({ action_key: 'intimidate', target_persona_id: 10 })
+        expect.objectContaining({
+          action_key: 'intimidate',
+          target_persona_id: 10,
+          initiator_persona: 33,
+        })
       );
     });
   });
@@ -744,6 +748,18 @@ describe('PersonaMenu', () => {
         '7',
         expect.objectContaining({ action_key: 'intimidate', delivery: 'table_talk' })
       );
+    });
+  });
+
+  it('toasts the server refusal when the action is refused', async () => {
+    vi.mocked(createActionRequest).mockRejectedValueOnce(
+      new Error('initiator_persona is required.')
+    );
+    const { user } = await openIntimidateSubmenu();
+    await user.click(screen.getByText(/^Default/));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('initiator_persona is required.');
     });
   });
 

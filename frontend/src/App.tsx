@@ -167,6 +167,9 @@ const StoryDetailPage = lazy(() =>
 const GMQueuePage = lazy(() =>
   import('@/stories/pages/GMQueuePage').then((m) => ({ default: m.GMQueuePage }))
 );
+const NpcRosterPage = lazy(() =>
+  import('@/gm/npcs/NpcRosterPage').then((m) => ({ default: m.NpcRosterPage }))
+);
 const GMDashboardPage = lazy(() =>
   import('@/stories/pages/GMDashboardPage').then((m) => ({ default: m.GMDashboardPage }))
 );
@@ -1008,6 +1011,16 @@ function App() {
               <Suspense fallback={<PageLoadingFallback />}>
                 <ProtectedRoute>
                   <GMDashboardPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/gm/npcs"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <NpcRosterPage />
                 </ProtectedRoute>
               </Suspense>
             }

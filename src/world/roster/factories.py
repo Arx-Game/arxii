@@ -15,18 +15,20 @@ from evennia_extensions.factories import (  # noqa: F401  (CharacterFactory re-e
 from evennia_extensions.models import Artist, PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
-from world.roster.constants import COMMONER_KIND_NAME, NOBLE_KIND_NAME
+from world.roster.constants import COMMONER_KIND_NAME, NOBLE_KIND_NAME, NPCLoanStatus
 from world.roster.models import (
     Family,
     FamilyKind,
     GameInvite,
     InviteStatus,
+    NPCLoan,
     PlayerMail,
     Roster,
     RosterApplication,
     RosterEntry,
     RosterTenure,
     RosterType,
+    StoryNPCSettings,
     TenureDisplaySettings,
     TenureMedia,
 )
@@ -335,3 +337,24 @@ def grant_test_tenure(
     return RosterTenureFactory(
         roster_entry=entry, player_data=PlayerDataFactory(account=account), end_date=None
     )
+
+
+class StoryNPCSettingsFactory(factory_django.DjangoModelFactory):
+    """Factory for StoryNPCSettings instances."""
+
+    class Meta:
+        model = StoryNPCSettings
+
+    roster_entry = factory.SubFactory(RosterEntryFactory)
+
+
+class NPCLoanFactory(factory_django.DjangoModelFactory):
+    """Factory for NPCLoan instances (offered by default)."""
+
+    class Meta:
+        model = NPCLoan
+
+    roster_entry = factory.SubFactory(RosterEntryFactory)
+    borrower = factory.SubFactory(AccountFactory)
+    offered_by = factory.SubFactory(AccountFactory)
+    status = NPCLoanStatus.OFFERED

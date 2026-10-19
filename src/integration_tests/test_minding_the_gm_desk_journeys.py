@@ -356,7 +356,12 @@ class AnsweringAPrompt(JourneyCase):
         away_sheet = CharacterSheetFactory()
         self.watch(away_sheet.character)
         prompt = self.prompt_for(away_sheet, private="Only for you.", room="A hush falls.")
-        with self.captureOnCommitCallbacks(execute=True):
+        # The private line's text goes only to non-web sessions (the web reads the
+        # pushed frame), and a harness character has none; stand one in.
+        on_telnet = patch(
+            "world.scenes.interaction_services.non_web_sessions", return_value=[object()]
+        )
+        with on_telnet, self.captureOnCommitCallbacks(execute=True):
             told = self.telnet(self.hobb, f"gm prompt send {prompt.pk}")
         self.assertIn("isn't here; their private line goes out on its own", told)
         self.assertTold(self.caddoc, "A hush falls.")

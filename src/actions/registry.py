@@ -372,6 +372,17 @@ from actions.definitions.npc_assignments import (
     UnassignGuardAction,
     UnassignServantAction,
 )
+from actions.definitions.npc_cast import (
+    DescribeCrowdAction,
+    PlaceNPCInSceneAction,
+    VoiceCrowdAction,
+)
+from actions.definitions.npc_lending import (
+    AnswerNPCLoanAction,
+    OfferNPCAction,
+    RequestNPCBorrowAction,
+    TakeBackNPCAction,
+)
 from actions.definitions.npc_services import (
     end_npc_interaction,
     resolve_npc_offer,
@@ -1078,6 +1089,15 @@ _ALL_ACTIONS: list[Action] = [
     SubmitCatalogSuggestionAction(),
     # #3426 — GM story-NPC on-ramp: mint a Story NPC tenure-bound to the GM's account.
     MintStoryNPCAction(),
+    # #4418: lending a major NPC to a Guide; asking to borrow one from the NPC roster.
+    OfferNPCAction(),
+    AnswerNPCLoanAction(),
+    TakeBackNPCAction(),
+    RequestNPCBorrowAction(),
+    # #4418: a crowd gets a voice on the scene's cast list, lent like any story NPC.
+    VoiceCrowdAction(),
+    DescribeCrowdAction(),
+    PlaceNPCInSceneAction(),
     # #3295 — scene check invocation: player self-checks, GM calls, proposals.
     SceneSelfCheckAction(),
     CallForCheckAction(),

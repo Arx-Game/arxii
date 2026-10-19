@@ -530,6 +530,14 @@ class ActionRegistryTests(TestCase):
             "gm_submit_catalog_suggestion",
             # #3426 — GM story-NPC on-ramp: mint a Story NPC tenure-bound to the GM's account.
             "mint_story_npc",
+            # #4418: lending a major NPC to a Guide; asking to borrow one.
+            "offer_npc",
+            "answer_npc_loan",
+            "take_back_npc",
+            "request_npc_borrow",
+            "voice_crowd",
+            "describe_crowd",
+            "place_npc_in_scene",
             # #3295 — scene check invocation: player self-checks, GM calls, proposals.
             "scene_self_check",
             "call_for_check",

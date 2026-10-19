@@ -348,11 +348,11 @@ class SetLifecycleStateTests(TestCase):
 
 
 class IsPlayerCharacterTests(TestCase):
-    """#4091 task 12 fix round 4: ``is_player_character`` means "held by an
-    account" -- a player's own PC, OR a GM's Story NPC -- never "a human is
-    puppeting it right now"."""
+    """``is_player_character`` means a character held by an account (offline or not),
+    never "a human is puppeting it right now". A story NPC is never one, however it is
+    held (ADR-4418)."""
 
-    def test_story_npc_with_an_active_tenure_counts_as_a_player_character(self) -> None:
+    def test_story_npc_with_an_active_tenure_is_not_a_player_character(self) -> None:
         from world.gm.constants import GMLevel
         from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
         from world.roster.services.staff_characters import mint_story_npc
@@ -363,7 +363,7 @@ class IsPlayerCharacterTests(TestCase):
 
         npc = mint_story_npc(gm_account=gm_account, name="Fix Round 4 Story NPC")
 
-        self.assertTrue(is_player_character(npc.sheet_data))
+        self.assertFalse(is_player_character(npc.sheet_data))
 
     def test_offline_pc_with_an_active_tenure_counts_as_a_player_character(self) -> None:
         sheet, _account, _roster, _entry = _build_sheet_with_tenure()

@@ -72,6 +72,29 @@ class RosterEntryQuerySet(ArxSharedMemoryQuerySet):
             tenures__end_date__isnull=True,
         )
 
+    def playable_by(self, user: AccountDB) -> RosterEntryQuerySet:
+        """Entries ``user`` may play: current tenures minus NPCs lent away, plus loans (#4418).
+
+        The same rule as ``npc_lending.playable_entries``, in one query for a caller
+        that holds no loans already (``Account.cached_roster_entries``, read on
+        every interaction-list request with a cold cache). Subqueries rather than
+        joins, so a held entry with several loans needs no ``DISTINCT``;
+        ``roster_entry_id`` is never NULL, so the ``NOT IN`` is safe.
+        """
+        from world.roster.constants import NPCLoanStatus  # noqa: PLC0415
+        from world.roster.models.npc_lending import NPCLoan  # noqa: PLC0415
+        from world.roster.models.tenures import RosterTenure  # noqa: PLC0415
+
+        held = RosterTenure.objects.filter(player_data__account=user, end_date__isnull=True).values(
+            "roster_entry_id"
+        )
+        active = NPCLoan.objects.filter(status=NPCLoanStatus.ACTIVE)
+        borrowed = active.filter(borrower=user).values("roster_entry_id")
+        lent_away = active.exclude(borrower=user).values("roster_entry_id")
+        return self.filter(models.Q(pk__in=held) | models.Q(pk__in=borrowed)).exclude(
+            pk__in=lent_away
+        )
+
     def actively_overseen(self) -> RosterEntryQuerySet:
         """Entries whose character has at least one active story at an
         active (non-archived) GM table.
@@ -139,6 +162,9 @@ class RosterEntryManager(GuardedSharedMemoryManager):
 
     def for_account(self, user: AccountDB) -> RosterEntryQuerySet:
         return self.get_queryset().for_account(user)
+
+    def playable_by(self, user: AccountDB) -> RosterEntryQuerySet:
+        return self.get_queryset().playable_by(user)
 
     def actively_overseen(self) -> RosterEntryQuerySet:
         return self.get_queryset().actively_overseen()

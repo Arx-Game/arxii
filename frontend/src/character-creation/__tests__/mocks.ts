@@ -35,6 +35,7 @@ export function createMockAccount(options: MockAccountOptions = {}): AccountData
     character_slots: { total: 4, used: 0, activity_total: 1, activity_used: 0, holders: [] },
     is_staff: isStaff,
     is_gm: isGM,
+    is_guide: false,
     available_characters: [],
     pending_applications: [],
     selected_entry_id: null,

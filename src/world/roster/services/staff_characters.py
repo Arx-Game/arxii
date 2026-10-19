@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.roster.models import NPCStatlinePreset
+    from world.roster.models.choices import CreationProvenance
 
 
 class StaffMintError(Exception):
@@ -50,8 +51,37 @@ class StaffMintError(Exception):
         self.user_message = message
 
 
-def _mint_character_working_set(account: AccountDB, name: str, typeclass: str) -> ObjectDB:
-    """Create Character + CharacterSheet + PRIMARY Persona + NPC-shelf tenure.
+# The puppet lock a minted character carries (#4418): whoever the account availability
+# check lets play it (its tenure holder, or a borrower while it is lent), or a developer.
+PLAYABLE_PUPPET_LOCK = "puppet:can_play() or perm(Developer) or pperm(Developer)"
+
+
+def ensure_playable_lock(character: ObjectDB) -> None:
+    """Give ``character`` the puppet lock that defers to the account availability check.
+
+    Idempotent. Evennia's default object lock lets only developers puppet, which left
+    a minted NPC unplayable by the GM holding it and by anyone it is lent to. Only the
+    ``puppet`` lock type is replaced; every other lock is left as it was.
+    """
+    if character.locks.get("puppet") == PLAYABLE_PUPPET_LOCK:
+        return
+    character.locks.add(PLAYABLE_PUPPET_LOCK)
+
+
+def _mint_character_working_set(  # noqa: PLR0913 - one working set, each knob is a real axis
+    account: AccountDB,
+    name: str,
+    typeclass: str,
+    *,
+    provenance: CreationProvenance | None = None,
+    created_by: AccountDB | None = None,
+    with_tenure: bool = True,
+) -> ObjectDB:
+    """Create Character + CharacterSheet + PRIMARY Persona + NPC-shelf entry (+ tenure).
+
+    ``provenance`` / ``created_by`` stamp who authored the entry (a GM's NPC is
+    ``GM_TABLE`` owned by the GM, #4418). ``with_tenure=False`` mints an entry nobody
+    holds, which is what a template NPC is.
 
     Shared name-validation and working-set creation for both
     ``mint_gm_character`` (role-aware typeclass, one per account) and
@@ -86,6 +116,7 @@ def _mint_character_working_set(account: AccountDB, name: str, typeclass: str) -
     )
     character.location = starting_room
     character.save(update_fields=["db_location"])
+    ensure_playable_lock(character)
     # Keyed on roster_type (unique), not name (#3426 in-scope bugfix): the seeded
     # shelf is named "NPCs" (world/roster/seeds.py), so a name="NPC" lookup never
     # matches it on a seeded DB and the fallback create collides on the unique
@@ -94,8 +125,13 @@ def _mint_character_working_set(account: AccountDB, name: str, typeclass: str) -
     roster, _ = Roster.objects.get_or_create(roster_type=RosterType.NPC, defaults={"name": "NPCs"})
     # A GM or staff character is staff-authored, never a player's own (#3996).
     entry = RosterEntry.objects.create(
-        character_sheet=sheet, roster=roster, creation_provenance=CreationProvenance.STAFF
+        character_sheet=sheet,
+        roster=roster,
+        creation_provenance=provenance or CreationProvenance.STAFF,
+        created_by_account=created_by,
     )
+    if not with_tenure:
+        return character
     player_data, _ = PlayerData.objects.get_or_create(account=account)
     RosterTenure.objects.create(
         player_data=player_data,
@@ -146,7 +182,7 @@ def mint_gm_character(account: AccountDB, name: str) -> ObjectDB:
     return _mint_character_working_set(account, name, typeclass)
 
 
-def check_story_npc_cap(gm_account: AccountDB) -> None:
+def check_story_npc_cap(gm_account: AccountDB, *, count_against_cap: bool = True) -> None:
     """Validate JUNIOR+ GM trust and ``GMLevelCap.max_story_npcs`` for ``gm_account``.
 
     The one authorization seam for "does this account get another Story-NPC
@@ -159,10 +195,14 @@ def check_story_npc_cap(gm_account: AccountDB) -> None:
     exceeding the cap is accepted, matching ``world.gm.story_services``'s
     documented norm.
 
+    ``count_against_cap=False`` keeps the trust and level checks but skips the count,
+    for a template NPC nobody holds (#4418).
+
     Raises:
         StaffMintError: missing GM trust, below JUNIOR, or at/over cap.
     """
     from core_management.permissions import is_staff_observer  # noqa: PLC0415
+    from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE  # noqa: PLC0415
     from world.gm.constants import GMLevel, gm_level_index  # noqa: PLC0415
     from world.gm.models import GMLevelCap, GMProfile  # noqa: PLC0415
     from world.roster.models import RosterTenure  # noqa: PLC0415
@@ -181,13 +221,28 @@ def check_story_npc_cap(gm_account: AccountDB) -> None:
         msg = f"Requires {GMLevel(GMLevel.JUNIOR).label} or higher."
         raise StaffMintError(msg)
 
+    if not count_against_cap:
+        return
     cap = GMLevelCap.objects.filter(level=profile.level).first()
     max_story_npcs = cap.max_story_npcs if cap is not None else 0
-    active_count = RosterTenure.objects.filter(
-        player_data__account=gm_account,
-        roster_entry__roster__roster_type=RosterType.NPC,
-        end_date__isnull=True,
-    ).count()
+    # A crowd's voice (#4418) is not a story NPC the GM keeps: it never counts. Nor
+    # does the GM's own GM or Staff OOC character, which sits on the same shelf but
+    # is no story NPC (``is_story_npc``'s rule, #4418 bug 6).
+    active_count = (
+        RosterTenure.objects.filter(
+            player_data__account=gm_account,
+            roster_entry__roster__roster_type=RosterType.NPC,
+            end_date__isnull=True,
+        )
+        .exclude(roster_entry__character_sheet__personas__voiced_opponents__isnull=False)
+        .exclude(
+            roster_entry__character_sheet__character__db_typeclass_path__in=list(
+                TYPECLASS_TO_CHARACTER_TYPE
+            )
+        )
+        .distinct()
+        .count()
+    )
     if active_count >= max_story_npcs:
         msg = (
             f"You already have {active_count} story NPC(s) -- your level allows "
@@ -274,12 +329,14 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
 
 
 @transaction.atomic
-def mint_story_npc(
+def mint_story_npc(  # noqa: PLR0913 - keyword-only; each knob is a real mint axis
     *,
     gm_account: AccountDB,
     name: str,
     description: str = "",
     preset: NPCStatlinePreset | None = None,
+    as_template: bool = False,
+    count_against_cap: bool = True,
 ) -> ObjectDB:
     """Mint a Story NPC for a JUNIOR+ GM, tenure-bound to their account (#3426).
 
@@ -297,15 +354,35 @@ def mint_story_npc(
     ``apply_npc_preset`` (#3427) so the minted NPC can actually roll a check
     immediately, without a GM hand-inventing stat/skill values.
 
+    The entry is stamped ``GM_TABLE`` with ``created_by_account=gm_account`` and gets a
+    ``StoryNPCSettings`` row (#4418). ``as_template`` mints it with no tenure, so it
+    counts against no cap and nobody holds it; borrowers get copies.
+    ``count_against_cap=False`` keeps the trust checks but skips the cap, for a
+    crowd's voice (``world.combat.services.crowd_voice``), which the GM holds but
+    does not keep as a story NPC.
+
     Raises:
         StaffMintError: missing GM trust, below JUNIOR, at/over cap, or (with
             a ``preset``) a preset-application refusal.
     """
     from world.character_sheets.services import set_physical_description  # noqa: PLC0415
 
-    check_story_npc_cap(gm_account)
+    check_story_npc_cap(gm_account, count_against_cap=count_against_cap and not as_template)
 
-    character = _mint_character_working_set(gm_account, name, "typeclasses.characters.Character")
+    from world.roster.models import StoryNPCSettings  # noqa: PLC0415
+    from world.roster.models.choices import CreationProvenance  # noqa: PLC0415
+
+    character = _mint_character_working_set(
+        gm_account,
+        name,
+        "typeclasses.characters.Character",
+        provenance=CreationProvenance.GM_TABLE,
+        created_by=gm_account,
+        with_tenure=not as_template,
+    )
+    StoryNPCSettings.objects.create(
+        roster_entry=character.sheet_data.roster_entry, is_template=as_template
+    )
     if description:
         set_physical_description(character.sheet_data, description)
     if preset is not None:

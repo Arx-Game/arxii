@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from typing import TYPE_CHECKING
 
 from actions.constants import Pipeline, PlayerDecision, ResolutionPhase
@@ -16,7 +17,7 @@ from world.checks.consequence_resolution import (
     apply_resolution,
     select_consequence_from_result,
 )
-from world.checks.services import perform_check
+from world.checks.services import mirrored_outcome, perform_check
 from world.checks.types import PendingResolution, ResolutionContext
 
 if TYPE_CHECKING:
@@ -182,6 +183,71 @@ def start_action_resolution(  # noqa: PLR0913
     pending.current_phase = ResolutionPhase.MAIN_RESOLVED
 
     # Context pools skipped for MVP — will integrate in Task 10
+    pending.current_phase = ResolutionPhase.COMPLETE
+    return pending
+
+
+def start_resisted_action_resolution(  # noqa: PLR0913 - mirrors start_action_resolution
+    *,
+    initiator: ObjectDB,
+    resister: ObjectDB,
+    template: ActionTemplate,
+    target_difficulty: int,
+    context: ResolutionContext,
+    effort_level: str | None,
+    extra_modifiers: int = 0,
+) -> PendingActionResolution:
+    """Resolve an action whose target rolls instead of its actor (#4418).
+
+    When an NPC acts on a PC, the PC rolls the template's ``resist_check_type`` against
+    ``target_difficulty`` (the NPC's rating, computed by the caller) and the NPC never
+    rolls. The PC's outcome is mirrored (``mirrored_outcome``) to the NPC's side, and that
+    mirrored result drives the template's own consequence pool, exactly as the NPC's own
+    roll would have. The resister's own unmirrored roll rides on
+    ``main_result.rolled_check_result`` for the wheel. ``effort_level`` and
+    ``extra_modifiers`` are the resister's. Main step only: gates are not run.
+    """
+    pending = PendingActionResolution(
+        template_id=template.pk,
+        character_id=initiator.pk,
+        target_difficulty=target_difficulty,
+        resolution_context_data={
+            "character_id": initiator.pk,
+            "challenge_instance_id": (
+                context.challenge_instance.pk if context.challenge_instance else None
+            ),
+        },
+        current_phase=ResolutionPhase.MAIN_PENDING,
+        extra_modifiers=extra_modifiers,
+        effort_level=effort_level,
+    )
+    resist_result = perform_check(
+        resister,
+        template.resist_check_type,
+        target_difficulty,
+        extra_modifiers=extra_modifiers,
+        effort_level=effort_level,
+    )
+    mirrored = dataclasses.replace(
+        resist_result,
+        outcome=mirrored_outcome(resist_result.outcome) if resist_result.outcome else None,
+    )
+    pool = template.consequence_pool
+    consequences = get_effective_consequences(pool) if pool is not None else []
+    if consequences:
+        pending_resolution = select_consequence_from_result(initiator, mirrored, consequences)
+        applied = apply_resolution(pending_resolution, context)
+    else:
+        pending_resolution = PendingResolution(
+            check_result=mirrored,
+            selected_consequence=None,  # type: ignore[arg-type]
+        )
+        applied = []
+    pending.main_result = _build_step_result(
+        "main", pending_resolution, applied, template.consequence_pool_id
+    )
+    # The wheel spins the resister's own roll on their own chart, never the mirror.
+    pending.main_result.rolled_check_result = resist_result
     pending.current_phase = ResolutionPhase.COMPLETE
     return pending
 

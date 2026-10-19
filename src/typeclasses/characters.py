@@ -325,16 +325,33 @@ class Character(ObjectParent, DefaultCharacter):
     def active_account(self):
         """Return the account currently linked to this character.
 
+        While a story NPC is lent (#4418), the person playing it is the borrower, so
+        the ACTIVE loan's borrower answers here, not the tenure holder: a Guide playing
+        a lent NPC never inherits its owner's GM standing, and consent asks, page
+        blocks and presence follow the borrower. The loan is read from the holder's
+        ``PlayerData.cached_npc_loans`` (no query once warm), and only for an
+        NPC-shelf entry. Every loan change clears that cache: a save through
+        ``NPCLoan.related_cache_fields``, and the activation, a raw UPDATE, through
+        ``npc_lending._clear_loan_caches``. So ending a loan flips this back at once.
+
         Returns:
             Account | None: The controlling account, if any.
         """
+        from world.roster.models.choices import RosterType
+
         try:
-            tenure = self.sheet_data.roster_entry.current_tenure
+            entry = self.sheet_data.roster_entry
         except ObjectDoesNotExist:
             return None
+        tenure = entry.current_tenure
         if not tenure or not tenure.player_data:
             return None
-        return tenure.player_data.account
+        player_data = tenure.player_data
+        if entry.roster.roster_type == RosterType.NPC:
+            for loan in player_data.cached_npc_loans:
+                if loan.roster_entry_id == entry.pk:
+                    return loan.borrower
+        return player_data.account
 
     def active_covenant_ids(self) -> frozenset[int]:
         """Return the frozenset of covenant PKs where this character is currently active.
@@ -666,6 +683,28 @@ class Character(ObjectParent, DefaultCharacter):
             from_obj=self,
             mapping={"name": self},
         )
+
+    def _stays_when_unplayed(self) -> bool:
+        """Whether this character keeps its place when its last session leaves (#4418).
+
+        A story NPC (``is_story_npc``) is meant to stand in its scene unplayed, so a
+        disconnect, a loan ending or a take-back leaves it in the room and on the cast
+        list. Because it never leaves, ``prelogout_location`` is not written, and
+        Evennia's ``at_pre_puppet`` (which only moves a location-less character) does
+        not move it on the next puppet. Player characters, and GM and Staff OOC
+        characters, still leave the grid.
+
+        Staying also skips the rest of the off-grid cleanup in ``at_post_unpuppet``,
+        on purpose: the encounter, battle and mission pause-on-disconnect protects
+        PCs (AFK never kills a PC), so a story NPC whose player disconnects pauses
+        nothing. Its room's scene is still checked for emptiness: an unplayed story
+        NPC never holds a scene open (``maybe_finish_empty_scene``), so the last
+        player leaving, even one who was playing a story NPC, finishes it.
+        """
+        from world.roster.services.activity import is_story_npc
+
+        sheet = self.character_sheet
+        return sheet is not None and is_story_npc(sheet)
 
     def _leave_the_grid(self, *, reason: str = "") -> None:
         """Take the character off the grid when its last session leaves (#4336).
@@ -1158,7 +1197,15 @@ class Character(ObjectParent, DefaultCharacter):
             # Another window still has this character (#3812): closing one of
             # two tabs is not going offline, and the character stays on the grid.
             return
-        self._leave_the_grid(reason=kwargs.get("reason", ""))
+        stays = self._stays_when_unplayed()
+        if not stays:
+            self._leave_the_grid(reason=kwargs.get("reason", ""))
+        elif origin is not None:
+            # An unplayed story NPC stays in the room but no longer holds its scene
+            # open, so its player leaving may have emptied it (#4418).
+            from world.scenes.round_services import maybe_finish_empty_scene
+
+            maybe_finish_empty_scene(origin)
 
         # Clear presence-tied resonance buff on logout; character is no longer present.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):

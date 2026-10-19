@@ -52,6 +52,10 @@ const rosterEntry: MyRosterEntry = {
   name: ACTIVE_NAME,
   character_id: 42,
   profile_picture_url: null,
+  loan: null,
+  npc_notes: null,
+  is_crowd_voice: false,
+  is_story_npc: false,
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 0,
@@ -77,6 +81,10 @@ const rosterEntry2: MyRosterEntry = {
   name: SECOND_NAME,
   character_id: 43,
   profile_picture_url: null,
+  loan: null,
+  npc_notes: null,
+  is_crowd_voice: false,
+  is_story_npc: false,
   primary_persona_id: 8,
   active_persona_id: 8,
   unread_narrative_count: 0,
@@ -118,6 +126,19 @@ vi.mock('@/roster/queries', () => ({
   })),
 }));
 
+const answerDispatch = vi.hoisted(() => vi.fn());
+vi.mock('@/combat/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/combat/api')>()),
+  postDispatchAction: (...args: unknown[]) => answerDispatch(...args),
+}));
+
+// #4418: the Guide's offers; empty unless a test sets one.
+const npcOffers = vi.hoisted(() => ({ current: [] as unknown[] }));
+vi.mock('@/gm/npcs/queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/gm/npcs/queries')>()),
+  useNpcOffersQuery: () => ({ data: npcOffers.current }),
+}));
+
 // #3412 — GamePage's mount-path auto-start effect calls `connect()`. Mocked
 // (mirroring GameTopBar.selection.test.tsx's own rationale) so no test in
 // this file opens a real WebSocket; the dedicated describe block below
@@ -129,6 +150,7 @@ vi.mock('@/hooks/useGameSocket', () => ({
     connect: connectMock,
     send: sendMock,
     sendConsole: vi.fn(),
+    disconnect: vi.fn(),
     disconnectAll: vi.fn(),
     executeAction: vi.fn(),
     requestRoomState: vi.fn(),
@@ -2443,6 +2465,87 @@ describe('GamePage', () => {
       growFeed(feed, observer, 2000);
 
       expect(feed.scrollTop).toBe(0);
+    });
+  });
+
+  describe('NPC offers with no selected character (#4418)', () => {
+    afterEach(async () => {
+      npcOffers.current = [];
+      const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+      vi.mocked(useMyRosterEntriesQuery).mockImplementation(
+        () =>
+          ({
+            data: [rosterEntry, rosterEntry2],
+            isLoading: false,
+            isError: false,
+          }) as unknown as ReturnType<typeof useMyRosterEntriesQuery>
+      );
+    });
+
+    it('shows an offer card although no character is selected', async () => {
+      npcOffers.current = [
+        {
+          loan_id: 5,
+          roster_entry_id: 13,
+          name: 'Sergeant Mira',
+          thumbnail_url: null,
+          scene_id: 3,
+          scene_title: 'Scene at Low Gate',
+          offered_by_name: 'Ravenna',
+          notes_for_player: 'She distrusts the Guild.',
+        },
+      ];
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(hydrateActiveCharacter(null));
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('npc-offer-card')).toHaveTextContent(
+        'Sergeant Mira, offered by Ravenna'
+      );
+    });
+
+    it('answers an offer as the account own character while a lent NPC tab is active', async () => {
+      answerDispatch.mockResolvedValue({ success: true, message: 'Done.' });
+      const mira: MyRosterEntry = {
+        ...rosterEntry2,
+        id: 9,
+        name: 'Sergeant Mira',
+        character_id: 99,
+        roster_type: 'NPC',
+        is_story_npc: true,
+        loan: { id: 7, scene_title: 'Low Gate', offered_by_name: 'Ravenna' },
+      };
+      const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+      vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+        data: [mira, rosterEntry],
+        isLoading: false,
+        isError: false,
+      } as unknown as ReturnType<typeof useMyRosterEntriesQuery>);
+      npcOffers.current = [
+        {
+          loan_id: 5,
+          roster_entry_id: 13,
+          name: 'Captain Vael',
+          thumbnail_url: null,
+          scene_id: 3,
+          scene_title: 'Scene at Low Gate',
+          offered_by_name: 'Ravenna',
+          notes_for_player: '',
+        },
+      ];
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(hydrateActiveCharacter({ name: 'Sergeant Mira', entryId: 9 }));
+
+      renderWithProviders(<GamePage />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Accept' }));
+
+      await waitFor(() => expect(answerDispatch).toHaveBeenCalled());
+      expect(answerDispatch.mock.calls[0][0]).toBe(rosterEntry.character_id);
+      expect(answerDispatch.mock.calls[0][1]).toMatchObject({
+        ref: { backend: 'registry', registry_key: 'answer_npc_loan' },
+        kwargs: { loan_id: 5, accept: true },
+      });
     });
   });
 });

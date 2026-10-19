@@ -28,7 +28,7 @@ import { CharacterCardDrawer } from '@/game/components/CharacterCardDrawer';
 import { PersonaCardContext } from '@/game/persona-menu/PersonaCardContext';
 import type { PoseUnitAvatarClickPersona } from '../components/PoseUnit';
 import type { ActionAttachmentInfo } from '../actionTypes';
-import { useAppSelector } from '@/store/hooks';
+import { useAccount, useAppSelector } from '@/store/hooks';
 import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { PendingActionAttachments } from '../components/PendingActionAttachments';
@@ -39,6 +39,7 @@ import { useEncounterForScene } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { GMStoryRail } from '../components/GMStoryRail';
+import { CastListPanel } from '@/gm/npcs/CastListPanel';
 import { ScenarioCard } from '../components/ScenarioCard';
 import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
 import {
@@ -187,6 +188,10 @@ export function SceneDetailPage() {
   // scene.running_beat is null, so the grid doesn't collapse the moment a
   // GM's beat finishes.
   const showStoryRail = !!scene?.viewer_can_gm;
+  // The cast panel lends NPCs and lists Guides: for staff and GMs only. A player who
+  // co-owns the scene because they were in the room when it started does not get it.
+  const account = useAccount();
+  const showCastPanel = showStoryRail && Boolean(account?.is_staff || account?.is_gm);
 
   // Scroll the rail into view the moment an encounter first appears
   // (none -> active transition) so a player mid-pose notices combat starting.
@@ -512,6 +517,9 @@ export function SceneDetailPage() {
               data-testid="scene-detail-combat-rail"
             >
               {showStoryRail && scene && <GMStoryRail scene={scene} />}
+              {showCastPanel && scene && (
+                <CastListPanel sceneId={scene.id} sceneName={scene.name} />
+              )}
               {showCombatRail && (
                 <>
                   {/* The rail lingers past the encounter's end so the aftermath digest

@@ -27,6 +27,7 @@ from unittest import mock
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from evennia.objects.objects import ObjectSessionHandler
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -222,7 +223,12 @@ class AnnounceDormantPerksTests(TestCase):
         bystander = CharacterFactory(location=self.room)
         firing = self._firing(name="Last Bulwark")
 
+        telnet = mock.MagicMock(protocol_key="telnet")
+        sessions = {self.subject_character.pk: [telnet]}
         with (
+            mock.patch.object(
+                ObjectSessionHandler, "all", lambda handler: sessions.get(handler.obj.pk, [])
+            ),
             mock.patch.object(self.subject_character, "msg") as mock_subject_msg,
             mock.patch.object(bystander, "msg") as mock_bystander_msg,
         ):
@@ -231,12 +237,12 @@ class AnnounceDormantPerksTests(TestCase):
         mock_bystander_msg.assert_not_called()
 
         # Both dispatch channels (the WS interaction push + the telnet
-        # companion) land on the SAME holder object -- find the positional
-        # (telnet-companion) call among them and check its text.
-        positional_calls = [c for c in mock_subject_msg.call_args_list if c.args]
-        assert len(positional_calls) == 1
-        (sent_text,) = positional_calls[0].args
-        assert sent_text == "your vow lies dormant - Last Bulwark would have answered here"
+        # companion) land on the SAME holder object. The telnet companion goes to
+        # the holder's telnet session (#4418), so find that text call.
+        text = "your vow lies dormant - Last Bulwark would have answered here"
+        text_calls = [c for c in mock_subject_msg.call_args_list if c.args == (text,)]
+        assert len(text_calls) == 1
+        assert text_calls[0].kwargs.get("session") == [telnet]
 
     def test_empty_dormant_no_dispatch(self) -> None:
         with mock.patch.object(self.subject_character, "msg") as mock_msg:

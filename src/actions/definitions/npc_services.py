@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
+from actions.kwarg_parsing import truthy_kwarg
 from actions.types import ActionResult, TargetType
 
 if TYPE_CHECKING:
@@ -18,17 +19,6 @@ if TYPE_CHECKING:
 
     from actions.types import ActionContext
     from world.missions.services.offer_handler import MissionRiskUnacknowledgedError
-
-# Kwarg spellings accepted as "yes, I acknowledge the risk" (#1770 PR4) —
-# telnet passes strings, the web dispatcher may pass a bool.
-_TRUTHY_VALUES = frozenset({"yes", "y", "true", "1"})
-
-
-def _truthy(value: Any) -> bool:
-    """Interpret an acknowledge_risk kwarg from either surface."""
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in _TRUTHY_VALUES if value is not None else False
 
 
 def _risk_prompt_message(exc: MissionRiskUnacknowledgedError) -> str:
@@ -182,7 +172,7 @@ class ResolveNPCOfferAction(Action):
         # the idempotent ack row written and the resolve retried; without
         # the kwarg the gate error becomes the informed-consent prompt. An
         # ineligible offer can therefore never mint an ack row.
-        acknowledge = _truthy(kwargs.get("acknowledge_risk"))
+        acknowledge = truthy_kwarg(kwargs.get("acknowledge_risk"))
         try:
             result = resolve_offer(session, offer)
         except MissionRiskUnacknowledgedError as exc:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 
 from actions.types import PendingActionResolution
 from world.magic.types import TechniqueUseResult
@@ -79,6 +79,11 @@ class InteractionPayload(TypedDict):
     attributed_companion_name: str | None
     reply_to: ReplyParentPayload | None
     narrates: NarratedEventPayload | None
+    # The actions this POSE carries (#4418 real-testing bug I), the same rows the
+    # REST feed's ``action_links`` field serializes (``InteractionActionLinkSerializer``).
+    # Empty for every other mode. Without it a live pose never named its action, so
+    # a reader keyed on the link (the NPC response card) never found the pose.
+    action_links: list[dict[str, Any]]
 
 
 class ReactionAggregation(TypedDict):

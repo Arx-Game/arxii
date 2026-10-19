@@ -588,8 +588,9 @@ class MarkingAndClearingACondition(_TheLongTable):
             self.ravenna, "gm condition Ysmay condition=Marked note=A brand only you can feel."
         )
         self.assertIn("Ysmay is now Marked.", told)
-        self.assertTold(self.ysmay, "Ysmay is now Marked. A brand only you can feel.")
+        self.assertShownRow(self.ysmay, "Ysmay is now Marked. A brand only you can feel.")
         self.assertNotTold(self.hobb, "Marked")
+        self.assertFalse([row for row in self.mailbox(self.hobb).rows if "Marked" in row])
         outcome = Interaction.objects.get(mode=InteractionMode.OUTCOME)
         self.assertEqual(outcome.visibility, InteractionVisibility.PERCEIVED_ONLY)
         self.assertEqual(
@@ -700,8 +701,9 @@ class MarkingAndClearingACondition(_TheLongTable):
             note="The wine was poisoned.",
         )
         self.assertTrue(marked.detail.success, marked.detail.message)
-        self.assertTold(self.ysmay, "Ysmay is now Marsh Fever. The wine was poisoned.")
+        self.assertShownRow(self.ysmay, "Ysmay is now Marsh Fever. The wine was poisoned.")
         self.assertNotTold(self.hobb, "Marsh Fever")
+        self.assertFalse([row for row in self.mailbox(self.hobb).rows if "Marsh Fever" in row])
         outcome = Interaction.objects.get(mode=InteractionMode.OUTCOME)
         self.assertIsNone(outcome.scene)
         self.assertEqual(outcome.visibility, InteractionVisibility.DEFAULT)

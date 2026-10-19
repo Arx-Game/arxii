@@ -64,6 +64,8 @@ export interface AccountData {
   is_staff: boolean;
   /** Whether this account has an approved GMProfile (#2004). */
   is_gm: boolean;
+  /** Whether this account has an active GuideProfile (#4418). */
+  is_guide: boolean;
   avatar_url?: string;
   available_characters: AvailableCharacter[];
   pending_applications: PendingApplication[];

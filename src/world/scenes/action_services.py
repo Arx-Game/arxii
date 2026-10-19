@@ -11,7 +11,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
-from actions.services import start_action_resolution
+from actions.constants import ActionCategory, ActionTargetType
+from actions.services import start_action_resolution, start_resisted_action_resolution
 from world.checks.theater import check_outcome_faces, maybe_emit_resolution_theater
 from world.checks.types import ResolutionContext
 from world.fatigue.constants import EffortLevel
@@ -19,6 +20,7 @@ from world.progression.models import KudosSourceCategory
 from world.progression.models.kudos import KudosDifficultyWeight
 from world.progression.services.engagement import accrue
 from world.scenes.action_constants import (
+    DIFFICULTY_BAND_STEP,
     DIFFICULTY_VALUES,
     RESIST_FATIGUE_BASE,
     ActionDelivery,
@@ -360,6 +362,7 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
     technique: Technique | None,
     delivery: str,
     boon: BoonAsk | None,
+    additional_target_personas: list[Persona] | None = None,
 ) -> None:
     """Every refusal that must land BEFORE any row exists.
 
@@ -393,6 +396,12 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
             character_id=initiator_persona.character_sheet_id,
         )
 
+    _refuse_untagged_npc_action_on_pc(
+        initiator_persona=initiator_persona,
+        targets=[target_persona, *(additional_target_personas or [])],
+        action_template=action_template,
+    )
+
     if action_template is not None and action_template.settles_allegiance:
         from world.npc_services.allegiance import allegiance_instance_on  # noqa: PLC0415
 
@@ -422,6 +431,48 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
 
     if delivery == ActionDelivery.TABLE_TALK and _current_place_for(initiator_persona) is None:
         msg = "Table-talk delivery requires you to be at a place."
+        raise ValidationError(msg)
+
+
+def is_contested_social_template(template: ActionTemplate | None) -> bool:
+    """True for a single-target social template, the kind a PC resists from an NPC (#4418).
+
+    The flipped roll and the NPC-on-PC refusal apply only to these. The same scope as
+    the ``npc-resist-checks`` Required-content sentinel (social, single target).
+    """
+    return (
+        template is not None
+        and template.category == ActionCategory.SOCIAL
+        and template.target_type == ActionTargetType.SINGLE
+    )
+
+
+def _refuse_untagged_npc_action_on_pc(
+    *,
+    initiator_persona: Persona,
+    targets: list[Persona | None],
+    action_template: ActionTemplate | None,
+) -> None:
+    """Refuse an NPC's contested social action on any PC when the template is untagged (#4418).
+
+    A PC resists an NPC's action with the template's resist check, and the consent category
+    decides whether they may refuse it. A template missing either (Seduce, today) fails
+    closed rather than becoming a resist-only request. Every PC target is checked, the
+    primary and each additional target alike.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    if not is_contested_social_template(action_template):
+        return
+    if (
+        action_template.resist_check_type_id is not None
+        and action_template.consent_category_id is not None
+    ):
+        return
+    if not _persona_is_npc(initiator_persona):
+        return
+    if any(target is not None and not _persona_is_npc(target) for target in targets):
+        msg = "That action can't be used by an NPC on a player character yet."
         raise ValidationError(msg)
 
 
@@ -565,6 +616,7 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
         technique=technique,
         delivery=delivery,
         boon=boon,
+        additional_target_personas=additional_target_personas,
     )
 
     snapshot_kwargs: dict[str, object] = {}
@@ -683,6 +735,10 @@ def _compute_difficulty_override_for_primary(
     """
     if action_request.target_persona is None:
         return None
+    if _pc_resists(action_request, action_request.target_persona):
+        return _resisted_difficulty(
+            action_request, action_request.target_persona.character_sheet, resist_effort
+        )
     from actions.constants import ActionCategory  # noqa: PLC0415
     from world.checks.services import compute_resist_increment  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue  # noqa: PLC0415
@@ -718,6 +774,44 @@ def _compute_difficulty_override_for_primary(
         target_persona=action_request.target_persona,
         base=base,
         increment=increment,
+    )
+
+
+def _pc_resists(action_request: SceneActionRequest, target_persona: Persona) -> bool:
+    """True when ``target_persona`` (a PC) rolls to resist an NPC's action (#4418).
+
+    The NPC never rolls: the PC rolls the template's ``resist_check_type`` instead.
+    """
+    template = action_request.action_template
+    return (
+        is_contested_social_template(template)
+        and template.resist_check_type_id is not None
+        and npc_acts_on_pc(action_request, target_persona)
+    )
+
+
+def _resisted_difficulty(
+    action_request: SceneActionRequest,
+    resister_sheet: CharacterSheet,
+    resist_effort: str,
+) -> int:
+    """The difficulty a resisting PC rolls against: the NPC's rating in the action (#4418).
+
+    The NPC's pre-roll rating in the template's ``check_type``, shifted by the template's
+    ``difficulty_tier_modifier`` bands. The PC's resist effort is their roll's effort (no
+    resist increment here); it still costs them social fatigue.
+    """
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.checks.services import compute_check_rating  # noqa: PLC0415
+    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+    template = action_request.action_template
+    initiator_character = action_request.initiator_persona.character_sheet.character
+    if resist_effort:
+        apply_fatigue(resister_sheet, ActionCategory.SOCIAL, RESIST_FATIGUE_BASE, resist_effort)
+    return (
+        compute_check_rating(initiator_character, template.check_type)
+        + DIFFICULTY_BAND_STEP * template.difficulty_tier_modifier
     )
 
 
@@ -887,6 +981,47 @@ def _invoke_action_resolver(
         resolver(action_request, result)
 
 
+class ResistOnlyError(ValueError):
+    """DENY on a request the target may resist but not refuse (#4418)."""
+
+    user_message = "You can resist this, but not refuse it."
+
+
+def npc_acts_on_pc(
+    action_request: SceneActionRequest, target_persona: Persona | None = None
+) -> bool:
+    """True when a story NPC is the initiator and a player character the target (#4418).
+
+    ``target_persona`` names an additional-target row's persona; it defaults to the
+    request's primary target.
+    """
+    target = target_persona if target_persona is not None else action_request.target_persona
+    if target is None or _persona_is_npc(target):
+        return False
+    return _persona_is_npc(action_request.initiator_persona)
+
+
+def request_is_resist_only(
+    action_request: SceneActionRequest, target_persona: Persona | None = None
+) -> bool:
+    """True when a PC may resist but not refuse this request (#4418, ADR-4418).
+
+    Only a contested social template (``is_contested_social_template``) can be: an NPC
+    acting on a PC with one is resist-only unless the action's consent category, or an
+    ancestor of it, is flagged ``refusable_from_npcs`` (romantic, for instance). Any
+    other template from an NPC stays deniable, as it is from a PC.
+    """
+    if not npc_acts_on_pc(action_request, target_persona):
+        return False
+    template = action_request.action_template
+    if not is_contested_social_template(template):
+        return False
+    category = template.consent_category
+    if category is None:
+        return True
+    return not category.is_refusable_from_npcs()
+
+
 def respond_to_action_request(
     *,
     action_request: SceneActionRequest,
@@ -918,6 +1053,8 @@ def respond_to_action_request(
         instead of a check result (the #777 hostile consent-accept path).
 
     Raises:
+        ResistOnlyError: On DENY when an NPC acts on a PC in a category the PC cannot
+            refuse (#4418).
         ValueError: If the request is a non-standalone-cast with no action_template
             set (standalone cast requests resolve via the cast pipeline and do not
             require an action_template).
@@ -926,6 +1063,8 @@ def respond_to_action_request(
         return None
 
     if decision == ConsentDecision.DENY:
+        if request_is_resist_only(action_request):
+            raise ResistOnlyError(ResistOnlyError.user_message)
         _deny_action_request(action_request, blacklist_actor)
         return None
 
@@ -1077,6 +1216,43 @@ def _charge_social_pull(
     return pull_flat_bonus
 
 
+def _resolve_pc_resisting(
+    action_request: SceneActionRequest,
+    target_persona: Persona,
+    *,
+    difficulty: int,
+    context: ResolutionContext,
+    resist_effort: str,
+) -> EnhancedSceneActionResult:
+    """#4418: an NPC acting on a PC never rolls.
+
+    The PC rolls the template's resist check against the NPC's rating
+    (``difficulty``), with their own modifiers and their declared resist effort; the
+    mirrored outcome drives the template's consequence pool from the NPC's side.
+    """
+    from world.checks.services import collect_check_modifiers  # noqa: PLC0415
+
+    action_template = action_request.action_template
+    resist_breakdown = collect_check_modifiers(
+        target_persona.character_sheet,
+        action_template.resist_check_type,
+        scene=action_request.scene,
+    )
+    return EnhancedSceneActionResult(
+        action_resolution=start_resisted_action_resolution(
+            initiator=context.character,
+            resister=target_persona.character_sheet.character,
+            template=action_template,
+            target_difficulty=difficulty,
+            context=context,
+            effort_level=resist_effort or None,
+            extra_modifiers=resist_breakdown.extra_modifiers_total,
+        ),
+        action_key=action_request.action_key,
+        fury_committed=None,
+    )
+
+
 def _social_check_contributions(
     action_request: SceneActionRequest,
     target_persona: Persona,
@@ -1108,6 +1284,7 @@ def _resolve_action_against_persona(
     *,
     difficulty_override: int | None = None,
     pull_flat_bonus: int = 0,
+    resist_effort: str = "",
 ) -> tuple[EnhancedSceneActionResult, Interaction | None, int]:
     """Resolve ``action_request`` against ONE persona.
 
@@ -1125,6 +1302,8 @@ def _resolve_action_against_persona(
             into the check's ``extra_modifiers`` on both the plain and the
             technique-enhanced branch. 0 when no pull was declared or the pull
             fizzled.
+        resist_effort: The target's declared resist effort. Read only when the target
+            is a PC resisting an NPC (#4418), where it is the PC's roll effort.
 
     Returns:
         (result, result_interaction, difficulty) — difficulty is returned so
@@ -1142,12 +1321,13 @@ def _resolve_action_against_persona(
     )
     from world.scenes.favor_invocation import declared_invocation_contribution  # noqa: PLC0415
 
-    if difficulty_override is not None:
-        difficulty = difficulty_override
-    else:
-        difficulty = DIFFICULTY_VALUES.get(
+    difficulty = (
+        difficulty_override
+        if difficulty_override is not None
+        else DIFFICULTY_VALUES.get(
             action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
         )
+    )
     action_template = action_request.action_template
     if action_template is None:
         msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
@@ -1189,8 +1369,17 @@ def _resolve_action_against_persona(
     )
     # #4333: a declared Call on favor rolls first (once per request) and its
     # labelled bonus joins this check.
-    favor = declared_invocation_contribution(action_request)
-    if action_request.technique is not None:
+    pc_resists = _pc_resists(action_request, target_persona)
+    favor = None if pc_resists else declared_invocation_contribution(action_request)
+    if pc_resists:
+        result = _resolve_pc_resisting(
+            action_request,
+            target_persona,
+            difficulty=difficulty,
+            context=context,
+            resist_effort=resist_effort,
+        )
+    elif action_request.technique is not None:
         # Fold condition / rollmod / scene / equipment / fashion modifiers into
         # the technique branch's check roll through the shared seam — the plain
         # branch already does this at line 930. Without this, conditions are
@@ -1331,6 +1520,7 @@ def _resolve_standard_action(
             action_request.target_persona,
             difficulty_override=difficulty_override,
             pull_flat_bonus=pull_flat_bonus,
+            resist_effort=action_request.resist_effort_level,
         )
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
@@ -1352,10 +1542,14 @@ def _accrue_engagement_for_persona(
     """Accrue graded good-sport credit for ``persona`` accepting an action request.
 
     Skips when:
-    - The persona's character has no linked account (NPC defender — no accrual).
-    - The initiator has no account (NPC initiator — no accrual).
+    - The target or the initiator is a story NPC, even one a GM or Guide is playing
+      (#4418, ADR-4418): good-sport credit is between player characters.
+    - The persona's character has no linked account (offline or unplayed).
+    - The initiator has no account.
     - The initiator and target share the same account (self-target — no farming).
     """
+    if _persona_is_npc(persona) or _persona_is_npc(action_request.initiator_persona):
+        return
     target_character = persona.character_sheet.character
     target_account = target_character.db_account
     if target_account is None:
@@ -1383,11 +1577,13 @@ def _accrue_engagement_for_primary(action_request: SceneActionRequest) -> None:
 
 
 def _persona_is_npc(persona: Persona) -> bool:
-    """True when nobody is currently assigned to play this persona's character.
+    """True when this persona's character is not a player character (#4418, ADR-4418).
 
-    "PC targets stay PENDING" means player-character, not "online right now" --
-    an offline PC's consent request must still wait for them, not auto-resolve
-    as if they were an NPC. ``character.db_account`` is the wrong proxy for
+    NPC-ness follows the character, not who plays it: a story NPC on the NPC shelf
+    reads True while a GM or Guide plays it, and gets no consent prompt. A character
+    nobody holds also reads True. "PC targets stay PENDING" means player-character,
+    not "online right now" -- an offline PC's consent request must still wait for
+    them, not auto-resolve as if they were an NPC. ``character.db_account`` is the wrong proxy for
     that: Evennia's ``unpuppet_object`` clears it the moment nobody is
     actively connected, so an offline PC would read as an NPC under it (#4091
     task 12 fix round 2). ``is_player_character`` also accepts an active
@@ -1419,6 +1615,10 @@ def _compute_target_difficulty_override(
     target's band lives on SceneActionTarget, not the request). Applies resist
     fatigue when a resist effort is supplied.
     """
+    if _pc_resists(action_request, action_target.target_persona):
+        return _resisted_difficulty(
+            action_request, action_target.target_persona.character_sheet, resist_effort
+        )
     from world.scenes.social_difficulty import resolved_base_difficulty  # noqa: PLC0415
 
     base = resolved_base_difficulty(
@@ -1508,6 +1708,8 @@ def respond_to_action_target(
     if action_target.status != ActionRequestStatus.PENDING:
         return None
     if decision == ConsentDecision.DENY:
+        if request_is_resist_only(action_target.action_request, action_target.target_persona):
+            raise ResistOnlyError(ResistOnlyError.user_message)
         _deny_action_target(action_target, blacklist_actor)
         return None
     if decision == ConsentDecision.ACCEPT:
@@ -1525,6 +1727,7 @@ def respond_to_action_target(
                 action_target.target_persona,
                 difficulty_override=difficulty_override,
                 pull_flat_bonus=pull_flat_bonus,
+                resist_effort=resist_effort,
             )
             action_target.status = ActionRequestStatus.RESOLVED
             action_target.resolved_at = timezone.now()
@@ -1812,6 +2015,7 @@ def _resolution_steps(
     return [
         SimpleNamespace(
             check_result=check_result,
+            rolled_check_result=None,
             consequence_pool_id=None,
             consequence_id=None,
         )
@@ -1902,7 +2106,9 @@ def _schedule_check_outcome_theater(  # noqa: PLR0913 - one keyword per wheel so
 
     def _emit() -> None:
         for step in steps:
-            current_check = step.check_result
+            # #4418: a resisted step spins the resister's own roll, not its mirror;
+            # the pool wheel below still reads the mirrored ``check_result``.
+            current_check = step.rolled_check_result or step.check_result
             chart_faces, chart_selected = check_outcome_faces(current_check)
             if not chart_faces or chart_selected is None:
                 continue

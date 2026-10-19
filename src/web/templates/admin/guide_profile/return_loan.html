@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static admin_urls %}
+{% comment %}
+Return to GM (#4418): confirm ending one of a Guide's active NPC loans. `admin/base.html`
+links base.css only; `.submit-row` and the aligned rows live in forms.css, which
+change_form.html links and this page has to link itself (#3667).
+{% endcomment %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{{ change_url }}">{{ guide.display_name }}</a>
+  &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <form method="post" id="return-loan-form">{% csrf_token %}
+    <fieldset class="module aligned">
+      <h2>{{ title }}</h2>
+      <div class="form-row">
+        <div class="flex-container">
+          <label>Playing</label>
+          <div class="readonly">{{ npc_name }}</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="flex-container">
+          <label>Guide</label>
+          <div class="readonly">{{ guide.display_name }}</div>
+        </div>
+      </div>
+      {% if loan.scene %}
+      <div class="form-row">
+        <div class="flex-container">
+          <label>Scene</label>
+          <div class="readonly">{{ loan.scene.name }}</div>
+        </div>
+      </div>
+      {% endif %}
+    </fieldset>
+    <div class="submit-row">
+      <input type="submit" class="default" value="Return to GM">
+      <a href="{{ change_url }}" class="closelink">{% translate 'Cancel' %}</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -65,3 +65,17 @@ class MediaUsage:
 
     used_bytes: int
     quota_bytes: int
+
+
+@dataclass(frozen=True)
+class HandOffCounts:
+    """How a Guide's NPC hand-offs went over a window (#4418, the Guide admin).
+
+    ``accepted``: loans that went active. ``declined``: offers or requests turned
+    down. ``taken_back_early``: active loans ended before their scene did (or with
+    no scene to end them), so by the owner, a GM or staff rather than the scene.
+    """
+
+    accepted: int
+    declined: int
+    taken_back_early: int

@@ -35,6 +35,7 @@ from world.npc_services.filters import (
     NPCStandingFilterSet,
     OfferCooldownFilterSet,
     PermitOfferDetailsFilterSet,
+    PersonalityTraitFilterSet,
     RecordedProfileFilterSet,
     StaffingProfileFilterSet,
     StaffingProfileLineFilterSet,
@@ -49,6 +50,7 @@ from world.npc_services.models import (
     OfferCooldown,
     OfferSummons,
     PermitOfferDetails,
+    PersonalityTrait,
     RecordedProfile,
     StaffingProfile,
     StaffingProfileLine,
@@ -68,6 +70,7 @@ from world.npc_services.serializers import (
     OfferSummonsCreateSerializer,
     OfferSummonsSerializer,
     PermitOfferDetailsSerializer,
+    PersonalityTraitSerializer,
     RecordedProfileCompleteSerializer,
     RecordedProfileSerializer,
     StaffingProfileLineSerializer,
@@ -80,6 +83,7 @@ from world.npc_services.services import (
     complete_recorded_profile,
     serialize_npc_session_state,
 )
+from world.roster.permissions import IsGMOrGuide
 from world.scenes.models import Persona
 
 # Key under which the in-flight interaction state lives in request.session.
@@ -641,3 +645,23 @@ class NpcLifecycleViewSet(viewsets.ViewSet):
             return Response({"detail": "Unknown sheet."}, status=400)
         entry = graduate_to_roster(sheet)
         return Response({"detail": f"{sheet.character} joins the roster.", "entry": entry.pk})
+
+
+class PersonalityTraitViewSet(viewsets.ReadOnlyModelViewSet):
+    """Active personality traits, for a GM or Guide picking what works on an NPC (#4418).
+
+    Read-only; staff author the traits in the admin.
+    """
+
+    serializer_class = PersonalityTraitSerializer
+    permission_classes = [IsGMOrGuide]
+    pagination_class = NPCServicesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PersonalityTraitFilterSet
+
+    def get_queryset(self):
+        return (
+            PersonalityTrait.objects.filter(is_active=True)
+            .select_related("eased_check")
+            .order_by("name", "pk")
+        )

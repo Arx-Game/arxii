@@ -640,6 +640,7 @@ def _narrate_gm_condition(
         _send_to_objects,
         create_interaction,
         get_active_scene,
+        send_text_to_non_web,
     )
     from world.scenes.narrator import (  # noqa: PLC0415
         get_or_create_narrator_persona,
@@ -681,7 +682,8 @@ def _narrate_gm_condition(
         receiver_persona_ids=[target_persona.pk] if not visible and target_persona else None,
     )
     _send_to_objects([target], payload)
-    target.msg(narration)
+    # The web reads the pushed row; only telnet needs the line as text.
+    send_text_to_non_web(target, narration)
 
 
 @dataclass
