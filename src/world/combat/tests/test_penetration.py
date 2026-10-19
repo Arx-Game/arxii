@@ -63,15 +63,19 @@ class PenetrationContestTests(TestCase):
         self.assertEqual(mock_pen.call_args.kwargs["target_difficulty"], expected)
 
     def test_penetration_adds_technique_term(self) -> None:
-        """The penetration roll keeps its own check type and adds the technique skill (#4450)."""
+        """The penetration roll keeps its own check type and adds the technique skill (#4450).
+
+        The resolver carries the cast's technique term as ``offense_extra_traits``; the
+        penetration contest reuses it rather than resolving the skill again.
+        """
+        from dataclasses import replace
+
         from world.checks.types import ExtraTraitTerm
         from world.skills.factories import SkillFactory
 
         skill = SkillFactory()
-        resolver = _build_resolver(barrier_strength=7)
-        technique = resolver.action.focused_action
-        technique.skill = skill
-        technique.save(update_fields=["skill"])
+        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        resolver = replace(_build_resolver(barrier_strength=7), offense_extra_traits=(term,))
         with (
             patch("world.combat.services.perform_check") as mock_pen,
             patch("world.combat.services.collect_check_modifiers") as mock_collect,
@@ -80,7 +84,6 @@ class PenetrationContestTests(TestCase):
             mock_collect.return_value = MagicMock(total=0)
             resolver(power=20, ledger=_ledger(20))
 
-        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
         self.assertEqual(mock_pen.call_args.args[1], get_penetration_check_type())
         self.assertEqual(tuple(mock_pen.call_args.kwargs["extra_traits"]), (term,))
         pen_collects = [

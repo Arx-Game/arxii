@@ -631,7 +631,6 @@ class CombatTechniqueResolver:
         """
         from world.conditions.services import get_penetration_factor  # noqa: PLC0415
         from world.magic.constants import PowerStage  # noqa: PLC0415
-        from world.magic.services.magic_skills import technique_skill_term  # noqa: PLC0415
         from world.magic.types.power_ledger import PowerLedgerBuilder  # noqa: PLC0415
 
         target = self.action.focused_opponent_target
@@ -641,9 +640,9 @@ class CombatTechniqueResolver:
 
         caster = self.participant.character_sheet.character
         pen_check_type = get_penetration_check_type()
-        # The penetration roll keeps its own check type and adds only the technique skill.
-        skill_term = technique_skill_term(caster, self.action.focused_action)
-        pen_extra_traits = (skill_term,) if skill_term is not None else ()
+        # The penetration roll keeps its own check type and adds only the cast's skill
+        # terms (the technique skill), the same terms the offense roll carries.
+        pen_extra_traits = self.offense_extra_traits
         # Mirror _roll_check: route through the shared modifier seam so the
         # penetration contest honors condition / rollmod / equipment
         # and CHARACTER (#767, e.g. "+penetration vs warded foes") sources.
