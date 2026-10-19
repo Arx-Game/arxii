@@ -24,8 +24,9 @@ from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_defau
 from world.roster.constants import NPCLoanStatus
 from world.roster.factories import NPCLoanFactory
 from world.roster.models import NPCLoan, RosterEntry
+from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
-from world.scenes.models import Scene
+from world.scenes.models import Interaction, Scene
 
 MINE = "/api/roster/entries/mine/"
 SELECT = "/api/roster/entries/select/"
@@ -361,6 +362,33 @@ class AGuidePlaysALentNpc(JourneyCase):
         )
         self.assertTrue(offered.detail.success, offered.detail.message)
         self.assertEqual(NPCLoan.objects.get(pk=offered.detail.data["loan_id"]).scene, scene)
+
+    def test_whoever_plays_the_npc_is_recorded_as_writing_its_lines(self) -> None:
+        # #4418 bug 3: a borrower's lines were pinned to the NPC's owner, so the
+        # Guide's whisper as Vael was a private line of Ravenna's.
+        loan_id = self._lend()
+        posed = self._pose_as_vael(self.guide)
+        self.assertIn(posed.status_code, (status.HTTP_200_OK, status.HTTP_201_CREATED), posed.data)
+        self.telnet(self.vael, "whisper Ysmay=The gate opens at midnight.")
+
+        vael_lines = Interaction.objects.filter(persona=persona_of(self.vael))
+        pose = vael_lines.get(mode=InteractionMode.POSE)
+        whisper = vael_lines.get(mode=InteractionMode.WHISPER)
+        self.assertEqual(pose.writer_account_id, self.guide.pk)
+        self.assertEqual(whisper.writer_account_id, self.guide.pk)
+        self.assertEqual(
+            list(whisper.receivers.values_list("account_id", flat=True)),
+            [self.account_of(self.ysmay).pk],
+        )
+
+        taken = self.web(self.ravenna, "take_back_npc", loan_id=loan_id)
+        self.assertTrue(taken.detail.success, taken.detail.message)
+        self._pose_as_vael(self.gm)
+        latest = vael_lines.filter(mode=InteractionMode.POSE).order_by("-pk").first()
+        self.assertNotEqual(latest.pk, pose.pk)
+        self.assertEqual(latest.writer_account_id, self.gm.pk)
+        # The Guide's own whisper stays theirs to read once the loan is over.
+        self.assertIn(whisper, Interaction.objects.visible_to(self.guide))
 
     def test_a_scene_ends_with_an_unplayed_npc_in_the_room(self) -> None:
         self.assertIsNone(self.vael.account)

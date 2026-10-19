@@ -9,6 +9,8 @@ import uuid
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
+from django.db.models import F, IntegerField, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from world.scenes.block_services import social_control_excluded_target_ids
@@ -1308,24 +1310,16 @@ def _get_account_for_persona(persona: Persona) -> int | None:
 
 
 def accounts_for_personas(personas: list[Persona]) -> dict[int, int]:
-    """Map persona pk -> current account id for a batch of personas, in one query (#1219).
+    """Map persona pk -> the account playing it now, for a batch of personas, in one query.
 
     The batched form of ``_get_account_for_persona`` — used when pinning receiver accounts at
     interaction creation so a place-scoped (whole-room) interaction stays O(1) queries.
     Personas whose character has no current tenure are simply absent from the map. Public
     (#2710) so callers outside this module — e.g. concealing a cast's ACTION interaction in
     ``world.scenes.cast_services`` — can pin receiver accounts without reaching for an
-    underscore-prefixed name.
+    underscore-prefixed name. Who plays it follows ``playing_accounts_for_sheets``.
     """
-    from world.roster.models import RosterTenure  # noqa: PLC0415
-
-    sheet_ids = {p.character_sheet_id for p in personas}
-    sheet_to_account = dict(
-        RosterTenure.objects.filter(
-            roster_entry__character_sheet_id__in=sheet_ids,
-            end_date__isnull=True,
-        ).values_list("roster_entry__character_sheet_id", "player_data__account_id")
-    )
+    sheet_to_account = playing_accounts_for_sheets({p.character_sheet_id for p in personas})
     return {
         p.pk: sheet_to_account[p.character_sheet_id]
         for p in personas
@@ -1333,19 +1327,39 @@ def accounts_for_personas(personas: list[Persona]) -> dict[int, int]:
     }
 
 
-def _get_account_for_character(character_id: int) -> int | None:
-    """Get the account ID for a character via roster tenure."""
-    from world.roster.models import RosterEntry  # noqa: PLC0415
+def playing_accounts_for_sheets(sheet_ids: Iterable[int]) -> dict[int, int]:
+    """Map character sheet id -> the account playing that character, in one query (#4418).
 
-    try:
-        entry = RosterEntry.objects.get(character_sheet_id=character_id)
-        tenure = entry.tenures.filter(end_date__isnull=True).first()
-        if tenure is None:
-            return None
-        player_data = tenure.player_data
-        return player_data.account_id
-    except RosterEntry.DoesNotExist:
-        return None
+    The tenure holder, except while a story NPC is lent: then the ACTIVE loan's
+    borrower plays it, the same rule as ``Character.active_account``. Every "who
+    wrote / who heard this" pin (``Interaction.writer_account``, a receiver's
+    account, scene participation) reads it, so a Guide's whisper as a lent NPC is
+    the Guide's, never the owner's, and the owner's again once the loan ends.
+    Sheets with no current tenure are absent.
+    """
+    from world.roster.constants import NPCLoanStatus  # noqa: PLC0415
+    from world.roster.models import NPCLoan, RosterTenure  # noqa: PLC0415
+
+    borrower = NPCLoan.objects.filter(
+        roster_entry_id=OuterRef("roster_entry_id"), status=NPCLoanStatus.ACTIVE
+    ).values("borrower_id")[:1]
+    return dict(
+        RosterTenure.objects.filter(
+            roster_entry__character_sheet_id__in=list(sheet_ids),
+            end_date__isnull=True,
+        )
+        .annotate(
+            playing_id=Coalesce(
+                Subquery(borrower), F("player_data__account_id"), output_field=IntegerField()
+            )
+        )
+        .values_list("roster_entry__character_sheet_id", "playing_id")
+    )
+
+
+def _get_account_for_character(character_id: int) -> int | None:
+    """Get the account ID playing a character (see ``playing_accounts_for_sheets``)."""
+    return playing_accounts_for_sheets([character_id]).get(character_id)
 
 
 def ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
