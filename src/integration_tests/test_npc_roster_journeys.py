@@ -234,9 +234,14 @@ class AnOwnerAuthorsAnNpc(NpcRosterCase):
 class AnOwnerDeclinesAndTemplatesList(NpcRosterCase):
     def test_owner_declines_a_request(self) -> None:
         self._list_vael(policy="on_request")
+        # The owner sees who asked by their GM character's name, never the account's.
+        mint_gm_character(self.other_gm, "Corvin")
         loan_id = self.api(self.other_gm).post(f"{self.url}borrow/").json()["id"]
         detail = self.api(self.owner).get(self.url).json()
-        self.assertEqual(detail["open_requests"], [{"id": loan_id, "status": "requested"}])
+        self.assertEqual(
+            detail["open_requests"],
+            [{"id": loan_id, "status": "requested", "requester_name": "Corvin"}],
+        )
         declined = self.api(self.owner).post(
             f"{NPCS}answer/", {"loan_id": loan_id, "accept": False}, format="json"
         )

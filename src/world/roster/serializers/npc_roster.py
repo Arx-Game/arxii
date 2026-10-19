@@ -16,7 +16,12 @@ from world.npc_services.models import (
     PersonalityTrait,
     PreferenceValence,
 )
-from world.roster.constants import NPCBorrowAudience, NPCLendPolicy, NPCSection
+from world.roster.constants import (
+    NPCBorrowAudience,
+    NPCLendPolicy,
+    NPCLoanStatus,
+    NPCSection,
+)
 from world.roster.models import NPCLoan, RosterEntry
 from world.roster.services.gallery import portrait_url
 from world.scenes.cast_list_services import (
@@ -123,6 +128,19 @@ class NPCRegardReadSerializer(serializers.Serializer):
     reason = serializers.CharField(read_only=True)
 
 
+class NPCOpenRequestSerializer(serializers.Serializer):
+    """A borrow request waiting on the owner, and who asked (#4418).
+
+    ``requester_name`` is shown the way ``player_names`` shows any account: a GM or
+    Staff character's name, a Guide's display name, or the role, never the account
+    name.
+    """
+
+    id = serializers.IntegerField()
+    status = serializers.ChoiceField(choices=NPCLoanStatus.choices)
+    requester_name = serializers.CharField()
+
+
 class NPCDetailSerializer(NPCRosterRowSerializer):
     """The owner's, an active borrower's, or staff's view of one NPC and its settings."""
 
@@ -216,13 +234,23 @@ class NPCDetailSerializer(NPCRosterRowSerializer):
             return FALLBACK_PLAYER_NAME
         return player_names([obj.created_by_account_id])[obj.created_by_account_id]
 
+    @extend_schema_field(NPCOpenRequestSerializer(many=True))
     def get_open_requests(self, obj: RosterEntry) -> list[dict[str, Any]]:
         if not self.context["viewer"].manages(obj):
             return []
-        return [
-            {"id": loan.pk, "status": loan.status}
-            for loan in obj.npc_loans.filter(status="requested").order_by("pk")
-        ]
+        loans = list(obj.npc_loans.filter(status=NPCLoanStatus.REQUESTED).order_by("pk"))
+        names = player_names({loan.borrower_id for loan in loans})
+        return NPCOpenRequestSerializer(
+            [
+                {
+                    "id": loan.pk,
+                    "status": loan.status,
+                    "requester_name": names.get(loan.borrower_id, FALLBACK_PLAYER_NAME),
+                }
+                for loan in loans
+            ],
+            many=True,
+        ).data
 
     def to_representation(self, instance: RosterEntry) -> dict[str, Any]:
         data = super().to_representation(instance)
