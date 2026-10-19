@@ -99,7 +99,13 @@ actions, backends, and service functions.
   command in `CharacterCmdSet`. Evennia's own no-match reply is an untyped `text`
   frame the web client could not place, so it was silent there; this reproduces
   Evennia's wording (near-miss suggestions via `string_suggestions`, double-quoted,
-  joined with "or") and sends it typed `error`. Telnet output is byte-identical.
+  joined with "or") and sends it typed `error`. Telnet output is byte-identical. Also
+  `CmdAccounts` (#3657 tranche 12): Evennia's staff `@accounts` listing without its
+  `@account` alias. A cmdset merge treats two commands as the same one when any key or alias
+  is shared, and the character cmdset outranks the account cmdset, so the alias swallowed the
+  player's `account` command (`account/account_info.py`): a puppeting player typing `account`
+  or `account email <address>` reached the Admin-locked listing and was told "Command
+  'account' is not available". Staff type `@accounts` in full.
 - **`CmdOOC`** (`ooc <message>`, `evennia_overrides/communication.py`, #4337): out-of-character
   speech to the room through `OOCSayAction` (key `ooc`): `<OOC> Name says: text`, typed `ooc`
   for the web feed, sent to the `say` audience (the broadcast-exclusion seam) minus anyone who
@@ -1085,7 +1091,13 @@ actions, backends, and service functions.
   **#2122:** `progression unlocks` also prepends the caller's XP balance
   (`ExperiencePointsData.current_available`) + last-5 `XPTransaction` rows, mirroring
   `CmdKudos._show_balance`'s account-scoped lookup pattern — previously the balance only
-  leaked into failed-purchase error text. Not duplicated onto `sheet`.
+  leaked into failed-purchase error text. Not duplicated onto `sheet`. Every subverb of both
+  is typed through the handler in `integration_tests/test_earning_your_keep_journeys.py`
+  (`TrainingAndUnlocking`, #3657 tranche 12; the hand-built `tests/test_progression_commands.py`,
+  which mocked every dispatch, is gone): a class-level unlock is bought with real XP, the
+  training budget is the real shared weekly purse, and an unknown skill, mentor, allocation
+  or unlock id is the action's own sentence (it used to be the ORM's "matching query does not
+  exist" line).
 - **`gift_learning.py`**: `CmdLearn` (`learn`, #2116) — the gift/technique/thread-weaving
   acquisition namespace. One `DispatchCommand` routes a leading subverb (`gift <id>` /
   `technique <id>` / `thread <id>`) through `dispatch_player_action` — the same seam the web
@@ -1095,7 +1107,13 @@ actions, backends, and service functions.
   the previously-unreachable `spend_xp_on_gift_unlock`/`accept_technique_offer` services
   (`world.magic.services.gift_acquisition`) to a player-facing surface, and gives
   `accept_thread_weaving_unlock` telnet parity with its pre-existing web endpoint. No business
-  logic in the command.
+  logic in the command. The hub, a real XP purchase, a meter opened from a real offer and the
+  refusals are typed in `integration_tests/test_earning_your_keep_journeys.py`
+  (`LearningAGift`, #3657 tranche 12), together with `train` (`commands/training.py`: the
+  meter listing, name resolution and the action's own refusals, down to the unconfigured
+  "Technique Training" check named); the hand-built `tests/test_gift_learning_command.py` and
+  `tests/test_training_command.py` are gone. The training session itself (the check, the
+  meter fill) stays with `actions/tests/test_technique_training_action`.
 - **`journals.py`**: `CmdJournal` (`journal`, #1350) — the journal authoring namespace. One
   `ArxCommand` routes a leading subverb (`journal write title=<text> body=<text> [public]
   [tags=a,b,c]` / `respond <id|#> type=praise|retort ...` / `edit <id|#> ...`) to the same
@@ -1103,7 +1121,11 @@ actions, backends, and service functions.
   `RespondToJournalAction`, `EditJournalEntryAction`. Bare `journal` / `journal list` lists the
   caller's recent top-level entries. `title`/`body` are free text (values run to the next `key=`
   token); `public` is a bare flag; `tags` is comma-separated. Namespaced to avoid top-level key
-  collisions.
+  collisions. Every subverb (write, list, edit, respond with the retort consent, consent,
+  disposition) is typed through the handler in
+  `integration_tests/test_earning_your_keep_journeys.py` (`KeepingAJournal`, #3657 tranche 12),
+  as is `goal` below (`SettingGoals`); the hand-built `tests/test_journals_goals_journey_e2e.py`
+  is gone. A new journal or goal verb gets its lines there.
 - **`goals.py`**: `CmdGoal` (`goal`, #1350) — the goal authoring namespace. One `ArxCommand`
   routes a leading subverb (`goal add domain=<id|name> points=<n> [notes=<text>]` (shares the
   same weekly revision limit as `set`) / `set domain=<id>:points=<n>[,...]` / `log
@@ -1113,15 +1135,21 @@ actions, backends, and service functions.
   remaining. Domains resolve by id or name (iexact); `title`/`content`/`notes` are free text
   (values run to the next `key=` or the bare `public` flag); `public` is a bare flag. Namespaced
   to avoid top-level key collisions.
-- **`progression_rewards.py`**: `CmdKudos` (`kudos`) / `CmdVote` (`vote`) / `CmdRandomScene`
-  (`randomscene`, alias `rscene`) / `CmdPathIntent` (`pathintent`) (#1348) — telnet faces of the
-  7 progression-reward Actions. `kudos [claim <category_id> <amount>]` dispatches
-  `ClaimKudosAction`. `vote [remove] <interaction|participation|journal> <id>` dispatches
-  `CastVoteAction` / `RemoveVoteAction`. `randomscene [claim|reroll] <id>` dispatches
-  `ClaimRandomSceneAction` / `RerollRandomSceneAction`. `pathintent [<path_id>|clear]` dispatches
-  `SetPathIntentAction` / `ClearPathIntentAction`. All are thin REGISTRY `ArxCommand` subclasses;
-  no business logic — behavior lives in `actions/definitions/progression_rewards.py` and
-  `world/progression/services/`.
+- **`progression_rewards.py`**: `CmdKudos` (`kudos`) / `CmdNominate` (`nominate`, #3738; it
+  replaced `vote`) / `CmdRandomScene` (`randomscene`, alias `rscene`) / `CmdPathIntent`
+  (`pathintent`) (#1348) — telnet faces of the 7 progression-reward Actions. `kudos [claim
+  <category_id> <amount>]` dispatches `ClaimKudosAction` (a claim too small to pay any XP is
+  refused before anything is written, #3657 tranche 12: it used to write and roll back, and the
+  idmapper-shared balance kept the rollback out). `nominate [remove] <pose|journal> <id>`
+  dispatches `NominateAction` / `WithdrawNominationAction`. `randomscene [claim|reroll] <id>`
+  dispatches `ClaimRandomSceneAction` / `RerollRandomSceneAction`. `pathintent [<path_id>|clear]`
+  dispatches `SetPathIntentAction` / `ClearPathIntentAction`. All are thin REGISTRY `ArxCommand`
+  subclasses; no business logic — behavior lives in `actions/definitions/progression_rewards.py`
+  and `world/progression/services/`. Every one of them, and `rest` (`fatigue.py`), is typed
+  through the handler in `integration_tests/test_earning_your_keep_journeys.py`
+  (`ClaimingRewards`, #3657 tranche 12: a nomination off a pose Hobb really posed, a random
+  scene claimed on real shared-scene evidence); the hand-built
+  `tests/test_progression_rewards_commands.py` and `test_progression_rewards_e2e.py` are gone.
 - **`relationships.py`**: `CmdRelationship` (`relationship`, #3957, was #1485) — the tie
   namespace. One `ArxCommand` routes a leading subverb (`declare <name>=<type>[,awareness]` /
   `shift <name>=<from>,<to>[,note]` / `end <name>=<type>` / `reveal <name>=<type>,<awareness>` /
@@ -1238,7 +1266,12 @@ actions, backends, and service functions.
   status of the caller's own pending `RosterApplication` rows via `PlayerData
   .get_pending_applications()`; roster browsing stays web-only (by design), scoped to the
   caller's own `PlayerData` (no id-based lookup exists, so it can't leak another account's
-  applications).
+  applications). Both are typed from the puppet in
+  `integration_tests/test_earning_your_keep_journeys.py` (`MindingTheAccount`, #3657 tranche
+  12; the hand-built `tests/test_account_info_command.py` is gone), which is how the alias
+  collision noted under `evennia_overrides/system.py` came to light. An account command
+  reached through a character answers the account (`self.caller.msg` goes to the account's
+  sessions, the same screen on telnet).
 - **`character_switching.py`**: `CmdIC`, `CmdCharacters` — character switching
 - **`reboot.py`**: `CmdReboot` (`@reboot`, `perm(reboot) or perm(Developer)`, #4001) — stop
   and restart BOTH Evennia daemons from inside the game. Thin over
@@ -1301,6 +1334,9 @@ actions, backends, and service functions.
   `/api/tidings/feed/` endpoint calls). Lists recent deeds + scandals the active character's
   societies are aware of, newest first. (`gossip`/`news` are intentionally *not* used — `gossip`
   is reserved for level-1-secret access at hubs, `news` for OOC game news; criers are NPCs.)
+  Both scopes, the mask and the established face are typed through the handler in
+  `integration_tests/test_earning_your_keep_journeys.py` (`CatchingUpOnTidings`, #3657 tranche
+  12; the hand-built `tests/test_tidings_command.py` is gone).
 - **`evidence.py` (social/)** (#1825): `CmdEvidence` (`evidence <subverb>`) — the
   physical-evidence namespace: bare `evidence` lists at-scene leavings of your own
   deeds + held evidence; `gather [<id>]` / `dispose <id>` / `examine <id>` dispatch the

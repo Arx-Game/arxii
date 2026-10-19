@@ -193,7 +193,26 @@ a telnet onlooker heard nothing, the `callcheck` shape again), and `moment` sent
 as a bare untyped line the web cannot place (its `func` override skipped the base command's
 typed `error` and structured frame) while `moment tag <absent name>` sent only Evennia's bare
 line (the loud-search shape); the override now refuses the way the base does and the search
-is quiet.
+is quiet. Tranche 12 (2026-10-19) rules the progression and journal groups:
+`test_progression_commands` (36, every dispatch a mock), `test_journals_goals_journey_e2e`
+(16, `Cmd.func()` by hand), `test_account_info_command` (11), `test_tidings_command` (10),
+`test_progression_rewards_commands` (4), `test_progression_rewards_e2e` (1),
+`test_gift_learning_command` (10) and `test_training_command` (9) are removed. A new journey
+module, `integration_tests/test_earning_your_keep_journeys.py`, types `journal` (write, list,
+edit, respond with the retort consent, disposition), `goal` (add, set, log, the weekly gate and
+the cap), `kudos`, `nominate` (a real pose in a real scene), `randomscene` (a claim with real
+scene evidence, a reroll), `pathintent`, `rest`, `training` (the shared weekly budget, another
+player's row), `progression` (an unlock bought with real XP, the breakthrough refusals),
+`learn` and `train` (a gift unlocked, a meter opened from Hobb's offer, the unconfigured
+training check named), `tidings` (her circles, a mask, another face, the square's board and
+crier) and `account` / `roster` through the puppet. Three fixes in place: Evennia's staff
+`@accounts` carried an `@account` alias, and a cmdset merge treats a shared alias as the same
+command, so the player's `account` (and with it `account email`, the telnet path to a verified
+email) was "not available" to anyone puppeting a character; a kudos claim too small to pay
+anything wrote the claim and rolled it back, which left the idmapper-shared balance short
+until the cache flushed (the check now runs before any write); and an unknown id on
+`training` or `progression unlock` answered with the ORM's own "matching query does not
+exist" line (each is now a sentence of its own).
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
