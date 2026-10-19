@@ -61,7 +61,8 @@ or a Guide plays one with an ordinary tenure or an active loan.
 
 **Services:**
 
-- `services/npc_lending.py`: `offer_npc(entry, guide, scene, by)`,
+- `services/npc_lending.py`: `offer_npc(entry, guide, scene, by)` (`by` owns the NPC
+  and runs the scene: staff, its GM or an owner, `can_create_encounter_for_scene`),
   `request_borrow(entry, borrower)`, `answer_loan(loan, accept, by)`,
   `end_loan(loan, by)`, `end_scene_loans(scene)` (called from `Scene.finish_scene` and from
   `conclude_battle`, which writes the scene's end directly; so every finish, an event's
@@ -84,7 +85,12 @@ or a Guide plays one with an ordinary tenure or an active loan.
   (`server/conf/lockfuncs.py`) defers to `Account.can_puppet_character`, so a lent NPC
   is playable by the borrower and by its owner when not lent.
   `mint_story_npc(..., as_template, count_against_cap)`; a crowd voice is minted
-  uncapped and never counts against the GM's story-NPC cap.
+  uncapped and never counts against the GM's story-NPC cap, and neither does the GM's
+  own GM or Staff OOC character (`check_story_npc_cap` follows `is_story_npc`).
+  `describe_crowd` (`world.combat.services.crowd_voice`) writes a voiced crowd's new
+  description to its voice through `set_physical_description`, which the cast row shows.
+- `NPCDetailSerializer.open_requests`: each waiting borrow request's `id`, `status` and
+  `requester_name` (from `player_names`, never an account name).
 - `services/gallery.py`: `_sync_npc_persona_portrait` sets both `Persona.thumbnail`
   and `Persona.thumbnail_url` from the worn look of a story NPC (PCs untouched).
   `can_manage_gallery` also lets the owner of a story NPC (`can_edit_npc_sheet`, held or
@@ -97,7 +103,13 @@ or a Guide plays one with an ordinary tenure or an active loan.
 web tab strip, posting and consent responses follow the borrower.
 `Character.active_account` returns the ACTIVE loan's borrower while the NPC is lent
 (a Guide never inherits the owner's GM standing); owner checks use
-`created_by_account`. `played_character_sheet_ids` stays tenure-only.
+`created_by_account`. `played_character_sheet_ids` stays tenure-only. The scene
+log's party pins (`Interaction.writer_account`, a receiver's account, scene
+participation) read `world.scenes.interaction_services.playing_accounts_for_sheets`,
+the same rule, so a borrower's poses and whispers are the borrower's.
+A story NPC stays in its room when its last session leaves (`Character._stays_when_unplayed`
+skips `_leave_the_grid`), so a disconnect, take-back or loan end leaves it in the
+scene and on the cast list; player characters still leave the grid.
 
 **Roster entry payload.** `GET /api/roster/entries/mine/` rows carry `loan`
 (`{id, scene_title, offered_by_name}` or null), `npc_notes` (the owner's notes for a
