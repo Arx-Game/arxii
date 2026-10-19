@@ -426,7 +426,8 @@ All models registered with appropriate admin interfaces:
 - **Attempts app**: Calls `perform_check()` for resolution; provides roulette display content via `ConsequenceDisplay`
 - **Callers** (goals, magic, combat, conditions, GM adjudication): Compute `extra_modifiers` before calling `perform_check()`
 - **Mechanics app**: `resolve_challenge()` folds its `capability_source.value` (a `CapabilitySource`, e.g. from a
-  technique) into `extra_modifiers` before calling `perform_check()`
+  technique) into `extra_modifiers` before calling `perform_check()`; a technique source also adds that
+  technique's skill as `extra_traits` (#4450), on the direct roll and the action-template path alike
 
 ---
 

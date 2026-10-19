@@ -645,6 +645,10 @@ no Path skill. An inactive skill gives no term.
   template's, the approach's) and add the technique term only. A casting standoff approach
   carries one grade per display technique (`ApproachView.technique_grades`), each graded with that
   technique's term, so the grade shown is the grade rolled.
+- A challenge met with a capability that comes from a technique (`CapabilitySourceType.TECHNIQUE`)
+  keeps the approach's check type, or its action template's, and adds that technique's term; a
+  trait, condition or equipment source adds none (`_capability_skill_terms`,
+  `world/mechanics/challenge_resolution.py`).
 - Activity rolls keep their check type and add `activity_skill_terms(<activity>)`: the anima
   ritual (`perform_anima_ritual`), technique learning (learner roll and teacher rating), sanctum
   rituals and the ritual pool shortfall (`RITUAL_WORKING`), sustaining magic, dispelling,

@@ -613,13 +613,16 @@ class ResolveRoundOffenseCheckTests(TestCase):
 
 
 def _make_dummy_capability_source(capability_id: int = 1) -> CapabilitySource:
-    """Build a minimal CapabilitySource for patching get_available_actions."""
+    """Build a minimal CapabilitySource for patching get_available_actions.
+
+    A trait source: a technique source must name a real Technique (#4450).
+    """
     return CapabilitySource(
         capability_name="fire_control",
         capability_id=capability_id,
         value=10,
-        source_type=CapabilitySourceType.TECHNIQUE,
-        source_name="Test Technique",
+        source_type=CapabilitySourceType.TRAIT,
+        source_name="Test Trait",
         source_id=1,
     )
 

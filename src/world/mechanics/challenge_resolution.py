@@ -15,7 +15,7 @@ from world.checks.outcome_utils import (
 )
 from world.checks.services import perform_check
 from world.checks.types import PendingResolution, ResolutionContext
-from world.mechanics.constants import DiscoveryType, ResolutionType
+from world.mechanics.constants import CapabilitySourceType, DiscoveryType, ResolutionType
 from world.mechanics.models import (
     ApproachConsequence,
     ChallengeInstance,
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import PendingActionResolution
-    from world.checks.types import CheckResult
+    from world.checks.types import CheckResult, ExtraTraitTerm
     from world.mechanics.models import (
         ChallengeApproach,
         ChallengeTemplate,
@@ -94,9 +94,12 @@ def resolve_challenge(
     8. Return result
     """
     _validate(character, challenge_instance, approach)
+    extra_traits = _capability_skill_terms(character, capability_source)
 
     if approach.action_template is not None:
-        return _resolve_via_template(character, challenge_instance, approach)
+        return _resolve_via_template(
+            character, challenge_instance, approach, extra_traits=extra_traits
+        )
 
     template = challenge_instance.template
 
@@ -108,6 +111,7 @@ def resolve_challenge(
         approach.check_type,
         target_difficulty=challenge_instance.effective_severity,
         extra_modifiers=extra_modifiers + capability_source.value,
+        extra_traits=extra_traits,
     )
 
     # 4. Select consequence and resolution metadata
@@ -163,6 +167,7 @@ def resolve_challenge(
         pool=None,
         check_type=approach.check_type,
         consequence=consequence,
+        extra_traits=extra_traits,
     )
 
     # 8. Build display consequences and return
@@ -186,13 +191,32 @@ def resolve_challenge(
     )
 
 
-def _record_challenge_outcome(
+def _capability_skill_terms(
+    character: ObjectDB,
+    capability_source: CapabilitySource,
+) -> tuple[ExtraTraitTerm, ...]:
+    """The skill term a challenge roll adds for ``capability_source`` (#4450).
+
+    A capability that comes from a technique makes the roll magical, so it adds that
+    technique's skill. Any other source adds nothing.
+    """
+    if capability_source.source_type != CapabilitySourceType.TECHNIQUE:
+        return ()
+    from world.magic.models import Technique  # noqa: PLC0415
+    from world.magic.services.magic_skills import technique_skill_term  # noqa: PLC0415
+
+    term = technique_skill_term(character, Technique.objects.get(pk=capability_source.source_id))
+    return (term,) if term is not None else ()
+
+
+def _record_challenge_outcome(  # noqa: PLR0913 - keyword-only record context
     *,
     record: CharacterChallengeRecord,
     character: ObjectDB,
     pool,  # actions.ConsequencePool | None — no import to avoid a cross-app cycle
     check_type,  # checks.CheckType | None
     consequence: Consequence,
+    extra_traits: tuple[ExtraTraitTerm, ...] = (),
 ) -> None:
     """Persist a ConsequenceOutcome for a challenge resolution (#850).
 
@@ -222,7 +246,7 @@ def _record_challenge_outcome(
     if character_sheet is None:
         return
 
-    breakdown = collect_check_modifiers(character_sheet, check_type)
+    breakdown = collect_check_modifiers(character_sheet, check_type, extra_traits=extra_traits)
     record_consequence_outcome(
         character_sheet,
         check_type,
@@ -357,6 +381,8 @@ def _resolve_via_template(
     character: ObjectDB,
     challenge_instance: ChallengeInstance,
     approach: ChallengeApproach,
+    *,
+    extra_traits: tuple[ExtraTraitTerm, ...] = (),
 ) -> ChallengeResolutionResult:
     """Resolve challenge using the approach's ActionTemplate pipeline."""
     from actions.services import start_action_resolution  # noqa: PLC0415
@@ -374,6 +400,7 @@ def _resolve_via_template(
         template=action_template,
         target_difficulty=challenge_instance.effective_severity,
         context=context,
+        extra_traits=extra_traits,
     )
 
     consequence, check_result = _outcome_of_pending(pending)
@@ -404,6 +431,7 @@ def _resolve_via_template(
         pool=action_template.consequence_pool,
         check_type=action_template.check_type,
         consequence=consequence,
+        extra_traits=extra_traits,
     )
 
     all_consequences = list(
