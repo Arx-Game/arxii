@@ -199,12 +199,13 @@ class SoulTetherJourneyTests(TestCase):
         cmd.raw_string = f"{cmd_cls.key} {args}".strip()
         caller.msg = MagicMock()
 
-        def _search(name: str, **_: object) -> object:
+        def _search(name: str, **_: object) -> list[object]:
+            # The quiet search `search_or_raise` makes returns a list of matches.
             if name == self.sinner_char.db_key:
-                return self.sinner_char
+                return [self.sinner_char]
             if name == self.sineater_char.db_key:
-                return self.sineater_char
-            return None
+                return [self.sineater_char]
+            return []
 
         caller.search = MagicMock(side_effect=_search)
         cmd.func()
