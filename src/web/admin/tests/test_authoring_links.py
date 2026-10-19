@@ -15,9 +15,13 @@ def unregistered_for_the_test(test: TestCase, model: type) -> None:
     of its own for the organizations a legend award names, #4473), so the "no ModelAdmin"
     behavior is exercised by removing one.
     """
-    model_admin = admin.site._registry[model].__class__
+    # Put the registered INSTANCE back, not a fresh one of its class: the registry-wide
+    # extras ready() set on the instance (save_as, the credit column) are what the
+    # save-as-new guard reads, and a re-registered class would arrive without them and
+    # fail it for whichever test runs after this one (#3657 tranche 13).
+    instance = admin.site._registry[model]
     admin.site.unregister(model)
-    test.addCleanup(admin.site.register, model, model_admin)
+    test.addCleanup(admin.site._registry.__setitem__, model, instance)
 
 
 class WorkbenchEditorUrlTests(TestCase):
