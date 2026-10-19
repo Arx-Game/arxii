@@ -107,8 +107,9 @@ class CurrencyTransfer(SharedMemoryModel):
     that its money history stays: a side whose FK is now null but whose kind is
     set was a real holder that has since been deleted, and the snapshot says who.
     A side with a blank kind never had a holder (a mint's source, a sink's
-    destination). ``currency_transfer_not_void`` reads the kinds, never the FKs,
-    for exactly that reason.
+    destination). ``currency_transfer_not_void`` still reads the FKs for now; the
+    follow-up step of #4467 moves it onto the kinds once every row carries one, which
+    is what lets a holder actually be deleted.
     """
 
     from_purse = models.ForeignKey(
@@ -186,7 +187,12 @@ class CurrencyTransfer(SharedMemoryModel):
                 name="currency_transfer_single_destination",
             ),
             models.CheckConstraint(
-                condition=~(models.Q(from_holder_kind="") & models.Q(to_holder_kind="")),
+                condition=~(
+                    models.Q(from_purse__isnull=True)
+                    & models.Q(from_treasury__isnull=True)
+                    & models.Q(to_purse__isnull=True)
+                    & models.Q(to_treasury__isnull=True)
+                ),
                 name="currency_transfer_not_void",
             ),
             models.CheckConstraint(

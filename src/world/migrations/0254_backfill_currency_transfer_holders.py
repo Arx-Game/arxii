@@ -1,8 +1,8 @@
 """Snapshot each existing CurrencyTransfer's holders (#4467).
 
-Data only. The columns came in 0253; the constraint that reads them follows in
-0255, because a constraint added in the same transaction as the backfill would
-queue trigger events against the rows just written.
+Data only. The columns came in 0253. The constraint that will read them ships in a
+later release, after a second backfill picks up rows the previous release wrote
+between this migration and the release swap (#4467).
 
 A side whose purse or treasury is still there gets its kind and its name today
 (a character's primary persona name, an organization's name). A side that is
