@@ -1,0 +1,62 @@
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+System check identified some issues:
+
+WARNINGS:
+arxii.Companion.ridden_by: (fields.W342) Setting unique=True on a ForeignKey has the same effect as using a OneToOneField.
+	HINT: ForeignKey(unique=True) is usually better served by a OneToOneField.
+arxii.CraftingRecipe: (models.W047) SQLite does not support unique constraints with nulls distinct.
+	HINT: A constraint won't be created. Silence this warning if you don't care about it.
+arxii.StandoffGroup: (models.W047) SQLite does not support unique constraints with nulls distinct.
+	HINT: A constraint won't be created. Silence this warning if you don't care about it.
+arxii.StandoffReveal: (models.W047) SQLite does not support unique constraints with nulls distinct.
+	HINT: A constraint won't be created. Silence this warning if you don't care about it.
+
+System check identified 4 issues (0 silenced).
+test_a_twin_a_spouse_and_children_are_accepted (world.character_creation.tests.test_beginning_routes_and_kin_rows.KinRowsValidationTests.test_a_twin_a_spouse_and_children_are_accepted) ... ok
+test_a_wrong_kind_fate_or_second_twin_is_refused (world.character_creation.tests.test_beginning_routes_and_kin_rows.KinRowsValidationTests.test_a_wrong_kind_fate_or_second_twin_is_refused) ... ok
+test_malformed_kin_row_does_not_replace_saved_people (world.character_creation.tests.test_beginning_routes_and_kin_rows.KinRowsValidationTests.test_malformed_kin_row_does_not_replace_saved_people) ... ok
+test_whisper_action_conflict_on_reused_id_with_different_target (actions.tests.test_actions.WhisperActionIdempotencyTests.test_whisper_action_conflict_on_reused_id_with_different_target)
+#3760 review Finding 1: reusing a client_request_id against a ... ok
+test_whisper_action_is_idempotent_on_client_request_id (actions.tests.test_actions.WhisperActionIdempotencyTests.test_whisper_action_is_idempotent_on_client_request_id) ... ok
+test_whisper_action_retry_delivers_to_target_only_once (actions.tests.test_actions.WhisperActionIdempotencyTests.test_whisper_action_retry_delivers_to_target_only_once)
+The telnet-delivery sibling of the say/pose broadcast-race fix (#3760): ... ok
+test_ephemeral_whisper_reaches_only_writer_and_target (actions.tests.test_actions.WhisperActionEphemeralPrivacyTests.test_ephemeral_whisper_reaches_only_writer_and_target) ... ok
+test_breakdown_total_folded_into_extra_modifiers (world.scenes.tests.test_action_services.SocialModifierSeamTests.test_breakdown_total_folded_into_extra_modifiers) ... ok
+test_target_attraction_folds_initiator_allure_as_contribution (world.scenes.tests.test_action_services.SocialModifierSeamTests.test_target_attraction_folds_initiator_allure_as_contribution)
+When the TARGET is Attracted to the initiator, the allure rides along (#1696). ... ok
+test_declared_invocation_rolls_once_per_request (world.scenes.tests.test_favor_invocation.SceneActionInvocationTests.test_declared_invocation_rolls_once_per_request) ... ok
+test_denied_action_uses_no_invocation (world.scenes.tests.test_favor_invocation.SceneActionInvocationTests.test_denied_action_uses_no_invocation) ... ok
+test_onlooker_payloads (world.scenes.tests.test_favor_invocation.SceneActionInvocationTests.test_onlooker_payloads)
+Onlookers get the call line, the outcome line and the action's own line: ... ok
+test_refused_at_declaration (world.scenes.tests.test_favor_invocation.SceneActionInvocationTests.test_refused_at_declaration) ... ok
+test_scene_action_invocation_rolls_at_accept (world.scenes.tests.test_favor_invocation.SceneActionInvocationTests.test_scene_action_invocation_rolls_at_accept) ... ok
+test_double_settle_is_refused (world.npc_services.tests.test_settle.SettleAllegianceTests.test_double_settle_is_refused)
+Settling the same charm twice: the second attempt finds nothing to settle. ... ok
+test_faded_charm_adds_less (world.npc_services.tests.test_settle.SettleAllegianceTests.test_faded_charm_adds_less) ... ok
+test_no_pool_means_the_charm_just_ends (world.npc_services.tests.test_settle.SettleAllegianceTests.test_no_pool_means_the_charm_just_ends) ... ok
+test_no_tier_opens_an_encounter (world.npc_services.tests.test_settle.SettleAllegianceTests.test_no_tier_opens_an_encounter) ... ok
+test_settle_against_a_non_allegiance_condition_is_refused (world.npc_services.tests.test_settle.SettleAllegianceTests.test_settle_against_a_non_allegiance_condition_is_refused)
+A condition with no ``sets_allegiance`` is never a charm to settle. ... ok
+test_settle_appears_in_scene_actions (world.npc_services.tests.test_settle.SettleAllegianceTests.test_settle_appears_in_scene_actions) ... ok
+test_settle_by_non_charmer_picks_template_pool_tier (world.npc_services.tests.test_settle.SettleAllegianceTests.test_settle_by_non_charmer_picks_template_pool_tier) ... ok
+test_settle_outcome_is_the_narrators_interaction_in_the_scene (world.npc_services.tests.test_settle.SettleAllegianceTests.test_settle_outcome_is_the_narrators_interaction_in_the_scene) ... ok
+test_settle_without_a_charm_is_refused (world.npc_services.tests.test_settle.SettleAllegianceTests.test_settle_without_a_charm_is_refused) ... ok
+test_stage_pool_beats_template_pool (world.npc_services.tests.test_settle.SettleAllegianceTests.test_stage_pool_beats_template_pool) ... ok
+test_unauthored_tier_does_not_broadcast_a_synthetic_label (world.npc_services.tests.test_settle.SettleAllegianceTests.test_unauthored_tier_does_not_broadcast_a_synthetic_label)
+No row at the rolled tier -> the generic ending line, never the raw outcome name. ... ok
+
+----------------------------------------------------------------------
+Ran 25 tests in 3.456s
+
+OK
+Destroying test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+Using settings file 'sqlite_test_settings' (server.conf.sqlite_test_settings).
+
+    TESTING: Using specified settings file 'server.conf.sqlite_test_settings'.
+
+    OBS: Evennia's full test suite may not pass if the settings are very
+    different from the default (use 'evennia test evennia' to run core tests)
+
+Gametime offset could not load - db not set up.
+Found 25 test(s).
+Restoring cached test schema (schema-80a405068489c33d.sqlite3).

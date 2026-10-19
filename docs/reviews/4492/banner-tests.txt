@@ -1,0 +1,952 @@
+[WARN] The following settings in pnpm-workspace.yaml were ignored because they are not written in camelCase: "store-dir" (use "storeDir").
+$ vitest run src/game/components/CommandInput.test.tsx --reporter=verbose
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend[39m
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mthe slash escape and the staff Commands mode (#3857)[2m > [22m[2ma / line in a scene goes over the socket as typed, never to the pose endpoint
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mthe slash escape and the staff Commands mode (#3857)[2m > [22m[2ma // line in a scene poses a literal slash through the pose endpoint
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22ma line starting with / is sent as the command after the slash, never wrapped[32m 138[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22ma / line in say mode is still a command, not speech[32m 38[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22ma / line in a scene goes over the socket as typed, never to the pose endpoint[32m 34[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22ma // line in a scene poses a literal slash through the pose endpoint[32m 15[2mms[22m[39m
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mthe slash escape and the staff Commands mode (#3857)[2m > [22m[2m@ and + mark a command too, and a person present wins (#4346)[2m > [22m[2msends a + line as the command it is, never as a pose
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mthe slash escape and the staff Commands mode (#3857)[2m > [22m[2m@ and + mark a command too, and a person present wins (#4346)[2m > [22m[2msends @ and a command the character has as typed, in a scene or say mode
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mthe slash escape and the staff Commands mode (#3857)[2m > [22m[2m@ and + mark a command too, and a person present wins (#4346)[2m > [22m[2mholds @ and a command the character lacks: nothing sent, the line kept, Send off
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mthe slash escape and the staff Commands mode (#3857)[2m > [22m[2m@ and + mark a command too, and a person present wins (#4346)[2m > [22m[2maddresses someone here in a scene through target names, keeping the name in the text
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22ma line starting with // poses a literal slash[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22msends a + line as the command it is, never as a pose[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22msends @ and a command the character has as typed, in a scene or say mode[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22msends @command in say mode as the command, not as speech[32m 22[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22mholds @ and a command the character lacks: nothing sent, the line kept, Send off[32m 20[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22mholds a target who is not here[32m 8[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22mshows the note for a lone unknown word only once Send is pressed[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22maddresses someone here outside a scene through the pose command, as before[32m 10[2mms[22m[39m
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mthe slash escape and the staff Commands mode (#3857)[2m > [22m[2m@ and + mark a command too, and a person present wins (#4346)[2m > [22m[2msends a picked and a typed spelling of one person as one target
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mthe slash escape and the staff Commands mode (#3857)[2m > [22m[2m@ and + mark a command too, and a person present wins (#4346)[2m > [22m[2mholds nobody as absent before the room is known
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mthe slash escape and the staff Commands mode (#3857)[2m > [22m[2m@ and + mark a command too, and a person present wins (#4346)[2m > [22m[2mposes @@ and ++ with one literal character
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22maddresses someone here in a scene through target names, keeping the name in the text[32m 15[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22msends a picked and a typed spelling of one person as one target[32m 13[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22mnever holds a page for naming someone elsewhere[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22mholds nobody as absent before the room is known[32m 15[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22mlets someone here win over a command of the same name[32m 10[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22mposes @@ and ++ with one literal character[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22msends @@ single behind a picked target, where the server would not unescape it[32m 10[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22m@ and + mark a command too, and a person present wins (#4346)[2m > [22mleaves @@ doubled on the socket, where the server parser reads the escape[32m 19[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22moffers Commands in the selector for staff only[32m 146[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22min Commands mode every line goes through sendConsole as typed, with the formatting hidden[32m 15[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mthe slash escape and the staff Commands mode (#3857)[2m > [22mpicking a mode works before any mode was set[32m 59[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mkeeps drafts editable while entry is unconfirmed and blocks button and keyboard sends[32m 22[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mrenders ghost text with mode label when composerMode is provided[32m 5[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mrenders ModeSelector dropdown[32m 8[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msubmits raw text when no composerMode is set[32m 8[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mprepends default command when no explicit command typed[32m 7[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22muses explicit command when one is typed[32m 7[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msends a typed page verbatim instead of wrapping it into pose/say IC text (#3069)[32m 10[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msends a typed ooc line verbatim in pose mode, never as IC speech (#4337)[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msends a typed ooc line verbatim in say mode, never as IC speech (#4337)[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mwhisper mode dispatches via executeAction with a resolved target_id and client_request_id (#3760)[32m 13[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mprepends targets with @ syntax for non-whisper commands[32m 10[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mappends @name to input when targetToAppend is set[32m 8[2mms[22m[39m
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mcalls onSubmitAction with attached action when submitting
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mdoes not call onSubmitAction when no action is attached
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mrenders action attachment slot when sceneId is provided
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mpose with detachments uses REST submitPose and skips WebSocket send
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mpose without detachments still uses REST submitPose (scene poses always take REST)
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mplain pose (no composerMode) with sceneId/personaId uses REST submitPose
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mwhisper composer mode with sceneId still dispatches via executeAction, never REST submitPose (#3760)
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mdirected pose composer mode sends target_names on the REST path (#2156)
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mdoes not send when whisper mode has no target[32m 10[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mdoes not submit empty text[32m 6[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcalls onSubmitAction with attached action when submitting[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mdoes not call onSubmitAction when no action is attached[32m 8[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mrenders action attachment slot when sceneId is provided[32m 5[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mrenders the locked mode label with no dropdown trigger when locked (#2165)[32m 10[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mpose with detachments uses REST submitPose and skips WebSocket send[32m 11[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mpose without detachments still uses REST submitPose (scene poses always take REST)[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mplain pose (no composerMode) with sceneId/personaId uses REST submitPose[32m 11[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mpose with no sceneId uses WebSocket send[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mwhisper composer mode with sceneId still dispatches via executeAction, never REST submitPose (#3760)[32m 17[2mms[22m[39m
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mkeeps the draft and surfaces an error toast when submitPose rejects (#2156)
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2ma REST pose retry of unmodified content reuses the same client_request_id (#3760 fix)
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to Popper inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Popper (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@radix-ui+react-popper@1.2.7_@types+react-dom@18.3.7_@types+react@18.3.23__@types+react_ffa2341e59ce9c78f0d0d849ccd75e57/node_modules/@radix-ui/react-popper/dist/index.mjs:30:11)
+    at Menu (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@radix-ui+react-menu@2.1.15_@types+react-dom@18.3.7_@types+react@18.3.23__@types+react@_fdc5c6ad9588e9f7f12c779229676662/node_modules/@radix-ui/react-menu/dist/index.mjs:50:11)
+    at Provider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@radix-ui+react-context@1.1.2_@types+react@18.3.23_react@18.3.1/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DropdownMenu (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@radix-ui+react-dropdown-menu@2.1.15_@types+react-dom@18.3.7_@types+react@18.3.23__@typ_8ec93851da28661231dcc925c4c21d7f/node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs:23:5)
+    at ModeSelector (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/scenes/components/ModeSelector.tsx:22:3)
+    at div
+    at div
+    at div
+    at RichTextInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/components/RichTextInput.tsx:38:3)
+    at div
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mdoes not clear a newer edit made after a REST pose request was sent but before the response arrives
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","5"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mshows no entrance state and no technique attachment once the viewer has entered
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mshows the entrance state with the technique attachment before the first pose
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2msends the first pose as the entrance
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mdirected pose composer mode sends target_names on the REST path (#2156)[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mkeeps the draft and surfaces an error toast when submitPose rejects (#2156)[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22ma REST pose retry of unmodified content reuses the same client_request_id (#3760 fix)[32m 14[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mdoes not clear a newer edit made after a REST pose request was sent but before the response arrives[32m 60[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mshows no entrance state and no technique attachment once the viewer has entered[32m 7[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mshows the entrance state with the technique attachment before the first pose[32m 4[2mms[22m[39m
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2msubmitting an entrance pose with an attached technique dispatches createActionRequest with the submitPose response id (#2183)
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2mplain entrance (no technique attached) sends no action request — regression
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mCommandInput[2m > [22m[2ma plain (non-entrance) pose sends no action request — byte-identical regression
+[22m[39mQuery data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["scene","1"]
+
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msends the first pose as the entrance[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msubmitting an entrance pose with an attached technique dispatches createActionRequest with the submitPose response id (#2183)[32m 11[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mplain entrance (no technique attached) sends no action request — regression[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mrenders the speaking-as chip with name and avatar when provided[32m 8[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mrenders the speaking-as chip with initial-letter avatar when thumbnailUrl is null[32m 4[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mdoes not render the speaking-as chip when the prop is omitted (legacy callers)[32m 3[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22ma plain (non-entrance) pose sends no action request — byte-identical regression[32m 8[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msends say via executeAction with a registry key and client_request_id, not raw text[32m 10[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mtt (tabletalk) dispatches via executeAction with a place kwarg and client_request_id when currentPlaceId is known (#3760 fix)[32m 7[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mtt falls back to legacy send when currentPlaceId is not known[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mwhisper falls back to legacy send when the target cannot be resolved to a room character[32m 16[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mkeeps the draft until the ACTION_RESULT ack arrives, then clears it (ack-gated clearing)[32m 13[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mignores an ACTION_RESULT for a different dispatch, then resolves on the matching one (#3781)[32m 11[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mkeeps the draft and surfaces an error toast when the ACTION_RESULT reports failure[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mshows the pending "Sending…" indicator and disables the textarea while a live send is in flight[32m 10[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mre-enables the textarea once the pending send resolves[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mshows the typed rejection reason inline and keeps the textarea editable[32m 13[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22ma hydrated unknown-status draft resolves to the stranded banner, not the live Check status/Retry pair[32m 21[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mshows the stranded-draft banner for a pending draft hydrated from storage with no live send in flight[32m 27[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mfalls back to roomName, never the raw draftScope cache key, when no composerMode label is set[32m 4[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mDiscard on the stranded banner clears the draft and dismisses the banner[32m 13[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22m"Resume & retry" redispatches under the ORIGINALLY stored whisper mode even though the live composerMode has since changed to pose[32m 10[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22man ordinary Send on an untouched rejected whisper draft redispatches as whisper, not the live pose mode (the Send-button leak)[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22ma legacy WS fallback dispatch (unresolvable whisper target) clears the v2 draft so no stranded banner reappears (Finding 3760 final review)[32m 12[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mediting the text after a stranded whisper draft picks up the CURRENT live mode instead (an edit is a genuinely new attempt)[32m 14[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mshows the storage-unavailable notice when sessionStorage writes fail[32m 7[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mdoes not show the storage-unavailable notice when sessionStorage writes succeed[32m 6[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mreconnect mid-send (#3760 Task 12)[2m > [22mmarks a live in-flight send unknown on reconnect and auto-resolves it via the lookup endpoint once it landed[32m 20[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mreconnect mid-send (#3760 Task 12)[2m > [22mleaves the draft resolvable via the live-unknown banner when the reconnect lookup finds no record[32m 18[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mreconnect mid-send (#3760 Task 12)[2m > [22mshows the LIVE unknown banner (Check status/Retry), not the stranded banner, right after a reconnect marks an in-flight send unknown[32m 23[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mreconnect mid-send (#3760 Task 12)[2m > [22mdoes not touch the draft on a plain ready toggle with nothing in flight[32m 7[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22mcomposer delivery states (#3760 Task 11)[2m > [22mreconnect mid-send (#3760 Task 12)[2m > [22mdoes not clobber a draft the session-level reconciliation scan already resolved as landed[32m 15[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msingle draft store (#3784)[2m > [22mhydrates the textarea from the stored draft content on mount[32m 5[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msingle draft store (#3784)[2m > [22mwrites typed text straight to the draft row, with no second key alongside it[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msingle draft store (#3784)[2m > [22mswaps drafts when draftScope changes and carries no text between rooms[32m 8[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msingle draft store (#3784)[2m > [22mcarries the draft into the real room when a provisional scope settles[32m 6[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msingle draft store (#3784)[2m > [22mdoes not carry a provisional draft into a conversation tab that opens first[32m 6[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msingle draft store (#3784)[2m > [22mappends a @target onto the existing draft and persists the result[32m 7[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msingle draft store (#3784)[2m > [22ma rejected send keeps its text on screen AND in storage, ready to retry[32m 10[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msingle draft store (#3784)[2m > [22man ack clears content and status together — the pair that used to be able to drift[32m 16[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mCommandInput[2m > [22msingle draft store (#3784)[2m > [22mrecalls a sent command with ArrowUp once the composer is empty again[32m 13[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mcompanion emote branch (#3294, Finding 5)[2m > [22mdispatches companionEmote and clears the draft on success[32m 62[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mcompanion emote branch (#3294, Finding 5)[2m > [22mdoes not clear a newer edit made after a companion emote request was sent but before the response arrives[32m 56[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mcompanion emote branch (#3294, Finding 5)[2m > [22mthreads a client_request_id and reuses it on retry of unmodified content (#3782)[32m 66[2mms[22m[39m
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mreply chip, reply_to wiring, and pre-emptive refusal (#3787)[2m > [22m[2momits reply_to entirely when there is no reply target (unchanged shape for an ordinary pose)
+[22m[39mWarning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+[90mstderr[2m | src/game/components/CommandInput.test.tsx[2m > [22m[2mreply chip, reply_to wiring, and pre-emptive refusal (#3787)[2m > [22m[2mallows a reply to a room-held target while the viewer is at a Place (#3811 -- a Place declutters, it does not isolate)
+[22m[39mWarning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+Warning: An update to CommandInput inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at CommandInput (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.tsx:72:3)
+    at QueryClientProvider (file:///workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/node_modules/.pnpm/@tanstack+react-query@5.83.0_react@18.3.1/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+    at Wrapper (/workspaces/arxii/.claude/worktrees/weekly-sonarcloud-2026-10-19/frontend/src/game/components/CommandInput.test.tsx:114:22)
+
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mmention autocomplete source[2m > [22muses scene participants when sceneId is provided[32m 18[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mreply chip, reply_to wiring, and pre-emptive refusal (#3787)[2m > [22mshows the excerpt alone for an outcome/action reply target -- never the Narrator bookkeeping author[32m 6[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mreply chip, reply_to wiring, and pre-emptive refusal (#3787)[2m > [22mstill names the writer for an ordinary pose/say reply target[32m 4[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mreply chip, reply_to wiring, and pre-emptive refusal (#3787)[2m > [22msends reply_to on the REST submit-pose call when replying, and clears the reply context on success[32m 11[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mreply chip, reply_to wiring, and pre-emptive refusal (#3787)[2m > [22momits reply_to entirely when there is no reply target (unchanged shape for an ordinary pose)[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mreply chip, reply_to wiring, and pre-emptive refusal (#3787)[2m > [22mallows a reply to a room-held target while the viewer is at a Place (#3811 -- a Place declutters, it does not isolate)[32m 11[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mreply chip, reply_to wiring, and pre-emptive refusal (#3787)[2m > [22mrenders no refusal when the reply target is reachable[32m 4[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mtag reachability (#3810)[2m > [22mshows the tag-refusal banner and disables Send when a mode switch carries a stale target[32m 9[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mtag reachability (#3810)[2m > [22mdoes not show the tag-refusal banner when the target shares the current place[32m 8[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mtag reachability (#3810)[2m > [22mdoes not show the tag-refusal banner in whisper mode regardless of location[32m 18[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mtag reachability (#3810)[2m > [22mrecomputes live on a mode switch that carries a stale target across, without unmounting[32m 17[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mtag reachability (#3810)[2m > [22mrecomputes live when a fresh room_state push moves an already-tagged target to a different place, with composerMode unchanged[32m 15[2mms[22m[39m
+ [32m✓[39m src/game/components/CommandInput.test.tsx[2m > [22mtag reachability (#3810)[2m > [22mrecomputes live when the actor moves to a different place, with the target and composerMode unchanged[32m 14[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m109 passed[39m[22m[90m (109)[39m
+[2m   Start at [22m 20:13:28
+[2m   Duration [22m 3.51s[2m (tests 52%, environment 18%, import 13%, transform 13%, setup 3%)[22m
