@@ -29640,6 +29640,9 @@ export interface components {
       persona_id: number | null;
       thumbnail_url: string;
       played_by: string;
+      played_by_role:
+        | (components['schemas']['PlayedByRoleEnum'] | components['schemas']['NullEnum'])
+        | null;
       loan_id: number | null;
       loan_status: string | null;
       tier: string | null;
@@ -46591,6 +46594,13 @@ export interface components {
       source: string;
       level: number;
     };
+    /**
+     * @description * `gm` - GM
+     *     * `guide` - Guide
+     *     * `staff` - Staff
+     * @enum {string}
+     */
+    PlayedByRoleEnum: 'gm' | 'guide' | 'staff';
     /**
      * @description Read-only serializer for PlayerAction — the homogeneous availability descriptor.
      *

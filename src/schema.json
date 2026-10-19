@@ -49190,6 +49190,11 @@ components:
           type: string
         played_by:
           type: string
+        played_by_role:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/PlayedByRoleEnum'
+          - $ref: '#/components/schemas/NullEnum'
         loan_id:
           type: integer
           nullable: true
@@ -49218,6 +49223,7 @@ components:
       - opponent_ids
       - persona_id
       - played_by
+      - played_by_role
       - roster_entry_id
       - thumbnail_url
       - tier
@@ -81860,6 +81866,16 @@ components:
       - label
       - level
       - source
+    PlayedByRoleEnum:
+      enum:
+      - gm
+      - guide
+      - staff
+      type: string
+      description: |-
+        * `gm` - GM
+        * `guide` - Guide
+        * `staff` - Staff
     PlayerAction:
       type: object
       description: |-
