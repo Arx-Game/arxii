@@ -40,6 +40,8 @@ import {
   BACKGROUND_KEYS,
   IDENTITY_KEYS,
   NpcStepError,
+  BORROW_AUDIENCES,
+  LEND_POLICIES,
   createNpc,
   fetchNpcDetail,
   fetchNpcTemplates,
@@ -78,15 +80,6 @@ const QUICK_CHIPS: { section: FoldedSection; label: string }[] = [
   { section: 'lending', label: 'Owner and lending' },
 ];
 
-const LEND_POLICIES: { value: LendPolicy; label: string }[] = [
-  { value: 'not_lent', label: 'Only me' },
-  { value: 'on_request', label: 'Me, and anyone I lend them to' },
-  { value: 'without_asking', label: 'Anyone who borrows them, without asking' },
-];
-const BORROW_AUDIENCES: { value: BorrowAudience; label: string }[] = [
-  { value: 'gms', label: 'Any GM' },
-  { value: 'gms_and_guides', label: 'Any GM or Guide' },
-];
 /** `StoryNPCSettings`' column defaults: what a new NPC has unless the GM changes it. */
 const DEFAULT_SETTINGS = {
   listed_on_npc_roster: false,

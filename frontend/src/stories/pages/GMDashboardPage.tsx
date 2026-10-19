@@ -12,6 +12,7 @@
  * rather than blowing the error boundary.
  */
 
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ import { apiFetch } from '@/evennia_replacements/api';
 import { parseDispatchBody } from '@/lib/errors';
 import { gmKeys, useGMAttention } from '@/gm/queries';
 import { NpcForm } from '@/gm/npcs/NpcForm';
+import { NpcOwnerPanel } from '@/gm/npcs/NpcOwnerPanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useAccount } from '@/store/hooks';
 import { GMPromptFilterCard } from '../components/GMPromptFilterCard';
@@ -160,6 +162,7 @@ function GMDashboardContent() {
   // general character list client-side (no dedicated backend endpoint needed).
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const myNpcs = myRosterEntries.filter((entry) => entry.roster_type === 'NPC');
+  const [managedNpcId, setManagedNpcId] = useState<number | null>(null);
 
   if (isLoading) {
     return <Skeleton className="h-96 w-full" />;
@@ -247,10 +250,25 @@ function GMDashboardContent() {
         ) : (
           <ul className="space-y-1 text-sm">
             {myNpcs.map((entry) => (
-              <li key={entry.id}>
-                <Link to={`/characters/${entry.id}`} className="font-medium hover:underline">
-                  {entry.name}
-                </Link>
+              <li key={entry.id} className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <Link to={`/characters/${entry.id}`} className="font-medium hover:underline">
+                    {entry.name}
+                  </Link>
+                  {entry.loan === null && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-expanded={managedNpcId === entry.id}
+                      onClick={() => setManagedNpcId(managedNpcId === entry.id ? null : entry.id)}
+                    >
+                      {managedNpcId === entry.id ? 'Close' : `Manage ${entry.name}`}
+                    </Button>
+                  )}
+                </div>
+                {managedNpcId === entry.id && (
+                  <NpcOwnerPanel entryId={entry.id} name={entry.name} />
+                )}
               </li>
             ))}
           </ul>

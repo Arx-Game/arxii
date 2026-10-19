@@ -73,6 +73,12 @@ vi.mock('@/roster/queries', () => ({
 // The new-NPC form (#4418) reads its own templates and dispatches its own mint;
 // it is covered by gm/npcs/__tests__/NpcForm.test.tsx, so it is stubbed here and
 // never shifts the ordered apiFetch mocks below.
+vi.mock('@/gm/npcs/NpcOwnerPanel', () => ({
+  NpcOwnerPanel: ({ entryId }: { entryId: number }) => (
+    <div data-testid="npc-owner-panel" data-entry={entryId} />
+  ),
+}));
+
 vi.mock('@/gm/npcs/NpcForm', () => ({
   NpcForm: ({ mode, sceneId }: { mode?: string; sceneId?: number | null }) => (
     <div data-testid="npc-form" data-mode={mode} data-scene={String(sceneId)} />
@@ -358,5 +364,28 @@ describe('GMDashboardPage new NPC form (#4418)', () => {
     render(withProviders(<GMDashboardPage />, '/gm/dashboard?scene=4'));
 
     expect(await screen.findByTestId('npc-form')).toHaveAttribute('data-scene', '4');
+  });
+});
+
+/** The owner's panel (#4418): only an NPC the viewer owns can be managed, not a borrowed one. */
+describe('GMDashboardPage owner panel (#4418)', () => {
+  it('offers Manage on an owned NPC and not on a borrowed one', async () => {
+    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+      data: [
+        { id: 9, name: 'Captain Vael', roster_type: 'NPC', loan: null },
+        { id: 10, name: 'Sergeant Mira', roster_type: 'NPC', loan: { id: 4 } },
+      ],
+    } as unknown as ReturnType<typeof useMyRosterEntriesQuery>);
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDashboard),
+    } as Response);
+
+    render(withProviders(<GMDashboardPage />));
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Manage Captain Vael' }));
+    expect(screen.getByTestId('npc-owner-panel')).toHaveAttribute('data-entry', '9');
+    expect(screen.queryByRole('button', { name: 'Manage Sergeant Mira' })).not.toBeInTheDocument();
   });
 });

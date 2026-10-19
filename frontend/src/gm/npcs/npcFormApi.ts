@@ -23,6 +23,16 @@ export type NpcSettingsPatch = components['schemas']['PatchedNPCDetailRequest'];
 export type LendPolicy = components['schemas']['LendPolicyEnum'];
 export type BorrowAudience = components['schemas']['BorrowAudienceEnum'];
 
+export const LEND_POLICIES: { value: LendPolicy; label: string }[] = [
+  { value: 'not_lent', label: 'Only me' },
+  { value: 'on_request', label: 'Me, and anyone I lend them to' },
+  { value: 'without_asking', label: 'Anyone who borrows them, without asking' },
+];
+export const BORROW_AUDIENCES: { value: BorrowAudience; label: string }[] = [
+  { value: 'gms', label: 'Any GM' },
+  { value: 'gms_and_guides', label: 'Any GM or Guide' },
+];
+
 type Schemas = components['schemas'];
 type CopySectionRequest = Schemas['CopySectionRequest'];
 type CopyAsNewRequest = Schemas['CopyAsNewRequest'];
