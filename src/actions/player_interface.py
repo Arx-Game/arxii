@@ -654,6 +654,7 @@ def _combat_actions(
     from world.magic.services.capability_requirements import (  # noqa: PLC0415
         technique_performable,
     )
+    from world.magic.services.magic_skills import cast_check_type  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
     from world.magic.services.targeting import (  # noqa: PLC0415
         position_target_shape,
@@ -687,8 +688,8 @@ def _combat_actions(
             continue
         template = technique.action_template  # guaranteed non-None: filtered above
         # #2014: the caster's own provisioned magic check wins over the template's
-        # fallback (ADR-0096) — mirrors what the resolver actually rolls at dispatch.
-        check_type = personal_check or template.check_type
+        # fallback (ADR-0096), the same rule resolve_cast_check rolls at dispatch.
+        check_type = cast_check_type(personal_check, technique)
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
             technique_id=technique.pk,

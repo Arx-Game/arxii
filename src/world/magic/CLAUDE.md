@@ -288,8 +288,10 @@ casting never hard-fails with "no template." The resolution chain:
   the flavor pick cannot affect the rolled check: **every** cast path (standalone,
   combat, clash, battle technique resolution in `world/battles/resolution.py`)
   resolves the check via `resolve_cast_check` (personal check first, template
-  fallback — ADR-0096) — as does the combat availability descriptor
-  (`actions/player_interface.py`), so the action-picker UI shows the same check
+  fallback — ADR-0096). The combat availability descriptor
+  (`actions/player_interface.py`) reads the personal check once per caster and
+  calls `cast_check_type(personal_check, technique)`, the same precedence
+  helper `resolve_cast_check` uses, so the action-picker UI shows the same check
   the resolver rolls — and none of them read
   `technique.action_template.check_type` directly anymore. Resolution:
   `technique_builder.resolve_cast_action_template()`.
@@ -332,7 +334,7 @@ Every magical roll adds skills staff chose in admin; no skill is named in code. 
   `ConditionCategory.adds_loss_of_self_skills`.
 - **Services (`services/magic_skills.py`):** `activity_skill_terms(activity)`,
   `technique_skill_term(character, technique)` / `technique_skill_term_for_path(technique, path)`,
-  `resolve_cast_check`, `involved_trait_ids`, `cast_involved_trait_ids`. `loss_of_self_terms(template)`
+  `cast_check_type(personal_check, technique)` (ADR-0096 precedence, once), `resolve_cast_check`, `involved_trait_ids`, `cast_involved_trait_ids`. `loss_of_self_terms(template)`
   is in `world/conditions/services.py`. Terms ride the check engine's `extra_traits`.
 - **Technique skill order:** technique override, else the caster's current Path (Major Gift),
   else the Gift (Minor Gift). Inactive skills give no term.

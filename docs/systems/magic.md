@@ -627,6 +627,7 @@ nothing, the roll runs without the added skill; there is no placeholder data.
 | `activity_skill_terms(activity)` | `services/magic_skills.py` | One `ExtraTraitTerm` per mapped row whose skill is active; empty when nothing is mapped |
 | `technique_skill_term(character, technique)` | `services/magic_skills.py` | The technique skill as a term at weight 1.00, or None |
 | `technique_skill_term_for_path(technique, path)` | `services/magic_skills.py` | The same rule with the Path already read, for callers resolving many techniques for one caster |
+| `cast_check_type(personal_check, technique)` | `services/magic_skills.py` | The ADR-0096 check type precedence (personal check, else the action template's), shared by `resolve_cast_check` and the combat action picker |
 | `resolve_cast_check(character, technique)` / `CastCheck` | `services/magic_skills.py`, `types/magic_skills.py` | Frozen `(check_type, extra_traits)` for a cast |
 | `involved_trait_ids(check_type, extra_traits)` / `cast_involved_trait_ids(cast_check)` | `services/magic_skills.py` | Trait ids a roll or cast involves, for thread pulls |
 | `loss_of_self_terms(template)` | `world/conditions/services.py` | The `RESISTING_LOSS_OF_SELF` terms for a condition template whose category is marked, else none |

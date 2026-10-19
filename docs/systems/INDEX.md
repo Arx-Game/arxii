@@ -18,7 +18,7 @@
   (override) set a cast's skill; `ConditionCategory.adds_loss_of_self_skills` marks the
   conditions whose resists add the `RESISTING_LOSS_OF_SELF` skills. Services in
   `world/magic/services/magic_skills.py`: `activity_skill_terms`, `technique_skill_term`,
-  `technique_skill_term_for_path`, `resolve_cast_check` / `CastCheck` (replaces
+  `technique_skill_term_for_path`, `cast_check_type`, `resolve_cast_check` / `CastCheck` (replaces
   `resolve_cast_check_type`), `involved_trait_ids`, `cast_involved_trait_ids`;
   `loss_of_self_terms` in `world/conditions/services.py`. The skills ride the check engine's
   `extra_traits`; cast thread pulls now include the cast's stat and skills. The Anima Check

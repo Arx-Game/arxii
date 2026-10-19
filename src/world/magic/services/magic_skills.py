@@ -91,6 +91,19 @@ def technique_skill_term(
     return technique_skill_term_for_path(technique, path)
 
 
+def cast_check_type(personal_check: CheckType | None, technique: Technique) -> CheckType | None:
+    """The check type a cast of ``technique`` rolls, given the caster's personal check.
+
+    ADR-0096 precedence, held in one place: the caster's personal magic check, else the
+    technique's action template check, else None. A caller resolving many techniques for
+    one caster reads ``get_character_cast_check`` once and passes it in.
+    """
+    if personal_check is not None:
+        return personal_check
+    template = technique.action_template
+    return template.check_type if template is not None else None
+
+
 def resolve_cast_check(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM — Evennia character
     technique: Technique,
@@ -101,9 +114,7 @@ def resolve_cast_check(
     else the technique's action template check. None when neither exists; callers that
     require a concrete check guard on that.
     """
-    check_type = get_character_cast_check(character)
-    if check_type is None and technique.action_template is not None:
-        check_type = technique.action_template.check_type
+    check_type = cast_check_type(get_character_cast_check(character), technique)
     if check_type is None:
         return None
     term = technique_skill_term(character, technique)
