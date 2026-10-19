@@ -906,6 +906,36 @@ narration needs a new `GMPromptKind` + `GMPromptGroup` mapping + event-source ca
 the queue, filter, and composer surfaces are already generic over `kind` and need no
 further change.
 
+## Magical skills, slice 1 (#4450, ADR-4450, BUILT 2026-10-18)
+
+Every magical roll now includes skills that staff choose in admin; before this a Tradition gave
+no mechanical content to train, and magic drew on three magic-category skills only through the
+caster's personal Anima Check.
+
+**Built:**
+- Check engine: `ExtraTraitTerm` and a keyword-only `extra_traits` on the roll functions
+  (`docs/systems/checks.md`). Terms score like extra check type rows, develop once per trait per
+  roll, and join the roll's involved traits.
+- Models: `MagicActivity` (18 kinds of roll), `MagicActivitySkill`, `Path.technique_skill`,
+  `Gift.technique_skill` (Minor Gifts only, DB constraint), `Technique.skill`,
+  `ConditionCategory.adds_loss_of_self_skills`. Schema-only migrations, no placeholder rows.
+- `world/magic/services/magic_skills.py`: the technique skill order (technique override, then the
+  caster's current Path for a Major Gift, then the Gift for a Minor Gift), `resolve_cast_check`
+  and `CastCheck` (replacing `resolve_cast_check_type`), activity terms, `loss_of_self_terms`.
+- Roll sites: all casts (scene, combat round, joust, clash, interception, battle, ward
+  penetration, social action, standoff display cast with per-technique grades) and every activity
+  roll in the `MagicActivity` list.
+- Cast thread pulls include the cast's stat, personal skill and technique skill, so a TRAIT
+  thread on any of them is offered and pulls.
+- Character creation no longer offers MAGIC-category skills as the Anima Check skill.
+- Admin changelists and fields for every mapping; three Required content probes (unmapped
+  activities, Paths and Minor Gifts).
+
+**Follow-ups, filed separately:** #4456 (fixed-value magic becomes checks that scale a cost or
+benefit by result tier), #4457 (Traditions train the magical skills; Orphans lack them), #4458
+(resonance-flavoured options on threads in magical skills). **Open tuning question:** trained
+casters' results shift upward against today's difficulty bands; check after play.
+
 ---
 
 ## Deeper design & history

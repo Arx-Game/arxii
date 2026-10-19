@@ -11,6 +11,19 @@
 
 ### Magic
 
+- **Magical skills (#4450, ADR-4450):** every magical roll adds skills staff choose in admin;
+  no skill is named in code. `MagicActivity` (18 kinds of roll) plus `MagicActivitySkill`
+  (`activity`, `skill`, `weight`) map a roll to skills; `Path.technique_skill` (Major Gift
+  techniques), `Gift.technique_skill` (Minor Gifts only, DB constraint) and `Technique.skill`
+  (override) set a cast's skill; `ConditionCategory.adds_loss_of_self_skills` marks the
+  conditions whose resists add the `RESISTING_LOSS_OF_SELF` skills. Services in
+  `world/magic/services/magic_skills.py`: `activity_skill_terms`, `technique_skill_term`,
+  `technique_skill_term_for_path`, `resolve_cast_check` / `CastCheck` (replaces
+  `resolve_cast_check_type`), `involved_trait_ids`, `cast_involved_trait_ids`;
+  `loss_of_self_terms` in `world/conditions/services.py`. The skills ride the check engine's
+  `extra_traits`; cast thread pulls now include the cast's stat and skills. The Anima Check
+  pick excludes MAGIC-category skills, and three Required content probes list unmapped
+  activities, Paths and Minor Gifts. Details: [magic.md](magic.md) "Magical skills".
 - **Facet vocabulary guards (#4197, ADR-4197):** `Facet` is a flat vocabulary typed by many
   hands. `world/magic/services/facets.py` holds the one spelling rule (`facet_key`),
   `find_facet` / `near_facets` (what a spelling resolves to, and what it is near; aliases
@@ -904,6 +917,10 @@ allocations that convert AP to development points.
   from one `ActionPointPool`, and BOTH doors enforce it — the tie door reads
   `standing_weekly_ap` (ties + training), the training door reads its own training total
   plus `standing_tie_ap`, so neither counts a row twice.
+- **Magic skills (#4450):** staff map skills to magical rolls (`MagicActivitySkill`) and to
+  casts (`Path.technique_skill`, `Gift.technique_skill`, `Technique.skill`), so a trained
+  skill adds points to those rolls and develops from them. The Anima Check pick in character
+  creation excludes MAGIC-category skills. See [magic.md](magic.md) "Magical skills".
 - **Integrates with:** traits (skill checks), character_creation (skill selection),
   action_points (weekly AP spend), progression (`DevelopmentTransaction` rows),
   relationships (the shared weekly AP budget above)
@@ -972,6 +989,13 @@ Check resolution engine — converts trait values to ranks and rolls against res
   only from the check's own `ResultChart` bands for stage one, never rollmod or an outcome
   guarantee (ADR-0297). See
   "Resolution theater" in [checks.md](checks.md).
+- **Call-time skill terms (#4450, ADR-4450):** `ExtraTraitTerm(trait, weight)` in
+  `world/checks/types.py`; the keyword-only `extra_traits=()` on `perform_check`,
+  `perform_check_with_modifiers`, `select_consequence`, `compute_check_rating`,
+  `preview_check_difficulty` and `collect_check_modifiers` scores each term like an extra
+  `CheckTypeTrait` row (a trait present twice scores twice), develops each trait once per roll,
+  and adds the trait ids to the roll's `involved_traits` for capability and thread matching.
+  Magic is the first user. See "extra_traits" in [checks.md](checks.md).
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
@@ -8203,7 +8227,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     gated by `_guardian_can_fire_technique_interpose`: affordable fires unconditionally;
     unaffordable fires only when `action.confirm_soulfray_risk` was set at declaration
     (#3573) - no pool at all still fizzles regardless); rolls the guardian's own cast check
-    (`resolve_cast_check_type`, None-guarded — an unprovisioned caster fizzles the same way)
+    (`resolve_cast_check`, None-guarded — an unprovisioned caster fizzles the same way)
     against the mundane Interpose challenge's severity; debits anima (not fatigue) on any
     non-fizzle fire via `_settle_technique_interpose_cost` (#3573) - `deduct_anima(lethal=
     encounter.is_lethal)` runs the guardian into deficit when consented, and a consented
@@ -9075,7 +9099,7 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `summon_ally(payload.military=True)` now reading `payload.properties`/
   `payload.capabilities`, #1711/#1794), mechanics (`Property` via `BattleUnit.properties`;
   `HasProperties`/`HasCapabilities` `Protocol`s, #1794), checks (`perform_check` sourced from
-  `resolve_cast_check_type` — the caster's provisioned personal magic check, falling back to
+  `resolve_cast_check` (`world/magic/services/magic_skills.py`) — the caster's provisioned personal magic check, falling back to
   the cast technique's `action_template.check_type` only when unprovisioned, ADR-0096 — via
   `use_technique`; `select_consequence` for the Surrounded entry roll and resist checks,
   #1733), combat

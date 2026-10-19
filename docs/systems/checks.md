@@ -11,6 +11,7 @@ Database-defined check types with weighted trait and aspect composition, resolve
 ```python
 from world.checks.types import (
     CheckResult,  # Dataclass returned by perform_check (no roll numbers exposed)
+    ExtraTraitTerm,  # (trait, weight) a caller adds to one roll (#4450)
 )
 ```
 
@@ -124,6 +125,33 @@ result.level_points    # LEVEL_POINTS_PER_LEVEL x class level, on every check (#
 result.total_points    # Final total
 ```
 
+### extra_traits (skills added to one roll, #4450, ADR-4450)
+
+A caller can add skills to a single roll without a check type for the combination:
+
+```python
+from world.checks.types import ExtraTraitTerm
+
+result = perform_check(
+    character, check_type, target_difficulty=10,
+    extra_traits=(ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00")),),
+)
+```
+
+`extra_traits` is keyword-only with an empty default (every existing roll is unchanged) on
+`perform_check`, `perform_check_with_modifiers`, `select_consequence` (forwarded only when
+non-empty), `compute_check_rating`, `preview_check_difficulty` and `collect_check_modifiers`.
+
+- Each term scores like a `CheckTypeTrait` row: the character's value times `weight`, through the
+  skill conversion table. A trait that is on the check type and also a term, or in two terms,
+  scores once per occurrence.
+- Development: with an `effort_level`, each trait the roll used earns check-based development once
+  per roll, however many times it scored.
+- Context: the terms' trait ids join the `involved_traits` that capability scoring and TRAIT
+  thread matching see.
+- A paused (GATED) action pipeline keeps its terms on `PendingActionResolution.extra_traits`.
+- Magic is the first caller: see `docs/systems/magic.md` ("Magical skills").
+
 ### get_rollmod (public helper)
 
 ```python
@@ -226,7 +254,7 @@ term would double-count it. See ADR-0166.
 
 ```
 1. Weighted trait points
-   For each CheckTypeTrait:
+   For each CheckTypeTrait, then each extra_traits term (#4450):
      raw_value = handler.get_trait_value(trait.name)
      weighted_value = int(raw_value * weight)
      points += PointConversionRange.calculate_points(trait_type, weighted_value)
@@ -331,14 +359,14 @@ with one effective consequence is applied directly without a second wheel.
 # These are private (_prefixed) and called by perform_check internally:
 
 # Calculate weighted trait points from CheckTypeTrait entries
-_calculate_trait_points(handler, check_type) -> int
+_calculate_trait_points(handler, check_type, *, stat_override=None, extra_traits=()) -> int
 
 # Calculate aspect bonus from character's most recent path
 _calculate_aspect_bonus(character, check_type, level) -> int
 
 # Calculate weighted capability points from authored CheckTypeCapabilityModifier rows (#2505)
 # 0 with no authored rows (curated gate, never calls the capability oracle) or no sheet_data
-_calculate_capability_points(character, check_type) -> int
+_calculate_capability_points(character, check_type, *, extra_traits=()) -> int
 
 # Shared arithmetic (#2505): raw per-row `weight * (value - innate_baseline)` products
 # (#2704, ADR-0164 D3 -- deviation from baseline, not the raw value), truncated-toward-zero

@@ -57,7 +57,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `apply_condition`'s capability grant uses DISTINCT ON, so its first real gate is CI parity,
   not the local SQLite fast tier. Separately, a guardian can declare Interpose "with" a known
   protective technique (`declare_interpose(technique=...)`); the BARRIER flavor's real
-  resolution (guardian's own cast check via `resolve_cast_check_type`, anima debited instead
+  resolution (guardian's own cast check via `resolve_cast_check`, anima debited instead
   of fatigue, ally damage zeroed) is journey-proven (`TechniqueGuardianBarrierResolutionTest`,
   SQLite tier). See ADR-0118 for why the technique-guardian roll happens outside
   `use_technique`. **Consented Soulfray path (#3573, ADR-0255):** a guardian who

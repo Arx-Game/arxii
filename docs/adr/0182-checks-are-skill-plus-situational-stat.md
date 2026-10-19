@@ -50,3 +50,5 @@ Social, investigation, resist, and multi-stat checks stay separate.
 - The GM ad-hoc check model (ADR-0110) uses the default stat — the question of
   whether GMs should select from a stat palette or whether checks should emerge
   from authored situations is a separate follow-up.
+
+> **Amended by ADR-4450 (#4450, 2026-10-18):** a roll may also add skills at call time through `extra_traits`; the check type stays the base, and a `stat_override` still replaces only the STAT row.

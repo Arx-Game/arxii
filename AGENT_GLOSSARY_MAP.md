@@ -263,6 +263,11 @@ AGENT_GLOSSARY](src/world/combat/AGENT_GLOSSARY.md). `rank_difference = roller_r
 target_rank`, positive favors the roller (ADR-0165). _Avoid_: difficulty class, DC,
 pass/fail.
 
+**Extra trait term** (#4450, ADR-4450):
+A trait and weight a caller adds to one roll on top of its **CheckType**, scored like an extra
+trait row. See [checks AGENT_GLOSSARY](src/world/checks/AGENT_GLOSSARY.md). _Avoid_:
+bonus skill, synthetic check type.
+
 **Consequence Pool / graded outcome**:
 The authored pool of consequences a graded outcome draws from; difficulty comes from
 authored model/config fields routed through the pool, never hardcoded constants or binary
@@ -411,6 +416,15 @@ auto-grant), and Dramatic Surge (an unrelated combat intensity-modifier jump). F
 Surge lives in [combat AGENT_GLOSSARY](src/world/combat/AGENT_GLOSSARY.md).
 
 ## Magic spine
+
+**Magic Activity / Technique skill** (#4450, ADR-4450):
+A **Magic Activity** is a kind of magical roll (anima ritual, dispelling, sensing magic,
+worship rite, ...) that adds the skills staff mapped to it; the **Technique skill** is the one
+skill a technique cast adds, set by the technique, else the caster's Path (Major Gift) or the
+Gift (Minor Gift). Both ride the roll as **Extra trait terms**. See [magic
+AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Magic Activity", "Technique skill") and
+[checks AGENT_GLOSSARY](src/world/checks/AGENT_GLOSSARY.md) ("Extra trait term"). _Avoid_:
+magic check type, casting skill.
 
 **Thread**:
 The magic currency/anchor (`world.magic.Thread`) that ties a character to a typed target

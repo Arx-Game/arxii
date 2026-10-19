@@ -321,6 +321,30 @@ attachments (both the primary persona's authored identity tags and runtime
 `has_capability` DSL op (both in `flows/filters/evaluator.py` /
 `typeclasses/characters.py`).
 
+### Magical skills (#4450, ADR-4450)
+
+Every magical roll adds skills staff chose in admin; no skill is named in code. Full reference:
+`docs/systems/magic.md` "Magical skills".
+
+- **Models:** `MagicActivity` (`constants.py`, 18 kinds of roll), `MagicActivitySkill`
+  (`models/magic_activity.py`: activity, skill, weight; unique per pair), `Path.technique_skill`,
+  `Gift.technique_skill` (Minor only, DB constraint plus `clean()`), `Technique.skill` (override),
+  `ConditionCategory.adds_loss_of_self_skills`.
+- **Services (`services/magic_skills.py`):** `activity_skill_terms(activity)`,
+  `technique_skill_term(character, technique)` / `technique_skill_term_for_path(technique, path)`,
+  `resolve_cast_check`, `involved_trait_ids`, `cast_involved_trait_ids`. `loss_of_self_terms(template)`
+  is in `world/conditions/services.py`. Terms ride the check engine's `extra_traits`.
+- **Technique skill order:** technique override, else the caster's current Path (Major Gift),
+  else the Gift (Minor Gift). Inactive skills give no term.
+- **Adding a magical roll:** add a `MagicActivity` member and pass
+  `extra_traits=activity_skill_terms(MagicActivity.X)` at the roll. Import it inside the
+  function when the caller is `world.conditions` or `world.species` (they sit below magic). A
+  member with no `MagicActivitySkill` row adds nothing, and the Required content dashboard lists
+  it until staff map one.
+- **A new cast path** calls `resolve_cast_check(character, technique)` and passes both the
+  `check_type` and `extra_traits` to the roll, and the `CastCheck` to its thread pull context.
+- **Anima Check:** the character-creation pick excludes MAGIC-category skills.
+
 ### Dispel / Cleanse (#1585)
 
 A technique carrying `TechniqueRemovedCondition` rows strips matching conditions from the

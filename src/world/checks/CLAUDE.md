@@ -20,7 +20,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 
 ### `services.py`
 - **`perform_check(character, check_type, target_difficulty, extra_modifiers)`**: Main resolution function. Returns CheckResult.
-- **`perform_check_with_modifiers(character, check_type, ..., *, scene=None, extra_contributions=None, skip_fashion=False)`** (#2750, #2758): Thin wrapper around `perform_check` that resolves `character.character_sheet`, guards `None` for sheet-less actors (GM puppets, companions — sums `extra_contributions` `.value` into `extra_modifiers` on this path so caller modifiers aren't lost), calls `collect_check_modifiers`, and forwards `breakdown.total` additively to `perform_check`. Use this for any check that should honor conditions, equipment, fashion, capability, and distinction modifiers. Mirrors `perform_check`'s exact signature plus keyword-only `scene`, `extra_contributions` (caller-supplied labeled contributions forwarded to the aggregator), and `skip_fashion` (suppress the aggregator's location-derived FASHION block when the caller supplies fashion via `extra_contributions`).
+- **`perform_check_with_modifiers(character, check_type, ..., *, scene=None, extra_contributions=None, skip_fashion=False, extra_traits=())`** (#2750, #2758): Thin wrapper around `perform_check` that resolves `character.character_sheet`, guards `None` for sheet-less actors (GM puppets, companions — sums `extra_contributions` `.value` into `extra_modifiers` on this path so caller modifiers aren't lost), calls `collect_check_modifiers`, and forwards `breakdown.total` additively to `perform_check`. Use this for any check that should honor conditions, equipment, fashion, capability, and distinction modifiers. Mirrors `perform_check`'s exact signature plus keyword-only `scene`, `extra_contributions` (caller-supplied labeled contributions forwarded to the aggregator), and `skip_fashion` (suppress the aggregator's location-derived FASHION block when the caller supplies fashion via `extra_contributions`).
 - **`get_rollmod(character)`**: Public function that sums character and account rollmod values. Used by both checks and attempts apps.
 
 ### `consequence_resolution.py`
@@ -55,11 +55,16 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 ### `types.py`
 - **`CheckResult`**: Dataclass returned by perform_check. Contains outcome, chart, ranks, and point breakdowns. No roll numbers exposed.
 - **`ResolutionContext`**: Carries typed optional refs to whatever triggered a consequence resolution (challenge_instance, action_context, future fields). Handlers use `context.character` and `context.location`.
+- **`ExtraTraitTerm`** (#4450, ADR-4450): frozen `(trait, weight)` a caller adds to ONE roll, on top of the check type's own `CheckTypeTrait` rows. Passed as the keyword-only `extra_traits: Sequence[ExtraTraitTerm] = ()`; the empty default leaves every existing roll unchanged.
 - **`PendingResolution`**: Intermediate result holding check_result and selected_consequence. Supports future reroll/negation by separating selection from application.
 
 ## Resolution Pipeline
 
-1. Weighted trait points from CheckTypeTrait entries
+1. Weighted trait points from CheckTypeTrait entries, plus one term per `extra_traits` entry
+   (#4450): the same `value x weight`, skill conversion path (`_weighted_trait_points`), added
+   after the check type's rows and after any `stat_override`, which only ever replaces the
+   check's STAT row. A trait on the check type AND in a term, or in two terms, adds its points
+   once per occurrence. A caller drops a term whose skill is inactive before passing it.
 2. Aspect bonus from PathAspect weights * CheckTypeAspect weights * character level
 3. Level points (#2707, ADR-0166): `LEVEL_POINTS_PER_LEVEL * character level`, on EVERY check —
    a guaranteed floor, additive with (not a replacement for) the aspect bonus above, which is
@@ -96,9 +101,38 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
    for every trait the check used — the ONE chokepoint for check-driven dp accrual.
    Runs after both the rolled path and the test-rig forced-outcome path (each exactly
    once). Cheap no-op when `effort_level is None`; silently skipped when the character
-   has no `CharacterSheet`. Previously this lived only in `world.fatigue.action_pipeline
+   has no `CharacterSheet`. A roll's `extra_traits` develop too (#4450), but development is
+   once per trait per roll however many times its points counted
+   (`skill_development._developing_traits` de-duplicates by trait, because
+   `WeeklySkillUsage` has one row per character, trait and week). Previously this lived only in `world.fatigue.action_pipeline
    ._execute_action_with_fatigue`, whose public wrapper had zero production callers — the
    pipeline no longer awards at all.
+
+## Call-time skill terms: `extra_traits` (#4450, ADR-4450)
+
+A roll keeps its check type as the base and a caller may add skills to that one roll with
+`extra_traits=(ExtraTraitTerm(trait, weight), ...)`. Magic is the first user: every magical roll
+adds the skills staff mapped in admin (`world/magic/services/magic_skills.py`), so no check type
+is synthesized per character and skill.
+
+- **Who takes it** (keyword-only, default `()`): `perform_check`, `perform_check_with_modifiers`,
+  `select_consequence` (forwarded only when non-empty), `compute_check_rating`,
+  `preview_check_difficulty`, `collect_check_modifiers`, and underneath them
+  `_compute_check_breakdown`, `_calculate_trait_points`, `_calculate_capability_points`,
+  `_capability_contributions` and `_capability_point_allocation`. The forced-outcome path and
+  `test_helpers` capture (`CheckCapture.extra_traits`) carry it too.
+- **Points**: one occurrence, one contribution (see pipeline step 1).
+- **Development**: `_award_check_development(..., extra_traits=)` and
+  `award_check_development(..., extra_traits=)` award each trait once per roll, whether it came
+  from the check type, a term, or both.
+- **Context**: `_capability_point_allocation` appends the terms' trait ids (once each) to the
+  `involved_traits` of its `PullActionContext`, so a TRAIT thread on a term's skill counts when
+  capability rows are scored. `collect_check_modifiers` takes the same terms so the provenance
+  breakdown matches the roll. A caller that previews a grade passes the same terms to
+  `collect_check_modifiers` and `preview_check_difficulty` as the roll it previews.
+- **Pipeline**: `start_action_resolution` and `_run_main_step` (`actions/services.py`) take
+  `extra_traits`, and `PendingActionResolution.extra_traits` keeps them so a GATED roll resumes
+  with the same terms.
 
 ## Opposed checks — two mutually exclusive answers for the opposing side (#2707, ADR-0166)
 
@@ -147,7 +181,7 @@ the standoff verbs pass the group's highest active level. Callers that do not aw
 development: combat, standoffs, and the scenes' NPC passive resist
 (`_npc_passive_resist_increment`, `world/scenes/action_services.py`).
 
-## The modifier seam — `collect_check_modifiers(sheet, check_type, *, scene=None, extra_contributions=None, skip_fashion=False)`
+## The modifier seam — `collect_check_modifiers(sheet, check_type, *, scene=None, extra_contributions=None, skip_fashion=False, extra_traits=())`
 
 Central aggregator (`services.py`) that gathers condition / rollmod / scene /
 equipment / CHARACTER / equipment-walk / **fashion** / **CAPABILITY** contributions

@@ -45,6 +45,14 @@ from world.magic.constants import (
                              # passive_vital_bonuses returns 0 for them.
     RitualExecutionKind,     # SERVICE, FLOW
     PendingAlterationStatus, # OPEN, RESOLVED, STAFF_CLEARED
+    MagicActivity,           # 18 kinds of magical roll that add staff-mapped
+                             # skills (#4450): ANIMA_RITUAL, TECHNIQUE_LEARNING,
+                             # RITUAL_WORKING, SUSTAINING_MAGIC, DISPELLING,
+                             # MAGICAL_TREATMENT, SOULFRAY_RESILIENCE,
+                             # RESISTING_LOSS_OF_SELF, SOUL_TETHER_RESCUE,
+                             # COURT_PETITION, FURY_CONTROL, MOON_CONTROL,
+                             # ENDURING_HOSTILE_RESONANCE, FEEDING_RESTRAINT,
+                             # SENSING_MAGIC, WORSHIP_RITE, INVOCATION, CEREMONY
     AlterationTier,
     ALTERATION_TIER_CAPS,
     THREADWEAVING_ITEM_TYPECLASSES,
@@ -90,7 +98,7 @@ part of the Resonance Pivot — relationship flavor is now carried by
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
 | `CharacterTechnique` | Known techniques; the character's hold carries their own personalization of it (#4099, ADR-4099) | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques), `custom_name` (display only, never a lookup key; blank = the catalog name), `custom_description` (blank = the catalog description), `price` (FK `Restriction`, PRICE kind only, nullable), `early_form` (FK `TechniqueVariant`, nullable; bought in creation before the gift thread reaches its level) | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
-| `CharacterAnimaRitual` | Personalized recovery rituals | `stat`, `skill`, `resonance`, `personal_description`, `is_primary` | FK via `character.anima_rituals` |
+| Anima ritual (no model of its own) | A character's personal recovery ritual is a `Ritual` row (`SCENE_ACTION`), found with `get_character_anima_ritual`; its `RitualCheckConfig` holds the stat, skill, optional resonance and the per-character check type | `Ritual.author_account`, `Ritual.check_config` |
 
 **Anima band vocabulary (#1446).** `ANIMA_BANDS` (`constants.py`) is a descending
 `(min_ratio, label)` tuple (PLACEHOLDER labels pending Apostate rewrite — brimming /
@@ -514,6 +522,7 @@ per-technique via the FK. Key surfaces:
 | `get_standalone_cast_template()` | `seeds_cast.py` | Retrieves the shared ActionTemplate; called by `create_technique` default |
 | `ensure_character_magic_check_type(character_sheet, *, stat, skill)` | `seeds_checks.py` | Synthesizes a per-character `CheckType` (pattern: `character_magic_check_type_name()`) for that character's stat + skill |
 | `get_character_cast_check(character)` | `services/anima.py` | Resolves the per-character check type for cast resolution |
+| `resolve_cast_check(character, technique)` | `services/magic_skills.py` | The one resolver every cast path calls (#4450, replaces `resolve_cast_check_type`): returns a `CastCheck(check_type, extra_traits)` or None. Check type precedence is unchanged (ADR-0096); `extra_traits` holds the technique skill term |
 | `get_character_anima_ritual(character)` | `services/anima.py` | Retrieves the character's personal SCENE_ACTION `Ritual` (their anima ritual) |
 | `provision_player_anima_ritual(...)` | `services/anima.py` | Points `RitualCheckConfig.check_type` at the per-character check so ritual and technique casts share the same roll |
 | `ensure_technique_catalog_content()` | `seeds_cast.py` | Idempotent seed: curated catalog of consequence-pool flavors (children of the base pool) + matching ActionTemplates |
@@ -582,6 +591,80 @@ pool's own entries minus exclusions), each with `outcome_tier`, `effect_types`, 
 `character_loss`, so `ConsequencePoolPicker` (`frontend/src/stories/components/
 ConsequencePoolPicker.tsx`) can preview what actually fires before a GM selects a pool for
 a beat's success/failure/expired consequences.
+
+### Magical skills (#4450, ADR-4450) [BUILT & WIRED]
+
+Every magical roll adds skills that staff choose in admin; no skill is named in code. A roll keeps
+its own check type as the base and passes the skills as `extra_traits` terms (see
+`docs/systems/checks.md`, "extra_traits"). Terms add points, earn check-based development when the
+roll passes an effort level, and count as involved traits for thread pulls. Where staff have set
+nothing, the roll runs without the added skill; there is no placeholder data.
+
+| Surface | Location | Purpose |
+|---------|----------|---------|
+| `MagicActivity` | `constants.py` | 18 `TextChoices` kinds of magical roll (see Enums) |
+| `MagicActivitySkill` | `models/magic_activity.py` | `activity`, `skill` (FK Skill, PROTECT), `weight` (default 1.00); unique on (activity, skill). One row adds one skill to every roll of that activity; an activity may map several |
+| `Path.technique_skill` | `world/classes/models.py` | Nullable FK Skill (SET_NULL): the skill every Major Gift technique cast by someone currently on this Path adds |
+| `Gift.technique_skill` | `models/gifts.py` | Nullable FK Skill (SET_NULL), Minor Gifts only: DB constraint `gift_technique_skill_minor_only` and a matching `clean()` message |
+| `Technique.skill` | `models/techniques.py` | Nullable FK Skill (SET_NULL): overrides the Path and Gift skill for this one technique |
+| `ConditionCategory.adds_loss_of_self_skills` | `world/conditions/models.py` | Boolean (default False): resist and break-free rolls on conditions in the category add the `RESISTING_LOSS_OF_SELF` skills (staff tick it for corruption, atavism, possession) |
+| `activity_skill_terms(activity)` | `services/magic_skills.py` | One `ExtraTraitTerm` per mapped row whose skill is active; empty when nothing is mapped |
+| `technique_skill_term(character, technique)` | `services/magic_skills.py` | The technique skill as a term at weight 1.00, or None |
+| `technique_skill_term_for_path(technique, path)` | `services/magic_skills.py` | The same rule with the Path already read, for callers resolving many techniques for one caster |
+| `resolve_cast_check(character, technique)` / `CastCheck` | `services/magic_skills.py`, `types/magic_skills.py` | Frozen `(check_type, extra_traits)` for a cast |
+| `involved_trait_ids(check_type, extra_traits)` / `cast_involved_trait_ids(cast_check)` | `services/magic_skills.py` | Trait ids a roll or cast involves, for thread pulls |
+| `loss_of_self_terms(template)` | `world/conditions/services.py` | The `RESISTING_LOSS_OF_SELF` terms for a condition template whose category is marked, else none |
+
+**Technique skill resolution order.** The technique's own `skill`, if set; otherwise for a Major
+Gift technique the caster's current Path `technique_skill` (`current_path_for_character`, so after a
+Crossing it is the new Path's skill, never the parent's); otherwise for a Minor Gift technique the
+Gift's `technique_skill`. A technique has no Path of its own, because one technique can sit in
+several Paths' pools. A caster with no Path or no character sheet (an NPC, a combat opponent) gets
+no Path skill. An inactive skill gives no term.
+
+**Which rolls add what.**
+- Personal-check casts roll `CastCheck.check_type` and add the technique term: scene cast, combat
+  round and joust, clash, technique interception, battle technique, ward penetration.
+- A technique-enhanced social action and a standoff display cast keep their own check type (the
+  template's, the approach's) and add the technique term only. A casting standoff approach
+  carries one grade per display technique (`ApproachView.technique_grades`), each graded with that
+  technique's term, so the grade shown is the grade rolled.
+- Activity rolls keep their check type and add `activity_skill_terms(<activity>)`: the anima
+  ritual (`perform_anima_ritual`), technique learning (learner roll and teacher rating), sanctum
+  rituals and the ritual pool shortfall (`RITUAL_WORKING`), sustaining magic, dispelling,
+  magical treatment, Soulfray resilience, Soul Tether rescue, the Court emergency draw
+  (`COURT_PETITION`), Fury control, moon control, hostile resonance ground, feeding restraint,
+  noticing a cast or sensing a twisted ceremony or a loss of self (`SENSING_MAGIC`), worship rites,
+  invocations and ceremonies.
+- Resist rolls on application, on stage advance, on a peril condition's terminal-pool roll and on
+  Surrounded entry, and break-free rolls, add the `RESISTING_LOSS_OF_SELF` terms only for a
+  condition in a marked category. A friend's
+  Rally adds none; Reveal adds the `SENSING_MAGIC` terms for a marked category.
+- Treatment is magical, and adds `MAGICAL_TREATMENT`, when a technique drives it or the template
+  spends resonance or anima or requires a bond; zero-cost, bondless first aid is mundane.
+
+**Cast thread pulls.** `build_cast_applicable_threads` and `applicable_threads_for_cast` take the
+`CastCheck`; the paid pull inside `use_technique` and combat's `commit_combat_pull` do too, so the
+cast's stat, personal skill and technique skill are in `PullActionContext.involved_traits`. A TRAIT
+thread on any of them joins the cast's applicable threads, both as a passive tier-0 effect and as
+a declared pull. A social action passes its template check plus the technique term, because that
+is what it rolls.
+
+**Character creation.** The Anima Check skill pick excludes skills whose trait category is MAGIC
+(`compute_magic_errors`, and the `AnimaCheckStep` options), so a magic skill is never counted twice
+on a cast. Existing characters keep the skill they picked.
+
+**Required content dashboard** (TUNING tier, `src/web/admin/tuning/required_content.py`): three
+probes list what staff have not set: activities with no `MagicActivitySkill` row, active Paths with
+no `technique_skill`, and Minor Gifts with no `technique_skill`. An activity staff leave unmapped
+on purpose stays listed.
+
+**Admin.** `MagicActivitySkill` changelist (activity filter, skill autocomplete, weight editable in
+the list); `technique_skill` on the Path and Gift forms, `skill` on the Technique form,
+`adds_loss_of_self_skills` on the Condition category form.
+
+**Not in this slice:** Tradition skill grants, fixed-value magic that becomes a check, and
+resonance-flavoured thread options. See `docs/roadmap/magic.md`.
 
 ### Covenant-Role Blend Power Term (#2529, ADR-0149) [BUILT & WIRED]
 
