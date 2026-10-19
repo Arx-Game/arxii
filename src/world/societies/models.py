@@ -1598,12 +1598,13 @@ class OrganizationReputationEvent(SharedMemoryModel):
     def ripple_move(self) -> str:
         """A related-organization change as the GM reads it: its size and share of the source."""
         other = self.source_event.reputation.organization.name
+        possessive = f"{other}'" if other.endswith("s") else f"{other}'s"
         relation = self._relation_to_source()
         share = (
-            f"{relation.share_percent}% of {other}'s {self.source_event.amount:+d}, "
+            f"{relation.share_percent}% of {possessive} {self.source_event.amount:+d}, "
             f"{relation.get_kind_display().lower()}"
             if relation
-            else f"{other}'s {self.source_event.amount:+d}"
+            else f"{possessive} {self.source_event.amount:+d}"
         )
         return (
             f"{self.get_cause_display().lower()}, {self.amount:+d} ({share}), "
