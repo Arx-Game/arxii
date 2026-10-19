@@ -203,14 +203,19 @@ def _require_lendable(entry: RosterEntry) -> StoryNPCSettings | None:
 def offer_npc(*, entry: RosterEntry, guide: AccountDB, scene: Scene, by: AccountDB) -> NPCLoan:
     """Offer ``entry`` to the Guide ``guide`` for ``scene``.
 
-    ``by`` must own the NPC (or be staff) and GM the scene (or be staff). A newer
-    offer of the same NPC for the same scene replaces an older one still waiting.
+    ``by`` must own the NPC (or be staff) and run the scene: staff, its GM or an
+    owner (``can_create_encounter_for_scene``). A newer offer of the same NPC for
+    the same scene replaces an older one still waiting.
     """
+    from world.combat.permissions import can_create_encounter_for_scene  # noqa: PLC0415
+
     _require_lendable(entry)
     if not (_is_owner(entry, by) or _is_staff(by)):
         msg = "Only the NPC's owner can lend it."
         raise NPCLendingError(msg)
-    if not (scene.is_gm(by) or _is_staff(by)):
+    # Whoever runs the scene, as the cast panel's own gate admits them: staff, the
+    # scene's GM, or an owner (a GM who pressed Start Scene owns it, #4418 bug 9).
+    if not can_create_encounter_for_scene(by, scene):
         msg = "Only the scene's GM can lend an NPC for it."
         raise NPCLendingError(msg)
     if not scene.is_active:

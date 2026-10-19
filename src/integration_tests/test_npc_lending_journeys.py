@@ -25,6 +25,7 @@ from world.roster.constants import NPCLoanStatus
 from world.roster.factories import NPCLoanFactory
 from world.roster.models import NPCLoan, RosterEntry
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.models import Scene
 
 MINE = "/api/roster/entries/mine/"
 SELECT = "/api/roster/entries/select/"
@@ -338,6 +339,28 @@ class AGuidePlaysALentNpc(JourneyCase):
         )
         self.assertIs(owner_session.puppet, self.vael)
         self.assertEqual(self.vael.location, self.room)
+
+    def test_a_gm_who_started_the_scene_may_offer_an_npc_for_it(self) -> None:
+        # #4418 bug 9: Start Scene makes Ravenna an owner, not the scene's GM.
+        self.scene.is_active = False
+        self.scene.save()
+        tavern = self.make_room("The Lantern")
+        self.ravenna.move_to(tavern, quiet=True)
+        self.vael.move_to(tavern, quiet=True)
+        started = self.web(self.ravenna, "start_scene", name="A Night at the Lantern")
+        self.assertTrue(started.detail.success, started.detail.message)
+        scene = Scene.objects.get(name="A Night at the Lantern")
+        self.assertFalse(scene.is_gm(self.gm))
+
+        offered = self.web(
+            self.ravenna,
+            "offer_npc",
+            roster_entry_id=self.entry.pk,
+            guide_account_id=self.guide.pk,
+            scene_id=scene.pk,
+        )
+        self.assertTrue(offered.detail.success, offered.detail.message)
+        self.assertEqual(NPCLoan.objects.get(pk=offered.detail.data["loan_id"]).scene, scene)
 
     def test_a_scene_ends_with_an_unplayed_npc_in_the_room(self) -> None:
         self.assertIsNone(self.vael.account)
