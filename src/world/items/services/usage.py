@@ -57,6 +57,32 @@ def hard_delete_item_instance(item_instance: ItemInstance) -> None:
         item_instance.delete()
 
 
+def _unequip_everywhere(item_instance: ItemInstance) -> None:
+    """An item leaving play is no longer worn: unequip through the canonical service,
+    which also invalidates the wearer's equipped_items handler."""
+    from world.items.services.equip import unequip_item  # noqa: PLC0415
+
+    for equipped in EquippedItem.objects.filter(item_instance=item_instance).select_related(
+        "character"
+    ):
+        unequip_item(equipped_item=equipped)
+
+
+def release_item_for_custody(item_instance: ItemInstance) -> None:
+    """Take an item off the body and out of any container before custody that keeps it (#4474).
+
+    Unequips it, spills a container's contents to where the container was (they stay with
+    their holder, as when a container is destroyed) and clears ``contained_in`` in memory;
+    the caller saves that field with the custody change. Used by the org vault before
+    ``dematerialize_item_instance``. Caller owns the transaction.
+    """
+    _unequip_everywhere(item_instance)
+    game_object = item_instance.game_object
+    holder_object = game_object.location if game_object is not None else None
+    _spill_contents(item_instance, landing=holder_object)
+    item_instance.contained_in = None
+
+
 def dematerialize_item_instance(item_instance: ItemInstance) -> None:
     """Drop an item's game object and keep the item: custody is the row, not the prop (#4474).
 
@@ -117,14 +143,7 @@ def destroy_consumed_item_instance(
     """
     if preserve is None:
         preserve = item_instance.differs_from_template
-    # An item leaving play is no longer worn: unequip through the canonical service,
-    # which also invalidates the wearer's equipped_items handler.
-    from world.items.services.equip import unequip_item  # noqa: PLC0415
-
-    for equipped in EquippedItem.objects.filter(item_instance=item_instance).select_related(
-        "character"
-    ):
-        unequip_item(equipped_item=equipped)
+    _unequip_everywhere(item_instance)
     game_object = item_instance.game_object
     holder_object = game_object.location if game_object is not None else None
     _spill_contents(item_instance, landing=holder_object)

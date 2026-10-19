@@ -66,6 +66,29 @@ class OrgVaultServiceTests(TestCase):
         self.assertFalse(ObjectDB.objects.filter(pk=game_object_pk).exists())
         self.assertEqual(list(self.grunt.character_sheet.character.carried_items), [])
 
+    def test_a_worn_item_is_taken_off_when_deposited(self) -> None:
+        from world.items.factories import EquippedItemFactory
+        from world.items.models import EquippedItem
+
+        item = self._held_item(self.grunt)
+        EquippedItemFactory(character=self.grunt.character_sheet, item_instance=item)
+        deposit_item_to_vault(organization=self.org, persona=self.grunt, item_instance=item)
+        self.assertFalse(EquippedItem.objects.filter(item_instance=item).exists())
+
+    def test_a_deposited_pouch_spills_its_contents_to_the_holder(self) -> None:
+        pouch = carry(self.grunt.character_sheet.character, ItemTemplateFactory(is_container=True))
+        pouch.holder_character_sheet = self.grunt.character_sheet
+        pouch.save(update_fields=["holder_character_sheet"])
+        coin_purse_item = self._held_item(self.grunt)
+        coin_purse_item.contained_in = pouch
+        coin_purse_item.save(update_fields=["contained_in"])
+        coin_purse_item.game_object.location = pouch.game_object
+        deposit_item_to_vault(organization=self.org, persona=self.grunt, item_instance=pouch)
+        coin_purse_item.refresh_from_db()
+        self.assertIsNone(coin_purse_item.contained_in)
+        self.assertEqual(coin_purse_item.game_object.location, self.grunt.character_sheet.character)
+        self.assertEqual(coin_purse_item.holder_character_sheet, self.grunt.character_sheet)
+
     def test_withdraw_puts_the_item_back_in_the_recipients_inventory(self) -> None:
         item = self._held_item(self.grunt)
         deposit_item_to_vault(organization=self.org, persona=self.grunt, item_instance=item)

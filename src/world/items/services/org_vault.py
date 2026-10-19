@@ -26,7 +26,7 @@ from world.items.org_vault_models import (
     VaultTransit,
 )
 from world.items.services.materialize import materialize_item_game_object
-from world.items.services.usage import dematerialize_item_instance
+from world.items.services.usage import dematerialize_item_instance, release_item_for_custody
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -34,6 +34,15 @@ if TYPE_CHECKING:
     from world.roster.models import RosterTenure
     from world.scenes.models import Persona
     from world.societies.models import Organization
+
+
+def _take_into_custody(item: ItemInstance) -> None:
+    """Move a held item into the org's custody: off the body and out of any container,
+    its game object dropped (the row is the custody), its holder cleared."""
+    release_item_for_custody(item)
+    dematerialize_item_instance(item)
+    item.holder_character_sheet = None
+    item.save(update_fields=["holder_character_sheet", "contained_in"])
 
 
 def get_or_create_org_vault(organization: Organization) -> OrganizationVault:
@@ -98,9 +107,7 @@ def deposit_item_to_vault(
         msg = "That item is already in a vault."
         raise ValidationError(msg)
 
-    dematerialize_item_instance(item)
-    item.holder_character_sheet = None
-    item.save(update_fields=["holder_character_sheet"])
+    _take_into_custody(item)
     holding = VaultHolding.objects.create(vault=vault, item_instance=item, deposited_by=persona)
     OrgVaultEvent.objects.create(
         vault=vault,
@@ -208,9 +215,7 @@ def _resolve_one_transit(
     if item.holder_character_sheet_id != carrier_persona.character_sheet_id:
         msg = "PLACEHOLDER: you no longer carry all of the take."
         raise ValidationError(msg)
-    dematerialize_item_instance(item)
-    item.holder_character_sheet = None
-    item.save(update_fields=["holder_character_sheet"])
+    _take_into_custody(item)
     VaultHolding.objects.create(vault=vault, item_instance=item, deposited_by=carrier_persona)
     OrgVaultEvent.objects.create(
         vault=vault,

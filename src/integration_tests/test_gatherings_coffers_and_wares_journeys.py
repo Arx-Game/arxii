@@ -10,6 +10,7 @@ from datetime import timedelta
 from django.utils import timezone
 from evennia.utils.ansi import strip_ansi
 
+from evennia_extensions.factories import ObjectDBFactory
 from integration_tests.harness import JourneyCase
 from world.areas.factories import AreaFactory
 from world.consent.constants import ConsentMode
@@ -63,6 +64,17 @@ def sheet_of(character):
 
 def profile_of(room):
     return room.room_profile
+
+
+def held_item(character, name: str) -> ItemInstance:
+    """An item in *character*'s hands as play makes one: a game object in their inventory
+    and a row they hold (#4474; an item with no game object never reaches the deposit's
+    object branch)."""
+    return ItemInstanceFactory(
+        template=ItemTemplateFactory(name=name),
+        game_object=ObjectDBFactory(db_key=name, location=character),
+        holder_character_sheet=sheet_of(character),
+    )
 
 
 def give_coppers(character, amount: int) -> None:
@@ -556,10 +568,7 @@ class BankingWithTheHouse(JourneyCase):
             name="Bank Access", service_strategy=RoomFeatureServiceStrategy.BANK
         )
         RoomFeatureInstanceFactory(room_profile=profile_of(self.bank), feature_kind=kind, level=1)
-        self.ring = ItemInstanceFactory(
-            template=ItemTemplateFactory(name="Signet Ring"),
-            holder_character_sheet=sheet_of(self.ysmay),
-        )
+        self.ring = held_item(self.ysmay, "Signet Ring")
 
     def test_an_item_goes_into_the_vault_and_comes_back_out_by_rank(self) -> None:
         self.ysmay.location = self.parlour
@@ -583,6 +592,8 @@ class BankingWithTheHouse(JourneyCase):
         self.assertIn("is now in House Coffers's vault.", result.detail.message)
         self.ring.refresh_from_db()
         self.assertIsNone(self.ring.holder_character_sheet)
+        self.assertIsNone(self.ring.game_object)  # custody is the row; the ring is still there
+        self.assertEqual(list(self.ysmay.carried_items), [])
 
         result = self.web(
             self.hobb,
@@ -605,6 +616,8 @@ class BankingWithTheHouse(JourneyCase):
         self.assertIn("from House Coffers's vault.", result.detail.message)
         self.ring.refresh_from_db()
         self.assertEqual(self.ring.holder_character_sheet_id, sheet_of(self.ysmay).pk)
+        self.assertEqual(self.ring.game_object.location, self.ysmay)  # back in her hands
+        self.assertEqual(list(self.ysmay.carried_items), [self.ring])
 
     def test_the_treasury_pays_out_to_the_head_of_house_only(self) -> None:
         transfer(amount=500, reason="journey seed", to_treasury=get_or_create_treasury(self.house))
@@ -666,9 +679,7 @@ class BankingWithTheHouse(JourneyCase):
 
     def open_transit(self, carrier, name: str) -> ItemInstance:
         """A stone the house's collector carries home, owed to its vault."""
-        stone = ItemInstanceFactory(
-            template=ItemTemplateFactory(name=name), holder_character_sheet=sheet_of(carrier)
-        )
+        stone = held_item(carrier, name)
         VaultTransit.objects.create(
             vault=self.vault, item_instance=stone, carrier_character_sheet=sheet_of(carrier)
         )
@@ -701,6 +712,7 @@ class BankingWithTheHouse(JourneyCase):
         self.assertFalse(self.open_transits().exists())
         first.refresh_from_db()
         self.assertIsNone(first.holder_character_sheet)
+        self.assertIsNone(first.game_object)  # the stone survives as a row in the vault
 
         # Keeping a stone back needs the house's consent as well as her own nerve; with no
         # embezzlement consent category seeded, nobody can give it.
