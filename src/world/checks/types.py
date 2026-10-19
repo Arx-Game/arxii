@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from world.checks.constants import ModifierSourceKind
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
@@ -145,13 +147,26 @@ class ModifierContribution:
 
 @dataclass
 class ModifierBreakdown:
-    """Aggregated modifier provenance for a check."""
+    """Aggregated modifier provenance for a check.
+
+    ``total`` is the full recorded shift (what provenance and ``ConsequenceOutcome``
+    store). ``extra_modifiers_total`` is the part a caller adds into
+    ``perform_check``'s ``extra_modifiers``: it leaves out CAPABILITY contributions,
+    because the roll path (``_compute_check_breakdown``) already adds the same points
+    itself. Feeding ``total`` into ``extra_modifiers`` counts capability twice (#4453).
+    """
 
     contributions: list[ModifierContribution] = field(default_factory=list)
 
     @property
     def total(self) -> int:
         return sum(c.value for c in self.contributions)
+
+    @property
+    def extra_modifiers_total(self) -> int:
+        return sum(
+            c.value for c in self.contributions if c.source_kind != ModifierSourceKind.CAPABILITY
+        )
 
 
 @dataclass

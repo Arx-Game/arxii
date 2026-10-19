@@ -238,7 +238,7 @@ def resolve_npc_attack(
             level=opponent_action.opponent.level,
             character=opponent_action.opponent.objectdb,
         ),
-        extra_modifiers=breakdown.total,
+        extra_modifiers=breakdown.extra_modifiers_total,
         situation_ctx=situation_ctx,
         stat_override=DEFENSE_STAT,
     )

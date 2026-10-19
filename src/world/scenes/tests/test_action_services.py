@@ -1951,7 +1951,7 @@ class SocialModifierSeamTests(TestCase):
         self, mock_resolve: MagicMock, mock_collect: MagicMock
     ) -> None:
         mock_resolve.return_value = _make_pending_resolution(success=True)
-        mock_collect.return_value = SimpleNamespace(total=7)
+        mock_collect.return_value = SimpleNamespace(extra_modifiers_total=7)
 
         row = self._make_request()
         request = row.action_request
@@ -1988,7 +1988,7 @@ class SocialModifierSeamTests(TestCase):
         )
 
         mock_resolve.return_value = _make_pending_resolution(success=True)
-        mock_collect.return_value = SimpleNamespace(total=0)
+        mock_collect.return_value = SimpleNamespace(extra_modifiers_total=0)
 
         row = self._make_request()
         request = row.action_request

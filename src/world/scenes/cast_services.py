@@ -214,7 +214,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
             cast_check.check_type,
             scene=scene,
             extra_traits=cast_check.extra_traits,
-        ).total
+        ).extra_modifiers_total
 
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 

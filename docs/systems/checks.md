@@ -287,6 +287,11 @@ term would double-count it. See ADR-0166.
    # allocates the same truncated total back across rows by largest remainder
    # (now handling mixed-sign rows), so recorded contributions always sum to
    # exactly capability_points (#2505 fix).
+   # Counted ONCE (#4453): the roll path owns the points. The aggregator's CAPABILITY
+   # contributions are provenance; callers that feed a ModifierBreakdown into
+   # extra_modifiers (perform_check_with_modifiers and every direct caller) use
+   # ModifierBreakdown.extra_modifiers_total, which excludes CAPABILITY. `.total` is the
+   # full recorded shift (provenance), never a roll input.
 
 3. Total = trait_points + specialization_points + aspect_bonus + level_points + capability_points
    + extra_modifiers

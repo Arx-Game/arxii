@@ -216,3 +216,15 @@ MATERIAL_AUTO_SELL_THRESHOLD = 5000
 # yields at the lowest controlled rung only; higher rungs earn through fealty tithes.
 # PLACEHOLDER - magnitude is Apostate's tuning call.
 TERRITORY_BASE_PER_UNIT = 100
+
+
+class HolderKind(models.TextChoices):
+    """What kind of holder one side of a ``CurrencyTransfer`` was (#4467).
+
+    Blank means the side had no holder at all: a mint has no source, a sink no
+    destination. The kind survives the holder, which is what lets the ledger keep a
+    row whose purse or treasury has since been deleted.
+    """
+
+    PURSE = "purse", "Character purse"
+    TREASURY = "treasury", "Organization treasury"

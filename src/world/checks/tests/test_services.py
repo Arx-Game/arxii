@@ -23,6 +23,7 @@ from world.checks.services import (
     chart_has_success_outcomes,
     compute_resist_increment,
     perform_check,
+    perform_check_with_modifiers,
     preview_check_difficulty,
 )
 from world.checks.test_helpers import force_check_outcome
@@ -904,3 +905,71 @@ class PerformCheckDevelopmentAwardTests(TestCase):
         assert usage.check_count == 1
         expected_dp = calculate_check_dev_points(EffortLevel.HIGH, path_level=1)
         assert usage.points_earned == expected_dp
+
+
+class CapabilityCountedOnceTests(TestCase):
+    """A capability deviation moves a check's total once, never twice (#4453).
+
+    ``perform_check`` adds authored capability points itself; the aggregator
+    records the same points as CAPABILITY provenance. ``perform_check_with_modifiers``
+    feeds the aggregator into ``extra_modifiers``, so only the non-capability part
+    may be fed.
+    """
+
+    def setUp(self):
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.check_type = CheckTypeFactory(name="test_svc_capability_counted_once")
+        capability = CapabilityTypeFactory(name="test_svc_counted_once_fire", innate_baseline=5)
+        target = ModifierTargetFactory(target_capability=capability)
+        CharacterModifierFactory(character=self.sheet, target=target, value=5)
+        # baseline 5, effective 10, weight 2.0 -> +10, once.
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type, capability=capability, weight=Decimal("2.0")
+        )
+
+    def test_wrapper_total_equals_perform_check_total(self):
+        bare = perform_check(self.character, self.check_type)
+        wrapped = perform_check_with_modifiers(self.character, self.check_type)
+        # Pinned: level 1 (LEVEL_POINTS_PER_LEVEL) + capability 10, counted once.
+        assert bare.total_points == LEVEL_POINTS_PER_LEVEL + 10
+        assert wrapped.total_points == LEVEL_POINTS_PER_LEVEL + 10
+
+    def test_impairment_is_counted_once(self):
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
+        impaired = CapabilityTypeFactory(name="test_svc_counted_once_impaired", innate_baseline=5)
+        target = ModifierTargetFactory(target_capability=impaired)
+        CharacterModifierFactory(character=self.sheet, target=target, value=-5)
+        impaired_check = CheckTypeFactory(name="test_svc_counted_once_impaired_check")
+        CheckTypeCapabilityModifierFactory(
+            check_type=impaired_check, capability=impaired, weight=Decimal("2.0")
+        )
+        # effective 0 vs baseline 5 -> deviation -5, weight 2.0 -> -10, once.
+        bare = perform_check(self.character, impaired_check)
+        wrapped = perform_check_with_modifiers(self.character, impaired_check)
+        assert bare.total_points == LEVEL_POINTS_PER_LEVEL - 10
+        assert wrapped.total_points == LEVEL_POINTS_PER_LEVEL - 10
+
+    def test_wrapper_adds_only_non_capability_contributions(self):
+        self.sheet.rollmod = 3
+        self.sheet.save(update_fields=["rollmod"])
+        bare = perform_check(self.character, self.check_type)
+        wrapped = perform_check_with_modifiers(self.character, self.check_type)
+        assert wrapped.total_points == bare.total_points + 3
+
+    def test_breakdown_records_capability_but_does_not_feed_it(self):
+        from world.checks.constants import ModifierSourceKind
+        from world.checks.services import collect_check_modifiers
+
+        self.sheet.rollmod = 3
+        self.sheet.save(update_fields=["rollmod"])
+        breakdown = collect_check_modifiers(self.sheet, self.check_type)
+        capability = [
+            c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.CAPABILITY
+        ]
+        assert [c.value for c in capability] == [10]
+        assert breakdown.total == 13
+        assert breakdown.extra_modifiers_total == 3

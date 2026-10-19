@@ -171,7 +171,7 @@ def _resolve_social_check(
         character,
         check_type,
         target_difficulty=target_difficulty,
-        extra_modifiers=breakdown.total,
+        extra_modifiers=breakdown.extra_modifiers_total,
         situation_ctx=situation_ctx,
     )
     return result.success_level or 0

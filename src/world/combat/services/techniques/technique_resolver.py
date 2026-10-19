@@ -89,8 +89,10 @@ class CombatTechniqueResolver:
         # the combat check honors condition + rollmod sources (the #851
         # individualization lever) and the recorded ModifierBreakdown is exhaustive:
         # every point that shifts the roll is a labeled contribution, so the
-        # provenance UI can attribute it.  breakdown.total alone is the full roll
-        # shift — no out-of-band additive the breakdown can't see.
+        # provenance UI can attribute it.  breakdown.extra_modifiers_total alone is the
+        # roll shift from outside perform_check (CAPABILITY points are in the breakdown
+        # for provenance but perform_check adds them itself, #4453) — no out-of-band
+        # additive the breakdown can't see.
         # Effort is NOT folded in here (#3066) — it is threaded straight into
         # check_fn's own effort_level parameter below, which applies the exact
         # same EFFORT_CHECK_MODIFIER internally (perform_check._compute_check_breakdown)
@@ -179,7 +181,7 @@ class CombatTechniqueResolver:
             extra_contributions=extra_contributions,
             extra_traits=self.offense_extra_traits,
         )
-        extra_modifiers = breakdown.total
+        extra_modifiers = breakdown.extra_modifiers_total
 
         # #2536 Task 5: thread the live round context so CHECK_BONUS situational
         # perks can fire on the technique's own offense check — the check-side
@@ -675,7 +677,7 @@ class CombatTechniqueResolver:
             pen_check_type,
             target_difficulty=ward
             + level_opposition(pen_check_type, level=target.level, character=target.objectdb),
-            extra_modifiers=pen_breakdown.total,
+            extra_modifiers=pen_breakdown.extra_modifiers_total,
             situation_ctx=situation_ctx,
             extra_traits=pen_extra_traits,
         )

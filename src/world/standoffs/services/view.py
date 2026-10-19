@@ -198,7 +198,7 @@ class _Grader:
         if base_key not in self.base_totals:
             self.base_totals[base_key] = collect_check_modifiers(
                 self.sheet, check_type, extra_traits=extra_traits
-            ).total
+            ).extra_modifiers_total
         extra = self.base_totals[base_key] + sum(c.value for c in contributions)
         key = (*base_key, difficulty, extra)
         if key not in self.graded:
