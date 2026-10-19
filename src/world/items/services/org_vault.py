@@ -2,7 +2,8 @@
 
 Deposit/withdraw follow the ``transfer`` discipline — atomic, row-locked on the item,
 audited (``OrgVaultEvent``). Custody is logical: a vaulted item's holder goes null and
-its ``game_object`` is dematerialized (row-only, the established pattern), so custody
+its ``game_object`` is dematerialized (row-only, the established pattern; withdraw
+materializes a new one in the recipient's inventory), so custody
 never depends on a destructible physical object. WHERE these may be performed (a bank
 room / bank-access room feature) is the action layer's prerequisite gate, not this
 layer's concern.
@@ -24,6 +25,8 @@ from world.items.org_vault_models import (
     VaultHolding,
     VaultTransit,
 )
+from world.items.services.materialize import materialize_item_game_object
+from world.items.services.usage import dematerialize_item_instance, release_item_for_custody
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -31,6 +34,15 @@ if TYPE_CHECKING:
     from world.roster.models import RosterTenure
     from world.scenes.models import Persona
     from world.societies.models import Organization
+
+
+def _take_into_custody(item: ItemInstance) -> None:
+    """Move a held item into the org's custody: off the body and out of any container,
+    its game object dropped (the row is the custody), its holder cleared."""
+    release_item_for_custody(item)
+    dematerialize_item_instance(item)
+    item.holder_character_sheet = None
+    item.save(update_fields=["holder_character_sheet", "contained_in"])
 
 
 def get_or_create_org_vault(organization: Organization) -> OrganizationVault:
@@ -95,11 +107,7 @@ def deposit_item_to_vault(
         msg = "That item is already in a vault."
         raise ValidationError(msg)
 
-    if item.game_object is not None:
-        item.game_object.delete()
-        item.game_object = None
-    item.holder_character_sheet = None
-    item.save(update_fields=["holder_character_sheet", "game_object"])
+    _take_into_custody(item)
     holding = VaultHolding.objects.create(vault=vault, item_instance=item, deposited_by=persona)
     OrgVaultEvent.objects.create(
         vault=vault,
@@ -207,11 +215,7 @@ def _resolve_one_transit(
     if item.holder_character_sheet_id != carrier_persona.character_sheet_id:
         msg = "PLACEHOLDER: you no longer carry all of the take."
         raise ValidationError(msg)
-    if item.game_object is not None:
-        item.game_object.delete()
-        item.game_object = None
-    item.holder_character_sheet = None
-    item.save(update_fields=["holder_character_sheet", "game_object"])
+    _take_into_custody(item)
     VaultHolding.objects.create(vault=vault, item_instance=item, deposited_by=carrier_persona)
     OrgVaultEvent.objects.create(
         vault=vault,
@@ -300,8 +304,8 @@ def withdraw_item_from_vault(
     ``to_persona`` lets an authorized member direct the item to someone else's hands —
     the VAULT_ITEM boon shape: the target exercises their authority on the asker's
     behalf. Raises ``ValidationError`` when the persona lacks withdraw authority or
-    the item is not in this org's vault. The item lands row-only in the recipient's
-    inventory (materialization is a separate, existing step).
+    the item is not in this org's vault. The item lands in the recipient's inventory with a
+    freshly materialized game object (the vault kept only the row).
     """
     vault = get_or_create_org_vault(organization)
     if not can_access_vault(vault, persona):
@@ -317,6 +321,9 @@ def withdraw_item_from_vault(
     holding.delete()
     item.holder_character_sheet = recipient.character_sheet
     item.save(update_fields=["holder_character_sheet"])
+    if item.game_object is None:
+        # The vault kept the row only; the recipient's inventory is object-based.
+        materialize_item_game_object(item, recipient.character_sheet)
     OrgVaultEvent.objects.create(
         vault=vault,
         item_instance=item,

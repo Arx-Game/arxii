@@ -38,7 +38,7 @@ from world.currency.services import (
 from world.items.constants import ContainerAccessPolicy, OwnershipEventType
 from world.items.exceptions import ContainerAccessDenied, TheftNotPermitted
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
-from world.items.models import OwnershipEvent
+from world.items.models import ItemInstance, OwnershipEvent
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.societies.models import LegendEntry
 
@@ -160,12 +160,10 @@ class TheftJourneyTests(TestCase):
 
         # 4. Thief deposits the stolen cache — redemption credits their purse
         # and consumes the physical instrument (never a lingering ghost object).
-        cache_pk = cache.pk  # redeem deletes the row; keep the id for the check below.
         redeem_instrument(instance=cache, to_purse=self.thief_purse)
         self.thief_purse.refresh_from_db()
         self.assertEqual(self.thief_purse.balance, 35)
-        self.assertFalse(
-            CurrencyInstrumentDetails.objects.filter(item_instance_id=cache_pk).exists()
-        )
+        # A stolen cache has provenance, so it is soft-destroyed with its history (#4474).
+        self.assertIsNotNone(ItemInstance.objects.get(pk=cache.pk).destroyed_at)
 
         self.assertEqual(self._ledger_total(), total_before)

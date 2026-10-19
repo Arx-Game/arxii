@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from world.items.gems.models import PendingRareFind
 from world.items.materials_models import OrgMaterialStock, StreamMaterialPool
+from world.items.services.usage import destroy_consumed_item_instance
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -122,7 +123,7 @@ def collect_org_materials(
     if band_pct is None:
         # Catastrophe: the collector never made it back — common value and stones alike lost.
         for stone in stones:
-            stone.delete()
+            destroy_consumed_item_instance(stone, note="Lost with the collection.")
         return MaterialCollectionResult(
             common_value_landed=0,
             stones_delivered=0,
@@ -160,7 +161,7 @@ def collect_org_materials(
                 vault=vault, item_instance=stone, carrier_character_sheet=collector_sheet
             )
     for stone in losers:
-        stone.delete()
+        destroy_consumed_item_instance(stone, note="Lost with the collection.")
     return MaterialCollectionResult(
         common_value_landed=common_landed,
         stones_delivered=len(survivors),
