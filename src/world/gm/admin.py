@@ -1,8 +1,17 @@
 """GM admin configuration."""
 
+from datetime import timedelta
+
 from django.contrib import admin, messages
-from django.db.models import QuerySet
-from django.http import HttpRequest
+from django.core.exceptions import PermissionDenied
+from django.db.models import Model, QuerySet
+from django.forms import ModelForm
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from django.shortcuts import get_object_or_404
+from django.template.response import TemplateResponse
+from django.urls import URLPattern, path, reverse
+from django.utils import timezone
+from django.utils.html import format_html, format_html_join
 
 from world.gm.models import (
     AreaBuildGrant,
@@ -42,19 +51,133 @@ class GMProfileAdmin(admin.ModelAdmin):
 
 @admin.register(GuideProfile)
 class GuideProfileAdmin(admin.ModelAdmin):
+    """Staff grant the Guide role here and see what a Guide is playing (#4418).
+
+    Laid out as the approved demo's admin screen: Who (granted by is set to the
+    saving staff account), Right now (each active loan with a Return to GM link),
+    and Last 30 days (how the Guide's hand-offs went).
+    """
+
     list_display = ["display_name", "account", "is_active", "granted_by", "granted_at"]
     list_filter = ["is_active"]
-    raw_id_fields = ["account", "granted_by"]
+    raw_id_fields = ["account"]
+    # Granted by is never a form field: ``save_model`` sets it to the saving staff
+    # account, and ``granted_by_label`` shows it read-only. No widget, large or not.
+    large_table_widget_exempt = ["granted_by"]
     search_fields = ["display_name", "account__username"]
-    readonly_fields = ["active_loans"]
+    readonly_fields = ["granted_by_label", "right_now", "hand_offs"]
+    fieldsets = [
+        ("Who", {"fields": ["account", "granted_by_label", "is_active", "display_name"]}),
+        ("Right now", {"fields": ["right_now"]}),
+        ("Last 30 days", {"fields": ["hand_offs"]}),
+    ]
     actions = ["end_active_loans"]
 
-    @admin.display(description="Active NPC loans")
-    def active_loans(self, obj: GuideProfile) -> str:
-        """The major NPCs this Guide is playing now; the End-loans action ends them."""
-        loans = NPCLoan.objects.filter(borrower=obj.account, status=NPCLoanStatus.ACTIVE)
-        names = [str(loan.roster_entry) for loan in loans]
-        return ", ".join(names) or "None"
+    def save_model(
+        self, request: HttpRequest, obj: GuideProfile, form: ModelForm, change: bool
+    ) -> None:
+        """A new grant records the staff account saving it; later edits keep it."""
+        if not change:
+            obj.granted_by = request.user
+        super().save_model(request, obj, form, change)
+
+    @admin.display(description="Granted by")
+    def granted_by_label(self, obj: GuideProfile | None) -> str:
+        if obj is None or obj.pk is None:
+            return "Set to you on save"
+        return str(obj.granted_by)
+
+    @admin.display(description="Playing")
+    def right_now(self, obj: GuideProfile | None) -> str:
+        """The Guide's active loans: NPC, who lent it, the scene, and Return to GM."""
+        from world.scenes.cast_list_services import player_names  # noqa: PLC0415
+
+        if obj is None or obj.pk is None:
+            return "Nothing yet."
+        loans = list(
+            NPCLoan.objects.filter(borrower=obj.account, status=NPCLoanStatus.ACTIVE)
+            .select_related("roster_entry__character_sheet__character", "scene")
+            .order_by("pk")
+        )
+        if not loans:
+            return "Nothing right now."
+        names = player_names({loan.offered_by_id for loan in loans})
+        rows = format_html_join(
+            "",
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            (
+                (
+                    _admin_link(loan.roster_entry, _npc_name(loan)),
+                    names.get(loan.offered_by_id, ""),
+                    _admin_link(loan.scene, loan.scene.name) if loan.scene else "",
+                    format_html(
+                        '<a href="{}">Return to GM</a>',
+                        reverse(_RETURN_URL, args=[obj.pk, loan.pk]),
+                    ),
+                )
+                for loan in loans
+            ),
+        )
+        return format_html(
+            '<table class="guide-loans"><thead><tr><th>Playing</th><th>For</th>'
+            "<th>Scene</th><th></th></tr></thead><tbody>{}</tbody></table>",
+            rows,
+        )
+
+    @admin.display(description="Hand-offs")
+    def hand_offs(self, obj: GuideProfile | None) -> str:
+        from world.roster.services.npc_lending import guide_hand_off_counts  # noqa: PLC0415
+
+        if obj is None or obj.pk is None:
+            return "None yet."
+        counts = guide_hand_off_counts(
+            obj.account, since=timezone.now() - timedelta(days=HAND_OFF_WINDOW_DAYS)
+        )
+        return (
+            f"{counts.accepted} accepted, {counts.declined} declined, "
+            f"{counts.taken_back_early} taken back early"
+        )
+
+    def get_urls(self) -> list[URLPattern]:
+        return [
+            path(
+                "<int:object_id>/return-loan/<int:loan_id>/",
+                self.admin_site.admin_view(self.return_loan_view),
+                name=_RETURN_URL.removeprefix("admin:"),
+            ),
+            *super().get_urls(),
+        ]
+
+    def return_loan_view(self, request: HttpRequest, object_id: int, loan_id: int) -> HttpResponse:
+        """Confirm, then end one of this Guide's active loans (Return to GM)."""
+        from world.roster.services.npc_lending import end_loan  # noqa: PLC0415
+
+        guide = self.get_object(request, str(object_id))
+        if guide is None or not self.has_change_permission(request, guide):
+            raise PermissionDenied
+        loan = get_object_or_404(
+            NPCLoan, pk=loan_id, borrower=guide.account, status=NPCLoanStatus.ACTIVE
+        )
+        change_url = reverse(
+            f"admin:{self.opts.app_label}_{self.opts.model_name}_change", args=[guide.pk]
+        )
+        if request.method == "POST":
+            end_loan(loan, by=request.user)
+            self.message_user(request, f"{_npc_name(loan)} is back with its GM.", messages.SUCCESS)
+            return HttpResponseRedirect(change_url)
+        return TemplateResponse(
+            request,
+            "admin/guide_profile/return_loan.html",
+            {
+                **self.admin_site.each_context(request),
+                "title": "Return to GM",
+                "opts": self.opts,
+                "guide": guide,
+                "loan": loan,
+                "npc_name": _npc_name(loan),
+                "change_url": change_url,
+            },
+        )
 
     @admin.action(description="End the selected Guides' active NPC loans")
     def end_active_loans(self, request: HttpRequest, queryset: QuerySet[GuideProfile]) -> None:
@@ -69,6 +192,25 @@ class GuideProfileAdmin(admin.ModelAdmin):
             end_loan(loan, by=request.user)
             ended += 1
         self.message_user(request, f"Ended {ended} NPC loan(s).", messages.SUCCESS)
+
+
+# The Guide admin's summary window, and the name of its Return to GM page.
+HAND_OFF_WINDOW_DAYS = 30
+_RETURN_URL = "admin:arxii_guideprofile_return_loan"
+
+
+def _npc_name(loan: NPCLoan) -> str:
+    return loan.roster_entry.character_sheet.character.key
+
+
+def _admin_link(obj: Model, label: str) -> str:
+    """``label`` linked to ``obj``'s admin change page."""
+    opts = obj._meta  # noqa: SLF001
+    return format_html(
+        '<a href="{}">{}</a>',
+        reverse(f"admin:{opts.app_label}_{opts.model_name}_change", args=[obj.pk]),
+        label,
+    )
 
 
 @admin.register(AreaBuildGrant)

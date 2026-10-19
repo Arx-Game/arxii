@@ -26,14 +26,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 
 from world.roster.constants import NPCBorrowAudience, NPCLendPolicy, NPCLoanStatus
 from world.roster.models import NPCLoan
+from world.roster.types import HandOffCounts
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from datetime import datetime
 
     from evennia.accounts.models import AccountDB
 
@@ -440,6 +442,30 @@ def end_loan(loan: NPCLoan, *, by: AccountDB | None) -> None:
     if was_active:
         _clear_selection(loan.borrower, loan.roster_entry)
         _unpuppet_sessions(loan.roster_entry, keep=_holder_account(loan.roster_entry))
+
+
+def guide_hand_off_counts(account: AccountDB, *, since: datetime) -> HandOffCounts:
+    """How ``account``'s NPC hand-offs since ``since`` went (the Guide admin's summary).
+
+    A loan ended at or after its scene finished was ended by the scene
+    (``end_scene_loans`` runs after ``date_finished`` is written); one ended before
+    that, or with no scene, was taken back early. One query.
+    """
+    early = (
+        Q(scene__isnull=True)
+        | Q(scene__date_finished__isnull=True)
+        | Q(scene__date_finished__gt=F("ended_at"))
+    )
+    counts = NPCLoan.objects.filter(borrower=account).aggregate(
+        accepted=Count("pk", filter=Q(started_at__gte=since)),
+        declined=Count("pk", filter=Q(status=NPCLoanStatus.DECLINED, ended_at__gte=since)),
+        taken_back_early=Count(
+            "pk",
+            filter=Q(status=NPCLoanStatus.ENDED, started_at__isnull=False, ended_at__gte=since)
+            & early,
+        ),
+    )
+    return HandOffCounts(**counts)
 
 
 def end_scene_loans(scene: Scene) -> int:
