@@ -150,7 +150,22 @@ web, which cannot place Evennia's untyped line; `ArxCommand.search_or_raise` now
 quietly and raises once, wording several matches as Evennia's numbered list in the
 command's own typed error. The hand-built command tests that mock `caller.search` return a
 list now, as the quiet search does. The parity schema was also stale behind #4463
-(`just build-test-schema`).
+(`just build-test-schema`). Tranche 9 (2026-10-19) rules the first commands group: the
+hand-built `test_dispatchers` (46 tests), `test_friends_commands`, `test_covenant_command`,
+`test_gm_ops_command` and `test_gm_ops_catalog` are removed, and `test_consent_commands`
+keeps only its action-key registry and pull-token parsing classes. Their lines moved onto
+the harness: `look <name>'s <thing>`, `look <thing> in <bag>`, hidden bearers and
+`wear outfit` (`LookingAtThings`, `DressingAndPacking`), `home`/`home/set`/`recall`
+(`test_coming_home_journeys.py`), `friend`/`friends`/`unfriend`/`friend/all`
+(`KeepingAFriendsList`), `intimidate`/`accept`/`deny`/`accept/<band>`/`deny/blacklist`
+(`PressingSomeoneInAScene`), the covenant usages and `gm dashboard`/`gm claim`/`gmidle` in
+the gathering journey, and `gm suggest` in the staging journey. One fix in place: a plain
+`look <absent name>` still answered "Could not find" twice (the plain-look branch ran
+Evennia's loud search before raising its own error; the tranche 8 fix had reached every
+other verb), and `CmdLook` now resolves a plain look through `search_or_raise`. The
+journeys recorded two consent gaps on #3657 (the blacklist bar holds only on the web
+picker, and a telnet target is never told a request opened), and the parity schema was
+stale again behind #4471.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

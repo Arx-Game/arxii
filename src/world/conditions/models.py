@@ -11,11 +11,11 @@ Design doc: docs/plans/2026-01-25-conditions-models-design.md
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.utils.functional import cached_property
 
@@ -1582,6 +1582,21 @@ class ConditionInstance(SharedMemoryModel):
             "edge to seal, chosen at cast time. Null for non-position conditions."
         ),
     )
+
+    def delete(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, int]]:
+        """Settle the treat requests that point here, then delete (#4475).
+
+        Every removal path (healing, expiry, decay, waking, a bulk clear, combat upkeep)
+        ends in this call, so the requests are settled in one place: an open one is
+        expired because its wound is gone, and each keeps a snapshot of what it treated.
+        """
+        from world.scenes.action_services import (  # noqa: PLC0415
+            settle_treatment_requests_for_condition,
+        )
+
+        with transaction.atomic():
+            settle_treatment_requests_for_condition(self)
+            return super().delete(*args, **kwargs)
 
     class Meta:
         constraints = [

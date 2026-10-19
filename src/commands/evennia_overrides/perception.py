@@ -11,7 +11,6 @@ from actions.definitions.perception import (
 )
 from actions.types import ActionResult
 from commands.command import ArxCommand
-from commands.exceptions import CommandError
 from commands.utils.argsplit import split_on_keyword, split_possessive
 
 
@@ -65,12 +64,13 @@ class CmdLook(ArxCommand):
             if result is not None:
                 return result
 
-        # Plain look — falls through to LookAction.
-        target = self.caller.search(args)
-        if not target:
-            msg = f"Could not find '{args}'."
-            raise CommandError(msg)
-        return {"target": target}
+        # Plain look — falls through to LookAction. The quiet search answers an
+        # absent name once (#3657 tranche 9: Evennia's own search had said
+        # "Could not find" and the raised error said it again, the double line
+        # tranche 8 took off every other verb), in the same words the
+        # concealed-target rewrite in ``_execute`` uses, so the two stay
+        # indistinguishable.
+        return {"target": self.search_or_raise(args)}
 
     def _execute(self) -> None:
         """Run the plain-look dispatch, rewriting the concealment-gate failure.

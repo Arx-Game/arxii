@@ -12,14 +12,22 @@ from django.test import override_settings
 from django.utils import timezone
 from evennia.utils.ansi import strip_ansi
 
+from actions.constants import ActionTargetType
+from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import CharacterFactory
 from evennia_extensions.models import PlayerAllowList
 from integration_tests.harness import JourneyCase
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
+from world.consent.factories import SocialConsentCategoryFactory
+from world.consent.models import SocialConsentBlacklist
 from world.gm.factories import GMProfileFactory
 from world.roster.factories import RosterEntryFactory
-from world.scenes.models import BlockContactFlag, Mute, Persona, Scene
+from world.scenes.action_constants import ActionRequestStatus
+from world.scenes.action_models import SceneActionRequest
+from world.scenes.models import BlockContactFlag, Friendship, Mute, Persona, Scene
 from world.scenes.tasks import block_finalize_task
+from world.traits.factories import CheckSystemSetupFactory
 
 
 def active_scene(room) -> Scene | None:
@@ -418,3 +426,164 @@ class NarratingInPrivate(JourneyCase):
 
         self.assertIn("A cold draft finds the back of your neck.", self.feed_for(self.hobb))
         self.assertNotIn("A cold draft finds the back of your neck.", self.feed_for(self.bram))
+
+
+# A roll of 95 lands in the top band of every chart CheckSystemSetupFactory builds.
+ROLL_WELL = patch("world.checks.services.random.randint", return_value=95)
+
+
+class KeepingAFriendsList(JourneyCase):
+    """Ysmay keeps an out-of-character friends list, one character at a time or all at once."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.lantern = self.make_room("The Lantern")
+        self.ysmay = self.make_player("Ysmay", room=self.lantern)
+        self.hobb = self.make_player("Hobb", room=self.lantern)
+
+    def friends_of(self, character) -> int:
+        return Friendship.objects.filter(
+            friender_tenure__roster_entry__character_sheet__character=character
+        ).count()
+
+    def test_a_friend_is_added_listed_and_removed(self) -> None:
+        self.assertIn(
+            "Usage: friend <character>  (or friend/all <character>).",
+            self.telnet(self.ysmay, "friend"),
+        )
+        self.assertIn(
+            "This character has no friends listed.", strip_ansi(self.telnet(self.ysmay, "friends"))
+        )
+        self.assertIn(
+            "You added Hobb as a friend (from this character).",
+            self.telnet(self.ysmay, "friend Hobb"),
+        )
+        self.assertEqual(self.friends_of(self.ysmay), 1)
+        self.assertIn(
+            "Your friends (this character): Hobb", strip_ansi(self.telnet(self.ysmay, "friends"))
+        )
+        # The keyed spellings (`+friends`, `+unfriend`) are the same lines.
+        self.assertIn(
+            "Your friends (this character): Hobb", strip_ansi(self.telnet(self.ysmay, "+friends"))
+        )
+        self.assertIn(
+            "You removed Hobb as a friend (from this character).",
+            self.telnet(self.ysmay, "+unfriend Hobb"),
+        )
+        self.assertEqual(self.friends_of(self.ysmay), 0)
+        self.assertIn("Usage: unfriend <character>.", self.telnet(self.ysmay, "unfriend"))
+        self.assertIn("Could not find 'Nobody'.", self.telnet(self.ysmay, "friend Nobody"))
+        self.assertIn(
+            "All your characters now count Hobb as a friend.",
+            self.telnet(self.ysmay, "friend/all Hobb"),
+        )
+        self.assertEqual(self.friends_of(self.ysmay), 1)
+
+    def test_someone_she_has_blocked_cannot_be_her_friend(self) -> None:
+        self.telnet(self.ysmay, "+block Hobb=He will not take no for an answer.")
+        refusal = "That character is not available to add as a friend right now."
+        told = self.telnet(self.ysmay, "friend Hobb")
+        self.assertIn(refusal, told)
+        self.assertNotIn("block", told.lower())
+        self.assertIn(refusal, self.telnet(self.ysmay, "friend/all Hobb"))
+        self.assertEqual(Friendship.objects.count(), 0)
+
+
+class PressingSomeoneInAScene(JourneyCase):
+    """Ysmay moves to intimidate Hobb in a scene; the game waits on his answer."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        self.lantern = self.make_room("The Lantern")
+        self.ysmay = self.make_player("Ysmay", room=self.lantern)
+        self.hobb = self.make_player("Hobb", room=self.lantern)
+        self.bram = self.make_player("Bram", room=self.lantern)
+        self.menace = SocialConsentCategoryFactory(key="menace", name="Menace")
+        ActionTemplateFactory(
+            name="Intimidate",
+            category="social",
+            target_type=ActionTargetType.SINGLE,
+            check_type=CheckTypeFactory(name="Intimidation"),
+            consent_category=self.menace,
+        )
+        self.telnet(self.ysmay, "scene start")
+        self.watch(self.hobb)
+
+    def pending_for(self, character) -> list[SceneActionRequest]:
+        return list(
+            SceneActionRequest.objects.filter(
+                target_persona=character.sheet_data.primary_persona,
+                status=ActionRequestStatus.PENDING,
+            ).order_by("pk")
+        )
+
+    def test_a_threat_waits_on_its_target(self) -> None:
+        self.assertIn("Whom do you want to intimidate?", self.telnet(self.ysmay, "intimidate"))
+        self.assertIn("Could not find 'Nobody'.", self.telnet(self.ysmay, "intimidate Nobody"))
+        self.assertIn("You have no pending action to respond to.", self.telnet(self.hobb, "deny"))
+
+        told = self.telnet(self.ysmay, "intimidate Hobb")
+        (request,) = self.pending_for(self.hobb)
+        self.assertIn(
+            f"You move to intimidate Hobb. Awaiting their response (request #{request.pk}).", told
+        )
+        self.assertEqual(request.initiator_persona, self.ysmay.sheet_data.primary_persona)
+        self.assertEqual(request.action_key, "intimidate")
+        self.assertIn("You deny the action against you.", self.telnet(self.hobb, "deny"))
+        self.assertEqual(
+            SceneActionRequest.objects.get(pk=request.pk).status, ActionRequestStatus.DENIED
+        )
+
+        self.telnet(self.ysmay, "intimidate Hobb")
+        (request,) = self.pending_for(self.hobb)
+        with ROLL_WELL:
+            told = self.telnet(self.hobb, "accept")
+        self.assertIn("You accept the action against you.", told)
+        self.assertNotEqual(
+            SceneActionRequest.objects.get(pk=request.pk).status, ActionRequestStatus.PENDING
+        )
+        self.assertEqual(self.pending_for(self.hobb), [])
+
+    def test_an_answer_names_its_request_and_may_bar_the_asker(self) -> None:
+        self.telnet(self.ysmay, "intimidate Hobb")
+        self.telnet(self.bram, "intimidate Hobb")
+        first, second = self.pending_for(self.hobb)
+        with ROLL_WELL:
+            self.assertIn(
+                "You accept the action against you.",
+                self.telnet(self.hobb, f"accept/hard {first.pk}"),
+            )
+        self.assertEqual(
+            SceneActionRequest.objects.get(pk=second.pk).status, ActionRequestStatus.PENDING
+        )
+        # A deny with a blacklist bars the asker only once Hobb's rule for the category
+        # reads all-but-blacklist; under the default ("everyone") the entry is written and
+        # bars nobody, though the reply says otherwise (recorded on #3657).
+        self.assertIn(
+            "Menace set to all-but-blacklist.",
+            self.telnet(self.hobb, "consent category menace=blacklist"),
+        )
+        told = self.telnet(self.hobb, "deny/blacklist")
+        self.assertIn("You deny the action against you.", told)
+        self.assertIn("They can no longer target you with actions of this kind.", told)
+        self.assertEqual(
+            SceneActionRequest.objects.get(pk=second.pk).status, ActionRequestStatus.DENIED
+        )
+        # The entry is on Hobb's list, keyed by the two players' tenures. It keeps Bram off
+        # the web's target picker for this category; the typed verb opens a request all the
+        # same, since create_action_request consults no consent rule (recorded on #3657).
+        self.assertTrue(
+            SocialConsentBlacklist.objects.filter(
+                owner_tenure=self.hobb.sheet_data.roster_entry.current_tenure,
+                blocked_tenure=self.bram.sheet_data.roster_entry.current_tenure,
+                category=self.menace,
+            ).exists()
+        )
+
+    def test_a_threat_needs_a_scene(self) -> None:
+        yard = self.make_room("The Yard")
+        tam = self.make_player("Tam", room=yard)
+        self.make_player("Pim", room=yard)
+        self.assertIn("You are not in an active scene.", self.telnet(tam, "intimidate Pim"))
+        self.assertEqual(SceneActionRequest.objects.count(), 0)

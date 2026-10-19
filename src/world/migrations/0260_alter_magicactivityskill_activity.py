@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0257_vault_access_uniqueness_applies")]
+    dependencies = [("arxii", "0259_backfill_scene_action_request_condition_snapshot")]
 
     operations = [
         migrations.AlterField(

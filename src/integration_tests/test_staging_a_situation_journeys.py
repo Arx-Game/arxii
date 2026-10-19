@@ -5,8 +5,9 @@ was told and what rows the room now holds."""
 from __future__ import annotations
 
 from integration_tests.harness import JourneyCase
-from world.gm.constants import GMLevel
+from world.gm.constants import CatalogSuggestionProposalKind, GMLevel
 from world.gm.factories import GMProfileFactory
+from world.gm.models import CatalogSuggestion
 from world.mechanics.constants import DiscoveryType
 from world.mechanics.factories import ChallengeTemplateFactory, SituationTemplateFactory
 from world.mechanics.models import ChallengeInstance, SituationInstance
@@ -148,6 +149,25 @@ class StagingASituation(JourneyCase):
         self.assertIn("(hidden until discovered).", told)
         seam = ChallengeInstance.objects.get(target_object__db_key="the seam in the panelling")
         self.assertFalse(seam.is_revealed)
+
+    def test_a_new_gm_suggests_to_the_catalog_and_staff_hear_it(self) -> None:
+        told = self.telnet(self.hobb, "gm suggest new_situation=A dockside smuggling scene.")
+        self.assertIn("Suggestion submitted to staff for review.", told)
+        suggestion = CatalogSuggestion.objects.get()
+        self.assertEqual(suggestion.proposal_kind, CatalogSuggestionProposalKind.NEW_SITUATION)
+        self.assertEqual(suggestion.proposal_text, "A dockside smuggling scene.")
+        self.assertIn(
+            "Usage: gm suggest <kind>=<text>",
+            self.telnet(self.hobb, "gm suggest not a valid grammar"),
+        )
+        self.assertIn(
+            "Suggesting a pool_guide needs Experienced GM trust or higher.",
+            self.telnet(self.hobb, "gm suggest pool_guide=Use the Mishap pool."),
+        )
+        self.assertIn(
+            "GM trust required.", self.telnet(self.ysmay, "gm suggest other=Anything at all.")
+        )
+        self.assertEqual(CatalogSuggestion.objects.count(), 1)
 
     def test_the_web_names_the_template_by_id_and_is_sent_to_the_catalog_without_one(self) -> None:
         result = self.web(self.ravenna, "place_challenge", target_object_name="the gate")
