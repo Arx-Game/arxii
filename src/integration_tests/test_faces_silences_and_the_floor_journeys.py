@@ -223,6 +223,9 @@ class KeepingSomeoneOut(JourneyCase):
         self.assertIn(
             "Character 'Wren' is not on the roster.", self.telnet(self.hobb, "page Wren=Anyone?")
         )
+        self.assertIn(
+            "Only a rostered character can change visibility.", self.telnet(stranger, "hide")
+        )
 
         # Hidden, she reads as offline to everyone but her allow-list, and can page
         # only them; the allow-list itself is a staff-set row.
@@ -250,6 +253,15 @@ class KeepingSomeoneOut(JourneyCase):
         )
         self.telnet(self.hobb, "page Ysmay=There you are.")
         self.assertTold(self.ysmay, "Hobb pages: There you are.")
+
+        # Away is a toggle that lives only for the session.
+        self.assertIn(
+            "You are now marked away. Type afk again when you're back.",
+            strip_ansi(self.telnet(self.ysmay, "afk")),
+        )
+        self.assertTrue(self.ysmay.ndb.appear_afk)
+        self.assertIn("You are no longer marked away.", self.telnet(self.ysmay, "afk"))
+        self.assertFalse(self.ysmay.ndb.appear_afk)
 
     def test_a_block_on_one_face_can_be_widened_later(self) -> None:
         told = self.telnet(self.ysmay, "+block/persona Hobb=Just this one.")
