@@ -27,6 +27,7 @@ from evennia.utils.idmapper import models as idmapper_models
 
 from actions.constants import ActionBackend
 from actions.definitions.cast import CastTechniqueAction
+from actions.factories import ActionTemplateFactory
 from actions.player_interface import _dispatch_clash_contribution
 from actions.types import ActionRef
 from world.character_sheets.factories import CharacterSheetFactory
@@ -56,10 +57,12 @@ from world.magic.factories import (
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
+from world.magic.services.magic_skills import resolve_cast_check
 from world.magic.types.pull import CastPullDeclaration
 from world.npc_services.factories import NpcRegardFactory
 from world.scenes.constants import RoundStatus
 from world.scenes.services import active_persona_for_sheet
+from world.skills.factories import SkillFactory
 
 
 class CommitCombatPullCourtRegardAmplificationTests(TestCase):
@@ -173,17 +176,21 @@ class CastCommitCombatPullTargetWiringTests(TestCase):
             persona=enemy_sheet.primary_persona,
         )
         cast_pull = CastPullDeclaration(resonance=ResonanceFactory(), tier=1, threads=())
+        technique = TechniqueFactory(action_template=ActionTemplateFactory(), skill=SkillFactory())
 
-        with patch("world.combat.pull_helpers.commit_combat_pull") as mock_commit:
+        with patch("world.combat.pull_helpers.commit_combat_pull", autospec=True) as mock_commit:
             CastTechniqueAction._commit_combat_pull(
                 cast_pull,
                 ctx,
-                technique_id=TechniqueFactory().pk,
+                technique_id=technique.pk,
                 kwargs={"focused_opponent_target_id": opponent.pk},
             )
 
         mock_commit.assert_called_once()
         self.assertEqual(mock_commit.call_args.kwargs["target"], opponent.objectdb)
+        expected = resolve_cast_check(ctx.participant.character_sheet.character, technique)
+        self.assertIsNotNone(expected)
+        self.assertEqual(mock_commit.call_args.kwargs["cast_check"], expected)
 
     def test_resolves_focused_ally_target_when_no_opponent(self) -> None:
         ctx, encounter = self._ctx()
@@ -195,7 +202,7 @@ class CastCommitCombatPullTargetWiringTests(TestCase):
         )
         cast_pull = CastPullDeclaration(resonance=ResonanceFactory(), tier=1, threads=())
 
-        with patch("world.combat.pull_helpers.commit_combat_pull") as mock_commit:
+        with patch("world.combat.pull_helpers.commit_combat_pull", autospec=True) as mock_commit:
             CastTechniqueAction._commit_combat_pull(
                 cast_pull,
                 ctx,
@@ -210,7 +217,7 @@ class CastCommitCombatPullTargetWiringTests(TestCase):
         ctx, _encounter = self._ctx()
         cast_pull = CastPullDeclaration(resonance=ResonanceFactory(), tier=1, threads=())
 
-        with patch("world.combat.pull_helpers.commit_combat_pull") as mock_commit:
+        with patch("world.combat.pull_helpers.commit_combat_pull", autospec=True) as mock_commit:
             CastTechniqueAction._commit_combat_pull(
                 cast_pull,
                 ctx,
@@ -243,7 +250,7 @@ class DispatchClashContributionTargetWiringTests(TestCase):
         clash.npc_opponent.objectdb = enemy_sheet.character
         clash.npc_opponent.save(update_fields=["objectdb"])
 
-        technique = TechniqueFactory()
+        technique = TechniqueFactory(action_template=ActionTemplateFactory(), skill=SkillFactory())
         cast_pull = CastPullDeclaration(resonance=ResonanceFactory(), tier=1, threads=())
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
@@ -251,7 +258,7 @@ class DispatchClashContributionTargetWiringTests(TestCase):
             clash_action_slot=ClashActionSlot.FOCUSED.value,
         )
 
-        with patch("world.combat.pull_helpers.commit_combat_pull") as mock_commit:
+        with patch("world.combat.pull_helpers.commit_combat_pull", autospec=True) as mock_commit:
             _dispatch_clash_contribution(
                 ctx,
                 ref,
@@ -263,3 +270,6 @@ class DispatchClashContributionTargetWiringTests(TestCase):
             mock_commit.call_args.kwargs["target"],
             enemy_sheet.character,
         )
+        expected = resolve_cast_check(sheet.character, technique)
+        self.assertIsNotNone(expected)
+        self.assertEqual(mock_commit.call_args.kwargs["cast_check"], expected)
