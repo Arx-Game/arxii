@@ -719,12 +719,17 @@ def _probe_magic_activity_skills() -> ProbeResult:
     An unmapped activity adds no skill to its roll, so the roll behaves as it did
     before magical skills existed. That is a legal state, not a failure: staff may
     leave an activity unmapped on purpose, and it stays listed here until they map
-    one. The list shows which rolls still have no skill.
+    one. The list shows which rolls still have no skill. A row whose skill is inactive
+    adds nothing to the roll, so it does not count as a mapping.
     """
     from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.models import MagicActivitySkill  # noqa: PLC0415
 
-    mapped = set(MagicActivitySkill.objects.values_list("activity", flat=True).distinct())
+    mapped = set(
+        MagicActivitySkill.objects.filter(skill__is_active=True)
+        .values_list("activity", flat=True)
+        .distinct()
+    )
     missing = tuple(activity.label for activity in MagicActivity if activity.value not in mapped)
     if not missing:
         return ProbeResult(present=True)
@@ -737,12 +742,16 @@ def _probe_path_technique_skills() -> ProbeResult:
 
     Consumer: `world/magic/services/magic_skills.py:43` `_skill_for_path()`. A Major
     Gift technique without its own skill takes the caster's current Path
-    `technique_skill`; a Path with none leaves those casts at their check type alone.
+    `technique_skill`; a Path with none leaves those casts at their check type alone. An
+    inactive technique skill adds no term, so it counts as none.
     """
+    from django.db.models import Q  # noqa: PLC0415
+
     from world.classes.models import Path  # noqa: PLC0415
 
     missing = tuple(
-        Path.objects.filter(is_active=True, technique_skill__isnull=True)
+        Path.objects.filter(is_active=True)
+        .filter(Q(technique_skill__isnull=True) | Q(technique_skill__is_active=False))
         .order_by("name")
         .values_list("name", flat=True)
     )
@@ -759,13 +768,16 @@ def _probe_minor_gift_technique_skills() -> ProbeResult:
     Gift technique without its own skill takes the Gift's `technique_skill`. A Major
     Gift is never listed: it takes the caster's Path skill instead, and the model
     refuses a technique_skill on one. `Gift` has no active flag, so every Minor Gift
-    counts.
+    counts. An inactive technique skill adds no term, so it counts as none.
     """
+    from django.db.models import Q  # noqa: PLC0415
+
     from world.magic.constants import GiftKind  # noqa: PLC0415
     from world.magic.models import Gift  # noqa: PLC0415
 
     missing = tuple(
-        Gift.objects.filter(kind=GiftKind.MINOR, technique_skill__isnull=True)
+        Gift.objects.filter(kind=GiftKind.MINOR)
+        .filter(Q(technique_skill__isnull=True) | Q(technique_skill__is_active=False))
         .order_by("name")
         .values_list("name", flat=True)
     )

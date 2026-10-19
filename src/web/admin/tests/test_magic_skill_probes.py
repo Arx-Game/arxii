@@ -47,6 +47,14 @@ class UnmappedActivityProbeTests(TestCase):
         self.assertNotIn(MagicActivity.CEREMONY.label, result.missing)
         self.assertEqual(len(result.missing), len(MagicActivity) - 1)
 
+    def test_an_activity_mapped_only_to_an_inactive_skill_is_listed(self) -> None:
+        """The roll skips an inactive skill's row, so the dashboard does too."""
+        MagicActivitySkillFactory(
+            activity=MagicActivity.CEREMONY, skill=SkillFactory(is_active=False)
+        )
+
+        self.assertIn(MagicActivity.CEREMONY.label, self._resolve().missing)
+
     def test_present_once_every_activity_is_mapped(self) -> None:
         skill = SkillFactory()
         for activity in MagicActivity:
@@ -70,6 +78,12 @@ class PathTechniqueSkillProbeTests(TestCase):
         self.assertNotIn(mapped.name, result.missing)
         self.assertNotIn(inactive.name, result.missing)
 
+    def test_a_path_whose_technique_skill_is_inactive_is_listed(self) -> None:
+        """An inactive technique skill adds no term, so the Path still adds none."""
+        path = PathFactory(technique_skill=SkillFactory(is_active=False))
+
+        self.assertIn(path.name, self._resolve().missing)
+
     def test_present_when_every_active_path_has_one(self) -> None:
         PathFactory(technique_skill=SkillFactory())
         self.assertTrue(self._resolve().present)
@@ -90,6 +104,12 @@ class MinorGiftTechniqueSkillProbeTests(TestCase):
         self.assertIn(minor.name, result.missing)
         self.assertNotIn(major.name, result.missing)
         self.assertNotIn(mapped.name, result.missing)
+
+    def test_a_minor_gift_whose_technique_skill_is_inactive_is_listed(self) -> None:
+        """An inactive technique skill adds no term, so the Gift still adds none."""
+        gift = GiftFactory(kind=GiftKind.MINOR, technique_skill=SkillFactory(is_active=False))
+
+        self.assertIn(gift.name, self._resolve().missing)
 
     def test_present_when_only_a_major_gift_lacks_one(self) -> None:
         GiftFactory(kind=GiftKind.MAJOR, technique_skill=None)

@@ -45,6 +45,10 @@ def _skill_for_path(technique: Technique, path: Path | None) -> Skill | None:
 
     The technique's own skill wins. Otherwise a Major Gift technique takes the Path's skill
     and a Minor Gift technique takes the Gift's skill.
+
+    An override wins even when its skill is inactive: the technique then adds no term and
+    does NOT fall back to the Path or Gift skill. Staff deactivating a skill means that
+    skill is off, not that the technique should borrow another (deliberate ruling, #4450).
     """
     if technique.skill is not None:
         return technique.skill
