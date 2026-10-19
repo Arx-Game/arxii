@@ -238,7 +238,7 @@ class TelnetSessionDeliveryTests(_ScenePipelineTestCase):
         bystander_char.msg = Mock()
 
         web_session = MagicMock()
-        web_session.protocol_key = "webclient/websocket"
+        web_session.protocol_key = "websocket"
         with _patch_sessions({bystander_char.pk: [web_session]}):
             self._accept(mock_resolve=mock_resolve)
 

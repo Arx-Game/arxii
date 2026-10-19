@@ -598,6 +598,15 @@ def _target_character_ids(target_persona_ids: list[int] | None) -> frozenset[int
     )
 
 
+# The protocol keys Evennia's web transports give a session. ``init_session`` sets
+# them: "websocket" (``portal/webclient.py``, and this repo's SecureWebSocketClient,
+# which subclasses it) and "ajax/comet" (``portal/webclient_ajax.py``). The
+# "webclient/websocket" a protocol instance carries before ``init_session`` runs is
+# overwritten, so no live session ever has it; testing for that prefix sent every
+# telnet-only line to every web session as well (#4418 real-testing bug G).
+WEB_PROTOCOL_KEYS = frozenset({"websocket", "ajax/comet"})
+
+
 def non_web_sessions(obj: ObjectDB | AccountDB) -> list[Any]:
     """Sessions on ``obj`` that do NOT already receive the structured payload.
 
@@ -606,19 +615,14 @@ def non_web_sessions(obj: ObjectDB | AccountDB) -> list[Any]:
     ``addressed_to`` account, #4101), since both expose the same
     ``.sessions.all()`` handler.
 
-    Evennia's webclient protocols stamp ``session.protocol_key`` as
-    ``"webclient/websocket"`` or ``"webclient/ajax"`` (see
-    ``evennia/server/portal/webclient*.py``); telnet, telnet/ssl and ssh use
-    ``"telnet"``/``"telnet/ssl"``/``"ssh"``. This mirrors the existing
-    telnet-vs-web discriminator in ``server/conf/inputfuncs.py``'s ``text()``
-    (``protocol_key.startswith("telnet")``), inverted and widened to "not
-    webclient" so ssh sessions -- which also never receive the ``interaction=``
-    outputfunc -- get the mark too.
+    A web session is one whose ``protocol_key`` is in ``WEB_PROTOCOL_KEYS``;
+    telnet, telnet/ssl and ssh sessions are the rest, and only they get the plain
+    text lines (the involvement mark, an outcome's text, a check's result line).
     """
     return [
         session
         for session in obj.sessions.all()
-        if not str(session.protocol_key or "").startswith("webclient")
+        if str(session.protocol_key or "") not in WEB_PROTOCOL_KEYS
     ]
 
 

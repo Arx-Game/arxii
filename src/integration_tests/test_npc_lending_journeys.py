@@ -42,6 +42,11 @@ def _text_options(text) -> dict:
     return {}
 
 
+def _text_body(text) -> str:
+    """The words of an outgoing ``text`` frame."""
+    return text[0] if isinstance(text, tuple) else str(text)
+
+
 def persona_of(character):
     return character.sheet_data.primary_persona
 
@@ -461,11 +466,14 @@ class AGuidePlaysALentNpc(JourneyCase):
         self.scene.refresh_from_db()
         self.assertTrue(self.scene.is_active)
 
-    def _web_signed_in(self, character, sessid: int, *, puppet) -> ServerSession:
-        """A webclient session of ``character``'s account, puppeting ``puppet``."""
+    def _web_signed_in(
+        self, character, sessid: int, *, puppet, protocol: str = "websocket"
+    ) -> ServerSession:
+        """A session of ``character``'s account puppeting ``puppet``, by default a
+        browser's: "websocket" is the key Evennia's portal gives a live one."""
         handler = evennia.SESSION_HANDLER
         dummy = ServerSession()
-        dummy.init_session("webclient/websocket", ("localhost", "testmode"), handler)
+        dummy.init_session(protocol, ("localhost", "testmode"), handler)
         dummy.sessid = sessid
         handler.portal_connect(dummy.get_sync_data())
         session = handler.session_from_sessid(sessid)
@@ -516,6 +524,60 @@ class AGuidePlaysALentNpc(JourneyCase):
                 if "text" in kw and not _text_options(kw["text"]).get("interaction_echo")
             ]
             self.assertEqual(notes, [], session.puppet)
+
+    def test_a_resolved_action_reaches_web_sessions_once_and_telnet_as_text(self) -> None:
+        # Bug G: the outcome's text lines went to web sessions too, because a live
+        # websocket session's protocol key is "websocket", which the web test missed.
+        self._lend()
+        ensure_playable_lock(self.ysmay)
+        frames = Mock()
+        handler = evennia.SESSION_HANDLER
+        for name, stub in (("data_out", frames), ("disconnect", Mock())):
+            patcher = patch.object(handler, name, stub)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        as_vael = self._web_signed_in(self.ilsa, 4440, puppet=self.vael)
+        # Ysmay plays from a browser and a telnet client at once.
+        as_ysmay = self._web_signed_in(self.ysmay, 4441, puppet=self.ysmay)
+        on_telnet = self._web_signed_in(self.ysmay, 4442, puppet=self.ysmay, protocol="telnet")
+        ActionTemplateFactory(name="Persuade", check_type=CheckTypeFactory(name="Persuasion"))
+        frames.reset_mock()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            persuaded = self.api(self.account_of(self.ysmay)).post(
+                "/api/action-requests/",
+                {
+                    "scene": self.scene.pk,
+                    "initiator_persona": persona_of(self.ysmay).pk,
+                    "target_persona": persona_of(self.vael).pk,
+                    "action_key": "persuade",
+                },
+                format="json",
+            )
+        self.assertEqual(persuaded.json()["status"], "resolved", persuaded.data)
+
+        def sent_to(session):
+            return [call.kwargs for call in frames.call_args_list if call.args[0] is session]
+
+        for session in (as_vael, as_ysmay):
+            sent = sent_to(session)
+            outcomes = [
+                kw
+                for kw in sent
+                if "interaction" in kw and "persuade" in kw["interaction"][1]["line"]
+            ]
+            self.assertEqual(len(outcomes), 1, sent)
+            notes = [
+                kw["text"]
+                for kw in sent
+                if "text" in kw and not _text_options(kw["text"]).get("interaction_echo")
+            ]
+            self.assertEqual(notes, [], session.puppet)
+        telnet_lines = [_text_body(kw["text"]) for kw in sent_to(on_telnet) if "text" in kw]
+        self.assertTrue(
+            any("attempts to persuade Captain Vael" in line for line in telnet_lines),
+            telnet_lines,
+        )
 
     def test_a_scene_ends_with_an_unplayed_npc_in_the_room(self) -> None:
         self.assertIsNone(self.vael.account)
