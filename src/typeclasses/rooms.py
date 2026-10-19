@@ -52,15 +52,30 @@ class Room(ObjectParent, DefaultRoom):
     def active_scene(self) -> Scene | None:
         """Scene currently running in this room.
 
-        Evennia's ndb holder returns None natively for a missing attribute —
-        no defensive guard needed (silent-fail audit, holder hunt).
+        Read through ``get_active_scene``, the one location-to-scene resolver, so
+        it is derived from the database and only cached in memory. Until #4418 it
+        was an ``ndb`` value only ``broadcast_scene_message(START)`` ever set, and
+        Start Scene stopped calling that in #3069: every ``room_state`` push after
+        a scene began (a PC entering, an NPC placed, a reconnect, a restart)
+        carried no scene, and ``/game`` dropped the feed and the scene actions.
+        A cached scene that has since finished is dropped and looked up again.
         """
-        return self.ndb.active_scene
+        from world.scenes.interaction_services import (
+            get_active_scene,
+            invalidate_active_scene_cache,
+        )
+
+        scene = get_active_scene(self)
+        if scene is not None and not scene.is_active:
+            invalidate_active_scene_cache(self)
+            scene = get_active_scene(self)
+        return scene
 
     @active_scene.setter
     def active_scene(self, value: Scene | None) -> None:
-        """Cache ``value`` as the active scene for this room."""
-        self.ndb.active_scene = value
+        """Cache ``value`` as the active scene for this room (the scene services
+        set it when a scene starts or ends)."""
+        self._active_scene_cache = value
 
     @property
     def dominant_affinity(self):

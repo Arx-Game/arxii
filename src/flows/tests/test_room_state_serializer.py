@@ -481,7 +481,7 @@ class RoomStateThresholdTests(TestCase):
         self.caller_sheet = CharacterSheetFactory(character=self.caller)
         self.other_sheet = CharacterSheetFactory(character=self.other)
         self.scene = SceneFactory(room=self.room)
-        # The room's live scene is the ndb cache the scene services keep (Room.active_scene).
+        # The room's live scene is cached on the room (Room.active_scene, get_active_scene).
         self.room.active_scene = self.scene
         self.context = SceneDataManagerFactory()
         self.room_state = self.context.initialize_state_for_object(self.room)
@@ -520,3 +520,95 @@ class RoomStateThresholdTests(TestCase):
         ally = next(c for c in payload["characters"] if c["name"] == "ally")
         assert ally["in_scene"] is None
         assert payload["scene"] is None
+
+
+class RoomStateCarriesTheRoomsLiveSceneTests(TestCase):
+    """#4418 bug 4 - the room's live scene stays in every room_state push while it runs.
+
+    A scene started with Start Scene must show for a PC who enters afterwards, and must
+    survive the room's in-memory state being lost (a server restart), because /game reads
+    the scene feed, consent cards and scene actions off this block.
+    """
+
+    def setUp(self):
+        from actions.definitions.scenes import StartSceneAction
+
+        self.room = ObjectDBFactory(db_key="low gate", db_typeclass_path="typeclasses.rooms.Room")
+        self.starter = ObjectDBFactory(
+            db_key="ravenna",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        CharacterSheetFactory(character=self.starter)
+        self.newcomer = ObjectDBFactory(
+            db_key="ysmay", db_typeclass_path="typeclasses.characters.Character"
+        )
+        CharacterSheetFactory(character=self.newcomer)
+        result = StartSceneAction().run(actor=self.starter)
+        assert result.success, result.message
+        from world.scenes.models import Scene
+
+        self.scene = Scene.objects.active_for_room(self.room).get()
+
+    def _payload_for_newcomer(self):
+        context = SceneDataManagerFactory()
+        room_state = context.initialize_state_for_object(self.room)
+        newcomer_state = context.initialize_state_for_object(self.newcomer)
+        return build_room_state_payload(newcomer_state, room_state)
+
+    def test_a_pc_entering_after_start_sees_the_scene(self):
+        self.newcomer.move_to(self.room, quiet=True)
+        payload = self._payload_for_newcomer()
+        assert payload["scene"] is not None
+        assert payload["scene"]["id"] == self.scene.pk
+
+    def test_the_scene_survives_the_room_forgetting_its_memory(self):
+        # A server restart drops every in-memory attribute on the room.
+        from world.scenes.interaction_services import invalidate_active_scene_cache
+
+        self.room.nattributes.clear()
+        invalidate_active_scene_cache(self.room)
+        self.newcomer.move_to(self.room, quiet=True)
+        payload = self._payload_for_newcomer()
+        assert payload["scene"] is not None
+        assert payload["scene"]["id"] == self.scene.pk
+
+    def test_a_finished_scene_leaves_the_room(self):
+        from world.scenes.scene_admin_services import finish_scene_full
+
+        self.newcomer.move_to(self.room, quiet=True)
+        finish_scene_full(self.scene)
+        payload = self._payload_for_newcomer()
+        assert payload["scene"] is None
+
+
+class StartSceneTellsTheRoomTests(TestCase):
+    """#4418 bug 4 - starting a scene tells the other players in the room, not just the starter."""
+
+    def test_a_player_already_in_the_room_is_told_the_scene_began(self):
+        from actions.definitions.scenes import StartSceneAction
+        from evennia_extensions.factories import AccountFactory
+
+        room = ObjectDBFactory(db_key="low gate", db_typeclass_path="typeclasses.rooms.Room")
+        starter = ObjectDBFactory(
+            db_key="ravenna", db_typeclass_path="typeclasses.characters.Character", location=room
+        )
+        CharacterSheetFactory(character=starter)
+        onlooker = ObjectDBFactory(
+            db_key="ysmay", db_typeclass_path="typeclasses.characters.Character", location=room
+        )
+        CharacterSheetFactory(character=onlooker)
+        account = AccountFactory()
+        onlooker.db_account = account
+        onlooker.save()
+
+        with patch.object(onlooker.account, "msg") as told:
+            assert StartSceneAction().run(actor=starter).success
+
+        scene_frames = [c.kwargs["scene"] for c in told.call_args_list if "scene" in c.kwargs]
+        assert len(scene_frames) == 1
+        payload = scene_frames[0][1]
+        assert payload["action"] == "start"
+        from world.scenes.models import Scene
+
+        assert payload["scene"]["id"] == Scene.objects.active_for_room(room).get().pk

@@ -76,6 +76,13 @@ class StartSceneAction(Action):
             # #3069 sub-item 4: fold prior unattached RP into the scene right as it
             # starts — the single seam both telnet and web reach for scene creation.
             capture = capture_prescene_interactions(scene, room)
+            # Tell everyone in the room it began (#4418): #3069 moved web Start Scene
+            # onto this action and the START push was left behind, so only the
+            # starter's own page knew there was a scene.
+            from world.scenes.constants import SceneAction  # noqa: PLC0415
+            from world.scenes.services import broadcast_scene_message  # noqa: PLC0415
+
+            broadcast_scene_message(scene, SceneAction.START)
             message = "A scene begins."
             if capture.pending_consent_count:
                 plural = "s" if capture.pending_consent_count != 1 else ""
