@@ -60,7 +60,7 @@ import { NpcNotesCard } from '@/gm/npcs/NpcNotesCard';
 import { NpcResponseCard } from '@/gm/npcs/NpcResponseCard';
 import { pendingNpcResponse, poseCarryingAction } from '@/gm/npcs/pendingNpcResponse';
 import { useNpcOffersQuery } from '@/gm/npcs/queries';
-import { fallbackEntry, useLoanEndFallback } from '@/gm/npcs/useLoanEndFallback';
+import { useLoanEndFallback } from '@/gm/npcs/useLoanEndFallback';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
 import { PlaceBar } from '@/scenes/components/PlaceBar';
 import { TavernGameWidget } from '@/scenes/components/TavernGameWidget';
@@ -357,8 +357,9 @@ interface NpcPlayCardsProps {
 function NpcPlayCards({ activeEntry, interactions, onPoseAs }: NpcPlayCardsProps) {
   const { data: offers = [] } = useNpcOffersQuery();
   const { data: characters = [] } = useMyRosterEntriesQuery();
-  // Offers show with no character selected too; the answer goes out as the account's own PC.
-  const actor = activeEntry ?? fallbackEntry(characters);
+  // Offers are the account's, not a character's: they show with no character selected, and
+  // the answer goes out as the account's own PC, never as a lent NPC (the server refuses).
+  const actor = characters.find((c) => !isStoryNpc(c)) ?? null;
   const isNpc = isStoryNpc(activeEntry);
   const npcPersonaId = isNpc ? actingPersonaId(activeEntry) : null;
   const pending = useMemo(

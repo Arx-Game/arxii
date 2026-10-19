@@ -126,6 +126,12 @@ vi.mock('@/roster/queries', () => ({
   })),
 }));
 
+const answerDispatch = vi.hoisted(() => vi.fn());
+vi.mock('@/combat/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/combat/api')>()),
+  postDispatchAction: (...args: unknown[]) => answerDispatch(...args),
+}));
+
 // #4418: the Guide's offers; empty unless a test sets one.
 const npcOffers = vi.hoisted(() => ({ current: [] as unknown[] }));
 vi.mock('@/gm/npcs/queries', async (importOriginal) => ({
@@ -2462,8 +2468,17 @@ describe('GamePage', () => {
   });
 
   describe('NPC offers with no selected character (#4418)', () => {
-    afterEach(() => {
+    afterEach(async () => {
       npcOffers.current = [];
+      const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+      vi.mocked(useMyRosterEntriesQuery).mockImplementation(
+        () =>
+          ({
+            data: [rosterEntry, rosterEntry2],
+            isLoading: false,
+            isError: false,
+          }) as unknown as ReturnType<typeof useMyRosterEntriesQuery>
+      );
     });
 
     it('shows an offer card although no character is selected', async () => {
@@ -2487,6 +2502,49 @@ describe('GamePage', () => {
       expect(await screen.findByTestId('npc-offer-card')).toHaveTextContent(
         'Sergeant Mira, offered by Ravenna'
       );
+    });
+
+    it('answers an offer as the account own character while a lent NPC tab is active', async () => {
+      answerDispatch.mockResolvedValue({ success: true, message: 'Done.' });
+      const mira: MyRosterEntry = {
+        ...rosterEntry2,
+        id: 9,
+        name: 'Sergeant Mira',
+        character_id: 99,
+        roster_type: 'NPC',
+        is_story_npc: true,
+        loan: { id: 7, scene_title: 'Low Gate', offered_by_name: 'Ravenna' },
+      };
+      const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+      vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+        data: [mira, rosterEntry],
+        isLoading: false,
+        isError: false,
+      } as unknown as ReturnType<typeof useMyRosterEntriesQuery>);
+      npcOffers.current = [
+        {
+          loan_id: 5,
+          roster_entry_id: 13,
+          name: 'Captain Vael',
+          thumbnail_url: null,
+          scene_id: 3,
+          scene_title: 'Scene at Low Gate',
+          offered_by_name: 'Ravenna',
+          notes_for_player: '',
+        },
+      ];
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(hydrateActiveCharacter({ name: 'Sergeant Mira', entryId: 9 }));
+
+      renderWithProviders(<GamePage />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Accept' }));
+
+      await waitFor(() => expect(answerDispatch).toHaveBeenCalled());
+      expect(answerDispatch.mock.calls[0][0]).toBe(rosterEntry.character_id);
+      expect(answerDispatch.mock.calls[0][1]).toMatchObject({
+        ref: { backend: 'registry', registry_key: 'answer_npc_loan' },
+        kwargs: { loan_id: 5, accept: true },
+      });
     });
   });
 });

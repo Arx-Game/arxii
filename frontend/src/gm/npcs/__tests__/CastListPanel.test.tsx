@@ -38,6 +38,7 @@ const cast = [
     roster_entry_id: 5,
     persona_id: 9,
     played_by: 'Ilsa',
+    played_by_role: 'guide',
     loan_id: 33,
     loan_status: 'active',
   },
@@ -136,6 +137,42 @@ describe('CastListPanel', () => {
     renderPanel();
     expect(await screen.findByText('CV')).toBeInTheDocument();
     expect(screen.getByText('MO')).toBeInTheDocument();
+  });
+
+  it('labels a loan by the role of whoever plays it', async () => {
+    const lent = [
+      ...cast,
+      {
+        ...base,
+        kind: 'npc',
+        name: 'Warden Osk',
+        roster_entry_id: 8,
+        persona_id: 12,
+        played_by: 'Corvin',
+        played_by_role: 'gm',
+        loan_id: 34,
+        loan_status: 'active',
+      },
+      {
+        ...base,
+        kind: 'npc',
+        name: 'Clerk Dane',
+        roster_entry_id: 9,
+        persona_id: 13,
+        played_by: 'Tehom',
+        played_by_role: 'staff',
+        loan_id: 35,
+        loan_status: 'active',
+      },
+    ];
+    apiFetch.mockImplementation((url: string) =>
+      url.includes('cast-list')
+        ? Promise.resolve({ ok: true, json: () => Promise.resolve(lent) })
+        : respond(url)
+    );
+    renderPanel();
+    expect(await screen.findByText('Warden Osk \u00b7 Corvin (GM)')).toBeInTheDocument();
+    expect(screen.getByText('Clerk Dane \u00b7 Tehom')).toBeInTheDocument();
   });
 
   it('takes back a lent NPC by loan id', async () => {
