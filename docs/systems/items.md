@@ -889,7 +889,9 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
   and vogue momentum (`SilhouetteVogueMomentum` / `StyleVogueMomentum`,
   global v1, decayed BEFORE settlement) move only on the engagement legs.
   Engagement signal: `create_style_presentation_endorsement` bumps the
-  endorsee's unsettled showing (`record_showing_engagement`).
+  endorsee's unsettled showing (`record_showing_engagement`), which flushes
+  and refreshes the cached `FashionShowing` after its `F()` update so the
+  weekly settlement (same identity-map object) pays on the true count (#4476).
 
 ### Coverage & concealment: the layer walk + show/conceal (#2985, ADR-0199; refines ADR-0194)
 
