@@ -1491,7 +1491,10 @@ def _advance_staged_peril_condition(
         True if the character died during this call, else False.
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
-    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.conditions.services import (  # noqa: PLC0415
+        get_active_conditions,
+        loss_of_self_terms,
+    )
 
     if character_sheet is None:
         return False
@@ -1532,6 +1535,7 @@ def _advance_staged_peril_condition(
             character,
             stage.resist_check_type,
             target_difficulty=stage.resist_difficulty,
+            extra_traits=loss_of_self_terms(template),
         )
 
         if int(result.success_level) < 0:

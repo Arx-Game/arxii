@@ -19,6 +19,7 @@ from django.test import TestCase, override_settings
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import ExtraTraitTerm
@@ -555,6 +556,76 @@ class ConditionRollSiteTests(ActivityTermTestCase):
             "world.checks.consequence_resolution.perform_check",
             MagicActivity.RESISTING_LOSS_OF_SELF,
             lambda: _resolve_peril_via_pool(sheet, instance, pool, death_permitted=False),
+        )
+
+    def staged_peril(self, name: str, *, marked: bool) -> CharacterSheet:
+        """A character on the first of two stages of the peril condition called ``name``.
+
+        The per-round advance rolls the first stage's resist; the second stage keeps it
+        non-terminal, so the terminal pool roll is not reached.
+        """
+        template = self.template(marked=marked, name=name, has_progression=True)
+        first = ConditionStageFactory(
+            condition=template,
+            stage_order=1,
+            resist_check_type=CheckTypeFactory(),
+            resist_difficulty=5,
+        )
+        ConditionStageFactory(condition=template, stage_order=2)
+        sheet = CharacterSheetFactory()
+        ConditionInstanceFactory(condition=template, target=sheet.character, current_stage=first)
+        return sheet
+
+    def test_bleed_out_round_resist_marked(self) -> None:
+        from world.conditions.constants import BLEED_OUT_CONDITION_NAME
+        from world.vitals.services import advance_bleed_out
+
+        sheet = self.staged_peril(BLEED_OUT_CONDITION_NAME, marked=True)
+
+        self.assert_terms_reach(
+            "world.vitals.services.perform_check_with_modifiers",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: advance_bleed_out(sheet),
+        )
+
+    def test_bleed_out_round_resist_unmarked(self) -> None:
+        from world.conditions.constants import BLEED_OUT_CONDITION_NAME
+        from world.vitals.services import advance_bleed_out
+
+        sheet = self.staged_peril(BLEED_OUT_CONDITION_NAME, marked=False)
+
+        self.assert_no_terms(
+            "world.vitals.services.perform_check_with_modifiers",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: advance_bleed_out(sheet),
+        )
+
+    def test_surrounded_round_resist_marked(self) -> None:
+        from world.battles.services import create_battle
+        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+        from world.vitals.services import advance_surrounded
+
+        sheet = self.staged_peril(SURROUNDED_CONDITION_NAME, marked=True)
+        battle = create_battle(name="Round Resist Skills")
+
+        self.assert_terms_reach(
+            "world.vitals.services.perform_check_with_modifiers",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: advance_surrounded(sheet, battle=battle),
+        )
+
+    def test_surrounded_round_resist_unmarked(self) -> None:
+        from world.battles.services import create_battle
+        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+        from world.vitals.services import advance_surrounded
+
+        sheet = self.staged_peril(SURROUNDED_CONDITION_NAME, marked=False)
+        battle = create_battle(name="Round Resist Skills")
+
+        self.assert_no_terms(
+            "world.vitals.services.perform_check_with_modifiers",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: advance_surrounded(sheet, battle=battle),
         )
 
     def surrounded_entry(self, *, marked: bool):
