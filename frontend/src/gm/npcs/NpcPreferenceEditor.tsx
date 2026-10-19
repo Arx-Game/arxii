@@ -17,6 +17,9 @@ import type { PreferenceLine, PreferenceValence, SavedPreference } from './npcFo
 export interface PersonalityTraitOption {
   id: number;
   name: string;
+  description?: string;
+  /** The check this trait eases when it is a like. */
+  eased_check?: string | null;
 }
 
 const VALENCES: { value: PreferenceValence; label: string }[] = [
@@ -40,6 +43,8 @@ interface NpcPreferenceEditorProps {
 interface ShownRow {
   trait: number;
   name: string;
+  /** The trait's description and the check it eases, as the demo's note column. */
+  note: string;
   valence: PreferenceValence;
   remove: () => void;
 }
@@ -73,6 +78,13 @@ export function NpcPreferenceEditor({
     copied.find((row) => row.trait_id === id)?.trait_name ??
     String(id);
 
+  const noteOf = (id: number, valence: PreferenceValence) => {
+    const option = traits.find((candidate) => candidate.id === id);
+    if (!option) return '';
+    const eased = valence === 'likes' && option.eased_check ? `Eases ${option.eased_check}.` : '';
+    return [option.description, eased].filter(Boolean).join(' ');
+  };
+
   const typedTraits = new Set(lines.map((line) => line.trait));
   const rows: ShownRow[] = [
     ...copied
@@ -80,12 +92,14 @@ export function NpcPreferenceEditor({
       .map((row) => ({
         trait: row.trait_id,
         name: row.trait_name,
+        note: noteOf(row.trait_id, row.valence),
         valence: row.valence,
         remove: () => onRemovedChange([...removed, row.trait_id]),
       })),
     ...lines.map((line) => ({
       trait: line.trait,
       name: nameOf(line.trait),
+      note: noteOf(line.trait, line.valence),
       valence: line.valence,
       remove: () => onChange(lines.filter((other) => other !== line)),
     })),
@@ -103,9 +117,12 @@ export function NpcPreferenceEditor({
       {rows.length > 0 && (
         <ul className="flex flex-col gap-1 text-sm">
           {rows.map((row) => (
-            <li key={row.trait} className="flex items-center gap-2">
+            <li key={row.trait} className="flex flex-wrap items-center gap-2">
               <ValencePill valence={row.valence} />
-              <span className="flex-1">{row.name}</span>
+              <span className="shrink-0 font-medium">{row.name}</span>
+              <span className="flex-1 text-xs text-muted-foreground" data-testid="trait-note">
+                {row.note}
+              </span>
               <Button
                 type="button"
                 size="sm"
@@ -119,45 +136,43 @@ export function NpcPreferenceEditor({
           ))}
         </ul>
       )}
-      {traits.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label="Easier or harder"
-            className={selectClass}
-            value={valence}
-            onChange={(event) => setValence(event.target.value as PreferenceValence)}
-          >
-            {VALENCES.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Trait"
-            className={selectClass}
-            value={trait}
-            onChange={(event) => setTrait(event.target.value)}
-          >
-            <option value="">Trait</option>
-            {traits.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            aria-label="Add trait"
-            disabled={!trait}
-            onClick={add}
-          >
-            Add
-          </Button>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          aria-label="Easier or harder"
+          className={selectClass}
+          value={valence}
+          onChange={(event) => setValence(event.target.value as PreferenceValence)}
+        >
+          {VALENCES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Trait"
+          className={selectClass}
+          value={trait}
+          onChange={(event) => setTrait(event.target.value)}
+        >
+          <option value="">{traits.length === 0 ? 'No traits authored yet' : 'Trait'}</option>
+          {traits.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name}
+            </option>
+          ))}
+        </select>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label="Add trait"
+          disabled={!trait}
+          onClick={add}
+        >
+          Add
+        </Button>
+      </div>
     </div>
   );
 }
