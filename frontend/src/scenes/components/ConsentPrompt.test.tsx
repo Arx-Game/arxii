@@ -125,6 +125,16 @@ describe('ConsentPrompt', () => {
     expect(screen.getByText('Intimidate')).toBeInTheDocument();
   });
 
+  it('lets the answer buttons wrap inside a narrow feed column', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    const actions = await screen.findByTestId('consent-actions');
+    expect(actions).toHaveClass('flex-wrap');
+    expect(actions.parentElement).toHaveClass('flex-wrap');
+  });
+
   it('displays initiator name and action name', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
 
