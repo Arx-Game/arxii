@@ -239,7 +239,12 @@ actions, backends, and service functions.
   check-gated Wits + Larceny, concealed deed); `break` dispatches
   `BreakExitAction` (key `"break_exit"`, always succeeds, damages building
   condition tier by 1, non-concealed deed). Both gated only on
-  `HasCharacterSheetPrerequisite` — no owner/tenant standing required.
+  `HasCharacterSheetPrerequisite` — no owner/tenant standing required. All four are
+  typed through the handler at a real gate in
+  `integration_tests/test_keeping_a_house_journeys.py` (`LockingTheDoor`, #3657 tranche
+  13: a guest kept out and let through, the Lockpicking check rolled for real, the room
+  lines and the deeds); the hand-built `tests/test_door.py`, which mocked every action's
+  `run`, is gone.
 - **`offer_registry.py`**: `OfferHandler` protocol, `_REGISTRY`, `register_offer_handler`,
   `get_all_pending`, `find_handler` — pure-Python in-process registry; no DB model.
 - **`offer_response.py`**: `CmdDecline` (`decline`) — registry-offer decline; see also
@@ -864,7 +869,10 @@ actions, backends, and service functions.
   `DissolvePortalAnchorAction` (key `portal_anchor_dissolve`). Switch-routed (mirrors
   `CmdRoom`'s manual switch dispatch, `locations.py`); no business logic in the command
   — kind/anchor resolution from text is the only work done here, all gating (standing,
-  funds, duplicate-kind) lives in the actions/services.
+  funds, duplicate-kind) lives in the actions/services. Both switches, every gate and the
+  purse are typed through the handler in `integration_tests/test_keeping_a_house_journeys.py`
+  (`OpeningAPortal`, #3657 tranche 13; the hand-built `tests/test_portals_command.py` is
+  gone): a tenant installs, only the owner dissolves.
 - **`who.py`**: `CmdWho` (`who`, #1463) — the online roster. Thin read over
   `world.scenes.presence.who_listing`: online characters by **active** persona with a **coarse**
   idle marker (active / idle / away — never exact, so identical idle times can't out an account's
@@ -991,7 +999,13 @@ actions, backends, and service functions.
 - **`functionary.py`**: `CmdFunctionary` (`functionary`, #1766) — list/place/remove the class-1
   Functionaries standing in the caller's current room. Bare `functionary`/`functionary list`
   lists them (open); `functionary place <role>[=<name>]` and `functionary remove <role>` are
-  staff-only (`check_permstring("Builder")`). Thin over `world.npc_services.functionaries`
+  staff-only: the caller's *account* must pass `check_permstring("Builder")`, the way a
+  `perm()` lock reads it (#3657 tranche 13: asked of the character, Evennia's
+  `check_permstring` reads the character's own permissions, so a staff account puppeting an
+  ordinary character was refused). Typed through the handler in
+  `integration_tests/test_keeping_a_house_journeys.py` (`KeepingAFunctionary`; the hand-built
+  `tests/test_functionary_command.py`, whose caller was a `MagicMock`, is gone). Thin over
+  `world.npc_services.functionaries`
   (`place_functionary`/`remove_functionary`/`functionaries_in_room`); the room the caller stands
   in is resolved via `areas.services.get_room_profile`. Functionaries also surface on `look`
   (`actions.definitions.examine_extras.gather_examine_extras` appends them for a room target,
@@ -1243,6 +1257,12 @@ actions, backends, and service functions.
     `RoomProfile` Arx reads, and nobody uses them. `@wipe`, `@cpattr` and `@mvattr` remain
     stock and still act on Evennia's retired `desc` Attribute, not on the description `look`
     shows; nobody ruled on them.
+  Every one of these, the line editor included, is typed through the handler by a staff
+  character in `integration_tests/test_keeping_a_house_journeys.py` (`DescribingTheHouse`,
+  #3657 tranche 13); the hand-built `tests/test_desc_command.py` and
+  `tests/test_builder_stock_commands.py` are gone. Their "without permission" tests called
+  `func()` past the `cmd:perm(Builder)` lock; a player typing `desc`, `@set` or `@name` is
+  told the command is not available and never reaches the permission line inside.
 
 ### Account Commands (`account/`)
 - **`account_info.py`**: `CmdAccount` (`@account`/`account`) — bare shows account information

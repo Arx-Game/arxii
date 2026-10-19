@@ -681,6 +681,9 @@ class TrainingAndUnlocking(JourneyCase):
             self.telnet(self.ysmay, f"progression unlock language={oldtongue.pk}"),
         )
         self.assertIn(
+            "No such language.", self.telnet(self.ysmay, "progression unlock language=99999")
+        )
+        self.assertIn(
             "No such thread.", self.telnet(self.ysmay, "progression unlock thread=99999 level=10")
         )
         for line, reply in (

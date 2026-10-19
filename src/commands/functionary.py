@@ -69,7 +69,12 @@ class CmdFunctionary(ArxCommand):
         return get_room_profile(location)
 
     def _require_staff(self) -> None:
-        if not self.caller.check_permstring(_STAFF_PERM):
+        # The account's permissions, the way a `perm()` lock reads them. Evennia's
+        # check_permstring on a character reads the character's own permissions
+        # (an account's only when it is a superuser), so a staff account puppeting
+        # an ordinary character was refused here (#3657 tranche 13).
+        holder = self.caller.account or self.caller
+        if not holder.check_permstring(_STAFF_PERM):
             msg = "Only staff may place or remove functionaries."
             raise CommandError(msg)
 

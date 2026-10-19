@@ -212,7 +212,20 @@ email) was "not available" to anyone puppeting a character; a kudos claim too sm
 anything wrote the claim and rolled it back, which left the idmapper-shared balance short
 until the cache flushed (the check now runs before any write); and an unknown id on
 `training` or `progression unlock` answered with the ORM's own "matching query does not
-exist" line (each is now a sentence of its own).
+exist" line (each is now a sentence of its own). Tranche 13 (2026-10-19) rules the
+buildings group: `test_door` (7, every action's `run` mocked), `test_builder_stock_commands`
+(18), `test_desc_command` (10), `test_portals_command` (4) and `test_functionary_command` (6,
+a `MagicMock` caller) are removed. A new journey module,
+`integration_tests/test_keeping_a_house_journeys.py`, types `lock`/`unlock` (a tenant and a
+guest at a real gate, the guest kept out and let through), `pick` and `break` (the authored
+Lockpicking check, the room lines, the deeds), `desc`, `desc/edit` through the real line
+editor, `@set <obj>/desc`, `@name` on a room, a character, an item, a companion and an object,
+`@sethome` with and without a tenancy, a player with no builder verb at all and Evennia's
+retired `setdesc`/`@spawn`/`@copy`, `portal/install` and `portal/dissolve` with the purse,
+the standing and the kinds, and `functionary` place/list/remove. One fix in place:
+`functionary place|remove` asked `caller.check_permstring("Builder")`, which on a character
+reads the character's own permissions, so a staff account puppeting an ordinary character
+was refused; it now asks the account, the way a `perm()` lock does.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
