@@ -1055,6 +1055,9 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   bool, denormalized from `once_per_wound_per_helper` at insert time, mirrors
   `once_per_scene_guard`'s pattern — partial `UniqueConstraint` on
   `(helper, target_condition_instance)` where true, #2644)
+  - `SceneActionRequest.target_condition_instance` is SET_NULL with `target_condition_template`/
+    `target_condition_name` snapshot columns; `ConditionInstance.delete()` expires open treat requests
+    and fills missing snapshots via `settle_treatment_requests_for_condition` (#4475)
 - **Lookup Tables:** `CapabilityType`, `CheckType`, `DamageType`
 - **Handlers:** `obj.conditions` (`ConditionHandler` / `CharacterConditionHandler` in
   `world/conditions/handlers.py`, installed as `@cached_property` on `ObjectParent`).

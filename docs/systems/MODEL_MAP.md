@@ -8900,6 +8900,7 @@
   - action_template -> actions.ActionTemplate [FK] (nullable)
   - treatment -> conditions.TreatmentTemplate [FK] (nullable)
   - target_condition_instance -> conditions.ConditionInstance [FK] (nullable)
+  - target_condition_template -> conditions.ConditionTemplate [FK] (nullable)
   - target_pending_alteration -> magic.PendingAlteration [FK] (nullable)
   - thread_used -> magic.Thread [FK] (nullable)
   - technique -> magic.Technique [FK] (nullable)
