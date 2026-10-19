@@ -15,11 +15,18 @@ child rows, applied by ``world.roster.services.staff_characters
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, ClassVar
+
 from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.contributors.models import CreditedContent
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class NPCStatlinePreset(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -52,8 +59,24 @@ class NPCStatlinePreset(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    @PrunedCachedProperty
+    def cached_trait_lines(self) -> Sequence[NPCPresetTraitLine]:
+        """This preset's STAT lines with their traits (the catalog list prefetches it).
 
-class NPCPresetTraitLine(SharedMemoryModel):
+        A line's save or delete clears it through ``NPCPresetTraitLine.related_cache_fields``.
+        """
+        return list(self.trait_lines.select_related("trait"))
+
+    @PrunedCachedProperty
+    def cached_skill_lines(self) -> Sequence[NPCPresetSkillLine]:
+        """This preset's SKILL lines with their skills (the catalog list prefetches it).
+
+        A line's save or delete clears it through ``NPCPresetSkillLine.related_cache_fields``.
+        """
+        return list(self.skill_lines.select_related("skill", "skill__trait"))
+
+
+class NPCPresetTraitLine(RelatedCacheClearingMixin, SharedMemoryModel):
     """One STAT line on a preset, at display scale (1-10).
 
     ``apply_npc_preset`` converts ``display_value`` to the internal x10
@@ -61,6 +84,9 @@ class NPCPresetTraitLine(SharedMemoryModel):
     (``STAT_DISPLAY_DIVISOR``, ``world.traits.models``) -- staff author in
     the scale they see on a sheet, not the internal one.
     """
+
+    # The preset's cached line list (the catalog list reads it) follows every save.
+    related_cache_fields: ClassVar[list[str]] = ["preset"]
 
     preset = models.ForeignKey(
         NPCStatlinePreset,
@@ -94,13 +120,16 @@ class NPCPresetTraitLine(SharedMemoryModel):
         return f"{self.preset_id}: {self.trait_id}={self.display_value}"
 
 
-class NPCPresetSkillLine(SharedMemoryModel):
+class NPCPresetSkillLine(RelatedCacheClearingMixin, SharedMemoryModel):
     """One SKILL line on a preset, at true 1-100 scale.
 
     Skills store and display the same value (no x10 conversion, unlike
     stats) -- see ``STAT_DISPLAY_DIVISOR``'s docstring in
     ``world.traits.models``.
     """
+
+    # The preset's cached line list (the catalog list reads it) follows every save.
+    related_cache_fields: ClassVar[list[str]] = ["preset"]
 
     preset = models.ForeignKey(
         NPCStatlinePreset,

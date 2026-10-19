@@ -15,6 +15,11 @@ from world.checks.factories import CheckTypeFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_default_gm_level_caps
 from world.npc_services.models import PersonalityTrait
+from world.roster.factories import (
+    NPCPresetSkillLineFactory,
+    NPCPresetTraitLineFactory,
+    NPCStatlinePresetFactory,
+)
 from world.roster.models import RosterEntry
 from world.roster.services.npc_lending import answer_loan, offer_npc
 from world.roster.services.npc_placement import NOT_YOURS_MESSAGE
@@ -23,6 +28,7 @@ from world.scenes.factories import SceneFactory, SceneParticipationFactory
 CAST_LIST = "/api/scenes/{}/cast-list/"
 NPCS = "/api/roster/npcs/"
 TRAITS = "/api/npc-services/personality-traits/"
+PRESETS = "/api/roster/npc-presets/"
 
 
 class TheNpcFormsBackend(JourneyCase):
@@ -139,6 +145,27 @@ class TheNpcFormsBackend(JourneyCase):
         player = self.make_player("Ysmay", room=self.gate)
         refused = self.api(self.account_of(player)).get(TRAITS)
         self.assertEqual(refused.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_the_form_lists_stat_blocks_with_their_lines(self) -> None:
+        # #4418 bug 7: the list was a 500, so the form's Stat block picker was empty.
+        guard = NPCStatlinePresetFactory(name="Gate guard", description="A spear and a shield.")
+        strength = NPCPresetTraitLineFactory(preset=guard, display_value=3)
+        brawl = NPCPresetSkillLineFactory(preset=guard, value=25)
+
+        response = self.api(self.gm).get(PRESETS)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        self.assertEqual(
+            response.json()["results"],
+            [
+                {
+                    "id": guard.pk,
+                    "name": "Gate guard",
+                    "description": "A spear and a shield.",
+                    "trait_lines": [{"trait_name": strength.trait.name, "display_value": 3}],
+                    "skill_lines": [{"skill_name": brawl.skill.name, "value": 25}],
+                }
+            ],
+        )
 
     # -- placing, more cases --------------------------------------------------
 
