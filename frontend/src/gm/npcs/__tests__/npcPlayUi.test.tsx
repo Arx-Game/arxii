@@ -19,7 +19,7 @@ vi.mock('@/combat/api', async (importOriginal) => ({
 }));
 vi.mock('@/home/hall/queries', () => ({ useClockQuery: () => ({ data: undefined }) }));
 
-const vael: MyRosterEntry = {
+const vael = {
   id: 9,
   name: 'Captain Vael',
   character_id: 90,
@@ -43,7 +43,7 @@ const vael: MyRosterEntry = {
   thaw_available_at: null,
   session_count: 0,
   room_name: null,
-};
+} as unknown as MyRosterEntry;
 
 afterEach(() => {
   store.dispatch(resetGame());
