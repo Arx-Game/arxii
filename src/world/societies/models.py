@@ -1588,6 +1588,38 @@ class OrganizationReputationEvent(SharedMemoryModel):
             labels.append(label)
         return labels
 
+    def _relation_to_source(self) -> "OrganizationRelation | None":
+        """The authored relation this ripple followed, when it still exists."""
+        return OrganizationRelation.objects.filter(
+            organization=self.reputation.organization,
+            toward=self.source_event.reputation.organization,
+        ).first()
+
+    def ripple_move(self) -> str:
+        """A related-organization change as the GM reads it: its size and share of the source."""
+        other = self.source_event.reputation.organization.name
+        relation = self._relation_to_source()
+        share = (
+            f"{relation.share_percent}% of {other}'s {self.source_event.amount:+d}, "
+            f"{relation.get_kind_display().lower()}"
+            if relation
+            else f"{other}'s {self.source_event.amount:+d}"
+        )
+        return (
+            f"{self.get_cause_display().lower()}, {self.amount:+d} ({share}), "
+            f"{self.tier_before.title()} to {self.tier_after.title()}"
+        )
+
+    def ripple_source(self) -> str:
+        """The change this ripple followed, with what caused it, for the GM."""
+        source = self.source_event
+        cited = f" ({', '.join(source.cited(summary=True))})" if source.cited() else ""
+        return (
+            f"Source: {source.get_cause_display().lower()}{cited} moved "
+            f"{source.reputation.organization.name} by {source.amount:+d}, "
+            f"{source.tier_before.title()} to {source.tier_after.title()}"
+        )
+
     def _source_label(self) -> str:
         """A related-organization change, for staff: whose change it followed, and the share."""
         source = self.source_event
@@ -1758,8 +1790,8 @@ class NamedOrganization(SharedMemoryModel):
                 "does not know about the help has nothing to react to."
             )
         if self.consequence_effect_id is not None:
-            if self.base_amount is None:
-                errors["base_amount"] = "A consequence row needs a base amount."
+            if not self.base_amount:
+                errors["base_amount"] = "A consequence row needs a base amount above zero."
             if self.consequence_effect.effect_type != EffectType.LEGEND_AWARD:
                 errors["consequence_effect"] = "Only a LEGEND_AWARD effect can name organizations."
         elif self.base_amount is not None:

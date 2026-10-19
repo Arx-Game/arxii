@@ -904,14 +904,13 @@ def bump_organization_reputation(  # noqa: PLR0913 - keyword-only; each is a dis
             )
             event.full_clean()
             event.save()
+            # One transaction with the change it follows: a ripple that fails leaves neither.
+            _ripple_to_related_organizations(persona, event)
 
     if event is not None and event.tier_before != event.tier_after:
         from world.societies.notifications import notify_reputation_tier_change  # noqa: PLC0415
 
         notify_reputation_tier_change(event)
-
-    if event is not None:
-        _ripple_to_related_organizations(persona, event)
 
     from world.stories.services.reactivity import on_character_state_changed  # noqa: PLC0415
 

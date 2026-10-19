@@ -264,19 +264,53 @@ def _current_value(persona: Persona, organization: Organization) -> int:
     return row.value if row is not None else 0
 
 
+def _stance(organization: Organization, name: str) -> str | None:
+    """One principle as the author sees it: "method -4 (override; society: 1)", else None."""
+    override = getattr(organization, f"{name}_override")
+    society_value = getattr(organization.society, name) if organization.society_id else None
+    if override is not None:
+        society = f"society: {society_value}" if society_value is not None else "no society"
+        return f"{name} {override} (override; {society})"
+    if society_value:
+        return f"{name} {society_value} (society value)"
+    return None
+
+
+def _adjustment_working(reaction: NamedReaction, archetypes: Sequence) -> str:
+    """The adjustment's arithmetic, one term per axis the deed and the organization share."""
+    values = vars(effective_principles(reaction.organization))
+    terms = []
+    for name in PRINCIPLE_FIELD_NAMES:
+        value = values[name]
+        if not value:
+            continue
+        # The dot product through this one axis alone is (deed's axis sum) x (value).
+        alone = SimpleNamespace(**{other: value if other == name else 0 for other in values})
+        product = _archetype_dot_product(archetypes, alone)
+        if product:
+            terms.append(f"{product // value} x {value} = {product:+d}")
+    if not terms:
+        return "+0"
+    total = _archetype_dot_product(archetypes, SimpleNamespace(**values))
+    scaled = total * NAMED_ORG_PRINCIPLE_SCALE
+    return f"{', '.join(terms)}, x {NAMED_ORG_PRINCIPLE_SCALE} = {scaled:+d}"
+
+
 def estimate_for_staff(named: NamedOrganization) -> str:
     """What a named-organization row would pay, for the admin inline. Staff only.
 
-    Reads the row's effective principles and, for a mission row, the award's magnitude and
-    archetypes; a consequence row is shown at the base tier multiplier of 1.0.
+    Shows the organization's effective principles, then the base, the adjustment's working
+    and the total with the tier it moves to from Unknown. A mission row reads the award's
+    magnitude and archetypes; a consequence row is shown at the base tier multiplier of 1.0.
     """
+    from world.societies.types import ReputationTier  # noqa: PLC0415
+
     organization = named.organization
-    principles = effective_principles(organization)
-    stances = ", ".join(
-        f"{name} {getattr(principles, name)}"
+    stances = [
+        stance
         for name in PRINCIPLE_FIELD_NAMES
-        if getattr(principles, name)
-    )
+        if (stance := _stance(organization, name)) is not None
+    ]
     if named.mission_award_id:
         base = named_organization_base(named.mission_award.magnitude)
         archetypes = list(named.mission_award.archetypes.all())
@@ -285,12 +319,16 @@ def estimate_for_staff(named: NamedOrganization) -> str:
         archetypes = []
     reaction = NamedReaction(organization, named.role, named.only_if_exposed, base)
     total = reaction_total(reaction, archetypes)
-    from world.societies.types import ReputationTier  # noqa: PLC0415
-
     tier = ReputationTier.from_value(total).display_name
-    when = "applied only if exposed" if named.only_if_exposed else "applied at once"
+    sign = -1 if named.role == NamedOrganizationRole.HARMED else 1
+    outcome = f"Total {total:+d}: Unknown to {tier}."
+    if named.only_if_exposed:
+        outcome = (
+            f"Total {total:+d} ({tier}), applied only if exposed: recorded as a victim on a "
+            "secret about the award holder."
+        )
     return (
-        f"Principles: {stances or 'none'}. Base {base}, adjustment "
-        f"{principle_adjustment(reaction, archetypes):+d} (cap {base // 2}). "
-        f"Total {total:+d} ({tier} from Unknown), {when}."
+        f"{'; '.join(stances) or 'No principles'}. "
+        f"Base {sign * base:+d}. Adjustment: {_adjustment_working(reaction, archetypes)} "
+        f"(cap {base // 2}). {outcome}"
     )

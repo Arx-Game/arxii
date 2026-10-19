@@ -1110,8 +1110,15 @@ class RankingDisplayAdmin(admin.ModelAdmin):
 class RenownMagnitudeAwardAdmin(admin.ModelAdmin):
     """#3831 - fame + prestige staff prices per RenownMagnitude tier."""
 
-    list_display = ("magnitude", "fame_award", "prestige_award", "named_organization_award")
+    list_display = ("magnitude", "fame_award", "prestige_award", "named_award")
     list_filter = ("magnitude",)
+
+    @admin.display(description="Named organization award")
+    def named_award(self, obj: RenownMagnitudeAward) -> int:
+        """What a mission reaction of this magnitude pays: the authored value, else the default."""
+        from world.societies.named_organizations import named_organization_base  # noqa: PLC0415
+
+        return named_organization_base(obj.magnitude)
 
 
 @admin.register(LegendSettlementConfig)

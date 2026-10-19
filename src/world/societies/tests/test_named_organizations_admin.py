@@ -46,7 +46,10 @@ class NamedOrganizationAdminTests(TestCase):
         )
         html = self._page("missionrenownaward", award.pk)
         self.assertIn("Organizations this act names", html)
-        self.assertIn("Base 120, adjustment +36 (cap 60). Total +156", html)
+        self.assertIn("method -4 (override; society: 0)", html)
+        self.assertIn("Base +120. Adjustment: -3 x -4 = +12, x 3 = +36 (cap 60).", html)
+        self.assertIn("Total +156: Unknown to Favored.", html)
+        self.assertIn("helped rows cannot", html)
         self.assertIn("named organization 120", html)
         self.assertIn("never flip the direction", html)
 
@@ -59,7 +62,8 @@ class NamedOrganizationAdminTests(TestCase):
         NamedOrganizationFactory(consequence_effect=effect, base_amount=200)
         html = self._page("consequenceeffect", effect.pk)
         self.assertIn("Organizations this act names", html)
-        self.assertIn("Base 200", html)
+        self.assertIn("Base -200.", html)
+        self.assertIn("Total -200: Unknown to Disfavored.", html)
         self.assertIn("Consequences have no magnitude", html)
 
     def test_the_organization_page_authors_and_lists_relations(self) -> None:

@@ -164,11 +164,16 @@ class StandoffPayloadTests(TestCase):
         (group,) = self.detail(self.gm)["gm_standoff"]["groups"]
         (rule,) = [r for r in group["faction_rules"] if r["angle_text"] == "the wardens favor her"]
         (reason,) = rule["why"]
-        tier_line, moved = reason.split("\n")
+        tier_line, moved, source = reason.split("\n")
         self.assertIn("Favored", tier_line)
-        self.assertIn("related organization", moved)
-        self.assertIn("Hallowed Court moved -240 by gang turf (Unknown to Disfavored", moved)
-        self.assertIn("rival 50%", moved)
+        self.assertEqual(
+            moved,
+            "Moved by: related organization, +120 (50% of Hallowed Court's -240, rival), "
+            "Unknown to Favored",
+        )
+        self.assertEqual(
+            source, "Source: gang turf moved Hallowed Court by -240, Unknown to Disfavored"
+        )
 
     def test_no_player_or_onlooker_payload_carries_the_gm_view(self) -> None:
         for account in (self.player, self.onlooker):

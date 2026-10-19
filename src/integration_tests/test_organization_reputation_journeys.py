@@ -258,4 +258,5 @@ class AMissionForOneOrganizationAgainstAnother(JourneyCase):
             self.persona,
         )
         self.assertIn("related organization", reason)
-        self.assertIn("Millwrights moved -250 by secret exposed", reason)
+        self.assertIn("+125 (50% of Millwrights' -250, rival)", reason)
+        self.assertIn("Source: secret exposed (secret #", reason)
