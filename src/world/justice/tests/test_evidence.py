@@ -145,6 +145,30 @@ class DisposeEvidenceTests(EvidenceCheckFixture):
         assert evidence.item_instance is None
         assert not ItemInstance.objects.filter(pk=item_pk).exists()
 
+    def test_disposing_evidence_that_changed_hands_keeps_its_row_out_of_play(self):
+        """#4474: an item with provenance is soft-destroyed by the destroy rule, and its
+        game object leaves play instead of being deleted along with the row."""
+        from evennia.objects.models import ObjectDB
+
+        from world.items.constants import OwnershipEventType
+        from world.items.models import ItemInstance, OwnershipEvent
+
+        evidence = self._gathered()
+        item = evidence.item_instance
+        game_object_pk = item.game_object_id
+        OwnershipEvent.objects.create(
+            item_instance=item,
+            event_type=OwnershipEventType.GIVEN,
+            to_character_sheet=self.sheet,
+        )
+        with force_check_outcome(self.success):
+            dispose_evidence(self.character, evidence)
+        item = ItemInstance.objects.get(pk=item.pk)
+        assert item.destroyed_at is not None
+        assert item.ownership_events.filter(event_type=OwnershipEventType.CONSUMED).exists()
+        assert ObjectDB.objects.get(pk=game_object_pk).location is None
+        assert list(self.character.carried_items) == []
+
     def test_failed_dispose_keeps_the_item(self):
         evidence = self._gathered()
         with force_check_outcome(self.failure):

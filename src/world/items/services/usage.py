@@ -57,6 +57,29 @@ def hard_delete_item_instance(item_instance: ItemInstance) -> None:
         item_instance.delete()
 
 
+def dematerialize_item_instance(item_instance: ItemInstance) -> None:
+    """Drop an item's game object and keep the item: custody is the row, not the prop (#4474).
+
+    ``ItemInstance.game_object`` cascades from the object, so deleting the object first
+    deletes the item row and its whole history. The object is detached and saved BEFORE
+    it is deleted, so the cascade finds nothing to take. Used wherever an item changes
+    to custody that needs no physical object (an org vault, a boon whose object cannot
+    follow). It is not a destroy path: a row that is used up goes through
+    ``destroy_consumed_item_instance``. A row-only item is a no-op. The holder's
+    ``carried_items`` cache is invalidated. Mutates the instance in place; caller owns
+    the transaction.
+    """
+    game_object = item_instance.game_object
+    if game_object is None:
+        return
+    holder_object = game_object.location
+    item_instance.game_object = None
+    item_instance.save(update_fields=["game_object"])
+    game_object.delete()
+    if holder_object is not None and hasattr(holder_object, "carried_items"):
+        holder_object.carried_items.invalidate()
+
+
 def destroy_consumed_item_instance(
     item_instance: ItemInstance,
     *,
