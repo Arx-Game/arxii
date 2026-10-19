@@ -676,6 +676,40 @@ class AGuidePlaysALentNpc(JourneyCase):
             any(line.startswith("Aftermath: Victory.") for line in telnet_lines), telnet_lines
         )
 
+    def _dispatch_as_vael(self, account, key: str):
+        return self.api(account).post(
+            f"/api/actions/characters/{self.vael.pk}/dispatch/",
+            {"ref": {"backend": "registry", "registry_key": key}, "kwargs": {}},
+            format="json",
+        )
+
+    def test_the_web_dispatches_actions_as_whoever_plays_the_npc(self) -> None:
+        # Round 8 item 12: every web dispatch as a lent NPC was a 403 before any
+        # game rule ran; the endpoint checked tenure, not who may play the NPC.
+        loan_id = self._lend()
+
+        # Look with nothing named reaches the action's own answer, not a 403.
+        looked = self._dispatch_as_vael(self.guide, "look")
+        self.assertEqual(looked.status_code, status.HTTP_200_OK, looked.data)
+        self.assertEqual(looked.json()["message"], "Look at what?")
+        # A GM-only action reaches its own rule, which refuses the Guide.
+        finish = self._dispatch_as_vael(self.guide, "finish_scene")
+        self.assertEqual(finish.status_code, status.HTTP_200_OK, finish.data)
+        self.assertEqual(
+            finish.json()["message"], "Only the scene's GM or an owner can finish the scene."
+        )
+        # Lent away, the NPC is not its owner's to act as.
+        self.assertEqual(
+            self._dispatch_as_vael(self.gm, "look").status_code, status.HTTP_403_FORBIDDEN
+        )
+
+        taken = self.web(self.ravenna, "take_back_npc", loan_id=loan_id)
+        self.assertTrue(taken.detail.success, taken.detail.message)
+        self.assertEqual(self._dispatch_as_vael(self.gm, "look").status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self._dispatch_as_vael(self.guide, "look").status_code, status.HTTP_403_FORBIDDEN
+        )
+
     def test_a_scene_ends_with_an_unplayed_npc_in_the_room(self) -> None:
         self.assertIsNone(self.vael.account)
         finished = self.web(self.ravenna, "finish_scene")
