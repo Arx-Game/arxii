@@ -18,7 +18,7 @@ from actions.types import ActionRef
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.services import perform_check
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import CheckCapture, force_check_outcome
 from world.checks.types import CheckResult, ExtraTraitTerm
 from world.classes.factories import PathFactory
 from world.combat.constants import ActionCategory, ParticipantStatus
@@ -300,30 +300,39 @@ class ResistingLossOfSelf(JourneyCase):
         )
         return ConditionInstanceFactory(target=self.ysmay, condition=template, is_aware=True)
 
-    def roll_after(self, character, line: str) -> tuple[ExtraTraitTerm, ...]:
-        """The skill terms the roll behind ``line`` carried."""
+    def roll_after(self, character, line: str) -> CheckCapture:
+        """What the roll behind ``line`` was made with; fails when no roll happened."""
         success = CheckOutcome.objects.get(name="Success")
         with force_check_outcome(success) as capture:
             self.telnet(character, line)
-        return capture.extra_traits
+        self.assertIsNotNone(capture.check_type, f"{line!r} made no roll")
+        return capture
 
     def test_breaking_free_of_corruption_adds_the_skill(self) -> None:
         self.hold_on_ysmay(loss_of_self=True)
 
-        terms = self.roll_after(self.ysmay, "breakfree")
+        capture = self.roll_after(self.ysmay, "breakfree")
 
-        self.assertEqual(terms, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),))
+        self.assertEqual(
+            capture.extra_traits, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),)
+        )
 
     def test_a_friends_rally_adds_nothing_of_his_own(self) -> None:
         """The rally roll is Hobb's persuasion; Ysmay's skill joins only her own break-free."""
-        self.hold_on_ysmay(loss_of_self=True)
+        hold = self.hold_on_ysmay(loss_of_self=True)
 
-        self.assertEqual(self.roll_after(self.hobb, "rally Ysmay"), ())
+        capture = self.roll_after(self.hobb, "rally Ysmay")
+
+        self.assertEqual(capture.check_type, hold.condition.break_free_check_type)
+        self.assertEqual(capture.extra_traits, ())
 
     def test_breaking_free_of_an_ordinary_hold_adds_nothing(self) -> None:
-        self.hold_on_ysmay(loss_of_self=False)
+        hold = self.hold_on_ysmay(loss_of_self=False)
 
-        self.assertEqual(self.roll_after(self.ysmay, "breakfree"), ())
+        capture = self.roll_after(self.ysmay, "breakfree")
+
+        self.assertEqual(capture.check_type, hold.condition.break_free_check_type)
+        self.assertEqual(capture.extra_traits, ())
 
     def test_resist_corruption_adds_loss_of_self_skill(self) -> None:
         """The roll made when a corrupting condition is applied carries the skill."""
