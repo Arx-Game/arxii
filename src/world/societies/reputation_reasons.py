@@ -24,7 +24,7 @@ from world.societies.models import (
 )
 from world.societies.types import ReputationTier
 
-_TOKEN = re.compile(r"\{(tier|title|organization)\}")
+_TOKEN = re.compile(r"\{(tier|title|organization|other_tier)\}")
 
 
 def _tier_name(tier_value: str) -> str:
@@ -67,6 +67,7 @@ def reason_line(event: OrganizationReputationEvent, copy: dict[str, str]) -> str
         "organization": (
             event.source_event.reputation.organization.name if event.source_event_id else ""
         ),
+        "other_tier": _tier_name(event.source_event.tier_after) if event.source_event_id else "",
     }
     return _TOKEN.sub(lambda match: values[match.group(1)], template)
 

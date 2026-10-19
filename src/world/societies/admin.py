@@ -23,6 +23,7 @@ from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import OrganizationCodexGrant
 from world.codex.services import apply_organization_codex_grants
 from world.contributors.admin import CREDIT_FIELDSET
+from world.societies.constants import PRINCIPLE_FIELD_NAMES
 from world.societies.models import (
     AssociationConfig,
     CovenantLegendCredit,
@@ -52,6 +53,7 @@ from world.societies.models import (
     OrganizationMembershipOffer,
     OrganizationObligation,
     OrganizationRank,
+    OrganizationRelation,
     OrganizationReputation,
     OrganizationReputationEvent,
     OrganizationReputationReasonLine,
@@ -324,6 +326,36 @@ class VacancyInline(admin.TabularInline):
     raw_id_fields = ("kin_pool", "kin_node", "rank")
 
 
+class OrganizationRelationInline(admin.TabularInline):
+    """Organizations this one reacts to: a rival or ally follows a share of their change (#4473)."""
+
+    model = OrganizationRelation
+    fk_name = "organization"
+    formset = OneRowPerFormSet
+    extra = 0
+    verbose_name_plural = "Reacts to changes with"
+    fields = ("toward", "kind", "share_percent")
+    autocomplete_fields = ("toward",)
+
+
+class ReactingOrganizationInline(admin.TabularInline):
+    """Organizations that react to this one, read only; edit them on their own page (#4473)."""
+
+    model = OrganizationRelation
+    fk_name = "toward"
+    extra = 0
+    can_delete = False
+    verbose_name_plural = "Organizations that react to this one (read only)"
+    fields = ("organization", "kind", "share_percent")
+    readonly_fields = fields
+
+    def has_add_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
 def apply_grants_to_new_memberships(request: HttpRequest, formsets) -> int:
     """A membership row added on the Organization page learns the org's grants (#3788).
 
@@ -379,7 +411,10 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
         OrganizationCodexGrantInline,
         OrganizationGiftGrantInline,
         VacancyInline,
+        OrganizationRelationInline,
+        ReactingOrganizationInline,
     ]
+    readonly_fields = ["effective_principles"]
 
     fieldsets = (
         (None, {"fields": ("name", "society", "org_type", "tradition", "description")}),
@@ -390,9 +425,11 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
                     ("mercy_override", "method_override"),
                     ("status_override", "change_override"),
                     ("allegiance_override", "power_override"),
+                    "effective_principles",
                 ),
                 "description": (
-                    "Leave blank to inherit from the society. Values range from -5 to +5."
+                    "Leave blank to inherit from the society. Values range from -5 to +5. "
+                    "A deed that names this organization reads the effective values."
                 ),
                 "classes": ["collapse"],
             },
@@ -412,6 +449,21 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
             },
         ),
     )
+
+    @admin.display(description="Effective principles")
+    def effective_principles(self, obj) -> str:
+        """Each principle's value as a deed that names this organization reads it."""
+        if obj.pk is None:
+            return "Save to see the effective principles."
+        parts = []
+        for name in PRINCIPLE_FIELD_NAMES:
+            source = (
+                "override"
+                if getattr(obj, f"{name}_override") is not None
+                else ("society" if obj.society_id else "default")
+            )
+            parts.append(f"{name} {obj.get_effective_principle(name)} ({source})")
+        return ", ".join(parts)
 
     def member_count(self, obj):
         """Return the number of members in this organization."""
@@ -1043,7 +1095,7 @@ class RankingDisplayAdmin(admin.ModelAdmin):
 class RenownMagnitudeAwardAdmin(admin.ModelAdmin):
     """#3831 - fame + prestige staff prices per RenownMagnitude tier."""
 
-    list_display = ("magnitude", "fame_award", "prestige_award")
+    list_display = ("magnitude", "fame_award", "prestige_award", "named_organization_award")
     list_filter = ("magnitude",)
 
 

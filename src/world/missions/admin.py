@@ -28,6 +28,7 @@ from world.missions.models import (
     MissionRenownAward,
     MissionTemplate,
 )
+from world.societies.admin_inlines import MissionAwardNamedOrganizationInline
 
 
 @admin.register(MissionCategory)
@@ -143,6 +144,7 @@ class MissionRenownAwardAdmin(admin.ModelAdmin):
     list_select_related = ["route"]
     autocomplete_fields = ["route"]
     filter_horizontal = ["archetypes"]
+    inlines = [MissionAwardNamedOrganizationInline]
 
 
 @admin.register(MissionAssistPattern)

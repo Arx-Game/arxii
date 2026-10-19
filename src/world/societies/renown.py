@@ -237,6 +237,8 @@ class RenownAwardResult:
     # Phase C: org accumulated inflow + covenant-legend body-flow.
     org_inflow_org_ids: tuple[int, ...] = field(default_factory=tuple)
     covenant_legend_inflow_org_ids: tuple[int, ...] = field(default_factory=tuple)
+    # #4473: what each organization the award named moved by, keyed by organization pk.
+    named_organization_deltas: dict[int, int] = field(default_factory=dict)
 
 
 def _bump_prestige_from_deeds(persona: Persona, delta: int) -> None:
@@ -358,6 +360,8 @@ def fire_renown_award(  # noqa: PLR0913
     settled_risk: str | None = None,
     station: int = 0,
     structurally_perilous: bool = False,
+    named_reactions: Sequence = (),
+    mission_deed: object | None = None,
 ) -> RenownAwardResult:
     """Thin wrapper around :func:`_apply_renown_award` that fires the
     #743 narrative notification post-commit.
@@ -380,6 +384,8 @@ def fire_renown_award(  # noqa: PLR0913
         settled_risk=settled_risk,
         station=station,
         structurally_perilous=structurally_perilous,
+        named_reactions=named_reactions,
+        mission_deed=mission_deed,
     )
     try:
         from world.societies.notifications import notify_renown_event  # noqa: PLC0415
@@ -414,6 +420,8 @@ class _AwardInputs:
     overrides: dict
     title: str
     station: int = 0
+    named_reactions: tuple = ()
+    mission_deed: object | None = None
 
 
 def _magnitude_awards(magnitude: str | None) -> tuple[int, int]:
@@ -509,6 +517,8 @@ def _resolve_award_inputs(  # noqa: PLR0913
     settled_risk: str | None = None,
     station: int = 0,
     structurally_perilous: bool = False,
+    named_reactions: Sequence = (),
+    mission_deed: object | None = None,
 ) -> _AwardInputs:
     """Compute the normalized inputs once so the apply-phase helpers stay focused."""
     fame_awarded, prestige_awarded = _magnitude_awards(magnitude)
@@ -530,6 +540,8 @@ def _resolve_award_inputs(  # noqa: PLR0913
         aware_realm_ids=tuple(r.pk for r in aware_realms),
         overrides=society_overrides or {},
         title=title,
+        named_reactions=tuple(named_reactions),
+        mission_deed=mission_deed,
     )
 
 
@@ -572,6 +584,31 @@ def _apply_archetype_reputation(inputs: _AwardInputs) -> tuple[list[int], dict[i
         bump_society_reputation(inputs.persona, society, rep_delta, scale_gain=False)
         reputation_deltas[society.pk] = rep_delta
     return aware_society_ids, reputation_deltas
+
+
+def _apply_named_organization_reputation(inputs: _AwardInputs) -> dict[int, int]:
+    """Apply the organizations this award names (#4473): ``{organization pk: change}``.
+
+    A mission award has no scene, so it never goes through the reach check: a named
+    organization reacts at once unless the author marked the harmed row "only if exposed",
+    which records it as a victim on a secret about the award holder. The deed record is
+    stored either way. No-op for an award that names no organization.
+    """
+    if not inputs.named_reactions:
+        return {}
+    from world.societies.named_organizations import (  # noqa: PLC0415
+        react_to_named_organizations,
+        record_deed_organizations,
+    )
+
+    record_deed_organizations(inputs.named_reactions, mission_deed=inputs.mission_deed)
+    return react_to_named_organizations(
+        persona=inputs.persona,
+        reactions=inputs.named_reactions,
+        archetypes=inputs.archetype_list,
+        title=inputs.title,
+        mission_deed=inputs.mission_deed,
+    )
 
 
 def _create_legend_entry(inputs: _AwardInputs, aware_society_ids: list[int]) -> int | None:
@@ -632,6 +669,8 @@ def _apply_renown_award(  # noqa: PLR0913
     settled_risk: str | None = None,
     station: int = 0,
     structurally_perilous: bool = False,
+    named_reactions: Sequence = (),
+    mission_deed: object | None = None,
 ) -> RenownAwardResult:
     """Apply a Renown award bundle to ``persona``. Writes across every axis.
 
@@ -666,9 +705,12 @@ def _apply_renown_award(  # noqa: PLR0913
         settled_risk=settled_risk,
         station=station,
         structurally_perilous=structurally_perilous,
+        named_reactions=named_reactions,
+        mission_deed=mission_deed,
     )
     fame_tier_changed = _apply_magnitude_writes(inputs)
     aware_society_ids, reputation_deltas = _apply_archetype_reputation(inputs)
+    named_organization_deltas = _apply_named_organization_reputation(inputs)
     legend_entry_id = _create_legend_entry(inputs, aware_society_ids)
     org_inflow_org_ids, covenant_legend_inflow_org_ids = _apply_org_flows(inputs)
     return RenownAwardResult(
@@ -682,6 +724,7 @@ def _apply_renown_award(  # noqa: PLR0913
         reputation_deltas=reputation_deltas,
         org_inflow_org_ids=org_inflow_org_ids,
         covenant_legend_inflow_org_ids=covenant_legend_inflow_org_ids,
+        named_organization_deltas=named_organization_deltas,
     )
 
 
@@ -867,11 +910,53 @@ def bump_organization_reputation(  # noqa: PLR0913 - keyword-only; each is a dis
 
         notify_reputation_tier_change(event)
 
+    if event is not None:
+        _ripple_to_related_organizations(persona, event)
+
     from world.stories.services.reactivity import on_character_state_changed  # noqa: PLC0415
 
     on_character_state_changed(persona.character_sheet)
 
     return reputation.value
+
+
+def _ripple_to_related_organizations(persona: Persona, event) -> None:
+    """Move every organization that follows this one by its authored share (#4473, #4339).
+
+    Staff author ``OrganizationRelation`` rows ahead of play: ``organization`` reacts to a
+    change in ``toward``'s reputation of a character by ``share_percent`` of the change that
+    was actually applied, the same way for an ally and the opposite way for a rival. Each
+    goes through this same writer as RELATED_ORGANIZATION citing the source change, so it is
+    recorded and explained like any other. One step only: a related-organization change is
+    never rippled again, and neither is a character-creation seed or a staff adjustment
+    (``NON_RIPPLING_CAUSES``). The gain lever already scaled the source change, so the
+    ripple is not scaled a second time.
+    """
+    from world.societies.constants import (  # noqa: PLC0415
+        NON_RIPPLING_CAUSES,
+        OrganizationRelationKind,
+        OrganizationReputationCause,
+    )
+    from world.societies.models import OrganizationRelation  # noqa: PLC0415
+
+    if event.cause in NON_RIPPLING_CAUSES:
+        return
+    relations = OrganizationRelation.objects.filter(
+        toward=event.reputation.organization
+    ).select_related("organization")
+    for relation in relations:
+        magnitude = (abs(event.amount) * relation.share_percent + 50) // 100
+        if magnitude == 0:
+            continue
+        positive = (event.amount > 0) == (relation.kind == OrganizationRelationKind.ALLY)
+        bump_organization_reputation(
+            persona,
+            relation.organization,
+            magnitude if positive else -magnitude,
+            cause=OrganizationReputationCause.RELATED_ORGANIZATION,
+            scale_gain=False,
+            source_event=event,
+        )
 
 
 # ---------------------------------------------------------------------------

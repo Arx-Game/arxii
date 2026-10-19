@@ -1,1 +1,1 @@
-0256_gift_technique_skill_minor_only
+0257_organization_reputation_slice_2

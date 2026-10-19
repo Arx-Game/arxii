@@ -28,10 +28,14 @@ from django.utils.functional import cached_property
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.checks.constants import EffectType
 from world.checks.models import OutcomeTierAward
 from world.contributors.models import CreditedContent
 from world.societies.constants import (
     COMMON_KNOWLEDGE_MULTIPLIER,
+    ORGANIZATION_RELATION_SHARE_DEFAULT,
+    ORGANIZATION_RELATION_SHARE_MAX,
+    ORGANIZATION_RELATION_SHARE_MIN,
     VACANCY_BASIS_KIN,
     VACANCY_BASIS_RETAINER,
     CrimeTier,
@@ -40,8 +44,10 @@ from world.societies.constants import (
     EnemyReach,
     LevyKind,
     MembershipFavor,
+    NamedOrganizationRole,
     ObligationOrigin,
     ObligationState,
+    OrganizationRelationKind,
     OrganizationReputationCause,
     OrgAppealState,
     RenownMagnitude,
@@ -496,8 +502,8 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         """
         Get the effective value for a principle.
 
-        Returns the organization's override if set, otherwise returns the
-        society's value for that principle.
+        Returns the organization's override if set, otherwise the society's value
+        for that principle, otherwise 0 (a standalone organization with no override).
 
         Args:
             principle_name: One of 'mercy', 'method', 'status', 'change',
@@ -508,18 +514,14 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
 
         Raises:
             AttributeError: If principle_name is not a valid principle
-            ValueError: If society is None and no override is set for the principle
         """
         override_field = f"{principle_name}_override"
         override_value = getattr(self, override_field)
         if override_value is not None:
             return override_value
         if self.society is None:
-            msg = (
-                f"Cannot resolve principle {principle_name!r} for standalone "
-                f"organization {self.name!r}: no society and no override set."
-            )
-            raise ValueError(msg)
+            # A standalone organization with no override holds no stance on the axis.
+            return 0
         return getattr(self.society, principle_name)
 
     def get_rank_title(self, rank: int) -> str:
@@ -1577,8 +1579,29 @@ class OrganizationReputationEvent(SharedMemoryModel):
                 label += f", level {self.secret.level}"
                 if summary:
                     label += f": {' '.join(self.secret.content.split())[:60]}"
+            elif field == "legend_entry" and summary:  # noqa: STRING_LITERAL - a field name
+                label += f": {self.legend_entry.title}"
+            elif field == "mission_deed" and summary:  # noqa: STRING_LITERAL - a field name
+                label += f": {self.mission_deed.instance.template.name}"
+            elif field == "source_event":  # noqa: STRING_LITERAL - a citation field name
+                label = self._source_label()
             labels.append(label)
         return labels
+
+    def _source_label(self) -> str:
+        """A related-organization change, for staff: whose change it followed, and the share."""
+        source = self.source_event
+        other = source.reputation.organization
+        relation = OrganizationRelation.objects.filter(
+            organization=self.reputation.organization, toward=other
+        ).first()
+        share = (
+            f", {relation.get_kind_display().lower()} {relation.share_percent}%" if relation else ""
+        )
+        return (
+            f"{other.name} moved {source.amount:+d} by {source.get_cause_display().lower()}"
+            f" ({source.tier_before.title()} to {source.tier_after.title()}{share})"
+        )
 
     def __str__(self) -> str:
         return (
@@ -1607,7 +1630,8 @@ class OrganizationReputationReasonLine(SharedMemoryModel):
         blank=True,
         help_text=(
             "The line the player reads. Tokens: {tier} (the tier after the change), "
-            "{title} (the deed or story title), {organization} (the other organization). "
+            "{title} (the deed or story title), {organization} (the other organization), "
+            "{other_tier} (that organization's tier after its own change). "
             "Blank = the bracketed placeholder."
         ),
     )
@@ -1619,6 +1643,273 @@ class OrganizationReputationReasonLine(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Reason line: {self.get_cause_display()}"
+
+
+class NamedOrganization(SharedMemoryModel):
+    """An organization an authored act names as harmed or helped (#4473, #4339).
+
+    Authors name organizations where the deed is defined: on a mission's renown award
+    (``mission_award``) or on a story consequence's LEGEND_AWARD effect
+    (``consequence_effect``). One table with exactly one owner, as ``FactionRule`` does.
+    When the award fires the organization reacts through ``bump_organization_reputation``;
+    a harmed row marked ``only_if_exposed`` reacts only if the act is exposed.
+    A mission row's size comes from the award's magnitude
+    (``RenownMagnitudeAward.named_organization_award``); a consequence row carries its own
+    ``base_amount``, scaled by the outcome tier.
+    """
+
+    mission_award = models.ForeignKey(
+        "arxii.MissionRenownAward",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="named_organizations",
+        help_text="The mission renown award that names this organization.",
+    )
+    consequence_effect = models.ForeignKey(
+        "arxii.ConsequenceEffect",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="named_organizations",
+        help_text="The LEGEND_AWARD consequence effect that names this organization.",
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.CASCADE,
+        related_name="named_by_acts",
+        help_text="The organization the act names.",
+    )
+    role = models.CharField(
+        max_length=8,
+        choices=NamedOrganizationRole.choices,
+        help_text=(
+            "Harmed lowers the organization's reputation of the award holder; helped raises it."
+        ),
+    )
+    only_if_exposed = models.BooleanField(
+        default=False,
+        help_text=(
+            "Harmed rows only. The organization reacts only if the act is exposed: it is "
+            "recorded as a victim on a secret about the award holder. A helped organization "
+            "that does not know about the help has nothing to react to."
+        ),
+    )
+    base_amount = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Consequence rows only (required there): the size of the reaction before the "
+            "outcome tier and the organization's principles adjust it. A mission row is "
+            "sized by its award's magnitude instead."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Named Organization"
+        verbose_name_plural = "Named Organizations"
+        ordering = ["pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(mission_award__isnull=False, consequence_effect__isnull=True)
+                    | models.Q(mission_award__isnull=True, consequence_effect__isnull=False)
+                ),
+                name="named_organization_one_owner",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(only_if_exposed=True, role=NamedOrganizationRole.HELPED),
+                name="named_organization_only_if_exposed_is_harmed",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(consequence_effect__isnull=True)
+                | models.Q(base_amount__isnull=False),
+                name="named_organization_consequence_has_base",
+            ),
+            models.UniqueConstraint(
+                fields=["mission_award", "organization"],
+                condition=models.Q(mission_award__isnull=False),
+                name="unique_named_organization_per_mission_award",
+            ),
+            models.UniqueConstraint(
+                fields=["consequence_effect", "organization"],
+                condition=models.Q(consequence_effect__isnull=False),
+                name="unique_named_organization_per_consequence_effect",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_role_display()} {self.organization}"
+
+    @property
+    def owner(self) -> object:
+        """The mission award or consequence effect this row belongs to."""
+        return self.mission_award or self.consequence_effect
+
+    def clean(self) -> None:
+        super().clean()
+        if (self.mission_award_id is None) == (self.consequence_effect_id is None):
+            msg = "A named organization belongs to exactly one mission award or consequence effect."
+            raise ValidationError(msg)
+        errors: dict[str, str] = {}
+        if self.only_if_exposed and self.role == NamedOrganizationRole.HELPED:
+            errors["only_if_exposed"] = (
+                "Only a harmed organization can react only if exposed; an organization that "
+                "does not know about the help has nothing to react to."
+            )
+        if self.consequence_effect_id is not None:
+            if self.base_amount is None:
+                errors["base_amount"] = "A consequence row needs a base amount."
+            if self.consequence_effect.effect_type != EffectType.LEGEND_AWARD:
+                errors["consequence_effect"] = "Only a LEGEND_AWARD effect can name organizations."
+        elif self.base_amount is not None:
+            errors["base_amount"] = (
+                "A mission row is sized by its award's magnitude; leave the base amount blank."
+            )
+        if errors:
+            raise ValidationError(errors)
+
+
+class DeedOrganization(SharedMemoryModel):
+    """An organization a recorded deed named as harmed or helped (#4473, #4339).
+
+    Written when an award that carries ``NamedOrganization`` rows fires, whether or not the
+    organization reacted at once (a contained or covert act records it here and reacts only
+    if exposed). A scene or story deed is a ``LegendEntry``; a mission deed is a
+    ``MissionDeedRecord`` (a mission award with no risk mints no legend entry, so the deed
+    record is what exists). The contained-secret copy reads the harmed rows, and staff
+    read them to see which organizations an act named.
+    """
+
+    legend_entry = models.ForeignKey(
+        "arxii.LegendEntry",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="named_organizations",
+        help_text="The scene or story deed that named the organization.",
+    )
+    mission_deed = models.ForeignKey(
+        "arxii.MissionDeedRecord",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="named_organizations",
+        help_text="The mission deed that named the organization.",
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.CASCADE,
+        related_name="named_in_deeds",
+        help_text="The organization the deed named.",
+    )
+    role = models.CharField(
+        max_length=8,
+        choices=NamedOrganizationRole.choices,
+        help_text="Whether the deed harmed or helped the organization.",
+    )
+
+    class Meta:
+        verbose_name = "Deed Organization"
+        verbose_name_plural = "Deed Organizations"
+        ordering = ["pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(legend_entry__isnull=False, mission_deed__isnull=True)
+                    | models.Q(legend_entry__isnull=True, mission_deed__isnull=False)
+                ),
+                name="deed_organization_one_owner",
+            ),
+            models.UniqueConstraint(
+                fields=["legend_entry", "organization"],
+                condition=models.Q(legend_entry__isnull=False),
+                name="unique_deed_organization_per_legend_entry",
+            ),
+            models.UniqueConstraint(
+                fields=["mission_deed", "organization"],
+                condition=models.Q(mission_deed__isnull=False),
+                name="unique_deed_organization_per_mission_deed",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_role_display()} {self.organization}"
+
+
+class OrganizationRelation(SharedMemoryModel):
+    """One organization's opinion of a character follows another's (#4473, #4339).
+
+    Staff author these ahead of play on the Organization admin page: ``organization``
+    reacts to changes in ``toward``'s reputation of a character, by ``share_percent`` of
+    the change, the same way for an ally and the opposite way for a rival. A row is
+    one-directional ([F] can be [D]'s rival without [D] caring about [F]). The ripple goes
+    one step only and follows changes from play, never a character-creation seed or a staff
+    adjustment (``constants.NON_RIPPLING_CAUSES``). Not ``OrgPact``: pacts are player
+    diplomacy made and broken in play, and a pact has no rival counterpart.
+    """
+
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.CASCADE,
+        related_name="relations_toward",
+        help_text="The organization that reacts.",
+    )
+    toward = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.CASCADE,
+        related_name="followed_by",
+        help_text="The organization whose change this one follows.",
+    )
+    kind = models.CharField(
+        max_length=8,
+        choices=OrganizationRelationKind.choices,
+        help_text="Ally moves the same way as the other organization; rival the opposite way.",
+    )
+    share_percent = models.PositiveSmallIntegerField(
+        default=ORGANIZATION_RELATION_SHARE_DEFAULT,
+        validators=[
+            MinValueValidator(ORGANIZATION_RELATION_SHARE_MIN),
+            MaxValueValidator(ORGANIZATION_RELATION_SHARE_MAX),
+        ],
+        help_text=(
+            "How much of the other organization's change this one follows, in percent "
+            f"({ORGANIZATION_RELATION_SHARE_MIN} to {ORGANIZATION_RELATION_SHARE_MAX})."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Organization Relation"
+        verbose_name_plural = "Organization Relations"
+        ordering = ["organization", "toward"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "toward"], name="unique_organization_relation_pair"
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(organization=models.F("toward")),
+                name="organization_relation_distinct_organizations",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    share_percent__gte=ORGANIZATION_RELATION_SHARE_MIN,
+                    share_percent__lte=ORGANIZATION_RELATION_SHARE_MAX,
+                ),
+                name="organization_relation_share_in_range",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.organization} reacts to {self.toward} "
+            f"({self.get_kind_display().lower()}, {self.share_percent}%)"
+        )
+
+    def clean(self) -> None:
+        super().clean()
+        if self.organization_id is not None and self.organization_id == self.toward_id:
+            msg = "An organization cannot react to itself."
+            raise ValidationError(msg)
 
 
 class LegendSourceType(NaturalKeyMixin, SharedMemoryModel):
@@ -2150,6 +2441,15 @@ class RenownMagnitudeAward(SharedMemoryModel):
     )
     prestige_award = models.PositiveIntegerField(
         help_text="Permanent prestige-from-deeds increment for this magnitude.",
+    )
+    named_organization_award = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The base of each named organization's reaction to a mission award of this "
+            "magnitude, before the organization's principles adjust it. Blank = the default "
+            "for the tier."
+        ),
     )
 
     class Meta:

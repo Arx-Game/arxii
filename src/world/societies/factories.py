@@ -14,8 +14,10 @@ from world.journals.factories import JournalEntryFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.societies.constants import (
+    NamedOrganizationRole,
     ObligationOrigin,
     ObligationState,
+    OrganizationRelationKind,
     OrganizationReputationCause,
 )
 from world.societies.membership_services import base_rank_for_organization
@@ -28,11 +30,13 @@ from world.societies.models import (
     LegendLevelCalibration,
     LegendSourceType,
     LegendSpread,
+    NamedOrganization,
     Organization,
     OrganizationMembership,
     OrganizationMembershipOffer,
     OrganizationObligation,
     OrganizationRank,
+    OrganizationRelation,
     OrganizationReputation,
     OrganizationReputationEvent,
     OrganizationReputationReasonLine,
@@ -445,3 +449,26 @@ class SecretSocietyOrganizationFactory(OrganizationFactory):
     """Factory for creating secret society organizations with appropriate rank titles."""
 
     org_type = factory.SubFactory(OrganizationTypeFactory, name="secret_society")
+
+
+class OrganizationRelationFactory(factory_django.DjangoModelFactory):
+    """One organization that follows another's reputation changes (#4473)."""
+
+    class Meta:
+        model = OrganizationRelation
+
+    organization = factory.SubFactory(OrganizationFactory)
+    toward = factory.SubFactory(OrganizationFactory)
+    kind = OrganizationRelationKind.ALLY
+    share_percent = 25
+
+
+class NamedOrganizationFactory(factory_django.DjangoModelFactory):
+    """An organization a mission award names; pass ``consequence_effect`` for a story one."""
+
+    class Meta:
+        model = NamedOrganization
+
+    organization = factory.SubFactory(OrganizationFactory)
+    role = NamedOrganizationRole.HARMED
+    only_if_exposed = False
