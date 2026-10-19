@@ -74,6 +74,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useCreateBlock, useCreateMute } from '@/social/queries';
 import { toast } from 'sonner';
+import { actingPersonaId } from '@/roster/persona';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import {
   usePersonaMenuQuery,
@@ -235,10 +236,14 @@ export function PersonaMenu({
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const accountId = useAppSelector((state) => state.auth.account?.id ?? null);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const characterId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
+  const activeEntry = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName) ?? null,
     [myRosterEntries, activeCharacterName]
   );
+  const characterId = activeEntry?.character_id ?? null;
+  // The face the active tab acts as (for a lent NPC tab, the NPC's persona): the server
+  // refuses a scene action that names no initiator.
+  const initiatorPersonaId = actingPersonaId(activeEntry);
 
   const [open, setOpen] = useState(false);
   const { data, isLoading } = usePersonaMenuQuery(characterId, personaId, open);
@@ -311,7 +316,12 @@ export function PersonaMenu({
       technique_id?: number;
       delivery?: string;
       delivery_receiver_ids?: number[];
-    }) => createActionRequest(sceneId ?? '', params),
+    }) =>
+      createActionRequest(sceneId ?? '', {
+        ...params,
+        initiator_persona: initiatorPersonaId ?? undefined,
+      }),
+    onError: (error: Error) => toast.error(error.message),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
