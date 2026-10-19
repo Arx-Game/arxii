@@ -14,3 +14,9 @@ register = template.Library()
 def faction_rule_label(rule: FactionRule) -> str:
     """A short staff-facing label for what a faction rule tests."""
     return _faction_rule_label(rule)
+
+
+@register.filter
+def reason_lines(reason: str) -> list[str]:
+    """A staff reason split into its lines: the tier first, then the causes, one each."""
+    return reason.splitlines()

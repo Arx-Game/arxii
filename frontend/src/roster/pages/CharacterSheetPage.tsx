@@ -20,6 +20,7 @@ import { MessagesSection } from '@/narrative/components/MessagesSection';
 import { FriendButton } from '@/friends/components/FriendButton';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { MaturationPanel } from '@/character_sheets/components/MaturationPanel';
+import { StandoffProfilePanel } from '@/character_sheets/components/StandoffProfilePanel';
 import { StatPointPanel } from '@/character_sheets/components/StatPointPanel';
 import { WorshipSection, type PublicWorshipRef } from '@/worship/components/WorshipSection';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
@@ -267,6 +268,7 @@ export function CharacterSheetPage() {
                   </>
                 }
               />
+              <StandoffProfilePanel sheetId={sheetId} />
               {/* Messages belongs here rather than on the front, per the spec's ledger:
                 it is the player's own correspondence about the character, which is a
                 Growth concern, not something a reader of the sheet came for. */}

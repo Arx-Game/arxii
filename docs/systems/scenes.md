@@ -891,7 +891,10 @@ closes any still pending. See `docs/systems/standoffs.md`. `BEING_ANSWER` (#4333
 the second decision kind: a scene-less prompt to a stewarded being's table GM, answered from the
 table page (`/api/worship/steward-prompts/{id}/answer/`) or telnet `gm prompt answer`; its queue
 row carries `being_answer_summary` and `being_answer_table`, and `dismiss` (`dismiss_gm_prompt`)
-draws one of the being's authored answers instead of releasing default lines. See
+draws one of the being's authored answers instead of releasing default lines. A rite
+performed in a GM-run scene (#4333 slice 5) raises the same kind with the scene set and
+`rite_performance` instead of `pledge`: its row carries `being_answer_live`, the panel opens in
+the queue (`/api/worship/live-answers/{id}/`), and dismissing sends nothing. See
 `docs/systems/worship.md`.
 
 **Who the queue says it concerns (ruling RF-2).** A queue row's `subject_name` and

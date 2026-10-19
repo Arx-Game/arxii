@@ -215,6 +215,10 @@ through a graded **"Magic: Technique Cast"** `ConsequencePool`. The anima ritual
 technique casts always share the same personal check (`provision_player_anima_ritual`
 in `services/anima.py`).
 
+A player can now perform the anima ritual itself (#4451): the Perform button on its card on the
+Rituals page and telnet `ritual anima` both reach `perform_anima_ritual` through
+`PerformRitualAction`, once per scene, in the scene the character stands in.
+
 Deferred to follow-up issues: optional resonance→aspect mapping for the per-character
 check (today all magic checks use the Arcana aspect).
 

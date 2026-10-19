@@ -65,6 +65,7 @@ from world.standoffs.models import (
     StandoffReveal,
     StandoffTerms,
 )
+from world.standoffs.services.character_profile import target_refusal
 from world.standoffs.services.faction_rules import (
     MatchedFactionRule,
     band_shift_from,
@@ -128,11 +129,22 @@ def _lock(
     return locked_encounter, locked_group
 
 
-def _refusal(encounter: CombatEncounter, group: StandoffGroup | None) -> str | None:
+def _refusal(
+    encounter: CombatEncounter,
+    group: StandoffGroup | None,
+    actor_sheet: CharacterSheet | None = None,
+) -> str | None:
+    """Why a verb on ``group`` cannot run; with ``actor_sheet`` it also enforces consent.
+
+    A group that is a player character is acted on only by another player character and
+    only once its player has opted in (#4441).
+    """
     if not is_in_standoff(encounter):
         return _MSG_OVER
     if group is not None and group.state not in LIVE_GROUP_STATES:
         return _MSG_SETTLED
+    if group is not None and actor_sheet is not None:
+        return target_refusal(group.persona, actor_sheet)
     return None
 
 
@@ -242,7 +254,7 @@ def standoff_read(
 ) -> StandoffActionResult:
     """Read a group: a partial reveals one hidden thing, a success the one looked for."""
     encounter, group = _lock(participant.encounter, group)
-    refusal = _refusal(encounter, group)
+    refusal = _refusal(encounter, group, participant.character_sheet)
     if refusal:
         return _refuse(refusal)
     config = StandoffConfig.load()
@@ -663,7 +675,7 @@ def _press_refusal(  # noqa: PLR0913 - the press's whole pre-roll context
     technique: Technique | None,
 ) -> str | None:
     """Why this press cannot be rolled, checked in order; None when it can."""
-    refusal = _refusal(encounter, group)
+    refusal = _refusal(encounter, group, sheet)
     if refusal:
         return refusal
     if not members:
@@ -797,7 +809,7 @@ def standoff_terms(
 ) -> StandoffActionResult:
     """Name terms to a group: a partial or better settles it; the last settle ends the standoff."""
     encounter, group = _lock(participant.encounter, group)
-    refusal = _refusal(encounter, group)
+    refusal = _refusal(encounter, group, participant.character_sheet)
     if refusal:
         return _refuse(refusal)
     members = active_members(group)

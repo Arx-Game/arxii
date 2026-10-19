@@ -47,7 +47,7 @@ what its rules reach below, and a staff-only test of every rule against one char
         {% for row in results %}
         <tr><td>{{ row.rule|faction_rule_label }}{% if row.inherited %} <span class="sp-src">({{ row.source }})</span>{% endif %}</td>
           <td>{% if row.matched %}<span class="sp-grade sp-ok">matches</span>
-            <span class="sp-src">{{ row.reasons|join:"; " }}</span>{% else %}<span class="sp-src">no match</span>{% endif %}</td></tr>
+            {% for reason in row.reasons %}{% for line in reason|reason_lines %}<div{% if not forloop.first %} class="sp-src"{% endif %}>{{ line }}</div>{% endfor %}{% endfor %}{% else %}<span class="sp-src">no match</span>{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

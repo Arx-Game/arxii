@@ -5008,6 +5008,24 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/standoff-profile/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The owner's standoff profile and the catalogs they pick from (#4441). */
+    get: operations['character_sheets_standoff_profile_retrieve'];
+    put?: never;
+    /** @description Make one edit to the owner's standoff profile: consent, cause or a drive (#4441). */
+    post: operations['character_sheets_standoff_profile_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/stat-points/': {
     parameters: {
       query?: never;
@@ -6743,6 +6761,8 @@ export interface paths {
      *     ``?episode=`` (an owned story, or one of its episodes) or ``?encounter=`` (an encounter
      *     on one of the story's beats, for its scene GMs) scopes it to the personas that story
      *     already uses (``story_npc_personas``). Staff see every persona when they name no story.
+     *     A player character who opted in to being read and pressed is offered to any scene GM, with
+     *     or without a story (#4441).
      */
     get: operations['combat_placement_personas_list'];
     put?: never;
@@ -6767,6 +6787,8 @@ export interface paths {
      *     ``?episode=`` (an owned story, or one of its episodes) or ``?encounter=`` (an encounter
      *     on one of the story's beats, for its scene GMs) scopes it to the personas that story
      *     already uses (``story_npc_personas``). Staff see every persona when they name no story.
+     *     A player character who opted in to being read and pressed is offered to any scene GM, with
+     *     or without a story (#4441).
      */
     get: operations['combat_placement_personas_retrieve'];
     put?: never;
@@ -26465,6 +26487,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/live-answers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Rites waiting on a scene GM's live answer: the answer panel. */
+    get: operations['worship_live_answers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/live-answers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Rites waiting on a scene GM's live answer: the answer panel. */
+    get: operations['worship_live_answers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/live-answers/{id}/answer/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Send one of the being's answers, or one of its miracles. */
+    post: operations['worship_live_answers_answer_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/live-answers/{id}/dismiss/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dismiss: nothing is sent. */
+    post: operations['worship_live_answers_dismiss_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/miracles/': {
     parameters: {
       query?: never;
@@ -29371,6 +29461,16 @@ export interface components {
      *     * `territory` - Territory
      * @enum {string}
      */
+    CauseEnum: 'none' | 'predation' | 'orders' | 'hunger' | 'hatred' | 'territory';
+    /**
+     * @description * `none` - None
+     *     * `predation` - Predation
+     *     * `orders` - Orders
+     *     * `hunger` - Hunger
+     *     * `hatred` - Hatred
+     *     * `territory` - Territory
+     * @enum {string}
+     */
     CauseOverrideEnum: 'none' | 'predation' | 'orders' | 'hunger' | 'hatred' | 'territory';
     Ceremony: {
       readonly id: number;
@@ -29485,6 +29585,15 @@ export interface components {
      * @enum {string}
      */
     ChallengeTypeEnum: 'inhibitor' | 'threat';
+    /**
+     * @description * `opt_in` - Opt in
+     *     * `opt_out` - Opt out
+     *     * `cause` - Set cause
+     *     * `drive` - Set drive
+     *     * `drop_drive` - Drop drive
+     * @enum {string}
+     */
+    ChangeEnum: 'opt_in' | 'opt_out' | 'cause' | 'drive' | 'drop_drive';
     /** @description Serializer for creating chapters */
     ChapterCreate: {
       story: number;
@@ -33782,6 +33891,7 @@ export interface components {
       matched_by: string[];
       revealed: boolean;
       source: string;
+      why: string[];
     };
     GMGroupView: {
       group_id: number;
@@ -33923,6 +34033,11 @@ export interface components {
       readonly being_answer_summary: string;
       /** @description The table whose page holds a being_answer prompt's answer panel. */
       readonly being_answer_table: number | null;
+      /**
+       * @description True for a being_answer prompt a rite in the scene raised (#4333 slice 5): its
+       *     panel opens in the queue instead of on a table page.
+       */
+      readonly being_answer_live: boolean;
       /** @description What the GM decided on a decision prompt, with their reason when they gave one (a standoff Override's reason is recorded here). */
       readonly resolution_note: string;
       /** @description Resolved authored room line offered in the composer (may be blank). */
@@ -36524,6 +36639,29 @@ export interface components {
        * @description When the weekly sweep last processed this post.
        */
       last_sweep_at?: string | null;
+    };
+    /** @description A ``BEING_ANSWER`` prompt raised by a rite in the GM's scene, as its panel reads it. */
+    LivePrompt: {
+      id: number;
+      being_name: string;
+      rite_name: string;
+      subject_name: string;
+      outcome_tier_name: string;
+      answers: components['schemas']['_LiveAnswer'][];
+      miracles: components['schemas']['_LiveMiracle'][];
+      may_adapt: boolean;
+      /** @description Non-empty when nothing can be sent this week. */
+      limit_reason: string;
+    };
+    /**
+     * @description The panel's send: one answer (with edited text only for a level that may
+     *     adapt answers), or one miracle.
+     */
+    LiveSendRequest: {
+      answer?: number | null;
+      miracle?: number | null;
+      /** @default  */
+      text: string;
     };
     /**
      * @description * `anywhere` - Anywhere
@@ -40984,6 +41122,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['ListenerPost'][];
+    };
+    PaginatedLivePromptList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['LivePrompt'][];
     };
     PaginatedMediaList: {
       /** @example 123 */
@@ -46523,6 +46676,16 @@ export interface components {
       /** @description Display-only RP text. Mechanics NEVER read this (ADR-0178). */
       prose?: string;
     };
+    ProfileChoice: {
+      value: string;
+      label: string;
+    };
+    ProfileDrive: {
+      property_id: number;
+      name: string;
+      strength: number;
+      strength_label: string;
+    };
     /** @description Read payload for PROFILE_TEXT requests (#2631). */
     ProfileTextRequestDetails: {
       /** @description A character_sheets.ProfileTextField value. */
@@ -49907,6 +50070,25 @@ export interface components {
       group_id: number;
       direction: components['schemas']['StandoffMoraleRequestDirectionEnum'];
       reason: string;
+    };
+    /** @description The owner's own standoff profile with the catalogs they pick from (#4441). */
+    StandoffProfile: {
+      opted_in: boolean;
+      cause: string;
+      cause_label: string;
+      drives: components['schemas']['ProfileDrive'][];
+      locked: boolean;
+      locked_reason: string;
+      causes: components['schemas']['ProfileChoice'][];
+      properties: components['schemas']['ProfileChoice'][];
+      strengths: components['schemas']['ProfileChoice'][];
+    };
+    /** @description One edit to the owner's own standoff profile (#4441). */
+    StandoffProfileChangeRequest: {
+      change: components['schemas']['ChangeEnum'];
+      cause?: components['schemas']['CauseEnum'];
+      property_id?: number;
+      strength?: components['schemas']['StrengthEnum'];
     };
     /** @description The public standoff summary an onlooker sees (``services/gm_view.py``). */
     StandoffSummary: {
@@ -53471,6 +53653,22 @@ export interface components {
       readonly id: number;
       readonly title: string;
       readonly body: string;
+    };
+    _LiveAnswer: {
+      id: number;
+      outcome_tier_name: string;
+      delay_text: string;
+      answer_text: string;
+      onlooker_line: string;
+      used_count: number;
+    };
+    _LiveMiracle: {
+      id: number;
+      name: string;
+      favor_threshold: number;
+      resonance_pool_cost: number;
+      /** @description Why it is greyed out; empty when it may be sent. */
+      reason: string;
     };
     _NamedRow: {
       id: number;
@@ -59827,6 +60025,52 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  character_sheets_standoff_profile_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StandoffProfile'];
+        };
+      };
+    };
+  };
+  character_sheets_standoff_profile_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StandoffProfileChangeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StandoffProfile'];
+        };
       };
     };
   };
@@ -89780,6 +90024,101 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['InvocationOptions'];
+        };
+      };
+    };
+  };
+  worship_live_answers_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        scene?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedLivePromptList'];
+        };
+      };
+    };
+  };
+  worship_live_answers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LivePrompt'];
+        };
+      };
+    };
+  };
+  worship_live_answers_answer_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['LiveSendRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardActionResult'];
+        };
+      };
+    };
+  };
+  worship_live_answers_dismiss_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardActionResult'];
         };
       };
     };

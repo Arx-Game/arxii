@@ -361,7 +361,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
                 .prefetch_related(
                     Prefetch(
                         "item_facets",
-                        queryset=ItemFacet.objects.select_related(
+                        queryset=ItemFacet.attached().select_related(
                             "facet",
                             "attachment_quality_tier",
                             "applied_by_account",
@@ -391,13 +391,17 @@ class ItemFacetViewSet(viewsets.ViewSet):
         if row_pk is None:
             raise NotFound
         try:
-            row = ItemFacet.objects.select_related(
-                "item_instance",
-                "item_instance__holder_character_sheet__character",
-                "facet",
-                "attachment_quality_tier",
-                "applied_by_account",
-            ).get(pk=row_pk)
+            row = (
+                ItemFacet.attached()
+                .select_related(
+                    "item_instance",
+                    "item_instance__holder_character_sheet__character",
+                    "facet",
+                    "attachment_quality_tier",
+                    "applied_by_account",
+                )
+                .get(pk=row_pk)
+            )
         except ItemFacet.DoesNotExist as exc:
             raise NotFound from exc
 
@@ -483,7 +487,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         if row_pk is None:
             raise NotFound
         try:
-            row = ItemFacet.objects.select_related("item_instance").get(pk=row_pk)
+            row = ItemFacet.attached().select_related("item_instance").get(pk=row_pk)
         except ItemFacet.DoesNotExist as exc:
             raise NotFound from exc
         # Run object-level permission so non-owners are rejected with 403.
@@ -571,7 +575,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
                 .prefetch_related(
                     Prefetch(
                         "item_facets",
-                        queryset=ItemFacet.objects.select_related(
+                        queryset=ItemFacet.attached().select_related(
                             "facet",
                             "attachment_quality_tier",
                         ),
@@ -1397,7 +1401,7 @@ class VisibleItemDetailViewSet(viewsets.ViewSet):
                 .prefetch_related(
                     Prefetch(
                         "item_facets",
-                        queryset=ItemFacet.objects.select_related(
+                        queryset=ItemFacet.attached().select_related(
                             "facet",
                             "attachment_quality_tier",
                         ),

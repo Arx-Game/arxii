@@ -106,6 +106,34 @@ class StandoffPayloadTests(TestCase):
         self.assertEqual(rule["matched_by"], [self.player_sheet.primary_persona.name])
         self.assertEqual(len(group["members"]), 3)
 
+    def test_the_gm_reads_why_a_reputation_rule_matches_and_which_acts_moved_it(self) -> None:
+        from world.secrets.factories import SecretFactory
+        from world.societies.constants import OrganizationReputationCause
+        from world.societies.factories import OrganizationFactory
+        from world.societies.renown import bump_organization_reputation
+
+        org = OrganizationFactory(name="Guild of Locks")
+        FactionRuleFactory(
+            creature_template=self.template,
+            rule={"leaf": "max_org_reputation", "params": {"org": org.name, "tier": "disfavored"}},
+            angle_text="reads the guild's grudge",
+        )
+        bump_organization_reputation(
+            self.player_sheet.primary_persona,
+            org,
+            -150,
+            cause=OrganizationReputationCause.SECRET_EXPOSED,
+            secret=SecretFactory(),
+        )
+        (group,) = self.detail(self.gm)["gm_standoff"]["groups"]
+        (rule,) = [
+            r for r in group["faction_rules"] if r["angle_text"] == "reads the guild's grudge"
+        ]
+        (reason,) = rule["why"]
+        tier_line, moved = reason.split("\n")
+        self.assertIn("Disfavored", tier_line)
+        self.assertTrue(moved.startswith("Moved by: secret exposed (secret #"), moved)
+
     def test_no_player_or_onlooker_payload_carries_the_gm_view(self) -> None:
         for account in (self.player, self.onlooker):
             data = self.detail(account)

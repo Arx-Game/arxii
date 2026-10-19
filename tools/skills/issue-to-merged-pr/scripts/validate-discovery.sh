@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Validate the auditable discovery state before a workflow phase transition.
-# Usage: validate-discovery.sh <issue-number> [--body-file PATH] [--labels CSV] [--allow-approved-legacy]
+# Usage: validate-discovery.sh <issue-number> [--body-file PATH] [--labels CSV]
+#        [--parent-labels CSV --parent-state open|closed] [--allow-approved-legacy]
+# --parent-labels/--parent-state inject the parent issue's state (tests; no network).
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <issue-number> [--body-file PATH] [--labels CSV]" >&2
+  echo "Usage: $0 <issue-number> [--body-file PATH] [--labels CSV] [--parent-labels CSV --parent-state open|closed]" >&2
   exit 2
 }
 
@@ -12,6 +14,9 @@ issue=""
 body_file=""
 labels=""
 allow_legacy=0
+parent_labels=""
+parent_state=""
+parent_injected=0
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LEGACY_ALLOWLIST="$SCRIPT_DIR/../references/legacy-approved-issues.txt"
 while (($#)); do
@@ -24,6 +29,18 @@ while (($#)); do
     --labels)
       (($# >= 2)) || usage
       labels="$2"
+      shift 2
+      ;;
+    --parent-labels)
+      (($# >= 2)) || usage
+      parent_labels="$2"
+      parent_injected=1
+      shift 2
+      ;;
+    --parent-state)
+      (($# >= 2)) || usage
+      parent_state="$2"
+      parent_injected=1
       shift 2
       ;;
     --allow-approved-legacy)
@@ -120,9 +137,49 @@ for field in "${required_fields[@]}"; do
   require_field "$field"
 done
 
+# A slice of an approved spec declares its parent with one `Slice N of #M` line
+# before spec:start (trailing prose on that line is fine). More than one such line is ambiguous, so it fails closed.
+parent_lines=$(grep -E '^[[:space:]]*Slice [0-9]+ of #[0-9]+([^0-9].*)?$' <<<"$prefix" || true)
+parent_count=$(grep -c . <<<"$parent_lines" || true)
+if [[ "$parent_count" -gt 1 ]]; then
+  echo "discovery: more than one 'Slice N of #M' parent line before spec:start" >&2
+  exit 1
+fi
+
 if has_label status:implementing && ! has_label spec:approved; then
-  if [[ "$lane" != lightweight || "$state" != complete ]]; then
-    echo "discovery: status:implementing requires a complete lightweight marker or spec:approved" >&2
+  if [[ "$lane" == lightweight && "$state" == complete ]]; then
+    :
+  elif [[ "$parent_count" -eq 1 ]]; then
+    parent=$(grep -Eo '#[0-9]+' <<<"$parent_lines" | head -n1)
+    parent="${parent#\#}"
+    if [[ "$parent" == "$issue" ]]; then
+      echo "discovery: issue $issue names itself as its parent" >&2
+      exit 1
+    fi
+    if [[ "$state" != complete ]]; then
+      echo "discovery: a slice needs state=complete in its marker before implementing" >&2
+      exit 1
+    fi
+    if [[ "$parent_injected" == "0" ]]; then
+      if ! parent_payload=$(gh api "repos/{owner}/{repo}/issues/$parent" 2>/dev/null); then
+        echo "discovery: could not fetch parent issue #$parent" >&2
+        exit 1
+      fi
+      parent_state=$(jq -r '.state // ""' <<<"$parent_payload" 2>/dev/null) || parent_state=""
+      parent_labels=$(jq -r '[.labels[].name] | join(",")' <<<"$parent_payload" 2>/dev/null) || parent_labels=""
+    fi
+    if [[ "$parent_state" != open ]]; then
+      echo "discovery: parent issue #$parent is not open (state: ${parent_state:-unknown})" >&2
+      exit 1
+    fi
+    if [[ ",$parent_labels," != *",spec:approved,"* ]]; then
+      echo "discovery: parent issue #$parent does not carry spec:approved" >&2
+      exit 1
+    fi
+    printf 'discovery: valid lane=%s state=%s issue=%s parent=#%s\n' "$lane" "$state" "$issue" "$parent"
+    exit 0
+  else
+    echo "discovery: status:implementing requires a complete lightweight marker, spec:approved, or an approved parent ('Slice N of #M')" >&2
     exit 1
   fi
 fi

@@ -11,12 +11,16 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from world.ceremonies.models import CeremonyOffering
+    from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult, ModifierContribution
     from world.magic.models import ResonanceGrant
+    from world.traits.models import CheckOutcome
     from world.worship.models import (
         Answer,
         DevotionStanding,
         FavorInvocation,
+        Miracle,
+        MiraclePerformance,
         PledgeCredit,
         PledgeDetails,
         Vision,
@@ -292,3 +296,51 @@ class HolySite:
     @property
     def being_name(self) -> str:
         return self.being.name
+
+
+@dataclass(frozen=True)
+class LiveAnswerOption:
+    """One authored answer on the live panel: the row and how often it has been sent."""
+
+    answer: Answer
+    used_count: int
+
+
+@dataclass(frozen=True)
+class LiveMiracleOption:
+    """One miracle on the live panel; a non-empty ``reason`` greys it out."""
+
+    miracle: Miracle
+    reason: str
+
+
+@dataclass(frozen=True)
+class LivePanel:
+    """What a GM sees when a rite in their scene asks them to answer it (#4333 slice 5).
+
+    ``limit_reason`` is non-empty when the being already answered this character
+    live this game week: the panel then lists what exists but nothing can be sent.
+    ``may_adapt`` is the viewing GM's level: the answer's main text is editable only
+    when true.
+    """
+
+    being: WorshippedBeing
+    sheet: CharacterSheet
+    rite: WorshipRite
+    tier: CheckOutcome
+    answers: list[LiveAnswerOption]
+    miracles: list[LiveMiracleOption]
+    may_adapt: bool
+    limit_reason: str
+
+
+@dataclass(frozen=True)
+class LiveSend:
+    """What a live send delivered: a vision (an answer) or a miracle performance."""
+
+    being: WorshippedBeing
+    sheet: CharacterSheet
+    answer: Answer | None = None
+    vision: Vision | None = None
+    miracle: Miracle | None = None
+    performance: MiraclePerformance | None = None

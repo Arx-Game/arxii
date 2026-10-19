@@ -98,7 +98,7 @@ part of the Resonance Pivot — relationship flavor is now carried by
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
 | `CharacterTechnique` | Known techniques; the character's hold carries their own personalization of it (#4099, ADR-4099) | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques), `custom_name` (display only, never a lookup key; blank = the catalog name), `custom_description` (blank = the catalog description), `price` (FK `Restriction`, PRICE kind only, nullable), `early_form` (FK `TechniqueVariant`, nullable; bought in creation before the gift thread reaches its level) | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
-| Anima ritual (no model of its own) | A character's personal recovery ritual is a `Ritual` row (`SCENE_ACTION`), found with `get_character_anima_ritual`; its `RitualCheckConfig` holds the stat, skill, optional resonance and the per-character check type | `Ritual.author_account`, `Ritual.check_config` |
+| personal anima ritual (a `Ritual` of `execution_kind=SCENE_ACTION` + its `RitualCheckConfig`; the old `CharacterAnimaRitual` model is gone) | The character's recovery ritual: `author_account` is the player, `check_config` holds `check_type`, `target_difficulty`, `stat`, `skill`, `resonance` | `get_character_anima_ritual(character)` (`services/anima.py`) |
 
 **Anima band vocabulary (#1446).** `ANIMA_BANDS` (`constants.py`) is a descending
 `(min_ratio, label)` tuple (PLACEHOLDER labels pending Apostate rewrite — brimming /
@@ -524,6 +524,7 @@ per-technique via the FK. Key surfaces:
 | `get_character_cast_check(character)` | `services/anima.py` | Resolves the per-character check type for cast resolution |
 | `resolve_cast_check(character, technique)` | `services/magic_skills.py` | The one resolver every cast path calls (#4450, replaces `resolve_cast_check_type`): returns a `CastCheck(check_type, extra_traits)` or None. Check type precedence is unchanged (ADR-0096); `extra_traits` holds the technique skill term |
 | `get_character_anima_ritual(character)` | `services/anima.py` | Retrieves the character's personal SCENE_ACTION `Ritual` (their anima ritual) |
+| `perform_anima_ritual(character_sheet, scene)` | `services/anima.py` | The once-per-scene roll of the character's anima ritual plus `apply_anima_ritual_outcome` (Soulfray eased first, then anima by `AnimaRitualBudgetAward` tier). Reached by `PerformRitualAction`'s SCENE_ACTION branch (#4451) |
 | `provision_player_anima_ritual(...)` | `services/anima.py` | Points `RitualCheckConfig.check_type` at the per-character check so ritual and technique casts share the same roll |
 | `ensure_technique_catalog_content()` | `seeds_cast.py` | Idempotent seed: curated catalog of consequence-pool flavors (children of the base pool) + matching ActionTemplates |
 | `resolve_cast_action_template()` | `services/technique_builder.py` | Resolves a chosen catalog pool id (or `None`) to the ActionTemplate a Technique's `action_template` should point at |
@@ -531,6 +532,21 @@ per-technique via the FK. Key surfaces:
 Cast resolution (`world/scenes/cast_services.py:_resolve_cast`) passes the caster's personal
 check into `start_action_resolution` via the `check_type` override (optional kwarg added to
 `src/actions/services.py`). No schema migration — all seeded via `ensure_technique_cast_content()`.
+
+**Performing the anima ritual (#4451).** `PerformRitualAction.execute()` branches on
+`execution_kind == SCENE_ACTION` before component and pool handling and calls
+`_perform_anima_ritual`: the ritual must be the performer's own
+(`get_character_anima_ritual`), the scene is the one at their location
+(`get_active_scene`), and `perform_anima_ritual` does the roll and outcome. The four
+`MagicError` refusals (`NoRitualConfigured`, `CharacterEngagedForRitual`,
+`RitualScenePrerequisiteFailed`, `RitualAlreadyPerformedThisScene`) come back as a
+failure `ActionResult` carrying their `user_message`. Web: the Perform button on the
+SCENE_ACTION `RitualCard` posts `/api/magic/rituals/perform/`, whose response carries
+`message` and `result {outcome, anima_recovered, severity_reduced, soulfray_resolved}` for
+this kind. Telnet: `ritual anima` (or `ritual <the ritual's name>`; a SCENE_ACTION name
+resolves only for its author). The scene-action-request resolver
+(`anima_ritual_action.py`) is a second path to the same `apply_anima_ritual_outcome`.
+Journey: `src/integration_tests/test_performing_the_anima_ritual_journeys.py`.
 
 **Anima ritual name collisions are resolved silently, not surfaced (#2724).**
 `provision_player_anima_ritual` defaults a player's anima ritual name to
@@ -3328,7 +3344,7 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
   Sanctum's Ritual of Homecoming writes the same `LocationValueModifier` row shape onto its own
   room, so a resident Sanctum owner trickles from Homecoming growth as an intentional emergent
   synergy — see `world/magic/CLAUDE.md` "Residence declaration + room aura tagging" for detail.
-- `OUTFIT_TRICKLE` — outfit presentation trickle (see `docs/architecture/items-fashion-mantles.md`).
+- `OUTFIT_TRICKLE` — outfit presentation trickle (see `docs/architecture/items-fashion-mantles.md`). `outfit_item_facet` is PROTECT and a removed facet is soft-removed (`ItemFacet.removed_at`), so the grant history survives a sacrificed item or a stripped facet (#4461).
 - `STAFF_GRANT` — manual staff grant.
 - `SANCTUM_WEAVING` / `SANCTUM_OWNER_BONUS` / `SANCTUM_DISSOLUTION_RECOVERY` —
   Sanctum income and dissolution recovery (Plan 4).

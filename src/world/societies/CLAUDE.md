@@ -128,8 +128,10 @@ Reputation is normally driven by deeds (`fire_renown_award`). Two **public appli
 `renown.py` let other systems (e.g. the secret reveal→reputation bridge, #1429) feed it directly:
 - `apply_archetype_society_reputation(persona, societies, archetypes)` — the diffuse channel:
   archetype dot-product against each society's principles; one delta per society.
-- `bump_organization_reputation(persona, organization, delta)` — the relational channel: a direct
-  clamped `OrganizationReputation` hit, independent of the org's philosophy.
+- `bump_organization_reputation(persona, organization, delta, *, cause, <citation>)` — the
+  relational channel: a direct clamped `OrganizationReputation` hit, independent of the org's
+  philosophy. It is the one writer: every call passes a `cause` and the citation that cause
+  needs, and writes an `OrganizationReputationEvent` in the same transaction (#4448).
 - `bump_society_reputation(persona, society, delta)` — the relational channel for Society,
   symmetric with `bump_organization_reputation`: a direct clamped `SocietyReputation` hit,
   independent of the society's principles (#1760).

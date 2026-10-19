@@ -105,8 +105,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     shim); discovery beat generalized as `fire_variant_discoveries` (dispatch on
     `target_kind`). GIFT thread substrate: `TargetKind.GIFT` + `Thread.target_gift` +
     latent provisioning at CG + `gift_resonances_for` (the four cast sites).
-  - **Anima / rituals:** `CharacterAnima`, `CharacterAnimaRitual`,
-    `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
+  - **Anima / rituals:** `CharacterAnima`, the personal anima ritual (a SCENE_ACTION
+    `Ritual`; performed through `PerformRitualAction`, web Perform button and
+    telnet `ritual anima`, #4451), `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
     `TechniqueOutcomeModifier`. `ANIMA_BANDS` + `anima_band_for(current, maximum)`
     (`constants.py`, PLACEHOLDER labels pending Apostate rewrite) derive the
     qualitative band word; `CharacterAnimaSerializer.band` surfaces it for the
@@ -1712,7 +1713,7 @@ Mechanical regional climate + transient weather feeding the #1514 comfort substr
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
 
-- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank` (`can_resolve_appeals` #3293 — leader gate for appeal resolution; `can_declare_standing` #3290 — leader gate for standing declarations, alongside `can_invite`/`can_kick`/`can_manage_ranks`/`can_lead_rituals`), `OrganizationMembership` (`favor` + `favor_note`, #4106, ADR-0327: the organization's verdict on a standing member, in favour / in disgrace / exiled, distinct from `exiled_at` which removes them), `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `OrgAppeal` / `OrgAppealSignon` (#3293 — appeals to organizations: free-text IC ask, OPEN → GRANTED/DECLINED/WITHDRAWN, partial-unique one OPEN appeal per (org, petitioner); see ADR-0231 for the Appeal/Petition vocabulary split), `SocietyReputation`, `OrganizationReputation`, `StandingDeclaration` (#3290 — leader favor/disfavor audit row: `organization`/`target_persona`/`declared_by_persona` FKs, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` FK (rate-limit key), `created_at`; unique per (organization, target_persona, game_week)), `LegendEntry`, `LegendSpread`, `LegendHonor` (#3466 — paid testimony that
+- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank` (`can_resolve_appeals` #3293 — leader gate for appeal resolution; `can_declare_standing` #3290 — leader gate for standing declarations, alongside `can_invite`/`can_kick`/`can_manage_ranks`/`can_lead_rituals`), `OrganizationMembership` (`favor` + `favor_note`, #4106, ADR-0327: the organization's verdict on a standing member, in favour / in disgrace / exiled, distinct from `exiled_at` which removes them), `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `OrgAppeal` / `OrgAppealSignon` (#3293 — appeals to organizations: free-text IC ask, OPEN → GRANTED/DECLINED/WITHDRAWN, partial-unique one OPEN appeal per (org, petitioner); see ADR-0231 for the Appeal/Petition vocabulary split), `SocietyReputation`, `OrganizationReputation`, `OrganizationReputationEvent` (#4448 - one recorded change to an organization's reputation of a persona: `reputation` FK, `cause` (`OrganizationReputationCause`), applied `amount`, `value_before`/`value_after` (staff only), `tier_before`/`tier_after`, nullable citation FKs `legend_entry`/`mission_deed`/`secret`/`stake_resolution`/`standing_declaration`/`source_event`; `clean()` enforces the citation per cause), `OrganizationReputationReasonLine` (#4448 - staff-authored player reason text, one row per cause, `{tier}`/`{title}`/`{organization}` tokens), `StandingDeclaration` (#3290 — leader favor/disfavor audit row: `organization`/`target_persona`/`declared_by_persona` FKs, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` FK (rate-limit key), `created_at`; unique per (organization, target_persona, game_week)), `LegendEntry`, `LegendSpread`, `LegendHonor` (#3466 — paid testimony that
   raises a deed's `base_value`), `LegendLevelCalibration` (#3466 — per-level honor Hare
   cost/value-added/title-threshold dials)
 - **`Vacancy` model (#3648, ADR-0273):** an opening on a staff-minted family's org
@@ -1740,6 +1741,7 @@ Social structures, organizations, reputation, and legend tracking.
   `character_creation.services._bind_vacancy` at finalize.
 - **Office services** (`office_services.py`, #2239): `appoint_office` / `vacate_office` / `office_holder` / `holds_office`
 - **Obligation services** (`obligation_services.py`, #2428): `settle_obligation(obligation, token)` (redeems the Hare via `currency.redeem_favor_token`, flips `OWED` → `SETTLED`, stamps `settled_at`/`settled_by_token`; raises `ObligationNotOwedError` if not `OWED`) / `has_open_obligation(sheet, org)` (read-only gate for training/entrance flows)
+- **Reputation reasons** (`reputation_reasons.py`, #4448): `reason_lines_by_reputation(reputation_ids)` (newest three lines each, one query), `reason_line(event, copy)`, `copy_by_cause()`; `notifications.notify_reputation_tier_change(event)` sends the RENOWN message on a tier change. `renown.bump_organization_reputation(persona, organization, delta, *, cause, <citation>, scale_gain=True)` is the one writer and records an `OrganizationReputationEvent` in the same transaction.
 - **Standing declarations** (`standing_services.py`, #3290): `declare_standing(*, organization, target_persona, declared_by_persona, direction, citation)` — rank-gates on `can_declare_standing`, gates DISFAVOR through the #2170 antagonism-consent seam (the `hostile` `SocialConsentCategory`, the same one `world.secrets.services.accusation_permitted` consults for frame-job denounce), rate-limits to one declaration per (organization, target_persona) per IC `GameWeek`, applies the PLACEHOLDER `STANDING_DECLARATION_FAVOR_DELTA`/`STANDING_DECLARATION_DISFAVOR_DELTA` (`constants.py`) via the existing `bump_organization_reputation` (never a parallel writer), and mints the `StandingDeclaration` audit row. Typed errors: `NotAuthorizedToDeclareStandingError`, `InvalidStandingTargetError`, `StandingConsentBlockedError`, `StandingRateLimitedError`.
 - **Appeal services** (`appeal_services.py`, #3293): `lodge_appeal` / `signon_appeal` / `resolve_appeal` (rank `can_resolve_appeals` or staff) / `withdraw_appeal` (petitioner-only) / `can_resolve_org_appeals(persona, organization)`
 - **Enums:** `ReputationTier`, `OrganizationMembershipOffer.Kind`, `OrganizationMembershipOffer.Status`, `StandingDirection` (#3290 — FAVOR/DISFAVOR), `OrgAppealState` (OPEN/GRANTED/DECLINED/WITHDRAWN)
@@ -2280,7 +2282,7 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
   (`IsAdminUser`, no player IC scope): list (`?subject=` required), create, patch, and a
   `categories` action; no delete (secrets are story data). `AuthoredSecretSerializer` fixes
   provenance server-side (`GM_AUTHORED` + `author_persona=None`) and exposes `author_secret`'s
-  `subject_aware` kwarg; `SecretVictim`/`archetypes` (reputation) stay admin-only, off the API.
+  `subject_aware` kwarg; `SecretVictim`/`archetypes` (reputation) stay admin-only, off the API (a `SecretVictimInline` on the Secret admin, #4448; `secrets.services.add_secret_victim` is the service seam a spy job's residue uses).
   Frontend: `StaffSecretsPanel` + `AuthorSecretDialog`, staff-only-mounted on
   `CharacterSheetPage`.
 - **Hooks and truths (#4397):** `Secret.hook` (nullable self-FK, `truths`; one level, same
@@ -7705,7 +7707,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
-### Standoffs (#4145, #4354, #4361, #4373, #4415)
+### Standoffs (#4145, #4354, #4361, #4373, #4415, #4441)
 The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
 creatures, presses them with social approaches and names terms that settle them. Derived
 from live (OPEN or PROPOSED) `StandoffGroup` rows, never a stored flag (ADR-4145-A). In a
@@ -7713,7 +7715,9 @@ scene a GM is running, a firing cause becomes a GM proposal (ADR-4354-A). A plac
 edits over its template are stamped on each opponent at spawn (ADR-4361-A). A named NPC is
 its own group, read live from its persona (ADR-4373-A), and verbal approaches and terms pass a
 language gate. Hunger, Hatred and Territory run on each group's clock and on faction rules that
-provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A).
+provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A). A player
+character who opts in, with drives and a cause of their own, can be read and pressed by other
+player characters as a persona group (ADR-4441-A).
 
 - **Models:** `CreatureDrive`, `FactionRule` (was `RegardRule`), `StandoffApproach`,
   `StandoffTerms`, `StandoffConfig` (singleton), `StandoffCauseGloss`, `StandoffGroup`,
@@ -7730,7 +7734,8 @@ provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A
   `resolution_note` (`GMPromptKind.STANDOFF_CAUSE`, a decision kind); `StandoffGroup.persona`;
   `StandoffApproach.is_verbal`; `CreatureTemplate.language`;
   `StandoffConfig.regard_per_band` / `regard_max_bands` / `hunger_margin_step` /
-  `territory_patience`; `StandoffGroup.actions_elapsed`.
+  `territory_patience`; `StandoffGroup.actions_elapsed`; `CharacterStandoffProfile` /
+  `CharacterDrive` (a player character's opt-in, cause and drives).
 - **Key functions:** `open_standoff`, `end_standoff_into_fight`,
   `begin_round_or_break_standoff` (`services/state.py`); `evaluate_causes`,
   `cause_fire_reason`, `cause_fires`, `cause_clock`, `hunger_margin`, `patience_line`,
@@ -7746,7 +7751,9 @@ provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A
   `group_drives`, `group_rules`, `inherited_rules`, `affiliation_rules`, `persona_drives`
   (`services/profile.py`); `member_filter`, `attack_line` (`services/state.py`);
   `group_languages`, `persona_languages`, `language_refusal` (`services/language.py`);
-  `regard_for` (`services/verbs.py`); `story_npc_personas`, `may_stand_persona`
+  `regard_for` (`services/verbs.py`); `apply_profile_change`, `build_profile_view`,
+  `is_standoff_player_character`, `target_refusal`, `is_in_live_standoff`, `drive_catalog`
+  (`services/character_profile.py`); `story_npc_personas`, `may_stand_persona`
   (`world/stories/services/cast.py`);
   predicate leaves `max_org_reputation`, `max_society_standing`, `associated_with_org`,
   `associated_with_society`; `association_with_org` / `association_with_society`
@@ -7754,8 +7761,10 @@ provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A
   `standoff_fight`, `standoff_share_angle` (`services/verbs.py`); `build_standoff_view`
   (`services/view.py`); `social_target_difficulty` (`world/checks/social_target.py`, one
   grade for every social check on a character, ADR-4145-B).
-- **Surfaces:** actions `standoff_*` and `gm_standoff_*` / `gm_open_standoff`, telnet
-  `standoff`, `gm prompt confirm|hold|override`, `gm standoff shake|steady`; `StandoffCard`,
+- **Surfaces:** actions `standoff_*` (incl. `standoff_profile`) and `gm_standoff_*` /
+  `gm_open_standoff`, `/api/character-sheets/<id>/standoff-profile/` and the sheet's
+  `StandoffProfilePanel`, telnet
+  `standoff` (incl. `standoff profile`), `gm prompt confirm|hold|override`, `gm standoff shake|steady`; `StandoffCard`,
   `GMStandoffPanel` and `StandoffSummaryCard` from the encounter detail's `standoff`,
   `gm_standoff` and `standoff_summary` blocks; `PlacementPanel` in the beat dialog and the
   mission studio's option page; `/api/combat/creature-templates/<id>/placement-context/`,
@@ -9221,6 +9230,14 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `steward-sacrifice-lines/`, `steward-prompts/` (+ `answer/`, `dismiss/`); `GMPromptSerializer`
   gains `being_answer_summary`, `being_answer_table`. Telnet `gm prompt answer`. Admin:
   `BeingStewardInline` on the being's change form. Frontend: the table page's Beings tab.
+- **Answering live** (#4333 slice 5, completes #3298): `GMPrompt.rite_performance`,
+  `GMLevelCap.may_adapt_answers`; `worship/live_services.py` (`route_live_answer`,
+  `live_panel`, `send_live_answer`, `dismiss_live_prompt`, `live_limit_reason`,
+  `may_adapt_answers`); `answer_services.deliver_live_answer`; `services.miracle_ineligibility`
+  (the eligibility check shared with `fire_divine_intervention`). API:
+  `/api/worship/live-answers/` (+ `answer/`, `dismiss/`); `GMPromptSerializer.being_answer_live`.
+  Telnet `gm prompt answer <id> answer=|miracle=`. Frontend: `LiveAnswerPanel` in the scene GM
+  queue.
 - **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite
   Princess/Prince/Chosen achievement on top-favor reach/tie), `gods_favorite_achievement_for`;
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,

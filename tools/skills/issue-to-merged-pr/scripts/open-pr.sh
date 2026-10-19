@@ -90,8 +90,10 @@ fi
 has_issue_label() {
   grep -qx "$1" <<<"$ISSUE_LABELS"
 }
-if ! has_issue_label spec:approved && [[ "$VALIDATION_RESULT" != *"lane=lightweight state=complete"* ]]; then
-  echo "ERROR: issue #$ISSUE requires spec:approved unless it has a complete lightweight discovery marker." >&2
+PARENT_APPROVED_RE='parent=#([0-9]+)$'
+if ! has_issue_label spec:approved && [[ "$VALIDATION_RESULT" != *"lane=lightweight state=complete"* ]] \
+  && [[ ! "$VALIDATION_RESULT" =~ $PARENT_APPROVED_RE ]]; then
+  echo "ERROR: issue #$ISSUE requires spec:approved, an approved parent slice line, or a complete lightweight discovery marker." >&2
   exit 1
 fi
 if [[ "$VALIDATION_RESULT" == *"legacy-approved"* ]]; then
@@ -126,6 +128,8 @@ if [[ -z "${VERIFICATION//[[:space:]]/}" || "$VERIFICATION" =~ ^[[:space:]]*not\
 fi
 if has_issue_label spec:approved; then
   SPEC_GATE_STATUS="member-approved"
+elif [[ "$VALIDATION_RESULT" =~ $PARENT_APPROVED_RE ]]; then
+  SPEC_GATE_STATUS="parent-approved #${BASH_REMATCH[1]}"
 else
   SPEC_GATE_STATUS="validated-lightweight-bypass"
 fi

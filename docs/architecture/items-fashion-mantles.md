@@ -692,7 +692,10 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> None:
 **`GainSource.OUTFIT_TRICKLE`** is a new value on the existing `GainSource`
 enum (the discriminator on `ResonanceGrant`). The audit ledger gains a new
 typed FK column `outfit_item_facet → ItemFacet` (Spec C's typed-FK pattern
-applies; new sources add their own columns).
+applies; new sources add their own columns). The FK is `on_delete=PROTECT`, not
+SET_NULL (#4461): the shape constraint requires it on every trickle grant, so an
+`ItemFacet` that fed a wearer is never deleted. Removing a facet stamps
+`ItemFacet.removed_at`; the trickle reads only attached facets.
 
 **Tuning knobs:**
 - `outfit_daily_trickle_per_item_resonance` (existing, currently default 1)

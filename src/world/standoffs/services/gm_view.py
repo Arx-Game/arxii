@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 from world.combat.constants import CauseKind, ParticipantStatus
 from world.combat.morale import OpponentMoraleState, morale_state_for, tier_has_morale
 from world.predicates.predicates import KEY_LEAF, KEY_OF, KEY_OP, KEY_PARAMS, OP_NOT, OP_OR
+from world.scenes.services import active_persona_for_sheet
 from world.standoffs.constants import (
     LIVE_GROUP_STATES,
     RevealKind,
@@ -74,6 +75,9 @@ class GMFactionRuleView:
     matched_by: list[str]
     revealed: bool
     source: str = ""
+    # Why each matching character matches, staff-readable (explain_leaf_for_staff): the
+    # newest recorded causes of the reputation behind it ride the same text (#4448).
+    why: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -194,8 +198,6 @@ def _active_participants(encounter: CombatEncounter) -> list:
 
 
 def _presented_name(sheet) -> str:
-    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
     return active_persona_for_sheet(sheet).name
 
 
@@ -231,14 +233,35 @@ def _regards(group: StandoffGroup, participants: list, config: StandoffConfig) -
     return views
 
 
-def _matched_by(group: StandoffGroup, participants: list, rules: list) -> dict[int, list[str]]:
-    """Each rule's pk to the presented names of the participants it matches."""
+def _matched_by(
+    group: StandoffGroup, participants: list, rules: list
+) -> tuple[dict[int, list[str]], dict[int, list[str]]]:
+    """Each rule's pk to the presented names of the participants it matches, and to why.
+
+    The why is ``explain_leaf_for_staff`` for each leaf that matched, per matching
+    participant, the lines of one reason joined by newlines; the participant is named in
+    front of it only when more than one character matches the rule.
+    """
+    from world.predicates.describe import explain_leaf_for_staff  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
     matched: dict[int, list[str]] = {entry.rule.pk: [] for entry in rules}
+    why: dict[int, list[str]] = {entry.rule.pk: [] for entry in rules}
     for participant in participants:
         sheet = participant.character_sheet
+        persona = active_persona_for_sheet(sheet)
         for match in faction_rule_matches(group, sheet, rules):
-            matched[match.rule.pk].append(_presented_name(sheet))
-    return matched
+            name = _presented_name(sheet)
+            matched[match.rule.pk].append(name)
+            why[match.rule.pk].extend(
+                f"{name}: {reason}"
+                for reason in (explain_leaf_for_staff(leaf, persona) for leaf in match.reasons)
+            )
+    for pk, names in matched.items():
+        if len(names) == 1:
+            prefix = f"{names[0]}: "
+            why[pk] = [line.removeprefix(prefix) for line in why[pk]]
+    return matched, why
 
 
 def _template_strengths(template: CreatureTemplate) -> dict[int, int]:
@@ -253,7 +276,7 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
     revealed_drive_ids = {r.drive_id for r in reveals if r.kind == RevealKind.DRIVE}
     revealed_rule_ids = {r.faction_rule_id for r in reveals if r.kind == RevealKind.FACTION_RULE}
     rules = group_rules(group)
-    matched = _matched_by(group, participants, rules)
+    matched, why = _matched_by(group, participants, rules)
     cause, margin = group_cause(group)
     organization = group_organization(group)
     # A named NPC's drives are its persona's own (ADR-4373-A): nothing there is "edited".
@@ -308,6 +331,7 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
                 matched_by=matched[entry.rule.pk],
                 revealed=entry.rule.pk in revealed_rule_ids,
                 source=entry.source,
+                why=why[entry.rule.pk],
             )
             for entry in rules
         ],

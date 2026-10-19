@@ -381,6 +381,56 @@ def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: AR
     )
 
 
+def intervention_cooldown_active(character) -> bool:
+    """Whether the divine intervention cooldown condition is on ``character``."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    return ConditionInstance.objects.filter(
+        target=character,
+        condition__name=_DIVINE_INTERVENTION_COOLDOWN_NAME,
+    ).exists()
+
+
+def miracle_ineligibility(
+    character_sheet: "CharacterSheet",
+    miracle: "Miracle",
+    *,
+    favor: int | None = None,
+    on_cooldown: bool | None = None,
+    cfg: "DivineInterventionConfig | None" = None,
+) -> str:
+    """Why ``miracle`` cannot be performed for ``character_sheet`` now, or "" when it can.
+
+    The eligibility half of a divine intervention (#2360, #4333 design 6), shared
+    by :func:`fire_divine_intervention` (the trigger's automatic path) and the
+    live answer panel: the intervention cooldown condition is clear, the
+    character's favor with the miracle's being meets both the config threshold and
+    the miracle's own, and the being's pool covers the larger of the miracle's cost
+    and the config minimum. The miracle's trigger is not asked here: a caller that
+    fires on a trigger filters by it. ``favor``, ``on_cooldown`` and ``cfg`` let a
+    caller that already holds them skip the lookups.
+    """
+    if cfg is None:
+        cfg = get_divine_intervention_config()
+    if on_cooldown is None:
+        on_cooldown = intervention_cooldown_active(character_sheet.character)
+    if on_cooldown:
+        return "Divine intervention is on cooldown for this character."
+    being = miracle.being
+    if favor is None:
+        standing = DevotionStanding.objects.filter(
+            character_sheet=character_sheet, being=being
+        ).first()
+        favor = standing.favor if standing is not None else 0
+    threshold = max(cfg.favor_threshold, miracle.favor_threshold)
+    if favor < threshold:
+        return f"Favor with {being.name} ({favor}) is below this miracle's threshold ({threshold})."
+    needed = max(miracle.resonance_pool_cost, cfg.min_pool_for_intervention)
+    if being.resonance_pool < needed:
+        return f"{being.name}'s worship pool ({being.resonance_pool}) cannot pay {needed}."
+    return ""
+
+
 def fire_divine_intervention(
     character_sheet: "CharacterSheet",
     *,
@@ -399,17 +449,14 @@ def fire_divine_intervention(
     to one god (a prayer is to someone). Returns None when nothing fires: no
     candidate, or the per-character cooldown condition is still on.
     """
-    from world.conditions.models import ConditionInstance, ConditionTemplate  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition as _apply  # noqa: PLC0415
     from world.worship.models import Miracle  # noqa: PLC0415
 
     character = character_sheet.character
     cfg = get_divine_intervention_config()
 
-    if ConditionInstance.objects.filter(
-        target=character,
-        condition__name=_DIVINE_INTERVENTION_COOLDOWN_NAME,
-    ).exists():
+    if intervention_cooldown_active(character):
         return None
 
     standings = DevotionStanding.objects.filter(
@@ -424,13 +471,13 @@ def fire_divine_intervention(
             being=standing.being,
             intervention_trigger=trigger,
             is_active=True,
-            favor_threshold__lte=standing.favor,
         )
         candidates.extend(
             (standing, miracle)
             for miracle in miracles
-            if standing.being.resonance_pool
-            >= max(miracle.resonance_pool_cost, cfg.min_pool_for_intervention)
+            if not miracle_ineligibility(
+                character_sheet, miracle, favor=standing.favor, on_cooldown=False, cfg=cfg
+            )
         )
     if not candidates:
         return None

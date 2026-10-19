@@ -103,7 +103,10 @@ missing/mismatched target, never an exception:
 - `incriminate_level` — the residue rule: sloppy-tier routes mint a
   GM-provenance (TRUE) `Secret` about the **handler** plus an investigable
   counter-clue trail in the hubs of the target room's own area (#4085). Never confessed
-  in the report.
+  in the report. The residue secret names the job's target as its victim (#4448): an
+  organization target, a domain target's owning organization, or a person target (never the
+  issuing organization itself). On the secret's first exposure the victim organization's
+  reputation of the handler drops by the level default and is recorded as `SECRET_EXPOSED`.
 - **Cross-system addendum**: `domain_report` (DOMAIN — population, prosperity,
   unrest, holdings, open crises), `domain_unrest_delta` (DOMAIN, ± clamp
   0–100 — foment or soothe; feeds the weekly domain tick/crisis machinery),

@@ -1326,7 +1326,7 @@
 - `favored_facets_by_item(being: 'WorshippedBeing', item_instances: 'list[ItemInstance]') -> 'dict[int, Facet]' - Each of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet),`
 - `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig - Get-or-create the first CeremonyConfig row (singleton-by-convention).`
-- `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, facet: 'Facet | None', granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Destroy an offered item and feed ``being``'s pool from its value.`
+- `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, facet: 'Facet | None', granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and feed ``being``'s pool from its value.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
 - `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held.`
@@ -1818,6 +1818,7 @@
   - skill_values <- skills.CharacterSkillValue
   - specialization_values <- skills.CharacterSpecializationValue
   - training_allocations <- skills.TrainingAllocation
+  - standoff_profile <- standoffs.CharacterStandoffProfile
   - character_stories <- stories.Story
   - story_participations <- stories.StoryParticipation
   - aggregate_contributions <- stories.AggregateBeatContribution
@@ -4318,6 +4319,7 @@
   - confirmed_tag -> magic.DramaticMomentTag [OneToOne] (nullable)
   - standoff_group -> standoffs.StandoffGroup [FK] (nullable)
   - pledge -> worship.PledgeDetails [FK] (nullable)
+  - rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
 **Pointed to by:**
   - narrations <- gm.GMPromptNarration
 
@@ -6764,6 +6766,7 @@
   - military_units <- military.MilitaryUnit
   - personas <- scenes.Persona
   - creature_drives <- standoffs.CreatureDrive
+  - character_drives <- standoffs.CharacterDrive
 
 ### PropertyCategory
 **Foreign Keys:**
@@ -6931,6 +6934,7 @@
   - route_candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
   - legend_entries -> societies.LegendEntry [M2M]
 **Pointed to by:**
+  - organization_reputation_events <- societies.OrganizationReputationEvent
   - encounters <- combat.CombatEncounter
   - reward_lines <- missions.MissionDeedRewardLine
   - queued_rewards <- missions.MissionRewardQueue
@@ -9035,6 +9039,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - enemy_rows <- character_sheets.CharacterEnemy
   - clues <- clues.Clue
+  - organization_reputation_events <- societies.OrganizationReputationEvent
   - distinction <- distinctions.CharacterDistinction
   - accusation_crime_claim <- justice.AccusationCrimeClaim
   - nullification <- justice.AccusationNullification
@@ -9075,6 +9080,7 @@
 
 ### Service Functions
 - `accusation_permitted(*, framer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet') -> 'bool' - Target-side consent gate for a frame-job (#1825) — may *framer* accuse *target*?`
+- `add_secret_victim(secret: 'Secret', *, organization: 'Organization | None' = None, persona: 'Persona | None' = None) -> 'SecretVictim' - Name a victim of ``secret``'s underlying fact: an organization or a persona (#4448).`
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' - Author a Level-1 player-flavor secret (the only tier a player may free-write).`
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', subject_aware: 'bool' = True, author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None, hook: 'Secret | None' = None) -> 'Secret' - Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 - `author_truth(hook: 'Secret', *, content: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, category: 'SecretCategory | None' = None, consequences: 'str' = '') -> 'Secret' - Write the truth under a hook, unknown to its subject until revealed (#4397).`
@@ -9525,6 +9531,7 @@
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - titles <- achievements.PersonaTitle
+  - organization_reputation_events <- societies.OrganizationReputationEvent
   - spread_assist_targets <- societies.SpreadAssistTarget
   - spreads <- societies.LegendSpread
   - deed_stories <- societies.LegendDeedStory
@@ -9802,6 +9809,22 @@
 **Foreign Keys:**
   - persona -> scenes.Persona [FK]
   - organization -> societies.Organization [FK]
+**Pointed to by:**
+  - events <- societies.OrganizationReputationEvent
+
+### OrganizationReputationEvent
+**Foreign Keys:**
+  - reputation -> societies.OrganizationReputation [FK]
+  - legend_entry -> societies.LegendEntry [FK] (nullable)
+  - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
+  - secret -> secrets.Secret [FK] (nullable)
+  - stake_resolution -> stories.StakeResolution [FK] (nullable)
+  - standing_declaration -> societies.StandingDeclaration [FK] (nullable)
+  - source_event -> societies.OrganizationReputationEvent [FK] (nullable)
+**Pointed to by:**
+  - ripple_events <- societies.OrganizationReputationEvent
+
+### OrganizationReputationReasonLine
 
 ### OrganizationType
 **Pointed to by:**
@@ -9926,6 +9949,8 @@
   - target_persona -> scenes.Persona [FK]
   - declared_by_persona -> scenes.Persona [FK]
   - game_week -> game_clock.GameWeek [FK]
+**Pointed to by:**
+  - reputation_events <- societies.OrganizationReputationEvent
 
 ### StatureBand
 **Pointed to by:**
@@ -10063,6 +10088,17 @@
 
 
 ## world.standoffs
+
+### CharacterDrive
+**Foreign Keys:**
+  - profile -> standoffs.CharacterStandoffProfile [FK]
+  - property -> mechanics.Property [FK]
+
+### CharacterStandoffProfile
+**Foreign Keys:**
+  - sheet -> character_sheets.CharacterSheet [OneToOne]
+**Pointed to by:**
+  - drives <- standoffs.CharacterDrive
 
 ### CreatureDrive
 **Foreign Keys:**
@@ -10402,6 +10438,7 @@
   - stake -> stories.Stake [FK]
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
+  - organization_reputation_events <- societies.OrganizationReputationEvent
   - npc_regard_events <- npc_services.NpcRegardEvent
   - reward_lines <- stories.StakeRewardLine
 
@@ -11194,6 +11231,7 @@
   - outcome_tier -> traits.CheckOutcome [FK]
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - gm_prompts <- gm.GMPrompt
   - closed_pledge <- worship.PledgeDetails
   - pledge_credits <- worship.PledgeCredit
 
@@ -11258,8 +11296,10 @@
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' - Resolve the gender-matched God's Favorite achievement row (Decision 6).`
 - `grant_worship(being: world.worship.models.WorshippedBeing, amount: int, *, granted_by: 'CharacterSheet | None' = None, reason: str = '') -> world.worship.models.WorshipGrant - Add worship to a being's pool and record the audit ledger row.`
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
+- `intervention_cooldown_active(character) -> bool - Whether the divine intervention cooldown condition is on ``character``.`
 - `is_birth_favored_by(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, today: 'date | None' = None) -> bool - Whether character_sheet is birth-favored by being today (#3776).`
 - `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: fire a divine miracle when a high-devotion PC is incapacitated.`
+- `miracle_ineligibility(character_sheet: 'CharacterSheet', miracle: 'Miracle', *, favor: int | None = None, on_cooldown: bool | None = None, cfg: 'DivineInterventionConfig | None' = None) -> str - Why ``miracle`` cannot be performed for ``character_sheet`` now, or "" when it can.`
 - `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None, trigger_event: str = 'character_incapacitated') -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
 - `release_patronage(standing: world.worship.models.DevotionStanding) -> None - Mark a patronage as released (dormant).`
 - `remove_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Remove the divine intervention trigger when favor drops below threshold.`

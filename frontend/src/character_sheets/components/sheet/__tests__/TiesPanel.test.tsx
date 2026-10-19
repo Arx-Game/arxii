@@ -117,7 +117,9 @@ describe('TiesPanel', () => {
             favor_note: '',
           },
         ],
-        reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'liked' }],
+        reputations: [
+          { organization_id: 20, organization: 'The Iron Guard', tier: 'liked', reasons: [] },
+        ],
       },
     });
     expect(screen.getByText('House Valardin')).toBeInTheDocument();
@@ -166,11 +168,11 @@ describe('TiesPanel', () => {
     expect(screen.queryByText('Covenant')).not.toBeInTheDocument();
   });
 
-  it('drops the Standing groups when the server withheld standing, keeping Renown', () => {
+  it('drops the Organizations groups when the server withheld standing, keeping Renown', () => {
     // The stranger's view. Standing gone, Titles and Covenant unaffected, and the
     // page keeps its shape — which is what render-or-vanish is for.
     renderTies({ standing: EMPTY_STANDING });
-    expect(screen.getByText('Standing')).toBeInTheDocument();
+    expect(screen.getByText('Organizations')).toBeInTheDocument();
     expect(screen.queryByText('Belongs to')).not.toBeInTheDocument();
     expect(screen.queryByText('Thought of as')).not.toBeInTheDocument();
     expect(screen.getByText('Titles')).toBeInTheDocument();

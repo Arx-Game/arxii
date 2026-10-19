@@ -156,6 +156,8 @@ def visible_prompts_for(account: AccountDB, *, scene: Scene | None) -> QuerySet[
             "standoff_group__creature_template",
             "pledge__pledge__being",
             "pledge__closing_performance__outcome_tier",
+            "rite_performance__rite__being",
+            "rite_performance__outcome_tier",
             "scene",
         )
         .order_by("-created_at")
@@ -339,6 +341,7 @@ def route_narratable_event(
                 stake_outcome=event.stake_outcome,
                 standoff_group=event.standoff_group,
                 pledge=event.pledge_details,
+                rite_performance=event.rite_performance,
             )
             for account in recipients
         ]

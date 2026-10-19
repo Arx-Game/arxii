@@ -420,6 +420,9 @@ def build_standoff_view(
         display_techniques=[DisplayTechniqueView(t.pk, t.name) for t in techniques],
     )
     for group in encounter.standoff_groups.select_related("creature_template", "persona"):
+        if group.persona is not None and group.persona.character_sheet_id == viewer_sheet.pk:
+            # A player character is never a target of their own reads and presses (#4441).
+            continue
         _append_group_views(
             view,
             group,
