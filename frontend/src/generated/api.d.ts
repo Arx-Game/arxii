@@ -38561,6 +38561,7 @@ export interface components {
       readonly lifecycle_state: string;
       readonly roster_type: string;
       readonly character_type: string;
+      readonly is_story_npc: boolean;
       readonly activity_state: string;
       readonly activity_requirement: string;
       readonly creation_provenance: string;

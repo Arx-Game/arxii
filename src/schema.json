@@ -67908,6 +67908,9 @@ components:
         character_type:
           type: string
           readOnly: true
+        is_story_npc:
+          type: boolean
+          readOnly: true
         activity_state:
           type: string
           readOnly: true
@@ -67956,6 +67959,7 @@ components:
       - has_ambient_unread
       - id
       - is_crowd_voice
+      - is_story_npc
       - lifecycle_state
       - loan
       - name
