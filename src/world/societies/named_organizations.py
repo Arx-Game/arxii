@@ -42,7 +42,7 @@ from world.societies.renown import _archetype_dot_product, bump_organization_rep
 
 if TYPE_CHECKING:
     from world.checks.models import ConsequenceEffect
-    from world.missions.models import MissionDeedRecord, MissionRenownAward
+    from world.missions.models import MissionDeedRecord
     from world.scenes.models import Persona, Scene
     from world.secrets.models import Secret
     from world.societies.models import LegendEntry, NamedOrganization, Organization
@@ -61,29 +61,36 @@ class NamedReaction:
     base: int
 
 
-def named_organization_base(magnitude: str | None) -> int:
-    """What a mission award of this magnitude pays each named organization, before principles.
+def named_organization_bases() -> dict[str, int]:
+    """What a mission award of each magnitude pays each named organization, before principles.
 
     ``RenownMagnitudeAward`` is the staff-tuned table; a tier with no row, or a row that
-    leaves the column blank, pays the ``MAGNITUDE_NAMED_ORGANIZATION_AWARDS`` default.
+    leaves the column blank, pays the ``MAGNITUDE_NAMED_ORGANIZATION_AWARDS`` default. One
+    query for every tier, so a caller handling several awards reads it once.
     """
-    if not magnitude:
-        return 0
     from world.societies.models import RenownMagnitudeAward  # noqa: PLC0415
 
-    row = RenownMagnitudeAward.objects.filter(magnitude=magnitude).first()
-    if row is not None and row.named_organization_award is not None:
-        return int(row.named_organization_award)
-    return MAGNITUDE_NAMED_ORGANIZATION_AWARDS.get(magnitude, 0)
+    bases = dict(MAGNITUDE_NAMED_ORGANIZATION_AWARDS)
+    for row in RenownMagnitudeAward.objects.exclude(named_organization_award=None):
+        bases[row.magnitude] = int(row.named_organization_award)
+    return bases
 
 
-def mission_reactions(award: MissionRenownAward) -> list[NamedReaction]:
-    """The reactions a mission renown award's named organizations carry, sized by magnitude."""
-    base = named_organization_base(award.magnitude)
-    return [
-        NamedReaction(row.organization, row.role, row.only_if_exposed, base)
-        for row in award.named_organizations.select_related("organization__society")
-    ]
+def named_organization_base(magnitude: str | None) -> int:
+    """What a mission award of this magnitude pays each named organization, before principles."""
+    return named_organization_bases().get(magnitude, 0) if magnitude else 0
+
+
+def mission_reactions(
+    rows: Sequence[NamedOrganization], magnitude: str, bases: dict[str, int]
+) -> list[NamedReaction]:
+    """The reactions a mission renown award's named organization rows carry, sized by magnitude.
+
+    The caller loads the rows for all of a route's awards at once (see
+    ``emit_terminal_renown_awards``); ``bases`` is ``named_organization_bases()``, read once.
+    """
+    base = bases.get(magnitude, 0) if magnitude else 0
+    return [NamedReaction(row.organization, row.role, row.only_if_exposed, base) for row in rows]
 
 
 def consequence_reactions(effect: ConsequenceEffect, tier_multiplier: float) -> list[NamedReaction]:

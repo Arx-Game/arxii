@@ -21,12 +21,13 @@ block in ``services.resolution``, so partial failures roll back together.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from world.missions.constants import RewardGroupRule
 from world.missions.models import MissionRenownAward
 from world.missions.services.legend_pricing import mission_settlement_context
-from world.societies.named_organizations import mission_reactions
+from world.societies.named_organizations import mission_reactions, named_organization_bases
 
 if TYPE_CHECKING:
     from world.missions.models import (
@@ -64,7 +65,7 @@ def emit_terminal_renown_awards(
     """
     from django.db.models import Prefetch  # noqa: PLC0415
 
-    from world.societies.models import PhilosophicalArchetype  # noqa: PLC0415
+    from world.societies.models import NamedOrganization, PhilosophicalArchetype  # noqa: PLC0415
 
     awards = list(
         route.renown_awards.prefetch_related(
@@ -85,9 +86,16 @@ def emit_terminal_renown_awards(
 
     results: list[RenownAwardResult] = []
     holder_persona_cache: Persona | None = None
+    # #4473: the organizations every award names, in one query, and the sizes in another.
+    named_by_award: dict[int, list[NamedOrganization]] = defaultdict(list)
+    for named in NamedOrganization.objects.filter(
+        mission_award__in=[award.pk for award in awards]
+    ).select_related("organization__society"):
+        named_by_award[named.mission_award_id].append(named)
+    bases = named_organization_bases()
     for award in awards:
         archetypes = list(award.prefetched_archetypes)
-        reactions = mission_reactions(award)
+        reactions = mission_reactions(named_by_award[award.pk], award.magnitude, bases)
         if award.contract_holder_only:
             holder_persona_cache = holder_persona_cache or _resolve_holder_persona(
                 instance, participants
