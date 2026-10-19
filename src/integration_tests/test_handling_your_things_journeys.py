@@ -22,11 +22,16 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
-from world.conditions.services import has_condition
+from world.conditions.services import has_condition, register_detection
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.items.constants import BodyRegion, EquipmentLayer
-from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, TemplateSlotFactory
+from world.items.factories import (
+    ItemInstanceFactory,
+    ItemTemplateFactory,
+    OutfitFactory,
+    TemplateSlotFactory,
+)
 from world.items.models import EquippedItem, ItemInstance
 from world.magic.constants import GiftKind, TargetKind as ThreadTargetKind
 from world.magic.factories import (
@@ -230,6 +235,20 @@ class DressingAndPacking(JourneyCase):
         self.assertIn("You drop Linen Shirt.", self.telnet(self.ysmay, "drop Linen Shirt"))
         self.assertEqual(where(self.shirt), self.room)
         self.assertFalse(worn_by(self.ysmay, self.shirt))
+
+    def test_a_saved_outfit_is_worn_by_name(self) -> None:
+        wardrobe = held_item(self.ysmay, "Cedar Wardrobe", is_wardrobe=True, is_container=True)
+        OutfitFactory(character_sheet=sheet_of(self.ysmay), wardrobe=wardrobe, name="Court Attire")
+        self.assertIn(
+            "You change into Court Attire.", self.telnet(self.ysmay, "wear outfit Court Attire")
+        )
+        self.assertTold(self.hobb, "Ysmay changes into Court Attire.")
+        self.assertIn(
+            "You change into Court Attire.", self.telnet(self.ysmay, "wear OUTFIT court attire")
+        )
+        self.assertIn(
+            "You have no outfit named 'Nothing'.", self.telnet(self.ysmay, "wear outfit Nothing")
+        )
 
     def test_undress_takes_everything_off(self) -> None:
         self.telnet(self.ysmay, "wear Linen Shirt")
@@ -641,4 +660,122 @@ class HandingThingsOver(JourneyCase):
         account.save(update_fields=["is_staff"])
         self.assertIn(
             "Granted 'Silver Locket' to Hobb.", self.telnet(dagny, "grant_item Hobb=Silver Locket")
+        )
+
+
+class LookingAtThings(JourneyCase):
+    """Ysmay looks at what Hobb wears and what sits in a bag; what she cannot see, she is
+    told is not there, in the same words whether it is hidden or absent."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.room = self.make_room("The Lantern")
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.shirt = wearable(self.hobb, "Linen Shirt")
+        self.telnet(self.hobb, "wear Linen Shirt")
+        self.bag = held_item(
+            self.ysmay, "Canvas Bag", is_container=True, supports_open_close=True, is_open=True
+        )
+        self.coin = held_item(self.ysmay, "Brass Coin", size=1)
+        self.telnet(self.ysmay, "put Brass Coin in Canvas Bag")
+
+    def test_she_looks_at_what_he_wears_and_what_her_bag_holds(self) -> None:
+        self.assertIn(
+            "Linen Shirt\nA Linen Shirt.", self.telnet(self.ysmay, "look Hobb's Linen Shirt")
+        )
+        self.assertIn(
+            "Linen Shirt\nA Linen Shirt.", self.telnet(self.ysmay, "look Linen Shirt on Hobb")
+        )
+        self.assertIn(
+            "You don't see anything by that name on Hobb.",
+            self.telnet(self.ysmay, "look Hobb's Crown"),
+        )
+        self.assertIn(
+            "Brass Coin\nA Brass Coin.", self.telnet(self.ysmay, "look Brass Coin in Canvas Bag")
+        )
+        self.assertIn(
+            "You don't see anything by that name in the Canvas Bag.",
+            self.telnet(self.ysmay, "look Ruby in Canvas Bag"),
+        )
+        self.bag.is_open = False
+        self.bag.save(update_fields=["is_open"])
+        self.assertIn(
+            "That container is closed.", self.telnet(self.ysmay, "look Brass Coin in Canvas Bag")
+        )
+        ObjectDBFactory(db_key="Pebble", location=self.ysmay)
+        self.assertIn(
+            "That isn't a container.", self.telnet(self.ysmay, "look Brass Coin in Pebble")
+        )
+        # A plain look at a thing in the room, and at a thing that is not there.
+        floor_item(self.room, "Brass Lantern")
+        self.assertIn("Brass Lantern", self.telnet(self.ysmay, "look Brass Lantern"))
+        # Once, not twice: the plain look had let Evennia's search say it first, as a
+        # bare untyped line the web composer could not place, before the command's
+        # own typed error. The frames are what a typed line sends the session, on
+        # telnet and on the web alike: the one text line typed ``error`` and the
+        # structured ``command_error`` frame a CommandError always carries, no bare line.
+        box = self.mailbox(self.ysmay)
+        first_frame = len(box.calls)
+        self.assertEqual(
+            NOT_HERE.format("Nothing"), self.telnet(self.ysmay, "look Nothing").strip()
+        )
+        self.assertEqual(
+            box.calls[first_frame:],
+            [
+                (((NOT_HERE.format("Nothing"), {"type": "error"}),), {}),
+                (
+                    (None,),
+                    {
+                        "command_error": {
+                            "error": NOT_HERE.format("Nothing"),
+                            "command": "look Nothing",
+                        }
+                    },
+                ),
+            ],
+        )
+        self.assertEqual(
+            NOT_HERE.format("Nobody's hat"), self.telnet(self.ysmay, "look Nobody's hat").strip()
+        )
+
+    def test_a_thing_named_like_a_drilled_form_is_still_found(self) -> None:
+        floor_item(self.room, "Bob's Hat")
+        floor_item(self.room, "Bob in Armor")
+        self.assertIn("Bob's Hat", self.telnet(self.ysmay, "look Bob's Hat"))
+        self.assertIn("Bob in Armor", self.telnet(self.ysmay, "look Bob in Armor"))
+
+    def test_a_hidden_hobb_is_not_there_until_she_sees_him(self) -> None:
+        hidden = ConditionTemplateFactory(
+            name="Shrouded", category=ConditionCategoryFactory(conceals_from_perception=True)
+        )
+        ConditionInstanceFactory(target=self.hobb, condition=hidden)
+        self.assertIn(
+            NOT_HERE.format("Hobb's Linen Shirt"),
+            self.telnet(self.ysmay, "look Hobb's Linen Shirt"),
+        )
+        self.assertIn(
+            NOT_HERE.format("Linen Shirt on Hobb"),
+            self.telnet(self.ysmay, "look Linen Shirt on Hobb"),
+        )
+        # A prefix of his name, in lower case, is answered in the words an absent name gets.
+        self.assertEqual(
+            self.telnet(self.ysmay, "look hob").strip(),
+            self.telnet(self.ysmay, "look nob").strip().replace("nob", "hob"),
+        )
+        self.assertEqual(NOT_HERE.format("hob"), self.telnet(self.ysmay, "look hob").strip())
+        register_detection(sheet_of(self.ysmay), self.hobb)
+        self.assertIn(
+            "Linen Shirt\nA Linen Shirt.", self.telnet(self.ysmay, "look Hobb's Linen Shirt")
+        )
+
+    def test_a_hidden_bag_is_not_there_either(self) -> None:
+        self.telnet(self.ysmay, "drop Canvas Bag")
+        hidden = ConditionTemplateFactory(
+            name="Shrouded", category=ConditionCategoryFactory(conceals_from_perception=True)
+        )
+        ConditionInstanceFactory(target=self.bag.game_object, condition=hidden)
+        self.assertIn(
+            NOT_HERE.format("Brass Coin in Canvas Bag"),
+            self.telnet(self.hobb, "look Brass Coin in Canvas Bag"),
         )
