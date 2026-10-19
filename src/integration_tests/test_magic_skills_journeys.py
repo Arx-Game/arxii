@@ -26,6 +26,7 @@ from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    CreatureTemplateFactory,
 )
 from world.combat.services import resolve_round
 from world.conditions.constants import BreakFreeMode
@@ -61,6 +62,8 @@ from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
 from world.skills.factories import SkillFactory
+from world.standoffs.factories import StandoffApproachFactory
+from world.standoffs.services.state import open_standoff
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import CharacterTraitValue, CheckOutcome, PointConversionRange, TraitType
 from world.vitals.models import CharacterVitals
@@ -337,3 +340,38 @@ class ResistingLossOfSelf(JourneyCase):
             capture.extra_traits,
             (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),),
         )
+
+
+class SizingUpAStandoffWithTechniques(JourneyCase):
+    """Ysmay faces road bandits in a standoff and knows two techniques (#4450).
+
+    A casting approach is pressed with a technique, and each technique can carry its own
+    skill, so ``standoff`` grades the approach once per technique she knows. A plain
+    approach keeps its one line.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        road = self.make_room("The Old Road")
+        self.ysmay = self.make_player("Ysmay", room=road)
+        encounter = CombatEncounterFactory(room=road)
+        CombatParticipantFactory(encounter=encounter, character_sheet=self.ysmay.sheet_data)
+        CombatOpponentFactory(
+            encounter=encounter, creature_template=CreatureTemplateFactory(name="Road Bandits")
+        )
+        open_standoff(encounter)
+        StandoffApproachFactory(name="Hard Stare")
+        StandoffApproachFactory(name="Show of Power", casts_technique=True)
+        for name in ("Thunderclap", "Gale"):
+            CharacterTechniqueFactory(
+                character=self.ysmay.sheet_data, technique=TechniqueFactory(name=name)
+            )
+
+    def test_the_summary_grades_a_casting_approach_per_technique(self) -> None:
+        told = self.telnet(self.ysmay, "standoff")
+
+        self.assertIn("Road Bandits", told)
+        self.assertRegex(told, r"press Show of Power with Thunderclap: \w+")
+        self.assertRegex(told, r"press Show of Power with Gale: \w+")
+        self.assertNotRegex(told, r"press Show of Power: ")
+        self.assertRegex(told, r"press Hard Stare: \w+")
