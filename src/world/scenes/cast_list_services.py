@@ -24,7 +24,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from world.combat.constants import OpponentStatus, OpponentTier
 from world.roster.constants import NPCLoanStatus
-from world.scenes.constants import RoundStatus
+from world.scenes.constants import PlayedByRole, RoundStatus
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -49,6 +49,7 @@ class CastListEntry:
     persona_id: int | None
     thumbnail_url: str
     played_by: str
+    played_by_role: str | None
     loan_id: int | None
     loan_status: str | None
     tier: str | None
@@ -58,20 +59,41 @@ class CastListEntry:
 
 
 @dataclass(frozen=True)
-class _Player:
-    """Who plays an entry: the name shown, and the loan that put them there, if any."""
+class ShownPlayer:
+    """How an account is shown as who plays an NPC: a name, and the role it plays in."""
 
     name: str
+    role: str | None
+
+
+# How an entry nobody holds or borrows is shown.
+_NOBODY = ShownPlayer(name="", role=None)
+
+
+@dataclass(frozen=True)
+class _Player:
+    """Who plays an entry: how they are shown, and the loan that put them there, if any."""
+
+    shown: ShownPlayer
     loan: NPCLoan | None
 
 
 def player_names(account_ids: Iterable[int]) -> dict[int, str]:
-    """How each account is shown as who plays an NPC, in three queries.
+    """How each account is shown as who plays an NPC (see ``shown_players``)."""
+    return {account_id: shown.name for account_id, shown in shown_players(account_ids).items()}
 
-    Never an account name, and never one of the account's player characters (that
-    would tie the account to a PC). A GM or Staff OOC character's name first, else
-    the Guide's ``display_name``, else the role: "Guide", "GM", or "Staff".
+
+def shown_players(account_ids: Iterable[int]) -> dict[int, ShownPlayer]:
+    """How each account is shown as who plays an NPC, and in what role, in four queries.
+
+    The name is never an account name, and never one of the account's player
+    characters (that would tie the account to a PC): a GM or Staff OOC character's
+    name first, else the Guide's ``display_name``, else the role's label: "Guide",
+    "GM", or "Staff". The role (``PlayedByRole``) is the account's standing, staff
+    first, then GM, then Guide; None for an account with none of them.
     """
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
     from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE  # noqa: PLC0415
     from world.gm.models import GMProfile, GuideProfile  # noqa: PLC0415
     from world.roster.models import RosterTenure  # noqa: PLC0415
@@ -96,19 +118,42 @@ def player_names(account_ids: Iterable[int]) -> dict[int, str]:
         GuideProfile.objects.filter(account_id__in=ids).values_list("account_id", "display_name")
     )
     gm_ids = set(GMProfile.objects.filter(account_id__in=ids).values_list("account_id", flat=True))
-    names: dict[int, str] = {}
-    for account_id in ids:
-        if account_id in ooc_names:
-            names[account_id] = ooc_names[account_id]
-        elif guide_names.get(account_id):
-            names[account_id] = guide_names[account_id]
-        elif account_id in guide_names:
-            names[account_id] = GUIDE_LABEL
-        elif account_id in gm_ids:
-            names[account_id] = GM_LABEL
-        else:
-            names[account_id] = FALLBACK_PLAYER_NAME
-    return names
+    staff_ids = set(
+        AccountDB.objects.filter(pk__in=ids, is_staff=True).values_list("pk", flat=True)
+    )
+    return {
+        account_id: ShownPlayer(
+            name=_shown_name(account_id, ooc_names, guide_names, gm_ids),
+            role=_role(account_id, staff_ids, gm_ids, set(guide_names)),
+        )
+        for account_id in ids
+    }
+
+
+def _shown_name(
+    account_id: int, ooc_names: dict[int, str], guide_names: dict[int, str], gm_ids: set[int]
+) -> str:
+    if account_id in ooc_names:
+        return ooc_names[account_id]
+    if guide_names.get(account_id):
+        return guide_names[account_id]
+    if account_id in guide_names:
+        return GUIDE_LABEL
+    if account_id in gm_ids:
+        return GM_LABEL
+    return FALLBACK_PLAYER_NAME
+
+
+def _role(
+    account_id: int, staff_ids: set[int], gm_ids: set[int], guide_ids: set[int]
+) -> PlayedByRole | None:
+    if account_id in staff_ids:
+        return PlayedByRole.STAFF
+    if account_id in gm_ids:
+        return PlayedByRole.GM
+    if account_id in guide_ids:
+        return PlayedByRole.GUIDE
+    return None
 
 
 def _loans_by_entry(scene: Scene, entry_ids: set[int]) -> dict[int, NPCLoan]:
@@ -152,16 +197,17 @@ def _players(scene: Scene, entries: list[RosterEntry]) -> dict[int, _Player]:
     holder_ids.update(open_tenures)
     account_ids = {loan.borrower_id for loan in loans.values()}
     account_ids |= {account_id for account_id in holder_ids.values() if account_id is not None}
-    names = player_names(account_ids)
+    shown = shown_players(account_ids)
     players: dict[int, _Player] = {}
     for entry in entries:
         loan = loans.get(entry.pk)
         if loan is not None:
-            players[entry.pk] = _Player(name=names[loan.borrower_id], loan=loan)
+            players[entry.pk] = _Player(shown=shown[loan.borrower_id], loan=loan)
             continue
         holder_id = holder_ids[entry.pk]
-        name = names[holder_id] if holder_id is not None else ""
-        players[entry.pk] = _Player(name=name, loan=None)
+        players[entry.pk] = _Player(
+            shown=shown[holder_id] if holder_id is not None else _NOBODY, loan=None
+        )
     return players
 
 
@@ -276,6 +322,7 @@ def _unvoiced_crowd(rows: list[CombatOpponent]) -> CastListEntry:
         persona_id=None,
         thumbnail_url="",
         played_by="",
+        played_by_role=None,
         loan_id=None,
         loan_status=None,
         tier=first.tier,
@@ -296,7 +343,8 @@ def _voiced_crowd(rows: list[CombatOpponent], player: _Player | None) -> CastLis
         roster_entry_id=entry.pk if entry is not None else None,
         persona_id=voice.pk,
         thumbnail_url=voice.thumbnail_url,
-        played_by=player.name if player is not None else "",
+        played_by=player.shown.name if player is not None else "",
+        played_by_role=player.shown.role if player is not None else None,
         loan_id=loan.pk if loan is not None else None,
         loan_status=loan.status if loan is not None else None,
         tier=first.tier,
@@ -340,7 +388,8 @@ def scene_cast_list(scene: Scene) -> list[CastListEntry]:
                 roster_entry_id=entry.pk,
                 persona_id=persona.pk if persona is not None else None,
                 thumbnail_url=persona.thumbnail_url if persona is not None else "",
-                played_by=player.name,
+                played_by=player.shown.name,
+                played_by_role=player.shown.role,
                 loan_id=player.loan.pk if player.loan is not None else None,
                 loan_status=player.loan.status if player.loan is not None else None,
                 tier=None,

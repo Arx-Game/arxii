@@ -210,3 +210,12 @@ GENERAL_CONVERSATION_KEY = KIND_ROOM
 # history at once. Ambient needs no equivalent floor: it is scoped to a scene
 # that is still running, which is inherently recent.
 DIRECTED_UNREAD_DAYS = 14
+
+
+class PlayedByRole(models.TextChoices):
+    """The role in which someone plays a cast-list row (#4418): read off the account's
+    GM, Guide or staff standing, so a GM who borrowed an NPC is never called a Guide."""
+
+    GM = "gm", "GM"
+    GUIDE = "guide", "Guide"
+    STAFF = "staff", "Staff"

@@ -14,6 +14,7 @@ from world.justice.constants import HUMILIATION_MARK_EXPLANATION
 from world.justice.serializers import HumiliationMarkSerializer
 from world.missions.serializers import GroupBallotStateSerializer, GroupBeatResultSerializer
 from world.scenes.constants import (
+    PlayedByRole,
     ScenePrivacyMode,
     SceneRoundMode,
     SceneRoundStartReason,
@@ -624,6 +625,10 @@ class CastListEntrySerializer(serializers.Serializer):
     persona_id = serializers.IntegerField(allow_null=True)
     thumbnail_url = serializers.CharField(allow_blank=True)
     played_by = serializers.CharField(allow_blank=True)
+    # The role the player plays in (``PlayedByRole``): staff, GM or Guide, from their
+    # standing, so a GM who borrowed from the roster is not shown as a Guide. Null
+    # for nobody, or an account with none of those standings.
+    played_by_role = serializers.ChoiceField(choices=PlayedByRole.choices, allow_null=True)
     loan_id = serializers.IntegerField(allow_null=True)
     loan_status = serializers.CharField(allow_null=True)
     tier = serializers.CharField(allow_null=True)

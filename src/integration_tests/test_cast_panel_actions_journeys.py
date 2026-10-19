@@ -10,7 +10,9 @@ from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.combat.models import CombatOpponent
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_default_gm_level_caps
+from world.roster.constants import NPCLendPolicy
 from world.roster.models import NPCLoan, RosterEntry
+from world.roster.services.staff_characters import mint_gm_character
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Persona
@@ -81,6 +83,35 @@ class TheGmRunsTheCastFromAnywhere(JourneyCase):
         taken = self.web(self.ravenna, "take_back_npc", loan_id=loan_id, scene_id=self.scene.pk)
         self.assertTrue(taken.detail.success, taken.detail.message)
         self.assertEqual(NPCLoan.objects.get(pk=loan_id).status, "ended")
+
+    def _vael_row(self) -> dict:
+        rows = self.api(self.gm).get(CAST_LIST.format(self.scene.pk)).json()
+        return next(row for row in rows if row["name"] == "Captain Vael")
+
+    def test_the_cast_list_says_what_role_the_player_plays_in(self) -> None:
+        # Real-testing bug H: a GM who borrowed from the roster was shown as a Guide.
+        mint_gm_character(self.gm, "Ravenna's Mask")
+        row = self._vael_row()
+        self.assertEqual((row["played_by"], row["played_by_role"]), ("Ravenna's Mask", "gm"))
+
+        offered = self._offer(self.ravenna)
+        loan_id = offered.detail.data["loan_id"]
+        self.web(self.ilsa, "answer_npc_loan", loan_id=loan_id, accept=True)
+        self.assertEqual(self._vael_row()["played_by_role"], "guide")
+        self.web(self.ravenna, "take_back_npc", loan_id=loan_id, scene_id=self.scene.pk)
+
+        # Corvin, a GM with no Guide role, borrows Vael from the NPC roster.
+        corvin_account = self.account_of(self.make_player("Bram", room=self.study))
+        GMProfileFactory(account=corvin_account, level=GMLevel.JUNIOR)
+        mint_gm_character(corvin_account, "Corvin")
+        settings = self.entry.story_npc_settings
+        settings.listed_on_npc_roster = True
+        settings.lend_policy = NPCLendPolicy.WITHOUT_ASKING
+        settings.save()
+        borrowed = self.api(corvin_account).post(f"/api/roster/npcs/{self.entry.pk}/borrow/")
+        self.assertEqual(borrowed.json()["status"], "active", borrowed.data)
+        row = self._vael_row()
+        self.assertEqual((row["played_by"], row["played_by_role"]), ("Corvin", "gm"))
 
     def test_someone_who_does_not_run_the_scene_is_refused(self) -> None:
         offered = self._offer(self.ysmay)
