@@ -65,7 +65,7 @@ function playedByText(entry: CastEntry): string {
   if (entry.loan_id === null) return entry.played_by;
   if (entry.loan_status === 'offered') return `Offered to ${entry.played_by}`;
   // `played_by_role` is "gm", "guide", "staff" or null; the label names only the first two.
-  const role = (entry as CastEntry & { played_by_role?: string | null }).played_by_role;
+  const role = entry.played_by_role;
   if (role === 'guide') return `${entry.played_by} (Guide)`;
   if (role === 'gm') return `${entry.played_by} (GM)`;
   return entry.played_by;
