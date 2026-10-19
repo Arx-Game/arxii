@@ -67,7 +67,13 @@ or a Guide plays one with an ordinary tenure or an active loan.
   `end_loan(loan, by)`, `end_scene_loans(scene)` (called from `Scene.finish_scene` and from
   `conclude_battle`, which writes the scene's end directly; so every finish, an event's
   completion and a concluded battle included, ends the scene's loans),
-  `may_end_loan`, `playable_entries`, `active_loans_touching`.
+  `may_end_loan`, `playable_entries`, `active_loans_touching`,
+  `guide_hand_off_counts(account, since)` (a `HandOffCounts` of accepted, declined and
+  taken back early; the Guide admin's Last 30 days). The Guide admin
+  (`world.gm.admin.GuideProfileAdmin`) shows Who (granted by set on save), Right now
+  (active loans with a per-loan Return to GM page) and Last 30 days.
+- `MyRosterEntrySerializer.is_story_npc` (`entry_is_story_npc`, no query per row) is
+  the NPC tag's test; `roster_type` alone also matches a GM's own GM or Staff character.
   Activation is race-safe, takes the NPC from its owner while lent (owner cannot play
   it), unpuppets the other side's sessions and clears any saved selection. Errors
   raise `NPCLendingError` with a `user_message`.
