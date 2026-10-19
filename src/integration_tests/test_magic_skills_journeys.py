@@ -11,6 +11,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 
@@ -29,14 +30,22 @@ from world.checks.services import perform_check
 from world.checks.test_helpers import CheckCapture, force_check_outcome
 from world.checks.types import CheckResult, ExtraTraitTerm
 from world.classes.factories import PathFactory
-from world.combat.constants import ActionCategory, ParticipantStatus
+from world.combat.constants import (
+    ActionCategory,
+    CombatAllegiance,
+    OpponentStatus,
+    ParticipantStatus,
+)
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
     CreatureTemplateFactory,
+    ThreatPoolFactory,
 )
 from world.combat.services import resolve_round
+from world.companions.content import BIND_ATTEMPT_CHECK_NAME, ensure_companion_content
+from world.companions.factories import CompanionArchetypeFactory
 from world.conditions.constants import BreakFreeMode
 from world.conditions.factories import (
     ConditionCategoryFactory,
@@ -62,7 +71,9 @@ from world.magic.factories import (
     ThreadWeavingUnlockFactory,
 )
 from world.magic.models import CharacterResonance
+from world.magic.models.threads import Thread
 from world.magic.services.threads import weave_thread
+from world.magic.specialization.services import grant_gift_to_character
 from world.magic.types.pull import CastPullDeclaration
 from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.models import KudosSourceCategory, WeeklySkillUsage
@@ -517,3 +528,66 @@ class SizingUpAStandoffWithTechniques(JourneyCase):
         self.assertRegex(told, r"press Show of Power with Gale: \w+")
         self.assertNotRegex(told, r"press Show of Power: ")
         self.assertRegex(told, r"press Hard Stare: \w+")
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class BindingASummonedCompanion(JourneyCase):
+    """Ysmay binds a creature she summoned; staff mapped a skill to companion binding (#4477).
+
+    The web ``promote_summon`` action rolls the Bind Attempt check. The mapped skill joins
+    that roll, and a binding with no mapped skill rolls without one.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        self.skill = SkillFactory()
+        self.room = self.make_room("The Menagerie")
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        sheet = self.ysmay.sheet_data
+        self.gift = ensure_companion_content()
+        grant_gift_to_character(sheet, self.gift, resonance=self.gift.resonances.first())
+        thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=self.gift)
+        thread.level = 10
+        thread.save(update_fields=["level"])
+        self.archetype = CompanionArchetypeFactory(bind_difficulty=20, capacity_cost=5)
+        self.summon = CombatOpponentFactory(
+            encounter=CombatEncounterFactory(room=self.room), threat_pool=ThreatPoolFactory()
+        )
+        self.summon.allegiance = CombatAllegiance.ALLY
+        self.summon.summoned_by = sheet
+        self.summon.status = OpponentStatus.ACTIVE
+        self.summon.save(update_fields=["allegiance", "summoned_by", "status"])
+
+    def bind(self):
+        """Ysmay binds the summon through the web action; returns the roll and the result."""
+        success = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(success) as capture:
+            dispatched = self.web(
+                self.ysmay,
+                "promote_summon",
+                combat_opponent_id=self.summon.pk,
+                archetype_id=self.archetype.pk,
+                gift_id=self.gift.pk,
+                name="Pell",
+            )
+        return capture, dispatched.detail
+
+    def test_the_mapped_skill_joins_the_bind_roll(self) -> None:
+        MagicActivitySkillFactory(
+            activity=MagicActivity.COMPANION_BINDING, skill=self.skill, weight=Decimal("0.50")
+        )
+
+        capture, result = self.bind()
+
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(capture.check_type.name, BIND_ATTEMPT_CHECK_NAME)
+        self.assertEqual(
+            capture.extra_traits, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),)
+        )
+
+    def test_an_unmapped_binding_rolls_without_a_skill(self) -> None:
+        capture, result = self.bind()
+
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(capture.extra_traits, ())

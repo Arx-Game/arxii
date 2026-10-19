@@ -795,3 +795,5 @@ class MagicActivity(models.TextChoices):
     WORSHIP_RITE = "worship_rite", "Worship rite"
     INVOCATION = "invocation", "Invocation"
     CEREMONY = "ceremony", "Ceremony"
+    COMPANION_BINDING = "companion_binding", "Companion binding"
+    DREAM_PERIL = "dream_peril", "Dream peril"

@@ -45,14 +45,15 @@ from world.magic.constants import (
                              # passive_vital_bonuses returns 0 for them.
     RitualExecutionKind,     # SERVICE, FLOW
     PendingAlterationStatus, # OPEN, RESOLVED, STAFF_CLEARED
-    MagicActivity,           # 18 kinds of magical roll that add staff-mapped
+    MagicActivity,           # 20 kinds of magical roll that add staff-mapped
                              # skills (#4450): ANIMA_RITUAL, TECHNIQUE_LEARNING,
                              # RITUAL_WORKING, SUSTAINING_MAGIC, DISPELLING,
                              # MAGICAL_TREATMENT, SOULFRAY_RESILIENCE,
                              # RESISTING_LOSS_OF_SELF, SOUL_TETHER_RESCUE,
                              # COURT_PETITION, FURY_CONTROL, MOON_CONTROL,
                              # ENDURING_HOSTILE_RESONANCE, FEEDING_RESTRAINT,
-                             # SENSING_MAGIC, WORSHIP_RITE, INVOCATION, CEREMONY
+                             # SENSING_MAGIC, WORSHIP_RITE, INVOCATION, CEREMONY,
+                             # COMPANION_BINDING, DREAM_PERIL
     AlterationTier,
     ALTERATION_TIER_CAPS,
     THREADWEAVING_ITEM_TYPECLASSES,
@@ -618,7 +619,7 @@ nothing, the roll runs without the added skill; there is no placeholder data.
 
 | Surface | Location | Purpose |
 |---------|----------|---------|
-| `MagicActivity` | `constants.py` | 18 `TextChoices` kinds of magical roll (see Enums) |
+| `MagicActivity` | `constants.py` | 20 `TextChoices` kinds of magical roll (see Enums) |
 | `MagicActivitySkill` | `models/magic_activity.py` | `activity`, `skill` (FK Skill, PROTECT), `weight` (default 1.00); unique on (activity, skill). One row adds one skill to every roll of that activity; an activity may map several |
 | `Path.technique_skill` | `world/classes/models.py` | Nullable FK Skill (SET_NULL): the skill every Major Gift technique cast by someone currently on this Path adds |
 | `Gift.technique_skill` | `models/gifts.py` | Nullable FK Skill (SET_NULL), Minor Gifts only: DB constraint `gift_technique_skill_minor_only` and a matching `clean()` message |
@@ -657,7 +658,12 @@ no Path skill. An inactive skill gives no term.
   magical treatment, Soulfray resilience, Soul Tether rescue, the Court emergency draw
   (`COURT_PETITION`), Fury control, moon control, hostile resonance ground, feeding restraint,
   noticing a cast or sensing a twisted ceremony or a loss of self (`SENSING_MAGIC`), worship rites,
-  invocations and ceremonies.
+  invocations and ceremonies; binding a summoned being as a companion (`promote_summon`,
+  `COMPANION_BINDING`) and a dream's peril resist (`resolve_dream_peril_collapse`, `DREAM_PERIL`).
+- A condition effect from a technique-enhanced action (`handle_apply_condition_on_check`,
+  `handle_remove_condition_on_check` in `actions/effects/conditions.py`) adds that technique's
+  term (`technique_skill_term`) when the effect's `ActionEnhancement` source is a technique
+  (`config.enhancement.technique`); a distinction or condition source adds none.
 - Resist rolls on application, on stage advance, on a peril condition's per-round resist and
   terminal-pool roll (Bleeding Out, Surrounded) and on Surrounded entry, and break-free rolls, add the `RESISTING_LOSS_OF_SELF` terms only for a
   condition in a marked category. A friend's

@@ -328,7 +328,7 @@ attachments (both the primary persona's authored identity tags and runtime
 Every magical roll adds skills staff chose in admin; no skill is named in code. Full reference:
 `docs/systems/magic.md` "Magical skills".
 
-- **Models:** `MagicActivity` (`constants.py`, 18 kinds of roll), `MagicActivitySkill`
+- **Models:** `MagicActivity` (`constants.py`, 20 kinds of roll), `MagicActivitySkill`
   (`models/magic_activity.py`: activity, skill, weight; unique per pair), `Path.technique_skill`,
   `Gift.technique_skill` (Minor only, DB constraint plus `clean()`), `Technique.skill` (override),
   `ConditionCategory.adds_loss_of_self_skills`.
