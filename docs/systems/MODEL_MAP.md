@@ -2029,6 +2029,7 @@
   - capture_rescue_template -> missions.MissionTemplate [FK] (nullable)
   - crime_kinds -> justice.CrimeKind [M2M]
 **Pointed to by:**
+  - named_organizations <- societies.NamedOrganization
   - affection_shifts <- relationships.AffectionShift
 
 ### ConsequenceOutcome
@@ -6948,6 +6949,7 @@
   - legend_entries -> societies.LegendEntry [M2M]
 **Pointed to by:**
   - organization_reputation_events <- societies.OrganizationReputationEvent
+  - named_organizations <- societies.DeedOrganization
   - encounters <- combat.CombatEncounter
   - reward_lines <- missions.MissionDeedRewardLine
   - queued_rewards <- missions.MissionRewardQueue
@@ -7117,6 +7119,8 @@
 **Foreign Keys:**
   - route -> missions.MissionOptionRoute [FK]
   - archetypes -> societies.PhilosophicalArchetype [M2M]
+**Pointed to by:**
+  - named_organizations <- societies.NamedOrganization
 
 ### MissionRewardQueue
 **Foreign Keys:**
@@ -9109,7 +9113,7 @@
 
 ### Service Functions
 - `accusation_permitted(*, framer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet') -> 'bool' - Target-side consent gate for a frame-job (#1825) — may *framer* accuse *target*?`
-- `add_secret_victim(secret: 'Secret', *, organization: 'Organization | None' = None, persona: 'Persona | None' = None) -> 'SecretVictim' - Name a victim of ``secret``'s underlying fact: an organization or a persona (#4448).`
+- `add_secret_victim(secret: 'Secret', *, organization: 'Organization | None' = None, persona: 'Persona | None' = None, severity: 'int | None' = None) -> 'SecretVictim' - Name a victim of ``secret``'s underlying fact: an organization or a persona (#4448).`
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' - Author a Level-1 player-flavor secret (the only tier a player may free-write).`
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', subject_aware: 'bool' = True, author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None, hook: 'Secret | None' = None) -> 'Secret' - Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 - `author_truth(hook: 'Secret', *, content: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, category: 'SecretCategory | None' = None, consequences: 'str' = '') -> 'Secret' - Write the truth under a hook, unknown to its subject until revealed (#4397).`
@@ -9322,6 +9326,12 @@
   - bid -> societies.CrownBid [FK]
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - persona -> scenes.Persona [FK] (nullable)
+
+### DeedOrganization
+**Foreign Keys:**
+  - legend_entry -> societies.LegendEntry [FK] (nullable)
+  - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
+  - organization -> societies.Organization [FK]
 
 ### Domain
 **Foreign Keys:**
@@ -9561,6 +9571,7 @@
 **Pointed to by:**
   - titles <- achievements.PersonaTitle
   - organization_reputation_events <- societies.OrganizationReputationEvent
+  - named_organizations <- societies.DeedOrganization
   - spread_assist_targets <- societies.SpreadAssistTarget
   - spreads <- societies.LegendSpread
   - deed_stories <- societies.LegendDeedStory
@@ -9646,6 +9657,12 @@
 **Pointed to by:**
   - commitments <- societies.PactCommitment
 
+### NamedOrganization
+**Foreign Keys:**
+  - mission_award -> missions.MissionRenownAward [FK] (nullable)
+  - consequence_effect -> checks.ConsequenceEffect [FK] (nullable)
+  - organization -> societies.Organization [FK]
+
 ### NobiliaryParticle
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
@@ -9706,6 +9723,10 @@
   - appeals <- societies.OrgAppeal
   - reputations <- societies.OrganizationReputation
   - standing_declarations <- societies.StandingDeclaration
+  - named_by_acts <- societies.NamedOrganization
+  - named_in_deeds <- societies.DeedOrganization
+  - relations_toward <- societies.OrganizationRelation
+  - followed_by <- societies.OrganizationRelation
   - proclamations <- societies.Proclamation
   - held_turf <- societies.Turf
   - crown_bids <- societies.CrownBid
@@ -9833,6 +9854,11 @@
 **Pointed to by:**
   - memberships <- societies.OrganizationMembership
   - vacancies <- societies.Vacancy
+
+### OrganizationRelation
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - toward -> societies.Organization [FK]
 
 ### OrganizationReputation
 **Foreign Keys:**
@@ -10037,7 +10063,7 @@
   - memberships <- societies.OrganizationMembership
 
 ### Service Functions
-- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None, interaction: 'Interaction | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
+- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None, interaction: 'Interaction | None' = None, named_reactions: 'Sequence[NamedReaction]' = ()) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
 - `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0, event: 'LegendEvent | None' = None, interaction: 'Interaction | None' = None) -> 'LegendEntry' - Create a solo legend deed, optionally anchored to a shared event's ceiling.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' - Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' - Fast lookup of a character's total legend from materialized view.`

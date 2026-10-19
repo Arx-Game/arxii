@@ -132,6 +132,9 @@ Reputation is normally driven by deeds (`fire_renown_award`). Two **public appli
   relational channel: a direct clamped `OrganizationReputation` hit, independent of the org's
   philosophy. It is the one writer: every call passes a `cause` and the citation that cause
   needs, and writes an `OrganizationReputationEvent` in the same transaction (#4448).
+  It ripples a change from play to the organizations that follow the changed one
+  (`OrganizationRelation`, RELATED_ORGANIZATION, one step; #4473). `named_organizations.py` is
+  where a deed's named organizations are sized and applied (`react_to_named_organizations`).
 - `bump_society_reputation(persona, society, delta)` — the relational channel for Society,
   symmetric with `bump_organization_reputation`: a direct clamped `SocietyReputation` hit,
   independent of the society's principles (#1760).

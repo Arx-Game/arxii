@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0262_romantic_refusable_from_npcs")]
+    dependencies = [("arxii", "0263_romantic_refusable_from_npcs")]
 
     operations = [
         migrations.AddField(

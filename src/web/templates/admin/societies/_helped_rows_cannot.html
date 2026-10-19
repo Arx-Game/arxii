@@ -1,0 +1,30 @@
+<script>
+  // A helped organization that does not know about the help has nothing to react to, so a
+  // helped row cannot be "only if exposed": the checkbox gives way to a note, as the design shows.
+  (function () {
+    function sync(row) {
+      var role = row.querySelector('select[name$="-role"]');
+      var box = row.querySelector('input[name$="-only_if_exposed"]');
+      if (!role || !box) { return; }
+      var note = row.querySelector('.helped-rows-cannot');
+      if (!note) {
+        note = document.createElement('span');
+        note.className = 'helped-rows-cannot help';
+        note.textContent = '(helped rows cannot)';
+        box.parentNode.appendChild(note);
+      }
+      var helped = role.value === 'helped';
+      if (helped) { box.checked = false; }
+      box.style.display = helped ? 'none' : '';
+      note.style.display = helped ? '' : 'none';
+    }
+    function syncAll() {
+      document.querySelectorAll('#named_organizations-group tr.form-row').forEach(sync);
+    }
+    document.addEventListener('change', function (event) {
+      if (event.target.matches('select[name$="-role"]')) { syncAll(); }
+    });
+    document.addEventListener('formset:added', syncAll);
+    window.addEventListener('load', syncAll);
+  })();
+</script>

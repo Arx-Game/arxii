@@ -21,11 +21,13 @@ block in ``services.resolution``, so partial failures roll back together.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from world.missions.constants import RewardGroupRule
 from world.missions.models import MissionRenownAward
 from world.missions.services.legend_pricing import mission_settlement_context
+from world.societies.named_organizations import mission_reactions, named_organization_bases
 
 if TYPE_CHECKING:
     from world.missions.models import (
@@ -34,6 +36,7 @@ if TYPE_CHECKING:
         MissionOptionRoute,
     )
     from world.scenes.models import Persona
+    from world.societies.named_organizations import NamedReaction
     from world.societies.renown import RenownAwardResult
 
 
@@ -62,7 +65,7 @@ def emit_terminal_renown_awards(
     """
     from django.db.models import Prefetch  # noqa: PLC0415
 
-    from world.societies.models import PhilosophicalArchetype  # noqa: PLC0415
+    from world.societies.models import NamedOrganization, PhilosophicalArchetype  # noqa: PLC0415
 
     awards = list(
         route.renown_awards.prefetch_related(
@@ -83,21 +86,31 @@ def emit_terminal_renown_awards(
 
     results: list[RenownAwardResult] = []
     holder_persona_cache: Persona | None = None
+    # #4473: the organizations every award names, in one query, and the sizes in another.
+    named_by_award: dict[int, list[NamedOrganization]] = defaultdict(list)
+    for named in NamedOrganization.objects.filter(
+        mission_award__in=[award.pk for award in awards]
+    ).select_related("organization__society"):
+        named_by_award[named.mission_award_id].append(named)
+    bases = named_organization_bases()
     for award in awards:
         archetypes = list(award.prefetched_archetypes)
+        reactions = mission_reactions(named_by_award[award.pk], award.magnitude, bases)
         if award.contract_holder_only:
             holder_persona_cache = holder_persona_cache or _resolve_holder_persona(
                 instance, participants
             )
             if holder_persona_cache is None:
                 continue
-            results.append(_fire_award(award, holder_persona_cache, archetypes))
+            results.append(_fire_award(award, holder_persona_cache, archetypes, reactions, deed))
             continue
         # Broadcast — distribute per reward_group_rule.
         if rule != RewardGroupRule.ALL_EQUAL:
             raise NotImplementedError(_ERR_UNIMPLEMENTED_RULE.format(rule=rule))
         results.extend(
-            _fire_award(award, _resolve_participant_persona(participant), archetypes)
+            _fire_award(
+                award, _resolve_participant_persona(participant), archetypes, reactions, deed
+            )
             for participant in participants
         )
     # #1765 — criminality belongs to the RUN (user-ratified): tag every legend
@@ -180,8 +193,10 @@ def _fire_award(
     award: MissionRenownAward,
     persona: Persona,
     archetypes: list,
+    reactions: list[NamedReaction],
+    deed: MissionDeedRecord,
 ) -> RenownAwardResult:
-    """Fire one award on one persona."""
+    """Fire one award on one persona, with the organizations it names (#4473)."""
     from world.societies.renown import fire_renown_award  # noqa: PLC0415
 
     # #3468: the pricing rule is shared with the deferred POST_CRON grant and
@@ -198,6 +213,8 @@ def _fire_award(
         title=_award_title(award),
         settled_risk=settled_risk,
         station=station,
+        named_reactions=reactions,
+        mission_deed=deed,
     )
 
 

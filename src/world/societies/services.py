@@ -6,6 +6,7 @@ and querying legend totals from materialized views.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -36,6 +37,8 @@ from world.stories.models import Story
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CovenantRole
+    from world.societies.named_organizations import NamedReaction
+    from world.societies.scandal import DeedReachResult
 
 
 def _shed_witnesses_if_concealed(
@@ -142,6 +145,11 @@ def create_solo_deed(  # noqa: PLR0913
             for bystanders when the deed also turns out public and
             crime-tagged. None for a social-pose solo deed with no interaction
             anchor, which never opens a window.
+        named_reactions: #4473 - the organizations the act names as harmed or helped,
+            sized by the caller. Each entry stores them (``DeedOrganization``), and once the
+            scene's reach check has decided what happened to the act each organization
+            reacts, is held as a victim on the act's secret, or does not react (see
+            ``named_organizations.react_to_named_organizations``).
 
     Returns:
         The created LegendEntry.
@@ -219,6 +227,7 @@ def create_legend_event(  # noqa: PLR0913, C901
     containment_approach: str | None = None,
     stations_by_persona: dict[int, int] | None = None,
     interaction: Interaction | None = None,
+    named_reactions: Sequence[NamedReaction] = (),
 ) -> tuple[LegendEvent, list[LegendEntry]]:
     """Create a shared event and individual deeds for each participant.
 
@@ -299,6 +308,8 @@ def create_legend_event(  # noqa: PLR0913, C901
     if archetypes:
         for e in entries:
             e.archetypes.set(archetypes)
+    _store_named_organizations(entries, named_reactions)
+    reach_by_entry: dict[int, DeedReachResult] = {}
     if scene is not None:
         # #902 — scene-list witnesses know every deed born from the event.
         from world.societies.knowledge_services import (  # noqa: PLC0415
@@ -319,7 +330,7 @@ def create_legend_event(  # noqa: PLR0913, C901
                 room=scene.room,
             )
             # #1464 — each participant routes (and hushes) their own part.
-            route_deed_reach(
+            reach_by_entry[e.pk] = route_deed_reach(
                 entry=e,
                 scene=scene,
                 actor_persona=e.persona,
@@ -328,6 +339,7 @@ def create_legend_event(  # noqa: PLR0913, C901
                 fully_concealed=fully_concealed,
             )
             _maybe_open_witness_window(interaction=interaction, entry=e, scene=scene)
+    _react_to_named_organizations(entries, named_reactions, reach_by_entry, scene)
     all_credits: list[CovenantLegendCredit] = []
     for e in entries:
         all_credits.extend(credit_engaged_covenants(entry=e))
@@ -342,6 +354,45 @@ def create_legend_event(  # noqa: PLR0913, C901
             seen_covenant_ids.add(credit.covenant_id)
             recompute_covenant_level(covenant=credit.covenant)
     return event, entries
+
+
+def _store_named_organizations(
+    entries: list[LegendEntry], named_reactions: Sequence[NamedReaction]
+) -> None:
+    """Record on each entry which organizations the act named, before its reach is decided."""
+    from world.societies.named_organizations import record_deed_organizations  # noqa: PLC0415
+
+    for entry in entries:
+        record_deed_organizations(named_reactions, legend_entry=entry)
+
+
+def _react_to_named_organizations(
+    entries: list[LegendEntry],
+    named_reactions: Sequence[NamedReaction],
+    reach_by_entry: dict[int, DeedReachResult],
+    scene: Scene | None,
+) -> None:
+    """Each participant's organizations react once their own part's reach is decided (#4473)."""
+    from world.societies.constants import NamedActReach  # noqa: PLC0415
+    from world.societies.named_organizations import react_to_named_organizations  # noqa: PLC0415
+
+    for entry in entries:
+        reach = reach_by_entry.get(entry.pk)
+        if reach is not None and reach.contained:
+            route = NamedActReach.CONTAINED
+        elif reach is not None and reach.kept_private:
+            route = NamedActReach.PRIVATE
+        else:
+            route = NamedActReach.OPEN
+        react_to_named_organizations(
+            persona=entry.persona,
+            reactions=named_reactions,
+            archetypes=list(entry.archetypes.all()),
+            reach=route,
+            title=entry.title,
+            legend_entry=entry,
+            scene=scene,
+        )
 
 
 @transaction.atomic

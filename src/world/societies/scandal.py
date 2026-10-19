@@ -41,6 +41,7 @@ from world.societies.constants import (
     SCANDAL_SECRET_LEVEL_FLOORS,
     SCANDAL_THRESHOLD,
 )
+from world.societies.named_organizations import copy_harmed_organizations_to_secret
 from world.societies.renown import _archetype_dot_product
 
 if TYPE_CHECKING:
@@ -62,6 +63,10 @@ class DeedReachResult:
     aware_society_ids: list[int] = field(default_factory=list)
     spread_multiplier: int | None = None
     scandalous: bool = False
+    # #4473: a private, unremarkable act: nothing minted and nothing aware. Distinct from the
+    # legacy no-op (no scene, no archetypes, no societies), which is an open act for the
+    # organizations it names.
+    kept_private: bool = False
 
 
 def scandalous_societies(
@@ -336,6 +341,8 @@ def _mint_contained_secret(
     except SecretError:
         return None
     secret.archetypes.set(entry.archetypes.all())
+    # #4473: the harmed organizations the deed named are victims of what it hides.
+    copy_harmed_organizations_to_secret(entry, secret)
     return secret.pk
 
 
@@ -407,7 +414,7 @@ def route_deed_reach(  # noqa: PLR0913
             return DeedReachResult(contained=True, secret_id=secret_id, scandalous=True)
     elif not is_public:
         # Private and unremarkable: nothing to mint, nothing to spread.
-        return DeedReachResult()
+        return DeedReachResult(kept_private=True)
 
     # The act is out — news or leaked scandal: awareness, reputation, spread.
     entry.societies_aware.set(societies)

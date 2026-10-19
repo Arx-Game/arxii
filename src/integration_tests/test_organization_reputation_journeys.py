@@ -19,18 +19,38 @@ from world.areas.factories import AreaFactory
 from world.assets.factories import NPCAssetFactory
 from world.character_creation.factories import RealmFactory
 from world.checks.test_helpers import force_check_outcome
+from world.missions.constants import OptionKind, OptionSource
+from world.missions.factories import (
+    MissionDeedRecordFactory,
+    MissionInstanceFactory,
+    MissionNodeFactory,
+    MissionOptionFactory,
+    MissionOptionRouteFactory,
+    MissionParticipantFactory,
+    MissionTemplateFactory,
+)
+from world.missions.models import MissionRenownAward
+from world.missions.services.renown_emission import emit_terminal_renown_awards
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
+from world.predicates.describe import explain_leaf_for_staff
 from world.secrets.models import Secret
-from world.secrets.services import grant_secret_knowledge
+from world.secrets.services import expose_secret, grant_secret_knowledge
 from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.social_checks import seed_social_check_content
 from world.skills.factories import CharacterSpecializationValueFactory
 from world.skills.models import Specialization
-from world.societies.constants import OrganizationReputationCause
+from world.societies.constants import (
+    NamedOrganizationRole,
+    OrganizationRelationKind,
+    OrganizationReputationCause,
+    RenownMagnitude,
+)
 from world.societies.factories import (
+    NamedOrganizationFactory,
     OrganizationFactory,
     OrganizationMembershipFactory,
+    OrganizationRelationFactory,
     OrganizationReputationReasonLineFactory,
     SocietyFactory,
 )
@@ -39,6 +59,9 @@ from world.tasking.constants import TaskTargetKind
 from world.tasking.factories import OrgTaskFactory, TaskOutcomeRouteFactory, TaskTemplateFactory
 from world.tasking.services import assign_agent, resolve_task
 from world.traits.factories import CheckOutcomeFactory
+
+HARMED = NamedOrganizationRole.HARMED
+HELPED = NamedOrganizationRole.HELPED
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # the social check content gates on it
@@ -142,3 +165,98 @@ class ASpyJobGoneWrong(JourneyCase):
             ).values_list("message__body", flat=True)
         )
         self.assertEqual(bodies, ["Guild of Locks: Disfavored [staff-authored reason text]"])
+
+
+class AMissionForOneOrganizationAgainstAnother(JourneyCase):
+    """Ysmay's mission for the Lantern Order sabotages the Millwrights' mill (#4473, slice 2).
+
+    The award names the Order as helped and the Millwrights as harmed only if exposed. The
+    Carters were authored ahead of play as the Millwrights' rivals; the Order's tier rises at
+    once, the Millwrights' waits for the exposure, and the Carters follow the Millwrights.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.ysmay = self.make_player("Ysmay", room=self.make_room("Ysmay's Lodging"))
+        self.sheet = self.ysmay.sheet_data
+        self.persona = self.sheet.primary_persona
+        self.order = OrganizationFactory(name="Lantern Order")
+        self.millwrights = OrganizationFactory(name="Millwrights")
+        self.carters = OrganizationFactory(name="Carters")
+        OrganizationRelationFactory(
+            organization=self.carters,
+            toward=self.millwrights,
+            kind=OrganizationRelationKind.RIVAL,
+            share_percent=50,
+        )
+        template = MissionTemplateFactory(name="Night at the Mill", risk_tier=1)
+        node = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        option = MissionOptionFactory(
+            node=node, order=0, option_kind=OptionKind.BRANCH, source_kind=OptionSource.AUTHORED
+        )
+        self.route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
+        self.instance = MissionInstanceFactory(template=template)
+        MissionParticipantFactory(
+            instance=self.instance, character=self.sheet, is_contract_holder=True
+        )
+        self.deed = MissionDeedRecordFactory(
+            instance=self.instance, actor=self.sheet, node=node, option=option
+        )
+        award = MissionRenownAward.objects.create(
+            route=self.route, magnitude=RenownMagnitude.HIGH, contract_holder_only=True
+        )
+        NamedOrganizationFactory(mission_award=award, organization=self.order, role=HELPED)
+        NamedOrganizationFactory(
+            mission_award=award, organization=self.millwrights, role=HARMED, only_if_exposed=True
+        )
+        OrganizationReputationReasonLineFactory(
+            cause=OrganizationReputationCause.DEED_NAMED, text="{tier}, because of {title}"
+        )
+        OrganizationReputationReasonLineFactory(
+            cause=OrganizationReputationCause.RELATED_ORGANIZATION,
+            text="{tier}, because {organization} is now {other_tier} toward you",
+        )
+
+    def _sheet_reputations(self) -> dict[str, dict]:
+        response = self.api(self.account_of(self.ysmay)).get(
+            f"/api/character-sheets/{self.ysmay.pk}/"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        return {row["organization"]: row for row in response.data["standing"]["reputations"]}
+
+    def test_the_helped_organization_rises_now_and_the_harmed_one_waits(self) -> None:
+        emit_terminal_renown_awards(self.instance, self.route, self.deed)
+
+        rows = self._sheet_reputations()
+        self.assertEqual(list(rows), ["Lantern Order"])
+        self.assertEqual(rows["Lantern Order"]["tier"], "liked")
+        self.assertEqual(rows["Lantern Order"]["reasons"], ["Liked, because of Night at the Mill"])
+        bodies = list(
+            NarrativeMessageDelivery.objects.filter(
+                recipient_character_sheet=self.sheet, message__category=NarrativeCategory.RENOWN
+            ).values_list("message__body", flat=True)
+        )
+        self.assertIn("Lantern Order: Liked, because of Night at the Mill", bodies)
+        self.assertFalse([body for body in bodies if "Millwrights" in body])
+
+    def test_exposure_drops_the_millwrights_and_their_rivals_warm_to_her(self) -> None:
+        emit_terminal_renown_awards(self.instance, self.route, self.deed)
+        secret = Secret.objects.get(subject_sheet=self.sheet)
+
+        expose_secret(secret, societies=[SocietyFactory()])
+
+        rows = self._sheet_reputations()
+        self.assertEqual(rows["Millwrights"]["tier"], "disliked")
+        self.assertEqual(rows["Carters"]["tier"], "favored")
+        self.assertEqual(
+            rows["Carters"]["reasons"],
+            ["Favored, because Millwrights is now Disliked toward you"],
+        )
+        # A rival's rule sees both causes, one per line, for the GM.
+        reason = explain_leaf_for_staff(
+            {"leaf": "min_org_reputation", "params": {"org": "Carters", "tier": "favored"}},
+            self.persona,
+        )
+        self.assertIn("related organization", reason)
+        self.assertIn("+125 (50% of Millwrights' -250, rival)", reason)
+        self.assertIn("Source: secret exposed (secret #", reason)

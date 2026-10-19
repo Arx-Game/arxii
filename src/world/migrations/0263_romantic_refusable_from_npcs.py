@@ -8,7 +8,7 @@ def mark_romantic_refusable(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0261_actiontemplate_resist_check_type_and_more")]
+    dependencies = [("arxii", "0262_actiontemplate_resist_check_type_and_more")]
 
     operations = [
         migrations.RunPython(mark_romantic_refusable, migrations.RunPython.noop),

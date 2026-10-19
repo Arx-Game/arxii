@@ -41,6 +41,14 @@ _Avoid_: reputation log entry, standing event.
 The one line a player reads for a recorded reputation change: the tier after the change plus staff-authored copy for the cause (`OrganizationReputationReasonLine`). A secret's reason line never names the secret or whoever spread it.
 _Avoid_: explanation, reputation note.
 
+**Named organization** (`NamedOrganization`, #4473):
+An organization an authored act (a mission renown award or a LEGEND_AWARD story consequence) names as **harmed** or **helped**. It reacts to the act through the one reputation writer, sized by the act and adjusted by its own principles; a harmed one marked "only if exposed" reacts only if the act is exposed. The deed keeps a `DeedOrganization` record of whom it named.
+_Avoid_: target organization, affected org.
+
+**Organization relation** (`OrganizationRelation`, #4473):
+Staff-authored, one-directional: organization F follows organization D's reputation changes by a share (1 to 50 percent), the same way as an **ally**, the opposite way as a **rival**. One step only. Not an `OrgPact` (player diplomacy made in play).
+_Avoid_: enemy, alliance (that is `OrgPact`), faction link.
+
 **Principle Axes**:
 The six −5..+5 value axes — mercy, method, status, change, allegiance, power — that define a Society's (or Organization's) moral character; archetype vectors dot-product against them to produce reputation deltas.
 _Avoid_: alignment, morals, stats.

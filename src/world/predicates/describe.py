@@ -138,17 +138,21 @@ def _recent_causes(row: object) -> list[str]:
     if not isinstance(row, OrganizationReputation):
         return []
     events = list(row.events.all()[:REASON_LINES_SHOWN])
-    moves = []
-    for event in events:
-        cited = event.cited(summary=True)
-        detail = f" ({', '.join(cited)})" if cited else ""
-        moves.append(
-            f"{event.get_cause_display().lower()}{detail}, "
-            f"{event.tier_before.title()} to {event.tier_after.title()}"
-        )
-    return [
-        f"{'Moved by' if index == 0 else 'Earlier'}: {move}" for index, move in enumerate(moves)
-    ]
+    lines = []
+    for index, event in enumerate(events):
+        if event.source_event_id:
+            move = event.ripple_move()
+        else:
+            cited = event.cited(summary=True)
+            detail = f" ({', '.join(cited)})" if cited else ""
+            move = (
+                f"{event.get_cause_display().lower()}{detail}, "
+                f"{event.tier_before.title()} to {event.tier_after.title()}"
+            )
+        lines.append(f"{'Moved by' if index == 0 else 'Earlier'}: {move}")
+        if event.source_event_id:
+            lines.append(event.ripple_source())
+    return lines
 
 
 def _org_reputation(params: dict, persona: object) -> str | None:

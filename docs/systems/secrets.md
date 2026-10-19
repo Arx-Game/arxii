@@ -291,6 +291,12 @@ two channels, one-shot:
   a spy job's residue secret names the job's target (`tasking.spy_payouts._name_residue_victim`
   via `secrets.services.add_secret_victim`): an organization target, a domain target's owning
   organization, or a person target. The issuing organization is never its own victim.
+  **Named-organization producers (#4473):** a harmed organization that a deed names covertly
+  (`only_if_exposed`), or whose act the scene's reach check contained or kept private, becomes a
+  victim on a secret about the actor (`societies.named_organizations`): the contained secret copies
+  the deed's harmed organizations at the level default, a new secret carries each victim's
+  `severity` (the size the act carried) at the largest level whose default fits.
+  `add_secret_victim` takes the optional `severity` for this.
 
 **Persona victims — the victim decides.** A persona victim's effect is **never auto-applied**
 (the relationship system is consent-gated and player-driven). Instead, when the victim *learns

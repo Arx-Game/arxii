@@ -134,6 +134,47 @@ class StandoffPayloadTests(TestCase):
         self.assertIn("Disfavored", tier_line)
         self.assertTrue(moved.startswith("Moved by: secret exposed (secret #"), moved)
 
+    def test_the_gm_reads_a_rivals_reaction_and_the_change_it_followed(self) -> None:
+        from world.societies.constants import (
+            OrganizationRelationKind,
+            OrganizationReputationCause,
+        )
+        from world.societies.factories import OrganizationFactory, OrganizationRelationFactory
+        from world.societies.renown import bump_organization_reputation
+
+        court = OrganizationFactory(name="Hallowed Court")
+        wardens = OrganizationFactory(name="Wardens of the March")
+        OrganizationRelationFactory(
+            organization=wardens,
+            toward=court,
+            kind=OrganizationRelationKind.RIVAL,
+            share_percent=50,
+        )
+        FactionRuleFactory(
+            creature_template=self.template,
+            rule={"leaf": "min_org_reputation", "params": {"org": wardens.name, "tier": "favored"}},
+            angle_text="the wardens favor her",
+        )
+        bump_organization_reputation(
+            self.player_sheet.primary_persona,
+            court,
+            -240,
+            cause=OrganizationReputationCause.GANG_TURF,
+        )
+        (group,) = self.detail(self.gm)["gm_standoff"]["groups"]
+        (rule,) = [r for r in group["faction_rules"] if r["angle_text"] == "the wardens favor her"]
+        (reason,) = rule["why"]
+        tier_line, moved, source = reason.split("\n")
+        self.assertIn("Favored", tier_line)
+        self.assertEqual(
+            moved,
+            "Moved by: related organization, +120 (50% of Hallowed Court's -240, rival), "
+            "Unknown to Favored",
+        )
+        self.assertEqual(
+            source, "Source: gang turf moved Hallowed Court by -240, Unknown to Disfavored"
+        )
+
     def test_no_player_or_onlooker_payload_carries_the_gm_view(self) -> None:
         for account in (self.player, self.onlooker):
             data = self.detail(account)

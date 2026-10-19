@@ -23,6 +23,7 @@ from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import OrganizationCodexGrant
 from world.codex.services import apply_organization_codex_grants
 from world.contributors.admin import CREDIT_FIELDSET
+from world.societies.constants import PRINCIPLE_FIELD_NAMES
 from world.societies.models import (
     AssociationConfig,
     CovenantLegendCredit,
@@ -52,6 +53,7 @@ from world.societies.models import (
     OrganizationMembershipOffer,
     OrganizationObligation,
     OrganizationRank,
+    OrganizationRelation,
     OrganizationReputation,
     OrganizationReputationEvent,
     OrganizationReputationReasonLine,
@@ -324,6 +326,53 @@ class VacancyInline(admin.TabularInline):
     raw_id_fields = ("kin_pool", "kin_node", "rank")
 
 
+class OrganizationRelationInline(admin.TabularInline):
+    """Organizations this one reacts to: a rival or ally follows a share of their change (#4473)."""
+
+    model = OrganizationRelation
+    fk_name = "organization"
+    formset = OneRowPerFormSet
+    extra = 0
+    verbose_name_plural = "Reacts to changes with"
+    template = "admin/societies/organization_relation_inline.html"
+    fields = ("toward", "kind", "share_percent")
+    autocomplete_fields = ("toward",)
+
+    def get_formset(self, request: HttpRequest, obj: object = None, **kwargs):
+        """The demo's column names: the other organization, and the share in percent."""
+        kwargs["labels"] = {"toward": "Other organization", "share_percent": "Share (%)"}
+        return super().get_formset(request, obj, **kwargs)
+
+
+class ReactingOrganizationInline(admin.TabularInline):
+    """Organizations that react to this one, read only; edit them on their own page (#4473)."""
+
+    model = OrganizationRelation
+    fk_name = "toward"
+    formset = OneRowPerFormSet
+    extra = 0
+    can_delete = False
+    template = "admin/societies/reacting_organization_inline.html"
+    fields = ("organization", "kind", "share")
+    readonly_fields = fields
+
+    @admin.display(description="Share (%)")
+    def share(self, obj: OrganizationRelation) -> int:
+        return obj.share_percent
+
+    def get_formset(self, request: HttpRequest, obj: object = None, **kwargs):
+        """The heading names the organization, as the demo's does."""
+        name = obj.name if obj is not None else "this organization"
+        self.verbose_name_plural = f"Organizations that react to {name} (read only)"
+        return super().get_formset(request, obj, **kwargs)
+
+    def has_add_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
 def apply_grants_to_new_memberships(request: HttpRequest, formsets) -> int:
     """A membership row added on the Organization page learns the org's grants (#3788).
 
@@ -379,6 +428,8 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
         OrganizationCodexGrantInline,
         OrganizationGiftGrantInline,
         VacancyInline,
+        OrganizationRelationInline,
+        ReactingOrganizationInline,
     ]
 
     fieldsets = (
@@ -392,7 +443,8 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
                     ("allegiance_override", "power_override"),
                 ),
                 "description": (
-                    "Leave blank to inherit from the society. Values range from -5 to +5."
+                    "Leave blank to inherit from the society. Values range from -5 to +5. "
+                    "A deed that names this organization reads the effective values."
                 ),
                 "classes": ["collapse"],
             },
@@ -412,6 +464,22 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
             },
         ),
     )
+
+    def get_form(self, request: HttpRequest, obj=None, **kwargs):
+        """Under each override: the society's value and the effective one a deed reads."""
+        form = super().get_form(request, obj, **kwargs)
+        if obj is not None:
+            for name in PRINCIPLE_FIELD_NAMES:
+                society = (
+                    f"{obj.society.name} value: {getattr(obj.society, name)}. "
+                    if obj.society_id
+                    else "No society. "
+                )
+                form.base_fields[f"{name}_override"].help_text = (
+                    f"Blank = use the society's value. {society}"
+                    f"Effective: {obj.get_effective_principle(name)}."
+                )
+        return form
 
     def member_count(self, obj):
         """Return the number of members in this organization."""
@@ -1043,8 +1111,15 @@ class RankingDisplayAdmin(admin.ModelAdmin):
 class RenownMagnitudeAwardAdmin(admin.ModelAdmin):
     """#3831 - fame + prestige staff prices per RenownMagnitude tier."""
 
-    list_display = ("magnitude", "fame_award", "prestige_award")
+    list_display = ("magnitude", "fame_award", "prestige_award", "named_award")
     list_filter = ("magnitude",)
+
+    @admin.display(description="Named organization award")
+    def named_award(self, obj: RenownMagnitudeAward) -> int:
+        """What a mission reaction of this magnitude pays: the authored value, else the default."""
+        from world.societies.named_organizations import named_organization_base  # noqa: PLC0415
+
+        return named_organization_base(obj.magnitude)
 
 
 @admin.register(LegendSettlementConfig)

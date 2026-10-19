@@ -561,12 +561,24 @@ REASON_LINE_CAUSES: tuple[str, ...] = (
     OrganizationReputationCause.RELATED_ORGANIZATION,
 )
 
-#: The reason-line causes a writer fires today. The Required-content probe covers these;
-#: ``DEED_NAMED`` and ``RELATED_ORGANIZATION`` join it when slice 2 adds their writers.
+#: The reason-line causes a writer fires today. The Required-content probe covers these.
 LIVE_REASON_LINE_CAUSES: tuple[str, ...] = (
+    OrganizationReputationCause.DEED_NAMED,
     OrganizationReputationCause.SECRET_EXPOSED,
     OrganizationReputationCause.SECRET_REVERSED,
     OrganizationReputationCause.STAKE_RESOLVED,
+    OrganizationReputationCause.RELATED_ORGANIZATION,
+)
+
+#: Causes a rival or ally never follows (#4473). A character-creation seed and a staff
+#: correction are setup, not play; a related-organization change is itself a ripple, and
+#: the ripple goes one step only.
+NON_RIPPLING_CAUSES: frozenset[str] = frozenset(
+    {
+        OrganizationReputationCause.CHARACTER_CREATION,
+        OrganizationReputationCause.STAFF_ADJUSTMENT,
+        OrganizationReputationCause.RELATED_ORGANIZATION,
+    }
 )
 
 #: What a reason line says until staff author the copy for its cause.
@@ -574,3 +586,54 @@ REASON_LINE_PLACEHOLDER = "[staff-authored reason text]"
 
 #: Reason lines a player sees per organization, and recent causes a GM sees.
 REASON_LINES_SHOWN = 3
+
+
+class NamedOrganizationRole(models.TextChoices):
+    """Whether an act harmed or helped an organization it names (#4473, #4339)."""
+
+    HARMED = "harmed", "Harmed"
+    HELPED = "helped", "Helped"
+
+
+class NamedActReach(models.TextChoices):
+    """What the scene's reach check did with an act that named organizations (#4473).
+
+    OPEN: the act is known, so every named organization reacts at once. CONTAINED: the
+    reach check minted a secret, which holds the harmed organizations as victims. PRIVATE:
+    the act stayed private with no secret, so the harmed organizations go on a new secret.
+    A helped organization reacts only to an open act.
+    """
+
+    OPEN = "open", "Open"
+    CONTAINED = "contained", "Contained"
+    PRIVATE = "private", "Kept private"
+
+
+class OrganizationRelationKind(models.TextChoices):
+    """How one organization's opinion follows another's (#4473, #4339).
+
+    An ally moves the same way as the organization it follows, a rival the opposite way.
+    """
+
+    RIVAL = "rival", "Rival"
+    ALLY = "ally", "Ally"
+
+
+#: What a named organization's reaction is worth, per deed magnitude, until staff author a
+#: ``RenownMagnitudeAward.named_organization_award`` for the tier. Example values.
+MAGNITUDE_NAMED_ORGANIZATION_AWARDS: dict[str, int] = {
+    RenownMagnitude.SMALL.value: 50,
+    RenownMagnitude.MODERATE.value: 120,
+    RenownMagnitude.HIGH.value: 250,
+    RenownMagnitude.VERY_HIGH.value: 400,
+}
+
+#: Puts the deed's archetype-against-principles reading on the same scale as a reaction's
+#: base amount (example value). The product is capped at half the base.
+NAMED_ORG_PRINCIPLE_SCALE = 3
+
+#: The share of a source change a rival or ally follows, in percent. A related organization
+#: always moves less than the one the act was about.
+ORGANIZATION_RELATION_SHARE_MIN = 1
+ORGANIZATION_RELATION_SHARE_MAX = 50
+ORGANIZATION_RELATION_SHARE_DEFAULT = 25

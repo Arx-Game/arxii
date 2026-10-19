@@ -510,18 +510,22 @@ class TestContentRowExportViewsConfigured(TestCase):
         """Credited+exportable models with no ModelAdmin degrade to the workbench link.
 
         A handful of credited+exportable models never got a ``ModelAdmin``
-        registered (``checks.ConsequenceEffect`` is one - it is deliberately
-        inline-only, mirroring ``magic.TechniqueDamageProfile``: a payload row
-        has no meaning apart from its owning ``Consequence``, #3831). Exporting
+        registered (``magic.TechniqueDamageProfile`` is inline-only: a payload row
+        has no meaning apart from its owning technique, #3831; ``checks.ConsequenceEffect``
+        was another until #4473 gave it a page for its named organizations, so this test
+        takes its ModelAdmin out of the registry). Exporting
         one used to 500 the diff page on ``NoReverseMatch`` building its
         (nonexistent) admin change-form URL (#3019 review, Item 2) - it now
         degrades to a workbench editor link, which always resolves regardless
         of the admin registry. (Formerly used ``missions.MissionTemplate`` as
         the example; #3831 gave it a standalone `ModelAdmin`.)
         """
+        from web.admin.tests.test_authoring_links import unregistered_for_the_test
         from world.checks.factories import ConsequenceEffectFactory
+        from world.checks.models import ConsequenceEffect
         from world.contributors.factories import ContentContributorFactory
 
+        unregistered_for_the_test(self, ConsequenceEffect)
         effect = ConsequenceEffectFactory(
             written_by=ContentContributorFactory(name="Row No ModelAdmin Writer"),
         )

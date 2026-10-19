@@ -96,19 +96,25 @@ def add_secret_victim(
     *,
     organization: Organization | None = None,
     persona: Persona | None = None,
+    severity: int | None = None,
 ) -> SecretVictim:
     """Name a victim of ``secret``'s underlying fact: an organization or a persona (#4448).
 
     On the secret's first exposure an organization victim's reputation of the subject drops by
     the secret's level default, and a persona victim is told and decides their own reaction.
-    No per-victim size: the level decides. Naming the same victim twice returns the existing
-    row. Raises ``SecretError`` unless exactly one of ``organization`` / ``persona`` is given.
+    The level decides the size unless ``severity`` is given, which only a named-organization
+    act sets (its reaction was already sized when the act was authored). Naming the same
+    victim twice returns the existing row. Raises ``SecretError`` unless exactly one of
+    ``organization`` / ``persona`` is given.
     """
     if (organization is None) == (persona is None):
         msg = "A secret's victim is exactly one of an organization or a persona."
         raise SecretError(msg, user_message=msg)
     victim, _ = SecretVictim.objects.get_or_create(
-        secret=secret, organization=organization, persona=persona
+        secret=secret,
+        organization=organization,
+        persona=persona,
+        defaults={"severity": severity},
     )
     return victim
 
