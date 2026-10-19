@@ -27,3 +27,5 @@ a cast-event fan-out into a round that isn't the guardian's own declared cast.
 > `TechniqueGuardianBarrierResolutionTest`, SQLite tier); extends ADR-0060's reactive-cost
 > family to declared (not just standing-condition-triggered) reactions;
 > `_try_technique_interpose` in `world/combat/services.py`.
+
+> **Amended by ADR-4450 (#4450, 2026-10-18):** `resolve_cast_check_type` is now `resolve_cast_check` (`world/magic/services/magic_skills.py`), which keeps the ADR-0096 precedence and also returns the technique skill term.
