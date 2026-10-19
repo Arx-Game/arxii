@@ -24,6 +24,7 @@ from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_defau
 from world.roster.constants import NPCLoanStatus
 from world.roster.factories import NPCLoanFactory
 from world.roster.models import NPCLoan, RosterEntry
+from world.roster.services.staff_characters import ensure_playable_lock
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction, Scene, SceneParticipation
@@ -32,6 +33,13 @@ MINE = "/api/roster/entries/mine/"
 SELECT = "/api/roster/entries/select/"
 SUBMIT_POSE = "/api/interactions/submit-pose/"
 NO_ACCESS = "You don't have access to that character."
+
+
+def _text_options(text) -> dict:
+    """The options dict of an outgoing ``text`` frame (Evennia's ``(text, {opts})``)."""
+    if isinstance(text, tuple) and len(text) > 1 and isinstance(text[1], dict):
+        return text[1]
+    return {}
 
 
 def persona_of(character):
@@ -452,6 +460,62 @@ class AGuidePlaysALentNpc(JourneyCase):
         self._leave_the_gate_to(self.ravenna)
         self.scene.refresh_from_db()
         self.assertTrue(self.scene.is_active)
+
+    def _web_signed_in(self, character, sessid: int, *, puppet) -> ServerSession:
+        """A webclient session of ``character``'s account, puppeting ``puppet``."""
+        handler = evennia.SESSION_HANDLER
+        dummy = ServerSession()
+        dummy.init_session("webclient/websocket", ("localhost", "testmode"), handler)
+        dummy.sessid = sessid
+        handler.portal_connect(dummy.get_sync_data())
+        session = handler.session_from_sessid(sessid)
+        self.addCleanup(handler.pop, sessid, None)
+        account = self.account_of(character)
+        handler.login(session, account, testmode=True)
+        account.puppet_object(session, puppet)
+        self.assertIs(session.puppet, puppet)
+        return session
+
+    def test_a_web_pose_reaches_each_web_session_once(self) -> None:
+        # Bug E: a pose sent from the web composer arrived on every web session in
+        # the room twice, as the Interaction and as an untagged text line the web
+        # client shows as a note. The lent NPC's tab and a PC's tab must match.
+        frames = Mock()
+        handler = evennia.SESSION_HANDLER
+        for name, stub in (("data_out", frames), ("disconnect", Mock())):
+            patcher = patch.object(handler, name, stub)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self._lend()
+        ensure_playable_lock(self.ysmay)
+        ensure_playable_lock(self.ravenna)
+        as_vael = self._web_signed_in(self.ilsa, 4430, puppet=self.vael)
+        as_ravenna = self._web_signed_in(self.ravenna, 4431, puppet=self.ravenna)
+        self._web_signed_in(self.ysmay, 4432, puppet=self.ysmay)
+        frames.reset_mock()
+
+        posed = self.api(self.account_of(self.ysmay)).post(
+            SUBMIT_POSE,
+            {
+                "persona_id": persona_of(self.ysmay).pk,
+                "scene_id": self.scene.pk,
+                "content": "holds up the forged orders.",
+                "client_request_id": str(uuid.uuid4()),
+            },
+            format="json",
+        )
+        self.assertEqual(posed.status_code, status.HTTP_201_CREATED, posed.data)
+
+        for session in (as_vael, as_ravenna):
+            sent = [call.kwargs for call in frames.call_args_list if call.args[0] is session]
+            poses = [kw for kw in sent if "interaction" in kw]
+            self.assertEqual(len(poses), 1, sent)
+            notes = [
+                kw["text"]
+                for kw in sent
+                if "text" in kw and not _text_options(kw["text"]).get("interaction_echo")
+            ]
+            self.assertEqual(notes, [], session.puppet)
 
     def test_a_scene_ends_with_an_unplayed_npc_in_the_room(self) -> None:
         self.assertIsNone(self.vael.account)
