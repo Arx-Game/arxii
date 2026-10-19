@@ -9,7 +9,12 @@
 
 import { postDispatchAction } from '@/combat/api';
 import { isDispatchFailure } from '@/combat/types';
-import { patchStaffEdit, type StaffEditBody } from '@/character_sheets/api';
+import {
+  fetchCharacterSheet,
+  patchStaffEdit,
+  runStaffRowAction,
+  type StaffEditBody,
+} from '@/character_sheets/api';
 import { apiFetch } from '@/evennia_replacements/api';
 import type { components } from '@/generated/api';
 import { throwApiError } from '@/lib/errors';
@@ -123,6 +128,76 @@ export function mergePreferences(
 export async function fetchSheetIdForEntry(entryId: number): Promise<number> {
   const entry = await fetchRosterEntry(entryId);
   return entry.character.id;
+}
+
+// ---------------------------------------------------------------------------
+// Powers (typed in the form, applied after the mint)
+// ---------------------------------------------------------------------------
+
+export type PowerOptions = Schemas['NPCPowerOptions'];
+
+/** `GET /api/roster/npcs/power-options/`: what the form's Powers pickers offer so far. */
+export async function fetchNpcPowerOptions(pick: {
+  path: string;
+  tradition: string;
+  gift: string;
+}): Promise<PowerOptions> {
+  const params = new URLSearchParams();
+  if (pick.path) params.set('path', pick.path);
+  if (pick.tradition) params.set('tradition', pick.tradition);
+  if (pick.gift) params.set('gift', pick.gift);
+  const res = await apiFetch(`/api/roster/npcs/power-options/?${params}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the powers choices');
+  return (await res.json()) as PowerOptions;
+}
+
+/** What the GM picked under Powers; ids are held as the pickers' strings. */
+export interface PowersDraft {
+  path: string;
+  /** The path's level, or ''. */
+  level: string;
+  tradition: string;
+  gift: string;
+  techniques: number[];
+  resonance: string;
+  animaStat: string;
+  animaSkill: string;
+  /** Stat and skill overrides by trait id; '' is untouched. */
+  stats: Record<string, string>;
+  skills: Record<string, string>;
+}
+
+export const EMPTY_POWERS: PowersDraft = {
+  path: '',
+  level: '',
+  tradition: '',
+  gift: '',
+  techniques: [],
+  resonance: '',
+  animaStat: '',
+  animaSkill: '',
+  stats: {},
+  skills: {},
+};
+
+/** Magic is granted only once every pick it needs is made, as Grant magic requires. */
+export function magicComplete(powers: PowersDraft): boolean {
+  return Boolean(
+    powers.tradition &&
+      powers.gift &&
+      powers.techniques.length > 0 &&
+      powers.resonance &&
+      powers.animaStat &&
+      powers.animaSkill
+  );
+}
+
+function filledValues(values: Record<string, string>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(values)
+      .filter(([, text]) => text.trim() !== '')
+      .map(([id, text]) => [id, Number(text)])
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -250,6 +325,8 @@ export interface NpcFormDraft {
   removedPreferences: number[];
   /** Lending settings and notes the GM changed. */
   settings: NpcSettingsPatch;
+  /** Typed Powers, applied on top of a stat block or a Powers copy. */
+  powers?: PowersDraft;
 }
 
 export const IDENTITY_KEYS = [
@@ -364,6 +441,88 @@ export interface CreateNpcOptions {
   sceneId?: number | null;
 }
 
+/**
+ * Typed Powers, in the order NpcPowersPanel's editors take them: path, magic, stats,
+ * skills. Each step is safe to run again (a granted gift is not granted twice).
+ */
+async function applyPowers(entryId: number, powers: PowersDraft): Promise<void> {
+  const stats = filledValues(powers.stats);
+  const skills = filledValues(powers.skills);
+  const wantsMagic = magicComplete(powers);
+  const nothingTyped =
+    !powers.path &&
+    !powers.level &&
+    !wantsMagic &&
+    Object.keys(stats).length === 0 &&
+    Object.keys(skills).length === 0;
+  if (nothingTyped) return;
+  let sheetId: number | null = null;
+  const sheet = async () => (sheetId ??= await fetchSheetIdForEntry(entryId));
+  if (powers.path) {
+    await step(
+      'saving the path',
+      async () =>
+        void (await runStaffRowAction(await sheet(), {
+          path: 'staff-path',
+          method: 'PATCH',
+          body: { path: Number(powers.path) },
+        }))
+    );
+  }
+  if (powers.level) {
+    await step(
+      'saving the path level',
+      async () =>
+        void (await runStaffRowAction(await sheet(), {
+          path: 'staff-path',
+          method: 'PATCH',
+          body: { level: Number(powers.level) },
+        }))
+    );
+  }
+  if (wantsMagic) {
+    await step('granting magic', async () => {
+      const sid = await sheet();
+      const held = (await fetchCharacterSheet(sid)).staff_edit?.rows.has_gift;
+      if (held) return;
+      await runStaffRowAction(sid, {
+        path: 'staff-magic',
+        method: 'POST',
+        body: {
+          tradition: Number(powers.tradition),
+          gift: Number(powers.gift),
+          techniques: powers.techniques,
+          resonance: Number(powers.resonance),
+          anima_stat: Number(powers.animaStat),
+          anima_skill: Number(powers.animaSkill),
+        },
+      });
+    });
+  }
+  if (Object.keys(stats).length > 0) {
+    await step(
+      'saving the stats',
+      async () =>
+        void (await runStaffRowAction(await sheet(), {
+          path: 'staff-stats',
+          method: 'PATCH',
+          body: { stats },
+        }))
+    );
+  }
+  if (Object.keys(skills).length > 0) {
+    await step(
+      'saving the skills',
+      async () =>
+        void (await runStaffRowAction(await sheet(), {
+          path: 'staff-skills',
+          method: 'PATCH',
+          body: { skills },
+        }))
+    );
+  }
+}
+
 export async function createNpc(
   characterId: number,
   draft: NpcFormDraft,
@@ -409,6 +568,7 @@ export async function createNpc(
       await patchStaffEdit(sid, body);
     });
   }
+  if (draft.powers) await applyPowers(id, draft.powers);
   for (const line of draft.regard) {
     await step('saving Who they favor and oppose', () => putNpcRegard(id, line));
   }

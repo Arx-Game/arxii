@@ -38,7 +38,21 @@ const COPIED = {
   ],
 };
 
+const NO_POWER_OPTIONS = {
+  paths: [],
+  traditions: [],
+  gifts: [],
+  techniques: [],
+  resonances: [],
+  stats: [],
+  skills: [],
+  technique_limit: 1,
+  all_stats: [],
+  all_skills: [],
+};
+
 function route(url: string, init?: RequestInit) {
+  if (url.startsWith('/api/roster/npcs/power-options/')) return ok(NO_POWER_OPTIONS);
   // The source's detail, and the new NPC's once the copy has written the same rows.
   if (
     !init?.method &&

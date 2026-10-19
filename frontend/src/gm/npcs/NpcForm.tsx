@@ -33,6 +33,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { initials } from '@/lib/initials';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
+import { NpcPowersEditor } from './NpcPowersEditor';
 import { NpcPowersPanel } from './NpcPowersPanel';
 import { NpcPreferenceEditor } from './NpcPreferenceEditor';
 import { NpcRegardEditor } from './NpcRegardEditor';
@@ -42,6 +43,7 @@ import {
   IDENTITY_KEYS,
   NpcStepError,
   BORROW_AUDIENCES,
+  EMPTY_POWERS,
   LEND_POLICIES,
   createNpc,
   fetchNpcDetail,
@@ -53,6 +55,7 @@ import {
   type LendPolicy,
   type NpcCopySource,
   type NpcFormDraft,
+  type PowersDraft,
   type NpcSection,
   type NpcSettingsPatch,
   type PreferenceLine,
@@ -209,6 +212,7 @@ export function NpcForm({
     traits: [],
   });
   const [settings, setSettings] = useState<NpcSettingsPatch>({});
+  const [powers, setPowers] = useState<PowersDraft>(EMPTY_POWERS);
   /** What this form already minted, kept so a retry never mints a second one. */
   const [minted, setMinted] = useState<{ id: number; asTemplate: boolean } | null>(null);
   const [created, setCreated] = useState<CreatedNpc | null>(null);
@@ -331,6 +335,7 @@ export function NpcForm({
       preferences: shown('preferences') ? preferences : [],
       removedPreferences: shown('preferences') ? removedPreferences : [],
       settings: sentSettings,
+      powers: shown('powers') ? powers : undefined,
     };
   };
 
@@ -372,6 +377,7 @@ export function NpcForm({
     setPreferences([]);
     setRemovedCopied({ source: null, traits: [] });
     setSettings({});
+    setPowers(EMPTY_POWERS);
     setMinted(null);
     setCreated(null);
     setExpanded(new Set());
@@ -568,7 +574,9 @@ export function NpcForm({
         <FormSection
           title="Powers"
           copy={copyFor('powers', 'Powers', mode === 'detailed' && preset !== '')}
-        />
+        >
+          <NpcPowersEditor value={powers} onChange={setPowers} />
+        </FormSection>
       )}
 
       {shown('regard') && (
