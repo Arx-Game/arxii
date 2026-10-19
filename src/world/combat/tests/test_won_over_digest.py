@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
+from evennia.objects.objects import ObjectSessionHandler
 
 from world.checks.factories import CheckTypeFactory
 from world.combat.aftermath import build_aftermath_digest, render_aftermath_digest
@@ -122,12 +123,28 @@ class WonOverDigestTests(TestCase):
 
         for participant in (self.pc_a, self.pc_b):
             participant.character_sheet.character.msg = MagicMock()
+        # Each character plays from a telnet client and a browser at once: the
+        # browser reads the pushed row, the telnet session gets the text (#4418).
+        self.sessions = {
+            participant.character_sheet.character.pk: [
+                MagicMock(protocol_key="telnet"),
+                MagicMock(protocol_key="websocket"),
+            ]
+            for participant in (self.pc_a, self.pc_b)
+        }
 
         # The real completion seam: stamp, cleanup (which deletes the calmed
         # body), then digest delivery from the pre-cleanup snapshot.
-        with patch(
-            "world.combat.aftermath.render_aftermath_digest", wraps=render_aftermath_digest
-        ) as render:
+        with (
+            patch(
+                "world.combat.aftermath.render_aftermath_digest", wraps=render_aftermath_digest
+            ) as render,
+            patch.object(
+                ObjectSessionHandler,
+                "all",
+                lambda handler: self.sessions.get(handler.obj.pk, []),
+            ),
+        ):
             complete_encounter(self.enc, outcome=EncounterOutcome.VICTORY)
         self.delivered_digests = [call.args[0] for call in render.call_args_list]
 
@@ -287,9 +304,16 @@ class WonOverDigestTests(TestCase):
             self.assertIn(expected, web.content)
 
             character = participant.character_sheet.character
-            telnet = [c.args[0] for c in character.msg.call_args_list if c.args]
-            self.assertEqual(len(telnet), 1)
-            self.assertIn(expected, telnet[0])
+            # Text goes to the telnet session only (the fight's closing line and
+            # the digest); the browser reads the pushed row instead.
+            on_telnet, _browser = self.sessions[character.pk]
+            texts = [c for c in character.msg.call_args_list if c.args]
+            self.assertTrue(texts)
+            for call in texts:
+                self.assertEqual(call.kwargs, {"session": [on_telnet]})
+            digests = [c.args[0] for c in texts if c.args[0].startswith("Aftermath:")]
+            self.assertEqual(len(digests), 1, texts)
+            self.assertIn(expected, digests[0])
 
     def test_deleted_body_row_reports_absent_with_no_actions(self):
         self.assertEqual(len(self.delivered_digests), 2)
