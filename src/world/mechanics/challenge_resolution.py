@@ -94,7 +94,7 @@ def resolve_challenge(
     8. Return result
     """
     _validate(character, challenge_instance, approach)
-    extra_traits = _capability_skill_terms(character, capability_source)
+    extra_traits = capability_skill_terms(character, capability_source)
 
     if approach.action_template is not None:
         return _resolve_via_template(
@@ -191,14 +191,15 @@ def resolve_challenge(
     )
 
 
-def _capability_skill_terms(
+def capability_skill_terms(
     character: ObjectDB,
     capability_source: CapabilitySource,
 ) -> tuple[ExtraTraitTerm, ...]:
     """The skill term a challenge roll adds for ``capability_source`` (#4450).
 
     A capability that comes from a technique makes the roll magical, so it adds that
-    technique's skill. Any other source adds nothing.
+    technique's skill. Any other source adds nothing. The difficulty indicator shown
+    before the player commits previews with the same terms, so the label matches the roll.
     """
     if capability_source.source_type != CapabilitySourceType.TECHNIQUE:
         return ()

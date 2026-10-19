@@ -1044,6 +1044,37 @@ class TechniqueSkillTermTests(TestCase):
         self.assertEqual(rolled, ())
         self.assertEqual(tuple(recorded), ())
 
+    def _previewed_terms(self, source: CapabilitySource) -> tuple:
+        """The terms the difficulty indicator was previewed with when the approach was offered."""
+        from world.mechanics.services import get_available_actions
+
+        self.template.properties.add(self.application.target_property)
+        self._challenge()
+        with (
+            patch("world.mechanics.services.preview_check_difficulty", return_value=0) as preview,
+            patch("world.mechanics.services.chart_has_success_outcomes", return_value=True),
+        ):
+            actions = get_available_actions(
+                self.character, self.location, capability_sources=[source]
+            )
+        self.assertEqual(len(actions), 1)
+        preview.assert_called_once()
+        return tuple(preview.call_args.kwargs["extra_traits"])
+
+    def test_the_difficulty_preview_carries_the_terms_the_roll_does(self) -> None:
+        source = self._source(CapabilitySourceType.TECHNIQUE, self.technique.pk)
+
+        previewed = self._previewed_terms(source)
+        rolled, _ = self._resolve(source)
+
+        self.assertEqual(previewed, rolled)
+        self.assertEqual(rolled, self._expected())
+
+    def test_the_difficulty_preview_of_a_trait_source_carries_nothing(self) -> None:
+        source = self._source(CapabilitySourceType.TRAIT, self.technique.pk)
+
+        self.assertEqual(self._previewed_terms(source), ())
+
     def test_the_action_template_path_adds_the_technique_skill(self) -> None:
         from actions.factories import ActionTemplateFactory
         from world.checks.test_helpers import force_check_outcome

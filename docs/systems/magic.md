@@ -648,8 +648,9 @@ no Path skill. An inactive skill gives no term.
   technique's term, so the grade shown is the grade rolled.
 - A challenge met with a capability that comes from a technique (`CapabilitySourceType.TECHNIQUE`)
   keeps the approach's check type, or its action template's, and adds that technique's term; a
-  trait, condition or equipment source adds none (`_capability_skill_terms`,
-  `world/mechanics/challenge_resolution.py`).
+  trait, condition or equipment source adds none (`capability_skill_terms`,
+  `world/mechanics/challenge_resolution.py`). The difficulty indicator shown when the approach is
+  offered previews with the same terms.
 - Activity rolls keep their check type and add `activity_skill_terms(<activity>)`: the anima
   ritual (`perform_anima_ritual`), technique learning (learner roll and teacher rating), sanctum
   rituals and the ritual pool shortfall (`RITUAL_WORKING`), sustaining magic, dispelling,
@@ -657,8 +658,8 @@ no Path skill. An inactive skill gives no term.
   (`COURT_PETITION`), Fury control, moon control, hostile resonance ground, feeding restraint,
   noticing a cast or sensing a twisted ceremony or a loss of self (`SENSING_MAGIC`), worship rites,
   invocations and ceremonies.
-- Resist rolls on application, on stage advance, on a peril condition's terminal-pool roll and on
-  Surrounded entry, and break-free rolls, add the `RESISTING_LOSS_OF_SELF` terms only for a
+- Resist rolls on application, on stage advance, on a peril condition's per-round resist and
+  terminal-pool roll (Bleeding Out, Surrounded) and on Surrounded entry, and break-free rolls, add the `RESISTING_LOSS_OF_SELF` terms only for a
   condition in a marked category. A friend's
   Rally adds none; Reveal adds the `SENSING_MAGIC` terms for a marked category.
 - Treatment is magical, and adds `MAGICAL_TREATMENT`, when a technique drives it or the template
@@ -669,7 +670,7 @@ no Path skill. An inactive skill gives no term.
 cast's stat, personal skill and technique skill are in `PullActionContext.involved_traits`. A TRAIT
 thread on any of them joins the cast's applicable threads, both as a passive tier-0 effect and as
 a declared pull. A social action passes its template check plus the technique term, because that
-is what it rolls.
+is what it rolls; its declared pull is charged by `_charge_social_pull` against the same traits.
 
 **Character creation.** The Anima Check skill pick excludes skills whose trait category is MAGIC
 (`compute_magic_errors`, and the `AnimaCheckStep` options), so a magic skill is never counted twice

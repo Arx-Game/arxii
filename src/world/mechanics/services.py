@@ -1566,6 +1566,7 @@ def _build_action_for_source(  # noqa: PLR0913
             character,
             approach.check_type,
             ci.effective_severity,
+            source,
         )
         if difficulty == DifficultyIndicator.IMPOSSIBLE:
             return None
@@ -1815,6 +1816,7 @@ def _build_bare_object_action(  # noqa: PLR0913
             character,
             approach.check_type,
             template.severity,
+            source,
         )
         if difficulty == DifficultyIndicator.IMPOSSIBLE:
             return None
@@ -1952,10 +1954,22 @@ def _get_difficulty_indicator_for_check(
     character: ObjectDB,
     check_type: CheckType,
     target_difficulty: int,
+    capability_source: CapabilitySource,
 ) -> DifficultyIndicator:
-    """Determine difficulty indicator using the real check pipeline."""
+    """Determine difficulty indicator using the real check pipeline.
+
+    Previews with the skill terms the resolving roll will carry for ``capability_source``
+    (#4450), so a technique approach's label is graded the way its roll is.
+    """
+    from world.mechanics.challenge_resolution import capability_skill_terms  # noqa: PLC0415
+
     return difficulty_indicator_for_rank_difference(
-        preview_check_difficulty(character, check_type, target_difficulty)
+        preview_check_difficulty(
+            character,
+            check_type,
+            target_difficulty,
+            extra_traits=capability_skill_terms(character, capability_source),
+        )
     )
 
 
