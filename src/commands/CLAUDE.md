@@ -702,7 +702,14 @@ actions, backends, and service functions.
   `gmtable transfer <id>=<account>`. **Authorization mirrors the web exactly** so telnet can't
   escalate: create/list/members/invite/kick are table-owner (GM) ops gated on
   `account.gm_profile == table.gm`; `archive` + `transfer` are staff-only (the web gates both behind
-  `IsAdminUser`). No business logic in the command.
+  `IsAdminUser`). No business logic in the command. Every subverb and gate is typed through
+  the handler in `integration_tests/test_minding_the_gm_desk_journeys.py` (`KeepingATable`,
+  #3657 tranche 11; the hand-built `tests/test_gmtable_command.py` is gone), as are `gmtrust`
+  (`TrustingAGM`; `tests/test_gmtrust_command.py`, whose callers were mocks, gone), `gm prompts`
+  and `gm prompt send|dismiss|done` with `emit/prompt` and `pemit/prompt` (`AnsweringAPrompt`;
+  `tests/test_gm_prompt_commands.py` gone), `moment` (`SuggestingADramaticMoment`;
+  `tests/test_moment_command.py` gone) and `gemit` (`ProclaimingToTheRealm`;
+  `tests/test_gemit_command.py` gone). A new GM desk verb gets its lines there.
 - **`gmtrust.py`**: `CmdGMTrust` (`gmtrust`, #2000) — the GM trust-ladder namespace. Subverb-dispatched:
   `gmtrust show [account]` (self-service; naming another account is staff-only), `gmtrust evidence
   <account>` (staff-only aggregate track record), `gmtrust promote <account>=<level> reason=<why>`
@@ -1337,7 +1344,11 @@ actions, backends, and service functions.
   command calling `create_dramatic_moment_tag` directly (the same service the web
   serializer calls, not via an Action). `moment tag list` browses the authored
   `DramaticMomentType` catalog. Both GM-gated via `_account_can_gm_scene` on the caller's
-  active scene.
+  active scene. Its `func` sends a `CommandError` the way `ArxCommand.func` does, typed
+  `error` with the structured `command_error` frame (#3657 tranche 11: the override had sent a
+  bare line the web could not place); the tagged name resolves through a quiet global search
+  and an absent name is the command's own line (the loud search had sent Evennia's bare line
+  and the command then said nothing); several matches are named.
 
 ### Frontend Integration
 - **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)

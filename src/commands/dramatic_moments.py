@@ -66,7 +66,11 @@ class CmdMoment(ArxCommand):
         try:
             self._dispatch()
         except CommandError as err:
-            self.msg(str(err))
+            # Typed ``error`` with the structured frame, as ``ArxCommand.func`` sends
+            # every refusal (#3657 tranche 11: this override sent a bare line the web
+            # could not place, and an absent name got only Evennia's own bare line).
+            self.msg((str(err), {"type": "error"}))
+            self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
 
     def _dispatch(self) -> None:
         raw = (self.args or "").strip()
@@ -227,9 +231,16 @@ class CmdMoment(ArxCommand):
             msg = "Only the scene's GM, owner, or staff may tag dramatic moments."
             raise CommandError(msg)
 
-        target = self.caller.search(name, global_search=True)
-        if target is None:
-            return
+        # Quiet: the loud search had said "Could not find" as a bare untyped line and
+        # the command then said nothing of its own (#3657 tranche 11).
+        matches = self.caller.search(name, global_search=True, quiet=True)
+        if not matches:
+            msg = f"Could not find '{name}'."
+            raise CommandError(msg)
+        if len(matches) > 1:
+            msg = f"More than one match for '{name}' (please narrow target)."
+            raise CommandError(msg)
+        target = matches[0]
 
         sheet = target.character_sheet
         if sheet is None:

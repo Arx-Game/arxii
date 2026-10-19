@@ -178,7 +178,22 @@ shape: `CmdRelationship` resolved its target and its `show` argument loudly (two
 find" lines), `CmdOutfit` searched its wardrobe and item dbrefs loudly ("Could not find
 '#id'." before its own refusal), and `GrantItemAction` searched loudly and answered nothing
 of its own, so the web got only Evennia's bare line. Each now searches quietly and the
-journeys assert the one typed line.
+journeys assert the one typed line. Tranche 11 (2026-10-19) rules the GM desk group:
+`test_gm_prompt_commands` (15, with `get_active_scene` and `narrate_privately` patched),
+`test_gmtrust_command` (17, every caller a `MagicMock`), `test_gmtable_command` (14),
+`test_moment_command` (22) and `test_gemit_command` (5) are removed. A new journey module,
+`integration_tests/test_minding_the_gm_desk_journeys.py`, types `gmtable` (create, list,
+members, invite, kick, archive, transfer, every gate), `gmtrust` (show, evidence, promote with
+the level-change row), `gm prompts` / `gm prompt send|dismiss|done` with `emit/prompt` and
+`pemit/prompt` against the real scene and the real on-commit release, `moment`
+(suggestions, confirm, dismiss, tag, tag list, the mute, the cap) and `gemit` behind the real
+`perm(Admin)` lock. Two fixes in place: a prompt's authored room line released on close
+reached the web feed only (`broadcast_scene_emit`'s scene-scoped push sent no text line;
+a telnet onlooker heard nothing, the `callcheck` shape again), and `moment` sent every refusal
+as a bare untyped line the web cannot place (its `func` override skipped the base command's
+typed `error` and structured frame) while `moment tag <absent name>` sent only Evennia's bare
+line (the loud-search shape); the override now refuses the way the base does and the search
+is quiet.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
