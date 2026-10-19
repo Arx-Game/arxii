@@ -142,7 +142,8 @@ def describe_crowd(*, opponents: list[CombatOpponent], name: str, description: s
     A blank ``name`` or ``description`` leaves that field as it is. The rows are
     locked and re-read like ``voice_crowd``'s, and must be persona-less ACTIVE bodies
     of one unfinished encounter. A crowd with a voice renames its voice character and
-    persona too, so the name it poses under follows. Everything is checked before
+    persona too, so the name it poses under follows, and its voice takes the new
+    description, which the voiced crowd's cast row shows. Everything is checked before
     anything is written.
 
     Raises:
@@ -175,6 +176,20 @@ def describe_crowd(*, opponents: list[CombatOpponent], name: str, description: s
         opponent.save(update_fields=fields)
     if name:
         _rename_voices(voices, name)
+    if description:
+        _describe_voices(voices, description)
+
+
+def _describe_voices(voices: set[Persona], description: str) -> None:
+    """The voice character takes the crowd's new description (#4418 bug 2).
+
+    A voiced crowd's cast row reads its voice's description, so without this the
+    GM's edit looked unsaved. Written through the sanctioned, versioned seam.
+    """
+    from world.character_sheets.services import set_physical_description  # noqa: PLC0415
+
+    for voice in voices:
+        set_physical_description(voice.character_sheet, description)
 
 
 def _refuse_taken_voice_name(voices: set[Persona], name: str) -> None:

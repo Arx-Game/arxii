@@ -143,6 +143,35 @@ class TheGmRunsTheCastFromAnywhere(JourneyCase):
             Persona.objects.get(pk=voiced.detail.data["persona_id"]).name, "Gate wardens"
         )
 
+    def test_describing_a_voiced_crowd_shows_the_new_description(self) -> None:
+        # #4418 bug 2: the row read the voice's old description after the edit.
+        guard_ids = [guard.pk for guard in self.guards]
+        voiced = self.web(
+            self.ravenna,
+            "voice_crowd",
+            opponent_ids=guard_ids,
+            name="Gate guards",
+            scene_id=self.scene.pk,
+        )
+        self.assertTrue(voiced.detail.success, voiced.detail.message)
+        described = self.web(
+            self.ravenna,
+            "describe_crowd",
+            opponent_ids=guard_ids,
+            name="",
+            description="Eight wardens in rain-dark cloaks.",
+            scene_id=self.scene.pk,
+        )
+        self.assertTrue(described.detail.success, described.detail.message)
+        crowds = [
+            row
+            for row in self.api(self.gm).get(CAST_LIST.format(self.scene.pk)).json()
+            if row["kind"] == "crowd"
+        ]
+        self.assertEqual(
+            [row["description"] for row in crowds], ["Eight wardens in rain-dark cloaks."]
+        )
+
     def _describe(self, opponent_ids, name: str):
         return self.web(
             self.ravenna,
