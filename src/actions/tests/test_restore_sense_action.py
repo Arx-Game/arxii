@@ -20,6 +20,7 @@ from actions.definitions.social import RestoreSenseAction
 from actions.effects.registry import apply_effects
 from actions.models import ActionEnhancement, RemoveConditionOnCheckConfig
 from actions.registry import get_action
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.magic.factories import (
     BerserkConditionTemplateFactory,
@@ -92,7 +93,9 @@ class RestoreSenseActionEffectTest(TestCase):
 
         return ActionContext(
             action=MagicMock(),
-            actor=MagicMock(),
+            # The factory's enhancement is technique-sourced, so the handler resolves the
+            # actor's technique skill (#4477): a real character, not a mock.
+            actor=CharacterSheetFactory().character,
             target=target,
             kwargs={},
             scene_data=MagicMock(),
