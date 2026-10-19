@@ -229,13 +229,13 @@ class Account(DefaultAccount):
         ``get_account_personas`` read this and ``cached_persona_ids``.
 
         #4418: NPC loans join here, so persona ownership for posting and consent
-        follows who plays the NPC (``npc_lending.playable_entries``). ``NPCLoan``
-        saves clear it through ``NPCLoan.related_cache_fields``.
+        follows who plays the NPC (the ``npc_lending.playable_entries`` rule, read
+        in one query by ``RosterEntry.objects.playable_by``). ``NPCLoan`` saves
+        clear it through ``NPCLoan.related_cache_fields``.
         """
         from world.roster.models import RosterEntry
-        from world.roster.services.npc_lending import playable_entries
 
-        return playable_entries(self, list(RosterEntry.objects.for_account(self)))
+        return list(RosterEntry.objects.playable_by(self))
 
     @cached_property
     def cached_selected_entry(self):

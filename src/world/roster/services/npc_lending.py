@@ -2,10 +2,11 @@
 
 A loan moves who plays a story NPC without moving who holds it. The holder keeps
 their ``RosterTenure``; an ACTIVE ``NPCLoan`` takes the NPC out of the holder's
-playable characters and puts it into the borrower's. ``playable_entries`` is the one
-place that rule lives, and both availability seams read it:
-``PlayerData.get_available_roster_entries`` (puppeting, ``mine``, selection) and
-``Account.cached_roster_entries`` (persona ownership for posting and consent).
+playable characters and puts it into the borrower's. ``playable_entries`` states that
+rule over loans already in hand, for ``PlayerData.get_available_roster_entries``
+(puppeting, ``mine``, selection); ``RosterEntry.objects.playable_by`` states it as one
+query, for ``Account.cached_roster_entries`` (persona ownership for posting and
+consent). ``PlayableByMatchesPlayableEntries`` holds the two to the same answer.
 
 Two ways in:
 
