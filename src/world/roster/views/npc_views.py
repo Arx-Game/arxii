@@ -42,6 +42,8 @@ from world.roster.serializers.npc_roster import (
     NPCDetailSerializer,
     NPCLoanSerializer,
     NPCOfferSerializer,
+    NPCPowerOptionsQuerySerializer,
+    NPCPowerOptionsSerializer,
     NPCRosterRowSerializer,
     PreferencesSerializer,
     RegardResultSerializer,
@@ -310,6 +312,41 @@ class StoryNPCViewSet(
     @action(detail=False, methods=[HTTPMethod.GET])
     def templates(self, request: Request) -> Response:
         return self._page_response(request)
+
+    @extend_schema(
+        parameters=[NPCPowerOptionsQuerySerializer],
+        responses=NPCPowerOptionsSerializer,
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.GET],
+        url_path="power-options",
+        pagination_class=None,
+        filter_backends=[],
+    )
+    def power_options(self, request: Request) -> Response:
+        """What the NPC form's Powers section picks from, before the NPC has a sheet.
+
+        The same catalog and narrowing as staff-magic-options, given ``?path=``,
+        ``?tradition=`` and ``?gift=`` picked so far.
+        """
+        from world.character_creation.magic_writer import BASE_TECHNIQUE_PICKS  # noqa: PLC0415
+        from world.character_sheets.staff_views import magic_options, path_options  # noqa: PLC0415
+        from world.classes.models import Path  # noqa: PLC0415
+
+        query = NPCPowerOptionsQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        picks = query.validated_data
+        # The query's fields, in declared order: path, tradition, gift.
+        path_id, tradition_id, gift_id = (picks.get(name) for name in query.fields)
+        options = magic_options(
+            path=Path.objects.filter(pk=path_id).first() if path_id else None,
+            species=None,
+            tradition_id=str(tradition_id) if tradition_id else None,
+            gift_id=str(gift_id) if gift_id else None,
+            technique_limit=BASE_TECHNIQUE_PICKS,
+        )
+        return Response(NPCPowerOptionsSerializer({**options, "paths": path_options()}).data)
 
     # -- borrowing -----------------------------------------------------------
 

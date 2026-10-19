@@ -80,6 +80,8 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.classes.models import Path
+    from world.species.models import Species
 
 
 def _refused(exc: SheetWriteError) -> Response:
@@ -746,7 +748,6 @@ def _staff_options(sheet: CharacterSheet) -> dict[str, Any]:
         EnemyKind,
         EnemyPowerTier,
     )
-    from world.classes.models import Path  # noqa: PLC0415
     from world.distinctions.models import Distinction  # noqa: PLC0415
     from world.forms.constants import MarkingKind  # noqa: PLC0415
     from world.forms.services import get_cg_form_options  # noqa: PLC0415
@@ -770,7 +771,7 @@ def _staff_options(sheet: CharacterSheet) -> dict[str, Any]:
             for trait, options in form.items()
         ],
         "beginnings": _named(Beginnings.objects.order_by("name")),
-        "paths": _named(Path.objects.order_by("name")),
+        "paths": path_options(),
         "beings": _named(WorshippedBeing.objects.order_by("name")),
         "marking_regions": _choices(BodyRegion),
         "marking_kinds": _choices(MarkingKind),
@@ -785,34 +786,57 @@ def _choices(choices: Any) -> list[dict[str, str]]:
 
 
 def _magic_options(sheet: CharacterSheet, tradition_id: str | None, gift_id: str | None) -> dict:
-    """Traditions; the tradition's gifts on the sheet's path; the gift's techniques and
-    resonances; the anima stats and skills; the sheet's technique limit."""
+    """Grant magic's options for ``sheet``: its path, species and technique limit."""
     from world.character_creation.magic_writer import technique_pick_limit  # noqa: PLC0415
+    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+
+    path_row = CharacterPathHistory.objects.filter(character=sheet).order_by("-pk").first()
+    return magic_options(
+        path=path_row.path if path_row else None,
+        species=sheet.species,
+        tradition_id=tradition_id,
+        gift_id=gift_id,
+        technique_limit=technique_pick_limit(sheet),
+    )
+
+
+def magic_options(
+    *,
+    path: Path | None,
+    species: Species | None,
+    tradition_id: str | None,
+    gift_id: str | None,
+    technique_limit: int,
+) -> dict:
+    """Traditions; the tradition's gifts on ``path``; the gift's techniques and
+    resonances (plus ``species``' own); the anima stats and skills; the limit.
+
+    Needs no sheet, so the NPC form's power options (``/api/roster/npcs/power-options/``,
+    #4418) read the same catalog before the NPC exists.
+    """
     from world.magic.models import Tradition  # noqa: PLC0415
     from world.magic.services.cg_catalog import (  # noqa: PLC0415
         get_gift_options,
         get_species_technique_options,
         get_technique_options,
     )
-    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
-    path_row = CharacterPathHistory.objects.filter(character=sheet).order_by("-pk").first()
     tradition = Tradition.objects.filter(pk=tradition_id).first() if tradition_id else None
-    gifts = get_gift_options(tradition, path_row.path) if tradition and path_row else []
+    gifts = get_gift_options(tradition, path) if tradition and path else []
     gift = next((g for g in gifts if str(g.pk) == gift_id), None) if gift_id else None
     techniques: list[Any] = []
-    if gift is not None and tradition is not None and path_row is not None:
+    if gift is not None and tradition is not None and path is not None:
         options = get_technique_options(
-            path_row.path, gift, tradition, include_unready=True, exclude_gated=True
+            path, gift, tradition, include_unready=True, exclude_gated=True
         )
         techniques = [
             technique
             for technique in [
                 *options.pool,
                 *options.tradition,
-                *get_species_technique_options(sheet.species, include_unready=True),
+                *get_species_technique_options(species, include_unready=True),
             ]
             if technique.action_template_id
         ]
@@ -825,8 +849,15 @@ def _magic_options(sheet: CharacterSheet, tradition_id: str | None, gift_id: str
         "skills": _named(
             Skill.objects.filter(is_active=True).select_related("trait").order_by("trait__name")
         ),
-        "technique_limit": technique_pick_limit(sheet),
+        "technique_limit": technique_limit,
     }
+
+
+def path_options() -> list[dict[str, Any]]:
+    """Every Path, as an option (the staff row editors and the NPC form's power options)."""
+    from world.classes.models import Path  # noqa: PLC0415
+
+    return _named(Path.objects.order_by("name"))
 
 
 #: How many rooms a residence search answers with; rooms are searched, never listed.

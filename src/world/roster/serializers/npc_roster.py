@@ -9,6 +9,10 @@ from django.db.models import Q
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from world.character_sheets.staff_serializers import (
+    StaffMagicOptionsSerializer,
+    StaffOptionSerializer,
+)
 from world.npc_services.constants import RegardTargetType
 from world.npc_services.models import (
     REGARD_MAX,
@@ -396,3 +400,22 @@ class CreatedNPCSerializer(serializers.Serializer):
     """What ``POST copy-as-new`` answers: the new NPC's roster entry id."""
 
     id = serializers.IntegerField()
+
+
+class NPCPowerOptionsQuerySerializer(serializers.Serializer):
+    """The picks so far that narrow the NPC form's power options (#4418)."""
+
+    path = serializers.IntegerField(required=False)
+    tradition = serializers.IntegerField(required=False)
+    gift = serializers.IntegerField(required=False)
+
+
+class NPCPowerOptionsSerializer(StaffMagicOptionsSerializer):
+    """What the NPC form's Powers section picks from before the NPC exists (#4418).
+
+    Staff edit mode's Grant magic options (``staff-magic-options``), read with no
+    sheet: the path comes from ``?path=`` instead of the sheet's own, and there is
+    no species. ``paths`` lists every Path to pick it from.
+    """
+
+    paths = StaffOptionSerializer(many=True)
