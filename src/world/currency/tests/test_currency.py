@@ -146,6 +146,7 @@ class InstrumentTests(TestCase):
 
         coin = ItemInstance.objects.get(pk=coin.pk)
         assert coin.destroyed_at is not None
+        assert not CurrencyInstrumentDetails.objects.filter(item_instance=coin).exists()
         assert ObjectDB.objects.get(pk=game_object_pk).location is None
         purse.refresh_from_db()
         assert purse.balance == 1_000

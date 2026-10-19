@@ -356,6 +356,9 @@ def redeem_instrument(
             to_treasury=to_treasury,
         )
         destroy_consumed_item_instance(instance, note=f"Redeemed for {details.face_value}c.")
+        # The coin's value is back in the books: a soft-destroyed coin must not keep
+        # counting as money in circulation.
+        CurrencyInstrumentDetails.objects.filter(pk=details.pk).delete()
     return row
 
 

@@ -21,7 +21,7 @@ from world.currency.services import (
 )
 from world.items.constants import OwnershipEventType
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
-from world.items.models import OwnershipEvent
+from world.items.models import ItemInstance, OwnershipEvent
 
 
 class LooseCacheTests(TestCase):
@@ -107,12 +107,10 @@ class LooseCachePhysicalTests(TestCase):
         self.assertEqual(self.purse.balance, 1_000)
 
     def test_provenance_survives_redemption(self):
-        """OwnershipEvent rows outlive the redeemed coin (#1025 provenance, SET_NULL).
+        """OwnershipEvent rows outlive the redeemed coin (#1025 provenance).
 
-        Pins the deletion-order/FK behavior the redeem path relies on: deleting
-        the game_object CASCADE-removes the ItemInstance, and the event's
-        ``item_instance`` FK nulls out while the from/to sheet audit trail stays
-        intact.
+        A coin with provenance is soft-destroyed by the destroy rule (#4474), so the
+        event keeps pointing at it and the from/to sheet audit trail stays intact.
         """
         giver_sheet = CharacterSheetFactory()
         instance = mint_loose_cache(amount=350, holder_sheet=self.sheet, from_purse=self.purse)
@@ -142,7 +140,10 @@ class LooseCachePhysicalTests(TestCase):
             )
             .get()
         )
-        self.assertIsNone(row["item_instance_id"])  # SET_NULL, row not cascaded
+        # The coin has provenance, so the destroy rule soft-deletes it (#4474): the event
+        # keeps pointing at the destroyed coin, which keeps its whole history.
+        self.assertEqual(row["item_instance_id"], instance.pk)
+        self.assertIsNotNone(ItemInstance.objects.get(pk=instance.pk).destroyed_at)
         self.assertEqual(row["event_type"], OwnershipEventType.GIVEN)
         self.assertEqual(row["from_character_sheet_id"], giver_sheet.pk)
         self.assertEqual(row["to_character_sheet_id"], self.sheet.pk)
