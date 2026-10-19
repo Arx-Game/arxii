@@ -124,6 +124,13 @@ vi.mock('@/roster/queries', () => ({
   })),
 }));
 
+// #4418: the Guide's offers; empty unless a test sets one.
+const npcOffers = vi.hoisted(() => ({ current: [] as unknown[] }));
+vi.mock('@/gm/npcs/queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/gm/npcs/queries')>()),
+  useNpcOffersQuery: () => ({ data: npcOffers.current }),
+}));
+
 // #3412 — GamePage's mount-path auto-start effect calls `connect()`. Mocked
 // (mirroring GameTopBar.selection.test.tsx's own rationale) so no test in
 // this file opens a real WebSocket; the dedicated describe block below
@@ -2449,6 +2456,35 @@ describe('GamePage', () => {
       growFeed(feed, observer, 2000);
 
       expect(feed.scrollTop).toBe(0);
+    });
+  });
+
+  describe('NPC offers with no selected character (#4418)', () => {
+    afterEach(() => {
+      npcOffers.current = [];
+    });
+
+    it('shows an offer card although no character is selected', async () => {
+      npcOffers.current = [
+        {
+          loan_id: 5,
+          roster_entry_id: 13,
+          name: 'Sergeant Mira',
+          thumbnail_url: null,
+          scene_id: 3,
+          scene_title: 'Scene at Low Gate',
+          offered_by_name: 'Ravenna',
+          notes_for_player: 'She distrusts the Guild.',
+        },
+      ];
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(hydrateActiveCharacter(null));
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('npc-offer-card')).toHaveTextContent(
+        'Sergeant Mira, offered by Ravenna'
+      );
     });
   });
 });

@@ -35,8 +35,10 @@ export function useNpcOffersQuery() {
     queryFn: fetchNpcOffers,
     enabled: mayBeOffered,
     retry: false,
-    // A non-Guide's 403 settles as an error and is not polled; a Guide re-reads each minute.
-    refetchInterval: (query) => (query.state.status === 'success' ? 60_000 : false),
+    // A non-Guide's 403 settles as an error and is not polled; a Guide re-reads every 30s
+    // and on focus (nothing pushes a new offer or a withdrawn one).
+    refetchInterval: (query) => (query.state.status === 'success' ? 30_000 : false),
+    refetchOnWindowFocus: true,
   });
 }
 

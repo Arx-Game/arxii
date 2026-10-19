@@ -60,6 +60,7 @@ import { NpcNotesCard } from '@/gm/npcs/NpcNotesCard';
 import { NpcResponseCard } from '@/gm/npcs/NpcResponseCard';
 import { pendingNpcResponse } from '@/gm/npcs/pendingNpcResponse';
 import { useNpcOffersQuery } from '@/gm/npcs/queries';
+import { fallbackEntry, useLoanEndFallback } from '@/gm/npcs/useLoanEndFallback';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
 import { PlaceBar } from '@/scenes/components/PlaceBar';
 import { TavernGameWidget } from '@/scenes/components/TavernGameWidget';
@@ -355,6 +356,9 @@ interface NpcPlayCardsProps {
  */
 function NpcPlayCards({ activeEntry, interactions, onPoseAs }: NpcPlayCardsProps) {
   const { data: offers = [] } = useNpcOffersQuery();
+  const { data: characters = [] } = useMyRosterEntriesQuery();
+  // Offers show with no character selected too; the answer goes out as the account's own PC.
+  const actor = activeEntry ?? fallbackEntry(characters);
   const isNpc = activeEntry?.roster_type === 'NPC';
   const npcPersonaId = isNpc ? actingPersonaId(activeEntry) : null;
   const pending = useMemo(
@@ -362,15 +366,15 @@ function NpcPlayCards({ activeEntry, interactions, onPoseAs }: NpcPlayCardsProps
     [interactions, npcPersonaId]
   );
 
-  if (!activeEntry) return null;
+  if (!actor) return null;
   if (offers.length === 0 && !isNpc) return null;
   return (
     <div className="space-y-2 border-b p-2">
       {offers.map((offer) => (
-        <NpcOfferCard key={offer.loan_id} loan={offer} characterId={activeEntry.character_id} />
+        <NpcOfferCard key={offer.loan_id} loan={offer} characterId={actor.character_id} />
       ))}
-      {isNpc && <NpcNotesCard entry={activeEntry} />}
-      {pending && (
+      {isNpc && activeEntry && <NpcNotesCard entry={activeEntry} />}
+      {pending && activeEntry && (
         <NpcResponseCard interaction={pending} npcName={activeEntry.name} onPoseAs={onPoseAs} />
       )}
     </div>
@@ -403,11 +407,14 @@ export function GamePage() {
   // 60s timer are what make a badge clear on this device after the player read
   // the poses on another one; nothing pushes read state.
   const { data: characters = [] } = useMyRosterEntriesQuery({
-    refetchInterval: 60_000,
+    // Also how an ended NPC loan reaches this page (#4418): nothing pushes it.
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
   const { sessions, active } = useAppSelector((state) => state.game);
+  const hasSession = useCallback((name: string) => Boolean(sessions[name]), [sessions]);
+  useLoanEndFallback(characters, active, hasSession);
 
   // Enter-the-world auto-start (#3412): a fresh hydration (reload survival,
   // or arriving here via the header's docked chip) sets `active` with no

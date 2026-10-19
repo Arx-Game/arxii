@@ -32,6 +32,14 @@ async function getResults<T>(url: string, fallback: string): Promise<T[]> {
   return body.results;
 }
 
+// The cast-list action returns a bare list (not a page), whatever the generated
+// schema says: SceneViewSet.cast_list wraps the serializer data in a plain Response.
+async function getCastList(sceneId: number): Promise<CastEntry[]> {
+  const res = await apiFetch(`/api/scenes/${sceneId}/cast-list/`);
+  if (!res.ok) throw new Error('Failed to load the cast.');
+  return (await res.json()) as CastEntry[];
+}
+
 function castListKey(sceneId: number) {
   return ['scene-cast-list', sceneId] as const;
 }
@@ -39,8 +47,7 @@ function castListKey(sceneId: number) {
 function useCastListQuery(sceneId: number) {
   return useQuery({
     queryKey: castListKey(sceneId),
-    queryFn: () =>
-      getResults<CastEntry>(`/api/scenes/${sceneId}/cast-list/`, 'Failed to load the cast.'),
+    queryFn: () => getCastList(sceneId),
     staleTime: 10_000,
   });
 }

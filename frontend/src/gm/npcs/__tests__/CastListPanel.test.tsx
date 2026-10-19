@@ -84,8 +84,11 @@ const cast = [
 ];
 
 function respond(url: string) {
-  const results = url.includes('cast-list') ? cast : [{ account_id: 21, display_name: 'Ilsa' }];
-  return Promise.resolve({ ok: true, json: () => Promise.resolve({ results }) });
+  // The cast-list endpoint returns a bare list; the Guides endpoint is paginated.
+  const body = url.includes('cast-list')
+    ? cast
+    : { results: [{ account_id: 21, display_name: 'Ilsa' }] };
+  return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
 }
 
 function renderPanel() {
