@@ -405,6 +405,7 @@ All models registered with appropriate admin interfaces:
 
 - `CheckCategoryAdmin` - List with editable `display_order`, inline `CheckType` editing, search by name
 - `CheckTypeAdmin` - List/filter by `category` and `is_active`, editable `is_active` and `display_order`, inline `CheckTypeTrait` and `CheckTypeAspect` editing with autocomplete fields
+- `ConsequenceEffectAdmin` (#4473) - one effect on its own page (the Consequence page lists effects inline and links here). A `LEGEND_AWARD` effect names the organizations the act harmed or helped through the `NamedOrganization` inline (organization, role, base amount, "only if exposed", a staff-only estimate). The `_legend_award` handler sizes each row's base by `_tier_multiplier` of the outcome tier and passes the reactions to `create_legend_event(named_reactions=...)`; see `docs/systems/societies.md`.
 
 ---
 
