@@ -419,7 +419,27 @@ class RisingAndFallingInACovenant(JourneyCase):
         queue = self.api(ravenna.db_account).get("/api/stories/gm-queue/")
         self.assertEqual(queue.status_code, 200, queue.content)
         self.assertIn(request.pk, [row["request_id"] for row in queue.data["open_group_requests"]])
+        # The same queue on the line: the dashboard counts the open ask and names the banner.
+        told = strip_ansi(self.telnet(ravenna, "gm dashboard"))
+        self.assertIn("GM Dashboard:", told)
+        self.assertIn(f"[{table.pk}] {table.name}", told)
+        self.assertIn("Open group requests: 1", told)
+        self.assertIn(f"[{request.pk}] The Iron Banner", told)
+        self.assertIn("Usage: gm dashboard", self.telnet(ravenna, "gm frobnicate"))
+        self.assertIn("Usage: gm claim <request-id>", self.telnet(ravenna, "gm claim"))
         tam = self.make_player("Tam", room=self.room)
+        self.assertIn(
+            "You must have a GM profile to use this command.", self.telnet(tam, "gm dashboard")
+        )
+        # Staff see which tables sit idle; a player has no such verb.
+        self.assertIn("is not available", self.telnet(tam, "gmidle"))
+        marrow = self.make_player("Marrow", room=self.room)
+        staff = self.account_of(marrow)
+        staff.is_staff = True
+        staff.save(update_fields=["is_staff"])
+        # The verb's lock reads the account's permissions ahead of the character's.
+        staff.permissions.add("Admin")
+        self.assertIn(f"[{table.pk}] {table.name}", strip_ansi(self.telnet(marrow, "gmidle")))
         self.assertIn(
             "You must have a GM profile to claim a group story request.",
             self.telnet(tam, f"gm claim {request.pk}"),
@@ -464,6 +484,54 @@ class RisingAndFallingInACovenant(JourneyCase):
         told = self.telnet(self.ysmay, "covenant kick Hobb")
         self.assertIn("You can only remove members ranked below you.", told)
         self.assertEqual(self.rank_of(self.hobb), "Commander")
+
+    def test_the_lines_that_go_nowhere(self) -> None:
+        self.assertIn(
+            "Usage: covenant [list|engage|disengage|leave|kick|rank|transfer|standdown|",
+            self.telnet(self.ysmay, "covenant frobnicate"),
+        )
+        self.assertIn(
+            "You are not a member of a covenant named 'The Velvet Hand'.",
+            self.telnet(self.ysmay, "covenant engage The Velvet Hand"),
+        )
+        self.assertIn(
+            "Kick whom? (covenant kick <char> [in <covenant>])",
+            self.telnet(self.ysmay, "covenant kick"),
+        )
+        self.assertIn(
+            "Usage: covenant rank <char> <rank> [in <covenant>]",
+            self.telnet(self.ysmay, "covenant rank"),
+        )
+        self.assertIn(
+            "Transfer to whom? (covenant transfer <char> [in <covenant>])",
+            self.telnet(self.ysmay, "covenant transfer"),
+        )
+        # Sworn to two banners, she must say which one she means.
+        second = CovenantFactory(
+            name="The Second Banner",
+            covenant_type=CovenantType.BATTLE,
+            battle_binding=BattleBinding.STANDING,
+            is_dormant=False,
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=sheet_of(self.ysmay),
+            covenant=second,
+            covenant_role=self.role,
+            rank=CovenantRankFactory(covenant=second, name="Marcher", tier=3),
+        )
+        self.assertIn(
+            "Which covenant? You are in: The Iron Banner, The Second Banner",
+            self.telnet(self.ysmay, "covenant engage"),
+        )
+        self.assertIn(
+            "You engage your covenant role.",
+            self.telnet(self.ysmay, "covenant engage The Second Banner"),
+        )
+        self.assertTrue(
+            CharacterCovenantRole.objects.filter(
+                character_sheet=sheet_of(self.ysmay), covenant=second, engaged=True
+            ).exists()
+        )
 
     def test_a_dormant_banner_cannot_be_raised(self) -> None:
         self.banner.is_dormant = True

@@ -83,7 +83,18 @@ actions, backends, and service functions.
 
 ### Command Files
 - **`evennia_overrides/perception.py`**: `CmdLook` (`feed_kind = "look"`; its own
-  `_execute` routes through `send_result`, #3856), `CmdInventory`
+  `_execute` routes through `send_result`, #3856), `CmdInventory`. The look grammars
+  (`look <name>'s <thing>`, `look <thing> on <name>`, `look <thing> in <bag>`, a thing whose
+  own name carries `'s` or ` in `, a hidden bearer reading as absent) are typed through the
+  handler in `integration_tests/test_handling_your_things_journeys.py` (`LookingAtThings`),
+  and `home`/`home/set`/`recall` in `test_coming_home_journeys.py` (#3657 tranche 9); the
+  hand-built `tests/test_dispatchers.py`, which built every parser by hand, is gone. A new
+  look or movement grammar gets its lines there. A plain look resolves its target through
+  `search_or_raise` (tranche 9: the loud search had said "Could not find" and the raised
+  error said it again, the double line tranche 8 took off every other verb); the drilled
+  forms keep their quiet searches and fall through to the plain look, and `_execute`
+  rewrites a concealed target's failure in the same words, so an absent name and a hidden
+  one still read alike.
 - **`evennia_overrides/system.py`**: `CmdNoMatch` (#3856) — the `CMD_NOMATCH` system
   command in `CharacterCmdSet`. Evennia's own no-match reply is an untyped `text`
   frame the web client could not place, so it was silent there; this reproduces
@@ -290,6 +301,19 @@ actions, backends, and service functions.
   `add`'s NPC name already has); `<tier>` must be `elite`/`boss`/`hero_killer`.
 - **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdSeduce`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338/#1695); `CmdAccept` (extended to check offer registry first; consent
   fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
+  Every player path (the verb in and out of a scene, no target, an absent name, `accept`,
+  `deny`, `accept/<band> <id>`, `deny/blacklist`, nothing pending) is typed through the
+  handler in `integration_tests/test_faces_silences_and_the_floor_journeys.py`
+  (`PressingSomeoneInAScene`, #3657 tranche 9); `tests/test_consent_commands.py` keeps only
+  the action-key registry map and the pull-token parsing. Two gaps are open on #3657:
+  `create_action_request` consults no consent rule, so the blacklist bars only the web's
+  target picker and a telnet `intimidate <name>` still opens the request; and the telnet
+  target is never told a request opened (the actor alone sees the request number).
+- **`social/friends.py`**: `CmdFriend` (`friend <name>`, `friend/all <name>`), `CmdUnfriend`,
+  `CmdFriends` — the OOC friends list, per character or across every character of the
+  account; a character who has blocked the caller is "not available" with the block never
+  named. Typed through the handler in the faces journey (`KeepingAFriendsList`, #3657
+  tranche 9; the hand-built `tests/test_friends_commands.py` is gone).
 - **`allegiance.py`**: After-fight allegiance choices for a charmed, turned, or calmed NPC
   (#4091, ADR-4091). `CmdSettle` (`settle <character>`, `ConsentRequestCommand`) dispatches the
   one `settles_allegiance` `ActionTemplate` through the ordinary scene social-action pipeline
@@ -1103,6 +1127,11 @@ actions, backends, and service functions.
   top-level keys — to avoid exit/channel/alias collisions; mirrors `CmdCombat`/`CmdDuel`.
   No business logic in the command. Covenant induction and banner-call rise are session-driven via
   `CmdRitual` + `CovenantInductionAdapter`/`BannerCallAdapter` (see `ritual_adapters.py`).
+  Every subverb, the usages and the which-covenant prompt are typed through the handler in
+  `integration_tests/test_gatherings_coffers_and_wares_journeys.py` (#3657 tranches 2 and 9;
+  the hand-built `tests/test_covenant_command.py` is gone), as are `gm dashboard`, `gm claim`
+  and `gmidle` (`tests/test_gm_ops_command.py` gone) and, in the staging journey, `gm suggest`
+  (`tests/test_gm_ops_catalog.py` gone). A new covenant or `gm` subverb gets its lines there.
 - **`events.py`**: `CmdEvent` (`event`, alias `events`, #1499) — the event lifecycle + invitee RSVP
   namespace. One `ArxCommand` routes a leading subverb and runs the matching event Action via
   `action.run()` directly — the same seam the web `EventViewSet` / `EventInvitationViewSet` use.
