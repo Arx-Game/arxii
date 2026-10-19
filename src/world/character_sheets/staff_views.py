@@ -752,14 +752,13 @@ def _staff_options(sheet: CharacterSheet) -> dict[str, Any]:
     from world.forms.constants import MarkingKind  # noqa: PLC0415
     from world.forms.services import get_cg_form_options  # noqa: PLC0415
     from world.items.constants import BodyRegion  # noqa: PLC0415
-    from world.skills.models import Skill, Specialization  # noqa: PLC0415
-    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+    from world.skills.models import Specialization  # noqa: PLC0415
     from world.worship.models import WorshippedBeing  # noqa: PLC0415
 
     form = get_cg_form_options(sheet.species) if sheet.species is not None else {}
     return {
-        "stats": _named(Trait.objects.filter(trait_type=TraitType.STAT).order_by("name")),
-        "skills": _named(Skill.objects.select_related("trait").order_by("trait__name")),
+        "stats": stat_options(),
+        "skills": skill_options(),
         "specializations": _named(Specialization.objects.order_by("name")),
         "distinctions": _named(Distinction.objects.order_by("name")),
         "form_traits": [
@@ -821,7 +820,6 @@ def magic_options(
         get_technique_options,
     )
     from world.skills.models import Skill  # noqa: PLC0415
-    from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
     tradition = Tradition.objects.filter(pk=tradition_id).first() if tradition_id else None
     gifts = get_gift_options(tradition, path) if tradition and path else []
@@ -845,12 +843,26 @@ def magic_options(
         "gifts": _named(gifts),
         "techniques": _named(list({t.pk: t for t in techniques}.values())),
         "resonances": _named(gift.resonances.order_by("name")) if gift else [],
-        "stats": _named(Trait.objects.filter(trait_type=TraitType.STAT).order_by("name")),
+        "stats": stat_options(),
         "skills": _named(
             Skill.objects.filter(is_active=True).select_related("trait").order_by("trait__name")
         ),
         "technique_limit": technique_limit,
     }
+
+
+def stat_options() -> list[dict[str, Any]]:
+    """Every stat, as an option (the staff Stats editor, Grant magic, the NPC form)."""
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+
+    return _named(Trait.objects.filter(trait_type=TraitType.STAT).order_by("name"))
+
+
+def skill_options() -> list[dict[str, Any]]:
+    """Every skill, active or not, as an option (the staff Skills editor, the NPC form)."""
+    from world.skills.models import Skill  # noqa: PLC0415
+
+    return _named(Skill.objects.select_related("trait").order_by("trait__name"))
 
 
 def path_options() -> list[dict[str, Any]]:

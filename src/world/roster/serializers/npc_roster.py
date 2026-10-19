@@ -415,7 +415,12 @@ class NPCPowerOptionsSerializer(StaffMagicOptionsSerializer):
 
     Staff edit mode's Grant magic options (``staff-magic-options``), read with no
     sheet: the path comes from ``?path=`` instead of the sheet's own, and there is
-    no species. ``paths`` lists every Path to pick it from.
+    no species. ``paths`` lists every Path to pick it from. ``all_stats`` and
+    ``all_skills`` are staff-options' full Stats and Skills catalogs (inactive skills
+    too), for the form's stat and skill overrides; ``stats`` and ``skills`` stay the
+    Grant magic lists.
     """
 
     paths = StaffOptionSerializer(many=True)
+    all_stats = StaffOptionSerializer(many=True)
+    all_skills = StaffOptionSerializer(many=True)

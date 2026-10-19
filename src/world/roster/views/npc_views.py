@@ -331,7 +331,12 @@ class StoryNPCViewSet(
         ``?tradition=`` and ``?gift=`` picked so far.
         """
         from world.character_creation.magic_writer import BASE_TECHNIQUE_PICKS  # noqa: PLC0415
-        from world.character_sheets.staff_views import magic_options, path_options  # noqa: PLC0415
+        from world.character_sheets.staff_views import (  # noqa: PLC0415
+            magic_options,
+            path_options,
+            skill_options,
+            stat_options,
+        )
         from world.classes.models import Path  # noqa: PLC0415
 
         query = NPCPowerOptionsQuerySerializer(data=request.query_params)
@@ -346,7 +351,16 @@ class StoryNPCViewSet(
             gift_id=str(gift_id) if gift_id else None,
             technique_limit=BASE_TECHNIQUE_PICKS,
         )
-        return Response(NPCPowerOptionsSerializer({**options, "paths": path_options()}).data)
+        return Response(
+            NPCPowerOptionsSerializer(
+                {
+                    **options,
+                    "paths": path_options(),
+                    "all_stats": stat_options(),
+                    "all_skills": skill_options(),
+                }
+            ).data
+        )
 
     # -- borrowing -----------------------------------------------------------
 

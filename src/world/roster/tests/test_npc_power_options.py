@@ -20,6 +20,8 @@ from world.magic.factories import (
 )
 from world.progression.factories import CharacterPathHistoryFactory
 from world.roster.factories import RosterEntryFactory
+from world.skills.factories import SkillFactory
+from world.traits.factories import StatTraitFactory
 
 POWER_OPTIONS = "/api/roster/npcs/power-options/"
 
@@ -86,5 +88,21 @@ class NpcPowerOptionsTests(TestCase):
             on_sheet = staff.get(f"/api/character-sheets/{sheet.pk}/staff-magic-options/", picks)
             self.assertEqual(on_sheet.status_code, 200, on_sheet.content[:800])
             sheet_free = self._get(self.gm, path=self.path.pk, **picks).json()
-            sheet_free.pop("paths")
+            catalogs = {key: sheet_free.pop(key) for key in ("paths", "all_stats", "all_skills")}
             self.assertEqual(sheet_free, on_sheet.json(), picks)
+
+        # The override catalogs are staff-options' Stats and Skills lists and Paths.
+        options = staff.get(f"/api/character-sheets/{sheet.pk}/staff-options/").json()
+        self.assertEqual(catalogs["all_stats"], options["stats"])
+        self.assertEqual(catalogs["all_skills"], options["skills"])
+        self.assertEqual(catalogs["paths"], options["paths"])
+
+    def test_the_override_catalogs_include_inactive_skills(self) -> None:
+        retired = SkillFactory(is_active=False)
+        live = SkillFactory()
+        strength = StatTraitFactory(name="power_options_strength")
+        data = self._get(self.gm).json()
+        self.assertIn({"id": strength.pk, "name": strength.name}, data["all_stats"])
+        all_ids = {row["id"] for row in data["all_skills"]}
+        self.assertTrue({retired.pk, live.pk} <= all_ids)
+        self.assertNotIn(retired.pk, {row["id"] for row in data["skills"]})
