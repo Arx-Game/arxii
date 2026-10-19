@@ -1193,6 +1193,43 @@ def _charge_social_pull(
     return pull_flat_bonus
 
 
+def _resolve_pc_resisting(
+    action_request: SceneActionRequest,
+    target_persona: Persona,
+    *,
+    difficulty: int,
+    context: ResolutionContext,
+    resist_effort: str,
+) -> EnhancedSceneActionResult:
+    """#4418: an NPC acting on a PC never rolls.
+
+    The PC rolls the template's resist check against the NPC's rating
+    (``difficulty``), with their own modifiers and their declared resist effort; the
+    mirrored outcome drives the template's consequence pool from the NPC's side.
+    """
+    from world.checks.services import collect_check_modifiers  # noqa: PLC0415
+
+    action_template = action_request.action_template
+    resist_breakdown = collect_check_modifiers(
+        target_persona.character_sheet,
+        action_template.resist_check_type,
+        scene=action_request.scene,
+    )
+    return EnhancedSceneActionResult(
+        action_resolution=start_resisted_action_resolution(
+            initiator=context.character,
+            resister=target_persona.character_sheet.character,
+            template=action_template,
+            target_difficulty=difficulty,
+            context=context,
+            effort_level=resist_effort or None,
+            extra_modifiers=resist_breakdown.extra_modifiers_total,
+        ),
+        action_key=action_request.action_key,
+        fury_committed=None,
+    )
+
+
 def _resolve_action_against_persona(
     action_request: SceneActionRequest,
     target_persona: Persona,
@@ -1237,12 +1274,13 @@ def _resolve_action_against_persona(
     from world.relationships.services import relationship_gated_contributions  # noqa: PLC0415
     from world.scenes.favor_invocation import declared_invocation_contribution  # noqa: PLC0415
 
-    if difficulty_override is not None:
-        difficulty = difficulty_override
-    else:
-        difficulty = DIFFICULTY_VALUES.get(
+    difficulty = (
+        difficulty_override
+        if difficulty_override is not None
+        else DIFFICULTY_VALUES.get(
             action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
         )
+    )
     action_template = action_request.action_template
     if action_template is None:
         msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
@@ -1287,27 +1325,12 @@ def _resolve_action_against_persona(
     pc_resists = _pc_resists(action_request, target_persona)
     favor = None if pc_resists else declared_invocation_contribution(action_request)
     if pc_resists:
-        # #4418: an NPC acting on a PC never rolls. The PC rolls the template's
-        # resist check against the NPC's rating (``difficulty``), with their own
-        # modifiers and their declared resist effort; the mirrored outcome drives the
-        # template's consequence pool from the NPC's side.
-        resist_breakdown = collect_check_modifiers(
-            target_persona.character_sheet,
-            action_template.resist_check_type,
-            scene=action_request.scene,
-        )
-        result = EnhancedSceneActionResult(
-            action_resolution=start_resisted_action_resolution(
-                initiator=character,
-                resister=target_character,
-                template=action_template,
-                target_difficulty=difficulty,
-                context=context,
-                effort_level=resist_effort or None,
-                extra_modifiers=resist_breakdown.extra_modifiers_total,
-            ),
-            action_key=action_request.action_key,
-            fury_committed=None,
+        result = _resolve_pc_resisting(
+            action_request,
+            target_persona,
+            difficulty=difficulty,
+            context=context,
+            resist_effort=resist_effort,
         )
     elif action_request.technique is not None:
         # Fold condition / rollmod / scene / equipment / fashion modifiers into
