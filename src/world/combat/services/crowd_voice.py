@@ -165,7 +165,7 @@ def describe_crowd(*, opponents: list[CombatOpponent], name: str, description: s
 
     voices = {opponent.voice_persona for opponent in opponents if opponent.voice_persona_id}
     if name:
-        _refuse_taken_voice_name(voices, name)
+        _refuse_taken_voice_name(voices, name, bodies=_bodies(opponents))
 
     fields = [field for field, value in (("name", name), ("description", description)) if value]
     for opponent in opponents:
@@ -176,8 +176,26 @@ def describe_crowd(*, opponents: list[CombatOpponent], name: str, description: s
         opponent.save(update_fields=fields)
     if name:
         _rename_voices(voices, name)
+        _rename_bodies(opponents, name)
     if description:
         _describe_voices(voices, description)
+
+
+def _bodies(opponents: list[CombatOpponent]) -> list[int]:
+    """The pks of the crowd's ephemeral in-room bodies (CombatNPC objects)."""
+    return [
+        opponent.objectdb_id
+        for opponent in opponents
+        if opponent.objectdb_is_ephemeral and opponent.objectdb_id
+    ]
+
+
+def _rename_bodies(opponents: list[CombatOpponent], name: str) -> None:
+    """The crowd's ephemeral bodies take its new name, so the room's object list shows
+    it (#4418). They exist only for the fight, so the key is all there is to change."""
+    for opponent in opponents:
+        if opponent.objectdb_is_ephemeral and opponent.objectdb is not None:
+            opponent.objectdb.key = name
 
 
 def _describe_voices(voices: set[Persona], description: str) -> None:
@@ -192,12 +210,18 @@ def _describe_voices(voices: set[Persona], description: str) -> None:
         set_physical_description(voice.character_sheet, description)
 
 
-def _refuse_taken_voice_name(voices: set[Persona], name: str) -> None:
+def _refuse_taken_voice_name(voices: set[Persona], name: str, *, bodies: list[int]) -> None:
+    """Refuse a voice name another object has; the crowd's own bodies share it freely."""
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
     for voice in voices:
         character = voice.character_sheet.character
-        if ObjectDB.objects.filter(db_key__iexact=name).exclude(pk=character.pk).exists():
+        taken = (
+            ObjectDB.objects.filter(db_key__iexact=name)
+            .exclude(pk=character.pk)
+            .exclude(pk__in=bodies)
+        )
+        if taken.exists():
             raise CrowdVoiceError(NAME_TAKEN_MESSAGE)
 
 

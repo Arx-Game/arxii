@@ -172,6 +172,28 @@ class TheGmRunsTheCastFromAnywhere(JourneyCase):
             [row["description"] for row in crowds], ["Eight wardens in rain-dark cloaks."]
         )
 
+    def test_renaming_a_crowd_renames_its_bodies_in_the_room(self) -> None:
+        # Round 3: the room's object list kept showing the bodies' old name.
+        guard_ids = [guard.pk for guard in self.guards]
+        voiced = self.web(
+            self.ravenna,
+            "voice_crowd",
+            opponent_ids=guard_ids,
+            name="Gate guards",
+            scene_id=self.scene.pk,
+        )
+        self.assertTrue(voiced.detail.success, voiced.detail.message)
+        for _ in range(2):  # a second save under the same name is not "name taken"
+            renamed = self._describe(guard_ids, "Gate wardens")
+            self.assertTrue(renamed.detail.success, renamed.detail.message)
+
+        bodies = [guard.objectdb for guard in CombatOpponent.objects.filter(pk__in=guard_ids)]
+        self.assertEqual(len(bodies), 8)
+        self.assertEqual({body.key for body in bodies}, {"Gate wardens"})
+        self.assertEqual({body.location for body in bodies}, {self.gate})
+        in_room = [obj.key for obj in self.gate.contents if obj in bodies]
+        self.assertEqual(in_room, ["Gate wardens"] * 8)
+
     def _describe(self, opponent_ids, name: str):
         return self.web(
             self.ravenna,
