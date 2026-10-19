@@ -78,25 +78,15 @@ describe('NPC play UI', () => {
     const interaction = {
       id: 1,
       persona: { id: 5, name: 'Mirel' },
-      content: 'Mirel looks at Dannic.',
+      content: 'Mirel attempts to persuade Vael: Solid success',
+      mode: 'action',
       target_persona_ids: [70],
-      action_links: [
-        {
-          id: 1,
-          ordering: 0,
-          action_interaction: {
-            id: 2,
-            content: 'Persuade Vael: Solid success',
-            mode: 'action',
-            timestamp: '',
-          },
-        },
-      ],
+      action_links: [],
     } as unknown as Interaction;
     renderWithProviders(
       <NpcResponseCard interaction={interaction} npcName="Vael" onPoseAs={onPoseAs} />
     );
-    expect(screen.getByText('Mirel: Persuade Vael: Solid success')).toBeInTheDocument();
+    expect(screen.getByText('Mirel attempts to persuade Vael: Solid success')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Pose as Vael' }));
     expect(onPoseAs).toHaveBeenCalledWith(interaction);
   });
