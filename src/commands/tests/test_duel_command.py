@@ -65,7 +65,7 @@ class CmdDuelRoutingTests(TestCase):
 
     def test_challenge_dispatches_registry_ref_through_func(self) -> None:
         cmd = _make_cmd("challenge Bob")
-        cmd.caller.search.return_value = MagicMock()
+        cmd.caller.search.return_value = [MagicMock()]
         result = DispatchResult(
             backend=ActionBackend.REGISTRY,
             deferred=False,
@@ -96,7 +96,7 @@ class CmdDuelArgResolutionTests(TestCase):
         cmd = _make_cmd("challenge Bob")
         cmd._subverb, cmd._rest = "challenge", "Bob"
         sentinel = MagicMock()
-        cmd.caller.search.return_value = sentinel
+        cmd.caller.search.return_value = [sentinel]
         kwargs = cmd.resolve_action_args()
         self.assertEqual(kwargs, {"target": sentinel})
 
