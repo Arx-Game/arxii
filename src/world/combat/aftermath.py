@@ -253,7 +253,8 @@ def deliver_aftermath_digests(
     encounter: CombatEncounter, *, won_over: WonOverSnapshot | None = None
 ) -> None:
     """One private Narrator OUTCOME interaction per ACTIVE or FLED participant, pushed
-    to that character only, plus ``character.msg(text)`` for telnet. REMOVED rows
+    to that character only, plus the same text to its telnet sessions
+    (``send_text_to_non_web``; a web session reads the row). REMOVED rows
     get nothing. ``won_over`` is the pre-cleanup snapshot (see ``build_aftermath_digest``).
     """
     from world.combat.models import CombatParticipant  # noqa: PLC0415
@@ -263,6 +264,7 @@ def deliver_aftermath_digests(
         _build_interaction_payload,
         _send_to_objects,
         create_interaction,
+        send_text_to_non_web,
     )
     from world.scenes.models import Persona  # noqa: PLC0415
 
@@ -305,5 +307,8 @@ def deliver_aftermath_digests(
                 receiver_persona_ids=[persona.pk],
             )
             _send_to_objects([character], payload)
-
-        character.msg(text)
+            # The web reads the pushed row; only telnet needs the digest as text.
+            send_text_to_non_web(character, text)
+        else:
+            # No row to push without a persona, so every session gets the text.
+            character.msg(text)

@@ -640,9 +640,20 @@ def _send_involvement_mark(obj: ObjectDB) -> None:
     character (no non-web session) gets skipped entirely rather than sent
     with an empty list.
     """
+    send_text_to_non_web(obj, _INVOLVEMENT_MARK_TEXT)
+
+
+def send_text_to_non_web(obj: ObjectDB | AccountDB, text: str) -> None:
+    """Send ``text`` to ``obj``'s telnet and ssh sessions only (``non_web_sessions``).
+
+    For the plain-text twin of a line the web already gets as a structured frame,
+    so a browser never shows it twice. Passing ``session=`` an empty list would
+    fall back to every session (Evennia's ``session or self.sessions.all()``), so a
+    web-only character is skipped rather than sent an empty list.
+    """
     non_web = non_web_sessions(obj)
     if non_web:
-        obj.msg(_INVOLVEMENT_MARK_TEXT, session=non_web)
+        obj.msg(text, session=non_web)
 
 
 def _send_to_objects(
@@ -1950,7 +1961,8 @@ def narrate_privately(
     - The WS payload goes ONLY to ``character`` via ``_send_to_objects``, never
       ``push_interaction`` (which resolves delivery off the WRITER persona's
       location, and the Narrator has none).
-    - A direct ``character.msg(text)`` telnet companion (HARD telnet parity).
+    - The same text to the character's telnet sessions (``send_text_to_non_web``),
+      HARD telnet parity; web sessions read the pushed row instead.
 
     No-op when the character has no sheet or no primary persona.
 
@@ -1996,7 +2008,8 @@ def narrate_privately(
         target_persona_ids=[persona.pk],
     )
     _send_to_objects([character], payload)
-    character.msg(text)
+    # The web reads the pushed row; only telnet needs the line as text (#4418).
+    send_text_to_non_web(character, text)
     return interaction
 
 

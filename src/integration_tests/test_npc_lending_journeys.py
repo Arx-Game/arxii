@@ -6,6 +6,7 @@ from functools import partial
 from unittest.mock import Mock, patch
 import uuid
 
+from django.utils import timezone
 import evennia
 from evennia.server.serversession import ServerSession
 from rest_framework import status
@@ -631,6 +632,49 @@ class AGuidePlaysALentNpc(JourneyCase):
         )
         # The live frame names the same links the REST feed does for that pose.
         self.assertEqual(live[0]["action_links"], posed.json()["action_links"])
+
+    def test_the_fights_aftermath_reaches_a_browser_once_and_telnet_as_text(self) -> None:
+        # Round 7 bug K: "Aftermath: Victory." showed twice on /game, as the pushed
+        # row and as a note, because the digest's text went to every session.
+        from world.combat.aftermath import deliver_aftermath_digests
+        from world.combat.constants import EncounterOutcome
+        from world.combat.factories import (
+            CombatEncounterFactory,
+            CombatParticipantFactory,
+        )
+
+        frames = Mock()
+        handler = evennia.SESSION_HANDLER
+        for name, stub in (("data_out", frames), ("disconnect", Mock())):
+            patcher = patch.object(handler, name, stub)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        ensure_playable_lock(self.ysmay)
+        in_browser = self._web_signed_in(self.ysmay, 4460, puppet=self.ysmay)
+        on_telnet = self._web_signed_in(self.ysmay, 4461, puppet=self.ysmay, protocol="telnet")
+        encounter = CombatEncounterFactory(
+            scene=self.scene,
+            room=self.room,
+            outcome=EncounterOutcome.VICTORY,
+            completed_at=timezone.now(),
+        )
+        CombatParticipantFactory(encounter=encounter, character_sheet=self.ysmay.sheet_data)
+        frames.reset_mock()
+
+        deliver_aftermath_digests(encounter)
+
+        def sent_to(session):
+            return [call.kwargs for call in frames.call_args_list if call.args[0] is session]
+
+        web = sent_to(in_browser)
+        rows = [kw["interaction"][1]["content"] for kw in web if "interaction" in kw]
+        self.assertEqual(len(rows), 1, web)
+        self.assertTrue(rows[0].startswith("Aftermath: Victory."), rows)
+        self.assertEqual([kw for kw in web if "text" in kw], [])
+        telnet_lines = [_text_body(kw["text"]) for kw in sent_to(on_telnet) if "text" in kw]
+        self.assertTrue(
+            any(line.startswith("Aftermath: Victory.") for line in telnet_lines), telnet_lines
+        )
 
     def test_a_scene_ends_with_an_unplayed_npc_in_the_room(self) -> None:
         self.assertIsNone(self.vael.account)
