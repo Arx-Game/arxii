@@ -1,1 +1,1 @@
-0252_set_null_constraint_pairs
+0254_gift_technique_skill_minor_only
