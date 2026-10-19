@@ -1,5 +1,6 @@
 import type { FeedKind } from '@/game/feedKinds';
 import type { NarratedEvent } from '@/scenes/types';
+import type { components } from '@/generated/api';
 
 export const GAME_MESSAGE_TYPE = {
   SYSTEM: 'system',
@@ -340,6 +341,12 @@ export interface InteractionWsPayload {
   /** The GM prompt this row narrates (#4101), when it narrates one. Carries the
    * raw frozen persona name as-is -- the live push has no per-viewer concept. */
   narrates?: NarratedEvent | null;
+  /**
+   * The actions a POSE carries, serialized as the REST feed's `action_links` are (typed from
+   * the generated REST shape so the two cannot drift); `[]` for every other mode. Absent on
+   * frames from before the field existed.
+   */
+  action_links?: components['schemas']['InteractionActionLink'][];
 }
 
 /** Redux-owned pose metadata. Full body text is intentionally absent. */
