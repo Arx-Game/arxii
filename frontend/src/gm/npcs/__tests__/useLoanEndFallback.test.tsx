@@ -18,7 +18,13 @@ vi.mock('@/roster/api', async (importOriginal) => ({
 }));
 
 function entry(id: number, name: string, roster_type: string): MyRosterEntry {
-  return { id, name, roster_type, character_id: id * 10 } as MyRosterEntry;
+  return {
+    id,
+    name,
+    roster_type,
+    is_story_npc: roster_type === 'NPC',
+    character_id: id * 10,
+  } as unknown as MyRosterEntry;
 }
 const ilsa = entry(1, 'Ilsa', 'PC');
 const mira = entry(2, 'Sergeant Mira', 'NPC');

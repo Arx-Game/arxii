@@ -25,7 +25,7 @@ import { JournalTab } from '@/journals/components/JournalTab';
 import { StatusPanel } from '@/status/components/StatusPanel';
 import { InventorySidebarPanel } from '@/inventory/components/InventorySidebarPanel';
 import { VoyagePanel } from '@/travel/components/VoyagePanel';
-import { actingPersonaId } from '@/roster/persona';
+import { actingPersonaId, isStoryNpc } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
@@ -359,7 +359,7 @@ function NpcPlayCards({ activeEntry, interactions, onPoseAs }: NpcPlayCardsProps
   const { data: characters = [] } = useMyRosterEntriesQuery();
   // Offers show with no character selected too; the answer goes out as the account's own PC.
   const actor = activeEntry ?? fallbackEntry(characters);
-  const isNpc = activeEntry?.roster_type === 'NPC';
+  const isNpc = isStoryNpc(activeEntry);
   const npcPersonaId = isNpc ? actingPersonaId(activeEntry) : null;
   const pending = useMemo(
     () => (npcPersonaId === null ? null : pendingNpcResponse(interactions, npcPersonaId)),

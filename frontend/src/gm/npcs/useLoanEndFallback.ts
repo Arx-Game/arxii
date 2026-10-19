@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef } from 'react';
 
+import { isStoryNpc } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import { writeTabIdentity } from '@/store/browsingIdentity';
@@ -15,7 +16,7 @@ import { useAppDispatch } from '@/store/hooks';
 
 /** A PC if the account has one, else any remaining character. */
 export function fallbackEntry(characters: MyRosterEntry[]): MyRosterEntry | null {
-  return characters.find((c) => c.roster_type !== 'NPC') ?? characters[0] ?? null;
+  return characters.find((c) => !isStoryNpc(c)) ?? characters[0] ?? null;
 }
 
 export function useLoanEndFallback(

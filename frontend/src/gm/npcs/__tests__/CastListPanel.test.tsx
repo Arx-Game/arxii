@@ -132,6 +132,12 @@ describe('CastListPanel', () => {
     expect(name.parentElement?.parentElement).toContainElement(select);
   });
 
+  it('falls back to two initials on a portrait with no picture', async () => {
+    renderPanel();
+    expect(await screen.findByText('CV')).toBeInTheDocument();
+    expect(screen.getByText('MO')).toBeInTheDocument();
+  });
+
   it('takes back a lent NPC by loan id', async () => {
     renderPanel();
     const [first] = await screen.findAllByRole('button', { name: 'Take back' });

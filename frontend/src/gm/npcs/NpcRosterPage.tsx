@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { apiFetch } from '@/evennia_replacements/api';
 import type { components } from '@/generated/api';
+import { initials } from '@/lib/initials';
 import { throwApiError } from '@/lib/errors';
 
 type NpcRow = components['schemas']['NPCRosterRow'];
@@ -95,7 +96,7 @@ function NpcCard({ row }: { row: NpcRow }) {
         <div className="flex items-center gap-3">
           <Avatar className="h-14 w-14">
             {row.thumbnail_url && <AvatarImage src={row.thumbnail_url} alt={row.name} />}
-            <AvatarFallback>{row.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+            <AvatarFallback>{initials(row.name)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
             <CardTitle className="font-display text-base">{row.name}</CardTitle>

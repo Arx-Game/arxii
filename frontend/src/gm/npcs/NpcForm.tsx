@@ -30,6 +30,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { initials } from '@/lib/initials';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { NpcPowersPanel } from './NpcPowersPanel';
@@ -88,16 +89,6 @@ const DEFAULT_SETTINGS = {
 };
 
 const selectClass = 'h-9 w-full rounded-md border bg-transparent px-2 text-sm';
-
-function initials(name: string): string {
-  const letters = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase() ?? '');
-  return letters.join('') || '?';
-}
 
 /** Enter in a one-line input never submits the whole form; sub-editors handle their own. */
 function holdEnter(event: KeyboardEvent<HTMLFormElement>) {

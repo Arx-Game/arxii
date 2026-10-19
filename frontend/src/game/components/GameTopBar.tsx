@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 
+import { isStoryNpc } from '@/roster/persona';
+import { initials } from '@/lib/initials';
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, ScrollText, Swords, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -94,7 +96,7 @@ interface GameTopBarProps {
 
 /** NPC or CROWD mark for a character the account plays but does not own (#4418). */
 function NpcTag({ entry }: { entry: MyRosterEntry }) {
-  if (entry.roster_type !== 'NPC') return null;
+  if (!isStoryNpc(entry)) return null;
   return (
     <span
       data-testid="npc-tag"
@@ -103,15 +105,6 @@ function NpcTag({ entry }: { entry: MyRosterEntry }) {
       {entry.is_crowd_voice ? 'CROWD' : 'NPC'}
     </span>
   );
-}
-
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
 }
 
 /**
@@ -321,7 +314,7 @@ export function GameTopBar({
             >
               <Avatar className="h-9 w-9 ring-2 ring-primary">
                 <AvatarImage src={activeCharacter.profile_picture_url ?? undefined} alt={active} />
-                <AvatarFallback className="text-xs">{getInitials(active)}</AvatarFallback>
+                <AvatarFallback className="text-xs">{initials(active)}</AvatarFallback>
               </Avatar>
             </button>
             <NpcTag entry={activeCharacter} />
@@ -377,7 +370,7 @@ export function GameTopBar({
                 <Avatar className={isDim ? 'h-6 w-6' : 'h-7 w-7'}>
                   <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
                   <AvatarFallback className={isDim ? 'text-[10px]' : 'text-xs'}>
-                    {getInitials(char.name)}
+                    {initials(char.name)}
                   </AvatarFallback>
                 </Avatar>
                 <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
@@ -395,7 +388,7 @@ export function GameTopBar({
             >
               <Avatar className="h-7 w-7">
                 <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
-                <AvatarFallback className="text-xs">{getInitials(char.name)}</AvatarFallback>
+                <AvatarFallback className="text-xs">{initials(char.name)}</AvatarFallback>
               </Avatar>
               <span>{char.name}</span>
               <NpcTag entry={char} />

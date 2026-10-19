@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { initials } from '@/lib/initials';
 import { apiFetch } from '@/evennia_replacements/api';
 import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
 import type { components } from '@/generated/api';
@@ -77,7 +78,7 @@ function Portrait({ entry }: { entry: CastEntry }) {
   return (
     <Avatar className="h-[72px] w-[72px] rounded-md">
       {entry.thumbnail_url && <AvatarImage src={entry.thumbnail_url} alt="" />}
-      <AvatarFallback className="rounded-md text-xl">{entry.name.slice(0, 1)}</AvatarFallback>
+      <AvatarFallback className="rounded-md text-xl">{initials(entry.name)}</AvatarFallback>
     </Avatar>
   );
 }
@@ -88,7 +89,7 @@ function CrowdStack({ entry }: { entry: CastEntry }) {
       {[0, 1, 2].map((i) => (
         <Avatar key={i} className={`h-9 w-9 border-2 border-background ${i > 0 ? '-ml-3' : ''}`}>
           {entry.thumbnail_url && <AvatarImage src={entry.thumbnail_url} alt="" />}
-          <AvatarFallback className="text-xs">{entry.name.slice(0, 1)}</AvatarFallback>
+          <AvatarFallback className="text-xs">{initials(entry.name)}</AvatarFallback>
         </Avatar>
       ))}
     </div>

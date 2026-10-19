@@ -35,6 +35,7 @@ const vael: MyRosterEntry = {
   attention_as_of_id: 0,
   lifecycle_state: 'ALIVE',
   roster_type: 'NPC',
+  is_story_npc: true,
   character_type: 'PC',
   activity_state: 'ACTIVE',
   activity_requirement: 'NONE',
@@ -57,6 +58,12 @@ describe('NPC play UI', () => {
     renderWithProviders(<GameTopBar characters={[vael, crowd]} />);
     const tags = screen.getAllByTestId('npc-tag').map((tag) => tag.textContent);
     expect(tags).toEqual(['NPC', 'CROWD']);
+  });
+
+  it('gives a GM character on the NPC shelf no tag', () => {
+    const gmCharacter = { ...vael, id: 11, name: 'Ravenna', loan: null, is_story_npc: false };
+    renderWithProviders(<GameTopBar characters={[vael, gmCharacter]} />);
+    expect(screen.getAllByTestId('npc-tag')).toHaveLength(1);
   });
 
   it('tags a crowd voice CROWD on the active tab', () => {
