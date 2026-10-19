@@ -7,6 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { Input } from '@/components/ui/input';
+import { titleCase } from '@/lib/titleCase';
 import { fetchNpcPowerOptions, type PowersDraft, type PowerOptions } from './npcFormApi';
 
 type Option = PowerOptions['paths'][number];
@@ -34,7 +35,7 @@ function Pick({
       <option value="">{label}</option>
       {options.map((option) => (
         <option key={option.id} value={option.id}>
-          {option.name}
+          {titleCase(option.name)}
         </option>
       ))}
     </select>
@@ -57,12 +58,12 @@ function Overrides({
   return (
     <fieldset className="flex flex-col gap-1">
       <legend className="text-xs font-medium text-muted-foreground">{title}</legend>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {options.map((option) => (
           <label key={option.id} className="flex items-center gap-2 text-sm">
-            <span className="w-24 truncate">{option.name}</span>
+            <span className="min-w-0 flex-1 break-words">{titleCase(option.name)}</span>
             <Input
-              aria-label={`${title}: ${option.name}`}
+              aria-label={`${title}: ${titleCase(option.name)}`}
               type="number"
               min={title === 'Stats' ? 1 : 0}
               max={max}

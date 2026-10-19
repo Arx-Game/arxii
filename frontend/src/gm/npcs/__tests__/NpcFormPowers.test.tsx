@@ -39,7 +39,10 @@ const OPTIONS = {
     { id: 11, name: 'Presence' },
     { id: 13, name: 'Strength' },
   ],
-  all_skills: [{ id: 12, name: 'Persuasion' }],
+  all_skills: [
+    { id: 12, name: 'Persuasion' },
+    { id: 14, name: 'Melee Combat Under Pressure' },
+  ],
 };
 
 let hasGift = false;
@@ -120,6 +123,20 @@ describe('NpcForm Powers', () => {
     expect(screen.getByLabelText('Tradition')).toBeInTheDocument();
     expect(screen.getByLabelText('Stats: Strength')).toBeInTheDocument();
     expect(screen.getByLabelText('Skills: Persuasion')).toBeInTheDocument();
+  });
+
+  it('shows stat names title-cased and long skill names in full', async () => {
+    apiFetch.mockImplementation((url: string, init?: RequestInit) =>
+      url.startsWith('/api/roster/npcs/power-options/')
+        ? ok({ ...OPTIONS, all_stats: [{ id: 13, name: 'agility' }] })
+        : route(url, init)
+    );
+    renderForm();
+    const stat = await screen.findByLabelText('Stats: Agility');
+    expect(stat.parentElement).toHaveTextContent('Agility');
+    const longName = screen.getByText('Melee Combat Under Pressure');
+    expect(longName).not.toHaveClass('truncate');
+    expect(longName).toHaveClass('break-words');
   });
 
   it('names what magic still needs until every pick is made', async () => {
