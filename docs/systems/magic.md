@@ -672,8 +672,9 @@ on a cast. Existing characters keep the skill they picked.
 
 **Required content dashboard** (TUNING tier, `src/web/admin/tuning/required_content.py`): three
 probes list what staff have not set: activities with no `MagicActivitySkill` row, active Paths with
-no `technique_skill`, and Minor Gifts with no `technique_skill`. An activity staff leave unmapped
-on purpose stays listed.
+no `technique_skill`, and Minor Gifts with no `technique_skill`. A row or field whose skill is
+inactive counts as unset, since the roll skips it. An activity staff leave unmapped on purpose
+stays listed.
 
 **Admin.** `MagicActivitySkill` changelist (activity filter, skill autocomplete, weight editable in
 the list); `technique_skill` on the Path and Gift forms, `skill` on the Technique form,
