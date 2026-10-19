@@ -116,7 +116,7 @@ adds the skills staff mapped in admin (`world/magic/services/magic_skills.py`), 
 is synthesized per character and skill.
 
 - **Who takes it** (keyword-only, default `()`): `perform_check`, `perform_check_with_modifiers`,
-  `select_consequence` (forwarded only when non-empty), `compute_check_rating`,
+  `select_consequence`, `compute_check_rating`,
   `preview_check_difficulty`, `collect_check_modifiers`, and underneath them
   `_compute_check_breakdown`, `_calculate_trait_points`, `_calculate_capability_points`,
   `_capability_contributions` and `_capability_point_allocation`. The forced-outcome path and

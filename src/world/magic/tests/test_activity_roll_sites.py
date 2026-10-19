@@ -115,14 +115,26 @@ class ActivityTermTestCase(TestCase):
         self.assertEqual(calls[0]["extra_traits"], self.expected)
 
     def assert_no_terms(
-        self, target: str, activity: MagicActivity, drive: Callable[[], object]
+        self,
+        target: str,
+        activity: MagicActivity,
+        drive: Callable[[], object],
+        *,
+        passes_terms: bool = True,
     ) -> None:
-        """The activity is mapped, yet this roll carries no term (or passes none at all)."""
+        """The activity is mapped, yet this roll carries no term.
+
+        A site that always passes ``extra_traits`` must pass an empty tuple; one that never
+        does (``passes_terms=False``) must not pass the keyword at all.
+        """
         self.map_activity(activity)
         with roll_recorded(target) as calls, self.assertRaises(RollReached):
             drive()
         self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0].get("extra_traits", ()), ())
+        if passes_terms:
+            self.assertEqual(calls[0]["extra_traits"], ())
+        else:
+            self.assertNotIn("extra_traits", calls[0])
 
 
 class MagicServiceRollSiteTests(ActivityTermTestCase):
@@ -362,7 +374,7 @@ class ConditionRollSiteTests(ActivityTermTestCase):
         category = ConditionCategoryFactory(adds_loss_of_self_skills=marked)
         return ConditionTemplateFactory(category=category, **fields)
 
-    def testloss_of_self_terms_only_for_marked_category(self) -> None:
+    def test_loss_of_self_terms_only_for_marked_category(self) -> None:
         from world.conditions.services import loss_of_self_terms
 
         self.map_activity(MagicActivity.RESISTING_LOSS_OF_SELF)
@@ -505,6 +517,7 @@ class ConditionRollSiteTests(ActivityTermTestCase):
             "world.checks.services.perform_check",
             MagicActivity.RESISTING_LOSS_OF_SELF,
             lambda: RallyAction().execute(actor, target=target),
+            passes_terms=False,
         )
 
     def peril(self, *, marked: bool):

@@ -139,8 +139,8 @@ result = perform_check(
 ```
 
 `extra_traits` is keyword-only with an empty default (every existing roll is unchanged) on
-`perform_check`, `perform_check_with_modifiers`, `select_consequence` (forwarded only when
-non-empty), `compute_check_rating`, `preview_check_difficulty` and `collect_check_modifiers`.
+`perform_check`, `perform_check_with_modifiers`, `select_consequence`, `compute_check_rating`,
+`preview_check_difficulty` and `collect_check_modifiers`.
 
 - Each term scores like a `CheckTypeTrait` row: the character's value times `weight`, through the
   skill conversion table. A trait that is on the check type and also a term, or in two terms,

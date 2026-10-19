@@ -404,7 +404,7 @@ class ProcessDamageConsequencesPoolTests(TestCase):
 
         # Mock perform_check in consequence_resolution to return outcome based on
         # whether extra_modifiers carries the condition value (> 0 → success, else failure).
-        def _mock_perform_check(char, check_type, target_difficulty, extra_modifiers=0):  # type: ignore[misc]
+        def _mock_perform_check(char, check_type, target_difficulty, extra_modifiers=0, **_kwargs):  # type: ignore[misc]
             outcome = success_outcome if extra_modifiers > 0 else failure_outcome
             return CheckResult(
                 check_type=check_type,
