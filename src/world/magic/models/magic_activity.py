@@ -6,6 +6,7 @@ its activity here. No skill is named in code; an activity with no row adds nothi
 
 from decimal import Decimal
 
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
@@ -35,6 +36,7 @@ class MagicActivitySkill(SharedMemoryModel):
         max_digits=4,
         decimal_places=2,
         default=Decimal("1.00"),
+        validators=[MinValueValidator(Decimal(0))],
         help_text="Weight multiplies the skill's value before it becomes points. "
         "1.00 is the default.",
     )
