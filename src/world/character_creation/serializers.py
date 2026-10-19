@@ -1983,23 +1983,27 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         }
         twins = 0
         for row in rows:
-            if not isinstance(row, dict) or row.get("kind") not in fates:
-                msg = "each person is a twin, a spouse or a child"
-                raise serializers.ValidationError({KIN_ROWS_KEY: msg})
-            name = row.get("name", "")
-            if not isinstance(name, str) or len(name) > KIN_ROW_NAME_MAX_LENGTH:
-                msg = f"a name is text of at most {KIN_ROW_NAME_MAX_LENGTH} characters"
-                raise serializers.ValidationError({KIN_ROWS_KEY: msg})
-            gender_id = row.get("gender_id")
-            if gender_id is not None and not isinstance(gender_id, int):
-                msg = "gender_id is a gender id or null"
-                raise serializers.ValidationError({KIN_ROWS_KEY: msg})
-            if row.get("fate", "") not in fates[row["kind"]]:
-                msg = f"{row['kind']}: that is not one of its fates"
-                raise serializers.ValidationError({KIN_ROWS_KEY: msg})
+            self._validate_kin_row(row, fates)
             twins += row["kind"] == KinRowKind.TWIN
         if twins > 1:
             msg = "one twin at most"
+            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
+
+    def _validate_kin_row(self, row: object, fates: dict[str, set[str]]) -> None:
+        """Validate one person's shape and the fates allowed for their kin role."""
+        if not isinstance(row, dict) or row.get("kind") not in fates:
+            msg = "each person is a twin, a spouse or a child"
+            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
+        name = row.get("name", "")
+        if not isinstance(name, str) or len(name) > KIN_ROW_NAME_MAX_LENGTH:
+            msg = f"a name is text of at most {KIN_ROW_NAME_MAX_LENGTH} characters"
+            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
+        gender_id = row.get("gender_id")
+        if gender_id is not None and not isinstance(gender_id, int):
+            msg = "gender_id is a gender id or null"
+            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
+        if row.get("fate", "") not in fates[row["kind"]]:
+            msg = f"{row['kind']}: that is not one of its fates"
             raise serializers.ValidationError({KIN_ROWS_KEY: msg})
 
     def _validate_origin_anchors(self, data: dict) -> None:

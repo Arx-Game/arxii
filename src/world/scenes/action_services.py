@@ -202,7 +202,7 @@ if TYPE_CHECKING:
     from actions.types import PendingActionResolution, StepResult
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType, Consequence
-    from world.checks.types import CheckResult, ExtraTraitTerm
+    from world.checks.types import CheckResult, ExtraTraitTerm, ModifierContribution
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
     from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
@@ -1077,6 +1077,31 @@ def _charge_social_pull(
     return pull_flat_bonus
 
 
+def _social_check_contributions(
+    action_request: SceneActionRequest,
+    target_persona: Persona,
+    favor: ModifierContribution | None,
+    *,
+    settles_allegiance: bool,
+) -> list[ModifierContribution]:
+    """Combine the directed relationship, allegiance and declared favor modifiers."""
+    from world.relationships.services import relationship_gated_contributions  # noqa: PLC0415
+
+    gated = relationship_gated_contributions(
+        perceiver=target_persona.character_sheet,
+        perceived=action_request.initiator_persona.character_sheet,
+    )
+    if settles_allegiance:
+        from world.npc_services.allegiance_outcomes import (  # noqa: PLC0415
+            settle_contributions,
+        )
+
+        gated = [*gated, *settle_contributions(target_persona.character_sheet.character)]
+    if favor is not None:
+        gated = [*gated, favor]
+    return gated
+
+
 def _resolve_action_against_persona(
     action_request: SceneActionRequest,
     target_persona: Persona,
@@ -1115,7 +1140,6 @@ def _resolve_action_against_persona(
     from world.npc_services.social_disposition import (  # noqa: PLC0415
         apply_social_disposition_delta,
     )
-    from world.relationships.services import relationship_gated_contributions  # noqa: PLC0415
     from world.scenes.favor_invocation import declared_invocation_contribution  # noqa: PLC0415
 
     if difficulty_override is not None:
@@ -1226,18 +1250,12 @@ def _resolve_action_against_persona(
         # initiator's gated modifier (allure) in as a directed contribution — once per gating
         # condition, so "Very Attracted" stacks the double. Empty until #1697 seeds the
         # conditions + Flirt/Seduction wiring.
-        gated = relationship_gated_contributions(
-            perceiver=target_persona.character_sheet,
-            perceived=action_request.initiator_persona.character_sheet,
+        gated = _social_check_contributions(
+            action_request,
+            target_persona,
+            favor,
+            settles_allegiance=action_template.settles_allegiance,
         )
-        if action_template.settles_allegiance:
-            from world.npc_services.allegiance_outcomes import (  # noqa: PLC0415
-                settle_contributions,
-            )
-
-            gated = [*gated, *settle_contributions(target_character)]
-        if favor is not None:
-            gated = [*gated, favor]
         breakdown = collect_check_modifiers(
             action_request.initiator_persona.character_sheet,
             action_template.check_type,

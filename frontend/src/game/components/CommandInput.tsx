@@ -6,7 +6,7 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload } from '@/hooks/types';
 import { useDraftStore, readStoredDraft } from '@/game/useDraftStore';
-import type { DraftKey, DraftMode, DraftScopeSettling } from '@/game/useDraftStore';
+import type { Draft, DraftKey, DraftMode, DraftScopeSettling } from '@/game/useDraftStore';
 import { readComposerLine, uniqueNames } from '@/game/composerLine';
 import type { ComposerLine } from '@/game/composerLine';
 import { dbrefToId } from '@/lib/dbref';
@@ -205,6 +205,17 @@ interface CommandInputProps {
   ready?: boolean;
 }
 
+type ComposerBanner = 'stranded' | 'pending' | 'rejected' | 'unknown' | null;
+
+/** A reopened send takes precedence over the live delivery-state banners. */
+function getComposerBanner(draft: Draft, isStrandedDraft: boolean): ComposerBanner {
+  if (isStrandedDraft) return 'stranded';
+  if (draft.status === 'pending') return 'pending';
+  if (draft.status === 'rejected' && draft.rejectionReason) return 'rejected';
+  if (draft.status === 'unknown') return 'unknown';
+  return null;
+}
+
 export function CommandInput({
   character,
   composerMode,
@@ -365,16 +376,7 @@ export function CommandInput({
   // status"/Retry pair layered on top of it too. `checkingSubmissionStatus`
   // deliberately doesn't participate here (it's a transient loading flag on
   // the `unknown` banner itself, not a banner-selection input).
-  let composerBanner: 'stranded' | 'pending' | 'rejected' | 'unknown' | null = null;
-  if (isStrandedDraft) {
-    composerBanner = 'stranded';
-  } else if (draft.status === 'pending') {
-    composerBanner = 'pending';
-  } else if (draft.status === 'rejected' && draft.rejectionReason) {
-    composerBanner = 'rejected';
-  } else if (draft.status === 'unknown') {
-    composerBanner = 'unknown';
-  }
+  const composerBanner = getComposerBanner(draft, isStrandedDraft);
 
   // #3760 Task 11 — "Check status" against the Task 6 writer-only lookup
   // endpoint. `enabled: false`: never fetched automatically, only via the
