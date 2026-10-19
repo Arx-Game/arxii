@@ -537,5 +537,5 @@ class PurchaseLanguageBreakthroughActionTests(TestCase):
             self.character, unlock_type="language_breakthrough", language_id=999999
         )
         self.assertFalse(result.success)
-        self.assertIn("language", result.message.lower())
-        self.assertIn("matching query does not exist", result.message.lower())
+        # #3657 tranche 12: the action's own sentence, not the ORM's.
+        self.assertEqual(result.message, "No such language.")

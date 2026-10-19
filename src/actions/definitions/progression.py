@@ -79,13 +79,17 @@ class ManageTrainingAction(Action):
                 )
             if operation == _OPERATION_REMOVE:
                 return self._remove(actor, kwargs, TrainingAllocation, remove_training_allocation)
-        except (
-            ValueError,
-            Skill.DoesNotExist,
-            Specialization.DoesNotExist,
-            TrainingAllocation.DoesNotExist,
-            Persona.DoesNotExist,
-        ) as exc:
+        except Skill.DoesNotExist:
+            return ActionResult(success=False, message="No such skill.")
+        except Specialization.DoesNotExist:
+            return ActionResult(success=False, message="No such specialization.")
+        except TrainingAllocation.DoesNotExist:
+            return ActionResult(success=False, message="No such training allocation.")
+        except Persona.DoesNotExist:
+            return ActionResult(success=False, message="No such mentor.")
+        except ValueError as exc:
+            # #3657 tranche 12: an unknown id used to answer with the ORM's own
+            # "TrainingAllocation matching query does not exist." line.
             if hasattr(exc, "user_message"):
                 msg: str = str(exc.user_message)
             else:
@@ -273,6 +277,17 @@ class PurchaseUnlockAction(Action):
             Thread.DoesNotExist,
             Skill.DoesNotExist,
             Language.DoesNotExist,
+        ) as exc:
+            # #3657 tranche 12: an unknown id used to answer with the ORM's own
+            # "ClassLevelUnlock matching query does not exist." line.
+            no_such = {
+                ClassLevelUnlock.DoesNotExist: "No such class-level unlock.",
+                Thread.DoesNotExist: "No such thread.",
+                Skill.DoesNotExist: "No such skill.",
+                Language.DoesNotExist: "No such language.",
+            }
+            return ActionResult(success=False, message=no_such[type(exc)])
+        except (
             CharacterSheet.DoesNotExist,
             AlterationGateError,
             InvalidImbueAmount,

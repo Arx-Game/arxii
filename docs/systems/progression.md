@@ -855,8 +855,13 @@ on the same `action.run()` seam:
 ## Telnet Commands
 
 Defined in `commands/progression.py` (training/unlock), `commands/progression_rewards.py`
-(#1348, kudos/vote/random-scene/path-intent), and `commands/durance.py` (#1700, Durance
+(#1348, kudos/nominate/random-scene/path-intent), and `commands/durance.py` (#1700, Durance
 readiness + site-convene); all use namespaced subverb commands to avoid one-word key collisions.
+The training, unlock and reward verbs are typed through the command handler in
+`integration_tests/test_earning_your_keep_journeys.py` (#3657 tranche 12). A kudos claim too
+small to pay any XP is refused by `claim_kudos_for_xp` before the claim is written: it used to
+write and roll back, and the idmapper-shared `KudosPointsData` kept the rolled-back amount
+until the cache next flushed.
 
 ### `training` — Manage weekly skill-training allocations
 
