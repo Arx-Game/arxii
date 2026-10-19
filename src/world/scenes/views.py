@@ -470,7 +470,7 @@ class SceneViewSet(viewsets.ModelViewSet):
         return Response(payload)
 
     @extend_schema(responses=CastListEntrySerializer(many=True), tags=["scenes"])
-    @action(detail=True, methods=[HTTPMethod.GET], url_path="cast-list")
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="cast-list", pagination_class=None)
     def cast_list(self, request: Request, pk: int | None = None) -> Response:
         """GET /api/scenes/{id}/cast-list/ (#4418) - the scene's named story NPCs and
         crowds, and who plays each.
