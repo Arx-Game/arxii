@@ -160,11 +160,11 @@ behavior claim. Any `OPEN` or `BLOCKED` item means `verdict=open`.
 Then, in plain words:
 
 ```
-### Evidence check, round <R>
+### <✅ if verdict=satisfied, ❌ if verdict=open> Evidence check, round <R>
 
 <One or two sentences: what this PR claims, and the overall state.>
 
-1. **<claim, in plain words>**: PROVEN | OPEN | BLOCKED
+1. <✅ for PROVEN, ❌ for OPEN or BLOCKED> **<claim, in plain words>**: PROVEN | OPEN | BLOCKED
    <For OPEN: what evidence would prove it, in one or two sentences.
     For PROVEN: where the evidence is.
     For BLOCKED: why, and what would close it.>
@@ -181,6 +181,9 @@ or `BLOCKED`, end with:
 This is the last round. The open items above go to the maintainer, who
 decides at approval.
 ```
+
+The marks follow the status words exactly: the header mark matches the `verdict=`
+in the marker line, and each item's mark matches its status. Keep the status words; other tools read them.
 
 Keep the comment short. Write for a reader who does not know the code. Do not
 praise, do not summarize the diff, and do not add advice outside the evidence
