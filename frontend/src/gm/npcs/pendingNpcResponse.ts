@@ -17,3 +17,12 @@ export function pendingNpcResponse(
   }
   return null;
 }
+
+/** The player's pose that attached this action, when one has been posted. */
+export function poseCarryingAction(interactions: Interaction[], action: Interaction) {
+  return (
+    interactions.find((row) =>
+      (row.action_links ?? []).some((link) => link.action_interaction.id === action.id)
+    ) ?? null
+  );
+}

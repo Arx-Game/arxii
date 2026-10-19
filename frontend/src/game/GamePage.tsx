@@ -58,7 +58,7 @@ import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActi
 import { NpcOfferCard } from '@/gm/npcs/NpcOfferCard';
 import { NpcNotesCard } from '@/gm/npcs/NpcNotesCard';
 import { NpcResponseCard } from '@/gm/npcs/NpcResponseCard';
-import { pendingNpcResponse } from '@/gm/npcs/pendingNpcResponse';
+import { pendingNpcResponse, poseCarryingAction } from '@/gm/npcs/pendingNpcResponse';
 import { useNpcOffersQuery } from '@/gm/npcs/queries';
 import { fallbackEntry, useLoanEndFallback } from '@/gm/npcs/useLoanEndFallback';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
@@ -375,7 +375,12 @@ function NpcPlayCards({ activeEntry, interactions, onPoseAs }: NpcPlayCardsProps
       ))}
       {isNpc && activeEntry && <NpcNotesCard entry={activeEntry} />}
       {pending && activeEntry && (
-        <NpcResponseCard interaction={pending} npcName={activeEntry.name} onPoseAs={onPoseAs} />
+        <NpcResponseCard
+          interaction={pending}
+          excerpt={poseCarryingAction(interactions, pending)}
+          npcName={activeEntry.name}
+          onPoseAs={onPoseAs}
+        />
       )}
     </div>
   );

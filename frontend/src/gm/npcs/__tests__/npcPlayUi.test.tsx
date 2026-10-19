@@ -11,6 +11,7 @@ import type { Interaction } from '@/scenes/types';
 import { NpcNotesCard } from '../NpcNotesCard';
 import { NpcOfferCard } from '../NpcOfferCard';
 import { NpcResponseCard } from '../NpcResponseCard';
+import { poseCarryingAction } from '../pendingNpcResponse';
 
 const postDispatchAction = vi.fn();
 vi.mock('@/combat/api', async (importOriginal) => ({
@@ -96,6 +97,52 @@ describe('NPC play UI', () => {
     expect(screen.getByText('Mirel attempts to persuade Vael: Solid success')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Pose as Vael' }));
     expect(onPoseAs).toHaveBeenCalledWith(interaction);
+  });
+
+  it('shows the attaching pose as a multi-paragraph excerpt under the outcome', () => {
+    const action = {
+      id: 7,
+      persona: { id: 5, name: 'Mirel' },
+      content: 'Mirel attempts to persuade Vael',
+      mode: 'action',
+      target_persona_ids: [70],
+      action_links: [],
+    } as unknown as Interaction;
+    const pose = {
+      id: 9,
+      persona: { id: 5, name: 'Mirel' },
+      content: 'Mirel leans in.\n\nShe lowers her voice.',
+      mode: 'pose',
+      target_persona_ids: [],
+      action_links: [
+        {
+          id: 1,
+          ordering: 0,
+          action_interaction: { id: 7, content: '', mode: 'action', timestamp: '' },
+        },
+      ],
+    } as unknown as Interaction;
+    expect(poseCarryingAction([action, pose], action)).toBe(pose);
+    renderWithProviders(
+      <NpcResponseCard interaction={action} excerpt={pose} npcName="Vael" onPoseAs={vi.fn()} />
+    );
+    expect(screen.getByText('Mirel attempts to persuade Vael')).toBeInTheDocument();
+    expect(screen.getByText('Mirel leans in.')).toBeInTheDocument();
+    expect(screen.getByText('She lowers her voice.')).toBeInTheDocument();
+  });
+
+  it('shows no excerpt box when no pose carried the action', () => {
+    const action = {
+      id: 7,
+      persona: { id: 5, name: 'Mirel' },
+      content: 'Mirel attempts to persuade Vael',
+      mode: 'action',
+      target_persona_ids: [70],
+      action_links: [],
+    } as unknown as Interaction;
+    expect(poseCarryingAction([action], action)).toBeNull();
+    renderWithProviders(<NpcResponseCard interaction={action} npcName="Vael" onPoseAs={vi.fn()} />);
+    expect(screen.queryByTestId('npc-response-excerpt')).not.toBeInTheDocument();
   });
 
   it('shows the notes as paragraphs', () => {
