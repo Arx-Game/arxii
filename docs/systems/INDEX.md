@@ -1981,7 +1981,9 @@ Character journal entries (public/private), praises, retorts, condemnations, fre
 weekly XP — read at **World › Journals**, the Reading Room (#3941).
 
 - **Models:** `JournalEntry` (FK CharacterSheet author; `about` FK CharacterSheet, nullable,
-  `SET_NULL`, the entry's subject, #3941; self-FK parent for responses;
+  `SET_NULL`, the entry's subject, #3941; self-FK parent for responses, `RESTRICT` since
+  #4464: an entry another player answered cannot be deleted alone, but a wipe that takes the
+  response too still works;
   `posthumous_override`/`revealed_at`/`revealed_by_settlement` #3287), `JournalTag`,
   `WeeklyJournalXP`, `JournalBequestGrant` (recipient_sheet/deceased_sheet FKs CharacterSheet,
   created_by_settlement FK estates.EstateSettlement, #3287). Two new `CharacterSheet` columns
@@ -5151,7 +5153,9 @@ state is node position + snapshots + already-applied consequences, never a scrat
   matching `MissionNodeSnapshot`'s per-visit semantics; play state, resettable),
   `MissionRiskAcknowledgement`, `MissionRunTale` (#2047 player-authored epilogue),
   `MissionGiver` (`GiverKind`: `ROOM_TRIGGER` / `ENVIRONMENTAL_DETAIL` / `BOARD` — a Notice
-  Board), `MissionAssistPattern` (support-move density catalog), `MissionInvite`/
+  Board), `MissionAssistPattern` (support-move density catalog; retired with `is_active`,
+  and `MissionSupportDeclaration.pattern` / `.support_option` are `PROTECT` since #4464, so a
+  used pattern or support gem is never deleted), `MissionInvite`/
   `MissionGroupBallot` (co-op), `MissionOption.encounter_risk_level` (`RiskLevel`, ENCOUNTER
   options only, #3565), `MissionOptionOpponentLine` (the `BeatOpponentLine` shape keyed on
   an ENCOUNTER option instead of a beat, #3565).
@@ -8040,6 +8044,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   trigger_kind, subject_sheet=None, reason="", subject_opponent=None,
   subject_phase_number=None, subject_companion=None)` (`world/combat/escalation.py`) - the
   one write path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
+  every subject FK is `CASCADE`, `subject_sheet` since #4464, because a nulled subject lands
+  in the subject-less slice of the dedup index;
   `SurgeTriggerKind`: ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES / INTERFERENCE /
   GM_MANUAL / BOSS_PHASE / BOSS_ENRAGE / BOSS_BREAK). `reason` (#3387) persists onto the
   record as GM-stated provenance for a manual trigger only — every automatic leg leaves it

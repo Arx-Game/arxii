@@ -2275,19 +2275,26 @@ class MissionSupportDeclaration(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="support_declarations",
     )
+    # PROTECT, never SET_NULL (#4464): support_declaration_xor_pattern_option requires
+    # exactly one of these, so nulling either is rejected by the database. Both targets
+    # are authored content: a pattern is retired with is_active, and an option that a
+    # declaration used is kept, as MissionNodeSnapshot keeps a played node.
     pattern = models.ForeignKey(
         MissionAssistPattern,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         related_name="+",
+        help_text="The general assist pattern the helper used. Set exactly when "
+        "support_option is not.",
     )
     support_option = models.ForeignKey(
         MissionNodeSupportOption,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         related_name="+",
+        help_text="The node-specific support gem the helper used. Set exactly when pattern is not.",
     )
     outcome = models.ForeignKey(
         CHECK_OUTCOME_MODEL,

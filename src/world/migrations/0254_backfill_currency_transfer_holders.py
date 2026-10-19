@@ -1,7 +1,7 @@
 """Snapshot each existing CurrencyTransfer's holders (#4467).
 
-Data only. The columns came in 0252; the constraint that reads them follows in
-0254, because a constraint added in the same transaction as the backfill would
+Data only. The columns came in 0253; the constraint that reads them follows in
+0255, because a constraint added in the same transaction as the backfill would
 queue trigger events against the rows just written.
 
 A side whose purse or treasury is still there gets its kind and its name today
@@ -53,7 +53,7 @@ def snapshot_holders(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0252_currency_transfer_holder_snapshot"),
+        ("arxii", "0253_currency_transfer_holder_snapshot"),
     ]
 
     operations = [

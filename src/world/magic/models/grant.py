@@ -89,7 +89,10 @@ class ResonanceGrant(SharedMemoryModel):
     )
     source_project = models.ForeignKey(
         "arxii.Project",
-        on_delete=models.SET_NULL,
+        # PROTECT, never SET_NULL: res_grant_project_contribution_shape requires this FK on
+        # every PROJECT_CONTRIBUTION grant (#4464). A project that has paid out is history
+        # the grant ledger reads; it is retired by status (CANCELLED/RESOLVED), not deleted.
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="resonance_grants",

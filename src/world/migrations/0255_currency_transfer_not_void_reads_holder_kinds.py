@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0253_backfill_currency_transfer_holders"),
-    ]
+    dependencies = [("arxii", "0254_backfill_currency_transfer_holders")]
 
     operations = [
         migrations.RemoveConstraint(

@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0251_itemfacet_removed_at"),
+        ("arxii", "0252_set_null_constraint_pairs"),
     ]
 
     operations = [

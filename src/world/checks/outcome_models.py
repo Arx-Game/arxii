@@ -29,10 +29,14 @@ from world.checks.constants import ModifierSourceKind
 class ConsequenceOutcome(SharedMemoryModel):
     """Unified record of one consequence-resolution event.
 
-    Exactly one of (combat_interaction, challenge_record, action_interaction) must
-    be set — enforced by the CheckConstraint below.  The modifier_total stores the
-    pre-computed sum of all modifiers that were in effect at resolution time;
-    individual rows are in ConsequenceOutcomeModifier (the ``modifiers``
+    Exactly one source kind (combat interaction, challenge_record, action
+    interaction) is recorded, enforced by the CheckConstraint below. An
+    interaction source is recorded by its timestamp companion, because the
+    writer may delete the pose itself and the FK then goes NULL (#4464).
+
+    The modifier_total stores the pre-computed sum of all modifiers that were
+    in effect at resolution time; individual rows are in
+    ConsequenceOutcomeModifier (the ``modifiers``
     reverse relation).
 
     The roulette result is NOT stored — it is recomputed from pool +
@@ -87,7 +91,8 @@ class ConsequenceOutcome(SharedMemoryModel):
         related_name="consequence_outcomes",
         help_text=(
             "The Interaction created when this outcome was resolved via combat. "
-            "Null for challenge-based resolutions."
+            "Null for challenge-based resolutions, and nulled if the writer deletes "
+            "the pose; combat_interaction_timestamp still records the source."
         ),
     )
     combat_interaction_timestamp = models.DateTimeField(
@@ -126,7 +131,9 @@ class ConsequenceOutcome(SharedMemoryModel):
         related_name="action_consequence_outcomes",
         help_text=(
             "The Interaction created for a template-driven scene action. "
-            "Null for combat and challenge-based resolutions."
+            "Null for combat and challenge-based resolutions, and nulled if the "
+            "writer deletes the pose; action_interaction_timestamp still records "
+            "the source."
         ),
     )
     action_interaction_timestamp = models.DateTimeField(
@@ -143,28 +150,47 @@ class ConsequenceOutcome(SharedMemoryModel):
 
     class Meta:
         constraints = [
+            # The source KIND is keyed on the timestamp companions, not the
+            # Interaction FKs (#4464). A writer may delete their own pose within
+            # DELETION_WINDOW_DAYS (scenes.interaction_services.delete_interaction);
+            # the FK then goes NULL, like every other mechanical record that points
+            # at an Interaction (CombatRoundAction, DramaticMoment, ...). The
+            # timestamp stays, so the outcome still says it came from combat or a
+            # scene action and when; the check history survives the deleted text.
             models.CheckConstraint(
                 check=(
-                    Q(combat_interaction__isnull=False)
+                    Q(combat_interaction_timestamp__isnull=False)
                     & Q(challenge_record__isnull=True)
-                    & Q(action_interaction__isnull=True)
+                    & Q(action_interaction_timestamp__isnull=True)
                 )
                 | (
-                    Q(combat_interaction__isnull=True)
+                    Q(combat_interaction_timestamp__isnull=True)
                     & Q(challenge_record__isnull=False)
-                    & Q(action_interaction__isnull=True)
+                    & Q(action_interaction_timestamp__isnull=True)
                 )
                 | (
-                    Q(combat_interaction__isnull=True)
+                    Q(combat_interaction_timestamp__isnull=True)
                     & Q(challenge_record__isnull=True)
-                    & Q(action_interaction__isnull=False)
+                    & Q(action_interaction_timestamp__isnull=False)
                 ),
                 name="consequence_outcome_exactly_one_source",
-            )
+            ),
+            # A linked Interaction always carries its partition timestamp.
+            models.CheckConstraint(
+                check=(
+                    Q(combat_interaction__isnull=True)
+                    | Q(combat_interaction_timestamp__isnull=False)
+                )
+                & (
+                    Q(action_interaction__isnull=True)
+                    | Q(action_interaction_timestamp__isnull=False)
+                ),
+                name="consequence_outcome_interaction_has_timestamp",
+            ),
         ]
 
     def __str__(self) -> str:
-        if self.combat_interaction_id:
+        if self.combat_interaction_timestamp is not None:
             source = f"interaction={self.combat_interaction_id}"
         elif self.challenge_record_id:
             source = f"challenge_record={self.challenge_record_id}"

@@ -32,15 +32,27 @@ model's constraints. The nullable column is nullable for the *other* source kind
 2. For each, every `CheckConstraint` on the same model: does any branch, including one
    side of an `|`, say `<fk>__isnull=False`? A "exactly one source" constraint
    (`Q(a__isnull=False, b__isnull=True) | Q(a__isnull=True, b__isnull=False)`)
-   counts: nulling `a` on a row in the first branch violates it.
+   counts: nulling `a` on a row in the first branch violates it. So does a negated
+   "not all null" (`~Q(a__isnull=True, b__isnull=True)`): a row with only `a` set has
+   no end left once `a` is nulled. A negated "not both set"
+   (`~Q(a__isnull=False, b__isnull=False)`) does not count; nulling satisfies it.
 3. Every `CheckConstraint` the diff adds: does it require a column that another
    declaration nulls?
+3a. Every partial `UniqueConstraint` whose condition is `<fk>__isnull=True`: nulling
+   the FK moves the row into that slice, and two rows that differed only by their
+   target then collide on delete (`DramaticSurgeRecord.subject_sheet`, #4464). The
+   mechanical guard below does not see this shape; you do.
 4. For a flagged pair, which fix fits (report it, do not implement):
    - the referring row is history that must outlive the target: `on_delete=PROTECT`
      and a soft-removal flag on the target (`removed_at`), so the target is never
      deleted; every reader of the target then filters the flag;
+   - the referring row is another player's writing or answer to the target: `RESTRICT`,
+     which refuses deleting the target alone but lets a wipe that deletes both through
+     (`JournalEntry.parent`, #4464);
    - the referring row should go with the target: `CASCADE`;
-   - the target really may vanish: widen the constraint to allow the null.
+   - the target really may vanish: widen the constraint to allow the null, keyed on a
+     column that survives the delete so the row still says what it was
+     (`ConsequenceOutcome` keys its source kind on the interaction timestamps, #4464).
 5. Every deletion path of the target, found by grep, not by memory: services, admin
    delete, merge/dedup helpers, purge jobs, cascades from a parent (`ItemInstance`
    deleting its `ItemFacet`s). `core.deletion.IdentityMapCollector` issues the SET_NULL
