@@ -224,7 +224,8 @@ class MagicServiceRollSiteTests(ActivityTermTestCase):
         )
 
     def test_dispelling(self) -> None:
-        from world.magic.services.condition_application import _attempt_removal
+        from world.magic.factories import TechniqueRemovedConditionFactory
+        from world.magic.services.condition_application import remove_technique_conditions
 
         cure = CheckTypeFactory()
         condition = ConditionTemplateFactory(
@@ -233,17 +234,17 @@ class MagicServiceRollSiteTests(ActivityTermTestCase):
         target = CharacterSheetFactory().character
         ConditionInstanceFactory(target=target, condition=condition)
         source = CharacterSheetFactory().character
+        row = TechniqueRemovedConditionFactory(condition=condition)
 
         self.assert_terms_reach(
             "world.magic.services.condition_application.perform_check_with_modifiers",
             MagicActivity.DISPELLING,
-            lambda: _attempt_removal(
-                target=target,
-                condition=condition,
-                remove_all_stacks=False,
-                source_character=source,
-                cure_power_multiplier=Decimal(0),
+            lambda: remove_technique_conditions(
+                technique=row.technique,
+                success_level=1,
                 eff_intensity=1,
+                targets_by_kind={row.target_kind: [target]},
+                source_character=source,
             ),
         )
 
@@ -842,24 +843,25 @@ class CeremonyRollSiteTests(ActivityTermTestCase):
         )
 
     def test_leak_sensing(self) -> None:
-        from world.ceremonies.leak import _observer_senses_twist
+        """A witness to a twisted rite rolls Search with the SENSING_MAGIC terms."""
+        from world.ceremonies.factories import CeremonyFactory
+        from world.ceremonies.leak import run_twisted_rite_leak
+        from world.clues.constants import SEARCH_CHECK_TYPE_NAME
         from world.roster.factories import RosterEntryFactory
         from world.secrets.factories import SecretFactory
+        from world.worship.factories import WorshipDeclarationFactory, WorshippedBeingFactory
 
-        observer = RosterEntryFactory().character_sheet
         officiant = RosterEntryFactory().character_sheet
-        check_type = CheckTypeFactory()
-        secret = SecretFactory()
+        WorshipDeclarationFactory(character_sheet=officiant, secret=SecretFactory())
+        CheckTypeFactory(name=SEARCH_CHECK_TYPE_NAME)
+        ceremony = CeremonyFactory(
+            being=WorshippedBeingFactory(), presented_being=WorshippedBeingFactory()
+        )
+        witness = RosterEntryFactory().character_sheet.character
+        witness.location = ceremony.location.objectdb
 
         self.assert_terms_reach(
             "world.checks.services.perform_check_with_modifiers",
             MagicActivity.SENSING_MAGIC,
-            lambda: _observer_senses_twist(
-                observer=observer.character,
-                observer_sheet=observer,
-                officiant_sheet=officiant,
-                check_type=check_type,
-                difficulty=1,
-                worship_secret=secret,
-            ),
+            lambda: run_twisted_rite_leak(ceremony=ceremony, officiant_sheet=officiant),
         )

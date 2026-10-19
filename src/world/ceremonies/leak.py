@@ -78,8 +78,13 @@ def run_twisted_rite_leak(*, ceremony: Ceremony, officiant_sheet: "CharacterShee
     if check_type is None:
         return 0
 
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
+
     config = get_ceremony_config()
     room = ceremony.location.objectdb
+    # Every witness rolls with the same SENSING_MAGIC terms: read them once.
+    sensing_terms = activity_skill_terms(MagicActivity.SENSING_MAGIC)
     minted = 0
     for obj in room.contents:
         try:
@@ -95,19 +100,28 @@ def run_twisted_rite_leak(*, ceremony: Ceremony, officiant_sheet: "CharacterShee
             check_type=check_type,
             difficulty=config.leak_detect_difficulty,
             worship_secret=worship_secret,
+            sensing_terms=sensing_terms,
         ):
             minted += 1
     return minted
 
 
 def _observer_senses_twist(  # noqa: PLR0913
-    *, observer, observer_sheet, officiant_sheet, check_type, difficulty, worship_secret
+    *,
+    observer,
+    observer_sheet,
+    officiant_sheet,
+    check_type,
+    difficulty,
+    worship_secret,
+    sensing_terms,
 ) -> bool:
-    """One witness: consent gate → hidden Search roll → clue mint on success."""
+    """One witness: consent gate → hidden Search roll → clue mint on success.
+
+    ``sensing_terms`` are the ``SENSING_MAGIC`` skill terms, read once for every witness.
+    """
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.clues.services import find_clue  # noqa: PLC0415
-    from world.magic.constants import MagicActivity  # noqa: PLC0415
-    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
     if not _may_investigate(observer_sheet, officiant_sheet):
@@ -116,7 +130,7 @@ def _observer_senses_twist(  # noqa: PLR0913
         observer,
         check_type,
         target_difficulty=difficulty,
-        extra_traits=activity_skill_terms(MagicActivity.SENSING_MAGIC),
+        extra_traits=sensing_terms,
     )
     if result.outcome is None or result.outcome.success_level <= 0:
         return False

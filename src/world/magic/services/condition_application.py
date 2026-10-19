@@ -29,6 +29,7 @@ from world.magic.services.magic_skills import activity_skill_terms
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.checks.types import ExtraTraitTerm
     from world.magic.models.techniques import Technique
     from world.scenes.models import Scene
 
@@ -280,6 +281,8 @@ def remove_technique_conditions(
     if not rows:
         return []
 
+    # The dispel skill terms are the same for every row and target: read them once.
+    dispel_terms = activity_skill_terms(MagicActivity.DISPELLING)
     out: list[RemovedConditionResult] = []
     for row in rows:
         # Gate 1: cast success-level gate (mirrors the apply path).
@@ -295,6 +298,7 @@ def remove_technique_conditions(
                 source_character=source_character,
                 cure_power_multiplier=row.cure_power_multiplier,
                 eff_intensity=eff_intensity,
+                dispel_terms=dispel_terms,
             )
             for target in targets
         )
@@ -309,8 +313,13 @@ def _attempt_removal(  # noqa: PLR0913 - cohesive removal-attempt params
     source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
     cure_power_multiplier: Any,
     eff_intensity: int,
+    dispel_terms: tuple[ExtraTraitTerm, ...],
 ) -> RemovedConditionResult:
-    """Resolve gates 2-4 for one (target, condition) and perform the removal."""
+    """Resolve gates 2-4 for one (target, condition) and perform the removal.
+
+    ``dispel_terms`` are the ``DISPELLING`` skill terms the cure check adds, read once by
+    the caller for the whole cast.
+    """
     # Gate 2: can_be_dispelled hard gate.
     if not condition.can_be_dispelled:
         return RemovedConditionResult(
@@ -334,7 +343,7 @@ def _attempt_removal(  # noqa: PLR0913 - cohesive removal-attempt params
             cure_check_type,
             condition.cure_difficulty,
             extra_modifiers=power_bonus,
-            extra_traits=activity_skill_terms(MagicActivity.DISPELLING),
+            extra_traits=dispel_terms,
         )
         if check_result.success_level <= 0:
             return RemovedConditionResult(
