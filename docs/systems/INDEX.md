@@ -5375,7 +5375,9 @@ the *collected* amount; the catastrophic band loses the whole pool — collector
 encounter seam, combat domain). Obligations/withholding ride collection declarations, so
 an idle org reaches stasis in both directions (loan interest still accrues — opted-in risk).
 
-- **Models:** `CharacterPurse`, `OrganizationTreasury`, `CurrencyTransfer` (audit),
+- **Models:** `CharacterPurse`, `OrganizationTreasury`, `CurrencyTransfer` (audit; each side snapshots
+  `*_holder_kind` / `*_holder_name` on save, the first step of #4467 - a second step moves
+  `currency_transfer_not_void` onto the kinds so a holder can be deleted with its history kept),
   `OrgIncomeStream` (`uncollected_pool`, optional `area` FK — authored anchor for a future
   local order/crime difficulty modifier; optional `room_profile` FK and kind `TERRITORY`
   since #4060 — a held rung's base land value, gross recomputed at accrual), `IncomeDeclaration` (actual-vs-declared),

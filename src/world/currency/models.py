@@ -25,6 +25,7 @@ from world.currency.constants import (
     ContractFormality,
     ContractStatus,
     Denomination,
+    HolderKind,
     IncomeStreamKind,
 )
 
@@ -77,12 +78,38 @@ class OrganizationTreasury(SharedMemoryModel):
         return f"Treasury({self.organization_id}: {self.balance}c)"
 
 
+def _holder_snapshot(
+    purse: CharacterPurse | None, treasury: OrganizationTreasury | None
+) -> tuple[str, str]:
+    """The (kind, name) a ``CurrencyTransfer`` records for one live side."""
+    if purse is not None:
+        # A ledger write never fails for want of a persona: the backfill tolerates the
+        # same gap, and the row still records the sheet it was.
+        from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+        persona = purse.character_sheet.personas.filter(persona_type=PersonaType.PRIMARY).first()
+        name = persona.name if persona else f"Character {purse.character_sheet_id}"
+        return HolderKind.PURSE, name
+    assert treasury is not None  # noqa: S101 - callers pass the side that has an FK set
+    return HolderKind.TREASURY, treasury.organization.name
+
+
 class CurrencyTransfer(SharedMemoryModel):
     """Audit row for every movement of money (#923: exact numbers in the ledger).
 
     Source/destination are typed nullable FKs: a null source is a **mint**
     (money entering the world — faucets), a null destination is a **sink**
-    (money leaving it). Never both null.
+    (money leaving it). A transfer never has neither end.
+
+    Each side also snapshots who its holder was (``*_holder_kind`` and
+    ``*_holder_name``, written the first time a side is saved). The holder FKs are SET_NULL so a
+    character sheet or organization can be deleted, and the owner ruled (#4467)
+    that its money history stays: a side whose FK is now null but whose kind is
+    set was a real holder that has since been deleted, and the snapshot says who.
+    A side with a blank kind never had a holder (a mint's source, a sink's
+    destination). ``currency_transfer_not_void`` still reads the FKs for now; the
+    follow-up step of #4467 moves it onto the kinds once every row carries one, which
+    is what lets a holder actually be deleted.
     """
 
     from_purse = models.ForeignKey(
@@ -112,6 +139,36 @@ class CurrencyTransfer(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="transfers_in",
+    )
+    from_holder_kind = models.CharField(
+        max_length=16,
+        choices=HolderKind.choices,
+        blank=True,
+        default="",
+        db_default="",
+        help_text="What the source was. Blank for a mint. Outlives the source purse or treasury.",
+    )
+    from_holder_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_default="",
+        help_text="The source holder's name when the transfer happened. Outlives the holder.",
+    )
+    to_holder_kind = models.CharField(
+        max_length=16,
+        choices=HolderKind.choices,
+        blank=True,
+        default="",
+        db_default="",
+        help_text="What the destination was. Blank for a sink. Outlives the destination.",
+    )
+    to_holder_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_default="",
+        help_text="The destination holder's name when the transfer happened. Outlives the holder.",
     )
     amount = models.PositiveBigIntegerField(help_text="Coppers moved.")
     reason = models.CharField(
@@ -150,6 +207,18 @@ class CurrencyTransfer(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Transfer({self.amount}c: {self.reason})"
+
+    def save(self, *args, **kwargs) -> None:
+        """Snapshot each live holder's kind and name the first time a side is written."""
+        if not self.from_holder_kind and (self.from_purse_id or self.from_treasury_id):
+            self.from_holder_kind, self.from_holder_name = _holder_snapshot(
+                self.from_purse, self.from_treasury
+            )
+        if not self.to_holder_kind and (self.to_purse_id or self.to_treasury_id):
+            self.to_holder_kind, self.to_holder_name = _holder_snapshot(
+                self.to_purse, self.to_treasury
+            )
+        super().save(*args, **kwargs)
 
     def clean(self) -> None:
         super().clean()
