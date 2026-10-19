@@ -16,6 +16,7 @@ from world.areas.positioning.services import (
     place_in_position,
     position_of,
 )
+from world.checks.types import ExtraTraitTerm
 from world.combat.constants import (
     CHARGE_DAMAGE_BONUS,
     JOUST_DECISIVE_MARGIN,
@@ -49,6 +50,7 @@ from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import EquippedItem
 from world.magic.factories import TechniqueDamageProfileFactory
 from world.scenes.constants import RoundStatus
+from world.skills.factories import SkillFactory
 
 
 def _mount(character) -> None:
@@ -484,6 +486,23 @@ class JoustResolutionTests(TestCase):
                 loser_sheet.character, ConditionTemplate.get_by_name(MOUNTED_CONDITION_NAME)
             )
         )
+
+    def test_each_jouster_rolls_with_the_technique_skill_term(self):
+        a, action_a, _mirror_a, b, action_b, _mirror_b = self._duel_pair()
+        skill = SkillFactory()
+        technique = action_a.focused_action
+        technique.skill = skill
+        technique.save(update_fields=["skill"])
+        with patch(
+            "world.combat.services.perform_check",
+            side_effect=[MagicMock(success_level=2), MagicMock(success_level=2)],
+        ) as roll:
+            _resolve_joust_pass(a, action_a, b, action_b)
+
+        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        self.assertEqual(roll.call_count, 2)
+        for call in roll.call_args_list:
+            self.assertEqual(tuple(call.kwargs["extra_traits"]), (term,))
 
     def test_narrow_margin_deals_damage_without_unhorsing(self):
         a, action_a, _mirror_a, b, action_b, _mirror_b = self._duel_pair()
