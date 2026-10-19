@@ -539,7 +539,7 @@ class CmdGetTests(TestCase):
             location=room,
         )
         item = ObjectDBFactory(db_key="Sword", location=room)
-        caller.search = MagicMock(return_value=item)
+        caller.search = MagicMock(return_value=[item])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdGet, caller, args=" Sword")
         with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
@@ -560,7 +560,7 @@ class CmdGetTests(TestCase):
         )
         chest = ObjectDBFactory(db_key="Chest", location=room)
         ring = ObjectDBFactory(db_key="Ring", location=chest)
-        caller.search = MagicMock(side_effect=[chest, ring])
+        caller.search = MagicMock(side_effect=[[chest], [ring]])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdGet, caller, args=" Ring from Chest")
         # Patch TakeOutAction.run so the test doesn't run the action body.
@@ -589,7 +589,7 @@ class CmdGetTests(TestCase):
         )
         chest = ObjectDBFactory(db_key="Chest", location=room)
         ring = ObjectDBFactory(db_key="Ring", location=chest)
-        caller.search = MagicMock(side_effect=[chest, ring])
+        caller.search = MagicMock(side_effect=[[chest], [ring]])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdGet, caller, args=" Ring from Chest")
         # The ``take`` alias resolves to the same CmdGet class — verify by
@@ -614,7 +614,7 @@ class CmdGetTests(TestCase):
             db_typeclass_path="typeclasses.characters.Character",
             location=room,
         )
-        caller.search = MagicMock(return_value=None)
+        caller.search = MagicMock(return_value=[])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdGet, caller, args=" Ring from Chest")
         cmd.func()
@@ -633,7 +633,7 @@ class CmdDropTests(TestCase):
             location=room,
         )
         item = ObjectDBFactory(db_key="Sword", location=caller)
-        caller.search = MagicMock(return_value=item)
+        caller.search = MagicMock(return_value=[item])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdDrop, caller, args=" Sword")
         with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
@@ -654,7 +654,7 @@ class CmdGiveTests(TestCase):
         )
         item = ObjectDBFactory(db_key="Sword", location=caller)
         recipient = ObjectDBFactory(db_key="Bob", location=room)
-        caller.search = MagicMock(side_effect=[item, recipient])
+        caller.search = MagicMock(side_effect=[[item], [recipient]])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdGive, caller, args=" Sword to Bob")
         with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
@@ -673,7 +673,7 @@ class CmdGiveCoinsTests(TestCase):
             location=room,
         )
         recipient = ObjectDBFactory(db_key="Bob", location=room)
-        caller.search = MagicMock(return_value=recipient)
+        caller.search = MagicMock(return_value=[recipient])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdGive, caller, args=" 3s 5c to Bob")
         with patch.object(
@@ -692,7 +692,7 @@ class CmdGiveCoinsTests(TestCase):
         )
         item = ObjectDBFactory(db_key="Sword", location=caller)
         recipient = ObjectDBFactory(db_key="Bob", location=room)
-        caller.search = MagicMock(side_effect=[item, recipient])
+        caller.search = MagicMock(side_effect=[[item], [recipient]])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdGive, caller, args=" Sword to Bob")
         with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
@@ -745,7 +745,7 @@ class CmdWithdrawCoinsTests(TestCase):
         )
         chest = ObjectDBFactory(db_key="Chest", location=caller)
         ring = ObjectDBFactory(db_key="Ring", location=chest)
-        caller.search = MagicMock(side_effect=[chest, ring])
+        caller.search = MagicMock(side_effect=[[chest], [ring]])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdWithdraw, caller, args=" Ring from Chest")
         with patch.object(
@@ -765,7 +765,7 @@ class CmdDepositTests(TestCase):
             location=room,
         )
         coin_cache = ObjectDBFactory(db_key="Coins", location=caller)
-        caller.search = MagicMock(return_value=coin_cache)
+        caller.search = MagicMock(return_value=[coin_cache])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdDeposit, caller, args=" Coins")
         with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
@@ -793,7 +793,7 @@ class CmdStealTests(TestCase):
             location=room,
         )
         item = ObjectDBFactory(db_key="Sword", location=room)
-        caller.search = MagicMock(return_value=item)
+        caller.search = MagicMock(return_value=[item])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdSteal, caller, args=" Sword")
         with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
@@ -810,7 +810,7 @@ class CmdStealTests(TestCase):
         )
         chest = ObjectDBFactory(db_key="Chest", location=room)
         ring = ObjectDBFactory(db_key="Ring", location=chest)
-        caller.search = MagicMock(side_effect=[chest, ring])
+        caller.search = MagicMock(side_effect=[[chest], [ring]])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdSteal, caller, args=" Ring from Chest")
         with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
@@ -828,7 +828,7 @@ class CmdSecureTests(TestCase):
             location=room,
         )
         chest = ObjectDBFactory(db_key="Chest", location=caller)
-        caller.search = MagicMock(return_value=chest)
+        caller.search = MagicMock(return_value=[chest])
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdSecure, caller, args=" Chest=owner_only")
         with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
@@ -1011,7 +1011,7 @@ class CmdWearTests(TestCase):
         """Plain 'wear <item>' still routes to EquipAction."""
         _room, character, _sheet = self._make_character("plain")
         item_obj = ObjectDBFactory(db_key="shirt", location=character)
-        character.search = MagicMock(return_value=item_obj)
+        character.search = MagicMock(return_value=[item_obj])
 
         cmd = _make_cmd(CmdWear, character, args="shirt")
         kwargs = cmd.resolve_action_args()

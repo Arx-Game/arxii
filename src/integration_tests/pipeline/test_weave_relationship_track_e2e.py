@@ -94,7 +94,7 @@ class WeaveRelationshipTrackImbueE2ETests(TestCase):
     def test_weave_relationship_track_then_imbue(self) -> None:
         character = self.sheet.character
         character.msg = MagicMock()
-        character.search = MagicMock(return_value=self.partner_sheet.character)
+        character.search = MagicMock(return_value=[self.partner_sheet.character])
 
         # Step 1: Rite of Weaving ceremony.
         self._cmd_ritual(character, self.weaving_ritual.name)

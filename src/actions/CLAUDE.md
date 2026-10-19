@@ -741,7 +741,10 @@ and the model for any later per-target menu (items, room objects, exits).
    `docs/testing/ledger/actions.csv` records which `tests/` modules were folded into
    the journeys and removed (tranche 6 began with the covenant, org vault, market
    sale, event, coin, trade and condition modules; tranche 7 took the GM adjudication
-   module into `integration_tests/test_refereeing_the_table_journeys.py`), and a new
+   module into `integration_tests/test_refereeing_the_table_journeys.py`; tranche 8 took
+   `test_items_actions` into `integration_tests/test_handling_your_things_journeys.py` and
+   kept the typed-menu wire tests, `test_typed_*`/`test_staged_*`/`test_target_menu_api`/
+   `test_menu_item_resolution`, as the menu's contract layer), and a new
    `tests/test_<verb>.py`
    that only calls `.run()` down the happy path is the shape that gets removed next.
    Never patch the room's `msg_contents` to keep a test quiet: `secure` raised on its

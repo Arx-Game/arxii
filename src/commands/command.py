@@ -168,14 +168,24 @@ class ArxCommand(Command):
             not_found_msg: Override the default
                 ``"Could not find '<name>'."`` message.
         """
-        if location is None:
-            target = self.caller.search(name)
-        else:
-            target = self.caller.search(name, location=location)
-        if not target:
-            msg = not_found_msg or f"Could not find '{name}'."
-            raise CommandError(msg)
-        return target
+        # Quiet: Evennia's own search would tell the player "Could not find ..." and
+        # then the raised error would say it again (#3657 tranche 8). One match is
+        # the target; none, and several, are this command's own error.
+        matches = self.caller.search(name, location=location, quiet=True)
+        if len(matches) == 1:
+            return matches[0]
+        if not matches:
+            raise CommandError(not_found_msg or f"Could not find '{name}'.")
+        # Several: the numbered list Evennia's own search words (numbered within each
+        # display name, which is what its `2-lantern` narrowing reads), raised as this
+        # command's error so the web client can place it; an untyped line is lost there.
+        lines = [f"More than one match for '{name}' (please narrow target):"]
+        seen: dict[str, int] = {}
+        for match in matches:
+            label = match.get_display_name(self.caller)
+            seen[label] = seen.get(label, 0) + 1
+            lines.append(f" {seen[label]}-{label}")
+        raise CommandError("\n".join(lines))
 
     def resolve_by_name_or_id(
         self,

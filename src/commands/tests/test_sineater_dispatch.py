@@ -11,7 +11,7 @@ class SineaterDispatchTests(TestCase):
     def _run(self, args):
         cmd = CmdSineater()
         cmd.caller = MagicMock()
-        cmd.caller.search.return_value = None
+        cmd.caller.search.return_value = []
         cmd.args = args
         cmd.func()
         return cmd
@@ -33,14 +33,14 @@ class SineaterDispatchTests(TestCase):
         # Simulate "no sheet": the command reads the character_sheet property (audit).
         type(cmd.caller).character_sheet = None
         cmd.args = "pleas"
-        cmd.caller.search.return_value = None
+        cmd.caller.search.return_value = []
         cmd.func()
         cmd.caller.msg.assert_called()
 
     def test_rescue_no_args_sends_usage(self):
         cmd = CmdSineater()
         cmd.caller = MagicMock()
-        cmd.caller.search.return_value = None
+        cmd.caller.search.return_value = []
         cmd.args = "rescue"
         cmd.func()
         msg = cmd.caller.msg.call_args[0][0].lower()

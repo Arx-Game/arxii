@@ -125,7 +125,7 @@ class CmdWeaveThreadRelationshipTrackTests(TestCase):
     def setUp(self) -> None:
         self.character = self.sheet.character
         self.character.msg = MagicMock()
-        self.character.search = MagicMock(return_value=self.partner_sheet.character)
+        self.character.search = MagicMock(return_value=[self.partner_sheet.character])
         PendingRitualEffect.objects.get_or_create(character=self.sheet, ritual=self.weaving_ritual)
 
     def _run(self, args: str) -> None:
@@ -153,7 +153,7 @@ class CmdWeaveThreadRelationshipTrackTests(TestCase):
         self.character.msg.assert_called()
 
     def test_weave_track_unknown_partner_reports_error(self) -> None:
-        self.character.search = MagicMock(return_value=None)
+        self.character.search = MagicMock(return_value=[])
         self._run("resonance=Embers track=Nobody/Trust")
         self.assertFalse(Thread.objects.filter(owner=self.sheet).exists())
         self.character.msg.assert_called()

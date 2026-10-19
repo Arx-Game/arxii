@@ -138,8 +138,9 @@ class TypedSwitchTests(TestCase):
 
         replies = _typed(self.speaker, "+unmute/x Linden")
 
-        # Evennia's search says it, then the command's error repeats it.
-        assert set(replies) == {"Could not find '/x Linden'."}
+        # Said once, by the command's own error (#3657 tranche 8: Evennia's search used
+        # to say it too, and this set hid the repeat).
+        assert replies == ["Could not find '/x Linden'."]
 
     def test_an_unmatched_line_keeps_its_slash(self) -> None:
         """``CMD_NOMATCH`` is handed the whole typed line as its arguments."""

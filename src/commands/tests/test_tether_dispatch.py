@@ -11,7 +11,7 @@ class TetherDispatchTests(TestCase):
     def _run(self, args):
         cmd = CmdTether()
         cmd.caller = MagicMock()
-        cmd.caller.search.return_value = None
+        cmd.caller.search.return_value = []
         cmd.args = args
         cmd.func()
         return cmd
@@ -32,7 +32,7 @@ class TetherDispatchTests(TestCase):
         cmd.caller = MagicMock()
         target = MagicMock()
         target.sheet_data = MagicMock()
-        cmd.caller.search.return_value = target
+        cmd.caller.search.return_value = [target]
         cmd.args = "burden Bob"
         cmd.func()
         msg = cmd.caller.msg.call_args[0][0]
@@ -55,7 +55,7 @@ class TetherDispatchTests(TestCase):
         cmd = CmdTether()
         cmd.caller = caller_char
         caller_char.msg = MagicMock()
-        caller_char.search = MagicMock(return_value=target_char)
+        caller_char.search = MagicMock(return_value=[target_char])
         cmd.args = f"dissolve {target_char.db_key}"
         cmd.func()
         caller_char.msg.assert_called()

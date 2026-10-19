@@ -27,6 +27,13 @@ SCENE_ADAPTIVE backend.
 - **`ArxCommand`**: Base command class for REGISTRY actions
   - `action`: The Action instance this command delegates to
   - `resolve_action_args()`: Override to parse telnet text into action kwargs
+  - `search_or_raise(name, location=, not_found_msg=)`: the one name-to-object lookup
+    commands use. It searches quietly and says "Could not find '<name>'." once as the
+    command's own error (#3657 tranche 8: Evennia's search had said it too, so every
+    mistyped name came back twice, and the web saw the untyped one not at all); several
+    matches raise Evennia's numbered list as the command's own error, numbered within each
+    display name the way Evennia's `2-lantern` narrowing reads it. A test that mocks
+    `caller.search` returns a list, as the quiet search does.
   - `func()`: Calls `resolve_action_args()` → `action.run()` → sends result to caller
   - **Switches are opt-in: a command that reads `self.switches` sets
     `takes_switches = True`.** `parse()` then splits them off the arguments through
@@ -141,7 +148,10 @@ actions, backends, and service functions.
   `CmdWithdraw` (`withdraw <item> from <container>`; also the `withdraw coins <amount>`
   loose-cash branch, #1909 — the `withdraw` command key was already spoken for by
   `TakeOutAction`, so the coin path rides a `coins` prefix on the same command rather
-  than a colliding new one), `CmdUse`
+  than a colliding new one), `CmdUse`. Every player path of these, of `get`/`drop`/`give`
+  and of `grant_item` is typed through the handler in
+  `integration_tests/test_handling_your_things_journeys.py` (#3657 tranche 8; the hand-built
+  `tests/test_use_command.py` is gone); a new item verb gets its lines there.
 - **`currency.py`**: `CmdDeposit` (`deposit <item>`), `CmdSteal` (`steal <item>` /
   `steal <item> from <container>`, mirrors `CmdGet`'s two grammars but always
   dispatches `StealAction` — no plain-take fallback), `CmdSecure`

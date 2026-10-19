@@ -25,7 +25,7 @@ class FriendsCommandTests(TestCase):
         self.account.msg = MagicMock()
         self.target = CharacterFactory(db_key="Bob")
         self._played(self.target)
-        self.caller.search = MagicMock(return_value=self.target)
+        self.caller.search = MagicMock(return_value=[self.target])
 
     def _run(self, cmd_class, args, switches=None):
         cmd = cmd_class()

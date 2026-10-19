@@ -259,7 +259,7 @@ class CmdOrgTests(TestCase):
         org = OrganizationFactory(name="Testers")
         target = MagicMock()
         caller = MagicMock()
-        caller.search.return_value = target
+        caller.search.return_value = [target]
 
         cmd = _make_cmd("invite Alice in Testers")
         cmd.caller = caller

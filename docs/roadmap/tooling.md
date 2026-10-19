@@ -133,7 +133,24 @@ note's width, a stat signed with the granting tenure, a technique from a held gi
 the trust and seat gates, a staffer with no tenure) and `gm condition` (the note narrated to
 the room and kept on the instance, a hidden condition's note to the bearer alone, the usage
 and bounds, list and remove with a reason, a staffer standing nowhere, a prop by id, an
-understanding condition opening an ear). No production code changed.
+understanding condition opening an ear). No production code changed. Tranche 8 (2026-10-19)
+rules the items group: `test_items_actions` (38 tests, every one a `.run()` or a
+prerequisite's `is_met` by hand) and the hand-built `commands/tests/test_use_command` are
+removed, and the nine typed-menu modules (`test_typed_*`, `test_staged_*`,
+`test_target_menu_api`, `test_menu_item_resolution`, #4184) are re-graded J and kept: they
+drive the dispatch and REST seams with the menu's own wire and are the contract layer for
+the right-click menu, not a second copy of a player path. A new journey module
+(`integration_tests/test_handling_your_things_journeys.py`) types `get`/`take`, `drop`,
+`inventory`, `wear`/`remove`/`undress`, `put ... in`, `withdraw ... from` and `get ... from`,
+`use`/`apply ... on`, `give ... to` and `grant_item`, with the web dispatches by row
+(`menu_target`), and reads back the rows, the room's lines and the bearer's conditions. It
+found one thing to fix in place: every mistyped name came back twice on telnet ("Could not
+find 'x'." from Evennia's own search and again from the command's error) and once on the
+web, which cannot place Evennia's untyped line; `ArxCommand.search_or_raise` now searches
+quietly and raises once, wording several matches as Evennia's numbered list in the
+command's own typed error. The hand-built command tests that mock `caller.search` return a
+list now, as the quiet search does. The parity schema was also stale behind #4463
+(`just build-test-schema`).
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

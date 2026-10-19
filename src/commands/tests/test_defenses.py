@@ -145,19 +145,19 @@ class DefenseCommandKwargsTests(TestCase):
         cmd._subverb = "install"
         cmd._rest = "bars exit=gate"
         mock_exit = MagicMock()
-        cmd.caller.search.return_value = mock_exit
+        cmd.caller.search.return_value = [mock_exit]
 
         kwargs = cmd.resolve_action_args()
 
         self.assertEqual(kwargs["defense_kind"], "EXIT_BARS")
         self.assertEqual(kwargs["exit"], mock_exit)
-        cmd.caller.search.assert_called_once_with("gate", location=cmd.caller.location)
+        cmd.caller.search.assert_called_once_with("gate", location=cmd.caller.location, quiet=True)
 
     def test_install_bars_missing_exit_raises_command_error(self) -> None:
         cmd = _make_cmd("install bars")
         cmd._subverb = "install"
         cmd._rest = "bars"
-        cmd.caller.search.return_value = None
+        cmd.caller.search.return_value = []
 
         with self.assertRaises(CommandError):
             cmd.resolve_action_args()
