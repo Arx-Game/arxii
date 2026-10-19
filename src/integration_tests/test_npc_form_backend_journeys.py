@@ -21,8 +21,10 @@ from world.roster.factories import (
     NPCStatlinePresetFactory,
 )
 from world.roster.models import RosterEntry
+from world.roster.models.choices import RosterType
 from world.roster.services.npc_lending import answer_loan, offer_npc
 from world.roster.services.npc_placement import NOT_YOURS_MESSAGE
+from world.roster.services.staff_characters import mint_gm_character
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 CAST_LIST = "/api/scenes/{}/cast-list/"
@@ -110,6 +112,15 @@ class TheNpcFormsBackend(JourneyCase):
         template = self._mint("Watch Officer", as_template="true")
         self.assertTrue(template.story_npc_settings.is_template)
         self.assertIsNone(template.current_tenure)
+
+    def test_a_gms_own_gm_character_does_not_use_up_the_npc_cap(self) -> None:
+        # #4418 bug 6: a JUNIOR GM (cap 2) with a GM character could mint only one.
+        gm_character = mint_gm_character(self.gm, "Ravenna's Mask")
+        self._mint("Captain Vael")
+        self._mint("Sergeant Rook")
+        refused = self.web(self.ravenna, "mint_story_npc", name="Corporal Brann", description="")
+        self.assertFalse(refused.detail.success)
+        self.assertEqual(gm_character.sheet_data.roster_entry.roster.roster_type, RosterType.NPC)
 
     def test_gms_and_guides_list_active_traits(self) -> None:
         persuasion = CheckTypeFactory(name="Persuasion")

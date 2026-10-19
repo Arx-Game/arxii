@@ -161,7 +161,13 @@ function GMDashboardContent() {
   // "My NPCs" (#3426) — the account's own Story NPC tenures, split out of the
   // general character list client-side (no dedicated backend endpoint needed).
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const myNpcs = myRosterEntries.filter((entry) => entry.roster_type === 'NPC');
+  // The GM's own GM or Staff character sits on the NPC shelf too but is no story NPC.
+  const myNpcs = myRosterEntries.filter(
+    (entry) =>
+      entry.roster_type === 'NPC' &&
+      entry.character_type !== 'GM' &&
+      entry.character_type !== 'STAFF'
+  );
   const [managedNpcId, setManagedNpcId] = useState<number | null>(null);
 
   if (isLoading) {

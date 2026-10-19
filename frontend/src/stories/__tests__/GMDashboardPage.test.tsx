@@ -389,3 +389,26 @@ describe('GMDashboardPage owner panel (#4418)', () => {
     expect(screen.queryByRole('button', { name: 'Manage Sergeant Mira' })).not.toBeInTheDocument();
   });
 });
+
+/** My NPCs (#4418 bug 6): the GM's own GM character is not one of their story NPCs. */
+describe('GMDashboardPage My NPCs list (#4418)', () => {
+  it("leaves out the GM's own GM character", async () => {
+    const { useMyRosterEntriesQuery } = await import('@/roster/queries');
+    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({
+      data: [
+        { id: 8, name: 'Ravenna', roster_type: 'NPC', character_type: 'GM', loan: null },
+        { id: 9, name: 'Captain Vael', roster_type: 'NPC', character_type: 'PC', loan: null },
+      ],
+    } as unknown as ReturnType<typeof useMyRosterEntriesQuery>);
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDashboard),
+    } as Response);
+
+    render(withProviders(<GMDashboardPage />));
+
+    expect(await screen.findByRole('heading', { name: 'My NPCs (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Manage Captain Vael' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manage Ravenna' })).not.toBeInTheDocument();
+  });
+});

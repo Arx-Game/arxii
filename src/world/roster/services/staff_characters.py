@@ -202,6 +202,7 @@ def check_story_npc_cap(gm_account: AccountDB, *, count_against_cap: bool = True
         StaffMintError: missing GM trust, below JUNIOR, or at/over cap.
     """
     from core_management.permissions import is_staff_observer  # noqa: PLC0415
+    from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE  # noqa: PLC0415
     from world.gm.constants import GMLevel, gm_level_index  # noqa: PLC0415
     from world.gm.models import GMLevelCap, GMProfile  # noqa: PLC0415
     from world.roster.models import RosterTenure  # noqa: PLC0415
@@ -224,7 +225,9 @@ def check_story_npc_cap(gm_account: AccountDB, *, count_against_cap: bool = True
         return
     cap = GMLevelCap.objects.filter(level=profile.level).first()
     max_story_npcs = cap.max_story_npcs if cap is not None else 0
-    # A crowd's voice (#4418) is not a story NPC the GM keeps: it never counts.
+    # A crowd's voice (#4418) is not a story NPC the GM keeps: it never counts. Nor
+    # does the GM's own GM or Staff OOC character, which sits on the same shelf but
+    # is no story NPC (``is_story_npc``'s rule, #4418 bug 6).
     active_count = (
         RosterTenure.objects.filter(
             player_data__account=gm_account,
@@ -232,6 +235,11 @@ def check_story_npc_cap(gm_account: AccountDB, *, count_against_cap: bool = True
             end_date__isnull=True,
         )
         .exclude(roster_entry__character_sheet__personas__voiced_opponents__isnull=False)
+        .exclude(
+            roster_entry__character_sheet__character__db_typeclass_path__in=list(
+                TYPECLASS_TO_CHARACTER_TYPE
+            )
+        )
         .distinct()
         .count()
     )
