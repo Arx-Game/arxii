@@ -58,7 +58,9 @@ class Room(ObjectParent, DefaultRoom):
         Start Scene stopped calling that in #3069: every ``room_state`` push after
         a scene began (a PC entering, an NPC placed, a reconnect, a restart)
         carried no scene, and ``/game`` dropped the feed and the scene actions.
-        A cached scene that has since finished is dropped and looked up again.
+        A cached scene that has since finished is dropped and looked up again. An
+        empty answer (None) is cached too, so a room with no scene is not queried
+        again until a scene starts or ends there (``invalidate_active_scene_cache``).
         """
         from world.scenes.interaction_services import (
             get_active_scene,

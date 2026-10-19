@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
+from world.scenes.constants import SceneAction
+from world.scenes.services import broadcast_scene_message
 
 # Re-use the same NOT_IN_A_ROOM_MESSAGE constant (defined in rounds.py and checked here).
 NOT_IN_A_ROOM_MESSAGE = "You are not in a room."
@@ -79,9 +81,6 @@ class StartSceneAction(Action):
             # Tell everyone in the room it began (#4418): #3069 moved web Start Scene
             # onto this action and the START push was left behind, so only the
             # starter's own page knew there was a scene.
-            from world.scenes.constants import SceneAction  # noqa: PLC0415
-            from world.scenes.services import broadcast_scene_message  # noqa: PLC0415
-
             broadcast_scene_message(scene, SceneAction.START)
             message = "A scene begins."
             if capture.pending_consent_count:
