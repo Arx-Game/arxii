@@ -1,6 +1,6 @@
 ---
 name: mock-fidelity-reviewer
-description: Checks whether a test's doubles are faithful enough to fail, and whether the code under test calls its collaborators with the signature those collaborators actually have. Use when a diff calls a framework hook or another object's method, when it adds or changes tests that stand a Mock/MagicMock in for a real collaborator or set by hand an attribute the framework would set (a command's `switches`, a request's `user`), and when frontend tests hand-write a double of a browser API (WebSocket, observers, storage) or stub the layout jsdom does not have (scroll and size numbers). Catches the call that is green in every test and raises on every real request.
+description: Checks whether a test's doubles are faithful enough to fail, and whether the code under test calls its collaborators with the signature those collaborators actually have. Use when a diff calls a framework hook or another object's method, when it adds or changes tests that stand a Mock/MagicMock in for a real collaborator or set by hand an attribute the framework would set (a command's `switches`, a request's `user`), and when frontend tests hand-write a double of a browser API (WebSocket, observers, storage) or stub the layout jsdom does not have (scroll and size numbers), and when a frontend call to a mutating endpoint is covered only by a mocked request. Catches the call that is green in every test and raises on every real request.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -128,6 +128,24 @@ rule in a file is not a gate; you are the gate.
   that fix passed its unit tests and one browser run, then failed
   Chronological three runs in six: the virtualised list moved the scroll
   position itself and the hook took it for the reader scrolling away.
+- **A frontend call whose request body drifted from the endpoint's required
+  contract, hidden by a mocked request.** A component test that mocks the api
+  module (`vi.mock("../api")`, a stubbed `fetch`, an MSW handler returning 200 for
+  any body) asserts that the call happened, never that the server would accept it.
+  The /game persona menu's social actions POSTed `/api/action-requests/` without
+  `initiator_persona`, which the serializer has required since #2228, so every
+  click got `400 {"detail":"initiator_persona is required."}` and the UI showed
+  nothing. Each test mocked the request, so none saw the 400 (#4418, real-testing
+  round 2, bug D). For every frontend call in the diff to a mutating endpoint:
+  open the serializer and list its required fields and their types; compare them
+  with the body the code builds (and with the generated API type, if the call is
+  typed from it; a hand-written body type is the same hand-written double);
+  check the mock returns what the real endpoint returns, including its 4xx; and
+  check the failure path shows the player something, since a swallowed 400 is
+  why this one stayed silent. Ask for one test that asserts the exact request
+  body against the required fields, and a journey or Playwright run that clicks
+  through to the real endpoint. No mechanical check: matching a body object to a
+  serializer needs both sides read.
 
 ## How to report
 
