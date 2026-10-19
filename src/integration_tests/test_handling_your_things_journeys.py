@@ -710,9 +710,30 @@ class LookingAtThings(JourneyCase):
         # A plain look at a thing in the room, and at a thing that is not there.
         floor_item(self.room, "Brass Lantern")
         self.assertIn("Brass Lantern", self.telnet(self.ysmay, "look Brass Lantern"))
-        # Once, not twice: the plain look had let Evennia's search say it first.
+        # Once, not twice: the plain look had let Evennia's search say it first, as a
+        # bare untyped line the web composer could not place, before the command's
+        # own typed error. The frames are what a typed line sends the session, on
+        # telnet and on the web alike: the one text line typed ``error`` and the
+        # structured ``command_error`` frame a CommandError always carries, no bare line.
+        box = self.mailbox(self.ysmay)
+        first_frame = len(box.calls)
         self.assertEqual(
             NOT_HERE.format("Nothing"), self.telnet(self.ysmay, "look Nothing").strip()
+        )
+        self.assertEqual(
+            box.calls[first_frame:],
+            [
+                (((NOT_HERE.format("Nothing"), {"type": "error"}),), {}),
+                (
+                    (None,),
+                    {
+                        "command_error": {
+                            "error": NOT_HERE.format("Nothing"),
+                            "command": "look Nothing",
+                        }
+                    },
+                ),
+            ],
         )
         self.assertEqual(
             NOT_HERE.format("Nobody's hat"), self.telnet(self.ysmay, "look Nobody's hat").strip()
