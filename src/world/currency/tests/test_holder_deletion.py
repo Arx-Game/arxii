@@ -50,6 +50,7 @@ class HolderDeletionKeepsLedgerTests(TestCase):
 
     def test_deleting_a_sheet_that_spent_money_keeps_the_sink(self) -> None:
         sheet = CharacterSheetFactory()
+        name = sheet.primary_persona.name
         purse = get_or_create_purse(sheet)
         transfer(amount=500, reason="seed", to_purse=purse)
         spend = transfer(amount=200, reason="upkeep", from_purse=purse)
@@ -58,7 +59,7 @@ class HolderDeletionKeepsLedgerTests(TestCase):
 
         spend = CurrencyTransfer.objects.get(pk=spend.pk)
         self.assertEqual(spend.from_holder_kind, HolderKind.PURSE)
-        self.assertEqual(spend.from_holder_name, sheet.primary_persona.name)
+        self.assertEqual(spend.from_holder_name, name)
         self.assertEqual(spend.to_holder_kind, "")
 
     def test_the_other_side_still_reads_who_the_deleted_holder_was(self) -> None:
@@ -112,3 +113,20 @@ class HolderDeletionKeepsLedgerTests(TestCase):
 
         with self.assertRaises(IntegrityError), transaction.atomic():
             CurrencyTransfer.objects.create(amount=5, reason="void")
+
+    def test_a_sheet_with_no_primary_persona_still_moves_money(self) -> None:
+        sheet = CharacterSheetFactory()
+        sheet.personas.all().delete()
+        row = transfer(amount=5, reason="mint", to_purse=get_or_create_purse(sheet))
+        self.assertEqual(row.to_holder_kind, HolderKind.PURSE)
+        self.assertEqual(row.to_holder_name, f"Character {sheet.pk}")
+
+    def test_a_later_save_keeps_the_name_the_holder_had_at_the_time(self) -> None:
+        sheet = CharacterSheetFactory()
+        row = transfer(amount=5, reason="mint", to_purse=get_or_create_purse(sheet))
+        before = row.to_holder_name
+        persona = sheet.primary_persona
+        persona.name = "Renamed Afterwards"
+        persona.save()
+        row.save()
+        self.assertEqual(CurrencyTransfer.objects.get(pk=row.pk).to_holder_name, before)

@@ -83,7 +83,13 @@ def _holder_snapshot(
 ) -> tuple[str, str]:
     """The (kind, name) a ``CurrencyTransfer`` records for one live side."""
     if purse is not None:
-        return HolderKind.PURSE, purse.character_sheet.primary_persona.name
+        # A ledger write never fails for want of a persona: the backfill tolerates the
+        # same gap, and the row still records the sheet it was.
+        from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+        persona = purse.character_sheet.personas.filter(persona_type=PersonaType.PRIMARY).first()
+        name = persona.name if persona else f"Character {purse.character_sheet_id}"
+        return HolderKind.PURSE, name
     assert treasury is not None  # noqa: S101 - callers pass the side that has an FK set
     return HolderKind.TREASURY, treasury.organization.name
 
@@ -96,7 +102,7 @@ class CurrencyTransfer(SharedMemoryModel):
     (money leaving it). A transfer never has neither end.
 
     Each side also snapshots who its holder was (``*_holder_kind`` and
-    ``*_holder_name``, written on save while the holder exists). The holder FKs are SET_NULL so a
+    ``*_holder_name``, written the first time a side is saved). The holder FKs are SET_NULL so a
     character sheet or organization can be deleted, and the owner ruled (#4467)
     that its money history stays: a side whose FK is now null but whose kind is
     set was a real holder that has since been deleted, and the snapshot says who.
@@ -193,12 +199,12 @@ class CurrencyTransfer(SharedMemoryModel):
         return f"Transfer({self.amount}c: {self.reason})"
 
     def save(self, *args, **kwargs) -> None:
-        """Snapshot each live holder's kind and name before the row is first written."""
-        if self.from_purse_id or self.from_treasury_id:
+        """Snapshot each live holder's kind and name the first time a side is written."""
+        if not self.from_holder_kind and (self.from_purse_id or self.from_treasury_id):
             self.from_holder_kind, self.from_holder_name = _holder_snapshot(
                 self.from_purse, self.from_treasury
             )
-        if self.to_purse_id or self.to_treasury_id:
+        if not self.to_holder_kind and (self.to_purse_id or self.to_treasury_id):
             self.to_holder_kind, self.to_holder_name = _holder_snapshot(
                 self.to_purse, self.to_treasury
             )

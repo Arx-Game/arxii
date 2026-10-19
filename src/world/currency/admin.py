@@ -39,6 +39,8 @@ class CurrencyTransferAdmin(admin.ModelAdmin):
     list_filter = ("created_at",)
     search_fields = ("reason", "from_holder_name", "to_holder_name")
     raw_id_fields = ("from_purse", "from_treasury", "to_purse", "to_treasury")
+    # The snapshot is the ledger's record of who each side was; it is written by save().
+    readonly_fields = ("from_holder_kind", "from_holder_name", "to_holder_kind", "to_holder_name")
     date_hierarchy = "created_at"
 
 
