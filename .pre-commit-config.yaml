@@ -58,6 +58,16 @@ repos:
         # `to_attr=... conflicts with a field`, so the endpoint is a 500 no unit test
         # sees. Only the repeats-its-own-relation shape is checked; a collision with
         # another field needs the model (see identity-map-write-reviewer).
+      - id: webclient-protocol-key
+        name: Block the dead webclient/websocket protocol-key literals
+        entry: uv run python tools/lint_webclient_protocol_key.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/
+        # #4418: a live web session's protocol_key is "websocket" or "ajax/comet";
+        # "webclient/websocket" is overwritten at session creation. A classifier or a
+        # test fake using it passes against fakes and fails against every real browser.
       - id: cached-property-import
         name: Forbid functools.cached_property in src/
         entry: uv run python tools/lint_cached_property_import.py

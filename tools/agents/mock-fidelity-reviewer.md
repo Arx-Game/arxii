@@ -146,6 +146,23 @@ rule in a file is not a gate; you are the gate.
   body against the required fields, and a journey or Playwright run that clicks
   through to the real endpoint. No mechanical check: matching a body object to a
   serializer needs both sides read.
+- **A fake built from a framework value the framework never produces.** The double is
+  type-correct and arity-correct, and its data is invented. `non_web_sessions` decided a
+  session was a browser by a `"webclient"` key prefix, and every test faked sessions
+  with `"webclient/websocket"`. Evennia's portal sets that key in `__init__`, then
+  `init_session("websocket", ...)` overwrites it (`evennia/server/portal/webclient.py`),
+  so a live browser's `protocol_key` is `"websocket"` (`"ajax/comet"` for the fallback).
+  Every real browser counted as non-web, every telnet-only line (involvement marks,
+  check result lines, GM prompt copies) reached browsers as notes, and the suite stayed
+  green because the fake and the classifier agreed on a key no session has (#4418,
+  real-testing round 4, bug G). For every fake session, request, message or event the
+  diff builds: take the keys, constants and shapes from the real source (the portal's
+  protocol registry, the framework's constants, `WEB_PROTOCOL_KEYS`), never from a
+  typed literal; read the framework code that finally sets the value, not the line that
+  first sets it; and ask for one test that builds the object the way the framework
+  builds it. Mechanical half: `tools/lint_webclient_protocol_key.py`
+  (`webclient-protocol-key` hook) rejects the two dead literals; any other invented
+  framework value is yours to find.
 
 ## How to report
 
