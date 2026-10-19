@@ -16,37 +16,40 @@ from django.db.models import CheckConstraint, Q
 from django.test import SimpleTestCase
 
 
-def _required_non_null_fields(node: Q) -> set[str]:
+def _required_non_null_fields(node: Q, *, negated: bool = False) -> set[str]:
     """Field names a Q tree asserts non-null somewhere (``field__isnull=False``).
 
     A disjunction counts: ``(A and f is set) or (B and f is null)`` still rejects a
-    row in branch A whose ``f`` becomes null.
+    row in branch A whose ``f`` becomes null. Negation flips the polarity:
+    ``~Q(f__isnull=True)`` requires ``f``, while ``~Q(f__isnull=False, g__isnull=False)``
+    ("not both set") is satisfied by nulling either, so it requires nothing (#4464).
     """
+    negated ^= node.negated
     found: set[str] = set()
     for child in node.children:
         if isinstance(child, Q):
-            found |= _required_non_null_fields(child)
+            found |= _required_non_null_fields(child, negated=negated)
             continue
         lookup, value = child
-        if lookup.endswith("__isnull") and value is False:
+        if lookup.endswith("__isnull") and value is negated:
             found.add(lookup.removesuffix("__isnull").split("__")[0])
     return found
 
 
-#: Pairs that already had the defect when this guard landed (#4461). Each is the same
-#: contradiction: deleting the target asks the database to null a column its check
-#: constraint requires. They need a per-case ruling (PROTECT, a soft-delete, or a
-#: constraint that allows the null), so they are listed, not fixed here. The set only
+#: Pairs that predate this guard and are not fixed yet. #4464 fixed the seven it found
+#: when it landed (#4461). Teaching it negation in #4464 found four more: a transfer with
+#: one end only (a mint into a purse, a spend out of one) is left with no end at all when
+#: that purse's sheet is deleted, which ``currency_transfer_not_void`` rejects. What a
+#: ledger row means once its only holder is gone is an owner's call, tracked in #4467.
+#: A pair needs a per-case ruling (PROTECT plus a soft removal, RESTRICT, CASCADE,
+#: or a constraint that allows the null); a new one is never added here. The set only
 #: shrinks: fixing one fails the second test until its line is removed.
 KNOWN_VIOLATIONS: frozenset[str] = frozenset(
     {
-        "arxii.ConsequenceOutcome.action_interaction",
-        "arxii.ConsequenceOutcome.combat_interaction",
-        "arxii.ResonanceGrant.source_project",
-        "arxii.DramaticSurgeRecord.subject_sheet",
-        "arxii.JournalEntry.parent",
-        "arxii.MissionSupportDeclaration.pattern",
-        "arxii.MissionSupportDeclaration.support_option",
+        "arxii.CurrencyTransfer.from_purse",
+        "arxii.CurrencyTransfer.from_treasury",
+        "arxii.CurrencyTransfer.to_purse",
+        "arxii.CurrencyTransfer.to_treasury",
     }
 )
 
