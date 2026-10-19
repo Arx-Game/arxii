@@ -651,6 +651,14 @@ class HandingThingsOver(JourneyCase):
         self.assertEqual(
             box.calls[first_frame:], [(((NOT_HERE.format("Nobody"), {"type": "error"}),), {})]
         )
+        # Two of a name: one typed line asking her to narrow it, and nothing granted.
+        self.make_player("Twin", room=self.room)
+        self.make_player("Twin", room=self.room)
+        first_frame = len(box.calls)
+        narrow = "More than one match for 'Twin' (please narrow target)."
+        self.assertEqual(narrow, self.telnet(self.ravenna, "grant_item Twin=Silver Locket").strip())
+        self.assertEqual(box.calls[first_frame:], [(((narrow, {"type": "error"}),), {})])
+        self.assertEqual(ItemInstance.objects.filter(template=locket).count(), 1)
         ObjectDBFactory(db_key="Pebble", location=self.room)
         self.assertIn(
             "That is not a character.", self.telnet(self.ravenna, "grant_item Pebble=Silver Locket")
