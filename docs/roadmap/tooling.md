@@ -165,7 +165,20 @@ Evennia's loud search before raising its own error; the tranche 8 fix had reache
 other verb), and `CmdLook` now resolves a plain look through `search_or_raise`. The
 journeys recorded two consent gaps on #3657 (the blacklist bar holds only on the web
 picker, and a telnet target is never told a request opened), and the parity schema was
-stale again behind #4471.
+stale again behind #4471. Tranche 10 (2026-10-19) rules the second commands group, the
+hand-built modules whose verbs a journey already named: `test_setsituation_command`,
+`test_grant_item`, `test_cmd_presence`, `test_social_consent_e2e`, `test_outfit` (every
+action's `run` mocked) and `test_relationships_command` (29 tests) are removed. Their lines
+moved onto the harness: the `outfit` namespace in full (`KeepingAWardrobe`, in the handling
+journey) and the `relationship` namespace in full (a new
+`integration_tests/test_keeping_ties_journeys.py`), `afk` and the unrostered `hide` in the
+faces journey, `setsituation find` by kind and bare in the staging journey, a plain object
+handed to `grant_item` in the handling journey. Three fixes in place, all the loud-search
+shape: `CmdRelationship` resolved its target and its `show` argument loudly (two "Could not
+find" lines), `CmdOutfit` searched its wardrobe and item dbrefs loudly ("Could not find
+'#id'." before its own refusal), and `GrantItemAction` searched loudly and answered nothing
+of its own, so the web got only Evennia's bare line. Each now searches quietly and the
+journeys assert the one typed line.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

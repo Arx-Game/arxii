@@ -375,10 +375,9 @@ class CmdRelationship(ArxCommand):
         """Resolve a target name (caller.search) to a sheet or a bonded companion (#3575)."""
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-        target = caller.search(name)
-        if not target:
-            msg = f"Could not find '{name}'."
-            raise CommandError(msg)
+        # The quiet search: an absent name is answered once (#3657 tranche 10; the
+        # loud search had said "Could not find" before the raised error did).
+        target = self.search_or_raise(name)
         companion = _active_companion_of(target)
         if companion is not None:
             return None, companion
@@ -439,10 +438,7 @@ class CmdRelationship(ArxCommand):
         if ref.isdigit():
             relationship = qs.filter(pk=int(ref)).first()
         else:
-            target = self.caller.search(ref)
-            if not target:
-                msg = f"Could not find '{ref}'."
-                raise CommandError(msg)
+            target = self.search_or_raise(ref)
             companion = _active_companion_of(target)
             if companion is not None:
                 relationship = qs.filter(target_companion=companion).first()

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from integration_tests.harness import JourneyCase
 from world.gm.constants import CatalogSuggestionProposalKind, GMLevel
-from world.gm.factories import GMProfileFactory
+from world.gm.factories import GMProfileFactory, SituationKindFactory
 from world.gm.models import CatalogSuggestion
 from world.mechanics.constants import DiscoveryType
 from world.mechanics.factories import ChallengeTemplateFactory, SituationTemplateFactory
@@ -71,6 +71,21 @@ class StagingASituation(JourneyCase):
         told = self.telnet(self.ravenna, "setsituation find Gate")
         self.assertIn("No situation templates matched 'Gate'.", told)
         self.assertIn(f"[{self.barred_gate.pk}] Barred Gate (Normal)", told)
+
+        # A kind is found by name with its guidance; a bare find is the kind list, not the
+        # templates; browsing never places anything.
+        SituationKindFactory(name="Chase", minimum_gm_level=GMLevel.STARTING)
+        self.assertIn(
+            "Kind: Chase (min tier: Starting GM)", self.telnet(self.hobb, "setsituation find Chase")
+        )
+        told = self.telnet(self.hobb, "setsituation find")
+        self.assertIn("Kind: Chase", told)
+        self.assertNotIn("Rising Water", told)
+        self.assertIn(
+            "No situation kind matched 'Nothing' at your GM tier.",
+            self.telnet(self.hobb, "setsituation find Nothing"),
+        )
+        self.assertEqual(SituationInstance.objects.count(), 0)
 
     def test_one_challenge_is_placed_on_a_named_thing_and_shifted_a_band(self) -> None:
         self.assertIn(
