@@ -68174,12 +68174,26 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/Status76aEnum'
+          - $ref: '#/components/schemas/NPCLoanStatusEnum'
           readOnly: true
       required:
       - id
       - roster_entry
       - status
+    NPCLoanStatusEnum:
+      enum:
+      - offered
+      - requested
+      - active
+      - declined
+      - ended
+      type: string
+      description: |-
+        * `offered` - Offered
+        * `requested` - Requested
+        * `active` - Active
+        * `declined` - Declined
+        * `ended` - Ended
     NPCOffer:
       type: object
       description: |-
@@ -68235,7 +68249,7 @@ components:
         id:
           type: integer
         status:
-          $ref: '#/components/schemas/Status76aEnum'
+          $ref: '#/components/schemas/NPCLoanStatusEnum'
         requester_name:
           type: string
       required:
@@ -90791,20 +90805,6 @@ components:
         * `resolving` - Resolving
         * `between_rounds` - Between Rounds
         * `completed` - Completed
-    Status76aEnum:
-      enum:
-      - offered
-      - requested
-      - active
-      - declined
-      - ended
-      type: string
-      description: |-
-        * `offered` - Offered
-        * `requested` - Requested
-        * `active` - Active
-        * `declined` - Declined
-        * `ended` - Ended
     Status7baEnum:
       enum:
       - pending

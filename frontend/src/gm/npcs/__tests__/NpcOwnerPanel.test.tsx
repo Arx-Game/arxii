@@ -24,7 +24,7 @@ const detail: NpcDetail = {
   listed_on_npc_roster: true,
   notes_for_player: 'He is right about almost everything.',
   is_template: false,
-  open_requests: [{ id: 5, status: 'requested' }],
+  open_requests: [{ id: 5, status: 'requested', requester_name: 'Corvin' }],
   preferences: [],
   regard: [],
 };
@@ -62,6 +62,11 @@ describe('NpcOwnerPanel', () => {
     );
     const call = apiFetch.mock.calls.find((c) => c[0] === '/api/roster/npcs/answer/')!;
     expect(bodyOf(call)).toEqual({ loan_id: 5, accept: true });
+  });
+
+  it('names who is asking', async () => {
+    renderPanel();
+    expect(await screen.findByText('Corvin asks to borrow Captain Vael')).toBeInTheDocument();
   });
 
   it('declines an open borrow request', async () => {

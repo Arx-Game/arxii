@@ -25,18 +25,30 @@ export function useLoanEndFallback(
 ): void {
   const dispatch = useAppDispatch();
   const { mutate: selectCharacter } = useSelectCharacterMutation();
-  // The last listed character this tab was on, kept past an account refetch that clears `active`.
-  const lastActive = useRef<string | null>(null);
+  // The last listed character this tab was on, by roster entry id: a rename (a crowd
+  // voice described again) changes the name but not the entry.
+  const last = useRef<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     // Only a character seen in the list counts: a name that never was there did not leave it.
-    if (active && characters.some((c) => c.name === active)) lastActive.current = active;
-    const previous = lastActive.current;
+    const current = active ? characters.find((c) => c.name === active) : undefined;
+    if (current) last.current = { id: current.id, name: current.name };
+    const previous = last.current;
     if (!previous || characters.length === 0) return;
-    if (characters.some((c) => c.name === previous)) return;
+    const same = characters.find((c) => c.id === previous.id);
+    if (same) {
+      if (same.name !== previous.name) {
+        // Renamed while played: follow the new name, nothing ended.
+        last.current = { id: same.id, name: same.name };
+        if (active === previous.name) {
+          dispatch(hydrateActiveCharacter({ name: same.name, entryId: same.id }));
+        }
+      }
+      return;
+    }
     const next = fallbackEntry(characters);
     if (!next) return;
-    lastActive.current = next.name;
+    last.current = { id: next.id, name: next.name };
     writeTabIdentity(next.id);
     dispatch(setBrowsingIdentity(next.id));
     if (hasSession(next.name)) {

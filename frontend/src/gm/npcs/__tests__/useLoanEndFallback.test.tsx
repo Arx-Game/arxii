@@ -69,6 +69,18 @@ describe('useLoanEndFallback', () => {
     expect(store.getState().game.active).toBe('Ilsa');
   });
 
+  it('stays on a played entry whose name changes', () => {
+    store.dispatch(hydrateActiveCharacter({ name: 'Sergeant Mira', entryId: 2 }));
+    const { rerender } = renderHook(
+      ({ characters }) => useLoanEndFallback(characters, store.getState().game.active, () => false),
+      { wrapper, initialProps: { characters: [ilsa, mira] } }
+    );
+    act(() => rerender({ characters: [ilsa, { ...mira, name: 'The Low Gate Watch' }] }));
+    expect(store.getState().game.active).toBe('The Low Gate Watch');
+    expect(store.getState().game.activeEntryId).toBe(2);
+    expect(postSelectEntry).not.toHaveBeenCalled();
+  });
+
   it('leaves a character the account still holds alone', () => {
     store.dispatch(hydrateActiveCharacter({ name: 'Ilsa', entryId: 1 }));
     const { rerender } = renderHook(

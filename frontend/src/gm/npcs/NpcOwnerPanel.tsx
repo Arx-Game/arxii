@@ -165,7 +165,7 @@ export function NpcOwnerPanel({ entryId, name }: { entryId: number; name: string
   if (isError || !data) {
     return <p className="text-sm text-destructive">Couldn't load {name}'s settings.</p>;
   }
-  const requests = data.open_requests as { id: number; status: string }[];
+  const requests = data.open_requests;
 
   return (
     <div className="space-y-4 rounded-md border p-3" data-testid="npc-owner-panel">
@@ -177,7 +177,9 @@ export function NpcOwnerPanel({ entryId, name }: { entryId: number; name: string
               className="flex flex-wrap items-center gap-2 text-sm"
               data-testid="npc-borrow-request"
             >
-              <span className="grow">Request to borrow {data.name}</span>
+              <span className="grow">
+                {request.requester_name} asks to borrow {data.name}
+              </span>
               <Button
                 size="sm"
                 disabled={answer.isPending}

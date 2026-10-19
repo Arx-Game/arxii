@@ -38667,8 +38667,17 @@ export interface components {
     NPCLoan: {
       readonly id: number;
       readonly roster_entry: number;
-      readonly status: components['schemas']['Status76aEnum'];
+      readonly status: components['schemas']['NPCLoanStatusEnum'];
     };
+    /**
+     * @description * `offered` - Offered
+     *     * `requested` - Requested
+     *     * `active` - Active
+     *     * `declined` - Declined
+     *     * `ended` - Ended
+     * @enum {string}
+     */
+    NPCLoanStatusEnum: 'offered' | 'requested' | 'active' | 'declined' | 'ended';
     /**
      * @description One OFFERED loan, as the Guide it was offered to reads it.
      *
@@ -38693,7 +38702,7 @@ export interface components {
      */
     NPCOpenRequest: {
       id: number;
-      status: components['schemas']['Status76aEnum'];
+      status: components['schemas']['NPCLoanStatusEnum'];
       requester_name: string;
     };
     /** @description One trait the NPC likes or dislikes, as the NPC form shows it. */
@@ -50760,15 +50769,6 @@ export interface components {
      * @enum {string}
      */
     Status4e6Enum: 'declaring' | 'resolving' | 'between_rounds' | 'completed';
-    /**
-     * @description * `offered` - Offered
-     *     * `requested` - Requested
-     *     * `active` - Active
-     *     * `declined` - Declined
-     *     * `ended` - Ended
-     * @enum {string}
-     */
-    Status76aEnum: 'offered' | 'requested' | 'active' | 'declined' | 'ended';
     /**
      * @description * `pending` - Pending
      *     * `accepted` - Accepted
