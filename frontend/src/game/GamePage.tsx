@@ -402,7 +402,7 @@ export function GamePage() {
   const account = useAccount();
   const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useAppDispatch();
-  const { connect, resume } = useGameSocket();
+  const { connect, resume, disconnect } = useGameSocket();
   // #3774 -- the game screen is the one place that polls this. Focus and the
   // 60s timer are what make a badge clear on this device after the player read
   // the poses on another one; nothing pushes read state.
@@ -413,8 +413,9 @@ export function GamePage() {
     refetchOnWindowFocus: true,
   });
   const { sessions, active } = useAppSelector((state) => state.game);
+  const dropSession = useCallback((name: string) => disconnect(name), [disconnect]);
   const hasSession = useCallback((name: string) => Boolean(sessions[name]), [sessions]);
-  useLoanEndFallback(characters, active, hasSession);
+  useLoanEndFallback(characters, active, hasSession, dropSession);
 
   // Enter-the-world auto-start (#3412): a fresh hydration (reload survival,
   // or arriving here via the header's docked chip) sets `active` with no

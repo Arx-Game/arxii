@@ -10,6 +10,7 @@ import { hydrateActiveCharacter, resetGame } from '@/store/gameSlice';
 
 import { fallbackEntry, useLoanEndFallback } from '../useLoanEndFallback';
 
+const dropSession = vi.fn();
 const postSelectEntry = vi.fn().mockResolvedValue({});
 vi.mock('@/roster/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/roster/api')>()),
@@ -45,13 +46,15 @@ describe('useLoanEndFallback', () => {
   it('drops the tab to the remaining character when the played NPC leaves the list', async () => {
     store.dispatch(hydrateActiveCharacter({ name: 'Sergeant Mira', entryId: 2 }));
     const { rerender } = renderHook(
-      ({ characters }) => useLoanEndFallback(characters, store.getState().game.active, () => false),
+      ({ characters }) =>
+        useLoanEndFallback(characters, store.getState().game.active, () => false, dropSession),
       { wrapper, initialProps: { characters: [ilsa, mira] } }
     );
     expect(store.getState().game.active).toBe('Sergeant Mira');
     act(() => rerender({ characters: [ilsa] }));
     expect(store.getState().game.active).toBe('Ilsa');
     expect(store.getState().game.activeEntryId).toBe(1);
+    expect(dropSession).toHaveBeenCalledWith('Sergeant Mira');
     await waitFor(() => expect(postSelectEntry).toHaveBeenCalledWith(1));
   });
 
@@ -59,7 +62,7 @@ describe('useLoanEndFallback', () => {
     store.dispatch(hydrateActiveCharacter({ name: 'Sergeant Mira', entryId: 2 }));
     const { rerender } = renderHook(
       ({ characters, active }: { characters: MyRosterEntry[]; active: string | null }) =>
-        useLoanEndFallback(characters, active, () => false),
+        useLoanEndFallback(characters, active, () => false, dropSession),
       {
         wrapper,
         initialProps: { characters: [ilsa, mira], active: 'Sergeant Mira' as string | null },
@@ -72,19 +75,21 @@ describe('useLoanEndFallback', () => {
   it('stays on a played entry whose name changes', () => {
     store.dispatch(hydrateActiveCharacter({ name: 'Sergeant Mira', entryId: 2 }));
     const { rerender } = renderHook(
-      ({ characters }) => useLoanEndFallback(characters, store.getState().game.active, () => false),
+      ({ characters }) =>
+        useLoanEndFallback(characters, store.getState().game.active, () => false, dropSession),
       { wrapper, initialProps: { characters: [ilsa, mira] } }
     );
     act(() => rerender({ characters: [ilsa, { ...mira, name: 'The Low Gate Watch' }] }));
     expect(store.getState().game.active).toBe('The Low Gate Watch');
     expect(store.getState().game.activeEntryId).toBe(2);
     expect(postSelectEntry).not.toHaveBeenCalled();
+    expect(dropSession).not.toHaveBeenCalled();
   });
 
   it('leaves a character the account still holds alone', () => {
     store.dispatch(hydrateActiveCharacter({ name: 'Ilsa', entryId: 1 }));
     const { rerender } = renderHook(
-      ({ characters }) => useLoanEndFallback(characters, 'Ilsa', () => false),
+      ({ characters }) => useLoanEndFallback(characters, 'Ilsa', () => false, dropSession),
       { wrapper, initialProps: { characters: [ilsa, mira] } }
     );
     act(() => rerender({ characters: [ilsa] }));

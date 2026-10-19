@@ -149,6 +149,9 @@ const mockUseBattleForSceneQuery = vi.fn(
   })
 );
 
+// The cast panel (#4418) has its own tests; here it would fetch the real network.
+vi.mock('@/gm/npcs/CastListPanel', () => ({ CastListPanel: () => null }));
+
 vi.mock('@/battles/queries', () => ({
   useBattleForSceneQuery: () => mockUseBattleForSceneQuery(),
 }));

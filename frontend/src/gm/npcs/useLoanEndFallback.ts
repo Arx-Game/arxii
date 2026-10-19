@@ -21,7 +21,9 @@ export function fallbackEntry(characters: MyRosterEntry[]): MyRosterEntry | null
 export function useLoanEndFallback(
   characters: MyRosterEntry[],
   active: string | null,
-  hasSession: (name: string) => boolean
+  hasSession: (name: string) => boolean,
+  /** Closes the ended loan's socket and forgets its session tab. */
+  dropSession: (name: string) => void
 ): void {
   const dispatch = useAppDispatch();
   const { mutate: selectCharacter } = useSelectCharacterMutation();
@@ -46,6 +48,7 @@ export function useLoanEndFallback(
       }
       return;
     }
+    dropSession(previous.name);
     const next = fallbackEntry(characters);
     if (!next) return;
     last.current = { id: next.id, name: next.name };
@@ -57,5 +60,5 @@ export function useLoanEndFallback(
       dispatch(hydrateActiveCharacter({ name: next.name, entryId: next.id }));
     }
     selectCharacter(next.id);
-  }, [characters, active, dispatch, hasSession, selectCharacter]);
+  }, [characters, active, dispatch, hasSession, dropSession, selectCharacter]);
 }
