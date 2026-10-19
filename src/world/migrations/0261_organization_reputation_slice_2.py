@@ -6,9 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0256_gift_technique_skill_minor_only"),
-    ]
+    dependencies = [("arxii", "0260_alter_magicactivityskill_activity")]
 
     operations = [
         migrations.AddField(

@@ -487,7 +487,7 @@ staff.
 _Avoid_: manifest choice, summon binding, bonded summon.
 
 **Magic Activity** (#4450, ADR-4450):
-A kind of magical roll that adds staff-chosen skills, one `MagicActivity` member each: the anima ritual, technique learning, ritual working, sustaining magic, dispelling, magical treatment, Soulfray resilience, resisting loss of self, Soul Tether rescue, Court petition, Fury control, moon control, enduring hostile resonance, feeding restraint, sensing magic, worship rite, invocation and ceremony. Staff map an activity to skills with `MagicActivitySkill` rows (a skill and a weight each); the roll keeps its own check type and adds those skills as terms. An activity with no row adds nothing. A technique cast is not an activity; its skill is the **Technique skill**. A new magical roll joins by adding a member and passing `activity_skill_terms(<member>)`.
+A kind of magical roll that adds staff-chosen skills, one `MagicActivity` member each: the anima ritual, technique learning, ritual working, sustaining magic, dispelling, magical treatment, Soulfray resilience, resisting loss of self, Soul Tether rescue, Court petition, Fury control, moon control, enduring hostile resonance, feeding restraint, sensing magic, worship rite, invocation, ceremony, companion binding and dream peril. Staff map an activity to skills with `MagicActivitySkill` rows (a skill and a weight each); the roll keeps its own check type and adds those skills as terms. An activity with no row adds nothing. A technique cast is not an activity; its skill is the **Technique skill**. A new magical roll joins by adding a member and passing `activity_skill_terms(<member>)`.
 _Avoid_: magic check type, roll category, skill bundle.
 
 **Technique skill** (#4450, ADR-4450):

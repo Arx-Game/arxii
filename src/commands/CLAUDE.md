@@ -83,7 +83,18 @@ actions, backends, and service functions.
 
 ### Command Files
 - **`evennia_overrides/perception.py`**: `CmdLook` (`feed_kind = "look"`; its own
-  `_execute` routes through `send_result`, #3856), `CmdInventory`
+  `_execute` routes through `send_result`, #3856), `CmdInventory`. The look grammars
+  (`look <name>'s <thing>`, `look <thing> on <name>`, `look <thing> in <bag>`, a thing whose
+  own name carries `'s` or ` in `, a hidden bearer reading as absent) are typed through the
+  handler in `integration_tests/test_handling_your_things_journeys.py` (`LookingAtThings`),
+  and `home`/`home/set`/`recall` in `test_coming_home_journeys.py` (#3657 tranche 9); the
+  hand-built `tests/test_dispatchers.py`, which built every parser by hand, is gone. A new
+  look or movement grammar gets its lines there. A plain look resolves its target through
+  `search_or_raise` (tranche 9: the loud search had said "Could not find" and the raised
+  error said it again, the double line tranche 8 took off every other verb); the drilled
+  forms keep their quiet searches and fall through to the plain look, and `_execute`
+  rewrites a concealed target's failure in the same words, so an absent name and a hidden
+  one still read alike.
 - **`evennia_overrides/system.py`**: `CmdNoMatch` (#3856) — the `CMD_NOMATCH` system
   command in `CharacterCmdSet`. Evennia's own no-match reply is an untyped `text`
   frame the web client could not place, so it was silent there; this reproduces
@@ -179,7 +190,13 @@ actions, backends, and service functions.
   `RemoveOutfitSlotAction` (`actions/definitions/outfits.py`) plus the pre-existing
   `ApplyOutfitAction`/`UndressAction`/`PresentOutfitAction` — the same Actions
   `OutfitViewSet`/`OutfitSlotViewSet` now dispatch through. Bare `outfit`/
-  `outfit list` shows a status hub.
+  `outfit list` shows a status hub. The wardrobe and item dbrefs (`wardrobe=<id>`,
+  `item=<id>`) resolve through `_held_by_id`, a quiet dbref search scoped to the caller's
+  hands (#3657 tranche 10: the loud one had said "Could not find '#id'." before the
+  command's own "You aren't holding that ..."). Every subverb, the hub and the usages are
+  typed through the handler in `integration_tests/test_handling_your_things_journeys.py`
+  (`KeepingAWardrobe`); the hand-built `tests/test_outfit.py`, which mocked every action's
+  `run`, is gone.
 - **`places.py`**: `CmdPlaces` (`places`, #1866) — join/leave a Place (named
   sub-location) in the caller's current room. Bare `places` lists active Places
   there; `places join <name>` resolves a Place by name scoped to the caller's room
@@ -290,6 +307,19 @@ actions, backends, and service functions.
   `add`'s NPC name already has); `<tier>` must be `elite`/`boss`/`hero_killer`.
 - **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdSeduce`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338/#1695); `CmdAccept` (extended to check offer registry first; consent
   fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
+  Every player path (the verb in and out of a scene, no target, an absent name, `accept`,
+  `deny`, `accept/<band> <id>`, `deny/blacklist`, nothing pending) is typed through the
+  handler in `integration_tests/test_faces_silences_and_the_floor_journeys.py`
+  (`PressingSomeoneInAScene`, #3657 tranche 9); `tests/test_consent_commands.py` keeps only
+  the action-key registry map and the pull-token parsing. Two gaps are open on #3657:
+  `create_action_request` consults no consent rule, so the blacklist bars only the web's
+  target picker and a telnet `intimidate <name>` still opens the request; and the telnet
+  target is never told a request opened (the actor alone sees the request number).
+- **`social/friends.py`**: `CmdFriend` (`friend <name>`, `friend/all <name>`), `CmdUnfriend`,
+  `CmdFriends` — the OOC friends list, per character or across every character of the
+  account; a character who has blocked the caller is "not available" with the block never
+  named. Typed through the handler in the faces journey (`KeepingAFriendsList`, #3657
+  tranche 9; the hand-built `tests/test_friends_commands.py` is gone).
 - **`allegiance.py`**: After-fight allegiance choices for a charmed, turned, or calmed NPC
   (#4091, ADR-4091). `CmdSettle` (`settle <character>`, `ConsentRequestCommand`) dispatches the
   one `settles_allegiance` `ActionTemplate` through the ordinary scene social-action pipeline
@@ -727,7 +757,10 @@ actions, backends, and service functions.
   into `target_name`/`template_name` kwargs and delegates to `GrantItemAction` (key `grant_item`,
   REGISTRY backend, `actions/definitions/items.py`) via `action.run()` — the same seam every other
   `ArxCommand` uses. The Action resolves the target by name
-  (`actor.search(..., global_search=True)`) and calls
+  (`actor.search(..., global_search=True, quiet=True)`; #3657 tranche 10: the loud search had
+  sent Evennia's bare untyped "Could not find" and the action then answered nothing, so the
+  web saw no refusal at all; now an absent name and several matches are the action's own
+  typed lines, and a plain object is "That is not a character.") and calls
   `world.items.services.narrative_grants.grant_touchstone_item_to_character` to create one
   `ItemInstance` of the named `ItemTemplate`, held by the target's `CharacterSheet`. No shop/
   merchant system exists in this codebase — this command IS the acquisition channel for
@@ -767,7 +800,10 @@ actions, backends, and service functions.
   place ONE authored challenge on a named thing in the room, the lightweight sibling of a full
   situation. The target name runs free up to the first `edge=`/`setback=` token, so a multi-word
   name needs no quoting; both tokens together are left for the Action to refuse (one refusal
-  message, not two). No business logic in the command.
+  message, not two). No business logic in the command. Every form (by name and id, the
+  usage, the trust gates, `find` by term, by kind and bare, `challenge` with its shifts) is
+  typed through the handler in `integration_tests/test_staging_a_situation_journeys.py`
+  (#3657 tranches 6 and 10; the hand-built `tests/test_setsituation_command.py` is gone).
 - **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list, create, or switch
   faces. Bare `persona`/`persona list` renders all the caller's personas (marking the active one
   `◄ active`). `persona <name>`/`wear-face <name>` resolves the name among the caller's own faces
@@ -838,6 +874,9 @@ actions, backends, and service functions.
   The **web equivalent** is `GET`/`PATCH /api/roster/visibility-settings/`
   (`roster.views.settings_views.VisibilitySettingsView`, #1484) — same `set_appear_offline` write,
   scoped to the player's active character; the toggle lives on the frontend `SettingsPage`.
+  `hide`/`unhide` with their paging consequences, the unrostered refusal and the `afk` toggle
+  are typed through the handler in `integration_tests/test_faces_silences_and_the_floor_journeys.py`
+  (#3657 tranches 3 and 10; the hand-built `tests/test_cmd_presence.py` is gone).
 - **`fatigue.py`**: `CmdRest` (`rest`, #1491) — telnet face of `RestAction`. Spend AP to become
   Well-Rested; thin REGISTRY command that delegates directly to `actions.definitions.fatigue.RestAction`.
 - **`sanctum.py`**: `CmdSanctum` (`sanctum`, #1497) — the sanctum-management namespace. One
@@ -1086,7 +1125,13 @@ actions, backends, and service functions.
   list` renders one line per side (labels, depth, tier); `relationship show <name|#>` adds
   gauges/AP/summary. Relationship types resolve by name (iexact); `advance` looks the named
   journal entry up among the caller's own (`author=sheet`). No consent gate (ADR-0024) — these
-  describe the caller's own side of a tie, they don't compel the target's behavior.
+  describe the caller's own side of a tie, they don't compel the target's behavior. The target
+  name (and `show <name>`) resolves through `search_or_raise` (#3657 tranche 10: the loud
+  search had said "Could not find" before the command's own error did). Every subverb, the
+  switch spelling, the usages, an absent name and a bonded companion are typed through the
+  handler in `integration_tests/test_keeping_ties_journeys.py` (`KeepingTies`); the
+  hand-built `tests/test_relationships_command.py` is gone, and a new tie verb gets its
+  lines there.
 - **`covenant.py`**: `CmdCovenant` (`covenant`, #1346) — covenant membership lifecycle namespace.
   One `ArxCommand` routes a leading subverb to the matching covenant Action via `action.run()` —
   the same seam the web covenant viewsets use (both converge on `world.covenants.services`).
@@ -1103,6 +1148,11 @@ actions, backends, and service functions.
   top-level keys — to avoid exit/channel/alias collisions; mirrors `CmdCombat`/`CmdDuel`.
   No business logic in the command. Covenant induction and banner-call rise are session-driven via
   `CmdRitual` + `CovenantInductionAdapter`/`BannerCallAdapter` (see `ritual_adapters.py`).
+  Every subverb, the usages and the which-covenant prompt are typed through the handler in
+  `integration_tests/test_gatherings_coffers_and_wares_journeys.py` (#3657 tranches 2 and 9;
+  the hand-built `tests/test_covenant_command.py` is gone), as are `gm dashboard`, `gm claim`
+  and `gmidle` (`tests/test_gm_ops_command.py` gone) and, in the staging journey, `gm suggest`
+  (`tests/test_gm_ops_catalog.py` gone). A new covenant or `gm` subverb gets its lines there.
 - **`events.py`**: `CmdEvent` (`event`, alias `events`, #1499) — the event lifecycle + invitee RSVP
   namespace. One `ArxCommand` routes a leading subverb and runs the matching event Action via
   `action.run()` directly — the same seam the web `EventViewSet` / `EventInvitationViewSet` use.

@@ -1,6 +1,6 @@
 ---
 name: item-destroy-reviewer
-description: Checks that code which removes or empties an ItemInstance goes through the canonical destroy helper, never a bare delete. Use when a diff deletes items, consumes items (crafting materials, ritual components, price components, charges, contributions), or drives an item's quantity or charges to zero, and when reviewing one. Catches the ghost game object left in a character's inventory.
+description: Checks that code which removes, empties or dematerializes an ItemInstance goes through the canonical usage helpers, never a bare delete of the item or of its game object. Use when a diff deletes items or an item's game object, consumes items (crafting materials, ritual components, price components, charges, contributions), or drives an item's quantity or charges to zero, and when reviewing one. Catches the ghost game object left in an inventory and the item row a game-object delete cascades away.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -36,6 +36,25 @@ soft-delete fields tells them apart. No linter catches it either: `.delete()` on
 variable named `instance` or `inst` is far more often a `ConditionInstance` than an
 item, so a name-based lint is not precise without type inference.
 
+**The second defect (#4474): deleting the game object deletes the item.** Because the
+cascade runs from `game_object` to the row, `item.game_object.delete()` is not "drop the
+prop"; it removes the `ItemInstance` and its whole history. Vault deposit and vault
+transit (`org_vault.py`) did it, then saved the row that was gone (`ValueError: Cannot
+force an update in save() with no primary key`), so depositing any real item failed; the
+tests used factory items with no game object and never reached the line. Evidence
+disposal and coin redemption hard-deleted through the object and skipped the soft-delete
+an item with a design or provenance is owed. The scene-boon fallback and lost gem stones
+had the same shapes. Two fixes, by intent: **custody that keeps the item** (a vault)
+calls `dematerialize_item_instance`, which detaches the object and saves the row BEFORE
+deleting the object; **an item that is used up** calls
+`destroy_consumed_item_instance`. Withdraw from a vault materializes a fresh object.
+
+**Mechanical half for #4474: `tools/lint_item_deletes.py`** (the `item-deletes` hook).
+It flags `.game_object.delete()`, a local named `game_object` deleted, and an
+`ItemInstance` queryset `.delete()`, outside `usage.py`. Suppress with
+`# noqa: ITEM_DELETE <reason>`. A game object held under another variable name, or an
+`item.delete()` on a row, is for this agent to catch.
+
 ## The canonical helpers (`world/items/services/usage.py`)
 
 - `destroy_consumed_item_instance(item_instance, *, preserve=None, note, event_type=CONSUMED)`:
@@ -47,6 +66,10 @@ item, so a name-based lint is not precise without type inference.
   `location = None` and is kept, and a CONSUMED `OwnershipEvent` is logged. Otherwise
   it goes through `hard_delete_item_instance`. Either way it invalidates the holder's
   `carried_items`. `consume_item_charges` and `consume_materials` both call it.
+- `dematerialize_item_instance(item_instance)`: drops only the game object and keeps
+  the item row (detach and save first, then delete the object). For custody with no
+  physical object: an org vault, a boon whose object cannot follow. Never for an item
+  that is used up.
 - `hard_delete_item_instance(item_instance)`: removes the whole footprint (ownership
   events first, then the game object, which cascades to the row; or the row alone when
   it has no game object). Used by recycling and the soft-delete cleanup.
@@ -125,11 +148,11 @@ delete there is a regression:
 - the fence (`sell_to_fence`, `world/items/market/services.py`), which writes
   TRANSFERRED to no receiver for an item with a history.
 
-Sites that delete the game object first and the row second
-(`world/currency/services.py` redemption, `world/justice/evidence.py`) leave no ghost.
-They do skip the ledger cleanup, so judge them when a diff touches them.
-`world/items/services/org_vault.py` deletes game objects when items move into a vault
-(a different lifecycle); check it the same way.
+Also routed through the helpers (#4474): coin redemption
+(`world/currency/services.py`), evidence disposal (`world/justice/evidence.py`), lost gem
+stones in a collection (`world/items/gems/collection.py`), and the boon fallback
+(`world/scenes/boon_services.py`). The org vault (`world/items/services/org_vault.py`)
+uses `dematerialize_item_instance`.
 
 **Watch for PROTECT references.** A hard delete of an item that a PROTECT FK points at
 (`Contribution.item_instance`, `Mantle`) raises `ProtectedError`. The old building
@@ -145,6 +168,9 @@ A test of any item-destroying path needs three assertions, not one:
 - for an item with provenance: the row exists with `destroyed_at` set, its game object
   has `location is None`, and a CONSUMED `OwnershipEvent` exists;
 - in both cases, `holder.carried_items` no longer lists it.
+
+A vault or other custody path also asserts the item row and its custom data survive
+with `game_object` null, and that the move back out gives it a game object again.
 
 Build the test item with a game object located on the character (see
 `world/magic/tests/price_cost_helpers.py`'s `carry`). An `ItemInstanceFactory` with no

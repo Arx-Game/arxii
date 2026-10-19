@@ -1265,10 +1265,18 @@ class GrantItemAction(Action):
                 message="Usage: grant_item <character>=<item template name>",
             )
 
-        target = actor.search(target_name, global_search=True)
-        if target is None:
-            # search() already messaged the actor with a not-found/ambiguous notice.
-            return ActionResult(success=False)
+        # Quiet: the loud search had told the actor "Could not find" as a bare
+        # untyped line the web cannot place, and the action then answered nothing
+        # (#3657 tranche 10). The refusal is this action's own, typed line.
+        matches = actor.search(target_name, global_search=True, quiet=True)
+        if not matches:
+            return ActionResult(success=False, message=f"Could not find '{target_name}'.")
+        if len(matches) > 1:
+            return ActionResult(
+                success=False,
+                message=f"More than one match for '{target_name}' (please narrow target).",
+            )
+        target = matches[0]
 
         sheet = target.character_sheet
         if sheet is None:

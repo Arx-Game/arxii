@@ -936,3 +936,170 @@ class CeremonyRollSiteTests(ActivityTermTestCase):
             MagicActivity.SENSING_MAGIC,
             lambda: run_twisted_rite_leak(ceremony=ceremony, officiant_sheet=officiant),
         )
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_charm_content gates on #2698
+class CompanionBindingRollSiteTests(ActivityTermTestCase):
+    """Binding a summoned being as a companion rolls with the COMPANION_BINDING skills."""
+
+    def test_bind_attempt(self) -> None:
+        from evennia import create_object
+
+        from world.combat.constants import CombatAllegiance, OpponentStatus
+        from world.combat.factories import (
+            CombatEncounterFactory,
+            CombatOpponentFactory,
+            ThreatPoolFactory,
+        )
+        from world.companions.content import ensure_companion_content
+        from world.companions.factories import CompanionArchetypeFactory
+        from world.companions.services import promote_summon_to_companion
+        from world.magic.constants import TargetKind
+        from world.magic.models.threads import Thread
+        from world.magic.specialization.services import grant_gift_to_character
+
+        sheet = CharacterSheetFactory()
+        sheet.character.location = create_object("typeclasses.rooms.Room", key="Bind Roll Room")
+        sheet.character.save()
+        gift = ensure_companion_content()
+        grant_gift_to_character(sheet, gift, resonance=gift.resonances.first())
+        thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=gift)
+        thread.level = 10
+        thread.save(update_fields=["level"])
+        archetype = CompanionArchetypeFactory(bind_difficulty=20, capacity_cost=5)
+        opponent = CombatOpponentFactory(
+            encounter=CombatEncounterFactory(), threat_pool=ThreatPoolFactory()
+        )
+        opponent.allegiance = CombatAllegiance.ALLY
+        opponent.summoned_by = sheet
+        opponent.status = OpponentStatus.ACTIVE
+        opponent.save(update_fields=["allegiance", "summoned_by", "status"])
+
+        self.assert_terms_reach(
+            "world.checks.services.perform_check",
+            MagicActivity.COMPANION_BINDING,
+            lambda: promote_summon_to_companion(
+                caster_sheet=sheet,
+                combat_opponent=opponent,
+                archetype=archetype,
+                granting_gift=gift,
+                name="Bound Roll",
+            ),
+        )
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class DreamPerilRollSiteTests(ActivityTermTestCase):
+    """A dream's peril resist rolls with the DREAM_PERIL skills."""
+
+    def test_peril_resist(self) -> None:
+        from world.character_sheets.services import create_character_with_sheet
+        from world.dreams.conditions import ensure_dream_conditions
+        from world.dreams.peril import get_dream_peril_config, resolve_dream_peril_collapse
+        from world.vitals.factories import create_dream_peril_pool
+        from world.vitals.seeds import seed_survivability_content
+
+        seed_survivability_content()
+        ensure_dream_conditions()
+        create_dream_peril_pool()
+        config = get_dream_peril_config()
+        config.resist_check_type = CheckTypeFactory()
+        config.save(update_fields=["resist_check_type"])
+        _char, sheet, _ = create_character_with_sheet(
+            character_key="Roll Dreamer", primary_persona_name="Roll Dreamer"
+        )
+
+        self.assert_terms_reach(
+            "world.checks.consequence_resolution.perform_check",
+            MagicActivity.DREAM_PERIL,
+            lambda: resolve_dream_peril_collapse(sheet),
+        )
+
+
+class NewActivityUnmappedTests(ActivityTermTestCase):
+    """With no row for an activity, its roll adds nothing, whatever else is mapped (#4477)."""
+
+    def test_unmapped_activities_add_nothing(self) -> None:
+        from world.magic.services.magic_skills import activity_skill_terms
+
+        MagicActivitySkillFactory(
+            activity=MagicActivity.CEREMONY, skill=self.skill, weight=SKILL_WEIGHT
+        )
+
+        for activity in (MagicActivity.COMPANION_BINDING, MagicActivity.DREAM_PERIL):
+            with self.subTest(activity=activity):
+                self.assertEqual(activity_skill_terms(activity), ())
+
+
+class TechniqueEnhancedConditionEffectTests(ActivityTermTestCase):
+    """A condition effect's roll adds the technique skill only for a technique source (#4477)."""
+
+    def drive(self, enhancement, *, remove: bool) -> list[dict]:
+        """Run the apply or remove handler for ``enhancement``; return its roll's kwargs."""
+        from actions.effects.conditions import (
+            handle_condition_on_check,
+            handle_remove_condition_on_check,
+        )
+        from actions.models import ConditionOnCheckConfig, RemoveConditionOnCheckConfig
+        from actions.types import ActionContext
+
+        context = ActionContext(
+            action=SimpleNamespace(),
+            actor=CharacterSheetFactory().character,
+            target=CharacterSheetFactory().character,
+            kwargs={},
+            scene_data=SimpleNamespace(),
+        )
+        fields = {
+            "enhancement": enhancement,
+            "check_type": CheckTypeFactory(),
+            "condition": ConditionTemplateFactory(),
+            "target_difficulty": 10,
+        }
+        if remove:
+            handler, config = (
+                handle_remove_condition_on_check,
+                RemoveConditionOnCheckConfig(**fields),
+            )
+        else:
+            handler, config = handle_condition_on_check, ConditionOnCheckConfig(**fields)
+        with roll_recorded("actions.effects.conditions.perform_check") as calls:
+            with self.assertRaises(RollReached):
+                handler(context, config)
+        self.assertEqual(len(calls), 1)
+        return calls
+
+    def technique_enhancement(self, **technique_fields: object):
+        from actions.factories import ActionEnhancementFactory
+
+        return ActionEnhancementFactory(technique=TechniqueFactory(**technique_fields))
+
+    def test_technique_source_adds_its_skill(self) -> None:
+        enhancement = self.technique_enhancement(skill=self.skill)
+        technique_terms = (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),)
+
+        for remove in (False, True):
+            with self.subTest(remove=remove):
+                calls = self.drive(enhancement, remove=remove)
+                self.assertEqual(calls[0]["extra_traits"], technique_terms)
+
+    def test_technique_without_a_skill_adds_nothing(self) -> None:
+        enhancement = self.technique_enhancement()
+
+        for remove in (False, True):
+            with self.subTest(remove=remove):
+                self.assertEqual(self.drive(enhancement, remove=remove)[0]["extra_traits"], ())
+
+    def test_non_technique_source_adds_nothing(self) -> None:
+        from actions.constants import EnhancementSourceType
+        from actions.factories import ActionEnhancementFactory
+
+        enhancement = ActionEnhancementFactory(
+            source_type=EnhancementSourceType.CONDITION,
+            technique=None,
+            condition=ConditionTemplateFactory(),
+        )
+
+        for remove in (False, True):
+            with self.subTest(remove=remove):
+                self.assertEqual(self.drive(enhancement, remove=remove)[0]["extra_traits"], ())

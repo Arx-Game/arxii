@@ -6,10 +6,12 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from actions.constants import EnhancementSourceType
 from actions.effects.base import resolve_target_difficulty
 from actions.effects.conditions import handle_condition_on_check
 from actions.effects.kwargs import handle_modify_kwargs
 from actions.effects.modifiers import handle_add_modifier
+from actions.factories import ActionEnhancementFactory
 from actions.models import AddModifierConfig, ConditionOnCheckConfig, ModifyKwargsConfig
 from actions.types import ActionContext, ActionResult
 from world.character_sheets.factories import CharacterSheetFactory
@@ -112,6 +114,12 @@ class ConditionOnCheckHandlerTests(TestCase):
         )
         cls.charmed = ConditionTemplateFactory(name="Charmed")
         cls.charm_immunity = ConditionTemplateFactory(name="Charm Immunity")
+        # A non-technique source: the handler adds a technique skill only for a technique.
+        cls.enhancement = ActionEnhancementFactory(
+            source_type=EnhancementSourceType.CONDITION,
+            technique=None,
+            condition=ConditionTemplateFactory(),
+        )
 
     def _make_context(self) -> ActionContext:
         return ActionContext(
@@ -125,6 +133,7 @@ class ConditionOnCheckHandlerTests(TestCase):
 
     def _make_config(self, **overrides: object) -> ConditionOnCheckConfig:
         defaults = {
+            "enhancement": self.enhancement,
             "check_type": self.attack_check,
             "resistance_check_type": self.defense_check,
             "condition": self.charmed,

@@ -2875,6 +2875,7 @@
   - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
 
 ### Service Functions
+- `activity_skill_terms(activity: 'MagicActivity') -> 'tuple[ExtraTraitTerm, ...]' - The skill terms staff mapped to ``activity``; empty when none are mapped.`
 - `bind_companion(*, owner: 'CharacterSheet', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' - Create a bonded Companion + its live CompanionObject in owner's current room.`
 - `companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' - Total Companion Capacity character_sheet has via gift's Thread level.`
 - `companion_is_savaged(companion: 'Companion') -> 'bool' - True when the companion's body carries the Savaged injury (#3652).`
@@ -8904,6 +8905,7 @@
   - action_template -> actions.ActionTemplate [FK] (nullable)
   - treatment -> conditions.TreatmentTemplate [FK] (nullable)
   - target_condition_instance -> conditions.ConditionInstance [FK] (nullable)
+  - target_condition_template -> conditions.ConditionTemplate [FK] (nullable)
   - target_pending_alteration -> magic.PendingAlteration [FK] (nullable)
   - thread_used -> magic.Thread [FK] (nullable)
   - technique -> magic.Technique [FK] (nullable)

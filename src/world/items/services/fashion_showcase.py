@@ -156,6 +156,13 @@ def record_showing_engagement(showing: FashionShowing) -> None:
         reason="issue #3817: intentional atomic write",
         engagement_count=F("engagement_count") + 1,
     )
+    # The F() update bypasses the identity map: the caller's instance (and the one
+    # weekly settlement iterates, the same object) would keep the old count and
+    # settle as if nobody had engaged.
+    showing.flush_from_cache(force=True)
+    # Full refresh: a fields=[...] refresh right after the flush leaves every other
+    # field deferred on the re-cached instance (same trap as relationships.move_gauges).
+    showing.refresh_from_db()
 
 
 def _settle_one(showing: FashionShowing) -> int:
