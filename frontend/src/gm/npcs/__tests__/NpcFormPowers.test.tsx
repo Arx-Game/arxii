@@ -13,6 +13,10 @@ vi.mock('@/evennia_replacements/api', () => ({
   apiFetch: (url: string, init?: RequestInit) => apiFetch(url, init),
 }));
 
+// The post-create Powers panel reads a full staff sheet; it has its own coverage, and this
+// file only drives the form's typed Powers.
+vi.mock('../NpcPowersPanel', () => ({ NpcPowersPanel: () => null }));
+
 import { NpcForm } from '../NpcForm';
 
 const NEW_ENTRY = 55;
