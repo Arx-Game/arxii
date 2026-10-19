@@ -1595,13 +1595,11 @@ def _resolve_enhanced_action(  # noqa: PLR0913
 
     # The pull context follows what this action rolls: the template's check traits plus the
     # technique skill term, not the caster's personal check (#4450).
+    action_cast_check = CastCheck(
+        check_type=action_template.check_type, extra_traits=tuple(extra_traits)
+    )
     applicable_threads = applicable_threads_for_cast(
-        character,
-        technique,
-        cast_pull=cast_pull,
-        cast_check=CastCheck(
-            check_type=action_template.check_type, extra_traits=tuple(extra_traits)
-        ),
+        character, technique, cast_pull=cast_pull, cast_check=action_cast_check
     )
 
     fury_res = run_fury_for_action(
@@ -1628,6 +1626,8 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         applicable_threads=applicable_threads,
         cast_pull=cast_pull,
         pull_target=context.target,
+        # The pull's involved traits follow this action's roll, not the personal check.
+        cast_check=action_cast_check,
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
         strain_power_enabled=False,

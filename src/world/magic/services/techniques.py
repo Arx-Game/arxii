@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.magic.types import MishapResult
+    from world.magic.types.magic_skills import CastCheck
     from world.magic.types.personalization import PricePayment
     from world.magic.types.pull import CastPullDeclaration
     from world.mechanics.models import ModifierTarget
@@ -944,13 +945,14 @@ def _emit_cast_events(  # noqa: PLR0913 - frozen event payload fields
         )
 
 
-def _charge_cast_pull(
+def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a distinct input
     *,
     character: ObjectDB,
     technique: Technique,
     cast_pull: CastPullDeclaration,
     effective_power: int,
     target: ObjectDB | None = None,
+    cast_check: CastCheck | None = None,
 ) -> tuple[int, int, list[ResolvedPullEffect]]:
     """Charge a non-combat cast pull and return resolved effects.
 
@@ -962,6 +964,11 @@ def _charge_cast_pull(
     ``PullActionContext.target`` so ``resolve_pull_effects`` can apply
     ``court_regard_modulation`` for COVENANT_ROLE pulls. ``None`` for untargeted
     casts.
+
+    ``cast_check`` is the check the cast actually rolls (#4450). A caller whose roll is not
+    the caster's own cast check (an enhanced social action rolls its template's check)
+    passes it, so the pull's involved traits match the roll; when ``None`` it is
+    re-resolved with ``resolve_cast_check``.
 
     When ``cast_pull.beseech_bonus > 0``, resolves the shared emergency
     thread-bond draw (``world.combat.pull_helpers._resolve_emergency_draw``,
@@ -996,6 +1003,8 @@ def _charge_cast_pull(
         # perks simply never hold here; DB-state perks are unaffected.
         beseech_bonus_thread_id, applied_bonus = _resolve_emergency_draw(pull_sheet, cast_pull)
 
+    if cast_check is None:
+        cast_check = resolve_cast_check(character, technique)
     pull_result = spend_resonance_for_pull(
         pull_sheet,
         cast_pull.resonance,
@@ -1006,7 +1015,7 @@ def _charge_cast_pull(
             involved_techniques=(technique.pk,),
             # The traits the cast rolls (#4450): a TRAIT thread on the caster's stat or
             # skills, or on the technique skill, is in this action.
-            involved_traits=cast_involved_trait_ids(resolve_cast_check(character, technique)),
+            involved_traits=cast_involved_trait_ids(cast_check),
             target=target,
         ),
         beseech_bonus_thread_id=beseech_bonus_thread_id,
@@ -1131,6 +1140,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
     cast_pull,
     pull_target,
     price_payment=None,
+    cast_check=None,
 ) -> _CastPreparation | None:
     """Run the pre-cast event and prepare power and pull effects."""
     effective_targets = targets or []
@@ -1169,6 +1179,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
             cast_pull=cast_pull,
             effective_power=effective_power,
             target=pull_target or (targets[0] if targets else None),
+            cast_check=cast_check,
         )
     return _CastPreparation(
         effective_targets,
@@ -1369,8 +1380,13 @@ def use_technique(  # noqa: PLR0913
     strain_config: object | None = None,
     strain_power_enabled: bool = True,
     defer_soulfray_reveal: bool = False,
+    cast_check: CastCheck | None = None,
 ) -> TechniqueUseResult:
     """Orchestrate technique use from cost validation through post-cast events.
+
+    ``cast_check`` is the check this cast rolls, when the caller already holds it (#4450);
+    a paid cast pull builds its involved traits from it. ``None`` re-resolves the caster's
+    own cast check.
 
     ``defer_soulfray_reveal=True`` holds a dramatic Soulfray stage draw's outcome
     wheel on ``result.soulfray_result.reveal`` instead of sending it on commit
@@ -1421,6 +1437,7 @@ def use_technique(  # noqa: PLR0913
         cast_pull=cast_pull,
         pull_target=pull_target,
         price_payment=price_payment,
+        cast_check=cast_check,
     )
     if preparation is None:
         return TechniqueUseResult(

@@ -133,6 +133,7 @@ def resolve_combat_technique(
         strain_commitment=action.strain_commitment,
         targets=targets,
         lethal=encounter.is_lethal,
+        cast_check=cast_check,
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=(
             (fury_res.intensity_bonus if fury_res else 0)

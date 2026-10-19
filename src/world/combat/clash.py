@@ -302,6 +302,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         confirm_soulfray_risk=True,
         lethal=clash.encounter.is_lethal,
         strain_config=config_strain,
+        cast_check=cast_check,
         # #2536 Task 4 review fix: thread the live round context (when a
         # CombatParticipant resolves — see step 0b above) so situational-perk
         # POWER_BONUS providers can read combat-positioning situations
