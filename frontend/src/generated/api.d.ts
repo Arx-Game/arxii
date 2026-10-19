@@ -38653,9 +38653,7 @@ export interface components {
       listed_on_npc_roster: boolean;
       notes_for_player: string;
       readonly is_template: boolean;
-      readonly open_requests: {
-        [key: string]: unknown;
-      }[];
+      readonly open_requests: components['schemas']['NPCOpenRequest'][];
       readonly preferences: components['schemas']['NPCPreferenceRead'][];
       readonly regard: components['schemas']['NPCRegardRead'][];
     };
@@ -38669,17 +38667,8 @@ export interface components {
     NPCLoan: {
       readonly id: number;
       readonly roster_entry: number;
-      readonly status: components['schemas']['NPCLoanStatusEnum'];
+      readonly status: components['schemas']['Status76aEnum'];
     };
-    /**
-     * @description * `offered` - Offered
-     *     * `requested` - Requested
-     *     * `active` - Active
-     *     * `declined` - Declined
-     *     * `ended` - Ended
-     * @enum {string}
-     */
-    NPCLoanStatusEnum: 'offered' | 'requested' | 'active' | 'declined' | 'ended';
     /**
      * @description One OFFERED loan, as the Guide it was offered to reads it.
      *
@@ -38694,6 +38683,18 @@ export interface components {
       readonly scene_title: string | null;
       readonly offered_by_name: string;
       readonly notes_for_player: string;
+    };
+    /**
+     * @description A borrow request waiting on the owner, and who asked (#4418).
+     *
+     *     ``requester_name`` is shown the way ``player_names`` shows any account: a GM or
+     *     Staff character's name, a Guide's display name, or the role, never the account
+     *     name.
+     */
+    NPCOpenRequest: {
+      id: number;
+      status: components['schemas']['Status76aEnum'];
+      requester_name: string;
     };
     /** @description One trait the NPC likes or dislikes, as the NPC form shows it. */
     NPCPreferenceRead: {
@@ -40568,21 +40569,6 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CanonReview'][];
-    };
-    PaginatedCastListEntryList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['CastListEntry'][];
     };
     PaginatedCatalogSuggestionDetailList: {
       /** @example 123 */
@@ -50774,6 +50760,15 @@ export interface components {
      * @enum {string}
      */
     Status4e6Enum: 'declaring' | 'resolving' | 'between_rounds' | 'completed';
+    /**
+     * @description * `offered` - Offered
+     *     * `requested` - Requested
+     *     * `active` - Active
+     *     * `declined` - Declined
+     *     * `ended` - Ended
+     * @enum {string}
+     */
+    Status76aEnum: 'offered' | 'requested' | 'active' | 'declined' | 'ended';
     /**
      * @description * `pending` - Pending
      *     * `accepted` - Accepted
@@ -84560,10 +84555,6 @@ export interface operations {
         gm?: string;
         is_active?: boolean;
         location?: number;
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
         participant?: number;
         player?: string;
         privacy_mode?: string;
@@ -84583,7 +84574,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedCastListEntryList'];
+          'application/json': components['schemas']['CastListEntry'][];
         };
       };
     };

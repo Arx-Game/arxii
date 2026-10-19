@@ -35564,18 +35564,6 @@ paths:
         name: location
         schema:
           type: number
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
       - in: query
         name: participant
         schema:
@@ -35601,7 +35589,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedCastListEntryList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/CastListEntry'
           description: ''
   /api/scenes/{id}/finish/:
     post:
@@ -68128,8 +68118,7 @@ components:
         open_requests:
           type: array
           items:
-            type: object
-            additionalProperties: {}
+            $ref: '#/components/schemas/NPCOpenRequest'
           readOnly: true
         preferences:
           type: array
@@ -68185,26 +68174,12 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/NPCLoanStatusEnum'
+          - $ref: '#/components/schemas/Status76aEnum'
           readOnly: true
       required:
       - id
       - roster_entry
       - status
-    NPCLoanStatusEnum:
-      enum:
-      - offered
-      - requested
-      - active
-      - declined
-      - ended
-      type: string
-      description: |-
-        * `offered` - Offered
-        * `requested` - Requested
-        * `active` - Active
-        * `declined` - Declined
-        * `ended` - Ended
     NPCOffer:
       type: object
       description: |-
@@ -68248,6 +68223,25 @@ components:
       - scene_id
       - scene_title
       - thumbnail_url
+    NPCOpenRequest:
+      type: object
+      description: |-
+        A borrow request waiting on the owner, and who asked (#4418).
+
+        ``requester_name`` is shown the way ``player_names`` shows any account: a GM or
+        Staff character's name, a Guide's display name, or the role, never the account
+        name.
+      properties:
+        id:
+          type: integer
+        status:
+          $ref: '#/components/schemas/Status76aEnum'
+        requester_name:
+          type: string
+      required:
+      - id
+      - requester_name
+      - status
     NPCPreferenceRead:
       type: object
       description: One trait the NPC likes or dislikes, as the NPC form shows it.
@@ -71808,29 +71802,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CanonReview'
-    PaginatedCastListEntryList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/CastListEntry'
     PaginatedCatalogSuggestionDetailList:
       type: object
       required:
@@ -90820,6 +90791,20 @@ components:
         * `resolving` - Resolving
         * `between_rounds` - Between Rounds
         * `completed` - Completed
+    Status76aEnum:
+      enum:
+      - offered
+      - requested
+      - active
+      - declined
+      - ended
+      type: string
+      description: |-
+        * `offered` - Offered
+        * `requested` - Requested
+        * `active` - Active
+        * `declined` - Declined
+        * `ended` - Ended
     Status7baEnum:
       enum:
       - pending
