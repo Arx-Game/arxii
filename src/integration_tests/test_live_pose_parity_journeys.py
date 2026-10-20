@@ -149,7 +149,8 @@ class ALivePoseIsEndorsedInAnOpenScene(JourneyCase):
             self.assertEqual(self._changed_ids(character), [pose_id], character.key)
         refetched = self.hobb_web.get(f"/api/interactions/{pose_id}/")
         self.assertEqual(refetched.status_code, status.HTTP_200_OK, refetched.content)
-        windows = refetched.json()["reaction_windows"]
-        self.assertEqual([w["kind"] for w in windows], ["kudos"])
-        self.assertEqual(windows[0]["my_reaction"], "kudos")
-        self.assertEqual(windows[0]["counts"], {"kudos": 1})
+        # Ysmay's first pose is her entrance, so its entrance window is there too.
+        windows = {w["kind"]: w for w in refetched.json()["reaction_windows"]}
+        self.assertEqual(sorted(windows), ["entrance", "kudos"])
+        self.assertEqual(windows["kudos"]["my_reaction"], "kudos")
+        self.assertEqual(windows["kudos"]["counts"], {"kudos": 1})
