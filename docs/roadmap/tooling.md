@@ -277,6 +277,23 @@ line lost "blessing", "sermon" and "rite" to colour codes on telnet; a conversio
 could not be opened from telnet at all (`ceremony/conversion`); and the conversion inbox,
 telnet and web alike, kept listing an offer whose rite had already closed.
 
+Tranche 17 moved the things a character keeps onto the harness: `companion`, `form`,
+`ship` and `station`. The four hand-built modules (`test_companion_command`,
+`test_ship_command`, `test_crafting_station` and `test_form_command`, 95 tests) are
+removed; the new `integration_tests/test_keeping_what_is_yours_journeys.py` types each
+verb through the handler against real rows: a hawk and a wolf bound on real Bind Attempt
+rolls as the gift's thread grows, a companion posed, mounted and released; an alternate
+self shifted into and reverted, and the revert blocked under a behavior-altering
+condition; a sloop commissioned from the quay (with a covenant), its handling and hull
+raised from the deck, the repair gate and the repair; a Lab station installed, upgraded
+and repaired out of a real purse. Six fixes in place: the usage lines of all four lost
+letters to colour codes on telnet (`<name|id>` read `<named>`); `form dance` answered
+"there was an error" (the usage error was raised past the dispatcher's handling) and a
+character with no alternate selves was told "Available: ."; `ship commission` could not
+name a covenant or ship type of two words, and `companion order` could not name a
+companion of two words; and a ship read "Sloop (building 12)" on its status line and in
+its project descriptions.
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,

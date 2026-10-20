@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 from actions.constants import ActionBackend
 from commands.command import DispatchCommand
 from commands.exceptions import CommandError
+from commands.parsing import parse_kv_and_flags
 
 if TYPE_CHECKING:
     from actions.types import ActionRef
@@ -48,29 +49,23 @@ _LEVEL_KWARG = "level"
 _SHIP_ID_KWARG = "ship_id"
 
 
-def _parse_kwargs(args: str) -> dict[str, str]:
-    """Parse ``key=value`` tokens, left to right.
+# The named things a ship line carries: a ship type, a covenant and a ship name may
+# all have spaces in them, so each value runs to the next ``key=`` token (#3657
+# tranche 17: only ``name=`` had, so ``covenant=The Tide`` was the covenant "The").
+_MULTIWORD_KWARGS = frozenset({_SHIP_TYPE_KWARG, _COVENANT_KWARG, _NAME_KWARG})
 
-    ``name`` greedily consumes the rest of the line so a ship name may
-    contain spaces (mirrors ``sanctum.py``'s ``narrative=`` special-case).
-    All other values are single whitespace-delimited tokens. Tokens that
-    contain no ``=`` are silently skipped (positional leftovers).
+
+def _parse_kwargs(args: str) -> dict[str, str]:
+    """Parse ``key=value`` tokens, left to right, through the shared tokenizer.
+
+    ``ship_type``, ``covenant`` and ``name`` take several words, up to the next
+    ``key=``; every other value is one token. A bare token with no ``=`` is a
+    usage error in the tokenizer's own words.
     """
-    out: dict[str, str] = {}
-    tokens = args.split()
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if "=" not in token:
-            index += 1
-            continue
-        key, _, value = token.partition("=")
-        if key == _NAME_KWARG:
-            out[_NAME_KWARG] = " ".join([value, *tokens[index + 1 :]]).strip()
-            break
-        out[key] = value
-        index += 1
-    return out
+    kwargs, _flags = parse_kv_and_flags(
+        args, multiword_keys=_MULTIWORD_KWARGS, known_flags=frozenset()
+    )
+    return kwargs
 
 
 class CmdShip(DispatchCommand):
@@ -82,13 +77,12 @@ class CmdShip(DispatchCommand):
                                                         specific ship's report
         ship commission ship_type=<name> [covenant=<name>] name=<ship name>
                                                       - commission a new ship
-        ship upgrade stat=handling|armament|hull
+        ship upgrade stat=<handling or armament or hull>
              level=<n> [ship_id=<n>]                   - raise a ship stat
         ship repair [ship_id=<n>]                      - start repairs
 
-    ``name=`` greedily consumes the rest of the line so a ship name may
-    contain spaces, so it must come last on the ``commission`` line (mirrors
-    ``sanctum homecoming``'s ``narrative=`` placement).
+    ``ship_type=``, ``covenant=`` and ``name=`` may hold spaces: each runs to
+    the next ``key=`` token, in any order.
     """
 
     key = "ship"
@@ -159,10 +153,7 @@ class CmdShip(DispatchCommand):
 
         ``ship_type``/``covenant`` are resolved here to model instances —
         ``CommissionShipAction`` requires already-resolved instances, not
-        telnet strings. ``name=`` is a greedy token (see ``_parse_kwargs``)
-        that consumes the rest of the line, so it must be supplied last —
-        any ``ship_type=``/``covenant=`` token after it would be swallowed
-        into the ship name instead of parsed as its own kwarg.
+        telnet strings. All three values may hold spaces (see ``_parse_kwargs``).
         """
         ship_type_raw = parsed.get(_SHIP_TYPE_KWARG, "").strip()
         name = parsed.get(_NAME_KWARG, "").strip()
@@ -183,7 +174,7 @@ class CmdShip(DispatchCommand):
         stat = parsed.get(_STAT_KWARG, "").strip().lower()
         level_raw = parsed.get(_LEVEL_KWARG, "")
         if not stat or not level_raw or not level_raw.isdigit():
-            msg = "Usage: ship upgrade stat=<handling|armament|hull> level=<n>."
+            msg = "Usage: ship upgrade stat=<handling | armament | hull> level=<n>."
             raise CommandError(msg)
         kwargs: dict[str, Any] = {"stat": stat, "target_level": int(level_raw)}
         kwargs.update(self._args_optional_ship_id(parsed))
