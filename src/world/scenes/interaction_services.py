@@ -13,6 +13,7 @@ from django.db.models import F, IntegerField, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from web.webclient.message_types import WebsocketMessageType
 from world.scenes.block_services import social_control_excluded_target_ids
 from world.scenes.constants import (
     InteractionMode,
@@ -1125,6 +1126,66 @@ def _narrates_for(interaction: Interaction) -> NarratedEventPayload | None:
     return narrated_event_payload(interaction)
 
 
+def _delivery_audience(
+    interaction: Interaction,
+    *,
+    receiver_characters: list[ObjectDB],  # noqa: OBJECTDB_PARAM - receivers are any puppet
+    receiver_ids: list[int],
+) -> tuple[bool, list[ObjectDB] | None]:
+    """Who a row reaches: ``(receiver_scoped, writer + receivers or None)``.
+
+    The one audience rule ``push_interaction`` and ``notify_interaction_changed`` share:
+    a receiver-scoped row (whisper, place-scoped, escalated visibility) reaches its
+    writer's character and its receivers; any other row reaches the room, which the
+    caller broadcasts to ``location``. The list is ``None`` for a room-heard row.
+    """
+    receiver_scoped = _is_delivery_receiver_scoped(interaction, has_receivers=bool(receiver_ids))
+    if not receiver_scoped:
+        return False, None
+    writer_char = interaction.persona.character_sheet.character
+    return True, [writer_char, *receiver_characters]
+
+
+def notify_interaction_changed(interaction: Interaction) -> None:
+    """Tell a pose's audience it changed so each page refetches it (#4508).
+
+    An endorsement, reaction or tag landed on (or left) ``interaction``. The frame
+    carries ids only: what each viewer may see of the pose is per-viewer, so each page
+    refetches through the REST retrieve instead of trusting a room-wide payload.
+    Registered on commit, so a write that rolls back never announces. The audience is
+    ``push_interaction``'s: writer + receivers for a receiver-scoped pose, else the
+    writer's location (the scene's when the writer is unplaced); no location, no frame.
+    """
+
+    def _send() -> None:
+        r_ids, r_chars = _query_receivers(interaction)
+        scoped, objects = _delivery_audience(
+            interaction, receiver_characters=r_chars, receiver_ids=r_ids
+        )
+        if not scoped:
+            location = interaction.persona.character_sheet.character.location
+            if location is None and interaction.scene_id is not None:
+                location = interaction.scene.room
+            if location is None:
+                return
+            objects = list(location.contents)
+        _send_changed_frame(
+            objects or [],
+            {"interaction_id": interaction.pk, "scene_id": interaction.scene_id},
+        )
+
+    transaction.on_commit(_send)
+
+
+def _send_changed_frame(objects: Iterable[ObjectDB], frame: dict[str, int | None]) -> None:
+    """Send the ids-only ``interaction_changed`` frame to each object."""
+    for obj in objects:
+        try:
+            obj.msg(**{WebsocketMessageType.INTERACTION_CHANGED.value: ((), frame)})
+        except AttributeError:
+            continue
+
+
 def push_interaction(
     interaction: Interaction,
     *,
@@ -1173,7 +1234,9 @@ def push_interaction(
         r_ids = receiver_persona_ids
         r_chars = receiver_characters
 
-    receiver_scoped = _is_delivery_receiver_scoped(interaction, has_receivers=bool(r_ids))
+    receiver_scoped, audience = _delivery_audience(
+        interaction, receiver_characters=r_chars, receiver_ids=r_ids
+    )
     if not receiver_scoped and location is None:
         return
 
@@ -1216,8 +1279,7 @@ def push_interaction(
         # Receiver-scoped modes (whisper, place-scoped, escalated visibility) keep
         # full text to their explicit receivers — the speaker chose this audience,
         # so it never gets the language garble (#2993).
-        writer_char = persona.character_sheet.character
-        _send_to_objects([writer_char, *r_chars], payload)
+        _send_to_objects(audience or [], payload)
     else:
         _broadcast_to_location(
             location,

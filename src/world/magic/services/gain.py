@@ -97,6 +97,7 @@ from world.magic.types import (
     SettlementResult,
 )
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
+from world.scenes.interaction_services import notify_interaction_changed
 from world.scenes.models import Interaction, Persona, Scene, SceneParticipation
 from world.scenes.place_models import InteractionReceiver
 
@@ -353,7 +354,15 @@ def create_pose_endorsement(  # noqa: C901
     # mixin alone (ADR-0298).
     if cached is not None:
         interaction.cached_endorsements = [*cached, endorsement]
+    notify_interaction_changed(interaction)
     return endorsement
+
+
+def retract_pose_endorsement(endorsement: PoseEndorsement) -> None:
+    """Delete a pose endorsement and tell the pose's audience it changed (#4508)."""
+    interaction = endorsement.interaction
+    endorsement.delete()
+    notify_interaction_changed(interaction)
 
 
 def _endorser_was_present(
@@ -585,7 +594,18 @@ def create_scene_entry_endorsement(
         source=GainSource.SCENE_ENTRY,
         scene_entry_endorsement=endorsement,
     )
+    _notify_entry_poses(scene, endorsee_sheet)
     return endorsement
+
+
+def _notify_entry_poses(scene: Scene, endorsee_sheet: CharacterSheet) -> None:
+    """Announce every entrance pose ``endorsee_sheet`` made in ``scene``: it shows the endorsers."""
+    from world.scenes.constants import PoseKind  # noqa: PLC0415
+
+    for entry in Interaction.objects.filter(
+        scene=scene, persona__character_sheet=endorsee_sheet, pose_kind=PoseKind.ENTRY
+    ):
+        notify_interaction_changed(entry)
 
 
 def _endorser_can_see_scene(
@@ -1009,6 +1029,8 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
             title=moment_type.label,
         )
 
+    if interaction is not None:
+        notify_interaction_changed(interaction)
     return tag
 
 

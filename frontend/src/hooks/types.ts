@@ -54,6 +54,8 @@ export const WS_MESSAGE_TYPE = {
   WEBCLIENT_OPTIONS: 'webclient_options',
   /** Inbound: a new GM prompt landed in this GM's queue (#4101). */
   GM_PROMPT: 'gm_prompt',
+  /** Inbound: a pose's endorsements, tags or reactions changed; refetch it (#4508). */
+  INTERACTION_CHANGED: 'interaction_changed',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];

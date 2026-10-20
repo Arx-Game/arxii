@@ -24,7 +24,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from world.scenes.interaction_services import can_view_interaction
+from world.scenes.interaction_services import can_view_interaction, notify_interaction_changed
 from world.scenes.models import SceneParticipation
 from world.scenes.reaction_models import ReactionWindow, WindowReaction
 
@@ -100,6 +100,8 @@ def open_reaction_window(*, interaction: Interaction, kind: str) -> ReactionWind
     )
     if created and cached is not None:
         interaction.cached_reaction_windows = [*cached, window]
+    if created:
+        notify_interaction_changed(interaction)
     return window
 
 
@@ -171,6 +173,7 @@ def react_to_window(
     except IntegrityError as exc:
         msg = "You have already reacted to this."
         raise ValidationError(msg) from exc
+    notify_interaction_changed(interaction)
     return reaction
 
 

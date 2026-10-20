@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.scenes.interaction_services import notify_interaction_changed
+
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
@@ -85,6 +87,7 @@ def toggle_interaction_reaction(
             interaction.cached_reactions = [
                 r for r in existing if (r.account_id, r.emoji) != (account.pk, emoji)
             ]
+        notify_interaction_changed(interaction)
         return False, None
     reaction = InteractionReaction.objects.create(
         interaction=interaction,
@@ -94,4 +97,5 @@ def toggle_interaction_reaction(
     )
     if existing is not None:
         interaction.cached_reactions = [*existing, reaction]
+    notify_interaction_changed(interaction)
     return True, reaction
