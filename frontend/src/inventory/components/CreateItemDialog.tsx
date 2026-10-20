@@ -198,8 +198,10 @@ export function CreateItemDialog({
                     ))}
                     {meaningQuery.data && (
                       <p>
-                        {meaningQuery.data.total} point{meaningQuery.data.total === 1 ? '' : 's'};
-                        the new piece records them, up to its cap.
+                        {meaningQuery.data.total} point{meaningQuery.data.total === 1 ? '' : 's'};{' '}
+                        {Math.min(meaningQuery.data.total, meaningQuery.data.made_from_cap)}{' '}
+                        recorded on the new piece
+                        {meaningQuery.data.total > meaningQuery.data.made_from_cap && ' (the cap)'}.
                       </p>
                     )}
                     <p className="text-destructive">

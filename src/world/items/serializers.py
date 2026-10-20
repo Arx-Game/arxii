@@ -338,6 +338,8 @@ class ItemMeaningSerializer(serializers.Serializer):
 
     total = serializers.IntegerField(read_only=True)
     lines = ItemMeaningLineSerializer(many=True, read_only=True)
+    # What a piece worked from this item records at most (DevotionConfig.made_from_max_points).
+    made_from_cap = serializers.IntegerField(read_only=True)
 
 
 class CraftableTemplateSerializer(serializers.ModelSerializer):

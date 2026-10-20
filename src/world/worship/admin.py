@@ -414,14 +414,25 @@ class DevotionConfigAdmin(admin.ModelAdmin):
                     "sacrifice_carried_days_per_point",
                     "sacrifice_carried_max_points",
                     "maker_tie_max_points",
+                    "sacrifice_ease_per_point",
+                    "sacrifices_per_week",
+                    "odds_reference_roller_points",
+                ),
+            },
+        ),
+        (
+            "Made and shown",
+            {
+                "description": (
+                    "What a commissioned piece's dedication, lineage and showings add to its "
+                    "meaning. No number here reads an item's price or a commission's fee."
+                ),
+                "fields": (
                     "made_for_max_points",
                     "made_from_max_points",
                     "shown_window_weeks",
                     "shown_engagements_per_point",
                     "shown_max_points",
-                    "sacrifice_ease_per_point",
-                    "sacrifices_per_week",
-                    "odds_reference_roller_points",
                 ),
             },
         ),

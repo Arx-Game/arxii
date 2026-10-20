@@ -30,6 +30,7 @@ class MeaningRail:
     lines: tuple[RailLine, ...]
     total: int
     note: str
+    made_from_cap: int = 0
 
 
 def meaning_rail(item: ItemInstance) -> MeaningRail | None:
@@ -53,4 +54,5 @@ def meaning_rail(item: ItemInstance) -> MeaningRail | None:
         lines=lines,
         total=meaning.points,
         note=note,
+        made_from_cap=get_devotion_config().made_from_max_points,
     )

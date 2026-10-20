@@ -915,7 +915,7 @@ class ItemInstance(SharedMemoryModel):
         db_default=Now(),
         help_text=(
             "When the current holder got this item. Starts the carry clock that "
-            "gates an item's personal meaning signals. Written by set_item_holder."
+            "gates an item's personal meaning signals."
         ),
     )
     holding_event = models.ForeignKey(
@@ -926,8 +926,7 @@ class ItemInstance(SharedMemoryModel):
         related_name="+",
         help_text=(
             "The ownership event that brought the item to the current holder, if one was "
-            "written (a gift, an inheritance). Null for an item the holder made or bought. "
-            "Written by set_item_holder."
+            "written (a gift, an inheritance). Null for an item the holder made or bought."
         ),
     )
     crafter_character_sheet = models.ForeignKey(
@@ -1581,7 +1580,8 @@ class ItemLineage(SharedMemoryModel):
         max_length=300, help_text="The source's name when it was used up."
     )
     points = models.PositiveSmallIntegerField(
-        help_text="The source's meaning points to the crafter when it was used up."
+        verbose_name="Points at consumption",
+        help_text="The source's meaning points to the crafter when it was used up.",
     )
 
     class Meta:

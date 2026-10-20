@@ -458,7 +458,7 @@ class ItemInstanceAdmin(admin.ModelAdmin):
                 ],
                 "description": (
                     "The designer is recorded only when that character wrote the name or "
-                    "description."
+                    "description. Legend deeds are the deeds this item is a trophy of."
                 ),
             },
         ),

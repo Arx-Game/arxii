@@ -34,6 +34,11 @@ import { FacetPicker } from '@/magic/components/FacetPicker';
 import { dispatchMarketAction, type ServiceOffer } from './api';
 import { examinePreview } from './commissionCredits';
 
+const OFFER_WORK: Record<string, string> = {
+  facet_attach: 'facet work',
+  style_attach: 'style work',
+};
+
 interface CommissionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -128,8 +133,9 @@ export function CommissionDialog({
         <DialogHeader>
           <DialogTitle>Commission from {offer.crafter_name}&apos;s shop</DialogTitle>
           <DialogDescription>
-            {offer.crafter_name}: {offer.recipe_kind.replace('_', ' ')}. Fee {offer.fee} coppers,
-            charged whatever the roll. You must be standing in their shop.
+            {offer.crafter_name}:{' '}
+            {OFFER_WORK[offer.recipe_kind] ?? offer.recipe_kind.replace('_', ' ')}. Fee {offer.fee}{' '}
+            coppers, charged whatever the roll. You must be standing in their shop.
           </DialogDescription>
         </DialogHeader>
 

@@ -36543,6 +36543,7 @@ export interface components {
     ItemMeaning: {
       readonly total: number;
       readonly lines: components['schemas']['ItemMeaningLine'][];
+      readonly made_from_cap: number;
     };
     /** @description One signal that makes an item matter to its holder (#4512). */
     ItemMeaningLine: {

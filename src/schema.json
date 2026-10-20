@@ -63903,8 +63903,12 @@ components:
           items:
             $ref: '#/components/schemas/ItemMeaningLine'
           readOnly: true
+        made_from_cap:
+          type: integer
+          readOnly: true
       required:
       - lines
+      - made_from_cap
       - total
     ItemMeaningLine:
       type: object
