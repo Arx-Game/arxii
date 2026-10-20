@@ -13,6 +13,9 @@ export type VisionCreate = components['schemas']['VisionCreateRequest'];
 export type InvocationOptions = components['schemas']['InvocationOptions'];
 export type InvocationOption = components['schemas']['InvocationOption'];
 export type InvocationBonusRow = components['schemas']['InvocationBonusRow'];
+/** The worn pieces that count with a being (#4520): what each means, and the ease it gives. */
+export type WornMeaning = components['schemas']['WornMeaning'];
+export type WornPiece = components['schemas']['WornPiece'];
 
 /** A Call on favor choice made in the picker, carried to the check it was made for. */
 export interface InvocationChoice {

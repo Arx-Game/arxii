@@ -64,6 +64,7 @@ const OPTIONS: InvocationOptions = {
         band: 'easy',
         band_label: 'Easy',
       },
+      worn: null,
     },
     {
       being_id: 6,
@@ -74,6 +75,7 @@ const OPTIONS: InvocationOptions = {
       uses_left: 3,
       uses_per_week: 3,
       difficulty: null,
+      worn: null,
     },
   ],
   bonuses: [

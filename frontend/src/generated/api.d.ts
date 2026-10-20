@@ -32768,6 +32768,7 @@ export interface components {
       base: number;
       chosen_bonus: number;
       modifiers: number;
+      worn_bonus: number;
       total: number;
     };
     EffectRow: {
@@ -36413,6 +36414,7 @@ export interface components {
       uses_left: number;
       uses_per_week: number;
       difficulty: components['schemas']['InvocationDifficulty'] | null;
+      worn: components['schemas']['WornMeaning'] | null;
     };
     /** @description The Call on favor picker's data: the beings and the bonus by result. */
     InvocationOptions: {
@@ -54229,6 +54231,39 @@ export interface components {
       name: string;
       travel_modes: string[];
       is_transit_stop: boolean;
+    };
+    /**
+     * @description What the worn pieces do for one being: the pieces, the capped ease and the earning
+     *     bonus (#4520).
+     */
+    WornMeaning: {
+      pieces: components['schemas']['WornPiece'][];
+      ease: number;
+      raw_ease: number;
+      ease_cap: number;
+      items_counted_max: number;
+      earning_percent: number;
+    };
+    /**
+     * @description A worn piece carrying a facet the being favors, as the wearer sees it in the Call on
+     *     favor picker: what it means, whether it counts and the ease it gives (#4520).
+     */
+    WornPiece: {
+      item_name: string;
+      facet_name: string;
+      signals: components['schemas']['WornSignal'][];
+      points: number;
+      ease_per_point: number;
+      ease: number;
+      earning_percent: number;
+      counted: boolean;
+    };
+    /** @description One reason a worn piece means something to its wearer (#4520). */
+    WornSignal: {
+      kind: string;
+      readonly kind_name: string;
+      points: number;
+      detail: string;
     };
     /**
      * @description PENDING conversion-offer inbox row (#2361). Mirrors SeanceManifestationOfferSerializer.

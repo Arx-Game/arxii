@@ -21,7 +21,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { useInvocationOptions } from '../queries';
 import { bonusLine } from '../invocationText';
-import type { InvocationChoice, InvocationOption } from '../types';
+import type { InvocationChoice, InvocationOption, WornMeaning } from '../types';
 
 /** The line a player may attach is one line, matching the server's limit. */
 const LINE_MAX_LENGTH = 200;
@@ -74,6 +74,71 @@ function DifficultyBreakdown({ option }: { option: InvocationOption }) {
           {difficulty.points}, {difficulty.band_label}
         </span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The worn pieces carrying a facet the selected being favors (#4520): what each means to
+ * the wearer, whether it counts, and the ease it gives. The wearer sees her own points; a
+ * bought piece with no history is listed as adding nothing.
+ */
+function WornPieces({ worn, beingName }: { worn: WornMeaning; beingName: string }) {
+  if (worn.pieces.length === 0) return null;
+  return (
+    <div className="space-y-1" data-testid="invocation-worn">
+      <Label>What you wear that {beingName} favors</Label>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="text-xs text-muted-foreground">
+              <th className="py-0.5 pr-2 font-normal">Worn piece</th>
+              <th className="py-0.5 pr-2 font-normal">What it means</th>
+              <th className="py-0.5 font-normal">Counts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {worn.pieces.map((piece) => (
+              <tr
+                key={`${piece.item_name}-${piece.facet_name}`}
+                className="border-t border-dotted align-top"
+                data-testid="invocation-worn-piece"
+              >
+                <td className="py-1 pr-2">{piece.item_name}</td>
+                <td className="py-1 pr-2">
+                  <span className="flex flex-wrap gap-1">
+                    {piece.signals.length === 0 ? (
+                      <Badge variant="outline" className="opacity-60">
+                        bought; no history beyond holding it
+                      </Badge>
+                    ) : (
+                      piece.signals.map((signal) => (
+                        <Badge key={signal.kind} variant="secondary">
+                          {signal.kind_name.toLowerCase()}
+                        </Badge>
+                      ))
+                    )}
+                    <Badge variant="outline">{piece.facet_name}, favored</Badge>
+                  </span>
+                </td>
+                <td className="py-1 tabular-nums" data-testid="invocation-worn-counts">
+                  {piece.counted
+                    ? `${piece.points} points x ${piece.ease_per_point} = eased ${piece.ease}`
+                    : '0'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-muted-foreground" data-testid="invocation-worn-note">
+        Up to {worn.items_counted_max} worn pieces count, and what you wear eases at most{' '}
+        {worn.ease_cap}
+        {worn.raw_ease > worn.ease ? ` (it would ease ${worn.raw_ease})` : ''}.
+        {worn.earning_percent
+          ? ` Your earning rate with ${beingName} is ${worn.earning_percent}% higher while you wear these.`
+          : ''}
+      </p>
     </div>
   );
 }
@@ -156,6 +221,9 @@ function CallOnFavorPicker({
               <Label>Invocation difficulty for {selected.being_name}</Label>
               <DifficultyBreakdown option={selected} />
             </div>
+          ) : null}
+          {selected?.worn ? (
+            <WornPieces worn={selected.worn} beingName={selected.being_name} />
           ) : null}
           <div className="space-y-1">
             <Label>Bonus to the next check, by result</Label>
