@@ -153,3 +153,25 @@ class CosmeticResolutionValidationTests(TestCase):
             character_sheet=self.sheet,
         )
         self.assertEqual(errors, [])
+
+
+class CosmeticScarSerializerTests(TestCase):
+    def test_a_cosmetic_scar_reads_cosmetic_with_every_drawback_cap_at_zero(self) -> None:
+        from world.magic.serializers import PendingAlterationSerializer
+
+        costly = PendingAlterationFactory(tier=AlterationTier.TOUCHED)
+        cosmetic = PendingAlterationFactory(tier=AlterationTier.TOUCHED, is_cosmetic=True)
+
+        costly_data = PendingAlterationSerializer(costly).data
+        cosmetic_data = PendingAlterationSerializer(cosmetic).data
+
+        self.assertFalse(costly_data["is_cosmetic"])
+        self.assertEqual(costly_data["tier_caps"]["weakness_cap"], 3)
+        self.assertTrue(cosmetic_data["is_cosmetic"])
+        self.assertEqual(
+            [
+                cosmetic_data["tier_caps"][key]
+                for key in ("weakness_cap", "resonance_cap", "social_cap")
+            ],
+            [0, 0, 0],
+        )
