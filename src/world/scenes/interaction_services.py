@@ -1892,11 +1892,14 @@ def _open_entrance(interaction: Interaction, scene: Scene, *, entrance: bool) ->
     ``room_state`` so the Here panel's mark leaves the entrant's row at once.
     """
     from world.scenes.constants import ReactionWindowKind  # noqa: PLC0415
-    from world.scenes.reaction_services import open_reaction_window  # noqa: PLC0415
+    from world.scenes.reaction_services import _get_or_create_window  # noqa: PLC0415
 
     if not entrance:
         return
-    open_reaction_window(interaction=interaction, kind=ReactionWindowKind.ENTRANCE)
+    # Not open_reaction_window: that announces a new window to the room, and this one is
+    # created before the pose's own push, whose frame already carries it. An announcement
+    # would only make every viewer refetch a pose they just received.
+    _get_or_create_window(interaction=interaction, kind=ReactionWindowKind.ENTRANCE)
     room = scene.room
     if room is None:
         return

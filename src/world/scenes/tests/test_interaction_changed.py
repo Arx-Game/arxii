@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.test import TestCase
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
@@ -27,10 +28,12 @@ from world.scenes.factories import (
     InteractionFactory,
     InteractionReceiverFactory,
     PlaceFactory,
+    SceneFactory,
     SceneParticipationFactory,
 )
 from world.scenes.interaction_services import (
     notify_interaction_changed,
+    record_interaction,
     send_outcome_text_to_non_web,
 )
 from world.scenes.reaction_services import (
@@ -284,6 +287,29 @@ class InteractionChangedTests(PushScene):
             except RuntimeError:
                 pass
         send.assert_not_called()
+
+
+class EntrancePoseIsNotAnnouncedTests(TestCase):
+    """An entrance window opens before the pose's own push, which already carries it."""
+
+    def test_recording_an_entrance_sends_the_live_frame_but_no_change_notice(self):
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        scene = SceneFactory(room=room)
+        character = CharacterFactory(db_key="Alice", location=room)
+        CharacterSheetFactory(character=character)
+        with (
+            patch(SEND) as changed,
+            patch("world.scenes.interaction_services._broadcast_to_location") as live,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            interaction = record_interaction(
+                character=character, content="steps in.", mode=InteractionMode.POSE
+            )
+        assert interaction is not None
+        assert interaction.scene == scene
+        changed.assert_not_called()
+        windows = live.call_args.args[1]["reaction_windows"]
+        assert [w["kind"] for w in windows] == [ReactionWindowKind.ENTRANCE]
 
 
 class RetrieveWithoutSceneParamTests(PushScene):
