@@ -256,6 +256,13 @@ the unified Persona identity system, and non-combat scene rounds.
   Omitted, it resolves from the writer persona's own character location, byte-identical to
   before. A caller passes it explicitly for a Narrator-authored row, since the Narrator's
   character is never physically placed anywhere.
+- **`notify_interaction_changed(interaction)`** (#4508): on commit, sends the ids-only
+  `interaction_changed` frame (`interaction_id`, `scene_id`) to the pose's audience, the same one
+  `push_interaction` reaches (`_delivery_audience`). Call it from any service that changes what a
+  viewer sees of a pose: endorse and retract, entry endorsement, dramatic-moment tag, reactions.
+  The page refetches that row per viewer, so the frame never carries viewer-specific data.
+- **`scene_entry_endorsements_for(scene)`** (#4508): the scene's entry endorsers by sheet, shared
+  by the feed, the single-pose retrieve and the live `interaction` frame's `entry_endorsers`.
 
 ### `line_rendering.py` (#3858, ADR-0299)
 - **`render_line(name, mode, content, *, language_name=None, place_name=None,
