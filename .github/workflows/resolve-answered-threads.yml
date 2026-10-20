@@ -1,0 +1,40 @@
+name: Resolve answered review threads
+
+# The ruleset requires every review thread resolved before merge. When someone
+# who is not a bot replies in a thread the code reviewer (github-actions[bot])
+# started, resolve that thread (#4510). Threads a human started are never
+# touched. Selection logic and its tests: tools/resolve_answered_threads.py,
+# tools/tests/test_resolve_answered_threads.py.
+#
+# TOKEN: the workflow GITHUB_TOKEN with pull-requests: write may call the
+# resolveReviewThread mutation. If the first run answers "Resource not
+# accessible by integration", the fix is a PAT or app token with
+# pull_requests:write stored as a secret and used in GH_TOKEN below.
+#
+# SECURITY: the script is checked out from the default branch, never from the
+# PR, so a PR cannot change the code that runs with this token. Same-repo PRs
+# only; there is no pull_request_target.
+
+on:
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  resolve:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.comment.in_reply_to_id != null &&
+      github.event.comment.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Resolve answered reviewer threads
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/resolve_answered_threads.py "$GITHUB_REPOSITORY" "${{ github.event.pull_request.number }}"

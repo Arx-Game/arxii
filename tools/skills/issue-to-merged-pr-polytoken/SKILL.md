@@ -407,6 +407,12 @@ On either bail, post a diagnostic PR comment summarizing every attempt and exit.
 When phase detection lands on **PR-comment**:
 - Run `scripts/read-pr-comments.sh <pr-N>` — get unread comments as JSON.
 - Address each: edit code, commit.
+- **Reply, then resolve the thread yourself** (#4510). The ruleset requires every
+  review thread resolved before merge and `scripts/enqueue-pr.sh` refuses while any
+  is unresolved, listing each with the `resolveReviewThread` command (checklist
+  section 4). A workflow, `.github/workflows/resolve-answered-threads.yml`, also
+  resolves reviewer-started threads once a non-bot replies; do not rely on it,
+  resolve what you answer. An implementer dispatch must say this.
 - Push.
 - **Takeaway evaluation** (see below — runs before the marker bump).
 - Update the PR body marker via the REST API (not `gh pr edit`, which errors on
