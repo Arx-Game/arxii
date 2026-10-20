@@ -125,7 +125,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     killing drains yield ×20 the victim's maximum. Contribute endpoint on
     `RitualSessionViewSet`; deep detail in `docs/systems/magic.md`
   - **Mage Scars (renamed from Magical Scars — display-only, §7.2):**
-    `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent`
+    `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent`.
+    `PendingAlteration.is_cosmetic` (#4501) marks a reward scar with no drawbacks that never
+    gates advancement (`has_pending_alterations` skips it); see `docs/systems/magic.md`.
   - **Spec A Thread + Currency (NEW):** `Thread` (discriminator + typed FKs:
     `target_trait` / `target_technique` / `target_facet` / `target_relationship`
     / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle`
@@ -4854,6 +4856,13 @@ register as additional kinds.
   Path-discovery system (#2603); it does not model the full research/discovery
   progression that gates Path selection. Seeded by `wire_ghost_tutor_content()`
   (`world.magic.factories`), called by `seed_magic_dev()`.
+- **Trial training points (#4501):** `credit_technique_progress(progress, points)`
+  (`world.magic.services.technique_progress`) is the add-points and mint-on-full steps of
+  `contribute_to_technique_progress`, with no AP charge and no weekly tracker; the
+  `TECHNIQUE_TRAINING` consequence effect calls it. Whether trial points count toward the weekly
+  cap is an open question for the action-point owner (#4343 "For Apostate", item 2); today they
+  do not. `technique_teaching_sources(technique)` (`technique_acquisition.py`) says where a
+  technique is taught.
 - **Check-based technique training (#2727):** `resolve_training_check()`
   (`world.magic.services.technique_training`) wraps
   `contribute_to_technique_progress` with a learning check. The learner
@@ -6738,6 +6747,14 @@ Unified modifier system — categories, types, sources, and per-character modifi
     are two independently-unlockable boolean layers on top. Left at their defaults (`False`),
     that call already IS the "a scene hands you a lead, not the answer" grant. Skips gracefully
     (mirrors `_grant_codex`) when the character has no `RosterEntry`.
+  - Added in #4501 (trials, spec #4343): `TECHNIQUE_TRAINING` (`technique` FK, `training_points`,
+    `training_meter_size`, `grants_technique_outright`) trains or grants the technique an entry
+    opens, through `learn_technique` (origin `TRIAL`, prerequisites still checked) and
+    `credit_technique_progress`; `GRANT_CODEX.grants_known` makes the entry KNOWN through
+    `grant_codex_entry`; `MAGICAL_SCARS.scar_is_cosmetic` queues a cosmetic Mage Scar
+    (`PendingAlteration.is_cosmetic`, never gates advancement). `Consequence.deliberately_free`
+    / `free_reason`. Save rules: `world/checks/trial_rules.py`. `grant_codex_entry` now also
+    announces the techniques a newly known entry opens (`codex.services.techniques_opened_by`).
 - **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers),
   action_points (AP modifiers), goals (goal domains), positioning (reshape handlers in effect_handlers.py)
 - **The effect layer is lore-authorable (#3071):** `checks.consequence`,

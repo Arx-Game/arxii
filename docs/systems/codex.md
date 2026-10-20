@@ -199,12 +199,24 @@ the timestamp nor the hook. `grant_codex_entry` therefore does **not** set the s
 itself: it opens the row UNCOVERED and pushes progress past the threshold, keeping the
 transition on the one path that carries the reactivity.
 
-Two callers deliberately create UNCOVERED rows and must keep doing so, because they mean
-"you can start researching this," not "you know this":
+Two callers create UNCOVERED rows by default, because they mean "you can start
+researching this," not "you know this":
 
 - the `GRANT_CODEX` consequence effect (`world.mechanics.effect_handlers`) — a scene hands
-  you a lead, not the answer;
+  you a lead, not the answer. **Unless the effect sets `grants_known` (#4501):** then the
+  handler calls `grant_codex_entry` and the entry is KNOWN. The flag is for a trial's
+  Success and Critical Success only (`ConsequenceEffect.clean` refuses it below Success);
 - `CodexTeachingOffer.accept` — the learner has paid AP and now has to make progress.
+
+**The "this opens a technique" notice (#4501).** On `newly_known`, `grant_codex_entry` calls
+`announce_opened_techniques`: `techniques_opened_by(sheet, entry)` returns the techniques whose
+active `CodexKnowledgeRequirement` names the entry, that the character does not know, whose
+gift they hold (`resolve_owned_gift`) and whose every other prerequisite they meet
+(`check_requirements_for_technique`); ultimates are skipped. One ABILITY message lists each with
+where it is taught (`technique_teaching_sources`: Academy TRAIN offers' organizations and a count
+of open player teaching offers). It is silent when the entry opens nothing. Every route that
+makes an entry known gets it (a trial, a pledge answer, a clue). `entry_gates_technique(entry)`
+says whether any technique requires the entry; the trial save rules use it.
 
 **A clue and the public flag refuse each other (#3775).** `CodexEntry.clean()` raises when
 `is_public` is set while a `Clue` still targets the entry; `Clue.clean()` raises when a

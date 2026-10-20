@@ -17,7 +17,9 @@ from world.codex.models import CharacterCodexKnowledge, CodexEntry, CodexEntryFi
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from world.character_sheets.models import CharacterSheet
     from world.codex.models import CodexSubject
+    from world.magic.models import Technique
     from world.roster.models import RosterEntry, RosterTenure
 
 #: Regex matching ``[[Entry Name]]`` wikilink syntax in content fields.
@@ -94,7 +96,101 @@ def grant_codex_entry(
             },
         )
         roster_entry.character_sheet.stats.increment(stat_def)
+        announce_opened_techniques(roster_entry.character_sheet, entry)
     return knowledge, newly_known
+
+
+def techniques_opened_by(sheet: CharacterSheet, entry: CodexEntry) -> list[Technique]:
+    """Techniques ``entry`` opens for ``sheet``: learnable now that it is known (#4501).
+
+    A technique whose ``CodexKnowledgeRequirement`` names ``entry``, that the character does
+    not already know, whose gift they hold, and whose every other prerequisite they meet.
+    Not an ultimate (only Audere reaches one). Call after the entry is KNOWN: the codex
+    requirement itself is then met, which is the point.
+    """
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+    from world.magic.services.gift_acquisition import resolve_owned_gift  # noqa: PLC0415
+    from world.progression.services.spends import (  # noqa: PLC0415
+        check_requirements_for_technique,
+    )
+
+    candidates = [
+        req.technique
+        for req in gated_technique_requirements(entry).select_related("technique__gift")
+        if not req.technique.is_ultimate
+    ]
+    known_ids = set(
+        CharacterTechnique.objects.filter(character=sheet, technique__in=candidates).values_list(
+            "technique_id", flat=True
+        )
+    )
+    opened: list[Technique] = []
+    for technique in dict.fromkeys(candidates):
+        if technique.pk in known_ids or resolve_owned_gift(sheet, technique.gift) is None:
+            continue
+        # One check per candidate; an entry opens a handful of techniques at most.
+        met, _failed = check_requirements_for_technique(sheet.character, technique)
+        if met:
+            opened.append(technique)
+    return opened
+
+
+def _taught_by_sentence(technique: Technique) -> str:
+    from world.magic.services.technique_acquisition import (  # noqa: PLC0415
+        technique_teaching_sources,
+    )
+
+    sources = technique_teaching_sources(technique)
+    if not sources.is_taught:
+        return "Nobody teaches it right now."
+    parts = []
+    if sources.academy_names:
+        parts.append("Taught by: " + ", ".join(sources.academy_names) + ".")
+    if sources.player_teacher_count:
+        plural = "s" if sources.player_teacher_count != 1 else ""
+        parts.append(f"{sources.player_teacher_count} player teacher{plural} offering it.")
+    else:
+        parts.append("No player teacher offers it right now.")
+    return " ".join(parts)
+
+
+def announce_opened_techniques(sheet: CharacterSheet, entry: CodexEntry) -> None:
+    """Tell the player which techniques a newly KNOWN entry opens, and where each is taught.
+
+    Every route that makes an entry known comes through ``grant_codex_entry``, so a trial, a
+    pledge answer and a clue all get this notice (#4501). Silent when it opens nothing.
+    """
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    opened = techniques_opened_by(sheet, entry)
+    if not opened:
+        return
+    lines = [
+        f"This opens a technique: {technique.name} ({technique.gift.name}). "
+        f"{_taught_by_sentence(technique)}"
+        for technique in opened
+    ]
+    send_narrative_message(
+        recipients=[sheet],
+        body=" ".join(lines),
+        category=NarrativeCategory.ABILITY,
+        sender_account=None,
+    )
+
+
+def entry_gates_technique(entry: CodexEntry) -> bool:
+    """True when some technique's learning requires ``entry`` to be KNOWN (#4501)."""
+    return gated_technique_requirements(entry).exists()
+
+
+def gated_technique_requirements(entry: CodexEntry):
+    """The active technique-learning requirements that name ``entry`` (#4501)."""
+    from world.progression.models import CodexKnowledgeRequirement  # noqa: PLC0415
+
+    return CodexKnowledgeRequirement.objects.filter(
+        codex_entry=entry, technique__isnull=False, is_active=True
+    )
 
 
 def file_entry_under(

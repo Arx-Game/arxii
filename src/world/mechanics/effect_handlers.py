@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 
-from world.checks.constants import EffectTarget, EffectType
+from world.checks.constants import SUCCESS_TIER_MIN_LEVEL, EffectTarget, EffectType
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.models import CharacterCodexKnowledge
 from world.conditions.services import apply_condition, remove_condition
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from world.checks.models import Consequence, ConsequenceEffect
     from world.checks.types import ResolutionContext
     from world.conditions.models import DamageType
-    from world.magic.models import Affinity, Resonance
+    from world.magic.models import Affinity, Resonance, Technique
 
 logger = logging.getLogger(__name__)
 
@@ -558,12 +558,28 @@ def _grant_codex(
             skip_reason=_NO_ROSTER_ENTRY_MSG,
         )
 
+    entry_name = effect.codex_entry.name
+    if effect.grants_known:
+        # A trial's Success (#4501): the entry becomes KNOWN through the one chokepoint that
+        # stamps learned_at, fires the stories hook, announces it and lists what it opens.
+        from world.codex.services import grant_codex_entry  # noqa: PLC0415
+
+        _, newly_known = grant_codex_entry(roster_entry, effect.codex_entry)
+        return AppliedEffect(
+            effect_type=EffectType.GRANT_CODEX,
+            description=(
+                f"Codex entry now known: {entry_name}"
+                if newly_known
+                else f"Codex entry already known: {entry_name}"
+            ),
+            applied=True,
+        )
+
     _, created = CharacterCodexKnowledge.objects.get_or_create(
         roster_entry=roster_entry,
         entry=effect.codex_entry,
         defaults={"status": CodexKnowledgeStatus.UNCOVERED},
     )
-    entry_name = effect.codex_entry.name
     if created:
         description = f"Granted codex entry: {entry_name}"
     else:
@@ -805,13 +821,39 @@ def _apply_magical_scars(
         origin_affinity=affinity,
         origin_resonance=resonance,
         scene=None,  # Deferred: thread scene through ResolutionContext when available
+        is_cosmetic=effect.scar_is_cosmetic,
     )
+    _announce_queued_scar(sheet, tier, cosmetic=effect.scar_is_cosmetic)
 
     verb = "escalated" if not result.created else "acquired"
+    kind = "cosmetic alteration" if effect.scar_is_cosmetic else "alteration"
     return AppliedEffect(
         effect_type=EffectType.MAGICAL_SCARS,
-        description=f"Magical alteration {verb}: tier {tier} pending for {target.db_key}",
+        description=f"Magical {kind} {verb}: tier {tier} pending for {target.db_key}",
         applied=True,
+    )
+
+
+def _announce_queued_scar(sheet: "CharacterSheet", tier: int, *, cosmetic: bool) -> None:
+    """Tell the player a Mage Scar is queued, and whether it holds back advancement (#4501)."""
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    if cosmetic:
+        body = (
+            f"A cosmetic Mage Scar (tier {tier}) is queued as a reward. Describe it when you "
+            "like; it does not hold back advancement."
+        )
+    else:
+        body = (
+            f"A Mage Scar (tier {tier}) is queued. Describe it in the scar form; advancement "
+            "waits until you do."
+        )
+    send_narrative_message(
+        recipients=[sheet],
+        body=body,
+        category=NarrativeCategory.SYSTEM,
+        sender_account=None,
     )
 
 
@@ -1548,6 +1590,131 @@ def _intoxicate(
     )
 
 
+def _send_system_notice(sheet: "CharacterSheet", body: str) -> None:
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    send_narrative_message(
+        recipients=[sheet],
+        body=body,
+        category=NarrativeCategory.SYSTEM,
+        sender_account=None,
+    )
+
+
+def _training_refusal_text(
+    error: Exception, technique: "Technique", *, names_requirements: bool
+) -> str:
+    """What a refused trial grant tells the player (#4501).
+
+    Only a Success or better names the unmet requirements: below that the trial has not
+    made the entry known, and "Need to know: <entry>" would hand the entry's name out for
+    free (hidden information comes only from a successful check).
+    """
+    from world.magic.exceptions import (  # noqa: PLC0415
+        GiftNotOwned,
+        TechniqueRequirementsNotMet,
+    )
+
+    if isinstance(error, GiftNotOwned):
+        return f"Technique not granted: you do not hold {technique.gift.name}."
+    if isinstance(error, TechniqueRequirementsNotMet):
+        if names_requirements:
+            return f"Technique not granted: {error.user_message}"
+        return f"Training toward {technique.name} did not begin: you do not yet meet what it needs."
+    return f"Technique not granted: {error.user_message}"
+
+
+def _technique_training(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Put a trial's training on the technique's meter, or grant it outright (#4501).
+
+    Every route goes through ``learn_technique``, so the gift, the prerequisites and the
+    technique cap are checked; only the TRIAL origin differs from a trained technique, and it
+    skips nothing. On a refusal nothing is minted and no points are credited, the message
+    says why, and the rest of the consequence (the codex entry, the cost, a cosmetic reward)
+    still applies.
+    """
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
+    from world.magic.exceptions import MagicError  # noqa: PLC0415
+    from world.magic.models import CharacterTechnique, TechniqueProgress  # noqa: PLC0415
+    from world.magic.services.technique_acquisition import learn_technique  # noqa: PLC0415
+    from world.magic.services.technique_progress import (  # noqa: PLC0415
+        credit_technique_progress,
+    )
+
+    try:
+        sheet: CharacterSheet = context.character.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return AppliedEffect(
+            effect_type=EffectType.TECHNIQUE_TRAINING,
+            description=_NO_SHEET_DESCRIPTION,
+            applied=False,
+            skip_reason=_NO_SHEET_SKIP_REASON,
+        )
+    technique = effect.technique
+    if CharacterTechnique.objects.filter(character=sheet, technique=technique).exists():
+        return AppliedEffect(
+            effect_type=EffectType.TECHNIQUE_TRAINING,
+            description=f"Already knows {technique.name}",
+            applied=False,
+            skip_reason="Already knows the technique",
+        )
+
+    names_requirements = effect.consequence.outcome_tier.success_level >= SUCCESS_TIER_MIN_LEVEL
+    meter = TechniqueProgress.objects.filter(character_sheet=sheet, technique=technique).first()
+    try:
+        if effect.grants_technique_outright:
+            learn_technique(
+                sheet,
+                technique,
+                source=AccessChangeSource.TRIAL,
+                ap_cost=0,
+                origin=AcquisitionOrigin.TRIAL,
+            )
+            if meter is not None:
+                meter.delete()
+            return AppliedEffect(
+                effect_type=EffectType.TECHNIQUE_TRAINING,
+                description=f"Granted {technique.name} outright",
+                applied=True,
+            )
+        if meter is None:
+            meter = learn_technique(
+                sheet,
+                technique,
+                source=AccessChangeSource.TRIAL,
+                ap_cost=effect.training_meter_size,
+            )
+        minted = credit_technique_progress(meter, effect.training_points)
+    except MagicError as error:
+        text = _training_refusal_text(error, technique, names_requirements=names_requirements)
+        _send_system_notice(sheet, text)
+        return AppliedEffect(
+            effect_type=EffectType.TECHNIQUE_TRAINING,
+            description=text,
+            applied=False,
+            skip_reason=text,
+        )
+    if minted is not None:
+        description = f"Training filled the meter: {technique.name} learned"
+    else:
+        meter.refresh_from_db()
+        description = (
+            f"Training toward {technique.name}: {meter.points_accumulated} of "
+            f"{meter.total_required}"
+        )
+        _send_system_notice(sheet, description + ".")
+    return AppliedEffect(
+        effect_type=EffectType.TECHNIQUE_TRAINING,
+        description=description,
+        applied=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Handler registry
 # ---------------------------------------------------------------------------
@@ -1581,4 +1748,5 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.RESTORE_FATIGUE: _restore_fatigue,
     EffectType.RESTORE_ANIMA: _restore_anima,
     EffectType.INTOXICATE: _intoxicate,
+    EffectType.TECHNIQUE_TRAINING: _technique_training,
 }

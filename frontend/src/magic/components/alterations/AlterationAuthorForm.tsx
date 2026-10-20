@@ -81,6 +81,8 @@ export function AlterationAuthorForm({
   isPending,
   onSubmit,
 }: AlterationAuthorFormProps) {
+  // A cosmetic Mage Scar (#4501) arrives with every drawback cap at 0.
+  const hasDrawbacks = caps.weakness_cap > 0 || caps.resonance_cap > 0 || caps.social_cap > 0;
   const [name, setName] = useState('');
   const [playerDescription, setPlayerDescription] = useState('');
   const [observerDescription, setObserverDescription] = useState('');
@@ -178,57 +180,67 @@ export function AlterationAuthorForm({
         ))}
       </div>
 
-      {/* Weakness magnitude */}
-      <MagnitudeSelect
-        id="alteration-weakness-mag"
-        label="Weakness magnitude"
-        cap={caps.weakness_cap}
-        value={weaknessMagnitude}
-        onChange={(val) => {
-          setWeaknessMagnitude(val);
-          if (val === 0) setWeaknessDamageTypeId(null);
-        }}
-      />
+      {hasDrawbacks && (
+        <>
+          {/* Weakness magnitude */}
+          <MagnitudeSelect
+            id="alteration-weakness-mag"
+            label="Weakness magnitude"
+            cap={caps.weakness_cap}
+            value={weaknessMagnitude}
+            onChange={(val) => {
+              setWeaknessMagnitude(val);
+              if (val === 0) setWeaknessDamageTypeId(null);
+            }}
+          />
 
-      {/* Weakness damage type — only enabled when weakness > 0 */}
-      <div className="space-y-1">
-        <Label htmlFor="alteration-weakness-type">Weakness damage type</Label>
-        <select
-          id="alteration-weakness-type"
-          value={weaknessDamageTypeId ?? ''}
-          disabled={weaknessMagnitude === 0}
-          onChange={(e) => {
-            const val = e.target.value;
-            setWeaknessDamageTypeId(val === '' ? null : Number(val));
-          }}
-          className={SELECT_CLASS_DISABLED}
-        >
-          <option value="">(select a type)</option>
-          {damageTypes.map((dt) => (
-            <option key={dt.id} value={dt.id}>
-              {dt.name}
-            </option>
-          ))}
-        </select>
-      </div>
+          {/* Weakness damage type — only enabled when weakness > 0 */}
+          <div className="space-y-1">
+            <Label htmlFor="alteration-weakness-type">Weakness damage type</Label>
+            <select
+              id="alteration-weakness-type"
+              value={weaknessDamageTypeId ?? ''}
+              disabled={weaknessMagnitude === 0}
+              onChange={(e) => {
+                const val = e.target.value;
+                setWeaknessDamageTypeId(val === '' ? null : Number(val));
+              }}
+              className={SELECT_CLASS_DISABLED}
+            >
+              <option value="">(select a type)</option>
+              {damageTypes.map((dt) => (
+                <option key={dt.id} value={dt.id}>
+                  {dt.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      {/* Resonance bonus */}
-      <MagnitudeSelect
-        id="alteration-resonance-mag"
-        label="Resonance bonus"
-        cap={caps.resonance_cap}
-        value={resonanceBonus}
-        onChange={setResonanceBonus}
-      />
+          {/* Resonance bonus */}
+          <MagnitudeSelect
+            id="alteration-resonance-mag"
+            label="Resonance bonus"
+            cap={caps.resonance_cap}
+            value={resonanceBonus}
+            onChange={setResonanceBonus}
+          />
 
-      {/* Social reactivity */}
-      <MagnitudeSelect
-        id="alteration-social-mag"
-        label="Social reactivity"
-        cap={caps.social_cap}
-        value={socialReactivity}
-        onChange={setSocialReactivity}
-      />
+          {/* Social reactivity */}
+          <MagnitudeSelect
+            id="alteration-social-mag"
+            label="Social reactivity"
+            cap={caps.social_cap}
+            value={socialReactivity}
+            onChange={setSocialReactivity}
+          />
+        </>
+      )}
+
+      {!hasDrawbacks && (
+        <p className="text-xs text-muted-foreground">
+          This is a cosmetic mark: it carries no drawbacks and does not hold back advancement.
+        </p>
+      )}
 
       {/* Visible at rest */}
       <div className="space-y-1">

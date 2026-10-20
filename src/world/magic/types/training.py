@@ -23,3 +23,19 @@ class TrainingCheckResult:
     dev_points_contributed: int
     ap_spent: int
     technique_acquired: CharacterTechnique | None
+
+
+@dataclass(frozen=True)
+class TechniqueTeachingSources:
+    """Where a technique is taught right now (#4501).
+
+    ``academy_names`` are the organizations fronting a TRAIN offer for it;
+    ``player_teacher_count`` is the number of open player teaching offers.
+    """
+
+    academy_names: tuple[str, ...]
+    player_teacher_count: int
+
+    @property
+    def is_taught(self) -> bool:
+        return bool(self.academy_names) or self.player_teacher_count > 0

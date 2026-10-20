@@ -65,6 +65,7 @@ export default function AlterationResolutionPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Badge variant="destructive">Tier {pending.tier}</Badge>
+                {pending.is_cosmetic ? 'Cosmetic ' : ''}
                 {pending.tier_display} Mage Scar
               </CardTitle>
               <CardDescription>

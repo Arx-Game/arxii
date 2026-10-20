@@ -1,5 +1,7 @@
 """Check system models."""
 
+from collections.abc import Sequence
+
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -306,9 +308,49 @@ class Consequence(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "character_loss candidate (character_loss always fires it)."
         ),
     )
+    deliberately_free = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "Trial rule (#4501): this consequence makes an entry that opens a technique "
+            "known, or trains one, with no cost on purpose. Needs free_reason."
+        ),
+    )
+    free_reason = models.TextField(
+        blank=True,
+        default="",
+        db_default="",
+        help_text="Why a technique-opening consequence is deliberately free of cost.",
+    )
 
     def __str__(self) -> str:
         return self.label
+
+    def clean(self) -> None:
+        """A deliberately-free consequence states why (#4501).
+
+        The whole-set cost rule is ``trial_rule_errors``: it needs the consequence's
+        effects, which a form saves after this model's ``clean`` runs, so the inline
+        formset and the Trial builder call it with the proposed set instead.
+        """
+        super().clean()
+        if self.deliberately_free and not self.free_reason.strip():
+            raise ValidationError({"free_reason": "Say why this is deliberately free of cost."})
+        if self.free_reason.strip() and not self.deliberately_free:
+            raise ValidationError(
+                {"deliberately_free": "A reason is written; tick deliberately free, or clear it."}
+            )
+
+    def trial_rule_errors(self, effects: Sequence["ConsequenceEffect"] | None = None) -> list[str]:
+        """Trial save rules over this consequence's effect set (#4501).
+
+        ``effects`` is the proposed set (unsaved rows allowed); defaults to the saved ones.
+        """
+        from world.checks.trial_rules import consequence_trial_errors  # noqa: PLC0415
+
+        if effects is None:
+            effects = list(self.effects.all()) if self.pk else []
+        return consequence_trial_errors(self, effects)
 
 
 class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -552,6 +594,54 @@ class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Override Search difficulty to spot the rescue clue. Unset = config default.",
     )
 
+    # Trial effects (#4501). ``grants_known`` is read by GRANT_CODEX; the rest by
+    # TECHNIQUE_TRAINING. ``scar_is_cosmetic`` is read by MAGICAL_SCARS.
+    grants_known = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "GRANT_CODEX: make the entry KNOWN (through grant_codex_entry) instead of an "
+            "uncovered lead. Success and Critical Success only."
+        ),
+    )
+    technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consequence_effects",
+        help_text="TECHNIQUE_TRAINING: the technique the trial trains. Never an ultimate.",
+    )
+    training_points = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="TECHNIQUE_TRAINING: points put on the technique's training meter.",
+    )
+    training_meter_size = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "TECHNIQUE_TRAINING: size of the meter this effect starts when the character has "
+            "none. Authored per trial, as TechniqueGrant.acquisition_ap_cost is."
+        ),
+    )
+    grants_technique_outright = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "TECHNIQUE_TRAINING: Critical Success only. Mint the technique through "
+            "learn_technique with the TRIAL origin; every prerequisite is still checked."
+        ),
+    )
+    scar_is_cosmetic = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "MAGICAL_SCARS: queue a cosmetic Mage Scar (a reward: no drawbacks, no wait on "
+            "advancement). Success and Critical Success only. Never counts as a cost."
+        ),
+    )
+
     # Positioning / reshaping effects (#1018). Resolved contextually within the
     # actor's room at apply time; no FK to a per-room runtime Position.
     position_name = models.CharField(max_length=50, blank=True, default="")
@@ -620,6 +710,7 @@ class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ],
         EffectType.RESTORE_ANIMA: [("anima_amount", "anima_amount")],
         EffectType.INTOXICATE: [("intoxication_potency", "intoxication_potency")],
+        EffectType.TECHNIQUE_TRAINING: [("technique", "technique_id")],
     }
 
     def clean(self) -> None:
@@ -632,6 +723,9 @@ class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             self._validate_non_legend_award_fields(errors)
         if self.effect_type == EffectType.MOVE_TO_POSITION:
             self._validate_move_to_position_fields(errors)
+        from world.checks.trial_rules import effect_trial_errors  # noqa: PLC0415
+
+        errors.update(effect_trial_errors(self))
 
         if errors:
             raise ValidationError(errors)
