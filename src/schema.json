@@ -91254,7 +91254,7 @@ components:
         sacrificed:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/_SacrificeDetail'
         prayer_text:
           type: string
         options:
@@ -98419,6 +98419,46 @@ components:
       - flavor_text
       - lifetime_earned
       - resonance_id
+    _SacrificeDetail:
+      type: object
+      description: |-
+        One sacrifice as the steward's answer panel reads it (#4500): the signals that made
+        it count, never the item's price.
+      properties:
+        item_name:
+          type: string
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/_SacrificeSignal'
+        points:
+          type: integer
+        facet_name:
+          type: string
+        counted:
+          type: boolean
+        outcome_name:
+          type: string
+      required:
+      - counted
+      - facet_name
+      - item_name
+      - outcome_name
+      - points
+      - signals
+    _SacrificeSignal:
+      type: object
+      properties:
+        kind_name:
+          type: string
+        points:
+          type: integer
+        detail:
+          type: string
+      required:
+      - detail
+      - kind_name
+      - points
     _SocietyReputation:
       type: object
       description: 'One reputation entry: society + tier label (no raw number).'

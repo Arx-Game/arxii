@@ -86,7 +86,16 @@ const prompt: StewardPrompt = {
   subject_name: 'Tobiah Fenwright',
   pledge_name: '[GM-authored pledge name]',
   outcome_tier_name: 'Success',
-  sacrificed: ['[item]'],
+  sacrificed: [
+    {
+      item_name: '[item]',
+      signals: [{ kind_name: 'Carried', points: 2, detail: 'held 120 days' }],
+      points: 2,
+      facet_name: '',
+      counted: true,
+      outcome_name: 'Success',
+    },
+  ],
   prayer_text: '[player-written prayer]',
   options: [
     {

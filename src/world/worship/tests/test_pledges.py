@@ -462,6 +462,21 @@ class SacrificeTests(PledgeTestBase):
         self.assertIn("sacrifices", line.content)
         self.assertIn("at Ombrin's shrine", line.content)
 
+    def test_the_gm_sees_the_signals_and_the_roll_of_a_sacrifice(self) -> None:
+        from world.worship.answer_services import sacrifice_detail
+
+        self._sacrifice("Success", self._carried_item(facet=self.silk))
+
+        detail = sacrifice_detail(CeremonyOffering.objects.get())
+
+        self.assertEqual(
+            [(s.kind_name, s.points) for s in detail.signals], [("Carried", 1), ("Own work", 1)]
+        )
+        self.assertEqual(
+            (detail.points, detail.facet_name, detail.counted, detail.outcome_name),
+            (2, "Silk", True, "Success"),
+        )
+
     def test_a_bought_item_earns_nothing_whatever_it_cost(self) -> None:
         item = self._carried_item(400, meaningful=False, days=200)
         pool_before = self.being.resonance_pool

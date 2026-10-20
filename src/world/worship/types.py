@@ -344,3 +344,24 @@ class LiveSend:
     vision: Vision | None = None
     miracle: Miracle | None = None
     performance: MiraclePerformance | None = None
+
+
+@dataclass(frozen=True)
+class SacrificeSignalLine:
+    """One meaning signal an item had when it was given up (#4500)."""
+
+    kind_name: str
+    points: int
+    detail: str
+
+
+@dataclass(frozen=True)
+class SacrificeDetail:
+    """A GM's view of one sacrifice: why it counted and how the roll went (#4500)."""
+
+    item_name: str
+    signals: list[SacrificeSignalLine]
+    points: int
+    facet_name: str
+    counted: bool
+    outcome_name: str

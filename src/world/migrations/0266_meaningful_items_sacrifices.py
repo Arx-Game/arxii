@@ -41,7 +41,7 @@ class Migration(migrations.Migration):
             name="devotion_per_offering_point",
             field=models.PositiveIntegerField(
                 default=5,
-                help_text="Officiant favor per meaning point of each counted ceremony offering (#4500). Renamed from 'devotion per offering': review this number.",
+                help_text="Officiant favor per meaning point of each counted ceremony offering. Renamed from 'devotion per offering': review this number.",
             ),
         ),
         migrations.AlterField(
@@ -49,7 +49,7 @@ class Migration(migrations.Migration):
             name="offering_pool_per_point",
             field=models.PositiveIntegerField(
                 default=5,
-                help_text="Worship pool granted per meaning point of each counted item given up (#4500). Renamed from 'offering resonance per value': it was per point of the item's value, so review this number. Nothing reads an item's price.",
+                help_text="Worship pool granted per meaning point of each counted item given up. Renamed from 'offering resonance per value': it was per point of the item's value, so review this number. Nothing reads an item's price.",
             ),
         ),
         migrations.AddField(
@@ -78,7 +78,7 @@ class Migration(migrations.Migration):
             name="outcome_tier",
             field=models.ForeignKey(
                 blank=True,
-                help_text="The sacrifice roll (#4500). Empty for an item with no meaning points, an item past the week's limit, and a ceremony offering, whose rite roll is its check.",
+                help_text="The sacrifice roll. Empty for an item with no meaning points, an item past the week's limit, and a ceremony offering, whose rite roll is its check.",
                 null=True,
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name="+",
@@ -145,7 +145,7 @@ class Migration(migrations.Migration):
             field=models.DateTimeField(
                 db_default=django.db.models.functions.datetime.Now(),
                 default=django.utils.timezone.now,
-                help_text="When the current holder got this item (#4500). Starts the carry clock that gates an item's personal meaning signals. Written by set_item_holder.",
+                help_text="When the current holder got this item. Starts the carry clock that gates an item's personal meaning signals. Written by set_item_holder.",
             ),
         ),
         migrations.AddField(
@@ -153,7 +153,7 @@ class Migration(migrations.Migration):
             name="holding_event",
             field=models.ForeignKey(
                 blank=True,
-                help_text="The ownership event that brought the item to the current holder, if one was written (a gift, an inheritance). Null for an item the holder made or bought. Written by set_item_holder (#4500).",
+                help_text="The ownership event that brought the item to the current holder, if one was written (a gift, an inheritance). Null for an item the holder made or bought. Written by set_item_holder.",
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="+",
@@ -165,7 +165,7 @@ class Migration(migrations.Migration):
             name="offering_favored_facet_multiplier_percent",
             field=models.PositiveIntegerField(
                 default=200,
-                help_text="Percent multiplier on an item's meaning points when it carries a Facet the being favors (BeingFacet), #3777, #4500. 100 = no bonus.",
+                help_text="Percent multiplier on an item's meaning points when it carries a Facet the being favors (BeingFacet), #3777. 100 = no bonus.",
             ),
         ),
         migrations.AlterField(

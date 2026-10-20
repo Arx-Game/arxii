@@ -38,7 +38,7 @@ from world.worship.constants import (
 )
 from world.worship.exceptions import VisionError, VisionPoolInsufficient
 from world.worship.models import Answer, PendingAnswer, Vision
-from world.worship.types import AnswerDelivery
+from world.worship.types import AnswerDelivery, SacrificeDetail, SacrificeSignalLine
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -134,23 +134,25 @@ def pledge_sacrifices(details: PledgeDetails) -> list[CeremonyOffering]:
     )
 
 
-def sacrifice_detail(offering: CeremonyOffering) -> str:
-    """The GM's line for one sacrifice: the item, what it meant, and how the roll went.
+def sacrifice_detail(offering: CeremonyOffering) -> SacrificeDetail:
+    """The GM's view of one sacrifice: the item, each signal that made it count, the
+    points, the favored facet, and how the roll went.
 
-    "<item>: carried 2 (held 120 days), gift 4 (from <persona>; tie tier 3) = 6 points.
-    Success". The signals were snapshotted when the item was given up (#4500); the item is
-    gone, so this is the GM's only view of why it counted. Never the item's price.
+    The signals were snapshotted when the item was given up (#4500); the item is gone, so
+    this is the GM's only view of why it counted. Never the item's price.
     """
-    signals = list(offering.signals.all())
-    if not signals:
-        return f"{offering.item_name}: no meaning points, no roll"
-    parts = ", ".join(
-        f"{s.get_kind_display().lower()} {s.points}" + (f" ({s.detail})" if s.detail else "")
-        for s in signals
+    signals = [
+        SacrificeSignalLine(signal.get_kind_display(), signal.points, signal.detail)
+        for signal in offering.signals.all()
+    ]
+    return SacrificeDetail(
+        item_name=offering.item_name,
+        signals=signals,
+        points=sum(signal.points for signal in signals),
+        facet_name=offering.facet.name if offering.facet_id is not None else "",
+        counted=offering.counted,
+        outcome_name=offering.outcome_tier.name if offering.outcome_tier_id is not None else "",
     )
-    points = sum(s.points for s in signals)
-    outcome = offering.outcome_tier.name if offering.outcome_tier_id is not None else "no roll"
-    return f"{offering.item_name}: {parts} = {points} points. {outcome}"
 
 
 def sacrifice_passage(answer: Answer, offerings: list[CeremonyOffering]) -> str:

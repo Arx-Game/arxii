@@ -352,6 +352,24 @@ class _AnswerOptionSerializer(serializers.Serializer):
     delay_text = serializers.CharField()
 
 
+class _SacrificeSignalSerializer(serializers.Serializer):
+    kind_name = serializers.CharField()
+    points = serializers.IntegerField()
+    detail = serializers.CharField(allow_blank=True)
+
+
+class _SacrificeDetailSerializer(serializers.Serializer):
+    """One sacrifice as the steward's answer panel reads it (#4500): the signals that made
+    it count, never the item's price."""
+
+    item_name = serializers.CharField()
+    signals = _SacrificeSignalSerializer(many=True)
+    points = serializers.IntegerField()
+    facet_name = serializers.CharField(allow_blank=True)
+    counted = serializers.BooleanField()
+    outcome_name = serializers.CharField(allow_blank=True)
+
+
 class StewardPromptSerializer(serializers.Serializer):
     """A ``BEING_ANSWER`` prompt as the steward's answer panel reads it."""
 
@@ -362,7 +380,7 @@ class StewardPromptSerializer(serializers.Serializer):
     subject_name = serializers.CharField()
     pledge_name = serializers.CharField()
     outcome_tier_name = serializers.CharField()
-    sacrificed = serializers.ListField(child=serializers.CharField())
+    sacrificed = _SacrificeDetailSerializer(many=True)
     prayer_text = serializers.CharField()
     options = _AnswerOptionSerializer(many=True)
     may_write_free_text = serializers.BooleanField()
@@ -387,7 +405,9 @@ class StewardPromptSerializer(serializers.Serializer):
             "subject_name": prompt_subject_name(prompt),
             "pledge_name": details.pledge.name,
             "outcome_tier_name": tier.name if tier is not None else "",
-            "sacrificed": [sacrifice_detail(offering) for offering in pledge_sacrifices(details)],
+            "sacrificed": _SacrificeDetailSerializer(
+                [sacrifice_detail(offering) for offering in pledge_sacrifices(details)], many=True
+            ).data,
             "prayer_text": details.prayer.text if details.prayer is not None else "",
             "options": [
                 {

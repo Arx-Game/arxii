@@ -211,7 +211,7 @@ class CeremonyOffering(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="+",
         help_text=(
-            "The sacrifice roll (#4500). Empty for an item with no meaning points, an item "
+            "The sacrifice roll. Empty for an item with no meaning points, an item "
             "past the week's limit, and a ceremony offering, whose rite roll is its check."
         ),
     )
@@ -316,7 +316,7 @@ class CeremonyConfig(SharedMemoryModel):
     offering_pool_per_point = models.PositiveIntegerField(
         default=5,
         help_text=(
-            "Worship pool granted per meaning point of each counted item given up (#4500). "
+            "Worship pool granted per meaning point of each counted item given up. "
             "Renamed from 'offering resonance per value': it was per point of the item's "
             "value, so review this number. Nothing reads an item's price."
         ),
@@ -336,7 +336,7 @@ class CeremonyConfig(SharedMemoryModel):
     devotion_per_offering_point = models.PositiveIntegerField(
         default=5,
         help_text=(
-            "Officiant favor per meaning point of each counted ceremony offering (#4500). "
+            "Officiant favor per meaning point of each counted ceremony offering. "
             "Renamed from 'devotion per offering': review this number."
         ),
     )
@@ -347,7 +347,7 @@ class CeremonyConfig(SharedMemoryModel):
         default=200,
         help_text=(
             "Percent multiplier on an item's meaning points when it carries a Facet the "
-            "being favors (BeingFacet), #3777, #4500. 100 = no bonus."
+            "being favors (BeingFacet), #3777. 100 = no bonus."
         ),
     )
 

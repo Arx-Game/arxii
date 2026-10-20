@@ -50997,7 +50997,7 @@ export interface components {
       subject_name: string;
       pledge_name: string;
       outcome_tier_name: string;
-      sacrificed: string[];
+      sacrificed: components['schemas']['_SacrificeDetail'][];
       prayer_text: string;
       options: components['schemas']['_AnswerOption'][];
       may_write_free_text: boolean;
@@ -54359,6 +54359,23 @@ export interface components {
       balance: number;
       lifetime_earned: number;
       flavor_text: string;
+    };
+    /**
+     * @description One sacrifice as the steward's answer panel reads it (#4500): the signals that made
+     *     it count, never the item's price.
+     */
+    _SacrificeDetail: {
+      item_name: string;
+      signals: components['schemas']['_SacrificeSignal'][];
+      points: number;
+      facet_name: string;
+      counted: boolean;
+      outcome_name: string;
+    };
+    _SacrificeSignal: {
+      kind_name: string;
+      points: number;
+      detail: string;
     };
     /** @description One reputation entry: society + tier label (no raw number). */
     _SocietyReputation: {

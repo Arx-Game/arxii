@@ -912,7 +912,7 @@ class ItemInstance(SharedMemoryModel):
         default=timezone.now,
         db_default=Now(),
         help_text=(
-            "When the current holder got this item (#4500). Starts the carry clock that "
+            "When the current holder got this item. Starts the carry clock that "
             "gates an item's personal meaning signals. Written by set_item_holder."
         ),
     )
@@ -925,7 +925,7 @@ class ItemInstance(SharedMemoryModel):
         help_text=(
             "The ownership event that brought the item to the current holder, if one was "
             "written (a gift, an inheritance). Null for an item the holder made or bought. "
-            "Written by set_item_holder (#4500)."
+            "Written by set_item_holder."
         ),
     )
     crafter_character_sheet = models.ForeignKey(

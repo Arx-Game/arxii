@@ -102,9 +102,8 @@ export function SacrificeDialog({
             </ul>
           )}
           <p className="text-xs text-muted-foreground">
-            <b>Rule:</b> items given up leave play; their design is kept. Each item that means
-            something to you rolls and may earn no favor. An item that means nothing to you earns
-            nothing, whatever it cost.
+            <b>Rule:</b> items given up leave play; their design is kept. Each item with points
+            rolls and may earn no favor.
           </p>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
