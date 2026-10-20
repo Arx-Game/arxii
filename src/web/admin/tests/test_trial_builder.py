@@ -243,6 +243,7 @@ class RefusalTests(TrialBuilderCase):
         response = self.post(self.valid_post(**overrides))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, message)
+        self.assertContains(response, 'class="errornote"')
         self.assertContains(response, "Nothing was saved")
         self.assertFalse(MissionOptionRoute.objects.filter(option=self.option))
         self.assertFalse(Consequence.objects.filter(label__startswith="Crypt jars"))

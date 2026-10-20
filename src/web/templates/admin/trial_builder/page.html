@@ -53,6 +53,7 @@ page links it itself (#3667), and `widgets.css` with it for the autocomplete pic
     <div class="tb-main">
       <form method="post" id="trial-form" novalidate data-check-url="{{ check_url }}">
         {% csrf_token %}
+        {% if refused %}<p class="errornote" data-testid="refused">Please correct the errors below. Nothing was saved.</p>{% endif %}
 
         <fieldset class="module aligned" id="tb-trial-module">
           <h2>Trial <span class="tb-chip">read-only</span></h2>
@@ -61,7 +62,7 @@ page links it itself (#3667), and `widgets.css` with it for the autocomplete pic
           <div class="form-row"><div><div class="flex-container"><label>Node</label>
             <div class="tb-field"><a href="{{ node_url }}">{{ option.node.key }}</a></div></div></div></div>
           <div class="form-row"><div><div class="flex-container"><label>Option</label>
-            <div class="tb-field">{{ option.key }}{% if option.authored_ic_framing %}: {{ option.authored_ic_framing }}{% endif %}</div></div></div></div>
+            <div class="tb-field">{% if option.authored_ic_framing %}{{ option.authored_ic_framing }}{% else %}{{ option.key }}{% endif %}</div></div></div></div>
           <div class="form-row"><div><div class="flex-container"><label>Check</label>
             <div class="tb-field">{% if option.authored_check_type %}{{ option.authored_check_type.name }}{% else %}[no check type set]{% endif %}
               at base risk {{ option.authored_base_risk }}. <a href="{{ option_url }}">Edit option</a></div></div></div></div>
@@ -80,6 +81,7 @@ page links it itself (#3667), and `widgets.css` with it for the autocomplete pic
                   {% for t in opened %}
                   Opens: <a href="{{ t.url }}">{{ t.name }}</a> ({{ t.gift }}).
                   Its other prerequisites: {% if t.prerequisites %}{{ t.prerequisites|join:"; " }}{% else %}none{% endif %}.
+                  Technique cap for {{ t.gift }}: checked per character when the trial runs.
                   {% empty %}
                   The technique this entry opens is listed here once it is picked and saved.
                   {% endfor %}

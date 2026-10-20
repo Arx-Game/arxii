@@ -139,13 +139,14 @@ def _tier_errors(result: Evaluation) -> dict[int, list[str]]:
     return errors
 
 
-def _render_page(
+def _render_page(  # noqa: PLR0913 - the option, its saved tiers, what the page proposes, two flags
     request: HttpRequest,
     option: MissionOption,
     states: list[TierState],
     result: Evaluation,
     *,
     needs_setup: bool = False,
+    refused: bool = False,
 ) -> HttpResponse:
     template = option.node.template
     tier_errors = _tier_errors(result)
@@ -182,6 +183,7 @@ def _render_page(
             "taught": live.taught_lines(head.get("technique")),
             "rail": _rail(states, result),
             "needs_setup": needs_setup,
+            "refused": refused,
             "has_trial_routes": any(s.codex or s.training for s in states),
             "check_url": reverse("admin_trial_builder_check", args=[option.pk]),
             "delete_url": reverse("admin_trial_builder_delete", args=[option.pk]),
@@ -204,8 +206,7 @@ def trial_builder(request: HttpRequest, option_pk: int) -> HttpResponse:
     if request.method != "POST" or contributor is None:
         return _render_page(request, option, states, result, needs_setup=contributor is None)
     if result.refused:
-        messages.error(request, "Please correct the errors below. Nothing was saved.")
-        return _render_page(request, option, states, result)
+        return _render_page(request, option, states, result, refused=True)
     save.save(option, result.proposals, contributor)
     messages.success(request, "Saved and credited to you.")
     if CONTINUE_BUTTON in request.POST:

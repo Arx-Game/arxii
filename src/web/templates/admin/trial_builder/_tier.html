@@ -5,7 +5,7 @@ messages slice 1's rules gave this tier; the check script rewrites them as the f
 {% endcomment %}
 {% with form=block.form state=block.state %}
 <fieldset class="module aligned tb-tier" id="tier-{{ form.tier.pk }}" data-tier="{{ form.tier.pk }}" data-level="{{ form.level }}">
-  <h2>{{ form.tier.name }} <span class="tb-chip">route {{ block.number }} of {{ block.total }}</span></h2>
+  <h2{% if form.can_outright %} class="tb-crit"{% endif %}>{{ form.tier.name }} <span class="tb-chip">route {{ block.number }} of {{ block.total }}</span></h2>
   {% if form.non_field_errors %}<p class="errornote">{{ form.non_field_errors }}</p>{% endif %}
   {% include "admin/trial_builder/_row.html" with field=form.next_node %}
   {% if not state.shared %}{% include "admin/trial_builder/_row.html" with field=form.label %}{% endif %}
