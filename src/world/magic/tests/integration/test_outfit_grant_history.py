@@ -57,7 +57,6 @@ class OutfitGrantHistorySurvivesTests(TestCase):
             counted=False,
             granted_by=self.sheet,
             reason="test",
-            note="Given up in a test",
         )
 
         stored = ItemInstance.objects.get(pk=self.item.pk)
