@@ -91,11 +91,16 @@ class CmdCraft(ArxCommand):
 
         if not item_id_raw or not item_id_raw.isdigit():
             raise CommandError(_USAGE)
-        obj = self.caller.search(f"#{item_id_raw}", location=self.caller, use_dbref=True)
-        if not obj:
+        # Quiet: the refusal below is the command's own line (#3657 tranche 14: the loud
+        # search had said "Could not find '#id'." first, the double line tranche 8 took off
+        # every other verb).
+        found = self.caller.search(
+            f"#{item_id_raw}", location=self.caller, use_dbref=True, quiet=True
+        )
+        if len(found) != 1:
             msg = "You aren't holding that item."
             raise CommandError(msg)
-        instance = resolve_item_instance(obj)
+        instance = resolve_item_instance(found[0])
         if instance is None:
             msg = "That isn't an item."
             raise CommandError(msg)

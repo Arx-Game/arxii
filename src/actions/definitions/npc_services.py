@@ -97,7 +97,6 @@ class StartNPCInteractionAction(Action):
         # real: the tier-1 instantiation moment (ADR-0058's ephemeral→durable
         # seam). A room without a placement of this role is untouched (the
         # staff/tests reach-a-role-from-anywhere path stays nameless).
-        display_name = role.name
         if npc_persona is None and actor.location is not None:
             from world.areas.services import get_room_profile  # noqa: PLC0415
             from world.npc_services.instantiation import (  # noqa: PLC0415
@@ -107,8 +106,10 @@ class StartNPCInteractionAction(Action):
             room_profile = get_room_profile(actor.location)
             if room_profile is not None:
                 npc_persona = materialize_role_in_room(room_profile, role)
-                if npc_persona is not None:
-                    display_name = npc_persona.name
+        # Whoever answers is named: the persona asked for by name, the placement
+        # made real, or the nameless role (#3657 tranche 14: a named persona had
+        # been greeted by the role's name).
+        display_name = npc_persona.name if npc_persona is not None else role.name
 
         session = start_interaction(
             role=role,

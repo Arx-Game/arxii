@@ -28,6 +28,7 @@ from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
     QualityTierFactory,
+    StyleFactory,
 )
 from world.items.gems.constants import GemAxis
 from world.items.models import ItemFacet, ItemInstance
@@ -54,7 +55,7 @@ class AttachFacetActionTests(TestCase):
 
     def test_attach_facet_success(self):
         actor, instance = self._actor_and_item()
-        facet = object()  # stand-in Facet; craft_attach_facet is mocked below
+        facet = FacetFactory(name="AttachActionGlow")  # craft_attach_facet is mocked below
         result = FacetCraftResult(
             attached=True,
             outcome=None,
@@ -71,6 +72,9 @@ class AttachFacetActionTests(TestCase):
             )
         assert action_result.success
         assert action_result.data["result"] is result
+        assert action_result.message == (
+            "You work AttachActionGlow into AttachFacetSword (unrated quality)."
+        )
         mocked.assert_called_once()
         assert mocked.call_args.kwargs["item_instance"] == instance
         assert mocked.call_args.kwargs["facet"] is facet
@@ -139,10 +143,13 @@ class AttachStyleActionTests(TestCase):
             "actions.definitions.crafting.craft_attach_style", return_value=result
         ) as mocked:
             action_result = AttachStyleAction().run(
-                actor=actor, item_instance=instance, style=object()
+                actor=actor, item_instance=instance, style=StyleFactory(name="AttachActionSharp")
             )
         assert action_result.success
         assert action_result.data["result"] is result
+        assert action_result.message == (
+            "You work AttachActionSharp into AttachStyleCoat (unrated quality)."
+        )
         mocked.assert_called_once()
 
 
@@ -188,14 +195,13 @@ class DetachFacetActionTests(TestCase):
         )
         template = ItemTemplateFactory(name="DetachFacetSword")
         instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
-
-        class _FakeItemFacet:
-            item_instance = instance
-
-        item_facet = _FakeItemFacet()
+        item_facet = ItemFacetFactory(
+            item_instance=instance, facet=FacetFactory(name="DetachActionGlow")
+        )
         with patch("actions.definitions.crafting.remove_facet_from_item") as mocked:
             action_result = DetachFacetAction().run(actor=actor, item_facet=item_facet)
         assert action_result.success
+        assert action_result.message == "You strip DetachActionGlow from DetachFacetSword."
         mocked.assert_called_once_with(item_facet=item_facet)
 
     def test_detach_inherent_facet_fails_with_player_message(self):
