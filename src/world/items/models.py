@@ -995,7 +995,7 @@ class ItemInstance(SharedMemoryModel):
         blank=True,
         related_name="dedicated_items",
         help_text=(
-            "The persona this piece was made for (#4512). Written once, at making or on a "
+            "The persona this piece was made for. Written once, at making or on a "
             "commission, and permanent: an item has at most one dedication."
         ),
     )
