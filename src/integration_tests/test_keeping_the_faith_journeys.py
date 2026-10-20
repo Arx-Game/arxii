@@ -12,7 +12,7 @@ from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, Conversi
 from world.ceremonies.factories import CeremonyTypeFactory
 from world.ceremonies.models import Ceremony, WorshipConversionOffer
 from world.covenants.factories import CovenantRoleFactory, CovenantRoleTechniqueSpecialtyFactory
-from world.items.factories import ItemInstanceFactory
+from world.items.factories import meaningful_item_for
 from world.items.models import ItemInstance
 from world.magic.constants import TechniqueFunction
 from world.magic.factories import (
@@ -43,16 +43,19 @@ def staff(case: JourneyCase, character) -> None:
     account.permissions.add("Admin")
 
 
-def carried(character, name: str, *, value: int = 20) -> ItemInstance:
-    """An item called ``name`` in ``character``'s hands."""
+def carried(character, name: str) -> ItemInstance:
+    """An item called ``name`` in ``character``'s hands, their own work and held a month.
+
+    An offering feeds a being by what the item means to the giver, never by its price
+    (#4500): a bought thing feeds nothing, so the journey's chalice carries a history.
+    """
     obj = ObjectDBFactory(db_key=name, db_typeclass_path="typeclasses.objects.Object")
     obj.db_location = character
     obj.save(update_fields=["db_location"])
-    return ItemInstanceFactory(
+    return meaningful_item_for(
+        character.sheet_data,
         template__name=name,
-        template__value=value,
         game_object=obj,
-        holder_character_sheet=character.sheet_data,
     )
 
 
@@ -167,7 +170,7 @@ class ConductingACeremony(JourneyCase):
         )
 
         # The offering: an item in her hands is consumed and feeds the being's pool.
-        chalice = carried(self.ysmay, "golden chalice", value=20)
+        chalice = carried(self.ysmay, "golden chalice")
         pool_before = pool_of(self.shepherd)
         self.assertIn("Offer what?", self.telnet(self.ysmay, "ceremony/offering"))
         self.assertIn(
