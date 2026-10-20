@@ -395,6 +395,7 @@ def run_service_craft(  # noqa: PLR0913 - the commissioner's words and dedicatio
     Returns ``(result, charged_fee)`` — the fee actually charged, after the
     crafter's regard band (#2995; a no-op when ``crafter_persona`` is a PC).
     """
+    from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
     from world.items.crafting.services import run_crafting_recipe  # noqa: PLC0415
 
     if item_instance.destroyed_at is not None:
@@ -426,7 +427,9 @@ def run_service_craft(  # noqa: PLR0913 - the commissioner's words and dedicatio
     _pay(buyer, offer.crafter_persona, fee, f"crafting service: {offer.recipe_kind}")
 
     result = run_crafting_recipe(
-        kind=offer.recipe_kind,
+        # The column is a plain string once loaded from the database; the recipe registry
+        # is keyed by the enum (found by running a real commission, #4512).
+        kind=CraftingRecipeKind(offer.recipe_kind),
         crafter_account=buyer_character.account,
         crafter_character=crafter_character,
         item_instance=item_instance,
@@ -437,14 +440,18 @@ def run_service_craft(  # noqa: PLR0913 - the commissioner's words and dedicatio
         from world.items.services.dedication import dedicate_item  # noqa: PLC0415
 
         dedicate_item(item_instance, by=buyer, to=dedicate_to)
-    MarketSale.objects.create(
-        kind=MarketSale.SaleKind.SERVICE,
-        buyer_persona=buyer,
-        seller_persona=offer.crafter_persona,
-        item_instance=item_instance,
-        price=fee,
-    )
-    del item_instance.cached_service_sales  # examine's "Facet work by" reads it (#4512)
+    # The sale is the record that the artist's work landed: examine credits "Facet work by"
+    # from it and the made-by-a-tie signal reads it, so a failed attempt (the fee is paid
+    # whatever the roll) writes none (#4512).
+    if result.attached:
+        MarketSale.objects.create(
+            kind=MarketSale.SaleKind.SERVICE,
+            buyer_persona=buyer,
+            seller_persona=offer.crafter_persona,
+            item_instance=item_instance,
+            price=fee,
+        )
+        del item_instance.cached_service_sales  # examine's "Facet work by" reads it
     return result, fee
 
 

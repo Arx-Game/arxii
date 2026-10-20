@@ -178,6 +178,8 @@ class CommissionTests(_CommissionCase):
             shop_room=self.shop,
             fee=40,
         )
+        # As the action loads it: the kind is a plain string, not the enum member.
+        self.offer.refresh_from_db()
         transfer(amount=500, reason="test", to_purse=get_or_create_purse(self.linnet))
         self.coat = ItemInstanceFactory(
             template=ItemTemplateFactory(name="riding coat", facet_capacity=2),
@@ -263,3 +265,25 @@ class CommissionTests(_CommissionCase):
             self._commission(item=theirs, name="Mine")
 
         self.assertEqual(get_or_create_purse(self.linnet).balance, balance)
+
+    def test_a_failed_attempt_still_costs_the_fee_and_keeps_her_words_but_credits_no_facet_work(
+        self,
+    ) -> None:
+        botch = CheckOutcomeFactory(name="CommissionBotch", success_level=-5)
+
+        with force_check_outcome(botch):
+            result, fee = run_service_craft(
+                offer=self.offer,
+                buyer=self.linnet.primary_persona,
+                buyer_character=self.linnet.character,
+                item_instance=self.coat,
+                target=self.facet,
+                name="Highwind Coat",
+            )
+
+        self.assertFalse(result.attached)
+        self.coat.refresh_from_db()
+        self.assertEqual(self.coat.custom_name, "Highwind Coat")
+        self.assertEqual(get_or_create_purse(self.linnet).balance, 500 - fee)
+        self.assertFalse(MarketSale.objects.filter(item_instance=self.coat).exists())
+        self.assertNotIn("Facet work", crafted_provenance_line(self.coat))
