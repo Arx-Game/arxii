@@ -615,7 +615,7 @@ def credit_lines(details: PledgeDetails) -> list[PledgeCreditLine]:
         "offering__outcome_tier",
         "rite_performance__rite",
         "rite_performance__outcome_tier",
-    ):
+    ).prefetch_related("offering__signals"):  # noqa: PREFETCH_STRING - read as .signals.all()
         label, before_rate = _credit_label(credit)
         lines.append(
             PledgeCreditLine(
