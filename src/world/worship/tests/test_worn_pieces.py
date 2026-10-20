@@ -9,7 +9,9 @@ adds nothing, whatever it cost or how many favored facets it carries.
 from datetime import timedelta
 
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
+from evennia.accounts.models import AccountDB
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -371,3 +373,42 @@ class InvocationUsesWornPiecesTests(WornPiecesTestBase):
         self.assertEqual(earning_rate(self.sheet, self.being), 104)
         breakdown = earning_rate_breakdown(self.sheet, self.being)
         self.assertEqual((breakdown.worn_bonus, breakdown.total), (4, 104))
+
+
+class InvocationDetailAdminTests(WornPiecesTestBase):
+    """The GM's invocation detail: the pieces that counted, their signals, the favored
+    facet that made each count and the ease it gave (#4520)."""
+
+    def test_the_invocation_page_lists_each_counted_piece_with_its_signals(self) -> None:
+        self.made_piece(self.kestrel, days=400, template__name="riding coat")
+        DevotionStandingFactory(character_sheet=self.sheet, being=self.being, favor=10)
+        with force_check_outcome(CheckOutcomeFactory(name="Success", success_level=1)):
+            outcome = invoke_favor(self.sheet, self.being, actor_name="Linnet")
+        staff = AccountDB.objects.create_superuser("gmdetail", "gm@example.com", "pw-1234567")
+        self.client.force_login(staff)
+
+        response = self.client.get(
+            reverse("admin:arxii_favorinvocation_change", args=(outcome.invocation.pk,))
+        )
+
+        body = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("riding coat", body)
+        self.assertIn("Kestrel (the gate; ease 2 per point)", body)
+        self.assertIn("held 400 days", body)
+        self.assertIn("made by the holder", body)
+        self.assertIn("4 points, eased 8 before the cap; eased 8 on the roll", body)
+        self.assertNotIn("value", body.split("Worn pieces that counted")[-1].lower())
+
+    def test_an_invocation_with_nothing_counted_says_so(self) -> None:
+        DevotionStandingFactory(character_sheet=self.sheet, being=self.being, favor=10)
+        with force_check_outcome(CheckOutcomeFactory(name="Success", success_level=1)):
+            outcome = invoke_favor(self.sheet, self.being, actor_name="Linnet")
+        staff = AccountDB.objects.create_superuser("gmdetail2", "gm2@example.com", "pw-1234567")
+        self.client.force_login(staff)
+
+        response = self.client.get(
+            reverse("admin:arxii_favorinvocation_change", args=(outcome.invocation.pk,))
+        )
+
+        self.assertContains(response, "No worn piece counted on this invocation.")
