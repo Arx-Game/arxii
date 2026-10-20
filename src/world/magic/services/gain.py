@@ -96,7 +96,12 @@ from world.magic.types import (
     ResonanceWeeklySettlementSummary,
     SettlementResult,
 )
-from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
+from world.scenes.constants import (
+    InteractionMode,
+    InteractionVisibility,
+    PoseKind,
+    ScenePrivacyMode,
+)
 from world.scenes.interaction_services import notify_interaction_changed
 from world.scenes.models import Interaction, Persona, Scene, SceneParticipation
 from world.scenes.place_models import InteractionReceiver
@@ -517,7 +522,6 @@ def create_scene_entry_endorsement(
     """Validate, persist, and fire scene-entry grant in one transaction (Spec C §2.3, §7)."""
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
-    from world.scenes.constants import PoseKind  # noqa: PLC0415
 
     if endorser_sheet.is_protagonism_locked:
         msg = "Endorser is locked from protagonism and cannot endorse scene entries"
@@ -600,7 +604,6 @@ def create_scene_entry_endorsement(
 
 def _notify_entry_poses(scene: Scene, endorsee_sheet: CharacterSheet) -> None:
     """Announce every entrance pose ``endorsee_sheet`` made in ``scene``: it shows the endorsers."""
-    from world.scenes.constants import PoseKind  # noqa: PLC0415
 
     for entry in Interaction.objects.filter(
         scene=scene, persona__character_sheet=endorsee_sheet, pose_kind=PoseKind.ENTRY

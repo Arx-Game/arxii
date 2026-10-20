@@ -1180,10 +1180,7 @@ def notify_interaction_changed(interaction: Interaction) -> None:
 def _send_changed_frame(objects: Iterable[ObjectDB], frame: dict[str, int | None]) -> None:
     """Send the ids-only ``interaction_changed`` frame to each object."""
     for obj in objects:
-        try:
-            obj.msg(**{WebsocketMessageType.INTERACTION_CHANGED.value: ((), frame)})
-        except AttributeError:
-            continue
+        obj.msg(**{WebsocketMessageType.INTERACTION_CHANGED.value: ((), frame)})
 
 
 def push_interaction(

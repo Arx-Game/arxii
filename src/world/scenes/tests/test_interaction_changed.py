@@ -24,7 +24,9 @@ from world.magic.services.gain import (
 )
 from world.scenes.constants import InteractionMode, PoseKind, ReactionWindowKind
 from world.scenes.factories import (
+    InteractionFactory,
     InteractionReceiverFactory,
+    PlaceFactory,
     SceneParticipationFactory,
 )
 from world.scenes.reaction_services import open_reaction_window, react_to_window
@@ -131,6 +133,68 @@ class InteractionChangedTests(PushScene):
         assert self.bystander not in audience
         assert self.author.character in audience
         assert receiver.character in audience
+
+    def test_place_scoped_change_reaches_only_writer_and_receivers(self):
+        receiver = sheet_with_tenure()
+        receiver.character.location = self.room
+        self.interaction.place = PlaceFactory()
+        self.interaction.save()
+        InteractionReceiverFactory(interaction=self.interaction, persona=receiver.primary_persona)
+        with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
+            toggle_interaction_reaction(
+                interaction=self.interaction, account=AccountFactory(), emoji="x"
+            )
+        audience = self._announced(send)
+        assert self.bystander not in audience
+        assert {self.author.character, receiver.character} <= set(audience)
+
+    def test_unplaced_writer_falls_back_to_the_scenes_room(self):
+        self.author.character.location = None
+        self.scene.room = self.room
+        with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
+            toggle_interaction_reaction(
+                interaction=self.interaction, account=AccountFactory(), emoji="x"
+            )
+        assert self.bystander in self._announced(send)
+
+    def test_no_location_at_all_sends_nothing(self):
+        self.author.character.location = None
+        with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
+            toggle_interaction_reaction(
+                interaction=self.interaction, account=AccountFactory(), emoji="x"
+            )
+        send.assert_not_called()
+
+    def test_every_entrance_pose_of_the_endorsee_is_announced(self):
+        self.interaction.pose_kind = PoseKind.ENTRY
+        self.interaction.save()
+        second = InteractionFactory(
+            persona=self.author.primary_persona, pose_kind=PoseKind.ENTRY, scene=self.scene
+        )
+        endorser = sheet_with_tenure()
+        SceneParticipationFactory(scene=self.scene, account=account_for_sheet(endorser))
+        with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
+            create_scene_entry_endorsement(endorser, self.author, self.scene, self.resonance)
+        announced = {call.args[1]["interaction_id"] for call in send.call_args_list}
+        assert announced == {self.interaction.pk, second.pk}
+
+    def test_the_real_msg_call_carries_the_ids_only_frame(self):
+        with (
+            patch.object(self.bystander, "msg") as bystander_msg,
+            patch.object(self.author.character, "msg") as author_msg,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            toggle_interaction_reaction(
+                interaction=self.interaction, account=AccountFactory(), emoji="x"
+            )
+        expected = {
+            "interaction_changed": (
+                (),
+                {"interaction_id": self.interaction.pk, "scene_id": self.scene.pk},
+            )
+        }
+        bystander_msg.assert_called_once_with(**expected)
+        author_msg.assert_called_once_with(**expected)
 
     def test_failed_endorsement_announces_nothing(self):
         with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
