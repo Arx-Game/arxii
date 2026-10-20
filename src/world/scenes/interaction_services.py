@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 import uuid
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import F, IntegerField, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -1143,29 +1143,34 @@ def _delivery_audience(
     if not receiver_scoped:
         return False, None
     writer_char = interaction.persona.character_sheet.character
-    return True, [writer_char, *receiver_characters]
+    # dict.fromkeys: a writer who is also a receiver is listed once, order kept.
+    return True, list(dict.fromkeys([writer_char, *receiver_characters]))
 
 
-def notify_interaction_changed(interaction: Interaction) -> None:
-    """Tell a pose's audience it changed so each page refetches it (#4508).
+class _ChangedFrameSend:
+    """The on-commit send for one changed pose; ``interaction_id`` is how a second
+    registration in the same transaction finds it and stands down."""
 
-    An endorsement, reaction or tag landed on (or left) ``interaction``. The frame
-    carries ids only: what each viewer may see of the pose is per-viewer, so each page
-    refetches through the REST retrieve instead of trusting a room-wide payload.
-    Registered on commit, so a write that rolls back never announces. The audience is
-    ``push_interaction``'s: writer + receivers for a receiver-scoped pose, else the
-    writer's location (the scene's when the writer is unplaced); no location, no frame.
-    """
+    def __init__(self, interaction: Interaction) -> None:
+        self.interaction = interaction
+        self.interaction_id = interaction.pk
+        self.sent = False
 
-    def _send() -> None:
+    def __call__(self) -> None:
+        # A real commit empties Django's pending list; a test that captures callbacks
+        # keeps them there, so a sent notice must stop standing in for a new one.
+        self.sent = True
+        interaction = self.interaction
         r_ids, r_chars = _query_receivers(interaction)
         scoped, objects = _delivery_audience(
             interaction, receiver_characters=r_chars, receiver_ids=r_ids
         )
         if not scoped:
-            location = interaction.persona.character_sheet.character.location
-            if location is None and interaction.scene_id is not None:
-                location = interaction.scene.room
+            # The scene's room, not the writer's present one: a writer who walked
+            # away before the commit must not move the frame to the wrong room.
+            location = interaction.scene.room
+            if location is None:
+                location = interaction.persona.character_sheet.character.location
             if location is None:
                 return
             objects = list(location.contents)
@@ -1174,7 +1179,30 @@ def notify_interaction_changed(interaction: Interaction) -> None:
             {"interaction_id": interaction.pk, "scene_id": interaction.scene_id},
         )
 
-    transaction.on_commit(_send)
+
+def notify_interaction_changed(interaction: Interaction) -> None:
+    """Tell a pose's audience it changed so each page refetches it (#4508).
+
+    An endorsement, reaction or tag landed on (or left) ``interaction``. The frame
+    carries ids only: what each viewer may see of the pose is per-viewer, so each page
+    refetches through the REST retrieve instead of trusting a room-wide payload.
+    Registered on commit, so a write that rolls back never announces, and once per
+    transaction per pose however many writes touched it. The audience is
+    ``push_interaction``'s: writer + receivers for a receiver-scoped pose, else the
+    room of the scene the pose belongs to (the writer's own location when the scene
+    holds no room, as a battle scene does). A pose in no scene has no feed to refresh.
+    """
+    if interaction.scene_id is None:
+        return
+    # Django keeps no dedupe for on_commit callbacks; the pending list is the only record.
+    for _sids, pending, *_ in connection.run_on_commit:
+        if (
+            isinstance(pending, _ChangedFrameSend)
+            and not pending.sent
+            and pending.interaction_id == interaction.pk
+        ):
+            return
+    transaction.on_commit(_ChangedFrameSend(interaction))
 
 
 def _send_changed_frame(objects: Iterable[ObjectDB], frame: dict[str, int | None]) -> None:

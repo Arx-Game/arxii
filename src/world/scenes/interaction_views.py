@@ -312,8 +312,9 @@ class InteractionViewSet(
         return context
 
     def retrieve(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """One row. The refetch a live frame triggers names no ``?scene=`` (#4508), so
-        the row's own scene says whose entrance endorsers to load."""
+        # One row. The refetch a live frame triggers names no ``?scene=`` (#4508), so the
+        # row's own scene says whose entrance endorsers to load. A comment, not a
+        # docstring: a docstring becomes the OpenAPI description and drifts api.d.ts.
         instance = self.get_object()
         context = self.get_serializer_context()
         if instance.scene_id is not None and not request.query_params.get("scene"):  # noqa: USE_FILTERSET

@@ -7,7 +7,9 @@ entrance endorsement or tags until a reload, because the frame had fewer fields 
 
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -42,6 +44,10 @@ from world.scenes.reaction_services import (
 )
 from world.scenes.reaction_toggle_services import toggle_interaction_reaction
 from world.scenes.tests.test_reaction_windows import _binary_kind
+
+# Measured at 9 for an ordinary pose: receivers, targets, entry endorsers, resonances,
+# pose endorsers, reactions, windows, tags, action rows. A new query here is a regression.
+QUERY_BOUND = 9
 
 FEED_FIELDS = (
     "visibility",
@@ -148,6 +154,11 @@ class PushFeedFieldsTests(PushScene):
             payload["endorsable_resonances"],
             [{"id": self.resonance.pk, "name": self.resonance.name}],
         )
+
+    def test_an_ordinary_pose_push_stays_within_its_query_bound(self):
+        with CaptureQueriesContext(connection) as queries:
+            self.push()
+        self.assertLessEqual(len(queries), QUERY_BOUND)
 
     def test_second_entrance_carries_existing_entry_endorsers(self):
         endorser = sheet_with_tenure()

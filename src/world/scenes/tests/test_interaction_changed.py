@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.exceptions import EndorsementValidationError
 from world.magic.factories import DramaticMomentTypeFactory, SceneEntryEndorsementFactory
@@ -29,7 +29,12 @@ from world.scenes.factories import (
     PlaceFactory,
     SceneParticipationFactory,
 )
-from world.scenes.reaction_services import open_reaction_window, react_to_window
+from world.scenes.interaction_services import notify_interaction_changed
+from world.scenes.reaction_services import (
+    open_reaction_window,
+    react_to_interaction,
+    react_to_window,
+)
 from world.scenes.reaction_toggle_services import toggle_interaction_reaction
 from world.scenes.tests.test_push_feed_fields import (
     PushScene,
@@ -156,6 +161,58 @@ class InteractionChangedTests(PushScene):
                 interaction=self.interaction, account=AccountFactory(), emoji="x"
             )
         assert self.bystander in self._announced(send)
+
+    def test_a_writer_who_walked_away_does_not_move_the_frame(self):
+        elsewhere = ObjectDBFactory(db_key="Garden", db_typeclass_path="typeclasses.rooms.Room")
+        gardener = CharacterFactory(db_key="Gardener")
+        gardener.location = elsewhere
+        self.scene.room = self.room
+        self.author.character.location = elsewhere
+        with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
+            toggle_interaction_reaction(
+                interaction=self.interaction, account=AccountFactory(), emoji="x"
+            )
+        audience = self._announced(send)
+        assert self.bystander in audience
+        assert gardener not in audience
+
+    def test_a_pose_in_no_scene_sends_nothing(self):
+        self.interaction.scene = None
+        self.interaction.save()
+        with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
+            notify_interaction_changed(self.interaction)
+        send.assert_not_called()
+
+    def test_a_whisper_to_its_own_writer_lists_the_writer_once(self):
+        self.interaction.mode = InteractionMode.WHISPER
+        self.interaction.save()
+        InteractionReceiverFactory(
+            interaction=self.interaction, persona=self.author.primary_persona
+        )
+        with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
+            notify_interaction_changed(self.interaction)
+        assert self._announced(send) == [self.author.character]
+
+    def test_two_writes_in_one_transaction_send_one_frame(self):
+        with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
+            with transaction.atomic():
+                notify_interaction_changed(self.interaction)
+                notify_interaction_changed(self.interaction)
+        assert send.call_count == 1
+
+    def test_a_first_kudos_sends_exactly_one_frame(self):
+        self.author.character.db_account = AccountFactory()
+        self.author.character.save()
+        reactor = sheet_with_tenure()
+        SceneParticipationFactory(scene=self.scene, account=account_for_sheet(reactor))
+        with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
+            react_to_interaction(
+                interaction=self.interaction,
+                kind=ReactionWindowKind.KUDOS,
+                reactor_persona=reactor.primary_persona,
+                choice="kudos",
+            )
+        assert send.call_count == 1
 
     def test_no_location_at_all_sends_nothing(self):
         self.author.character.location = None
