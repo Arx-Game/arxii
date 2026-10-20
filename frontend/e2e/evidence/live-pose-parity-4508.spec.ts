@@ -216,4 +216,147 @@ test.describe('a pose that arrives live matches a loaded one (#4508)', () => {
     await page.getByRole('menuitem', { name: 'Candor' }).click();
     await expect.poll(() => order.join(',')).toMatch(/^post,feed/);
   });
+
+  test("E6: toggling an emoji reaction refreshes the actor's own feed after the POST", async ({
+    page,
+  }) => {
+    const order: string[] = [];
+    const connection = await openScene(page, async () => {
+      await page.route('**/api/reaction-emoji/', async (route) => {
+        await route.fulfill({ json: { results: [{ emoji: '🔥', valence: 1, sort_order: 1 }] } });
+      });
+      await page.route('**/api/interactions/?*', async (route) => {
+        order.push('feed');
+        await route.fulfill({ json: { results: [], next: null } });
+      });
+      await page.route('**/api/interaction-reactions/', async (route) => {
+        order.push('post');
+        await route.fulfill({ status: 201, json: { id: 3 } });
+      });
+    });
+    sendPose(connection, { id: 920 });
+    const line = page.getByTestId('pose-unit').first();
+    await expect(line.getByText(/signet ring/)).toBeVisible();
+    order.length = 0;
+
+    await line.getByRole('button', { name: '🔥' }).click();
+    await expect.poll(() => order.join(',')).toMatch(/^post,feed/);
+  });
+
+  test('E7: giving kudos from the play menu refreshes the feed after the POST', async ({
+    page,
+  }) => {
+    const order: string[] = [];
+    let kudosBody: Record<string, unknown> | null = null;
+    const connection = await openScene(page, async () => {
+      await page.route('**/api/interactions/?*', async (route) => {
+        order.push('feed');
+        await route.fulfill({ json: { results: [], next: null } });
+      });
+      await page.route('**/api/reaction-windows/react-to-interaction/', async (route) => {
+        order.push('post');
+        kudosBody = route.request().postDataJSON() as Record<string, unknown>;
+        await route.fulfill({ status: 201, json: {} });
+      });
+    });
+    sendPose(connection, { id: 921 });
+    const line = page.getByTestId('pose-unit').first();
+    await expect(line.getByText(/signet ring/)).toBeVisible();
+    order.length = 0;
+
+    await line.getByTestId('pose-avatar').click();
+    await page.getByRole('menuitem', { name: 'Kudos' }).click();
+    await expect.poll(() => order.join(',')).toMatch(/^post,feed/);
+    expect(kudosBody).toMatchObject({ interaction_id: 921, kind: 'kudos', choice: 'kudos' });
+  });
+
+  test('E8: a live pose carrying a dramatic-moment tag shows it at once', async ({ page }) => {
+    const connection = await openScene(page);
+    sendPose(connection, {
+      id: 922,
+      dramatic_moment_tags: [{ moment_type_label: 'Defiance', character_sheet_id: null }],
+    });
+    const line = page.getByTestId('pose-unit').first();
+    await expect(line.getByText(/signet ring/)).toBeVisible();
+    await expect(line.getByTestId('dramatic-moment-badges')).toContainText('Defiance');
+    await page.screenshot({ path: shot('e8-live-pose-tag.png') });
+  });
+
+  test('E9: an entrance that already has endorsers is re-read once and shows mine', async ({
+    page,
+  }) => {
+    const connection = await openScene(page);
+    let retrieves = 0;
+    await page.route('**/api/interactions/923/', async (route) => {
+      retrieves += 1;
+      await route.fulfill({
+        json: retrieveRow({
+          id: 923,
+          content: ENTRY_POSE,
+          pose_kind: 'entry',
+          entry_endorsers: [
+            { persona_id: 31, persona_name: 'Bram', thumbnail_url: '', resonance_id: 4 },
+          ],
+          entry_endorsed_by_me: true,
+        }),
+      });
+    });
+    sendPose(connection, {
+      id: 923,
+      content: ENTRY_POSE,
+      pose_kind: 'entry',
+      endorsee_sheet_id: 77,
+      endorsable_resonances: RESONANCES,
+      entry_endorsers: [
+        { persona_id: 31, persona_name: 'Bram', thumbnail_url: '', resonance_id: 4 },
+      ],
+    });
+    const line = page.getByTestId('pose-unit').first();
+    await expect(line.getByText(/gate swings in/)).toBeVisible();
+    await expect(line.getByTestId('entry-endorsed-indicator')).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(retrieves).toBe(1);
+    await page.screenshot({ path: shot('e9-live-entrance-endorsed.png') });
+  });
+
+  test('E10: a disguised author is re-read once and then shows the entry control', async ({
+    page,
+  }) => {
+    const connection = await openScene(page);
+    let retrieves = 0;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/api/interactions/924/', async (route) => {
+      retrieves += 1;
+      await gate;
+      await route.fulfill({
+        json: retrieveRow({
+          id: 924,
+          content: ENTRY_POSE,
+          pose_kind: 'entry',
+          endorsee_sheet_id: 77,
+        }),
+      });
+    });
+    sendPose(connection, {
+      id: 924,
+      content: ENTRY_POSE,
+      pose_kind: 'entry',
+      endorsee_sheet_id: null,
+      endorsable_resonances: RESONANCES,
+    });
+    const line = page.getByTestId('pose-unit').first();
+    await expect(line.getByText(/gate swings in/)).toBeVisible();
+    await expect.poll(() => retrieves).toBe(1);
+    await expect(line.getByTestId('endorsement-control-entry')).toHaveCount(0);
+    release();
+    await expect(
+      line.getByTestId('endorsement-control-entry').getByRole('button', { name: 'Endorse entry' })
+    ).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(retrieves).toBe(1);
+    await page.screenshot({ path: shot('e10-disguised-author-entry-control.png') });
+  });
 });
