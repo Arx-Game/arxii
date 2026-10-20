@@ -36,6 +36,24 @@ _DANGEROUS_LINK_RE = _re.compile(
 
 TEMPORARY_AVAILABILITY = "temporary"
 RETAINED_AVAILABILITY = "retained"
+
+
+def conversation_for(scene_id: int | None) -> dict[str, str]:
+    """The non-authorizing grouping identity of a row in ``scene_id`` (or in no scene).
+
+    Shared by ``InteractionListSerializer`` and the live push (#4508), which has no row
+    to hand the serializer for an ephemeral frame.
+    """
+    return {"kind": "room", "key": "room" if scene_id is None else f"scene:{scene_id}"}
+
+
+def availability_for(scene: Scene | None) -> str:
+    """``temporary`` for an ephemeral scene, ``retained`` otherwise (see ``conversation_for``)."""
+    if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
+        return TEMPORARY_AVAILABILITY
+    return RETAINED_AVAILABILITY
+
+
 _UNKNOWN_REPLY_TARGET_FIELDS = "Unknown reply target fields."
 _REPLY_TARGET_TIMEZONE_ERROR = "Reply target timestamp must include a timezone."
 _RFC3339_OFFSET_RE = _re.compile(r"(?:Z|[+-]\d{2}:?\d{2})$")
@@ -311,18 +329,14 @@ class InteractionListSerializer(serializers.ModelSerializer):
 
     def get_conversation(self, obj: Interaction) -> dict[str, str]:
         """Expose a non-authorizing context identity for reader grouping."""
-        if obj.scene_id is not None:
-            return {"kind": "room", "key": f"scene:{obj.scene_id}"}
-        return {"kind": "room", "key": "room"}
+        return conversation_for(obj.scene_id)
 
     def get_availability(self, obj: Interaction) -> str:
         """Classify temporary scene rows without changing retention behavior."""
         try:
-            if obj.scene is not None and obj.scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
-                return TEMPORARY_AVAILABILITY
+            return availability_for(obj.scene)
         except AttributeError:
-            pass
-        return RETAINED_AVAILABILITY
+            return RETAINED_AVAILABILITY
 
     def get_is_unread(self, obj: Interaction) -> bool:
         """True when no exact ``(id, timestamp)`` receipt exists (#3947)."""

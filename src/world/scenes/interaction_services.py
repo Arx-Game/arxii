@@ -760,6 +760,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     reply_to: ReplyParentPayload | None = None,
     narrates: NarratedEventPayload | None = None,
     interaction: Interaction | None = None,
+    scene: Scene | None = None,
 ) -> InteractionPayload:
     """Build a structured interaction payload for WebSocket delivery.
 
@@ -772,9 +773,11 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
 
     ``interaction`` (#4508) is the persisted row, when there is one: the room-wide feed
     fields (``pose_kind``, endorsements, tags, reactions...) are read off it by
-    ``_feed_fields_payload``. Without a row they take the defaults a bare row would get.
+    ``_feed_fields_payload``. Without a row they take the defaults a bare row would get,
+    with ``scene`` (the ephemeral pusher has it in hand) deciding ``conversation`` and
+    ``availability``.
     """
-    feed = _feed_fields_payload(interaction, scene_id=scene_id)
+    feed = _feed_fields_payload(interaction, scene_id=scene_id, scene=scene)
     payload = InteractionPayload(
         id=interaction_id,
         persona=PersonaPayload(
@@ -846,7 +849,7 @@ def scene_entry_endorsements_for(scene: Scene | int) -> dict[int, list[SceneEntr
 
 
 def _feed_fields_payload(
-    interaction: Interaction | None, *, scene_id: int | None
+    interaction: Interaction | None, *, scene_id: int | None, scene: Scene | None
 ) -> FeedFieldsPayload:
     """The room-wide REST feed fields for a live frame (#4508).
 
@@ -858,31 +861,19 @@ def _feed_fields_payload(
     null on the push even when a given reader could see it over REST.
     """
     from world.scenes.interaction_serializers import (  # noqa: PLC0415
-        RETAINED_AVAILABILITY,
-        TEMPORARY_AVAILABILITY,
         InteractionListSerializer,
+        availability_for,
+        conversation_for,
     )
 
     if interaction is None:
-        if scene_id is None:
-            availability = ""
-        else:
-            privacy = Scene.objects.filter(pk=scene_id).values_list("privacy_mode", flat=True)
-            availability = (
-                TEMPORARY_AVAILABILITY
-                if privacy.first() == ScenePrivacyMode.EPHEMERAL
-                else RETAINED_AVAILABILITY
-            )
         return FeedFieldsPayload(
             visibility=InteractionVisibility.DEFAULT,
             pose_kind=PoseKind.STANDARD,
             endorsee_sheet_id=None,
             endorsable_resonances=[],
-            conversation={
-                "kind": "room",
-                "key": f"scene:{scene_id}" if scene_id is not None else "room",
-            },
-            availability=availability,
+            conversation=conversation_for(scene_id),
+            availability=availability_for(scene),
             pose_endorsers=[],
             entry_endorsers=[],
             reactions=[],
@@ -1347,6 +1338,7 @@ def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors per
         mode=mode,
         timestamp=now.isoformat(),
         scene_id=scene.pk,
+        scene=scene,
         place_id=place_id,
         place_name=place_name,
         receiver_persona_ids=receiver_persona_ids,
