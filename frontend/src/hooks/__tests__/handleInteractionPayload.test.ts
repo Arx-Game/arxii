@@ -162,6 +162,35 @@ describe('handleInteractionPayload', () => {
     expect(refreshRowMock).not.toHaveBeenCalled();
   });
 
+  it('refreshes a live pose whose endorsee is hidden by a disguise (#4508)', () => {
+    handleInteractionPayload(
+      'Bob',
+      makeWhisperPayload({ id: 496, mode: 'pose', endorsee_sheet_id: null }),
+      dispatch,
+      navigate
+    );
+    expect(refreshRowMock).toHaveBeenCalledWith(expect.anything(), {
+      interactionId: 496,
+      sceneId: 9,
+    });
+  });
+
+  it('does not refresh a live pose whose endorsee is shown, or a non-pose row', () => {
+    handleInteractionPayload(
+      'Bob',
+      makeWhisperPayload({ id: 497, mode: 'pose', endorsee_sheet_id: 12 }),
+      dispatch,
+      navigate
+    );
+    handleInteractionPayload(
+      'Bob',
+      makeWhisperPayload({ id: 498, mode: 'say', endorsee_sheet_id: null }),
+      dispatch,
+      navigate
+    );
+    expect(refreshRowMock).not.toHaveBeenCalled();
+  });
+
   it('fires a toast for a whisper delivered to a background session', () => {
     const payload = makeWhisperPayload({ id: 491 });
     handleInteractionPayload('Bob', payload, dispatch, navigate);

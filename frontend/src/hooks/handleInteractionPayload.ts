@@ -31,8 +31,13 @@ export function handleInteractionPayload(
     dispatch(addAmbientInteraction({ character, interaction: payload }));
   } else {
     dispatch(addSceneInteraction({ character, interaction: payload }));
-    // An entrance carries the endorsers of the whole entry only on a re-read (#4508).
-    if (payload.entry_endorsers?.length) {
+    // An entrance carries the endorsers of the whole entry only on a re-read, and a
+    // disguised pose's endorsee is hidden on the frame though a viewer who has
+    // discovered the disguise sees it on the re-read (#4508).
+    if (
+      payload.entry_endorsers?.length ||
+      (payload.mode === 'pose' && payload.endorsee_sheet_id === null)
+    ) {
       refreshSceneFeedRow(queryClient, {
         interactionId: payload.id,
         sceneId: payload.scene_id,

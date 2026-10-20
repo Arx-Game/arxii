@@ -32,14 +32,48 @@ export function sceneFeedQueryKey(args: {
   ] as const;
 }
 
+// One entry per pose being refetched: `dirty` means another frame arrived meanwhile.
+const inFlight = new Map<number, { dirty: boolean; done: Promise<void> }>();
+
 /**
  * Re-fetch one pose through the per-viewer retrieve and write it into every
  * cached feed of its scene. The feed is paginated newest-first
  * (`InteractionCursorPagination` orders `-timestamp`), so a row the cache does
- * not hold yet goes at the front of the first page. A 403 or 404 means the
- * viewer may not see the row, so nothing changes; any other failure is thrown.
+ * not hold yet goes at the front of the first page, unless it is older than
+ * everything loaded (a later page will bring it). A 403 or 404 means the viewer
+ * may not see the row, so nothing changes; any other failure is thrown.
+ *
+ * No cached feed for the scene means nothing to update, so nothing is fetched.
+ * Frames for a pose that arrive while its fetch is in flight share one follow-up
+ * fetch instead of one each.
  */
-export async function refreshSceneFeedRow(
+export function refreshSceneFeedRow(
+  queryClient: QueryClient,
+  args: { interactionId: number; sceneId: number }
+): Promise<void> {
+  const cached = queryClient.getQueryCache().findAll({ queryKey: sceneFeedSceneKey(args.sceneId) });
+  if (cached.length === 0) return Promise.resolve();
+  const pending = inFlight.get(args.interactionId);
+  if (pending) {
+    pending.dirty = true;
+    return pending.done;
+  }
+  const entry = { dirty: false, done: Promise.resolve() };
+  inFlight.set(args.interactionId, entry);
+  entry.done = (async () => {
+    try {
+      do {
+        entry.dirty = false;
+        await fetchIntoFeed(queryClient, args);
+      } while (entry.dirty);
+    } finally {
+      inFlight.delete(args.interactionId);
+    }
+  })();
+  return entry.done;
+}
+
+async function fetchIntoFeed(
   queryClient: QueryClient,
   args: { interactionId: number; sceneId: number }
 ): Promise<void> {
@@ -63,8 +97,17 @@ export async function refreshSceneFeedRow(
           return row;
         }),
       }));
-      if (!found) pages[0] = { ...pages[0], results: [row, ...pages[0].results] };
+      if (!found && !isOlderThanLoaded(row, data)) {
+        pages[0] = { ...pages[0], results: [row, ...pages[0].results] };
+      }
       return { ...data, pages };
     }
   );
+}
+
+/** True when the row predates every loaded row: paging will bring it, so do not add it now. */
+function isOlderThanLoaded(row: Interaction, data: InfiniteData<FeedPage>): boolean {
+  const loaded = data.pages.flatMap((page) => page.results);
+  const oldest = loaded.at(-1);
+  return oldest !== undefined && Date.parse(row.timestamp) < Date.parse(oldest.timestamp);
 }

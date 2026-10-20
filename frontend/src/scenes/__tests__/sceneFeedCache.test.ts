@@ -11,8 +11,13 @@ import type { Interaction } from '@/scenes/types';
 
 type Pages = InfiniteData<{ results: Interaction[]; next?: string }>;
 
+// Ids rise with time, so the timestamp follows the id.
 const row = (id: number, endorsers: unknown[] = []) =>
-  ({ id, pose_endorsers: endorsers }) as unknown as Interaction;
+  ({
+    id,
+    pose_endorsers: endorsers,
+    timestamp: new Date(Date.UTC(2026, 0, 1, 0, id)).toISOString(),
+  }) as unknown as Interaction;
 
 describe('sceneFeedCache keys', () => {
   it('puts the scene second so a scene prefix matches the feed', () => {
@@ -30,6 +35,14 @@ describe('sceneFeedCache keys', () => {
     expect(a).not.toEqual(b);
   });
 });
+
+function deferred() {
+  let resolve!: (value: Interaction) => void;
+  const promise = new Promise<Interaction>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
 
 describe('refreshSceneFeedRow', () => {
   let client: QueryClient;
@@ -61,6 +74,43 @@ describe('refreshSceneFeedRow', () => {
     const data = client.getQueryData<Pages>(key)!;
     expect(data.pages[0].results.map((r) => r.id)).toEqual([9, 6, 5]);
     expect(data.pages[1].results.map((r) => r.id)).toEqual([4]);
+  });
+
+  it('does not add a row older than everything loaded, since paging will bring it', async () => {
+    seed();
+    const before = client.getQueryData<Pages>(key);
+    fetchInteractionMock.mockResolvedValue(row(2));
+    await refreshSceneFeedRow(client, { interactionId: 2, sceneId: 7 });
+    expect(client.getQueryData<Pages>(key)!.pages.map((p) => p.results.map((r) => r.id))).toEqual(
+      before!.pages.map((p) => p.results.map((r) => r.id))
+    );
+  });
+
+  it('does not fetch when no feed for the scene is cached', async () => {
+    await refreshSceneFeedRow(client, { interactionId: 5, sceneId: 7 });
+    expect(fetchInteractionMock).not.toHaveBeenCalled();
+  });
+
+  it('coalesces frames that arrive during a fetch into one follow-up fetch', async () => {
+    seed();
+    const first = deferred();
+    fetchInteractionMock.mockReturnValueOnce(first.promise).mockResolvedValue(row(5, [{}]));
+    const calls = [1, 2, 3].map(() =>
+      refreshSceneFeedRow(client, { interactionId: 5, sceneId: 7 })
+    );
+    expect(fetchInteractionMock).toHaveBeenCalledTimes(1);
+    first.resolve(row(5));
+    await Promise.all(calls);
+    expect(fetchInteractionMock).toHaveBeenCalledTimes(2);
+    expect(client.getQueryData<Pages>(key)!.pages[0].results[1].pose_endorsers).toHaveLength(1);
+  });
+
+  it('fetches again for a pose once its earlier fetch has finished', async () => {
+    seed();
+    fetchInteractionMock.mockResolvedValue(row(5));
+    await refreshSceneFeedRow(client, { interactionId: 5, sceneId: 7 });
+    await refreshSceneFeedRow(client, { interactionId: 5, sceneId: 7 });
+    expect(fetchInteractionMock).toHaveBeenCalledTimes(2);
   });
 
   it.each([403, 404])('ignores a %i and leaves the cache unchanged', async (status) => {
