@@ -111,7 +111,7 @@ Pick the phase from this table (rows top-to-bottom; first match wins):
 | `OPEN` | — | any failure | — | **CI fix** (read failures, fix, push, return to CI watch) |
 | `OPEN` | — | any pending | — | **CI watch** (resume `watch-ci.sh`) |
 | `OPEN` | — | all success | exist | **PR-comment** (address comments, push, bump marker) |
-| `OPEN` | — | all success | none | **Idle** (post status comment, exit — review is on human) |
+| `OPEN` | — | all success | none | **Idle** (enqueued: run `watch-merge.sh` in the background per Step 6; not yet enqueued: post status comment, exit — review is on human) |
 
 In every `OPEN` phase, also check the evidence challenge (Step 6a): an `open`
 verdict with rounds left gets an answer before the session exits.
@@ -556,11 +556,23 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
   `scripts/enqueue-pr.sh <pr-N>`. It revalidates the committed
   report against the reviewed code revision, refuses while an open code-scanning
   alert or unresolved review thread sits on the PR head ref, and only then arms squash auto-merge. Then post a
-  brief status comment and exit the session. **Do NOT re-sync with main or merge by
+  brief status comment. **Do NOT re-sync with main or merge by
   hand.** The merge queue re-tests the PR on top of the latest main and merges it in
   order once a human approves - that human approval is the only remaining gate. If
-  main moves while the PR waits for approval, the queue handles the re-integration;
-  the agent does nothing further.
+  main moves while the PR waits for approval, the queue handles the re-integration.
+
+  **Then keep watching; do not end the session at enqueue (#4521).** Run
+  `scripts/watch-merge.sh <pr-N>` with `run_in_background`. It polls with plain `gh`
+  calls (no model cost) and exits when the PR stops waiting, which wakes the session:
+  - `MERGED` (exit 0): run Step 9's post-merge cleanup and report. Nobody should have
+    to tell you it merged.
+  - `CONFLICTING` (exit 8): merge main in (never rebase once evidence URLs are
+    published), run `sync-evidence-revision.sh`, push, re-enqueue, re-arm the watcher.
+  - `DROPPED` (exit 9): the queue ejected it or a check failed there. Read the checks,
+    enter the CI-fix phase, re-enqueue, re-arm the watcher.
+  - `CLOSED` (exit 7): tell the user; exit.
+  - `TIMEOUT` (exit 6, a day by default) or exit 1 (`gh` kept failing): re-arm it.
+  While it waits, answer an open evidence challenge round (Step 6a) as usual.
 
   **Before judging any PR "ready", read
   [`references/pr-mergeability-checklist.md`](references/pr-mergeability-checklist.md).**
@@ -781,6 +793,7 @@ where it stopped, what the human should decide.
 | Re-point evidence at the checked revision | `scripts/sync-evidence-revision.sh <pr>` |
 | Watch CI | `scripts/watch-ci.sh <pr>` |
 | Enqueue for the merge queue | `scripts/enqueue-pr.sh <pr>` |
+| Wait for the merge, in the background | `scripts/watch-merge.sh <pr>` |
 | Read failing log | `scripts/get-ci-failure.sh <pr> <check-name>` |
 | Read unread PR comments | `scripts/read-pr-comments.sh <pr>` |
 | Clean up after merge | `scripts/post-merge-cleanup.sh <branch> <pr>` |
