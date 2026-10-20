@@ -46,7 +46,11 @@ designer credit; a new name also reaches the game object's key, which `look`
 reads, #4338), `set_service_offer`, `run_service_craft` (wraps the real
 attachment pipeline `run_crafting_recipe` with the **offering crafter as
 skill source**, buyer present at the shop, fee charged up front — Arx 1's
-craft-with-a-crafter's-skill loop made consensual and priced).
+craft-with-a-crafter's-skill loop made consensual and priced). The buyer may also
+write the piece's `name` and `description` (only where it has none or they are its
+designer; they are credited as designer only when they write) and `dedicate_to` one
+other character, permanently (#4512, `docs/systems/items.md` "The commission loop").
+The fee counts for nothing as meaning.
 `MarketServiceError.user_message` on refusals. `purchase_stock`/
 `run_service_craft` return `(result, charged_price)` — the amount actually
 charged, which the calling action reports to the player.
@@ -117,7 +121,9 @@ unchanged.
 - REST (read-only): `/api/items/market-squares/` (stalls + live listings),
   `/api/items/service-offers/` (shop directory — advertises only; using a
   service means visiting the shop).
-- Web: `/market` — `MarketPage` (browse/buy + directory + `FinishWareForm`).
+- Web: `/market` — `MarketPage` (browse/buy + directory + `FinishWareForm` +
+  `CommissionDialog`, the commission form with Name, Description, Dedicate to and an
+  examine preview, #4512).
 - Telnet: `market` namespace (`market`, `/buy`, `/buyware`, `/list`,
   `/finish`, `/offer`, `/commission`).
 - Seeds: cluster `market` — PLACEHOLDER capital square + NPC stock stall.

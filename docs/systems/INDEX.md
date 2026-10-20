@@ -2901,15 +2901,19 @@ hostile floor refuses service outright.
 - **Models:** `MarketSquare`, `MarketStall` (host-org cuts,
   `shopkeeper_persona`), `StockListing` (`min_regard`), `WareListing`,
   `FinishingPass`, `CraftingServiceOffer` (`min_regard`), `MarketSale`;
-  `ItemInstance.designer_*` pair
+  `ItemInstance.designer_*` pair (stamped only when that character writes
+  text, #4512), `ItemInstance.dedicated_*` (who a piece was made for, permanent),
+  `ItemLineage` (what a piece was worked from)
 - **Services:** `world.items.market.services` — purchase_stock/list_ware/
   purchase_ware/finish_ware/set_service_offer/run_service_craft (offering
   crafter as skill source, shop-anchored, regard-gated + regard-adjusted
-  price), dual_provenance_line, `_shopkeeper_regard`/`_regard_adjusted_price`/
+  price; the buyer may write name, description and a dedication, #4512; the
+  words and dedication rules live in `world.items.services.dedication` /
+  `lineage`, the credits in `crafted_display.crafted_provenance_line`), dual_provenance_line, `_shopkeeper_regard`/`_regard_adjusted_price`/
   `_check_regard_gate` (`world.items.market.constants` bands/floor)
 - **Surfaces:** 6 `market_*` REGISTRY actions; `/api/items/market-squares/`
   + `/service-offers/` (read-only; directory advertises, execution requires
-  visiting; regard-gated rows hidden per-viewer); web `/market`; telnet
+  visiting; regard-gated rows hidden per-viewer); web `/market` (`CommissionDialog`); telnet
   `market` namespace; seeds cluster `market`
 - **Source:** `src/world/items/market/`
 - **Details:** [market.md](market.md)

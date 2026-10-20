@@ -538,14 +538,17 @@ sacrifice (at a shrine in the room or a temple over it) is a check eased by what
 means to the one giving it up:
 
 - Each item is read once (`ceremonies.services.read_item`): `item_meaning` returns its
-  signals (carried, gift, heirloom, own work, made by a tie; see `docs/systems/items.md`),
+  signals (carried, gift, heirloom, own work, made by a tie, and since #4512 designed by you,
+  made for, made from and shown; see `docs/systems/items.md`),
   and a carried facet the being favors multiplies the points by
   `CeremonyConfig.offering_favored_facet_multiplier_percent`.
 - An item with 0 points is given up with no roll, no favor, no pool grant and no use of the
   weekly limit. An item with points rolls the being's invocation check type (else the
   devotion config's) at the `invocation_difficulty` (Chosen ease, favor ease and favor
   invocation modifiers keep applying) eased by points x
-  `DevotionConfig.sacrifice_ease_per_point`, never below Trivial. With no check type
+  `DevotionConfig.sacrifice_ease_per_point`, never below Trivial. A piece's design and
+  dedication survive its being given up (#4512): examine still credits its maker, designer
+  and facet workers, marked "Gone: given up to <being>". With no check type
   configured the sacrifice is refused before anything is given up.
 - The outcome tier selects the `FavorOutcomeAward` of kind SACRIFICE (seeded 6 / 4 / 2 / 0 /
   0 by `ensure_favor_terms`; a missing row pays nothing). That is the base favor;

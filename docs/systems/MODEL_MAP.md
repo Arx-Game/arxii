@@ -2336,14 +2336,14 @@
 - `apply_organization_codex_grants(membership) -> 'int' - A new member learns everything their organization grants (#3780). Called`
 - `entry_gates_technique(entry: 'CodexEntry') -> 'bool' - True when some technique's learning requires ``entry`` to be KNOWN (#4501).`
 - `file_entry_under(entry: 'CodexEntry', subject: 'CodexSubject', *, sort_order: 'int' = 0) -> 'CodexEntryFiling' - Cross-list ``entry`` in ``subject``'s listing, in addition to its home.`
-- `gated_technique_requirements(entry: 'CodexEntry') - The active technique-learning requirements that name ``entry`` (#4501).`
+- `gated_technique_requirements(entry: 'CodexEntry') - The active requirements that make ``entry`` gate an ordinary technique (#4501).`
 - `grant_codex_entry(roster_entry: 'RosterEntry', entry: 'CodexEntry', *, learned_from: 'RosterTenure | None' = None) -> 'tuple[CharacterCodexKnowledge, bool]' - Grant ``entry`` to ``roster_entry`` as fully KNOWN. Idempotent.`
 - `grant_entry_to_species_holders(entry: 'CodexEntry') -> 'int' - Hand a species-owned entry to every character of that species (#3775).`
 - `grant_organization_entry_to_members(grant) -> 'int' - Hand an ``OrganizationCodexGrant``'s entry to every current member; returns`
 - `grant_to_current_holders(grant) -> 'int' - Hand a grant row's entry to everyone already in its group (#3775).`
 - `resolve_codex_links(content: 'str | None', subject: 'CodexSubject', roster_entries: 'Sequence[RosterEntry]') -> 'list[dict]' - Parse ``[[Entry Name]]`` wikilinks from content and resolve to link refs.`
 - `species_holder_roster_entries(entry: 'CodexEntry') -> 'list' - Roster entries of every character whose species lineage owns ``entry`` (#3775).`
-- `techniques_opened_by(sheet: 'CharacterSheet', entry: 'CodexEntry') -> 'list[Technique]' - Techniques ``entry`` opens for ``sheet``: learnable now that it is known (#4501).`
+- `techniques_opened_by(sheet: 'CharacterSheet', entry: 'CodexEntry') -> 'list[Technique]' - Techniques ``entry`` opens for ``sheet``: what ``learn_technique`` would accept now.`
 - `unfile_entry(entry: 'CodexEntry', subject: 'CodexSubject') -> 'None' - Remove ``entry``'s filing under ``subject``, if any. No-op otherwise.`
 
 
@@ -4744,6 +4744,8 @@
   - crafter_persona_display -> scenes.Persona [FK] (nullable)
   - designer_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - designer_persona_display -> scenes.Persona [FK] (nullable)
+  - dedicated_to_persona -> scenes.Persona [FK] (nullable)
+  - dedicated_by_persona -> scenes.Persona [FK] (nullable)
   - contained_in -> items.ItemInstance [FK] (nullable)
   - image -> evennia_extensions.Media [FK] (nullable)
   - legend_deeds -> societies.LegendEntry [M2M]
@@ -4762,6 +4764,8 @@
   - equipped_slots <- items.EquippedItem
   - room_placement <- items.RoomItem
   - ownership_events <- items.OwnershipEvent
+  - lineage <- items.ItemLineage
+  - worked_into <- items.ItemLineage
   - recycle_requests <- items.RecycleRequest
   - item_facets <- items.ItemFacet
   - item_styles <- items.ItemStyle
@@ -4789,6 +4793,11 @@
   - project_contributions <- projects.Contribution
   - secrets_about <- secrets.Secret
   - relic_of <- worship.Relic
+
+### ItemLineage
+**Foreign Keys:**
+  - item -> items.ItemInstance [FK]
+  - source_item -> items.ItemInstance [FK] (nullable)
 
 ### ItemRefinementDetails
 **Foreign Keys:**
@@ -8729,6 +8738,7 @@
   - appearance_changes <- forms.AppearanceChangeLog
   - appearance_changes_made <- forms.AppearanceChangeLog
   - gm_table_memberships <- gm.GMTableMembership
+  - dedicated_items <- items.ItemInstance
   - founded_styles <- items.Style
   - trendsetter_crownings <- items.Trendsetter
   - founded_vaults <- room_features.VaultDetails
@@ -9270,8 +9280,11 @@
 - `is_skill_at_xp_boundary(value: 'int') -> 'bool' - Public wrapper for :func:`_is_at_xp_boundary` (#2115).`
 - `process_weekly_training() -> 'dict[int, set[int]]' - Process all training allocations for the weekly tick.`
 - `purchase_skill_breakthrough(character: 'ObjectDB', skill: 'Skill') -> 'tuple[bool, str]' - Spend XP to break through a skill's XP-boundary plateau (#2115).`
+- `reconcile_skill_stores(sheet: 'CharacterSheet', skill: 'Skill') -> 'int' - Bring a skill's two stores up to the higher of the two, and return that rating.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' - Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' - Run the full weekly skill development cycle.`
+- `set_skill_sheet_value(sheet: 'CharacterSheet', skill: 'Skill', value: 'int') -> 'None' - The skill's ``CharacterSkillValue`` the sheet shows, the mirror of ``set_skill_trait``.`
+- `set_skill_trait(sheet: 'CharacterSheet', skill: 'Skill', value: 'int', source: 'str') -> 'None' - The skill's ``CharacterTraitValue`` the check engine reads (#2894), stamped (#3055).`
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
 - `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
 - `total_allocated_training_ap(character_id: 'int', exclude_pk: 'int | None' = None) -> 'int' - Get total AP currently allocated across all training for a character.`
