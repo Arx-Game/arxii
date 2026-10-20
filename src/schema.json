@@ -91259,7 +91259,7 @@ components:
         sacrificed:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/_SacrificeDetail'
         prayer_text:
           type: string
         options:
@@ -98330,6 +98330,34 @@ components:
       - dev_points_to_boundary
       - thread_id
       - xp_cost
+    _Odds:
+      type: object
+      properties:
+        difficulty_points:
+          type: integer
+        reference_rank_name:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/_OddsLine'
+      required:
+      - difficulty_points
+      - lines
+      - reference_rank_name
+    _OddsLine:
+      type: object
+      properties:
+        outcome_name:
+          type: string
+        success_level:
+          type: integer
+        percent:
+          type: integer
+      required:
+      - outcome_name
+      - percent
+      - success_level
     _OutcomeTier:
       type: object
       properties:
@@ -98424,6 +98452,64 @@ components:
       - flavor_text
       - lifetime_earned
       - resonance_id
+    _SacrificeDetail:
+      type: object
+      description: |-
+        One sacrifice as the steward's answer panel reads it (#4500): the signals that made
+        it count, never the item's price.
+      properties:
+        item_name:
+          type: string
+        offered_by_name:
+          type: string
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/_SacrificeSignal'
+        points:
+          type: integer
+        effective_points:
+          type: integer
+        facet_name:
+          type: string
+        counted:
+          type: boolean
+        outcome_name:
+          type: string
+        ease_points:
+          type: integer
+        difficulty_points:
+          type: integer
+          nullable: true
+        odds:
+          allOf:
+          - $ref: '#/components/schemas/_Odds'
+          nullable: true
+      required:
+      - counted
+      - difficulty_points
+      - ease_points
+      - effective_points
+      - facet_name
+      - item_name
+      - odds
+      - offered_by_name
+      - outcome_name
+      - points
+      - signals
+    _SacrificeSignal:
+      type: object
+      properties:
+        kind_name:
+          type: string
+        points:
+          type: integer
+        detail:
+          type: string
+      required:
+      - detail
+      - kind_name
+      - points
     _SocietyReputation:
       type: object
       description: 'One reputation entry: society + tier label (no raw number).'

@@ -114,13 +114,67 @@ export function StewardAnswerPanel({
         <span>{prompt.pledge_name}</span>
         <span className="text-muted-foreground">· Tier:</span>
         <Badge>{prompt.outcome_tier_name}</Badge>
-        {prompt.sacrificed.length > 0 && (
-          <>
-            <span className="text-muted-foreground">· Sacrificed:</span>
-            <span>{prompt.sacrificed.join(', ')}</span>
-          </>
-        )}
       </div>
+      {prompt.sacrificed.length > 0 && (
+        <div className="space-y-2" data-testid="steward-sacrificed">
+          <p className="text-sm text-muted-foreground">Sacrificed toward this pledge:</p>
+          {prompt.sacrificed.map((item, index) => (
+            <div key={index} className="rounded-md border p-2 text-sm">
+              <p className="font-medium">
+                {item.offered_by_name} sacrifices {item.item_name}.
+                {item.facet_name && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {item.facet_name}, favored
+                  </span>
+                )}
+              </p>
+              {item.signals.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No meaning points: given up, no roll, no favor.
+                </p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="text-left text-muted-foreground">
+                    <tr>
+                      <th>Signal</th>
+                      <th>Detail</th>
+                      <th>Points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {item.signals.map((signal, signalIndex) => (
+                      <tr key={signalIndex}>
+                        <td>{signal.kind_name}</td>
+                        <td>{signal.detail}</td>
+                        <td className="tabular-nums">{signal.points}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {item.signals.length > 0 && (
+                <p className="text-xs text-muted-foreground" data-testid="sacrifice-odds-note">
+                  {item.points} points
+                  {item.effective_points !== item.points
+                    ? `, ${item.facet_name} favored = ${item.effective_points} points`
+                    : ''}
+                  {item.counted && item.difficulty_points != null
+                    ? `, eased ${item.ease_points}, difficulty ${item.difficulty_points}.`
+                    : '.'}
+                  {item.counted && item.odds
+                    ? ` For a ${item.odds.reference_rank_name} roller: ${item.odds.lines
+                        .map((line) => `${line.percent}% ${line.outcome_name}`)
+                        .join(', ')}.`
+                    : ''}
+                  {item.counted
+                    ? ` This roll: ${item.outcome_name || 'none'}.`
+                    : " Past the week's limit: given up for nothing."}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {prompt.prayer_text && (
         <p className="text-sm">
           <span className="text-muted-foreground">Prayer:</span> {prompt.prayer_text}

@@ -9277,13 +9277,16 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `PledgeDetails` (the PLEDGE `Project`'s sidecar: sheet, pledge, prayer, closing
   performance, close attempts), `PledgeCredit` (one favor credit with base, earning rate,
   credited and its deed / sacrifice / rite), `DevotionConfig` deed percents, weekly deed cap
-  and sacrifice value per favor, `CeremonyOffering.being`/`pledge_details`/`facet` (a
-  sacrifice outside a ceremony). Services (`worship/pledge_services.py`): `take_pledge`,
+  and the sacrifice-by-meaning numbers (#4500: carry gate, ease per point, sacrifices per
+  week), `CeremonyOffering.being`/`pledge_details`/`facet` (a sacrifice outside a ceremony)
+  with `outcome_tier`/`game_week`/`counted` and its `OfferingSignal` rows. Services (`worship/pledge_services.py`): `take_pledge`,
   `record_pledge_credit` (from `bump_devotion`: progress is favor), `credit_pledge_deed`
   (from `grant_resonance`; passive sources skipped via `PASSIVE_DEED_SOURCES`), `close_pledge` (one retry after a failed first close; atomic
   RESOLVING + `resolve_project`), `resolve_pledge_project` (CLOSING award, or on a lapse the
   Partial Success award at half the target), `service_terms`, `pledge_card`,
-  `holy_sites_here`; `ceremonies.services.sacrifice_items` / `give_up_item`;
+  `holy_sites_here`; `ceremonies.services.sacrifice_items` / `give_up_item` / `read_item`
+  and `worship/sacrifice_services.py` (the sacrifice check, award and weekly limit; items
+  never pay by price, ADR-4462);
   `perform_worship_rite(..., pay_award=False)`. Actions `pledge_take`, `pledge_close`,
   `sacrifice`; API `pledges/`, `pledge-cards/`, `beings/{id}/service-terms/`,
   `beings/holy-site/`; telnet `pledge`, `pledge/close`, `sacrifice`; admin Being Service
@@ -9377,9 +9380,10 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   PENDING/ACCEPTED/DECLINED + `is_sincere`, mirrors `SeanceManifestationOffer`).
 - **Ceremony services**: `open_ceremony` (twisted-rite being/presented mapping; validates
   honoree count/liveness per type — CONVERSION needs exactly one, the convert),
-  `record_offering` (pool → TRUE being; devotion follows belief; an item carrying a facet the
-  TRUE being favors is credited at `CeremonyConfig.offering_favored_facet_multiplier_percent`
-  on grant and devotion alike, #3777), `record_speech`
+  `record_offering` (pool → TRUE being; devotion follows belief; an item counts by its meaning
+  points, never its price, within the weekly limit it shares with shrine sacrifices; one
+  carrying a facet the TRUE being favors has its points multiplied by
+  `CeremonyConfig.offering_favored_facet_multiplier_percent`, #3777, #4500), `record_speech`
   (Performance/Oratory), `finish_ceremony` (Rites + tradition-spec quality roll; a RITE
   ceremony pays its tier 3 rite award off that roll through `apply_rite_award`, #3777; honoree deeds
   via `create_solo_deed` — `_mint_ceremony_deed` takes optional `archetypes`/`scene` kwargs,

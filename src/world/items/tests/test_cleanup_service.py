@@ -28,7 +28,7 @@ class PurgeExpiredSoftDeletedItemsTests(TestCase):
         from world.items.models import ItemInstance, OwnershipEvent
         from world.items.services.cleanup import purge_expired_soft_deleted_items
 
-        inst = self._soft_deleted(age_days=40, custom_name="Plain Phial")
+        inst = self._soft_deleted(age_days=40, template__name="Plain Phial")
         OwnershipEvent.objects.create(item_instance=inst, event_type="consumed")
         pk = inst.pk
 
@@ -42,7 +42,7 @@ class PurgeExpiredSoftDeletedItemsTests(TestCase):
         from world.items.models import ItemInstance
         from world.items.services.cleanup import purge_expired_soft_deleted_items
 
-        inst = self._soft_deleted(age_days=5, custom_name="Recent Phial")
+        inst = self._soft_deleted(age_days=5, template__name="Recent Phial")
         purged = purge_expired_soft_deleted_items(grace=timedelta(days=30))
         self.assertEqual(purged, 0)
         self.assertTrue(ItemInstance.objects.filter(pk=inst.pk).exists())
@@ -53,10 +53,10 @@ class PurgeExpiredSoftDeletedItemsTests(TestCase):
         from world.items.models import ItemInstance
         from world.items.services.cleanup import purge_expired_soft_deleted_items
 
-        in_world = self._soft_deleted(age_days=40, custom_name="Re-homed Phial")
+        in_world = self._soft_deleted(age_days=40, template__name="Re-homed Phial")
         in_world.game_object.db_location = self.ObjectDBFactory()
         in_world.game_object.save()
-        plain = self._soft_deleted(age_days=40, custom_name="Plain Phial")
+        plain = self._soft_deleted(age_days=40, template__name="Plain Phial")
 
         with self.assertLogs("world.items.services.cleanup", level="WARNING") as logs:
             purged = purge_expired_soft_deleted_items(grace=timedelta(days=30))
@@ -107,7 +107,7 @@ class PurgeExpiredSoftDeletedItemsTests(TestCase):
         from world.items.models import ItemInstance
         from world.items.services.cleanup import purge_expired_soft_deleted_items
 
-        inst = self._soft_deleted(age_days=40, custom_name="Plain")
+        inst = self._soft_deleted(age_days=40, template__name="Plain")
         with override_settings(ITEM_SOFT_DELETE_GRACE_DAYS=30):
             purge_expired_soft_deleted_items()  # no grace arg → settings
         self.assertFalse(ItemInstance.objects.filter(pk=inst.pk).exists())
@@ -118,8 +118,8 @@ class PurgeExpiredSoftDeletedItemsTests(TestCase):
         from world.items.models import ItemInstance
         from world.items.services.cleanup import purge_expired_soft_deleted_items
 
-        protected_inst = self._soft_deleted(age_days=40, custom_name="Mantle Item")
-        plain_inst = self._soft_deleted(age_days=40, custom_name="Plain Item")
+        protected_inst = self._soft_deleted(age_days=40, template__name="Mantle Item")
+        plain_inst = self._soft_deleted(age_days=40, template__name="Plain Item")
         # Attach a Mantle to the protected instance so it has a PROTECT FK.
         MantleFactory(item_instance=protected_inst)
 
@@ -140,8 +140,8 @@ class PurgeExpiredSoftDeletedItemsTests(TestCase):
         from world.items.models import ItemInstance
         from world.items.services.cleanup import purge_expired_soft_deleted_items
 
-        inst_a = self._soft_deleted(age_days=40, custom_name="Protected A")
-        inst_b = self._soft_deleted(age_days=40, custom_name="Plain B")
+        inst_a = self._soft_deleted(age_days=40, template__name="Protected A")
+        inst_b = self._soft_deleted(age_days=40, template__name="Plain B")
         pk_a = inst_a.pk
         pk_b = inst_b.pk
 
@@ -165,3 +165,76 @@ class PurgeExpiredSoftDeletedItemsTests(TestCase):
         # The key invariant is that no exception escaped the function.
         self.assertTrue(ItemInstance.objects.filter(pk=pk_a).exists())
         self.assertTrue(ItemInstance.objects.filter(pk=pk_b).exists())
+
+
+def _silhouette():
+    from world.items.constants import WearFamily
+    from world.items.models import Silhouette
+
+    return Silhouette.objects.create(name="Boot", wear_family=WearFamily.FOOTWEAR)
+
+
+class PurgeSparesDesignsTests(TestCase):
+    """A design is never permanently deleted (#4500, owner ruling 2026-10-18)."""
+
+    def _expired(self, **kwargs):
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.items.factories import ItemInstanceFactory
+
+        return ItemInstanceFactory(
+            quality_tier=None,
+            game_object=ObjectDBFactory(),
+            destroyed_at=timezone.now() - timedelta(days=40),
+            **kwargs,
+        )
+
+    def _purge(self) -> int:
+        from world.items.services.cleanup import purge_expired_soft_deleted_items
+
+        return purge_expired_soft_deleted_items(grace=timedelta(days=30))
+
+    def test_a_player_named_facetless_untransferred_piece_survives(self) -> None:
+        from world.items.models import ItemInstance
+
+        named = self._expired(custom_name="The Cliff Coat")
+        described = self._expired(custom_description="[player-written description]")
+
+        self.assertEqual(self._purge(), 0)
+        self.assertTrue(ItemInstance.objects.filter(pk__in=[named.pk, described.pk]).count() == 2)
+
+    def test_a_designer_a_silhouette_or_a_style_each_spare_the_piece(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import ItemStyleFactory
+        from world.items.models import ItemInstance
+
+        designed = self._expired(designer_character_sheet=CharacterSheetFactory())
+        shaped = self._expired(silhouette=_silhouette())
+        styled = self._expired()
+        ItemStyleFactory(item_instance=styled)
+
+        self.assertEqual(self._purge(), 0)
+        self.assertEqual(
+            ItemInstance.objects.filter(pk__in=[designed.pk, shaped.pk, styled.pk]).count(), 3
+        )
+
+    def test_a_bare_throwaway_is_still_purged(self) -> None:
+        from world.items.models import ItemInstance
+
+        bare = self._expired()
+
+        self.assertEqual(self._purge(), 1)
+        self.assertFalse(ItemInstance.objects.filter(pk=bare.pk).exists())
+
+
+class DifferingFromTemplateTests(TestCase):
+    def test_a_silhouette_or_style_makes_a_nameless_piece_preserved_on_destroy(self) -> None:
+        from world.items.factories import ItemInstanceFactory, ItemStyleFactory
+
+        plain = ItemInstanceFactory()
+        shaped = ItemInstanceFactory(silhouette=_silhouette())
+        styled = ItemInstanceFactory()
+        ItemStyleFactory(item_instance=styled)
+
+        self.assertFalse(plain.differs_from_template)
+        self.assertTrue(shaped.differs_from_template)
+        self.assertTrue(styled.differs_from_template)

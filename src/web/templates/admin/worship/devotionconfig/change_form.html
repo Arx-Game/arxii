@@ -8,6 +8,21 @@ up to while typing them (the GlimpseTagAdmin precedent, magic/admin.py).
 {{ block.super }}
 <div class="help">Rule: an invocation bonus changes a result only when it moves the total across
 a rank threshold.</div>
+{% if odds_rows %}
+<fieldset class="module aligned" id="devotion-config-odds">
+  <h2>Odds at these settings (read-only; for the reference roller, from the result charts)</h2>
+  <table>
+    <thead>
+      <tr><th scope="col">Meaning points</th><th scope="col">Difficulty</th><th scope="col">Chances</th><th scope="col">Success or better</th></tr>
+    </thead>
+    <tbody>
+      {% for label, difficulty, chances, success in odds_rows %}
+      <tr><th scope="row">{{ label }}</th><td>{{ difficulty }}</td><td>{{ chances }}</td><td>{{ success }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</fieldset>
+{% endif %}
 {% if difficulty_rows %}
 <fieldset class="module aligned" id="devotion-config-context">
   <h2>Resulting invocation difficulty (read-only; the +15 modifier is an example)</h2>

@@ -399,8 +399,25 @@ class DevotionConfigAdmin(admin.ModelAdmin):
                     "earning_rate_rule",
                     ("favored_deed_percent", "associated_deed_percent"),
                     "weekly_deed_favor_cap",
-                    "sacrifice_value_per_favor",
                 )
+            },
+        ),
+        (
+            "Sacrifices",
+            {
+                "description": (
+                    "A sacrifice is a check eased by what the item means to the character "
+                    "who gives it up. No number here reads an item's price."
+                ),
+                "fields": (
+                    "sacrifice_min_carried_days",
+                    "sacrifice_carried_days_per_point",
+                    "sacrifice_carried_max_points",
+                    "maker_tie_max_points",
+                    "sacrifice_ease_per_point",
+                    "sacrifices_per_week",
+                    "odds_reference_roller_points",
+                ),
             },
         ),
     )
@@ -470,9 +487,30 @@ class DevotionConfigAdmin(admin.ModelAdmin):
                 obj, get_chosen_favor_config().invocation_ease_points
             )
             context["invocations_last_week"] = invocations_last_week()
+            context["odds_rows"] = sacrifice_odds_rows()
         return super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
         )
+
+
+def sacrifice_odds_rows() -> list[tuple[str, str, str, str]]:
+    """Rows for the Devotion config's read-only "Odds at these settings" table: for a
+    reference roller, the meaning points, the difficulty, each outcome's chance and the
+    Success-or-better total, all read from the real result charts (#4500)."""
+    from world.worship.sacrifice_services import sacrifice_odds_bands  # noqa: PLC0415
+
+    rows = []
+    for band in sacrifice_odds_bands():
+        if band.last_points is None:
+            label = f"{band.first_points} or more points"
+        elif band.last_points == band.first_points:
+            label = f"{band.first_points} point{'s' if band.first_points != 1 else ''}"
+        else:
+            label = f"{band.first_points} to {band.last_points} points"
+        odds = band.odds
+        chances = ", ".join(f"{line.percent}% {line.outcome_name}" for line in odds.lines)
+        rows.append((label, str(odds.difficulty_points), chances, f"{odds.success_or_better}%"))
+    return rows
 
 
 @admin.register(RiteKind)

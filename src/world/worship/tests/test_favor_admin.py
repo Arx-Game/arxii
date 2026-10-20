@@ -78,6 +78,39 @@ class DevotionConfigAdminTests(TestCase):
         ):
             self.assertIn(text, body, text)
 
+    def test_odds_table_is_read_from_the_result_charts(self) -> None:
+        from world.traits.factories import CheckRankFactory, ResultChartFactory
+        from world.traits.models import ResultChart, ResultChartOutcome
+
+        for rank, points in ((0, 0), (1, 25), (2, 50), (3, 75)):
+            CheckRankFactory(rank=rank, min_points=points, name=f"Rank {rank}")
+        # Reference roller 48 (rank 1). Daunting 75 is rank 3, eased 10 a point: 65 and 55
+        # are rank 2 (gap -1), 45 and 35 rank 1 (gap 0), 25 rank 1, then the 15 floor
+        # rank 0 (gap +1).
+        for gap, success_width in ((-1, 20), (0, 50), (1, 80)):
+            chart = ResultChartFactory(rank_difference=gap)
+            ResultChartOutcome.objects.create(
+                chart=chart, min_roll=1, max_roll=100 - success_width, outcome=self.failure
+            )
+            ResultChartOutcome.objects.create(
+                chart=chart, min_roll=101 - success_width, max_roll=100, outcome=self.success
+            )
+        ResultChart.clear_cache()
+        config = get_devotion_config()
+
+        body = self.client.get(
+            reverse("admin:arxii_devotionconfig_change", args=(config.pk,))
+        ).content.decode()
+
+        self.assertIn("Odds at these settings", body)
+        # Merged by chart, derived from the config and charts, not listed in code.
+        self.assertIn("1 to 2 points", body)
+        self.assertIn("20%", body)
+        self.assertIn("3 to 5 points", body)
+        self.assertIn("50%", body)
+        self.assertIn("6 or more points", body)
+        self.assertIn("80%", body)
+
     def test_saving_an_invocation_award(self) -> None:
         config = DevotionConfigFactory()
         check_type = CheckTypeFactory(name="Invocation")
@@ -95,7 +128,13 @@ class DevotionConfigAdminTests(TestCase):
                 "favored_deed_percent": "100",
                 "associated_deed_percent": "50",
                 "weekly_deed_favor_cap": "8",
-                "sacrifice_value_per_favor": "10",
+                "sacrifice_min_carried_days": "14",
+                "sacrifice_carried_days_per_point": "90",
+                "sacrifice_carried_max_points": "3",
+                "maker_tie_max_points": "3",
+                "sacrifice_ease_per_point": "10",
+                "sacrifices_per_week": "3",
+                "odds_reference_roller_points": "48",
                 "outcome_awards-TOTAL_FORMS": "1",
                 "outcome_awards-INITIAL_FORMS": "0",
                 "outcome_awards-MIN_NUM_FORMS": "0",

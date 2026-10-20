@@ -55,7 +55,8 @@ function card(overrides: Partial<PledgeCardData> = {}): PledgeCardData {
         id: 1,
         source: 'sacrifice',
         label: 'Sacrificed [item] (Silk facet, favored)',
-        calculation: 'value 20: 2 base, x2 Silk = 4, at 200% = +8',
+        calculation:
+          'carried 1 (held 30 days), own work 1 (made by the holder) = 2, x2 Silk = 4 points, eased 40. Success: 4 base, at 200% = +8',
         credited: 8,
         counts_toward_progress: true,
         created_at: new Date().toISOString(),
@@ -82,7 +83,7 @@ describe('PledgeCard', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('200% · Chosen')).toBeInTheDocument();
     expect(screen.getByTestId('pledge-credits')).toHaveTextContent(
-      'value 20: 2 base, x2 Silk = 4, at 200% = +8'
+      'carried 1 (held 30 days), own work 1 (made by the holder) = 2, x2 Silk = 4 points, eased 40. Success: 4 base, at 200% = +8'
     );
   });
 

@@ -725,9 +725,7 @@ class SacrificeAction(Action):
             else f"to {outcome.being.name}"
         )
         lines = [
-            f"You sacrifice {item.name} {where}. "
-            f"{item.calculation} favor with {outcome.being.name}."
-            for item in outcome.items
+            f"You sacrifice {item.name} {where}. {item.calculation}." for item in outcome.items
         ]
         return ActionResult(
             success=True,

@@ -1292,7 +1292,10 @@
   - facet -> magic.Facet [FK] (nullable)
   - worship_grant -> worship.WorshipGrant [FK] (nullable)
   - offered_by -> scenes.Persona [FK]
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
+  - game_week -> game_clock.GameWeek [FK] (nullable)
 **Pointed to by:**
+  - signals <- ceremonies.OfferingSignal
   - pledge_credit <- worship.PledgeCredit
 
 ### CeremonySpeech
@@ -1310,6 +1313,10 @@
   - ceremony -> ceremonies.Ceremony [OneToOne]
   - honoree_sheet -> character_sheets.CharacterSheet [FK]
   - title -> societies.Title [FK]
+
+### OfferingSignal
+**Foreign Keys:**
+  - offering -> ceremonies.CeremonyOffering [FK]
 
 ### SeanceManifestationOffer
 **Foreign Keys:**
@@ -1329,19 +1336,21 @@
 - `favored_facets_by_item(being: 'WorshippedBeing', item_instances: 'list[ItemInstance]') -> 'dict[int, Facet]' - Each of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet),`
 - `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig - Get-or-create the first CeremonyConfig row (singleton-by-convention).`
-- `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, facet: 'Facet | None', granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and feed ``being``'s pool from its value.`
+- `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, reading: world.ceremonies.services.ItemReading, counted: bool, granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and, when it counts, feed ``being``'s pool.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
 - `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held.`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `pending_wedding_consent_offers_for_account(account: object) -> 'QuerySet[WeddingConsentOffer]' - PENDING wedding consent offers addressed to any character this account holds (#2358).`
+- `read_item(instance: 'ItemInstance', sheet: 'CharacterSheet', *, facet: 'Facet | None') -> world.ceremonies.services.ItemReading - The item's meaning points for ``sheet``, with the favored-facet multiplier.`
 - `record_offering(*, ceremony: world.ceremonies.models.Ceremony, item_instances: 'list[ItemInstance]') -> list[world.ceremonies.models.CeremonyOffering] - Sacrifice items: destroy them, feed the being's pool, log offerings.`
 - `record_speech(*, ceremony: world.ceremonies.models.Ceremony, speaker_persona: 'Persona', target_honoree: world.ceremonies.models.CeremonyHonoree | None = None) -> world.ceremonies.models.CeremonySpeech - Recognize a speaker; their Performance/Oratory roll shapes the tally.`
 - `respond_to_conversion_offer(offer: 'WorshipConversionOffer', *, account: object, accept: bool, sincere: bool = True) -> 'WorshipConversionOffer' - Accept or decline a pending public-conversion offer (#2361, Ratified amendment #1a).`
 - `respond_to_seance_offer(offer: 'SeanceManifestationOffer', *, account: object, accept: bool) -> 'SeanceManifestationOffer' - Accept or decline a pending seance manifestation offer (#2393).`
 - `respond_to_wedding_consent_offer(offer: 'WeddingConsentOffer', *, account: object, accept: bool) -> 'WeddingConsentOffer' - Accept or decline a pending wedding consent offer (#2358).`
 - `revoke_seance_manifestations(ceremony: world.ceremonies.models.Ceremony) -> None - Force-unpuppet any manifested RETIRED honoree when a Seance closes (#2393).`
-- `sacrifice_items(sheet: 'CharacterSheet', item_instances: 'list[ItemInstance]', *, being: 'WorshippedBeing | None' = None) -> 'SacrificeOutcome' - Give items up to a being at its shrine or temple, outside a ceremony.`
+- `sacrifice_items(sheet: 'CharacterSheet', item_instances: 'list[ItemInstance]', *, being: 'WorshippedBeing | None' = None) -> 'SacrificeOutcome' - Give items up to a being at its shrine or temple, outside a ceremony (#4500).`
+- `write_offering_signals(offering: world.ceremonies.models.CeremonyOffering, reading: world.ceremonies.services.ItemReading) -> None - Snapshot the item's meaning signals onto its offering record (#4500).`
 
 
 ## world.character_creation
@@ -4729,6 +4738,7 @@
   - quality_tier -> items.QualityTier [FK] (nullable)
   - silhouette -> items.Silhouette [FK] (nullable)
   - holder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - holding_event -> items.OwnershipEvent [FK] (nullable)
   - crafter_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - attuned_to_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - crafter_persona_display -> scenes.Persona [FK] (nullable)

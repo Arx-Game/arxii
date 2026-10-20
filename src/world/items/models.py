@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
+from django.db.models.functions import Now
+from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 
@@ -906,6 +908,26 @@ class ItemInstance(SharedMemoryModel):
             "serialization time from holder_character_sheet.primary_persona."
         ),
     )
+    held_since = models.DateTimeField(
+        default=timezone.now,
+        db_default=Now(),
+        help_text=(
+            "When the current holder got this item. Starts the carry clock that "
+            "gates an item's personal meaning signals. Written by set_item_holder."
+        ),
+    )
+    holding_event = models.ForeignKey(
+        "OwnershipEvent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The ownership event that brought the item to the current holder, if one was "
+            "written (a gift, an inheritance). Null for an item the holder made or bought. "
+            "Written by set_item_holder."
+        ),
+    )
     crafter_character_sheet = models.ForeignKey(
         _CHARACTER_SHEET_FK,
         on_delete=models.SET_NULL,
@@ -1153,6 +1175,11 @@ class ItemInstance(SharedMemoryModel):
         """True if this instance carries per-instance data worth preserving on
         destruction (soft-delete). Bare template-identical throwaways return False."""
         if self.custom_name or self.custom_description or self.lore_value or self.quality_tier_id:
+            return True
+        # A silhouette or style is part of the design a given-up or destroyed item keeps
+        # (#4500, owner ruling 2026-10-18). The designer is not tested here: making stamps
+        # the crafter as designer on every crafted item (the purge spares it, cleanup.py).
+        if self.silhouette_id or self.item_styles.exists():
             return True
         if self.has_facet_history:
             return True

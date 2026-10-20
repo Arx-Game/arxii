@@ -344,3 +344,62 @@ class LiveSend:
     vision: Vision | None = None
     miracle: Miracle | None = None
     performance: MiraclePerformance | None = None
+
+
+@dataclass(frozen=True)
+class SacrificeSignalLine:
+    """One meaning signal an item had when it was given up (#4500)."""
+
+    kind_name: str
+    points: int
+    detail: str
+
+
+@dataclass(frozen=True)
+class SacrificeOddsLine:
+    """One outcome's chance, in percent, on the result chart a roll uses (#4500)."""
+
+    outcome_name: str
+    success_level: int
+    percent: int
+
+
+@dataclass(frozen=True)
+class SacrificeOdds:
+    """The odds of a sacrifice check for a reference roller, read from the real result
+    charts: the rank gap picks the chart, each outcome's band width is its chance."""
+
+    difficulty_points: int
+    reference_rank_name: str
+    lines: list[SacrificeOddsLine]
+
+    @property
+    def success_or_better(self) -> int:
+        return sum(line.percent for line in self.lines if line.success_level > 0)
+
+
+@dataclass(frozen=True)
+class SacrificeOddsBand:
+    """A run of meaning-point counts that roll on the same chart (Devotion config read-out).
+    ``last_points`` is None for the open-ended band that reaches the Trivial floor."""
+
+    first_points: int
+    last_points: int | None
+    odds: SacrificeOdds
+
+
+@dataclass(frozen=True)
+class SacrificeDetail:
+    """A GM's view of one sacrifice: why it counted and how the roll went (#4500)."""
+
+    item_name: str
+    offered_by_name: str
+    signals: list[SacrificeSignalLine]
+    points: int
+    effective_points: int
+    facet_name: str
+    counted: bool
+    outcome_name: str
+    ease_points: int
+    difficulty_points: int | None
+    odds: SacrificeOdds | None

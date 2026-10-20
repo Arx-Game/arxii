@@ -212,7 +212,9 @@ async function mockPantheon(page: Page): Promise<void> {
             {
               item_name: 'A notched iron scythe',
               offered_by: 'Lily',
-              item_value: 420,
+              meaning_points: 4,
+              signals: ['Carried 1', 'Gift 3'],
+              outcome_name: 'Success',
               amount: 840,
               ceremony_id: 3,
               when: now,
@@ -220,7 +222,9 @@ async function mockPantheon(page: Page): Promise<void> {
             {
               item_name: 'A coin purse',
               offered_by: 'Corin',
-              item_value: 50,
+              meaning_points: 0,
+              signals: [],
+              outcome_name: '',
               amount: 50,
               ceremony_id: 4,
               when: now,

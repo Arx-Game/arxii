@@ -791,11 +791,58 @@ class DevotionConfig(SharedMemoryModel):
             "this, or when the GM dismisses the prompt, an authored answer is drawn."
         ),
     )
-    sacrifice_value_per_favor = models.PositiveIntegerField(
-        default=10,
+    sacrifice_min_carried_days = models.PositiveIntegerField(
+        default=14,
+        db_default=14,
         help_text=(
-            "Base favor per sacrificed item is its value divided by this, at least 1, "
-            "multiplied for a favored facet. Ceremony offerings keep their own flat amount."
+            "Days an item must be held before its personal meaning signals count "
+            "(carried, gift, heirloom, own work, made by a tie). Stops making an item and "
+            "giving it up the same day."
+        ),
+    )
+    sacrifice_carried_days_per_point = models.PositiveIntegerField(
+        default=90,
+        db_default=90,
+        help_text=(
+            "One more carried point per this many days held beyond the minimum. Carried "
+            "counts only when the item has another signal: holding alone is never meaning."
+        ),
+    )
+    sacrifice_carried_max_points = models.PositiveIntegerField(
+        default=3, db_default=3, help_text="Most meaning points that carrying an item can give."
+    )
+    maker_tie_max_points = models.PositiveIntegerField(
+        default=3,
+        db_default=3,
+        help_text=(
+            "Made by a tie: the pair tier between the holder and the item's maker, up to "
+            "this many points. The best maker counts, never the sum."
+        ),
+    )
+    sacrifice_ease_per_point = models.PositiveIntegerField(
+        default=10,
+        db_default=10,
+        help_text=(
+            "Points the sacrifice check's difficulty is eased by, per meaning point of the "
+            "item, never below Trivial. Nothing here reads an item's price."
+        ),
+    )
+    odds_reference_roller_points = models.PositiveIntegerField(
+        default=48,
+        db_default=48,
+        help_text=(
+            "Check points of the reference roller the odds read-outs use (Devotion config "
+            "and the GM's sacrifice detail). 48 is a Competent roller. A read-out only: "
+            "no roll uses it."
+        ),
+    )
+    sacrifices_per_week = models.PositiveIntegerField(
+        default=3,
+        db_default=3,
+        help_text=(
+            "Items with meaning points that count per being, per character, per game "
+            "week, at shrines and in ceremonies together. Items past the limit are given "
+            "up for nothing."
         ),
     )
 
@@ -831,7 +878,8 @@ class FavorOutcomeAward(SharedMemoryModel):
     amount = models.PositiveIntegerField(
         help_text=(
             "Invocation: check points added to the check the invocation was declared on. "
-            "Closing: base favor paid when a closing rite resolves a pledge."
+            "Closing: base favor paid when a closing rite resolves a pledge. "
+            "Sacrifice: base favor paid when a sacrifice's check lands on this tier."
         )
     )
 

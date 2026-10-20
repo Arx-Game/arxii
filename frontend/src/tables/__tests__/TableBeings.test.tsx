@@ -86,7 +86,28 @@ const prompt: StewardPrompt = {
   subject_name: 'Tobiah Fenwright',
   pledge_name: '[GM-authored pledge name]',
   outcome_tier_name: 'Success',
-  sacrificed: ['[item]'],
+  sacrificed: [
+    {
+      item_name: '[item]',
+      offered_by_name: '[name]',
+      signals: [{ kind_name: 'Carried', points: 2, detail: 'held 120 days' }],
+      points: 2,
+      effective_points: 2,
+      facet_name: '',
+      counted: true,
+      outcome_name: 'Success',
+      ease_points: 20,
+      difficulty_points: 55,
+      odds: {
+        difficulty_points: 55,
+        reference_rank_name: 'Competent',
+        lines: [
+          { outcome_name: 'Failure', success_level: -1, percent: 40 },
+          { outcome_name: 'Success', success_level: 1, percent: 60 },
+        ],
+      },
+    },
+  ],
   prayer_text: '[player-written prayer]',
   options: [
     {
@@ -137,6 +158,18 @@ describe('TableBeings', () => {
       )
     ).toBeInTheDocument();
     expect(screen.getByText(/members of this table/)).toBeInTheDocument();
+  });
+
+  it('shows the GM each sacrifice with its signals, ease, odds and roll', async () => {
+    mockData([prompt]);
+    const user = userEvent.setup();
+    render(<TableBeings table={table} />);
+    await user.click(screen.getByRole('button', { name: 'Open' }));
+
+    expect(screen.getByText('[name] sacrifices [item].')).toBeInTheDocument();
+    expect(screen.getByTestId('sacrifice-odds-note')).toHaveTextContent(
+      '2 points, eased 20, difficulty 55. For a Competent roller: 40% Failure, 60% Success. This roll: Success.'
+    );
   });
 
   it('sends an authored answer or the steward’s own text with a clue', async () => {

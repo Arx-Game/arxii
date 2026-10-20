@@ -114,11 +114,13 @@ class FavorAwardKind(models.TextChoices):
 
     INVOCATION is the bonus, in check points, an invocation check's outcome tier
     adds to the check it was declared on. CLOSING is the base favor a pledge's
-    closing rite pays for its outcome tier; pledges read it (#4333 slice 2).
+    closing rite pays for its outcome tier; pledges read it (#4333 slice 2). SACRIFICE is
+    the base favor a sacrifice's check pays for its outcome tier (#4500).
     """
 
     INVOCATION = "invocation", "Invocation bonus (check points)"
     CLOSING = "closing", "Closing award (base favor)"
+    SACRIFICE = "sacrifice", "Sacrifice award (base favor)"
 
 
 #: The longest one-line description a player may attach to an invocation (#4333).

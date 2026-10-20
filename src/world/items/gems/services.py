@@ -18,6 +18,7 @@ from world.items.exceptions import (
 )
 from world.items.gems.constants import GemAxis
 from world.items.gems.models import Adornment, GemGrade
+from world.items.services.holding import set_item_holder
 from world.items.services.usage import destroy_consumed_item_instance
 
 if TYPE_CHECKING:
@@ -156,8 +157,7 @@ def pry_adornment(  # noqa: PLR0913 — keyword-only adornment + crafter + check
             return PryResult(shattered=True, freed_gem=None, worth_removed=worth)
 
         adornment.delete()  # remove the setting; the stone survives
-        gem_instance.holder_character_sheet = crafter_character_sheet
-        gem_instance.save(update_fields=["holder_character_sheet"])
+        set_item_holder(gem_instance, crafter_character_sheet)
         return PryResult(shattered=False, freed_gem=gem_instance, worth_removed=worth)
 
 

@@ -89,9 +89,12 @@ export function PledgeCard({ card, characterId }: PledgeCardProps) {
           ) : (
             <ul className="divide-y divide-dotted" data-testid="pledge-credits">
               {card.credits.map((credit) => (
-                <li key={credit.id} className="flex justify-between gap-3 py-1">
+                <li
+                  key={credit.id}
+                  className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 py-1"
+                >
                   <span>{credit.label}</span>
-                  <span className="shrink-0 text-right font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                  <span className="min-w-0 max-w-full text-left font-semibold tabular-nums text-amber-700 dark:text-amber-400 sm:text-right">
                     {credit.calculation}
                   </span>
                 </li>
