@@ -8,7 +8,7 @@ This module contains models related to earning and tracking rewards:
 - DevelopmentTransaction: Development point transaction audit trail
 """
 
-from typing import ClassVar, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -26,6 +26,9 @@ from world.traits.models import (
     TraitChangeSource,
     TraitType,
 )
+
+if TYPE_CHECKING:
+    from world.skills.models import Skill
 
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 TRAIT_MODEL = "arxii.Trait"
@@ -237,7 +240,15 @@ class DevelopmentPoints(SharedMemoryModel):
         self.total_earned += amount
         self.save()
 
-        trait_value, _created = CharacterTraitValue.objects.get_or_create(
+        from world.skills.services import (  # noqa: PLC0415 - skills.services imports this module
+            reconcile_skill_stores,
+            set_skill_sheet_value,
+        )
+
+        skill = self._skill()
+        if skill is not None:
+            reconcile_skill_stores(self.character_sheet, skill)
+        trait_value, created = CharacterTraitValue.objects.get_or_create(
             character=self.character_sheet,
             trait=self.trait,
             defaults={"value": 10},
@@ -282,7 +293,19 @@ class DevelopmentPoints(SharedMemoryModel):
                 source=TraitChangeSource.DEVELOPMENT_LEVEL_UP,
             )
 
+        if skill is not None and (level_ups or created):
+            # The sheet shows CharacterSkillValue, a check reads the trait row (#4496).
+            set_skill_sheet_value(self.character_sheet, skill, trait_value.value)
+
         return level_ups
+
+    def _skill(self) -> "Skill | None":
+        """The ``Skill`` this tracker's trait belongs to, ``None`` for any other trait."""
+        from world.skills.models import Skill  # noqa: PLC0415
+
+        if self.trait.trait_type != TraitType.SKILL:
+            return None
+        return Skill.objects.filter(trait_id=self.trait_id).first()
 
     class Meta:
         unique_together: ClassVar[list[str]] = ["character_sheet", "trait"]
