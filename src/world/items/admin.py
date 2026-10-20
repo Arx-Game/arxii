@@ -365,7 +365,14 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "crafter_character_sheet",
     ]
     list_filter = ["quality_tier", "template"]
-    readonly_fields = ["is_broken", "destroyed_at", "last_holder", "held_since", "holding_event"]
+    readonly_fields = [
+        "is_broken",
+        "destroyed_at",
+        "last_holder",
+        "holder_character_sheet",
+        "held_since",
+        "holding_event",
+    ]
     list_select_related = [
         "template",
         "quality_tier",

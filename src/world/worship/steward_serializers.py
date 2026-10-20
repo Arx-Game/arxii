@@ -365,6 +365,7 @@ class _SacrificeDetailSerializer(serializers.Serializer):
     item_name = serializers.CharField()
     signals = _SacrificeSignalSerializer(many=True)
     points = serializers.IntegerField()
+    effective_points = serializers.IntegerField()
     facet_name = serializers.CharField(allow_blank=True)
     counted = serializers.BooleanField()
     outcome_name = serializers.CharField(allow_blank=True)

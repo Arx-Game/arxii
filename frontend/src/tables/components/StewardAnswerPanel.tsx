@@ -155,6 +155,9 @@ export function StewardAnswerPanel({
               {item.signals.length > 0 && (
                 <p className="text-xs text-muted-foreground">
                   {item.points} points
+                  {item.effective_points !== item.points
+                    ? `, ${item.facet_name} favored = ${item.effective_points} points`
+                    : ''}
                   {item.counted
                     ? `. Roll: ${item.outcome_name || 'none'}`
                     : ". Past the week's limit: given up for nothing"}

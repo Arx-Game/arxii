@@ -281,7 +281,8 @@ class ProgressTests(PledgeTestBase):
         self.assertEqual(card.progress, 20)
         self.assertEqual(
             card.credits[2].calculation,
-            "carried 1 (held 30 days), own work 1 (made by the holder) = 2, x2 Silk = 4 points."
+            "carried 1 (held 30 days), own work 1 (made by the holder) = 2, "
+            "x2 Silk = 4 points, eased 40."
             " Success: 4 base, at 200% = +8",
         )
         self.assertEqual(self._favor(), 20)
@@ -810,7 +811,8 @@ class WebDispatchTests(PledgeTestBase):
         self.assertIn("Your earning rate with Ombrin: 200% (100% + 100% Chosen).", taken.message)
         self.assertTrue(given.success, given.message)
         self.assertIn(
-            "carried 1 (held 30 days), own work 1 (made by the holder) = 2, x2 Silk = 4 points."
+            "carried 1 (held 30 days), own work 1 (made by the holder) = 2, "
+            "x2 Silk = 4 points, eased 40."
             " Success: 4 base, at 200% = +8 favor.",
             given.message,
         )

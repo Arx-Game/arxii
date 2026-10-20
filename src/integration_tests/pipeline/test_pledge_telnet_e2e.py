@@ -165,7 +165,8 @@ class PledgeTelnetTests(TestCase):
         ItemFacetFactory(item_instance=item, facet=self.silk)
         heard = self._onlooker_hears(CmdSacrifice, "silk scarf")
         self.assertIn(
-            "carried 1 (held 30 days), own work 1 (made by the holder) = 2, x2 Silk = 4 points."
+            "carried 1 (held 30 days), own work 1 (made by the holder) = 2, "
+            "x2 Silk = 4 points, eased 40."
             " Success: 4 base, at 200% = +8 favor.",
             _said(self.ysmay),
         )

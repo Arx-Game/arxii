@@ -91,6 +91,7 @@ const prompt: StewardPrompt = {
       item_name: '[item]',
       signals: [{ kind_name: 'Carried', points: 2, detail: 'held 120 days' }],
       points: 2,
+      effective_points: 2,
       facet_name: '',
       counted: true,
       outcome_name: 'Success',

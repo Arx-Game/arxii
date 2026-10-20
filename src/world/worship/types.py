@@ -362,6 +362,7 @@ class SacrificeDetail:
     item_name: str
     signals: list[SacrificeSignalLine]
     points: int
+    effective_points: int
     facet_name: str
     counted: bool
     outcome_name: str

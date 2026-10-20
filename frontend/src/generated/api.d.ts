@@ -54368,6 +54368,7 @@ export interface components {
       item_name: string;
       signals: components['schemas']['_SacrificeSignal'][];
       points: number;
+      effective_points: number;
       facet_name: string;
       counted: boolean;
       outcome_name: string;

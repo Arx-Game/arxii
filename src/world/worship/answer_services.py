@@ -145,10 +145,15 @@ def sacrifice_detail(offering: CeremonyOffering) -> SacrificeDetail:
         SacrificeSignalLine(signal.get_kind_display(), signal.points, signal.detail)
         for signal in offering.signals.all()
     ]
+    from world.ceremonies.models import get_ceremony_config  # noqa: PLC0415
+
+    points = sum(signal.points for signal in signals)
+    percent = get_ceremony_config().offering_favored_facet_multiplier_percent
     return SacrificeDetail(
         item_name=offering.item_name,
         signals=signals,
-        points=sum(signal.points for signal in signals),
+        points=points,
+        effective_points=points * percent // 100 if offering.facet_id is not None else points,
         facet_name=offering.facet.name if offering.facet_id is not None else "",
         counted=offering.counted,
         outcome_name=offering.outcome_tier.name if offering.outcome_tier_id is not None else "",

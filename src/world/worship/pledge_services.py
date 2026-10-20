@@ -557,6 +557,11 @@ def sacrifice_calculation(
         text += " points"
     if not offering.counted:
         return f"{text}: past the week's limit, given up for nothing"
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+    percent = get_ceremony_config().offering_favored_facet_multiplier_percent
+    effective = points * percent // 100 if offering.facet_id is not None else points
+    text += f", eased {effective * get_devotion_config().sacrifice_ease_per_point}"
     outcome = offering.outcome_tier.name if offering.outcome_tier_id is not None else "No roll"
     text += f". {outcome}: {base} base"
     if rate is not None and credited is not None and base > 0:

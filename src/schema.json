@@ -98433,6 +98433,8 @@ components:
             $ref: '#/components/schemas/_SacrificeSignal'
         points:
           type: integer
+        effective_points:
+          type: integer
         facet_name:
           type: string
         counted:
@@ -98441,6 +98443,7 @@ components:
           type: string
       required:
       - counted
+      - effective_points
       - facet_name
       - item_name
       - outcome_name
