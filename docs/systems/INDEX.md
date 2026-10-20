@@ -5212,6 +5212,10 @@ makes decisions at branching points gated by skills/traits/predicates, and the c
 reshape the world around them. No engine arbitration: the player picks, pick+check routes;
 state is node position + snapshots + already-applied consequences, never a scratch blob.
 
+- **Trials (#4501, spec #4343):** a trial is not a model; it is a `MissionTemplate` whose CHECK
+  option's routes carry consequences with `GRANT_CODEX` (`grants_known`), `TECHNIQUE_TRAINING` and
+  a cost effect. See Mechanics' "Added in #4501" and `docs/systems/checks.md`; the save rules are
+  `world/checks/trial_rules.py`. Missions charge no action points yet, so a trial has no AP cost.
 - **Models:** `MissionTemplate` (authored graph: entry node + availability metadata — level
   band, risk tier, draw weight, visibility) → `MissionNode` (`track_successes`/
   `track_failures`/`track_success_target`/`track_failure_target`/`track_success_beat_outcome`/

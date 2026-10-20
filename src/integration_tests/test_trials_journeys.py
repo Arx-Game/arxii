@@ -46,8 +46,15 @@ from world.missions.factories import (
 )
 from world.missions.services.run import staff_assign_mission
 from world.narrative.models import NarrativeMessageDelivery
+from world.npc_services.constants import OfferKind
+from world.npc_services.factories import (
+    NPCRoleFactory,
+    NPCServiceOfferFactory,
+    TrainOfferDetailsFactory,
+)
 from world.progression.factories import CodexKnowledgeRequirementFactory
 from world.progression.models import TechniqueKnownRequirement
+from world.societies.factories import OrganizationFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -282,9 +289,23 @@ class ATrialInTheCrypt(JourneyCase):
         meter = TechniqueProgress.objects.get(character_sheet=self.sheet, technique=self.technique)
         self.assertEqual(meter.points_accumulated, 20)
 
+    def test_the_notice_says_where_the_technique_is_taught(self) -> None:
+        self._hold_the_gift()
+        academy = OrganizationFactory(name="Hall of Lanterns")
+        offer = NPCServiceOfferFactory(
+            kind=OfferKind.TRAIN, role=NPCRoleFactory(faction_affiliation=academy)
+        )
+        TrainOfferDetailsFactory(offer=offer, technique=self.technique)
+        self._take_the_trial("success")
+
+        self.assertIn(
+            "Taught by: Hall of Lanterns. No player teacher offers it right now.", self._notices()
+        )
+
     def test_failure_costs_and_opens_nothing(self) -> None:
         self._hold_the_gift()
         self._take_the_trial("failure")
+        self.assertIn("Condition: Crypt fever (severity 2).", self._notices())
 
         self.assertIsNone(self._entry_status(self.entry))
         self.assertFalse(TechniqueProgress.objects.filter(character_sheet=self.sheet))

@@ -44,10 +44,10 @@ A trial is a mission whose good tiers make a codex entry known, train or grant t
 opens, and cost something. Built in slice 1: `GRANT_CODEX.grants_known`, the `TECHNIQUE_TRAINING`
 effect (points on the technique's meter, or "grant outright" at Critical Success through
 `learn_technique` with the `TRIAL` origin, every prerequisite still checked), cosmetic Mage Scars
-as a Success reward, the "this opens a technique" notice, and the save rules in
+as a Success reward, the "this opens a technique" notice, a mission route's "Condition: name (severity n)" notice for a condition it puts on the actor, and the save rules in
 `world/checks/trial_rules.py`. Not built: the Trial builder page (slice 2), a trial's action point
 cost and whether trial points count toward the weekly training cap (the action-point owner's call),
-and GM-assigned activities paced by real time. A trial run today is authored on the stock
+a GM-facing log row of the effects a trial applied (the demo's GM tab; applied effects are not persisted anywhere today, so it needs a stored surface and a decision on one), and GM-assigned activities paced by real time. A trial run today is authored on the stock
 Consequence page (effects inline).
 
 ## Open Gaps (from the 2026-06-10 code audit; #923 economy work closes the money one)

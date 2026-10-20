@@ -239,6 +239,7 @@ export function AlterationAuthorForm({
       {!hasDrawbacks && (
         <p className="text-xs text-muted-foreground">
           This is a cosmetic mark: it carries no drawbacks and does not hold back advancement.
+          Others see it as they see any scar.
         </p>
       )}
 
