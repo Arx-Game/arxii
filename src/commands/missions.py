@@ -325,9 +325,9 @@ class CmdMission(ArxCommand):
         if not name:
             msg = "Invite whom? Usage: mission invite <id> <name>"
             raise CommandError(msg)
-        target = self.caller.search(name)
-        if target is None:
-            return  # search already sent a "not found" message
+        # The command's own line: the loud search had said "Could not find" untyped and
+        # the command then said nothing (#3657 tranche 15).
+        target = self.search_or_raise(name)
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
         # Invites are face-to-face: the holder acts as the face they currently

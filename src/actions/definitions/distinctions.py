@@ -140,9 +140,17 @@ class GMAwardDistinctionAction(Action):
         if not target_name or not distinction_slug:
             return ActionResult(success=False, message=_usage_message(action_str))
 
-        target = actor.search(target_name, global_search=True)
-        if target is None:
-            return ActionResult(success=False)
+        # Quiet: the loud search had told the actor "Could not find" as a bare untyped
+        # line and the action then said nothing (#3657 tranche 15; mirrors GrantItemAction).
+        matches = actor.search(target_name, global_search=True, quiet=True)
+        if not matches:
+            return ActionResult(success=False, message=f"Could not find '{target_name}'.")
+        if len(matches) > 1:
+            return ActionResult(
+                success=False,
+                message=f"More than one match for '{target_name}'; be more specific.",
+            )
+        target = matches[0]
 
         sheet = target.character_sheet
         if sheet is None:
@@ -293,6 +301,19 @@ class GMAwardDistinctionAction(Action):
         Returns:
             ``ActionResult`` indicating success or failure.
         """
+        # At the ceiling the grant is a no-op, but the request would still charge
+        # the character XP and report an award (#3657 tranche 15): refuse first.
+        held = _character_distinction_cls.objects.filter(
+            character=sheet, distinction=distinction
+        ).first()
+        if held is not None and held.rank >= distinction.max_rank:
+            return ActionResult(
+                success=False,
+                message=(
+                    f"{target.key} already holds {distinction.name} at its highest rank "
+                    f"({distinction.max_rank})."
+                ),
+            )
         try:
             req = _create_req(
                 sheet,

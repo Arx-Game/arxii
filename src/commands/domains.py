@@ -94,7 +94,13 @@ class CmdDomain(ArxCommand):
         }
         handler = handlers.get(first)
         if handler is None:
-            msg = "Usage: domain [list|offices|holding|improve|appoint|vacate|transfer|stature] ..."
+            # Spaced: Evennia reads "|h", "|i" and "|s" as colour codes, so the bare
+            # "list|offices|holding|improve|...|stature" printed "officesoldingmprove"
+            # on telnet (#3657 tranche 15).
+            msg = (
+                "Usage: domain [list | offices | holding | improve | appoint | vacate | "
+                "transfer | stature] ..."
+            )
             raise CommandError(msg)
         handler(rest)
 
@@ -162,10 +168,11 @@ class CmdDomain(ArxCommand):
         offices = OrganizationOffice.objects.filter(organization=domain.owner_org).select_related(
             "holder"
         )
+        # The house by name: ``str(org)`` reads "House Westrock (Society 2)" (#3657 tranche 15).
         if not offices:
-            self.msg(f"{domain.owner_org} has no offices.")
+            self.msg(f"{domain.owner_org.name} has no offices.")
             return
-        lines = [f"Offices of {domain.owner_org}:"]
+        lines = [f"Offices of {domain.owner_org.name}:"]
         for office in offices:
             holder = office.holder.name if office.holder else "vacant"
             lines.append(f"  {office.title or office.slug}: {holder}")
@@ -246,10 +253,9 @@ class CmdDomain(ArxCommand):
     def _resolve_holder_persona(self, char_name: str) -> Any:
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        target = self.caller.search(char_name, global_search=True)
-        if not target:
-            msg = f"Could not find '{char_name}'."
-            raise CommandError(msg)
+        # Quiet: the loud search had said "Could not find" untyped before this
+        # command's own line did (#3657 tranche 15).
+        target = self.search_or_raise(char_name, global_search=True)
         sheet = target.character_sheet
         if sheet is None:
             msg = f"'{char_name}' has no character sheet."
