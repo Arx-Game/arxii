@@ -79,7 +79,15 @@ def get_reaction_kind(kind: str) -> ReactionKindConfig:
 
 
 def open_reaction_window(*, interaction: Interaction, kind: str) -> ReactionWindow:
-    """Idempotently open a window of ``kind`` on ``interaction``."""
+    """Idempotently open a window of ``kind`` on ``interaction``; a new one is announced."""
+    window, created = _get_or_create_window(interaction=interaction, kind=kind)
+    if created:
+        notify_interaction_changed(interaction)
+    return window
+
+
+def _get_or_create_window(*, interaction: Interaction, kind: str) -> tuple[ReactionWindow, bool]:
+    """The window get-or-create without the announcement, for a caller that announces."""
     # Peek, don't read: interaction.cached_reaction_windows is a PrunedCachedProperty, so
     # reading it here would trigger a query whenever the cache happens to be cold --
     # defeating the point of caching it in the common (cold) case. A dict-lookup peek
@@ -100,9 +108,7 @@ def open_reaction_window(*, interaction: Interaction, kind: str) -> ReactionWind
     )
     if created and cached is not None:
         interaction.cached_reaction_windows = [*cached, window]
-    if created:
-        notify_interaction_changed(interaction)
-    return window
+    return window, created
 
 
 def _account_id_for_persona(persona: Persona) -> int | None:
@@ -199,7 +205,8 @@ def react_to_interaction(
         raise ValidationError(msg)
 
     with transaction.atomic():
-        window = open_reaction_window(interaction=interaction, kind=kind)
+        # react_to_window announces; the window's creation rides that one frame.
+        window, _created = _get_or_create_window(interaction=interaction, kind=kind)
         return react_to_window(
             window=window,
             reactor_persona=reactor_persona,

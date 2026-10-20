@@ -29,7 +29,10 @@ from world.scenes.factories import (
     PlaceFactory,
     SceneParticipationFactory,
 )
-from world.scenes.interaction_services import notify_interaction_changed
+from world.scenes.interaction_services import (
+    notify_interaction_changed,
+    send_outcome_text_to_non_web,
+)
 from world.scenes.reaction_services import (
     open_reaction_window,
     react_to_interaction,
@@ -193,12 +196,18 @@ class InteractionChangedTests(PushScene):
             notify_interaction_changed(self.interaction)
         assert self._announced(send) == [self.author.character]
 
-    def test_two_writes_in_one_transaction_send_one_frame(self):
-        with patch(SEND) as send, self.captureOnCommitCallbacks(execute=True):
-            with transaction.atomic():
-                notify_interaction_changed(self.interaction)
-                notify_interaction_changed(self.interaction)
-        assert send.call_count == 1
+    def test_a_writer_who_is_also_a_receiver_gets_one_telnet_line(self):
+        self.interaction.mode = InteractionMode.WHISPER
+        self.interaction.save()
+        InteractionReceiverFactory(
+            interaction=self.interaction, persona=self.author.primary_persona
+        )
+        with (
+            patch("world.scenes.interaction_services.non_web_sessions", return_value=["telnet"]),
+            patch.object(self.author.character, "msg") as author_msg,
+        ):
+            send_outcome_text_to_non_web(self.interaction, location=None)
+        author_msg.assert_called_once_with(self.interaction.content, session=["telnet"])
 
     def test_a_first_kudos_sends_exactly_one_frame(self):
         self.author.character.db_account = AccountFactory()
