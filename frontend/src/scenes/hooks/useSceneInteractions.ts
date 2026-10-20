@@ -23,10 +23,13 @@ export function wsPayloadToInteraction(
     // it from the bounded body cache and older payloads fall back to content.
     line: ('line' in payload ? payload.line : undefined) ?? getNarrativeBody(payload)?.line,
     mode: payload.mode,
-    visibility: 'default',
+    visibility: payload.visibility ?? 'default',
     timestamp: payload.timestamp,
     scene: payload.scene_id,
-    reactions: [],
+    reactions: payload.reactions ?? [],
+    reaction_windows: payload.reaction_windows,
+    dramatic_moment_tags: payload.dramatic_moment_tags,
+    availability: payload.availability,
     is_favorited: false,
     place: payload.place_id,
     place_name: payload.place_name,
@@ -42,13 +45,14 @@ export function wsPayloadToInteraction(
       payload.attributed_companion_id != null
         ? { id: payload.attributed_companion_id, name: payload.attributed_companion_name ?? '' }
         : null,
-    // Endorsement fields are not present in WS payloads; initialise as empty.
-    pose_kind: 'standard',
-    endorsee_sheet_id: null,
-    endorsable_resonances: [],
-    pose_endorsers: [],
+    // The room-wide endorsement fields ride the frame (#4508); an older frame falls back
+    // to empty. The viewer's own (`my_*`, `entry_endorsed_by_me`) are never broadcast.
+    pose_kind: payload.pose_kind ?? 'standard',
+    endorsee_sheet_id: payload.endorsee_sheet_id ?? null,
+    endorsable_resonances: payload.endorsable_resonances ?? [],
+    pose_endorsers: payload.pose_endorsers ?? [],
     my_pose_endorsement: null,
-    entry_endorsers: [],
+    entry_endorsers: payload.entry_endorsers ?? [],
     entry_endorsed_by_me: false,
   };
 }

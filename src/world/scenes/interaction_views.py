@@ -17,7 +17,7 @@ from rest_framework.serializers import BaseSerializer
 
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
-from world.magic.models import CharacterResonance, PoseEndorsement, SceneEntryEndorsement
+from world.magic.models import CharacterResonance, PoseEndorsement
 from world.relationships.reads import resolve_viewer_sheet
 from world.scenes.block_services import flag_blocked_contact_attempt, hidden_persona_ids_for_viewer
 from world.scenes.constants import (
@@ -51,6 +51,7 @@ from world.scenes.interaction_services import (
     mark_very_private,
     personas_for_characters,
     resolve_characters_by_name,
+    scene_entry_endorsements_for,
 )
 from world.scenes.models import (
     Interaction,
@@ -306,19 +307,7 @@ class InteractionViewSet(
         scene_id = self.request.query_params.get("scene")  # noqa: USE_FILTERSET
         entry_map: dict[int, list] = {}
         if scene_id:
-            rows = (
-                SceneEntryEndorsement.objects.filter(scene_id=scene_id)
-                .select_related("endorser_sheet", "resonance")
-                .prefetch_related(
-                    Prefetch(
-                        "endorser_sheet__personas",
-                        queryset=Persona.objects.filter(persona_type=PersonaType.PRIMARY),
-                        to_attr="cached_primary_persona",
-                    )
-                )
-            )
-            for r in rows:
-                entry_map.setdefault(r.endorsee_sheet_id, []).append(r)
+            entry_map = scene_entry_endorsements_for(int(scene_id))
         context["scene_entry_endorsements"] = entry_map
         return context
 

@@ -680,6 +680,7 @@ def _narrate_gm_condition(
         timestamp=interaction.timestamp.isoformat(),
         scene_id=interaction.scene_id,
         receiver_persona_ids=[target_persona.pk] if not visible and target_persona else None,
+        interaction=interaction,
     )
     _send_to_objects([target], payload)
     # The web reads the pushed row; only telnet needs the line as text.

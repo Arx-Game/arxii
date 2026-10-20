@@ -1,5 +1,5 @@
 import type { FeedKind } from '@/game/feedKinds';
-import type { NarratedEvent } from '@/scenes/types';
+import type { Interaction, NarratedEvent } from '@/scenes/types';
 import type { components } from '@/generated/api';
 
 export const GAME_MESSAGE_TYPE = {
@@ -347,6 +347,22 @@ export interface InteractionWsPayload {
    * frames from before the field existed.
    */
   action_links?: components['schemas']['InteractionActionLink'][];
+  /**
+   * The room-wide fields of the REST feed (#4508), typed from the feed row so the two cannot
+   * drift. Each is the value the feed gives a viewer-less reader; the per-viewer ones
+   * (`my_pose_endorsement`, `entry_endorsed_by_me`, `is_favorited`, `is_muted`, `is_unread`,
+   * a reaction's `reacted`) are never on the frame. Absent on frames from before they existed.
+   */
+  visibility?: Interaction['visibility'];
+  pose_kind?: Interaction['pose_kind'];
+  endorsee_sheet_id?: Interaction['endorsee_sheet_id'];
+  endorsable_resonances?: Interaction['endorsable_resonances'];
+  availability?: Interaction['availability'];
+  pose_endorsers?: Interaction['pose_endorsers'];
+  entry_endorsers?: Interaction['entry_endorsers'];
+  reactions?: Interaction['reactions'];
+  reaction_windows?: Interaction['reaction_windows'];
+  dramatic_moment_tags?: Interaction['dramatic_moment_tags'];
 }
 
 /** Redux-owned pose metadata. Full body text is intentionally absent. */

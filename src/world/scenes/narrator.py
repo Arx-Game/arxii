@@ -77,6 +77,7 @@ def narrate_room_outcome(
         timestamp=interaction.timestamp.isoformat(),
         scene_id=interaction.scene_id,
         receiver_persona_ids=None,
+        interaction=interaction,
     )
     _broadcast_to_location(room, payload)
     room.msg_contents(text)
