@@ -32,6 +32,28 @@ describe('ProfileDropdown', () => {
     expect(linkElement).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
+  it('links the Almanach and the World Builder for staff users (#4518)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProfileDropdown account={mockStaffAccount} />);
+
+    await user.click(screen.getByText(mockStaffAccount.display_name));
+
+    expect(screen.getByText('Almanach').closest('a')).toHaveAttribute('href', '/staff/almanach');
+    expect(screen.getByText('World Builder').closest('a')).toHaveAttribute(
+      'href',
+      '/staff/world-builder'
+    );
+  });
+
+  it('does not show the Almanach for non-staff users', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProfileDropdown account={mockAccount} />);
+
+    await user.click(screen.getByText(mockAccount.display_name));
+
+    expect(screen.queryByText('Almanach')).not.toBeInTheDocument();
+  });
+
   it('shows Profile link for all users', async () => {
     const user = userEvent.setup();
     renderWithProviders(<ProfileDropdown account={mockAccount} />);
