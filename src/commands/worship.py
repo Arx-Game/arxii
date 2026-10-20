@@ -177,7 +177,44 @@ def _render_invocation_option(option: InvocationOption, *, detailed: bool) -> li
         lines.extend(
             f"    {ease.label}: -{ease.points}" for ease in option.difficulty.eases if ease.points
         )
+        lines.extend(_render_worn(option))
         lines.append("    Eases add; 15 points is one band; never below Trivial.")
+    return lines
+
+
+def _render_worn(option: InvocationOption) -> list[str]:
+    """The worn pieces carrying a facet the being favors, for ``invoke <being>`` (#4520):
+    what each means, whether it counts and the ease it gives."""
+    worn = option.worn
+    if worn is None or not worn.pieces:
+        return []
+    lines = []
+    for piece in worn.pieces:
+        head = f"    Worn: {piece.item_name} ({piece.facet_name}, favored)"
+        if piece.counted:
+            reasons = ", ".join(
+                f"{signal.kind.replace('_', ' ')} {signal.points}"
+                for signal in piece.meaning.signals
+            )
+            lines.append(
+                f"{head}: {piece.points} points x {piece.ease_per_point} = eased {piece.ease}"
+                f"; {reasons}"
+            )
+        elif piece.points == 0:
+            lines.append(f"{head}: bought; no history beyond holding it, so it counts for nothing")
+        else:
+            lines.append(
+                f"{head}: only the {worn.items_counted_max} pieces with the most meaning count"
+            )
+    if worn.raw_ease > worn.ease:
+        lines.append(
+            f"    What you wear eases at most {worn.ease_cap} (it would ease {worn.raw_ease})."
+        )
+    if worn.earning_percent:
+        lines.append(
+            f"    Wearing these adds {worn.earning_percent}% to your earning rate with "
+            f"{option.being.name}."
+        )
     return lines
 
 

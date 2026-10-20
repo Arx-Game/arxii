@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
+from evennia_extensions.factories import RoomProfileFactory
 from evennia_extensions.models import PlayerData
 from web.admin.tests.test_distinction_builder import (
     emitted_classes,
@@ -15,9 +16,11 @@ from web.admin.tests.test_distinction_builder import (
 )
 from world.contributors.factories import ContentContributorFactory
 from world.distinctions.factories import DistinctionEffectFactory
+from world.items.market.models import CraftingServiceOffer
 from world.magic.factories import FacetFactory
 from world.mechanics.constants import FAVOR_INVOCATION_CATEGORY_NAME
 from world.mechanics.models import ModifierTarget
+from world.scenes.factories import PersonaFactory
 from world.worship.constants import BeingResonanceTier, RiteTier
 from world.worship.factories import (
     BeingFacetFactory,
@@ -43,7 +46,8 @@ class ServiceBuilderTestCase(TestCase):
         cls.unlinked = _superuser("bsunlinked")
         cls.being = WorshippedBeingFactory(name="Ombrin", domains="[PLACEHOLDER domains]")
         cls.favored = BeingResonanceFactory(being=cls.being, tier=BeingResonanceTier.FAVORED)
-        cls.silk = BeingFacetFactory(being=cls.being, facet__name="Silk").facet
+        cls.silk_row = BeingFacetFactory(being=cls.being, facet__name="Silk")
+        cls.silk = cls.silk_row.facet
         cls.wolf = FacetFactory(name="Wolf")
         cls.rite = WorshipRiteFactory(
             being=cls.being, kind=RiteKindFactory(tier=RiteTier.DEVOTIONAL), name="Small rite"
@@ -74,7 +78,19 @@ class ServiceBuilderTestCase(TestCase):
             "resonances-0-being": str(self.being.pk),
             "resonances-0-resonance": str(self.favored.resonance_id),
             "resonances-0-tier": BeingResonanceTier.ASSOCIATED,
-            "facets-favored_facets": [str(self.wolf.pk)],
+            "facets-TOTAL_FORMS": "2",
+            "facets-INITIAL_FORMS": "1",
+            "facets-MIN_NUM_FORMS": "0",
+            "facets-MAX_NUM_FORMS": "1000",
+            "facets-0-id": str(self.silk_row.pk),
+            "facets-0-being": str(self.being.pk),
+            "facets-0-facet": str(self.silk.pk),
+            "facets-0-invocation_ease_points": "3",
+            "facets-0-earning_bonus_percent": "2",
+            "facets-1-being": str(self.being.pk),
+            "facets-1-facet": str(self.wolf.pk),
+            "facets-1-invocation_ease_points": "1",
+            "facets-1-earning_bonus_percent": "1",
             "pledges-TOTAL_FORMS": "2",
             "pledges-INITIAL_FORMS": "1",
             "pledges-MIN_NUM_FORMS": "0",
@@ -112,6 +128,27 @@ class ServiceBuilderPageTests(ServiceBuilderTestCase):
         )
         self.assertIn("Ombrin favor invocation", body)  # the targets exist once it opens
         self.assertIn("Every pledge type has an active closing rite.", body)
+
+    def test_the_favored_facets_table_shows_the_worn_rates_and_the_side_panel_who_supplies_them(
+        self,
+    ) -> None:
+        artist = PersonaFactory(name="Corwen")
+        CraftingServiceOffer.objects.create(
+            crafter_persona=artist,
+            recipe_kind="facet_attach",
+            shop_room=RoomProfileFactory(),
+            fee=10,
+        )
+        body = self.body()
+
+        self.assertIn("Invocation ease points", body)
+        self.assertIn("Earning bonus percent", body)
+        self.assertIn("Who supplies these facets", body)
+        self.assertIn("Corwen", body)
+        # A worn Silk piece with 4 points eases 8 and adds 4%; at the cap of 8 points, 16 and 8%.
+        self.assertIn("A worn Silk piece with 4 points eases 8 and adds 4%", body)
+        self.assertIn("with 8 points (the cap) eases 16 and adds 8%", body)
+        self.assertIn("Cap for all meaning ease on one invocation: 40", body)
 
     def test_opening_creates_the_beings_favor_targets(self) -> None:
         self.body()
@@ -161,8 +198,12 @@ class ServiceBuilderSaveTests(ServiceBuilderTestCase):
         self.favored.refresh_from_db()
         self.assertEqual(self.favored.tier, BeingResonanceTier.ASSOCIATED)
         self.assertEqual(
-            list(BeingFacet.objects.filter(being=self.being).values_list("facet", flat=True)),
-            [self.wolf.pk],
+            sorted(
+                BeingFacet.objects.filter(being=self.being).values_list(
+                    "facet__name", "invocation_ease_points", "earning_bonus_percent"
+                )
+            ),
+            [("Silk", 3, 2), ("Wolf", 1, 1)],
         )
         pledges = list(Pledge.objects.filter(being=self.being).order_by("pk"))
         self.assertEqual(
@@ -170,6 +211,25 @@ class ServiceBuilderSaveTests(ServiceBuilderTestCase):
         )
         self.assertEqual(pledges[0].favor_target, 24)
         self.assertTrue(all(p.written_by == self.writer for p in pledges))
+
+    def test_a_favored_facet_can_be_deleted_from_the_table(self) -> None:
+        self.client.force_login(self.author)
+        data = self.post_data(**{"facets-0-DELETE": "on"})
+        data.pop("facets-1-facet")
+        data["facets-TOTAL_FORMS"] = "1"
+        self.client.post(self.url(), data)
+
+        self.assertFalse(BeingFacet.objects.filter(being=self.being).exists())
+
+    def test_a_negative_worn_rate_is_refused(self) -> None:
+        self.client.force_login(self.author)
+        response = self.client.post(
+            self.url(), self.post_data(**{"facets-0-invocation_ease_points": "-1"})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.silk_row.refresh_from_db()
+        self.assertEqual(self.silk_row.invocation_ease_points, 2)
 
     def test_a_ceremony_rite_cannot_close_a_pledge(self) -> None:
         self.client.force_login(self.author)

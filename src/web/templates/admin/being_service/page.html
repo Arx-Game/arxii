@@ -9,7 +9,7 @@
 A custom page extending `base_site.html` gets base.css, dark_mode.css and
 responsive.css only. `forms.css` (form rows, help, submit-row) is linked by
 `change_form.html`, so this page links it itself (#3667), and `widgets.css` with it
-for the facet picker.
+for the pickers.
 {% endcomment %}
 <link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
 <link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
@@ -99,16 +99,45 @@ for the facet picker.
         </div>
 
         <div class="module" id="facets-module">
-          <h2>Facets {{ being.name }} favors <span class="bs-chip">for sacrifices and offerings</span></h2>
-          <div class="form-row">
-            <div class="flex-container">
-              <label for="{{ facets.favored_facets.id_for_label }}">Favored facets:</label>
-              <div>
-                {{ facets.favored_facets.errors }}{{ facets.favored_facets }}
-                <div class="help">{{ facets.favored_facets.help_text }}</div>
-              </div>
-            </div>
+          <h2>Facets {{ being.name }} favors
+            <span class="bs-chip">for sacrifices, offerings and worn pieces</span></h2>
+          {{ facets.management_form }}
+          {% if facets.non_form_errors %}<p class="errornote">{{ facets.non_form_errors }}</p>{% endif %}
+          <div class="bs-scroll">
+          <table class="tuning-table bs-table">
+            <thead><tr><th>Facet</th><th>Invocation ease points</th><th>Earning bonus percent</th>
+              <th>Delete?</th></tr></thead>
+            <tbody id="facets-body">
+              {% for f in facets.forms %}
+              <tr>
+                {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{{ f.facet.errors }}{{ f.facet }}</td>
+                <td>{{ f.invocation_ease_points.errors }}{{ f.invocation_ease_points }}</td>
+                <td>{{ f.earning_bonus_percent.errors }}{{ f.earning_bonus_percent }}</td>
+                <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
+              </tr>
+              {% if f.non_field_errors %}<tr><td colspan="4">{{ f.non_field_errors }}</td></tr>{% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
           </div>
+          <template id="empty-facet-template">
+            <tr>
+              {% for hidden in facets.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <td>{{ facets.empty_form.facet }}</td>
+              <td>{{ facets.empty_form.invocation_ease_points }}</td>
+              <td>{{ facets.empty_form.earning_bonus_percent }}</td>
+              <td></td>
+            </tr>
+          </template>
+          <div class="bs-addrow">
+            <button type="button" class="button" id="add-facet-btn"
+                    data-prefix="{{ facets.prefix }}" data-target="facets-body"
+                    data-template="empty-facet-template">+ Add another facet</button>
+          </div>
+          <div class="help bs-note">Both are per meaning point of a worn piece carrying the
+            facet. A worn piece with no meaning adds nothing, whatever it cost. An offered item
+            carrying a favored facet counts double, here and in ceremonies.</div>
         </div>
 
         <div class="module" id="modifiers-module">
@@ -223,6 +252,7 @@ for the facet picker.
     });
   }
   wire("add-resonance-btn", "tbody");
+  wire("add-facet-btn", "tbody");
   wire("add-pledge-btn", "div");
 })();
 </script>

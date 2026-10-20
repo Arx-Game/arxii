@@ -14,6 +14,7 @@ from django.db import models
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.contributors.models import CreditedContent
+from world.items.constants import MeaningSignalKind
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractDamageProfile,
@@ -250,6 +251,23 @@ class BeingFacet(SharedMemoryModel):
     )
     facet = models.ForeignKey(
         "arxii.Facet", on_delete=models.PROTECT, related_name="favored_by_beings"
+    )
+    invocation_ease_points = models.PositiveIntegerField(
+        default=2,
+        db_default=2,
+        help_text=(
+            "Difficulty points eased on an invocation of this being, per meaning point of a "
+            "worn piece carrying this facet. A worn piece with no meaning adds nothing, "
+            "whatever it cost (#4520)."
+        ),
+    )
+    earning_bonus_percent = models.PositiveIntegerField(
+        default=1,
+        db_default=1,
+        help_text=(
+            "Percent added to the earning rate with this being, per meaning point of a worn "
+            "piece carrying this facet (#4520)."
+        ),
     )
 
     class Meta:
@@ -874,6 +892,41 @@ class DevotionConfig(SharedMemoryModel):
             "up for nothing."
         ),
     )
+    worn_item_max_points = models.PositiveIntegerField(
+        default=8,
+        db_default=8,
+        help_text="Most meaning points one worn piece brings to an invocation (#4520).",
+    )
+    worn_items_counted = models.PositiveIntegerField(
+        default=3,
+        db_default=3,
+        help_text=(
+            "Worn pieces carrying a facet the being favors that count per invocation, "
+            "highest meaning first (#4520)."
+        ),
+    )
+    resonance_fed_per_point = models.PositiveIntegerField(
+        default=10,
+        db_default=10,
+        help_text=(
+            "Resonance an item's facets fed its holder, in a resonance the being lists, per "
+            "meaning point; doubled for a favored resonance. Counts only alongside another "
+            "signal, so a bought piece worn for months still adds nothing (#4520)."
+        ),
+    )
+    resonance_fed_max_points = models.PositiveIntegerField(
+        default=3,
+        db_default=3,
+        help_text="Most meaning points the resonance fed signal gives one item (#4520).",
+    )
+    invocation_meaning_ease_max = models.PositiveIntegerField(
+        default=40,
+        db_default=40,
+        help_text=(
+            "Cap on the ease all meaning together gives one invocation (worn pieces now; "
+            "keepsakes and a Relic later) (#4520)."
+        ),
+    )
 
     class Meta:
         verbose_name = "Devotion config"
@@ -976,6 +1029,14 @@ class FavorInvocation(SharedMemoryModel):
         related_name="favor_invocation",
         help_text="The scene action whose check this invocation was declared on.",
     )
+    worn_ease = models.PositiveIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "Difficulty points the worn pieces eased this invocation by, after the cap "
+            "(#4520). The pieces behind it are the rows under this one."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
@@ -989,6 +1050,54 @@ class FavorInvocation(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character_sheet} invoked {self.being} ({self.outcome_tier})"
+
+
+class InvocationPiece(SharedMemoryModel):
+    """A worn piece that counted on one invocation, as it was when the check rolled
+    (#4520, #4462 section 6.4).
+
+    A snapshot, like ``OfferingSignal``: the piece can be given up, unworn or edited
+    afterwards, and the GM's invocation detail still reads what it meant that day. The
+    points were computed by ``world.items.services.meaning.item_meaning``, which reads
+    records and never a price.
+    """
+
+    invocation = models.ForeignKey(FavorInvocation, on_delete=models.CASCADE, related_name="pieces")
+    item_name = models.CharField(max_length=200)
+    facet_name = models.CharField(
+        max_length=100, help_text="The favored facet that made the piece count."
+    )
+    points = models.PositiveSmallIntegerField(
+        help_text="Meaning points counted, after the worn-piece cap."
+    )
+    ease_per_point = models.PositiveIntegerField(
+        help_text="The facet's invocation ease per meaning point."
+    )
+
+    class Meta:
+        ordering = ["-points", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.item_name}: {self.points} x {self.ease_per_point}"
+
+    @property
+    def ease(self) -> int:
+        return self.points * self.ease_per_point
+
+
+class InvocationPieceSignal(SharedMemoryModel):
+    """One meaning signal of a worn piece on one invocation (#4520)."""
+
+    piece = models.ForeignKey(InvocationPiece, on_delete=models.CASCADE, related_name="signals")
+    kind = models.CharField(max_length=20, choices=MeaningSignalKind.choices)
+    points = models.PositiveSmallIntegerField()
+    detail = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()} {self.points}"
 
 
 class RiteKind(SharedMemoryModel):

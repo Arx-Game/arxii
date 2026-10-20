@@ -4,6 +4,8 @@ from django.contrib import admin
 from django.db.models import Count
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.urls import reverse
+from django.utils.html import format_html, format_html_join
+from django.utils.safestring import SafeString
 
 from world.admin_utils import OneRowPerFormSet
 from world.scenes.action_constants import DIFFICULTY_VALUES, MIN_DIFFICULTY_POINTS, DifficultyChoice
@@ -126,9 +128,99 @@ class WorshippedBeingAdmin(admin.ModelAdmin):
 
 @admin.register(BeingFacet)
 class BeingFacetAdmin(admin.ModelAdmin):
-    list_display = ("being", "facet")
+    list_display = ("being", "facet", "invocation_ease_points", "earning_bonus_percent")
     list_filter = ("being",)
     search_fields = ("being__name", "facet__name")
+
+
+def worn_pieces_table(invocation: FavorInvocation) -> SafeString:
+    """The GM's invocation detail (#4520): each worn piece that counted, its signals, the
+    favored facet that made it count and the ease it gave, as the piece was when the check
+    rolled. Never a price."""
+    pieces = list(invocation.pieces.prefetch_related("signals"))  # noqa: PREFETCH_STRING
+    if not pieces:
+        return format_html("<p>No worn piece counted on this invocation.</p>")
+    rows = []
+    for piece in pieces:
+        signals = list(piece.signals.all())
+        rows.append(
+            format_html(
+                "<tr><td rowspan='{}'>{}</td><td>Favored facet</td>"
+                "<td>{} (the gate; ease {} per point)</td><td>-</td></tr>",
+                len(signals) + 1,
+                piece.item_name,
+                piece.facet_name,
+                piece.ease_per_point,
+            )
+        )
+        rows.extend(
+            format_html(
+                "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+                signal.get_kind_display(),
+                signal.detail,
+                signal.points,
+            )
+            for signal in signals
+        )
+    total_points = sum(piece.points for piece in pieces)
+    total_ease = sum(piece.ease for piece in pieces)
+    note = format_html(
+        "<p>{} points, eased {} before the cap; eased {} on the roll. Roll: {}.</p>",
+        total_points,
+        total_ease,
+        invocation.worn_ease,
+        invocation.outcome_tier.name,
+    )
+    return format_html(
+        "<table><thead><tr><th>Worn piece</th><th>Signal</th><th>Detail</th><th>Points</th></tr>"
+        "</thead><tbody>{}</tbody></table>{}",
+        format_html_join("", "{}", ((row,) for row in rows)),
+        note,
+    )
+
+
+@admin.register(FavorInvocation)
+class FavorInvocationAdmin(admin.ModelAdmin):
+    """One invocation of a being, read-only (#4333, #4520): the roll and the worn pieces
+    that eased it, each with the signals that made it count."""
+
+    list_display = ("character_sheet", "being", "outcome_tier", "worn_ease", "created_at")
+    list_filter = ("being", "outcome_tier")
+    search_fields = ("being__name", "character_sheet__character__db_key")
+    fields = (
+        "character_sheet",
+        "being",
+        "game_week",
+        "outcome_tier",
+        "bonus",
+        "worn_ease",
+        "player_line",
+        "scene",
+        "created_at",
+        "worn_pieces",
+    )
+    readonly_fields = fields
+    raw_id_fields = ("character_sheet", "scene")
+
+    @admin.display(description="Worn pieces that counted")
+    def worn_pieces(self, obj: FavorInvocation) -> SafeString:
+        return worn_pieces_table(obj)
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        del request
+        return False
+
+    def has_change_permission(
+        self, request: HttpRequest, obj: FavorInvocation | None = None
+    ) -> bool:
+        del request, obj
+        return False
+
+    def has_delete_permission(
+        self, request: HttpRequest, obj: FavorInvocation | None = None
+    ) -> bool:
+        del request, obj
+        return False
 
 
 @admin.register(BeingResonance)
@@ -433,6 +525,23 @@ class DevotionConfigAdmin(admin.ModelAdmin):
                     "shown_window_weeks",
                     "shown_engagements_per_point",
                     "shown_max_points",
+                ),
+            },
+        ),
+        (
+            "Worn pieces and invocations",
+            {
+                "description": (
+                    "What the pieces a character wears do when she calls on a being whose "
+                    "favored facet they carry (set per facet on the Being Service builder). "
+                    "A piece with no meaning adds nothing, whatever it cost."
+                ),
+                "fields": (
+                    "worn_item_max_points",
+                    "worn_items_counted",
+                    "resonance_fed_per_point",
+                    "resonance_fed_max_points",
+                    "invocation_meaning_ease_max",
                 ),
             },
         ),
