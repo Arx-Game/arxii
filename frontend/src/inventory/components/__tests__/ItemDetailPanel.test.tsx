@@ -217,6 +217,24 @@ describe('ItemDetailPanel', () => {
     expect(screen.getByText('a single garnet')).toBeInTheDocument();
   });
 
+  it('shows who made, designed and worked on the piece (#4512)', () => {
+    renderWithQueryClient(
+      <ItemDetailPanel
+        item={makeItem({
+          crafted_provenance:
+            'Made by Corwen for Linnet. Designed by Linnet. Facet work by Corwen.',
+        })}
+        open
+        onOpenChange={vi.fn()}
+        accountId={6}
+        characterId={42}
+      />
+    );
+    expect(screen.getByTestId('item-credits')).toHaveTextContent(
+      'Made by Corwen for Linnet. Designed by Linnet. Facet work by Corwen.'
+    );
+  });
+
   it('renders the stats grid (weight, size, value)', () => {
     render(<ItemDetailPanel item={makeItem()} open={true} onOpenChange={vi.fn()} />);
     expect(screen.getByText(/weight/i)).toBeInTheDocument();
