@@ -1,4 +1,5 @@
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
+import { ApiError } from '@/lib/errors';
 import { fetchInteraction } from '@/scenes/queries';
 import type { Interaction } from '@/scenes/types';
 
@@ -35,8 +36,8 @@ export function sceneFeedQueryKey(args: {
  * Re-fetch one pose through the per-viewer retrieve and write it into every
  * cached feed of its scene. The feed is paginated newest-first
  * (`InteractionCursorPagination` orders `-timestamp`), so a row the cache does
- * not hold yet goes at the front of the first page. A failed fetch (403, 404,
- * network) changes nothing: the viewer simply keeps the row they have.
+ * not hold yet goes at the front of the first page. A 403 or 404 means the
+ * viewer may not see the row, so nothing changes; any other failure is thrown.
  */
 export async function refreshSceneFeedRow(
   queryClient: QueryClient,
@@ -45,8 +46,9 @@ export async function refreshSceneFeedRow(
   let row: Interaction;
   try {
     row = await fetchInteraction(args.interactionId);
-  } catch {
-    return;
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 403 || error.status === 404)) return;
+    throw error;
   }
   queryClient.setQueriesData<InfiniteData<FeedPage>>(
     { queryKey: sceneFeedSceneKey(args.sceneId) },

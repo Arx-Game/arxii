@@ -50,7 +50,6 @@ import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 interface Props {
   sceneId: string;
   /** Character segment for the live `/game` query; omitted on legacy scene pages. */
-  viewerKey?: string;
 }
 
 interface PendingWarning {

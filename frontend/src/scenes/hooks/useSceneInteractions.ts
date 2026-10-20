@@ -124,8 +124,8 @@ export function useSceneInteractions(sceneId: string | undefined, viewerKey?: st
       .filter((ws) => !restIds.has(ws.id))
       .map(wsPayloadToInteraction);
 
-    // REST data is sorted by cursor pagination; WS data arrives chronologically (always newer).
-    // No sort needed — just append WS interactions after REST. (Fix #3)
+    // REST pages are newest-first and WS rows arrive chronologically; this order is not
+    // display order. Display order comes from the reader's timestamp sort (game/feedRows.ts).
     return [...restInteractions, ...newFromWs];
   }, [interactionsQuery.data?.pages, wsInteractions]);
 

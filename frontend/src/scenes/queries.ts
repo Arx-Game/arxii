@@ -108,7 +108,7 @@ export async function fetchInteractions(sceneId: string, cursor?: string) {
 /** Fetch a single interaction's full detail — used to reveal a sealed reel moment (#1241). */
 export async function fetchInteraction(interactionId: number): Promise<Interaction> {
   const res = await apiFetch(`/api/interactions/${interactionId}/`);
-  if (!res.ok) throw new Error('Failed to load interaction');
+  if (!res.ok) await throwApiError(res, 'Failed to load interaction');
   return res.json();
 }
 

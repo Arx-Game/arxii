@@ -25,7 +25,6 @@ import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 interface Props {
   sceneId: string;
-  viewerKey?: string;
 }
 
 /**

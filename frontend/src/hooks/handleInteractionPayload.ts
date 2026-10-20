@@ -33,10 +33,10 @@ export function handleInteractionPayload(
     dispatch(addSceneInteraction({ character, interaction: payload }));
     // An entrance carries the endorsers of the whole entry only on a re-read (#4508).
     if (payload.entry_endorsers?.length) {
-      void refreshSceneFeedRow(queryClient, {
+      refreshSceneFeedRow(queryClient, {
         interactionId: payload.id,
         sceneId: payload.scene_id,
-      });
+      }).catch((error) => console.error('Failed to refresh a live entrance', error));
     }
   }
   maybeToastWhisperAttention(character, payload, dispatch, navigate);

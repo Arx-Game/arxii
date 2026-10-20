@@ -78,6 +78,8 @@ import {
 } from './useGameSocket';
 import { queryClient } from '@/queryClient';
 import { draftStorageKey, type Draft } from '@/game/useDraftStore';
+import { QueryClient } from '@tanstack/react-query';
+import { sceneFeedQueryKey } from '@/scenes/sceneFeedCache';
 import { recordedUnknownFrames, __resetUnknownFramesForTests } from './unknownFrames';
 
 type Listener = (event: unknown) => void;
@@ -1230,5 +1232,90 @@ describe('useGameSocket control frames (#3933)', () => {
     });
 
     expect(dispatchedTypes()).toContain('game/addSessionDiagnostic');
+  });
+});
+
+describe('useGameSocket state resync (#4508)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('marks the real scene feed key stale for the resynced scene only', async () => {
+    const real = new QueryClient();
+    vi.mocked(queryClient.invalidateQueries).mockImplementation((...args) =>
+      real.invalidateQueries(...args)
+    );
+    const character = 'Reconcile-One';
+    const sceneKey = sceneFeedQueryKey({ sceneId: 7, accountId: 1, viewerKey: character });
+    const otherKey = sceneFeedQueryKey({ sceneId: 8, accountId: 1, viewerKey: character });
+
+    const { result } = renderHook(() => useGameSocket());
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const socket = MockWebSocket.instances[0];
+    act(() => {
+      socket.dispatch('open');
+    });
+    dispatchReadiness(socket, character);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    socket.readyState = 1;
+    // Seeded after readiness: reaching ready already marks every feed stale.
+    real.setQueryData(sceneKey, { pages: [], pageParams: [] });
+    real.setQueryData(otherKey, { pages: [], pageParams: [] });
+
+    let requestId: string | null = null;
+    act(() => {
+      requestId = result.current.requestRoomState(character);
+    });
+    expect(requestId).not.toBeNull();
+    socket.dispatch('message', {
+      data: JSON.stringify([
+        'room_state',
+        [],
+        {
+          room: { dbref: '#1', name: 'The Room' },
+          characters: [],
+          objects: [],
+          exits: [],
+          resync_request_id: requestId,
+          state_epoch: 'e1',
+          state_sequence: 5,
+        },
+      ]),
+    });
+    await act(async () => {
+      socket.dispatch('message', {
+        data: JSON.stringify([
+          'state_resync',
+          [],
+          {
+            client_request_id: requestId,
+            state_epoch: 'e1',
+            state_sequence: 5,
+            room_id: 1,
+            scene_id: 7,
+          },
+        ]),
+      });
+      await Promise.resolve();
+    });
+
+    expect(real.getQueryState(sceneKey)?.isInvalidated).toBe(true);
+    expect(real.getQueryState(otherKey)?.isInvalidated).toBe(false);
   });
 });

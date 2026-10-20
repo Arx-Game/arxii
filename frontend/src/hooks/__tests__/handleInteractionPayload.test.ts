@@ -126,6 +126,7 @@ describe('handleInteractionPayload', () => {
     getQueryDataMock.mockReturnValue(makeRosterEntries());
     getQueriesDataMock.mockReturnValue([]);
     invalidateMock.mockResolvedValue(undefined);
+    refreshRowMock.mockResolvedValue(undefined);
   });
 
   it('always dispatches addSceneInteraction regardless of toast outcome', () => {

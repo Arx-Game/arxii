@@ -6,6 +6,7 @@ const { fetchInteractionMock } = vi.hoisted(() => ({ fetchInteractionMock: vi.fn
 vi.mock('@/scenes/queries', () => ({ fetchInteraction: fetchInteractionMock }));
 
 import { refreshSceneFeedRow, sceneFeedQueryKey, sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
+import { ApiError } from '@/lib/errors';
 import type { Interaction } from '@/scenes/types';
 
 type Pages = InfiniteData<{ results: Interaction[]; next?: string }>;
@@ -62,13 +63,27 @@ describe('refreshSceneFeedRow', () => {
     expect(data.pages[1].results.map((r) => r.id)).toEqual([4]);
   });
 
-  it('ignores a failed fetch such as a 404', async () => {
+  it.each([403, 404])('ignores a %i and leaves the cache unchanged', async (status) => {
     seed();
     const before = client.getQueryData<Pages>(key);
-    fetchInteractionMock.mockRejectedValue(new Error('Failed to load interaction'));
+    fetchInteractionMock.mockRejectedValue(new ApiError('nope', { status }));
     await expect(
       refreshSceneFeedRow(client, { interactionId: 5, sceneId: 7 })
     ).resolves.toBeUndefined();
+    expect(client.getQueryData<Pages>(key)).toBe(before);
+  });
+
+  it('surfaces a 500 and a network failure', async () => {
+    seed();
+    const before = client.getQueryData<Pages>(key);
+    fetchInteractionMock.mockRejectedValueOnce(new ApiError('boom', { status: 500 }));
+    await expect(refreshSceneFeedRow(client, { interactionId: 5, sceneId: 7 })).rejects.toThrow(
+      'boom'
+    );
+    fetchInteractionMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(refreshSceneFeedRow(client, { interactionId: 5, sceneId: 7 })).rejects.toThrow(
+      'Failed to fetch'
+    );
     expect(client.getQueryData<Pages>(key)).toBe(before);
   });
 });
