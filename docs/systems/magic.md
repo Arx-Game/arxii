@@ -2123,6 +2123,17 @@ See `docs/systems/INDEX.md`'s "NPC Services" entry (and
 `world/npc_services/AGENT_GLOSSARY.md`) for the full TRAIN-offer flow (obligation gate,
 tradition-signature members-only availability, `NPCRole.teaches_tradition`).
 
+**A short purse is refused by cause, before anything is charged (#4523):** when `gold_cost > 0`,
+`charge_and_learn` first calls `enforce_can_afford_training(sheet, gold_cost)`, which locks the
+learner's `CharacterPurse` row and raises `TrainingFundsInsufficient` (a `MagicError`;
+`user_message` "This training costs 2g 5s and you have 9s.", built with `format_coppers`) when the
+balance is short. `run_train_offer` returns that message through its existing `except MagicError`
+branch with AP, coin, the Hare and `TechniqueProgress` untouched, so its `except ValidationError`
+branch ("Someone else called in that Hare before you finished.") now means only a lost Hare race.
+The purse lock is held until `transfer` takes the same row, so a concurrent debit cannot slip
+between the check and the charge. `accept_technique_offer` passes no coin (`gold_cost=0`), so the
+check returns at once for it. Journey: `integration_tests/test_academy_training_journeys.py`.
+
 **Unbound magic-learning AP surcharge (#2442):** `charge_and_learn` applies one more scale
 after the has-gift/major-gift multiplier: `ap_cost = ceil(ap_cost × (100 + surcharge%) / 100)`,
 where `surcharge%` is the learner's live `magic_learning_ap_cost` modifier total
