@@ -6,7 +6,7 @@ idiomatic_version_file_enable_tools = ["python"]
 python = "3.13.0"
 node = "24.4.1"
 pnpm = "latest"
-uv = "latest"
+uv = "0.13.4"
 just = "latest"
 
 [env]
