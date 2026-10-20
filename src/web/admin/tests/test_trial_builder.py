@@ -188,7 +188,11 @@ class SavingATrialTests(TrialBuilderCase):
         self.assertEqual({row.written_by for row in rows}, {self.writer})
 
     def test_a_tier_left_empty_keeps_no_route(self) -> None:
-        self.post(self.valid_post())
+        data = self.valid_post()
+        # The page does not draw a reward control below Success, so a browser sends none.
+        for key in (self.tier_key("Critical Failure", "reward_kind"),):
+            data.pop(key)
+        self.post(data)
         self.assertNotIn("Critical Failure", self.routes())
 
     def test_reopening_shows_what_was_saved_and_a_second_save_replaces_the_effects(self) -> None:

@@ -6,6 +6,10 @@ shell, the header chips, the inline control rows and the rail. Every colour is a
 variable, so light and dark follow admin's own selectors.
 {% endcomment %}
 <style>
+  #trial-builder-root { --tb-ok: #2f7a3f; }
+  @media (prefers-color-scheme: dark) { #trial-builder-root { --tb-ok: #8fb89a; } }
+  html[data-theme="light"] #trial-builder-root { --tb-ok: #2f7a3f; }
+  html[data-theme="dark"] #trial-builder-root { --tb-ok: #8fb89a; }
   #trial-builder-root .tb-head {
     display: flex; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; align-items: baseline;
   }
@@ -26,12 +30,14 @@ variable, so light and dark follow admin's own selectors.
     text-transform: none; letter-spacing: 0.02em;
   }
   #trial-builder-root .tb-field { flex: 1; min-width: 0; }
-  #trial-builder-root .tb-field .vLargeTextField, #trial-builder-root .tb-field .vTextField { width: 100%; }
+  #trial-builder-root .tb-field .vLargeTextField, #trial-builder-root .tb-field .vTextField {
+    width: 100%; box-sizing: border-box;
+  }
   #trial-builder-root .tb-inline { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; align-items: center; }
   #trial-builder-root .tb-inline label { width: auto; padding: 0; min-width: 0; float: none; }
   #trial-builder-root .tb-inline .vIntegerField { width: 5rem; }
   #trial-builder-root .tb-reason { flex: 1; min-width: 12rem; }
-  #trial-builder-root .tb-reason .vTextField { width: 100%; }
+  #trial-builder-root .tb-reason .vTextField { width: 100%; box-sizing: border-box; }
   #trial-builder-root .tb-entry { min-width: 14rem; }
   #trial-builder-root .tb-note { color: var(--body-quiet-color); font-size: 0.75rem; padding-top: 0.25rem; }
   #trial-builder-root .tb-tier-errors { margin: 0; padding: 0.4rem 0.8rem; }
@@ -43,7 +49,7 @@ variable, so light and dark follow admin's own selectors.
   #trial-builder-root .tb-list li { padding: 0.2rem 0; }
   #trial-builder-root .tb-block { color: var(--error-fg); font-weight: bold; }
   #trial-builder-root .tb-info { color: var(--body-quiet-color); }
-  #trial-builder-root .tb-ok { color: var(--message-success-bg, var(--body-fg)); }
+  #trial-builder-root .tb-ok { color: var(--tb-ok); }
   #trial-builder-root .tb-none { color: var(--body-quiet-color); }
   #trial-builder-root .tb-summary { width: 100%; font-size: 0.75rem; }
   #trial-builder-root .tb-summary td { padding: 0.25rem 0.6rem; vertical-align: top; }

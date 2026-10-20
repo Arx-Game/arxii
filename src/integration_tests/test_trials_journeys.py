@@ -10,8 +10,11 @@ Names are invented. Staff-authored copy is left as bracketed slots.
 
 from __future__ import annotations
 
+from django.urls import reverse
+from evennia.accounts.models import AccountDB
 from evennia.utils.ansi import strip_ansi
 
+from evennia_extensions.models import PlayerData
 from integration_tests.harness import JourneyCase
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import (
@@ -25,6 +28,7 @@ from world.codex.factories import CodexEntryFactory
 from world.codex.models import CharacterCodexKnowledge
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
+from world.contributors.factories import ContentContributorFactory
 from world.magic.constants import AcquisitionOrigin, GiftKind, PendingAlterationStatus, TargetKind
 from world.magic.factories import (
     CharacterGiftFactory,
@@ -313,3 +317,74 @@ class ATrialInTheCrypt(JourneyCase):
         self.assertTrue(
             ConditionInstance.objects.filter(target=self.ysolde, condition=self.fever).exists()
         )
+
+
+class ATrialBuiltOnThePage(JourneyCase):
+    """Staff build the crypt trial on the Trial builder page; a player then runs it (#4513)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.ysolde = self.make_player("Ysolde", room=self.make_room("The Crypt Stair"))
+        self.sheet = self.ysolde.sheet_data
+        CharacterResonanceFactory(character_sheet=self.sheet, resonance=ResonanceFactory())
+        self.gift = GiftFactory(name="Sight of Taint", kind=GiftKind.MINOR)
+        CharacterGiftFactory(character=self.sheet, gift=self.gift)
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=10,
+        )
+        self.technique = TechniqueFactory(name="Read the Cup", gift=self.gift)
+        self.entry = CodexEntryFactory(name="What her sight truly sees")
+        CodexKnowledgeRequirementFactory(
+            codex_entry=self.entry, path=None, technique=self.technique
+        )
+        self.success = CheckOutcomeFactory(name="Win", success_level=1)
+        self.template = MissionTemplateFactory(name="The poisoner's crypt", risk_tier=1)
+        node = MissionNodeFactory(template=self.template, key="jars", is_entry=True)
+        self.option = MissionOptionFactory(
+            node=node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=CheckTypeFactory(name="Name the poisons"),
+        )
+        staff = AccountDB.objects.create_superuser("crypt_staff", "cs@example.com", "pw-123456")
+        PlayerData.objects.create(account=staff, contributor=ContentContributorFactory())
+        self.client.force_login(staff)
+        self.builder_url = reverse("admin_trial_builder", args=[self.option.pk])
+
+    def test_a_trial_saved_on_the_page_runs_through_the_mission_command(self) -> None:
+        tier = self.success.pk
+        response = self.client.post(
+            self.builder_url,
+            {
+                "trial-codex_entry": str(self.entry.pk),
+                "trial-technique": str(self.technique.pk),
+                "trial-meter_size": "40",
+                f"tier{tier}-label": "[crypt jars, Win]",
+                f"tier{tier}-outcome_text": "[staff-authored Win text]",
+                f"tier{tier}-codex_mode": "known",
+                f"tier{tier}-training_points": "15",
+                f"tier{tier}-cost_kind": "scar",
+                f"tier{tier}-cost_severity": "2",
+                f"tier{tier}-reward_kind": "none",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        instance = staff_assign_mission(self.template, self.ysolde)
+        with force_check_outcome(self.success):
+            told = strip_ansi(self.telnet(self.ysolde, f"mission resolve {instance.pk} 1"))
+
+        self.assertIn("[staff-authored Win text]", told)
+        known = CharacterCodexKnowledge.objects.get(
+            roster_entry=self.sheet.roster_entry, entry=self.entry
+        )
+        self.assertEqual(known.status, CodexKnowledgeStatus.KNOWN)
+        meter = TechniqueProgress.objects.get(character_sheet=self.sheet, technique=self.technique)
+        self.assertEqual((meter.points_accumulated, meter.total_required), (15, 40))
+        (scar,) = PendingAlteration.objects.filter(character=self.sheet)
+        self.assertEqual((scar.tier, scar.is_cosmetic), (2, False))

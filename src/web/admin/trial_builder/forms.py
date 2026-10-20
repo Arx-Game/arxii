@@ -220,12 +220,12 @@ class TierForm(forms.Form):
         return not any(
             (
                 data.get("next_node"),
-                data.get("outcome_text", "").strip(),
-                data.get("codex_mode", CODEX_NONE) != CODEX_NONE,
+                (data.get("outcome_text") or "").strip(),
+                (data.get("codex_mode") or CODEX_NONE) != CODEX_NONE,
                 data.get("training_points"),
                 data.get("grant_outright"),
-                data.get("cost_kind", COST_NONE) != COST_NONE,
-                data.get("reward_kind", REWARD_NONE) != REWARD_NONE,
+                (data.get("cost_kind") or COST_NONE) != COST_NONE,
+                (data.get("reward_kind") or REWARD_NONE) != REWARD_NONE,
                 data.get("deliberately_free"),
             )
         )
