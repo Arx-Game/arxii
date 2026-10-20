@@ -88,7 +88,7 @@ export function DedicateToField({
       />
       {isFetching && <p className="text-xs text-muted-foreground">Searching...</p>}
       {choices.length > 0 && (
-        <ul className="rounded-md border text-sm" role="listbox" aria-label="Matching personas">
+        <ul className="rounded-md border text-sm" aria-label="Matching personas">
           {choices.map((persona) => (
             <li key={persona.id}>
               <button

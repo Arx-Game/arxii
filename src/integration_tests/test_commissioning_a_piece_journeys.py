@@ -294,3 +294,54 @@ class WorkingAnHeirloomIn(JourneyCase):
         looked = self.telnet(self.abel, "look Riding Boots")
         self.assertIn("Made and designed by Bracken for Abel.", looked)
         self.assertIn("Worked from worn saddle, which is gone.", looked)
+
+    def test_the_web_form_makes_boots_for_him_and_names_a_bad_choice(self) -> None:
+        saddle = ItemInstanceFactory(
+            template=ItemTemplateFactory(name="worn saddle"),
+            holder_character_sheet=self.bracken.sheet_data,
+            held_since=timezone.now() - timedelta(days=2200),
+        )
+        _give_object(saddle, self.bracken)
+        template = ItemTemplate.objects.get(name="Craftable Dagger")
+        client = self.api(self.bracken.db_account)
+        url = "/api/items/crafting/create/"
+
+        bad = client.post(
+            url,
+            {"template": template.pk, "made_for": 999999, "crafter_sheet_id": self.bracken.pk},
+            format="json",
+        )
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn("made_for", bad.json())
+        not_held = ItemInstanceFactory(holder_character_sheet=self.abel.sheet_data)
+        refused = client.post(
+            url,
+            {
+                "template": template.pk,
+                "worked_from": not_held.pk,
+                "crafter_sheet_id": self.bracken.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn("worked_from", refused.json())
+
+        with force_check_outcome(self.ok):
+            made = client.post(
+                url,
+                {
+                    "template": template.pk,
+                    "custom_name": "Riding Boots",
+                    "made_for": self.abel.sheet_data.primary_persona.pk,
+                    "worked_from": saddle.pk,
+                    "crafter_sheet_id": self.bracken.pk,
+                },
+                format="json",
+            )
+
+        self.assertEqual(made.status_code, 201, made.content)
+        boots = ItemInstance.objects.get(pk=made.json()["item_instance_id"])
+        self.assertEqual(boots.dedicated_to_persona, self.abel.sheet_data.primary_persona)
+        self.assertEqual(ItemLineage.objects.get(item=boots).source_name, "worn saddle")
+        saddle.refresh_from_db()
+        self.assertIsNotNone(saddle.destroyed_at)

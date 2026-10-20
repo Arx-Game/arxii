@@ -365,13 +365,13 @@ class ItemLineageInline(admin.TabularInline):
             return "(used up)"
         return str(source)
 
-    def has_add_permission(self, request: HttpRequest, obj: ItemInstance | None = None) -> bool:
+    def _read_only(self, request: HttpRequest, obj: ItemInstance | None = None) -> bool:
+        """Nobody adds or edits a lineage row by hand: it is written once, at making."""
         del request, obj
         return False
 
-    def has_change_permission(self, request: HttpRequest, obj: ItemInstance | None = None) -> bool:
-        del request, obj
-        return False
+    has_add_permission = _read_only
+    has_change_permission = _read_only
 
 
 @admin.register(ItemInstance)

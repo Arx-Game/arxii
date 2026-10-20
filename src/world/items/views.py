@@ -1738,6 +1738,29 @@ class GemCutViewSet(viewsets.ViewSet):
         return Response(GemCutQuoteSerializer(quote).data)
 
 
+def _resolve_commission_loop_inputs(
+    made_for_pk: object, worked_from_pk: object, actor_sheet: object
+) -> tuple[object | None, ItemInstance | None]:
+    """The persona a piece is made for and the held item worked into it (#4512), or a 400."""
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    dedicate_to = None
+    if made_for_pk:
+        dedicate_to = Persona.objects.filter(pk=made_for_pk).first()
+        if dedicate_to is None:
+            raise serializers.ValidationError({"made_for": "No such character."})
+    worked_from = None
+    if worked_from_pk:
+        worked_from = ItemInstance.objects.filter(
+            pk=worked_from_pk, holder_character_sheet=actor_sheet, destroyed_at__isnull=True
+        ).first()
+        if worked_from is None:
+            raise serializers.ValidationError(
+                {"worked_from": "You can only work in an item you are holding."}
+            )
+    return dedicate_to, worked_from
+
+
 @extend_schema(tags=["items"])
 class ItemCreateCraftViewSet(viewsets.ViewSet):
     """ViewSet for item-creation crafting: browse recipes, quote, and mint (#2211/#2240).
@@ -1809,7 +1832,6 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
         from actions.definitions.crafting import CreateItemAction  # noqa: PLC0415
         from world.items.models import Style  # noqa: PLC0415
         from world.mechanics.models import ModifierTarget  # noqa: PLC0415
-        from world.scenes.models import Persona  # noqa: PLC0415
 
         template_pk = request.data.get("template")
         custom_name = request.data.get("custom_name", "")
@@ -1836,20 +1858,9 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
         if len(styles) != len(set(style_pks)):
             raise serializers.ValidationError({"styles": "One or more styles are unknown."})
         actor_sheet = _resolve_actor_sheet(request, body_key="crafter_sheet_id")
-        dedicate_to = None
-        if made_for_pk:
-            dedicate_to = Persona.objects.filter(pk=made_for_pk).first()
-            if dedicate_to is None:
-                raise serializers.ValidationError({"made_for": "No such character."})
-        worked_from = None
-        if worked_from_pk:
-            worked_from = ItemInstance.objects.filter(
-                pk=worked_from_pk, holder_character_sheet=actor_sheet, destroyed_at__isnull=True
-            ).first()
-            if worked_from is None:
-                raise serializers.ValidationError(
-                    {"worked_from": "You can only work in an item you are holding."}
-                )
+        dedicate_to, worked_from = _resolve_commission_loop_inputs(
+            made_for_pk, worked_from_pk, actor_sheet
+        )
         action_result = CreateItemAction().run(
             actor=actor_sheet.character,
             output_template=template,
