@@ -158,6 +158,7 @@ class ArxCommand(Command):
         *,
         location: object | None = None,
         not_found_msg: str | None = None,
+        global_search: bool = False,
     ) -> Any:
         """Search for ``name`` near the caller; raise ``CommandError`` if not found.
 
@@ -167,11 +168,16 @@ class ArxCommand(Command):
                 (default: caller's room).
             not_found_msg: Override the default
                 ``"Could not find '<name>'."`` message.
+            global_search: Search the whole game, not just near the caller (the
+                verbs that name someone who need not be present).
         """
         # Quiet: Evennia's own search would tell the player "Could not find ..." and
         # then the raised error would say it again (#3657 tranche 8). One match is
         # the target; none, and several, are this command's own error.
-        matches = self.caller.search(name, location=location, quiet=True)
+        # The flag rides along only when asked for, so every local lookup's call shape
+        # (which the kept unit tests pin) is unchanged.
+        reach = {"global_search": True} if global_search else {}
+        matches = self.caller.search(name, location=location, quiet=True, **reach)
         if len(matches) == 1:
             return matches[0]
         if not matches:

@@ -149,7 +149,13 @@ They do not use the command system, dispatchers, or handlers.
   take.", "You craft Fang (Common quality).", "You strip Glow from plain sword."), since
   data alone left telnet silent; and `tasking.py` names an agent by `persona.name`, never
   `str(persona)` ("Wren (Established)"). The whole town group is typed in
-  `integration_tests/test_working_the_town_journeys.py`;
+  `integration_tests/test_working_the_town_journeys.py`. Tranche 15's lines in this layer:
+  `positioning.py`'s `SetTheStageAction` names what it staged ("You set the stage with Lone
+  Dais: Center."; it had answered with no message), and `distinctions.py`'s
+  `GMAwardDistinctionAction` searches quietly and answers an absent name itself ("Could not
+  find 'Nobody'.", as `GrantItemAction` does) and refuses a distinction already at its
+  highest rank before the sheet-update request charges XP for a no-op; both are typed in
+  `integration_tests/test_granting_and_staging_journeys.py`;
   `relationships.py` (#3957, was #1485) — the tie verbs, all REGISTRY backend, wrapping
   `world.relationships.services`: `DeclareLabelAction` (key `"declare_label"`, defaults
   Private awareness), `ShiftLabelAction` (`"shift_label"`), `EndLabelAction` (`"end_label"`),

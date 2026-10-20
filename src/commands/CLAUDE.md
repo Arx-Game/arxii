@@ -33,7 +33,9 @@ SCENE_ADAPTIVE backend.
     mistyped name came back twice, and the web saw the untyped one not at all); several
     matches raise Evennia's numbered list as the command's own error, numbered within each
     display name the way Evennia's `2-lantern` narrowing reads it. A test that mocks
-    `caller.search` returns a list, as the quiet search does.
+    `caller.search` returns a list, as the quiet search does. `global_search=True` (#3657
+    tranche 15) searches the whole game for the verbs that name someone who need not be
+    present (`domain appoint`).
   - `func()`: Calls `resolve_action_args()` → `action.run()` → sends result to caller
   - **Switches are opt-in: a command that reads `self.switches` sets
     `takes_switches = True`.** `parse()` then splits them off the arguments through
@@ -359,7 +361,7 @@ actions, backends, and service functions.
   `personal_favor`/`personal-favor` both resolve. Both `sendaway` and `retain` are gated by the
   same `world.npc_services.allegiance.actor_holds_sway_present` predicate the persona menu's
   "Send away"/"Take into service" items and the won-over digest row's flags also consult.
-- **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator.
+- **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator. The menu, an answer by name and by number with the conflict gauge read, and every refusal are typed in `integration_tests/test_granting_and_staging_journeys.py` (`AnsweringAWrong`, #3657 tranche 15; the hand-built `tests/test_grievance_command.py` is gone).
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
   `PerformRitualAction` and multi-participant session lifecycle:
   - `ritual <name> [k=v ...]` — single-actor ritual performance (SERVICE rituals execute
@@ -650,7 +652,12 @@ actions, backends, and service functions.
   two-stage group decision. `mission invite <id> <name>` invites a co-located character to join
   (#887); `mission accept <invite-id>` / `mission decline <invite-id>` respond to a pending
   invitation (the invitee is not yet a participant — thin over `world.missions.services.run`'s
-  `invite_to_mission` / `respond_to_mission_invite`). `mission report <id> <style>` closes out a RESOLVED run at a
+  `invite_to_mission` / `respond_to_mission_invite`; the invitee's name resolves through
+  `search_or_raise`, #3657 tranche 15: the loud search had said Evennia's bare "Could not
+  find" and the command then said nothing). The invitation, the acceptance into the party
+  and the refusal are typed in `integration_tests/test_granting_and_staging_journeys.py`
+  (`InvitingToAMission`; the hand-built `tests/test_mission_invite_command.py`, whose search
+  was a `MagicMock`, is gone). `mission report <id> <style>` closes out a RESOLVED run at a
   co-located report-to **Functionary** (#1766), choosing a payout *style*
   (`humble`/`accurate`/`embellished`, #1753) — thin over `world.missions.services.report`.
   Options are chosen by the small ordinal shown in `mission beat`
@@ -805,12 +812,20 @@ actions, backends, and service functions.
   parses the raw text into `target_name`/`distinction_slug`/optional `rank` kwargs and delegates
   to `GMAwardDistinctionAction` (key `gm_award_distinction`, REGISTRY backend,
   `actions/definitions/distinctions.py`) via `action.run()`. The Action resolves the target by
-  name (`actor.search(..., global_search=True)`), looks up the catalog `Distinction` by slug
-  (case-insensitive, active only — never freehand), validates an explicit rank against
-  `max_rank` (reject, not clamp), and calls `world.distinctions.services.grant_distinction`
-  (origin `GM_AWARD`) — the shared acquisition seam; re-awarding a held distinction ranks it up.
-  Gated on `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` (staff bypass preserved). Mirrors
-  `grant_item.py` exactly. No business logic in the command.
+  name (`actor.search(..., global_search=True, quiet=True)`; #3657 tranche 15: an absent name
+  and several matches are the action's own typed lines, as `grant_item`'s are), looks up the
+  catalog `Distinction` by slug (case-insensitive, active only — never freehand), validates an
+  explicit rank against `max_rank` (reject, not clamp; the sheet-update request then advances
+  one rank whatever was typed, recorded open on #3657), refuses a distinction already at its
+  highest rank before any XP moves (tranche 15: the no-op rank-up had charged XP and reported
+  an award), and calls `world.distinctions.services.grant_distinction` (origin `GM_AWARD`) —
+  the shared acquisition seam; re-awarding a held distinction ranks it up. Gated on
+  `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` (staff bypass preserved). Mirrors
+  `grant_item.py` exactly. No business logic in the command. The award, the rank-up, the
+  ceiling, the curse laid free and lifted for XP, and every refusal are typed with real XP in
+  `integration_tests/test_granting_and_staging_journeys.py` (`AwardingADistinction`; the
+  hand-built `tests/test_grant_distinction.py`, whose caller's search was a `MagicMock`, is
+  gone).
 - **`setstage.py`**: `CmdSetStage` (`setstage`, `cmd:all()`, #1498/#2117) — telnet face of
   `SetTheStageAction` (key `set_the_stage`, REGISTRY backend). A STARTING-tier-or-higher GM (or
   staff) caller instantiates a `PositionBlueprint` into their current room: `setstage` shows this
@@ -818,7 +833,11 @@ actions, backends, and service functions.
   <name|id>` instantiates one, `setstage <name|id> replace` replaces the room's existing position
   grid. Thin `ArxCommand` over `action.run()` (same seam as the web quick-action
   `_set_the_stage_actions`); gated by `MinimumGMLevelPrerequisite(GMLevel.STARTING)` (staff bypass
-  preserved). No business logic in the command.
+  preserved). No business logic in the command. The action now names what it staged ("You set
+  the stage with Lone Dais: Center."; #3657 tranche 15: it had answered with no message, so
+  telnet said nothing). The hub, the list, a staging by name and id, a restage, the refusals
+  and the gates are typed in `integration_tests/test_granting_and_staging_journeys.py`
+  (`SettingTheStage`; the hand-built `tests/test_setstage_command.py` is gone).
 - **`setsituation.py`**: `CmdSetSituation` (`setsituation`, `cmd:all()`, #1895/#2117/#2127) — telnet
   face of `SetSituationAction` (key `set_situation`, REGISTRY backend). A JUNIOR-tier-or-higher GM
   (or staff) caller instantiates an authored `SituationTemplate` into their current room via
@@ -988,7 +1007,17 @@ actions, backends, and service functions.
   caller's administrable domains (omit it when they run exactly one).
   `_parse_kwargs` supports free-text values (a `key=` value runs to the next
   `key=` token). No business logic in the command; authorization is re-checked in
-  the Action layer.
+  the Action layer. The appointee resolves through `search_or_raise(global_search=True)` and
+  `domain offices` names the house by `.name` (#3657 tranche 15: the loud search had said
+  Evennia's bare line first, and `str(org)` reads "House Westrock (Society 2)"). Every
+  subverb, as the leader, the steward and an outsider, is typed in
+  `integration_tests/test_granting_and_staging_journeys.py` (`RunningADomain`; the hand-built
+  `tests/test_domain_command.py` is gone). Its usage line keeps spaces around its separators
+  ("[list | offices | holding | ...]"): a bare `|h`, `|i` or `|s` is an Evennia colour code,
+  and the old "[list|offices|holding|improve|...|stature]" reached telnet as
+  "[list|officesoldingmprove|appoint|vacate|transfertature]". `domain holding` passes no
+  site, so a LAND or BUILDING holding kind cannot be placed from telnet (recorded open on
+  #3657).
 - **`pacts.py`**: `CmdPact` (`pact`, #2999) — the org-diplomacy + betrothal namespace.
   One `ArxCommand` routes a leading subverb (`list` / `propose <my-org> to <their-org>
   kind=<pact kind>` / `ratify <id>` / `dissolve <id>` / `betroth a=<kin> b=<kin>
