@@ -208,7 +208,7 @@ class CmdPersona(DispatchCommand):
             Persona.objects.filter(
                 character_sheet_id=sheet.pk,
                 name__iexact=self._name,
-            )
+            ).order_by("pk")
         )
         if not matches:
             available = ", ".join(
