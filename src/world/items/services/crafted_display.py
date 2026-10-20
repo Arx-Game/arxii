@@ -125,7 +125,13 @@ def _gone_sentence(instance: ItemInstance) -> str:
     """Why a piece that is no longer in play is gone, from the note on its last event: the
     record of who made and designed it outlives it (#4512)."""
     event = instance.ownership_events.order_by("-created_at", "-pk").first()
-    note = event.notes.strip().rstrip(".") if event is not None and event.notes else ""
+    # A give-up note reads "Given up to <being>: <reason>"; examine names the place, not the
+    # machine reason after the colon.
+    note = (
+        event.notes.partition(":")[0].strip().rstrip(".")
+        if event is not None and event.notes
+        else ""
+    )
     return f"Gone: {note}." if note else "It is gone."
 
 

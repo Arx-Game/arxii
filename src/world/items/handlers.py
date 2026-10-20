@@ -232,9 +232,9 @@ class CharacterCarriedItemsHandler:
                     # worked from.
                     Prefetch(
                         "market_sales",
-                        queryset=MarketSale.objects.filter(
-                            kind=MarketSale.SaleKind.SERVICE
-                        ).select_related("seller_persona"),
+                        queryset=MarketSale.objects.filter(kind=MarketSale.SaleKind.SERVICE)
+                        .select_related("seller_persona")
+                        .order_by("occurred_at", "pk"),
                         to_attr="cached_service_sales",
                     ),
                     Prefetch(

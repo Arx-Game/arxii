@@ -287,3 +287,47 @@ class CommissionTests(_CommissionCase):
         self.assertEqual(get_or_create_purse(self.linnet).balance, 500 - fee)
         self.assertFalse(MarketSale.objects.filter(item_instance=self.coat).exists())
         self.assertNotIn("Facet work", crafted_provenance_line(self.coat))
+
+
+class GoneNoteTests(_CommissionCase):
+    def test_a_given_up_piece_is_marked_gone_with_the_place_and_not_the_reason(self) -> None:
+        from world.items.constants import OwnershipEventType
+        from world.items.models import OwnershipEvent
+
+        item = ItemInstanceFactory(destroyed_at=timezone.now())
+        OwnershipEvent.objects.create(
+            item_instance=item,
+            event_type=OwnershipEventType.CONSUMED,
+            notes="Given up to the Highwind: sacrifice:shrine",
+        )
+
+        self.assertIn("Gone: Given up to the Highwind.", crafted_provenance_line(item))
+        self.assertNotIn("sacrifice:shrine", crafted_provenance_line(item))
+
+    def test_facet_workers_read_oldest_first_whichever_path_loaded_the_item(self) -> None:
+        from evennia_extensions.factories import ObjectDBFactory
+
+        first, second = self.corwen.primary_persona, self.linnet.primary_persona
+        item = ItemInstanceFactory(holder_character_sheet=self.linnet)
+        obj = ObjectDBFactory(db_key="coat", db_typeclass_path="typeclasses.objects.Object")
+        obj.db_location = self.linnet.character
+        obj.save(update_fields=["db_location"])
+        item.game_object = obj
+        item.save(update_fields=["game_object"])
+        for seller in (first, second):
+            MarketSale.objects.create(
+                kind=MarketSale.SaleKind.SERVICE,
+                buyer_persona=second if seller is first else first,
+                seller_persona=seller,
+                item_instance=item,
+                price=10,
+            )
+        cold = [sale.seller_persona for sale in item.cached_service_sales]
+
+        self.linnet.character.carried_items.invalidate()
+        handler_item = self.linnet.character.carried_items.get(item.pk)
+        self.assertIsNotNone(handler_item)
+        warm = [sale.seller_persona for sale in handler_item.cached_service_sales]
+
+        self.assertEqual(cold, [first, second])
+        self.assertEqual(warm, cold)
