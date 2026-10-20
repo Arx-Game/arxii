@@ -14,6 +14,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Scissors } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { fetchPrecapturedInteractions, truncatePrecapture } from '../precaptureQueries';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 interface Props {
   sceneId: string;
@@ -31,7 +32,7 @@ export function PrecapturePanel({ sceneId }: Props) {
     mutationFn: (interactionId: number) => truncatePrecapture(sceneId, interactionId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['precaptured-interactions', sceneId] });
-      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) });
     },
   });
 

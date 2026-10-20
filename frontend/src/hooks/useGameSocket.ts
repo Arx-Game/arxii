@@ -46,6 +46,11 @@ import type { BattleStatePayload } from '@/battles/types';
 import { handleKudosReceivedPayload } from './handleKudosReceivedPayload';
 import { handleMailArrivedPayload } from './handleMailArrivedPayload';
 import { handleGMPromptPayload } from './handleGMPromptPayload';
+import {
+  handleInteractionChangedPayload,
+  type InteractionChangedPayload,
+} from './handleInteractionChangedPayload';
+import { sceneFeedAllKey, sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -243,7 +248,7 @@ function markConnectionReady(
   // transport merely emits `open`.
   reconnectAttempts[character] = 0;
   dispatch(setSessionConnectionStatus({ character, status: true }));
-  queryClient.invalidateQueries({ queryKey: ['scene-interactions'] }).catch(() => {});
+  queryClient.invalidateQueries({ queryKey: sceneFeedAllKey() }).catch(() => {});
   // #4321: the roster payload carries the server's session count, which every
   // tab's chip and Hall card read; this tab just added a session to it.
   refetchPresence();
@@ -328,8 +333,7 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
         if (kwargs.scene_id !== null) {
           invalidations.push(
             queryClient.invalidateQueries({
-              queryKey: ['scene-interactions', String(kwargs.scene_id), character],
-              exact: true,
+              queryKey: sceneFeedSceneKey(kwargs.scene_id),
             })
           );
           invalidations.push(
@@ -477,6 +481,11 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
     // queue for this GM (`GMPromptQueue`'s `useGMPrompts`).
     case WS_MESSAGE_TYPE.GM_PROMPT:
       return () => handleGMPromptPayload();
+
+    // A pose's endorsements, tags or reactions changed (#4508): refetch that row.
+    case WS_MESSAGE_TYPE.INTERACTION_CHANGED:
+      return ({ kwargs }) =>
+        handleInteractionChangedPayload(kwargs as unknown as InteractionChangedPayload);
 
     default:
       return undefined;

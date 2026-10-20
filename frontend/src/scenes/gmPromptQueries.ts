@@ -10,6 +10,7 @@ import { apiFetch } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
 import { combatKeys } from '@/combat/queries';
 import type { GMPrompt } from './types';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 export const gmPromptKeys = {
   all: ['gm-prompts'] as const,
@@ -40,7 +41,7 @@ function usePromptPost(sceneId: string, verb: 'confirm' | 'dismiss' | 'hold') {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: gmPromptKeys.scene(sceneId) });
-      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) });
       queryClient.invalidateQueries({ queryKey: combatKeys.all });
     },
     // A refused confirm/dismiss usually means the row moved on server-side (another GM
@@ -109,7 +110,7 @@ export function useNarrateGMPrompt(sceneId: string) {
     // The narrated line is a new feed row too, so the scene's interactions refetch with it.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: gmPromptKeys.scene(sceneId) });
-      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) });
     },
   });
 }

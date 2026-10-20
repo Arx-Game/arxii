@@ -54,7 +54,29 @@ class NarratedEventPayload(TypedDict):
     subject_persona_id: NotRequired[int]
 
 
-class InteractionPayload(TypedDict):
+class FeedFieldsPayload(TypedDict):
+    """The room-wide REST feed fields a live frame carries (#4508).
+
+    Each is the value ``InteractionListSerializer`` gives it with NO viewer: the same for
+    everyone in the room, so one frame serves them all. The per-viewer ones (``my_*``,
+    ``is_favorited``, ``is_muted``, ``is_unread``) stay REST-only. A push built without a
+    row (ephemeral pushes) carries the defaults.
+    """
+
+    visibility: str
+    pose_kind: str
+    endorsee_sheet_id: int | None
+    endorsable_resonances: list[dict[str, Any]]
+    conversation: dict[str, str]
+    availability: str
+    pose_endorsers: list[dict[str, Any]]
+    entry_endorsers: list[dict[str, Any]]
+    reactions: list[dict[str, Any]]
+    reaction_windows: list[dict[str, Any]]
+    dramatic_moment_tags: list[dict[str, Any]]
+
+
+class InteractionPayload(FeedFieldsPayload):
     """Structured interaction payload for WebSocket delivery."""
 
     id: int

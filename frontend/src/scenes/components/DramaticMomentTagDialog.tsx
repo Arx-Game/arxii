@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { fetchDramaticMomentTypes, postDramaticMomentTag } from '../queries';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 interface DramaticMomentTagDialogProps {
   /** Whether the dialog is open. */
@@ -58,7 +59,7 @@ export function DramaticMomentTagDialog({
         interaction: interactionId,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) });
       onClose();
       setSelectedTypeId('');
     },

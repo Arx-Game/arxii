@@ -21,10 +21,10 @@ import type {
   PendingActionTarget,
   StakesSummary,
 } from '../actionTypes';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 interface Props {
   sceneId: string;
-  viewerKey?: string;
 }
 
 /**
@@ -231,7 +231,7 @@ function ConsentCard({
   );
 }
 
-export function ConsentPrompt({ sceneId, viewerKey }: Props) {
+export function ConsentPrompt({ sceneId }: Props) {
   const queryClient = useQueryClient();
 
   // Per-card resist effort state, keyed by a string ID.
@@ -262,11 +262,8 @@ export function ConsentPrompt({ sceneId, viewerKey }: Props) {
     onSuccess: (data) => {
       toastDispositionMessage(data);
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
-      // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
-      // real key is 'scene-interactions' (useSceneInteractions).
       queryClient.invalidateQueries({
-        queryKey: ['scene-interactions', sceneId, ...(viewerKey ? [viewerKey] : [])],
-        exact: true,
+        queryKey: sceneFeedSceneKey(sceneId),
       });
     },
   });
@@ -303,11 +300,8 @@ export function ConsentPrompt({ sceneId, viewerKey }: Props) {
     onSuccess: (data) => {
       toastDispositionMessage(data);
       queryClient.invalidateQueries({ queryKey: ['pending-targets', sceneId] });
-      // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
-      // real key is 'scene-interactions' (useSceneInteractions).
       queryClient.invalidateQueries({
-        queryKey: ['scene-interactions', sceneId, ...(viewerKey ? [viewerKey] : [])],
-        exact: true,
+        queryKey: sceneFeedSceneKey(sceneId),
       });
     },
   });

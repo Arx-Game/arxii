@@ -147,6 +147,7 @@ def _narrate_outcome(*, session: GameSession, content: str) -> None:
         mode=interaction.mode,
         timestamp=interaction.timestamp.isoformat(),
         scene_id=interaction.scene_id,
+        interaction=interaction,
     )
     _broadcast_to_location(room, payload)
 

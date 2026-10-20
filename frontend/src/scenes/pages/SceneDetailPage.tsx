@@ -55,6 +55,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -247,8 +248,7 @@ export function SceneDetailPage() {
     onSuccess: (_result, variables) => {
       attachedActionGuard.current.succeed(variables.clientRequestId);
       setActionAttachment(null);
-      // 2026-07 audit: 'scene-messages' matched no query — the feed key is 'scene-interactions'.
-      queryClient.invalidateQueries({ queryKey: ['scene-interactions', id] });
+      queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(id) });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', id] });
     },
     onError: (_error, variables) => {

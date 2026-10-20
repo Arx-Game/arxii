@@ -60,6 +60,10 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
 
 - **`queries.ts`**: React Query hooks for scene and interaction data
 - **`types.ts`**: TypeScript definitions for scene and interaction data structures
+- **`sceneFeedCache.ts`** (#4508): the one home of the scene feed's query keys
+  (`sceneFeedAllKey`, `sceneFeedSceneKey`, `sceneFeedQueryKey`, scene id second) and
+  `refreshSceneFeedRow`. Every feed read, write to the cache and invalidation goes through it;
+  never spell the key inline, or an invalidation will miss the feed.
 
 ## Key Features
 

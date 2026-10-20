@@ -45,11 +45,10 @@ import { SoulfrayWarning } from './SoulfrayWarning';
 import { StrainSlider } from './StrainSlider';
 import { TargetPicker, type TargetCandidate } from './TargetPicker';
 import { BoonAskForm } from './BoonAskForm';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 interface Props {
   sceneId: string;
-  /** Character segment for the live `/game` query; omitted on legacy scene pages. */
-  viewerKey?: string;
 }
 
 interface PendingWarning {
@@ -151,7 +150,7 @@ function TechniqueFormPicker({
   );
 }
 
-export function ActionPanel({ sceneId, viewerKey }: Props) {
+export function ActionPanel({ sceneId }: Props) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
@@ -192,11 +191,8 @@ export function ActionPanel({ sceneId, viewerKey }: Props) {
   // action may have spent anima/resonance, so both invalidate the same set
   // of caches (#2158).
   function invalidateActionOutcomeQueries() {
-    // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
-    // real key is 'scene-interactions' (useSceneInteractions).
     queryClient.invalidateQueries({
-      queryKey: ['scene-interactions', sceneId, ...(viewerKey ? [viewerKey] : [])],
-      exact: true,
+      queryKey: sceneFeedSceneKey(sceneId),
     });
     queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
     if (characterId !== null) {

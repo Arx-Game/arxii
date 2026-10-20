@@ -181,6 +181,7 @@ inventory reports for commands, API routes and frontend routes.
 | The GM runs the cast from anywhere: offering and taking back an NPC, voicing, naming and describing a crowd all name the scene, so a GM standing in another room can do them and someone who does not run the scene is refused (#4418). | dispatch + API | `src/integration_tests/test_cast_panel_actions_journeys.py` |
 | A pending extra target of a played NPC's action sees whether it can be refused: a contested action is resist-only, a romantic one can still be refused (#4418). | dispatch | `src/integration_tests/test_resist_only_targets_journeys.py` |
 | Behind the GM's NPC form: a minted NPC placed in a scene joins the cast list, placing is refused for others' NPCs, lent NPCs and non-NPCs, a template is not placeable, an at-cap GM still saves a template, GMs and Guides list the active personality traits, the detail lists copied preferences and authored regard, and staff place anyone's NPC (#4418). | API + dispatch | `src/integration_tests/test_npc_form_backend_journeys.py` |
+| A pose that arrives live in an open scene matches the feed: the live frame carries the same endorsable resonances the feed read shows, an endorsement tells the author and the endorser the pose changed, the endorser's refetch shows their own endorsement, and a retraction tells both again (#4508). | API + live frames | `src/integration_tests/test_live_pose_parity_journeys.py` |
 
 ## Gaps to write first
 

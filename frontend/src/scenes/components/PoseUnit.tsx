@@ -32,6 +32,7 @@ import type { Interaction, ActionLink } from '../types';
 import type { ActionAttachmentInfo } from '../actionTypes';
 import { PoseUnitDetailPanel } from './PoseUnitDetailPanel';
 import { useKudos } from '../hooks/useKudos';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 // ---------------------------------------------------------------------------
 // Action chip
@@ -158,7 +159,7 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
   const reactionMutation = useMutation({
     mutationFn: (emoji: string) => postInteractionReaction(interaction.id, emoji),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) });
       if (data?.bump_message) {
         toast.success(data.bump_message);
       }

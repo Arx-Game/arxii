@@ -305,6 +305,7 @@ def deliver_aftermath_digests(
                 timestamp=interaction.timestamp.isoformat(),
                 scene_id=interaction.scene_id,
                 receiver_persona_ids=[persona.pk],
+                interaction=interaction,
             )
             _send_to_objects([character], payload)
             # The web reads the pushed row; only telnet needs the digest as text.

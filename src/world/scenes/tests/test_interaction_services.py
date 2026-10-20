@@ -802,6 +802,17 @@ class TestPushInteraction(TestCase):
             "reply_to": None,
             "narrates": None,
             "action_links": [],
+            "visibility": InteractionVisibility.DEFAULT,
+            "pose_kind": "standard",
+            "endorsee_sheet_id": identity_a.pk,
+            "endorsable_resonances": [],
+            "conversation": {"kind": "room", "key": "room"},
+            "availability": "retained",
+            "pose_endorsers": [],
+            "entry_endorsers": [],
+            "reactions": [],
+            "reaction_windows": [],
+            "dramatic_moment_tags": [],
         }
         mock_a.assert_called_once_with(interaction=((), expected_payload))
         mock_b.assert_called_once_with(interaction=((), expected_payload))

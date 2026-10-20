@@ -548,6 +548,18 @@ resolves from the writer persona's own character location, byte-identical to bef
 caller passes it explicitly for a Narrator-authored row, since the Narrator's character is
 never physically placed anywhere.
 
+The live `interaction` frame carries the same room-wide feed fields the REST feed does
+(`_feed_fields_payload`): `visibility`, `pose_kind`, `endorsee_sheet_id`,
+`endorsable_resonances`, `conversation`, `availability`, `pose_endorsers`, `entry_endorsers`,
+`reactions`, `reaction_windows` and `dramatic_moment_tags`
+(`test_push_payload_parity.py` keeps the two in step). Viewer-specific fields stay out.
+What changes afterwards is announced by `notify_interaction_changed(interaction)`: an ids-only
+`interaction_changed` frame (`interaction_id`, `scene_id`) sent on commit to the pose's
+audience. Endorsing and retracting a pose endorsement, a scene-entry endorsement (every ENTRY
+pose of the endorsee), a dramatic-moment tag, and reactions and reaction windows all send it.
+Each page refetches the row through `GET /api/interactions/{id}/` (which fills entry endorsers
+without `?scene=`) and patches it into the scene feed cache. (#4508)
+
 ### Good-Sport Kudos Accrual
 
 When a defender accepts an action request, `_accrue_engagement_for_primary` (primary target)

@@ -24,6 +24,23 @@ describe('wsPayloadToInteraction (#3858)', () => {
     expect(row.line).toBe('Tehom stops at the edge of the plaza.');
   });
 
+  it('uses pushed endorsable resonances and pose kind', () => {
+    const row = wsPayloadToInteraction({
+      ...payload,
+      pose_kind: 'entry',
+      endorsable_resonances: [{ id: 4, name: 'Ember' }],
+    });
+    expect(row.pose_kind).toBe('entry');
+    expect(row.endorsable_resonances).toEqual([{ id: 4, name: 'Ember' }]);
+  });
+
+  it('falls back for a payload without feed fields', () => {
+    const row = wsPayloadToInteraction(payload);
+    expect(row.pose_kind).toBe('standard');
+    expect(row.endorsable_resonances).toEqual([]);
+    expect(row.entry_endorsed_by_me).toBe(false);
+  });
+
   it('leaves the line absent when the server sent none', () => {
     const { line: _line, ...older } = payload;
     expect(wsPayloadToInteraction(older).line).toBeUndefined();

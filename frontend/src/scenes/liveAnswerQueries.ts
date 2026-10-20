@@ -5,6 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './liveAnswerApi';
 import { gmPromptKeys } from './gmPromptQueries';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 export const liveAnswerKeys = {
   prompt: (promptId: number) => ['live-answers', promptId] as const,
@@ -23,7 +24,7 @@ function useRefreshQueue(sceneId: string) {
   const queryClient = useQueryClient();
   return () => {
     queryClient.invalidateQueries({ queryKey: gmPromptKeys.scene(sceneId) }).catch(() => {});
-    queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }).catch(() => {});
+    queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }).catch(() => {});
   };
 }
 

@@ -16,10 +16,6 @@ from world.scenes.interaction_serializers import InteractionListSerializer
 from world.scenes.types import InteractionPayload
 
 _VIEWER = "depends on who is reading; the push is one frame for the whole room"
-_UNTRIAGED = (
-    "UNTRIAGED at #4418: REST serves it and the push does not; decide whether a live "
-    "reader needs it and either push it or replace this with the reason it is REST-only"
-)
 
 # REST fields the live frame deliberately does not carry, each with why.
 REST_ONLY: dict[str, str] = {
@@ -28,20 +24,9 @@ REST_ONLY: dict[str, str] = {
     "entry_endorsed_by_me": _VIEWER,
     "is_muted": _VIEWER,
     "is_unread": _VIEWER,
-    "availability": _VIEWER,
-    "endorsable_resonances": _VIEWER,
     "scene": "the push names it as scene_id",
     "place": "the push names it as place_id",
     "attributed_companion": "the push names it as attributed_companion_id and _name",
-    "conversation": _UNTRIAGED,
-    "dramatic_moment_tags": _UNTRIAGED,
-    "endorsee_sheet_id": _UNTRIAGED,
-    "entry_endorsers": _UNTRIAGED,
-    "pose_endorsers": _UNTRIAGED,
-    "pose_kind": _UNTRIAGED,
-    "reaction_windows": _UNTRIAGED,
-    "reactions": _UNTRIAGED,
-    "visibility": _UNTRIAGED,
 }
 
 # Push keys the REST feed spells differently, each with why.
