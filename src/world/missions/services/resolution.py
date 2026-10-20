@@ -88,6 +88,7 @@ from world.missions.services.challenge_options import challenge_options_for_char
 from world.missions.services.renown_emission import emit_terminal_renown_awards
 from world.missions.services.rewards import emit_candidate_rewards, emit_terminal_rewards
 from world.missions.types import PresentedOption
+from world.narrative.services import send_narrative_message
 from world.predicates.describe import describe_leaf
 from world.predicates.predicates import CharacterPredicateContext, matched_leaves
 from world.traits.models import CheckOutcome
@@ -101,6 +102,7 @@ if TYPE_CHECKING:
     from world.areas.models import Area
     from world.checks.models import CheckType
     from world.mechanics.models import ChallengeApproach
+    from world.mechanics.types import AppliedEffect
     from world.missions.models import (
         MissionInstance,
         MissionNode,
@@ -864,7 +866,8 @@ def _route_graded_outcome(  # noqa: PLR0913
     context = ResolutionContext(
         character=character, mission_instance=instance, chosen_approach=chosen_approach
     )
-    apply_all_effects(consequence, context)
+    applied = apply_all_effects(consequence, context)
+    _announce_conditions_put_on_actor(character, consequence, applied)
 
     counts_on_track = (
         advance and node.is_track and option.option_kind in (OptionKind.CHECK, OptionKind.CONTEST)
@@ -909,6 +912,43 @@ def _route_graded_outcome(  # noqa: PLR0913
         # #735: fire any MissionRenownAward rows attached to the route.
         emit_terminal_renown_awards(instance, route, deed)
     return deed
+
+
+def _announce_conditions_put_on_actor(
+    character: ObjectDB,
+    consequence: Consequence,
+    applied: list[AppliedEffect],
+) -> None:
+    """Tell the player which condition a route's consequence put on them (#4501).
+
+    A trial's cost or a Failure's price is often a staged condition, and nothing else says
+    so. Scoped to missions: a condition effect fired from combat or a scene is announced
+    by the surfaces those already have.
+    """
+    from world.checks.constants import EffectTarget, EffectType  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+
+    sheet = character.character_sheet
+    if sheet is None or consequence.pk is None:
+        return
+    effects = consequence.effects.select_related("condition_template").order_by(
+        "execution_order", "pk"
+    )
+    for effect, result in zip(effects, applied, strict=False):
+        if (
+            effect.effect_type != EffectType.APPLY_CONDITION
+            or effect.target != EffectTarget.SELF
+            or not result.applied
+        ):
+            continue
+        template = effect.condition_template
+        label = "Staged condition" if template.has_progression else "Condition"
+        send_narrative_message(
+            recipients=[sheet],
+            body=f"{label}: {template.name} (severity {effect.condition_severity or 1}).",
+            category=NarrativeCategory.SYSTEM,
+            sender_account=None,
+        )
 
 
 def _advance_track(instance: MissionInstance, node: MissionNode, deed: MissionDeedRecord) -> None:

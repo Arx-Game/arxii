@@ -20,6 +20,10 @@ _Avoid_: turn-in, hand-in, mission payout.
 How the reporter frames the account when reporting (`ReportStyle`), modulating the payout — legend stays flat; only money and fame/prestige move. **Humble** (understate): +1 Bene resonance, lower fame/prestige, baseline money. **Accurate** (neutral): the promised money + fame/prestige. **Embellished** (aggrandize): a manipulation check against the giver (charm + Persuasion, +Manipulation specialization if held) — success doubles the money, raises fame/prestige, grants +1 Insidia; only offered to a reporter with Persuasion. **Mostly-accurate** (omit incriminating): dodges criminal/society consequences; inert until heat lands (#1765), so not offered yet.
 _Avoid_: spin, brag, framing.
 
+**Trial**:
+A mission whose good outcome tiers make a codex entry known, train or grant the technique that entry opens, and apply a cost, all in one consequence (#4343). There is no trial model: a trial is an authored `MissionTemplate` whose CHECK option routes carry consequences using `GRANT_CODEX` with `grants_known`, `TECHNIQUE_TRAINING` and a cost effect (`MAGICAL_SCARS` or `APPLY_CONDITION` on the actor). The save rules live in `world.checks.trial_rules`. A trial never raises level; Legend comes from the mission's ordinary rewards. The word "reveal" is avoided: in the magic glossary it means the ultimates Audere offers.
+_Avoid_: reveal, initiation, ordeal (as a model name), perception trial.
+
 **Mission Risk Acknowledgement**:
 A `MissionRiskAcknowledgement` row (#1770 PR4) — the accepting persona's on-record "yes, I know this job is dangerous," keyed on (offer, persona) with the template's `risk_tier` snapshotted. Required by `issue_mission` for any template at or above `MISSION_RISK_ACK_TIER` (`world.missions.constants`); missing → the typed `MissionRiskUnacknowledgedError`, which the `npc_resolve` action turns into an informed-consent prompt re-run with `acknowledge_risk=yes`. The mission sibling of combat's `EncounterRiskAcknowledgement` (#777 gate).
 _Avoid_: risk waiver, danger consent (consent is the ADR-0024 app), risk opt-out.

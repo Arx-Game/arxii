@@ -722,6 +722,9 @@ class AcquisitionOrigin(models.TextChoices):
       ``Technique`` and binds it to its designer (``author_technique``, technique-only).
     - ``GM_GRANT`` — reserved for the JUNIOR-gated GM story-reward surface (#3055
       slice 1c, not yet built); included now so 1c needs no further migration.
+    - ``TRIAL`` — a Critical Success trial's "grant outright"
+      (``TECHNIQUE_TRAINING`` effect, #4501). Unlike ``GM_GRANT`` it does NOT skip
+      ``enforce_technique_prerequisites``: only the training is waived, never a gate.
     """
 
     CHARACTER_CREATION = "character_creation", "Character Creation"
@@ -733,6 +736,7 @@ class AcquisitionOrigin(models.TextChoices):
     ALTERNATE_SELF_GRANT = "alternate_self_grant", "Alternate Self Grant"
     AUTHORED = "authored", "Authored"
     GM_GRANT = "gm_grant", "GM Grant"
+    TRIAL = "trial", "Trial"
 
 
 class UltimateSource(models.TextChoices):

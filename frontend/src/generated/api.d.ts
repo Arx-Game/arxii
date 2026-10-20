@@ -46048,6 +46048,8 @@ export interface components {
       readonly tier_caps: {
         [key: string]: unknown;
       };
+      /** @description A cosmetic scar (#4501): a reward with no drawbacks that does not hold back advancement. The player still writes it. Not the same as tier 1, Cosmetic Touch. */
+      is_cosmetic?: boolean;
       readonly origin_affinity_name: string;
       readonly origin_resonance_name: string;
       triggering_scene?: number | null;
