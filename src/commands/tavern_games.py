@@ -35,13 +35,13 @@ class CmdGame(ArxCommand):
 
     def func(self) -> None:
         raw = (self.args or "").strip()
-        if not raw:
-            self._show()
-            return
         parts = raw.split(maxsplit=1)
-        subverb = parts[0].lower()
+        subverb = parts[0].lower() if parts else ""
         rest = parts[1].strip() if len(parts) > 1 else ""
         handler = {
+            # Bare ``game`` reads the table; away from any place it refuses like the
+            # verbs do (#3657 tranche 14: it had raised past the handler instead).
+            "": lambda _rest: self._show(),
             "open": self._do_open,
             "join": self._do_join,
             "roll": self._do_roll,

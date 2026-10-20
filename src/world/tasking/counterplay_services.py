@@ -288,7 +288,7 @@ def detect_listeners(actor: Persona, room: RoomProfile) -> list[dict]:
             revealed.append(
                 {
                     "post_id": post.pk,
-                    "agent_name": str(asset.asset_persona) if asset else "",
+                    "agent_name": asset.asset_persona.name if asset else "",
                 }
             )
     return revealed

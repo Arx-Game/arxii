@@ -24,6 +24,7 @@ from world.tavern_games.exceptions import (
     AlreadyRolledError,
     AlreadySeatedError,
     AnteOutOfRangeError,
+    CannotCoverAnteError,
     GameNotActiveError,
     LossCapExceededError,
     NotASocialHubError,
@@ -78,10 +79,15 @@ def _charge_ante(*, character_sheet: CharacterSheet, session: GameSession, amoun
     if ledger.total_lost + amount > cap:
         raise LossCapExceededError
 
+    purse = get_or_create_purse(character_sheet)
+    # A short purse is the player's own refusal, not the ledger's validation error
+    # (#3657 tranche 14: ``game join`` with too few coppers raised past the command).
+    if purse.balance < amount:
+        raise CannotCoverAnteError
     transfer(
         amount=amount,
         reason=f"tavern game ante: {session.game.name} #{session.pk}",
-        from_purse=get_or_create_purse(character_sheet),
+        from_purse=purse,
     )
     ledger.total_lost += amount
     ledger.save(update_fields=["total_lost"])

@@ -182,7 +182,15 @@ actions, backends, and service functions.
   item=<id>`, calling `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`/
   `CutGemAction` directly (`actions/definitions/crafting.py`) — the same seam
   `ItemFacetViewSet`/`ItemStyleCraftViewSet`/`GemCutViewSet` now dispatch through.
-  No business logic in the command.
+  No business logic in the command. Every subverb is typed at a real bench (the
+  Enchanting recipes authored, a lab station in the room, the roll forced each way) in
+  `integration_tests/test_working_the_town_journeys.py` (`CraftingAtTheBench`, #3657
+  tranche 14; the hand-built `tests/test_crafting.py`, which mocked every action, is
+  gone). The attach, create and detach actions now answer in words ("You work Glow into
+  plain sword (Common quality).", "The work fails; Glow does not take.", "You craft Fang
+  (Common quality).", "You strip Glow from plain sword."): they had returned data alone,
+  so telnet said nothing either way. A failed `craft create` still makes the item, at
+  the floor tier (#2886). `craft quote` still prints the cost dataclass's repr.
 - **`investigation.py`**: `CmdSearch` (`search`, alias `investigate`, #1866) — a bare
   telnet delegate to the pre-existing `SearchAction` (`actions/definitions/
   investigation.py`), which had zero telnet command before. Mirrors `CmdRest`'s
@@ -214,7 +222,14 @@ actions, backends, and service functions.
   <name>=<ante>` opens one; `game join`/`game roll`/`game leave` act on the single
   open session at that Place. Every subverb dispatches the matching REGISTRY action
   (`tavern_game_open`/`_join`/`_roll`/`_leave`, `actions/definitions/tavern_games.py`)
-  -- the same seam the web Place-bar game widget uses.
+  -- the same seam the web Place-bar game widget uses. A whole hand, the refund, the
+  room's rows, the weekly cap and every refusal are typed at a real Place with real
+  purses in `integration_tests/test_working_the_town_journeys.py` (`PlayingAtTheTable`,
+  #3657 tranche 14; the hand-built `tests/test_tavern_games.py` is gone). Bare `game`
+  now reads the table inside the command's error handling (away from any Place it had
+  raised past the handler), and an ante the purse cannot cover is the service's own
+  `CannotCoverAnteError` ("You don't have the coppers to cover the ante.") rather than
+  the ledger's `ValidationError` escaping the command.
 - **`positions.py`**: `CmdPosition` (`position`, #2005/#3385) — the telnet face of the tactical
   position graph, mirroring `CmdPlaces`' shape. Bare `position` lists the caller's current
   room's staged positions with kind, occupants, and ADJACENT-reach adjacency (or
@@ -859,7 +874,11 @@ actions, backends, and service functions.
   the command. `TravelAction` itself gained a portal-travel branch (#2222) tried before
   the walking pathfinder — see `src/actions/CLAUDE.md` and `world/magic/CLAUDE.md`
   "Portal travel"; no command-layer change was needed since `CmdTravel` already
-  dispatches the same `travel_to` action.
+  dispatches the same `travel_to` action. The walk, the stop, a way that closes and
+  every refusal are typed over real public rooms and exits in
+  `integration_tests/test_working_the_town_journeys.py` (`WalkingAcrossTown`, #3657
+  tranche 14: `evennia.utils.delay` is stood in for and each hop ticked by hand; the
+  hand-built `tests/test_travel_command.py` is gone).
 - **`portals.py`**: `CmdPortalAnchor` (`portal`, `cmd:all()`, #2222) — install/dissolve a
   portal anchor in the caller's current room. `portal/install <kind>=<name>` resolves
   the `PortalAnchorKind` by name (case-insensitive exact) and dispatches
@@ -900,6 +919,9 @@ actions, backends, and service functions.
   (#3657 tranches 3 and 10; the hand-built `tests/test_cmd_presence.py` is gone).
 - **`fatigue.py`**: `CmdRest` (`rest`, #1491) — telnet face of `RestAction`. Spend AP to become
   Well-Rested; thin REGISTRY command that delegates directly to `actions.definitions.fatigue.RestAction`.
+  Typed at home and away, short of AP and twice in
+  `integration_tests/test_earning_your_keep_journeys.py` (`ClaimingRewards`, #3657 tranche
+  12); the hand-built `tests/test_fatigue_command.py` went in tranche 14.
 - **`sanctum.py`**: `CmdSanctum` (`sanctum`, #1497) — the sanctum-management namespace. One
   `DispatchCommand` routes a leading subverb to a REGISTRY `ActionRef` and dispatches through
   `dispatch_player_action` — the same seam the web `SanctumViewSet` uses — reaching the 7
@@ -992,10 +1014,45 @@ actions, backends, and service functions.
   subverb-routing shape. No business logic in the command.
 - **`hire.py`**: `CmdHire` (`hire`, #1493) — telnet face of the three NPC-service lifecycle
   Actions (`npc_start`, `npc_resolve`, `npc_end`). Parses `hire <role> [as <persona>]`,
-  `hire offer <id>`, `hire end`, and bare `hire` status hub. Stores the ephemeral
-  `InteractionSession` on `caller.session.ndb` between operations; delegates to the same registry
-  Actions as the web `InteractionViewSet`. `hire <name>` prefers a co-located **Functionary**
-  (#1766) standing in the caller's room, falling back to a global role lookup.
+  `hire offer <id> [acknowledge_risk=yes]`, `hire end`, `hire accept|decline <summons-id>`
+  and bare `hire` status hub. Stores the ephemeral `InteractionSession` on the
+  **character's** `ndb` between operations (#3657 tranche 14: it had read
+  `caller.session.ndb`, and an Evennia character has no `session` attribute, so every
+  `hire` a player typed raised; its unit tests' caller was a `MagicMock` with one);
+  delegates to the same registry Actions as the web `InteractionViewSet`. `hire <name>`
+  prefers a co-located **Functionary** (#1766) standing in the caller's room, falling
+  back to a global role lookup. `as <npc>` names someone standing here (their active
+  persona) or a persona by its own name, several named back (tranche 14: it had asked
+  `caller.search` for a `Persona`, which search never returns); the greeting is the
+  action's, naming the persona who answered. Every subverb, a real mission issued, the
+  risk prompt and a directed summons are typed in
+  `integration_tests/test_working_the_town_journeys.py` (`HiringAnNPC`; the hand-built
+  `tests/test_hire_command.py` is gone).
+- **`network.py`**: `CmdNetwork` (`network`, alias `spynet`, #2820) — the org-tasking and
+  spy-network namespace, thin over the REGISTRY actions in `actions/definitions/tasking.py`:
+  bare `network`/`board` (`list_org_tasks`), `issue <template> org=<org>` (`issue_org_task`,
+  leadership only), `assign <task> = <agent>` (`assign_task_agent`, rolls the handler's own
+  check), `accept <task>` (`accept_org_task`, a mission-backed task taken as a run), `post
+  <agent>` (`post_listener`), `collect` (`collect_harvest`, in person), `sweep`
+  (`detect_listeners`, consentless), `clear` (`clear_room_listeners`, room authority),
+  `suppress`/`flip` (`suppress_listener`/`flip_listener`, consent-gated by the owner's
+  `espionage` category, closed by default) and `plant <post> <character> = <lie>`
+  (`plant_red_herring`, the flip controller's). Name-to-pk resolution is the only work
+  here. Every subverb, as the leader, an outsider and the room's owner, with the gate
+  opened by `consent category espionage=everyone`, is typed in
+  `integration_tests/test_working_the_town_journeys.py` (`RunningASpyNetwork`, #3657
+  tranche 14; the hand-built `tests/test_network_command.py`, whose caller was a
+  `MagicMock`, is gone). Agents are named by `persona.name` on every line and in the
+  API's `agent_name`: `str(persona)` reads "Wren (Established)".
+- **`identification.py`**: `CmdIdentify` (`identify <target>[=<guess>]`, #1107 slice 5) —
+  a bare `ArxCommand` delegate to `IdentifyAction` (`actions/definitions/identification.py`),
+  no consent flow (a private perception roll, ADR-0024). The target resolves through
+  `search_or_raise`, so a masked character is still named by key. Typed against a real
+  mask with the seeded Identification check forced each way, the guess ease read off the
+  check capture, and the outcome-blind scene log, in
+  `integration_tests/test_working_the_town_journeys.py` (`SeeingWhoIsUnderTheMask`, #3657
+  tranche 14; the hand-built `tests/test_identification.py`, which mocked the action, is
+  gone).
 - **`functionary.py`**: `CmdFunctionary` (`functionary`, #1766) — list/place/remove the class-1
   Functionaries standing in the caller's current room. Bare `functionary`/`functionary list`
   lists them (open); `functionary place <role>[=<name>]` and `functionary remove <role>` are

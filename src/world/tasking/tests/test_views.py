@@ -92,7 +92,7 @@ class OrgTaskAssignTests(OrgTaskBoardTestBase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], TaskStatus.ASSIGNED)
-        self.assertEqual(response.data["fulfillment"]["agent_name"], str(asset.asset_persona))
+        self.assertEqual(response.data["fulfillment"]["agent_name"], asset.asset_persona.name)
         self.assertEqual(response.data["fulfillment"]["report"], "")
 
     def test_assign_foreign_agent_rejected_with_user_message(self) -> None:
