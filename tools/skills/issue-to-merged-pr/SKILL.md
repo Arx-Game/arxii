@@ -555,7 +555,7 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
 - `OK` (exit 0): first settle the evidence challenge (Step 6a), then run
   `scripts/enqueue-pr.sh <pr-N>`. It revalidates the committed
   report against the reviewed code revision, refuses while an open code-scanning
-  alert sits on the PR head ref, and only then arms squash auto-merge. Then post a
+  alert or unresolved review thread sits on the PR head ref, and only then arms squash auto-merge. Then post a
   brief status comment and exit the session. **Do NOT re-sync with main or merge by
   hand.** The merge queue re-tests the PR on top of the latest main and merges it in
   order once a human approves - that human approval is the only remaining gate. If
@@ -652,6 +652,12 @@ On either bail, post a diagnostic PR comment summarizing every attempt
 When phase detection lands on **PR-comment**:
 - Run `scripts/read-pr-comments.sh <pr-N>` — get unread comments as JSON.
 - Address each: edit code, commit.
+- **Reply, then resolve the thread yourself** (#4510). The ruleset requires every
+  review thread resolved before merge and `scripts/enqueue-pr.sh` refuses while any
+  is unresolved, listing each with the `resolveReviewThread` command (checklist
+  section 4). A workflow, `.github/workflows/resolve-answered-threads.yml`, also
+  resolves reviewer-started threads once a non-bot replies; do not rely on it,
+  resolve what you answer. An implementer dispatch must say this.
 - Push.
 - **Takeaway evaluation** (see below — runs before the marker bump).
 - Update the PR body marker:
