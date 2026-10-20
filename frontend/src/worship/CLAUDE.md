@@ -21,7 +21,8 @@ invocation-options/`): per being the difficulty with each ease, uses left, the b
   staff-authored text, its favor target, the system-generated `ServiceTermsList` of what earns
   favor with the earning rate, an optional prayer; dispatches `pledge_take`),
   `components/SacrificeDialog.tsx` (items the character carries; dispatches `sacrifice`, which
-  the server refuses away from a shrine or temple), `components/PledgeCard.tsx` (the sheet's
+  the server refuses away from a shrine or temple; an item counts by what it means to the
+  giver, never its price, #4500), `components/PledgeCard.tsx` (the sheet's
   pledge in three labelled parts, each credit with its calculation, and Close once the target
   is met; dispatches `pledge_close`). `WorshipSection` shows the newest pledge card and the
   owner's Pray / Sacrifice / Pledge yourself doors; the room panel's

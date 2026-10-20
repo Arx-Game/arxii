@@ -50,3 +50,32 @@ def get_relationship_tier(
     if not any(is_mutual(side, label.type) for label in teaching_labels):
         return 0
     return min(side.tier, other.tier)
+
+
+def pair_tier(sheet_a: CharacterSheet, sheet_b: CharacterSheet) -> int:
+    """The highest relationship tier the pair's added depth reaches, 0 with no tie (#4500).
+
+    A tie is each character's directed side toward the other. The pair depth is the two
+    sides' depth added together (``CharacterRelationship.pair_depth``); the pair tier is
+    the highest ``RelationshipTier`` whose ``depth_threshold`` that depth meets. It reads
+    the depth the pair has built through play, not the tier either side has claimed, which
+    is why it sits beside ``get_relationship_tier`` (a mutual Mentor/Student read) and not
+    in place of it. "Made by a tie" reads it because making a piece to order is something
+    both characters take part in.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.relationships.models import CharacterRelationship, RelationshipTier  # noqa: PLC0415
+
+    sides = list(
+        CharacterRelationship.objects.filter(
+            Q(source=sheet_a, target=sheet_b) | Q(source=sheet_b, target=sheet_a)
+        )
+    )
+    if not sides:
+        return 0
+    depth = sum(side.depth for side in sides)
+    tier = (
+        RelationshipTier.objects.filter(depth_threshold__lte=depth).order_by("-tier_number").first()
+    )
+    return tier.tier_number if tier is not None else 0

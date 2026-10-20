@@ -203,6 +203,8 @@ def _complete_item_fetch(
     but holder save fails) roll back — mirroring the ``pick_up`` / ``take_out``
     service functions' own atomicity.
     """
+    from world.items.services.holding import set_item_holder  # noqa: PLC0415
+
     # Stale callback — actor moved or a new fetch superseded this one.
     current_token = actor.ndb.active_fetch_token
     if current_token != token:
@@ -223,8 +225,7 @@ def _complete_item_fetch(
     # Set holder if unowned (same logic as pick_up).
     taker_sheet = actor.character_sheet
     if item_instance.holder_character_sheet_id is None and taker_sheet is not None:
-        item_instance.holder_character_sheet = taker_sheet
-        item_instance.save(update_fields=["holder_character_sheet"])
+        set_item_holder(item_instance, taker_sheet)
 
     # Invalidate carried-items cache.
     if hasattr(actor, "carried_items"):

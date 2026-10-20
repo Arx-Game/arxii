@@ -37,6 +37,7 @@ from world.items.exceptions import (
 )
 from world.items.models import EquippedItem, OwnershipEvent
 from world.items.services import equip_item, unequip_item
+from world.items.services.holding import set_item_holder
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -346,8 +347,7 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
         raise NotReachable
     # Sheet-less actors can't own things — skip the assignment (holder stays None).
     if item.instance.holder_character_sheet_id is None and taker_sheet is not None:
-        item.instance.holder_character_sheet = taker_sheet
-        item.instance.save(update_fields=["holder_character_sheet"])
+        set_item_holder(item.instance, taker_sheet)
     character.obj.carried_items.invalidate()
     # If the item came from another character (rare), invalidate that too.
     # Rooms/containers don't have ``carried_items`` — only characters do.
@@ -420,14 +420,12 @@ def give(
     if not item.instance.game_object.move_to(recipient.obj, quiet=True):
         raise NotReachable
     recipient_sheet = recipient.obj.sheet_data
-    item.instance.holder_character_sheet = recipient_sheet
-    item.instance.save(update_fields=["holder_character_sheet"])
     # Snapshot the IC face each side is wearing at the transfer moment.
     # Null falls back to the sheet's primary_persona at render time.
     giver_persona = (
         previous_holder_sheet.primary_persona if previous_holder_sheet is not None else None
     )
-    OwnershipEvent.objects.create(
+    event = OwnershipEvent.objects.create(
         item_instance=item.instance,
         event_type=OwnershipEventType.GIVEN,
         from_character_sheet=previous_holder_sheet,
@@ -435,6 +433,7 @@ def give(
         from_persona_display=giver_persona,
         to_persona_display=recipient_sheet.primary_persona,
     )
+    set_item_holder(item.instance, recipient_sheet, event=event)
     giver.obj.carried_items.invalidate()
     recipient.obj.carried_items.invalidate()
     _fire_item_acquisition_triggers(recipient, item)
@@ -796,9 +795,7 @@ def steal(character: CharacterState, item: ItemState) -> None:
         item.instance.save(update_fields=["contained_in"])
     if not item.instance.game_object.move_to(character.obj, quiet=True):
         raise NotReachable
-    item.instance.holder_character_sheet = taker_sheet
-    item.instance.save(update_fields=["holder_character_sheet"])
-    OwnershipEvent.objects.create(
+    event = OwnershipEvent.objects.create(
         item_instance=item.instance,
         event_type=OwnershipEventType.STOLEN,
         from_character_sheet=previous_holder_sheet,
@@ -808,6 +805,7 @@ def steal(character: CharacterState, item: ItemState) -> None:
         ),
         to_persona_display=taker_sheet.primary_persona,
     )
+    set_item_holder(item.instance, taker_sheet, event=event)
     character.obj.carried_items.invalidate()
     _record_theft_deed(character, item)
     _fire_item_acquisition_triggers(character, item)

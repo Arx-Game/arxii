@@ -253,7 +253,8 @@ export function BeingDashboardPage() {
                   <tr>
                     <th>Item</th>
                     <th>Offered by</th>
-                    <th>Value</th>
+                    <th>Meaning</th>
+                    <th>Roll</th>
                     <th>Credited</th>
                     <th>When</th>
                   </tr>
@@ -263,14 +264,16 @@ export function BeingDashboardPage() {
                     <tr key={index}>
                       <td>{row.item_name}</td>
                       <td>{row.offered_by}</td>
-                      <td className="tabular-nums">{row.item_value}</td>
-                      <td className="tabular-nums">
-                        {row.amount != null && row.amount > row.item_value ? (
-                          <Badge variant="secondary">{row.amount} · favored</Badge>
-                        ) : (
-                          (row.amount ?? '—')
+                      <td title={row.signals.join(', ')}>
+                        <span className="tabular-nums">{row.meaning_points}</span>
+                        {row.signals.length > 0 && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {row.signals.join(', ')}
+                          </span>
                         )}
                       </td>
+                      <td>{row.outcome_name || '—'}</td>
+                      <td className="tabular-nums">{row.amount ?? '—'}</td>
                       <td className="text-muted-foreground">
                         {row.when ? formatRelativeTime(row.when) : ''}
                       </td>

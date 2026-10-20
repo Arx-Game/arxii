@@ -686,11 +686,10 @@ def _deliver_business(
 def _flip_item(item: Any, sheet: CharacterSheet, target_persona: Any) -> None:
     from world.items.constants import OwnershipEventType  # noqa: PLC0415
     from world.items.models import OwnershipEvent  # noqa: PLC0415
+    from world.items.services.holding import set_item_holder  # noqa: PLC0415
 
     target_sheet = target_persona.character_sheet
-    item.holder_character_sheet = target_sheet
-    item.save(update_fields=["holder_character_sheet"])
-    OwnershipEvent.objects.create(
+    event = OwnershipEvent.objects.create(
         item_instance=item,
         event_type=OwnershipEventType.INHERITED,
         from_character_sheet=sheet,
@@ -698,6 +697,7 @@ def _flip_item(item: Any, sheet: CharacterSheet, target_persona: Any) -> None:
         from_persona_display=sheet.primary_persona,
         to_persona_display=target_persona,
     )
+    set_item_holder(item, target_sheet, event=event)
 
 
 def _first_eligible_recipient(item, recipient_persona, heir_persona):

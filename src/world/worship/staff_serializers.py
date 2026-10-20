@@ -289,7 +289,9 @@ class ContributorRowSerializer(serializers.Serializer):
 class OfferingRowSerializer(serializers.Serializer):
     item_name = serializers.CharField()
     offered_by = serializers.CharField()
-    item_value = serializers.IntegerField()
+    meaning_points = serializers.IntegerField()
+    signals = serializers.ListField(child=serializers.CharField())
+    outcome_name = serializers.CharField(allow_blank=True)
     amount = serializers.IntegerField(allow_null=True)
     ceremony_id = serializers.IntegerField(allow_null=True)
     when = serializers.DateTimeField(allow_null=True)

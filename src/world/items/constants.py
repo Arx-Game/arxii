@@ -58,6 +58,21 @@ class OwnershipEventType(models.TextChoices):
     RECOVERED = "recovered", "Recovered"  # reclamation returned it to the wronged (#2368)
 
 
+class MeaningSignalKind(models.TextChoices):
+    """One fact that makes an item matter to the character holding it (#4500, #4462).
+
+    The 6a signals are read from records the game already keeps. ``OfferingSignal.kind``
+    snapshots them when an item is given up. Nothing here reads a price, fee or
+    material cost.
+    """
+
+    CARRIED = "carried", "Carried"
+    GIFT = "gift", "Gift"
+    HEIRLOOM = "heirloom", "Heirloom"
+    OWN_WORK = "own_work", "Own work"
+    MADE_BY_TIE = "made_by_tie", "Made by a tie"
+
+
 # Ownership events that represent the item changing hands — the lore-relevant
 # provenance the soft-delete cleanup must never destroy (#1025). Deliberately
 # excludes CREATED (origin) and ACTIVATED/CONSUMED (every consumed item has

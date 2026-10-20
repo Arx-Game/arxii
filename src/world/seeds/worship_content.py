@@ -290,13 +290,24 @@ _CLOSING_AWARDS = {
 }
 
 
+#: Example sacrifice awards by outcome (#4500): base favor a sacrifice's check pays, before
+#: the earning rate. Failure and Critical Failure pay nothing. PLACEHOLDER tuning.
+_SACRIFICE_AWARDS = {
+    "Critical Success": 6,
+    "Success": 4,
+    "Partial Success": 2,
+    "Failure": 0,
+    "Critical Failure": 0,
+}
+
+
 def ensure_favor_terms(check_type) -> None:
     """Seed the favor terms every character shares (#4333) and every being's targets.
 
     The ``DevotionConfig`` singleton (its default invocation check is the Ceremony
-    Rites check, when that exists and none is set yet), the example INVOCATION and
-    CLOSING ``FavorOutcomeAward`` rows, and each being's favor invocation and favor earning
-    ``ModifierTarget`` (``ensure_being_modifier_targets``). Idempotent; never
+    Rites check, when that exists and none is set yet), the example INVOCATION, CLOSING
+    and SACRIFICE ``FavorOutcomeAward`` rows, and each being's favor invocation and favor
+    earning ``ModifierTarget`` (``ensure_being_modifier_targets``). Idempotent; never
     overwrites a value staff set.
     """
     from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
@@ -314,6 +325,7 @@ def ensure_favor_terms(check_type) -> None:
     for kind, amounts in (
         (FavorAwardKind.INVOCATION, _INVOCATION_BONUSES),
         (FavorAwardKind.CLOSING, _CLOSING_AWARDS),
+        (FavorAwardKind.SACRIFICE, _SACRIFICE_AWARDS),
     ):
         for outcome_name, amount in amounts.items():
             outcome = CheckOutcome.objects.filter(name=outcome_name).first()

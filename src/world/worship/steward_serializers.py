@@ -371,7 +371,10 @@ class StewardPromptSerializer(serializers.Serializer):
 
     def to_representation(self, prompt) -> dict:
         from world.gm.prompt_services import prompt_subject_name  # noqa: PLC0415
-        from world.worship.answer_services import pledge_sacrifices  # noqa: PLC0415
+        from world.worship.answer_services import (  # noqa: PLC0415
+            pledge_sacrifices,
+            sacrifice_detail,
+        )
 
         details = prompt.pledge
         being = details.pledge.being
@@ -384,7 +387,7 @@ class StewardPromptSerializer(serializers.Serializer):
             "subject_name": prompt_subject_name(prompt),
             "pledge_name": details.pledge.name,
             "outcome_tier_name": tier.name if tier is not None else "",
-            "sacrificed": [offering.item_name for offering in pledge_sacrifices(details)],
+            "sacrificed": [sacrifice_detail(offering) for offering in pledge_sacrifices(details)],
             "prayer_text": details.prayer.text if details.prayer is not None else "",
             "options": [
                 {

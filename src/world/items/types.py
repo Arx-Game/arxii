@@ -63,3 +63,23 @@ class UseItemResult:
     soft_deleted: bool = False
     check_result: CheckResult | None = None
     appearance_changes: list[tuple[FormTrait, FormTraitOption]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class MeaningSignal:
+    """One fact that makes an item matter to a holder, worth ``points`` (#4500)."""
+
+    kind: str  # MeaningSignalKind
+    points: int
+    detail: str
+
+
+@dataclass(frozen=True)
+class ItemMeaning:
+    """What an item means to one holder: its signals, and their sum as meaning points."""
+
+    signals: tuple[MeaningSignal, ...] = ()
+
+    @property
+    def points(self) -> int:
+        return sum(signal.points for signal in self.signals)

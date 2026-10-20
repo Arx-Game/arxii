@@ -399,8 +399,24 @@ class DevotionConfigAdmin(admin.ModelAdmin):
                     "earning_rate_rule",
                     ("favored_deed_percent", "associated_deed_percent"),
                     "weekly_deed_favor_cap",
-                    "sacrifice_value_per_favor",
                 )
+            },
+        ),
+        (
+            "Sacrifices",
+            {
+                "description": (
+                    "A sacrifice is a check eased by what the item means to the character "
+                    "who gives it up. No number here reads an item's price."
+                ),
+                "fields": (
+                    "sacrifice_min_carried_days",
+                    "sacrifice_carried_days_per_point",
+                    "sacrifice_carried_max_points",
+                    "maker_tie_max_points",
+                    "sacrifice_ease_per_point",
+                    "sacrifices_per_week",
+                ),
             },
         ),
     )

@@ -20,8 +20,9 @@ from commands.worship import CmdPledge, CmdSacrifice
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.action_points.factories import ActionPointPoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.items.factories import ItemFacetFactory, ItemInstanceFactory
+from world.items.factories import ItemFacetFactory, ItemInstanceFactory, meaningful_item_for
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.services import active_persona_for_sheet
@@ -81,6 +82,11 @@ class PledgeTelnetTests(TestCase):
         FavorOutcomeAwardFactory(
             config=config, kind=FavorAwardKind.CLOSING, outcome_tier=self.success, amount=5
         )
+        FavorOutcomeAwardFactory(
+            config=config, kind=FavorAwardKind.SACRIFICE, outcome_tier=self.success, amount=4
+        )
+        config.invocation_check_type = CheckTypeFactory()
+        config.save(update_fields=["invocation_check_type"])
         for outcome in outcomes.values():
             WorshipRiteTierAwardFactory(tier=RiteTier.DEVOTIONAL, outcome_tier=outcome)
 
@@ -149,11 +155,19 @@ class PledgeTelnetTests(TestCase):
         obj = ObjectDBFactory(db_key="silk scarf", db_typeclass_path="typeclasses.objects.Object")
         obj.db_location = self.ysmay
         obj.save(update_fields=["db_location"])
-        item = ItemInstanceFactory(template__name="silk scarf", template__value=20, game_object=obj)
+        # Made by Ysmay and carried 30 days: own work 1 and carried 1, so 2 meaning points.
+        item = meaningful_item_for(
+            self.ysmay.sheet_data,
+            template__name="silk scarf",
+            template__value=20,
+            game_object=obj,
+        )
         ItemFacetFactory(item_instance=item, facet=self.silk)
         heard = self._onlooker_hears(CmdSacrifice, "silk scarf")
         self.assertIn(
-            "Value 20: 2 base, x2 Silk = 4, at 200% = +8 favor with Ombrin.", _said(self.ysmay)
+            "carried 1 (held 30 days), own work 1 (made by the holder) = 2, x2 Silk = 4 points."
+            " Success: 4 base, at 200% = +8 favor.",
+            _said(self.ysmay),
         )
         self.assertEqual(heard, [f"{name} sacrifices silk scarf at Ombrin's shrine."])
 

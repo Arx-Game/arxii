@@ -79,6 +79,7 @@ from world.worship.types import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.ceremonies.models import CeremonyOffering
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import ResonanceGrant
     from world.projects.models import Project
@@ -500,7 +501,13 @@ def service_terms(sheet: CharacterSheet, being: WorshippedBeing) -> ServiceTerms
         )
         sacrifice += f"; items with the {', '.join(facets)} facet count {multiplier}"
     lines.append(
-        ServiceTermLine(label=sacrifice, amount=f"1 per {config.sacrifice_value_per_favor} value")
+        ServiceTermLine(
+            label=sacrifice,
+            amount=(
+                f"a check, eased by what each item means to you; "
+                f"{config.sacrifices_per_week} a week"
+            ),
+        )
     )
     lines.append(
         ServiceTermLine(
@@ -516,19 +523,52 @@ def service_terms(sheet: CharacterSheet, being: WorshippedBeing) -> ServiceTerms
     )
 
 
-def _sacrifice_calculation(credit: PledgeCredit) -> str:
-    from world.ceremonies.models import get_ceremony_config  # noqa: PLC0415
-    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+def sacrifice_calculation(
+    offering: CeremonyOffering,
+    *,
+    base: int,
+    rate: int | None = None,
+    credited: int | None = None,
+) -> str:
+    """How a sacrifice's favor came about, in plain words (#4500).
 
+    The offering's signals, their sum, the favored-facet multiplier, the roll's outcome and
+    its base favor; with ``rate`` and ``credited`` the earning rate and the favor paid. It
+    reads the signals snapshotted when the item was given up, never its price.
+    """
+    from world.ceremonies.models import get_ceremony_config  # noqa: PLC0415
+
+    signals = list(offering.signals.all())
+    if not signals:
+        return "No meaning points: given up, no roll, no favor"
+    parts = []
+    for signal in signals:
+        part = f"{signal.get_kind_display().lower()} {signal.points}"
+        parts.append(f"{part} ({signal.detail})" if signal.detail else part)
+    points = sum(signal.points for signal in signals)
+    text = f"{', '.join(parts)} = {points}"
+    if offering.facet_id is not None:
+        percent = get_ceremony_config().offering_favored_facet_multiplier_percent
+        text += (
+            f", {multiplier_label(percent)} {offering.facet.name} = {points * percent // 100}"
+            " points"
+        )
+    else:
+        text += " points"
+    if not offering.counted:
+        return f"{text}: past the week's limit, given up for nothing"
+    outcome = offering.outcome_tier.name if offering.outcome_tier_id is not None else "No roll"
+    text += f". {outcome}: {base} base"
+    if rate is not None and credited is not None and base > 0:
+        text += f", at {rate}% = +{credited} favor"
+    return text
+
+
+def _sacrifice_calculation(credit: PledgeCredit) -> str:
     offering = credit.offering
     if offering is None:
         return f"{credit.base} base"
-    raw = max(offering.item_value // get_devotion_config().sacrifice_value_per_favor, 1)
-    text = f"value {offering.item_value}: {raw} base"
-    if offering.facet_id is not None and credit.base != raw:
-        percent = get_ceremony_config().offering_favored_facet_multiplier_percent
-        text += f", {multiplier_label(percent)} {offering.facet.name} = {credit.base}"
-    return text
+    return sacrifice_calculation(offering, base=credit.base)
 
 
 def _credit_label(credit: PledgeCredit) -> tuple[str, str]:
@@ -567,6 +607,7 @@ def credit_lines(details: PledgeDetails) -> list[PledgeCreditLine]:
     for credit in details.credits.select_related(
         "resonance_grant__resonance",
         "offering__facet",
+        "offering__outcome_tier",
         "rite_performance__rite",
         "rite_performance__outcome_tier",
     ):

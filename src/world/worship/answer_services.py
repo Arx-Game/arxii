@@ -127,9 +127,30 @@ def pledge_sacrifices(details: PledgeDetails) -> list[CeremonyOffering]:
 
     return list(
         CeremonyOffering.objects.filter(pledge_details=details)
-        .select_related("facet")
+        .select_related("facet", "outcome_tier")
+        # Read back as offering.signals.all() in sacrifice_detail, so a plain prefetch.
+        .prefetch_related("signals")  # noqa: PREFETCH_STRING
         .order_by("pk")
     )
+
+
+def sacrifice_detail(offering: CeremonyOffering) -> str:
+    """The GM's line for one sacrifice: the item, what it meant, and how the roll went.
+
+    "<item>: carried 2 (held 120 days), gift 4 (from <persona>; tie tier 3) = 6 points.
+    Success". The signals were snapshotted when the item was given up (#4500); the item is
+    gone, so this is the GM's only view of why it counted. Never the item's price.
+    """
+    signals = list(offering.signals.all())
+    if not signals:
+        return f"{offering.item_name}: no meaning points, no roll"
+    parts = ", ".join(
+        f"{s.get_kind_display().lower()} {s.points}" + (f" ({s.detail})" if s.detail else "")
+        for s in signals
+    )
+    points = sum(s.points for s in signals)
+    outcome = offering.outcome_tier.name if offering.outcome_tier_id is not None else "no roll"
+    return f"{offering.item_name}: {parts} = {points} points. {outcome}"
 
 
 def sacrifice_passage(answer: Answer, offerings: list[CeremonyOffering]) -> str:

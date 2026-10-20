@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from world.items.gems.models import PendingRareFind
 from world.items.materials_models import OrgMaterialStock, StreamMaterialPool
+from world.items.services.holding import set_item_holder
 from world.items.services.usage import destroy_consumed_item_instance
 
 if TYPE_CHECKING:
@@ -155,8 +156,7 @@ def collect_org_materials(
 
         vault = get_or_create_org_vault(organization)
         for stone in survivors:
-            stone.holder_character_sheet = collector_sheet
-            stone.save(update_fields=["holder_character_sheet"])
+            set_item_holder(stone, collector_sheet)
             VaultTransit.objects.create(
                 vault=vault, item_instance=stone, carrier_character_sheet=collector_sheet
             )

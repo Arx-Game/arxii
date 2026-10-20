@@ -1,7 +1,8 @@
 /**
- * SacrificeDialog (#4333) — give up items you carry at a being's shrine or temple. Each item is
- * destroyed and earns favor in proportion to its value (more for a facet the being favors); the
- * server answers with each item's calculation. Dispatches `sacrifice` as the character; the
+ * SacrificeDialog (#4333, #4500) — give up items you carry at a being's shrine or temple. Each
+ * item with meaning for you (carried, a gift, an heirloom, your own work, made by a tie) rolls a
+ * check eased by that meaning; an item with none is given up for nothing. The price never counts.
+ * The server answers with each item's calculation. Dispatches `sacrifice` as the character; the
  * server refuses it away from a holy site.
  */
 
@@ -101,8 +102,9 @@ export function SacrificeDialog({
             </ul>
           )}
           <p className="text-xs text-muted-foreground">
-            <b>Rule:</b> each item is destroyed. Favor is its value per the being's terms, more for
-            a facet the being favors, at your earning rate.
+            <b>Rule:</b> items given up leave play; their design is kept. Each item that means
+            something to you rolls and may earn no favor. An item that means nothing to you earns
+            nothing, whatever it cost.
           </p>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

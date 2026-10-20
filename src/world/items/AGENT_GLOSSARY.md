@@ -196,3 +196,15 @@ _Avoid_: allowance (that's the automatic even split), donation, gem grant (super
 - **Remember (always / never)** — `MakeoverRemember`: the one-motion shortcut on a
   makeover answer that whitelists or blacklists the stylist for the makeover category
   as the answer is given. _Avoid_: trust / block (those name other systems).
+
+**Meaning signal / meaning points**:
+One fact that makes an item matter to the character holding it, worth points (#4500, ADR-4462): carried, gift, heirloom, own work, made by a tie (slice 6b adds designed, made for, made from, shown, resonance fed, trophy, keepsake, requested). An item's points are the sum, read by `item_meaning` from records the game keeps; the reader never looks at a price, fee or material cost, so a bought item with no history means nothing. What a sacrifice or offering earns scales with these points.
+_Avoid_: value, worth, price (those are what an item costs, not what it means)
+
+**Carry gate**:
+The days a character must have held an item (`DevotionConfig.sacrifice_min_carried_days`) before its personal meaning signals count; `ItemInstance.held_since` is the clock and `set_item_holder` restarts it. Carried itself counts only alongside another signal.
+_Avoid_: ownership age
+
+**Pair tier**:
+The highest `RelationshipTier` whose depth threshold two characters' added depth meets (`pair_tier` in `world/relationships/helpers.py`), 0 with no tie. Read for "made by a tie".
+_Avoid_: mutual tier (that is `get_relationship_tier`, the Mentor/Student read)

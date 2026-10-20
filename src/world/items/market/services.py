@@ -21,6 +21,7 @@ from world.items.market.models import (
     StockListing,
     WareListing,
 )
+from world.items.services.holding import set_item_holder
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -241,8 +242,7 @@ def purchase_ware(*, listing: WareListing, buyer: Persona) -> FinishingPass:
         )
 
     instance = listing.item_instance
-    instance.holder_character_sheet = buyer.character_sheet
-    instance.save(update_fields=["holder_character_sheet"])
+    set_item_holder(instance, buyer.character_sheet)
 
     listing.sold_at = timezone.now()
     listing.save(update_fields=["sold_at"])
