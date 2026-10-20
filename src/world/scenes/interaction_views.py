@@ -307,11 +307,14 @@ class InteractionViewSet(
         scene_id = self.request.query_params.get("scene")  # noqa: USE_FILTERSET
         # A single-row retrieve (the refetch a live frame triggers, #4508) names no
         # ``?scene=``; the row's own scene says whose entrance endorsers to load.
-        if not scene_id and self.action == "retrieve":
+        # The play views build this viewset by hand, with no URL kwargs, and fall through.
+        try:
+            row_pk = self.kwargs.get("pk")
+        except AttributeError:
+            row_pk = None
+        if not scene_id and row_pk is not None:
             scene_id = (
-                Interaction.objects.filter(pk=self.kwargs.get("pk"))
-                .values_list("scene_id", flat=True)
-                .first()
+                Interaction.objects.filter(pk=row_pk).values_list("scene_id", flat=True).first()
             )
         entry_map: dict[int, list] = {}
         if scene_id:
