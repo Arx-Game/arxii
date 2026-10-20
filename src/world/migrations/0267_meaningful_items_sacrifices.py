@@ -7,9 +7,7 @@ import django.utils.timezone
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0265_alter_npcloan_scene_alter_npcregardevent_amount"),
-    ]
+    dependencies = [("arxii", "0266_consequence_deliberately_free_and_more")]
 
     operations = [
         # ADR-0237 data disposition. The two renames keep their tuned numbers (RenameField);

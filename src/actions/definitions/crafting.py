@@ -100,7 +100,20 @@ class AttachFacetAction(Action):
             )
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, data={"result": result})
+        return ActionResult(
+            success=True,
+            message=_worked_in_message(facet.name, item_instance, result),
+            data={"result": result},
+        )
+
+
+def _worked_in_message(name: str, item_instance: ItemInstance, result: Any) -> str:
+    """What the crafter is told after a facet or style attempt (#3657 tranche 14: the
+    actions had answered with data alone, so telnet said nothing either way)."""
+    if not result.attached:
+        return f"The work fails; {name} does not take."
+    tier = result.quality_tier.name if result.quality_tier is not None else "unrated"
+    return f"You work {name} into {item_instance.display_name} ({tier} quality)."
 
 
 @dataclass
@@ -192,7 +205,12 @@ class DetachFacetAction(Action):
             remove_facet_from_item(item_facet=item_facet)
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True)
+        return ActionResult(
+            success=True,
+            message=(
+                f"You strip {item_facet.facet.name} from {item_facet.item_instance.display_name}."
+            ),
+        )
 
 
 @dataclass
@@ -235,7 +253,11 @@ class AttachStyleAction(Action):
             )
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, data={"result": result})
+        return ActionResult(
+            success=True,
+            message=_worked_in_message(style.name, item_instance, result),
+            data={"result": result},
+        )
 
 
 @dataclass
@@ -286,7 +308,12 @@ class CreateItemAction(Action):
             )
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, data={"result": result})
+        if result.created and result.item_instance is not None:
+            tier = result.quality_tier.name if result.quality_tier is not None else "unrated"
+            message = f"You craft {result.item_instance.display_name} ({tier} quality)."
+        else:
+            message = "The work fails; nothing is made."
+        return ActionResult(success=True, message=message, data={"result": result})
 
 
 @dataclass

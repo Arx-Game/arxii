@@ -1,7 +1,7 @@
 """Telnet face of the NPC-service hire/commission loop (#1493).
 
 Thin command: parses subverbs, manages the ephemeral ``InteractionSession`` in
-``caller.session.ndb.npc_interaction``, and delegates each operation to the
+``caller.ndb.npc_interaction``, and delegates each operation to the
 matching registry Action so telnet players reach the same seam as the web.
 """
 
@@ -81,16 +81,19 @@ class CmdHire(ArxCommand):
     def _session(self) -> Any | None:
         """Return the in-flight InteractionSession, if any.
 
-        ndb returns None natively for a missing attribute; the dynamic
-        attribute name is why this is getattr at all.
+        The conversation is the character's, held on the character's ``ndb``
+        (#3657 tranche 14: it had been read off ``caller.session``, which an
+        Evennia character does not have, so every ``hire`` a player typed
+        raised). ndb returns None natively for a missing attribute; the
+        dynamic attribute name is why this is getattr at all.
         """
-        return getattr(self.caller.session.ndb, self._SESSION_KEY, None)
+        return getattr(self.caller.ndb, self._SESSION_KEY, None)
 
     def _set_session(self, session: Any) -> None:
-        setattr(self.caller.session.ndb, self._SESSION_KEY, session)
+        setattr(self.caller.ndb, self._SESSION_KEY, session)
 
     def _clear_session(self) -> None:
-        setattr(self.caller.session.ndb, self._SESSION_KEY, None)
+        setattr(self.caller.ndb, self._SESSION_KEY, None)
 
     def _parse_start_args(self, args: str) -> tuple[str, str | None]:
         """Split ``hire <role> [as <persona>]`` into role query and persona name."""
@@ -103,14 +106,28 @@ class CmdHire(ArxCommand):
         return args, None
 
     def _resolve_persona_id(self, name: str | None) -> int | None:
-        """Use ``self.caller.search`` to turn a Persona name into a primary-key id."""
+        """Turn the ``as <npc>`` name into a Persona id.
+
+        Someone standing here is their active persona; otherwise the name is a
+        persona's own (#3657 tranche 14: this had asked ``caller.search``, which
+        only ever returns game objects, for a ``Persona``, so no name was ever
+        found). Several personas of one name are named back, never guessed at.
+        """
         if not name:
             return None
-        target = self.caller.search(name)
-        if not target or not isinstance(target, Persona):
+        found = self.caller.search(name, quiet=True)
+        if len(found) == 1 and found[0].character_sheet is not None:
+            from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+            return active_persona_for_sheet(found[0].character_sheet).pk
+        personas = list(Persona.objects.filter(name__iexact=name)[:2])
+        if len(personas) > 1:
+            msg = f"More than one persona is called '{name}'."
+            raise CommandError(msg)
+        if not personas:
             msg = f"Could not find persona '{name}'."
             raise CommandError(msg)
-        return target.pk
+        return personas[0].pk
 
     def _do_start(self, args: str) -> None:
         if self._session() is not None:
@@ -147,7 +164,10 @@ class CmdHire(ArxCommand):
             self.msg(result.message)
             return
         self._set_session(result.data["session"])
-        self.msg(f"You begin speaking with {display}.")
+        # The action names who answered: the named persona when one was asked for,
+        # the placement's face otherwise (#3657 tranche 14: the command had named the
+        # functionary it matched the role on even when ``as <npc>`` chose someone else).
+        self.msg(result.message or f"You begin speaking with {display}.")
         self._show_offers(result.data["session"])
 
     def _functionary_here(self, role_query: str) -> Any | None:

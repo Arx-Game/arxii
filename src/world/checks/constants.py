@@ -21,6 +21,14 @@ value, not engine logic.
 """
 
 
+#: ``CheckOutcome.success_level`` at and above which a tier counts as Success (#4501).
+SUCCESS_TIER_MIN_LEVEL = 1
+#: ``CheckOutcome.success_level`` at and above which a tier counts as Critical Success (#4501).
+CRITICAL_SUCCESS_TIER_MIN_LEVEL = 2
+#: ``CheckOutcome.success_level`` at and below which a tier counts as Failure (#4501).
+FAILURE_TIER_MAX_LEVEL = -1
+
+
 class EffectType(models.TextChoices):
     """Type of mechanical effect applied by a consequence."""
 
@@ -52,6 +60,7 @@ class EffectType(models.TextChoices):
     RESTORE_FATIGUE = "restore_fatigue", "Restore Fatigue"
     RESTORE_ANIMA = "restore_anima", "Restore Anima"
     INTOXICATE = "intoxicate", "Intoxicate"
+    TECHNIQUE_TRAINING = "technique_training", "Technique Training"
 
 
 class PositionDestination(models.TextChoices):

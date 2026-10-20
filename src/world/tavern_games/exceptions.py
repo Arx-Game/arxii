@@ -50,3 +50,7 @@ class NotEnoughSeatsError(TavernGameError):
 
 class LossCapExceededError(TavernGameError):
     user_message = "That ante would push you past your weekly loss cap for the week."
+
+
+class CannotCoverAnteError(TavernGameError):
+    user_message = "You don't have the coppers to cover the ante."

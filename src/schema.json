@@ -80639,6 +80639,11 @@ components:
           type: object
           additionalProperties: {}
           readOnly: true
+        is_cosmetic:
+          type: boolean
+          description: 'A cosmetic scar (#4501): a reward with no drawbacks that does
+            not hold back advancement. The player still writes it. Not the same as
+            tier 1, Cosmetic Touch.'
         origin_affinity_name:
           type: string
           readOnly: true

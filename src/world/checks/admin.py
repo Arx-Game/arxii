@@ -1,6 +1,8 @@
 """Check system admin configuration."""
 
 from django.contrib import admin
+from django.core.exceptions import ValidationError
+from django.forms.models import BaseInlineFormSet
 
 from world.admin_utils import OneRowPerFormSet
 from world.checks.models import (
@@ -77,8 +79,32 @@ class CheckTypeAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 
+class ConsequenceEffectFormSet(BaseInlineFormSet):
+    """Runs the trial rules over the whole proposed effect set (#4501).
+
+    The cost rule needs the sibling effects, which an inline form saves after the
+    consequence's own ``clean``; the Trial builder runs the same rule over its own set.
+    """
+
+    def clean(self) -> None:
+        super().clean()
+        if any(self.errors):
+            return
+        proposed = [
+            form.instance
+            for form in self.forms
+            if form.cleaned_data
+            and not form.cleaned_data.get("DELETE")
+            and form.cleaned_data.get("effect_type")
+        ]
+        errors = self.instance.trial_rule_errors(proposed)
+        if errors:
+            raise ValidationError(errors)
+
+
 class ConsequenceEffectInline(admin.TabularInline):
     model = ConsequenceEffect
+    formset = ConsequenceEffectFormSet
     extra = 1
     # #4473: a LEGEND_AWARD effect names organizations on its own page.
     show_change_link = True
@@ -96,6 +122,16 @@ _LEGEND_AWARD_FIELDS = (
 )
 
 
+_TRIAL_FIELDS = (
+    "grants_known",
+    "technique",
+    "training_points",
+    "training_meter_size",
+    "grants_technique_outright",
+    "scar_is_cosmetic",
+)
+
+
 @admin.register(ConsequenceEffect)
 class ConsequenceEffectAdmin(admin.ModelAdmin):
     """One effect of a consequence, on its own page (#4473).
@@ -108,24 +144,35 @@ class ConsequenceEffectAdmin(admin.ModelAdmin):
     list_filter = ["effect_type"]
     search_fields = ["consequence__label"]
     list_select_related = ["consequence"]
-    autocomplete_fields = ["consequence", "crime_kinds"]
+    autocomplete_fields = ["consequence", "crime_kinds", "technique"]
     inlines = [ConsequenceNamedOrganizationInline]
 
     def get_fieldsets(self, request, obj=None):
         """The effect and its legend award first; every other effect's fields collapsed."""
-        named = {*_EFFECT_FIELDS, *_LEGEND_AWARD_FIELDS}
+        named = {*_EFFECT_FIELDS, *_LEGEND_AWARD_FIELDS, *_TRIAL_FIELDS}
         others = [f for f in self.get_fields(request, obj) if f not in named]
         return (
             (None, {"fields": _EFFECT_FIELDS}),
             ("Legend award", {"fields": _LEGEND_AWARD_FIELDS}),
+            (
+                "Trial (#4343)",
+                {
+                    "fields": _TRIAL_FIELDS,
+                    "description": (
+                        "grants_known makes a codex entry KNOWN (Success and above). "
+                        "Technique training trains or grants a technique; the cosmetic scar "
+                        "flag makes a reward scar that is never a cost."
+                    ),
+                },
+            ),
             ("Other effect fields", {"fields": others, "classes": ["collapse"]}),
         )
 
 
 @admin.register(Consequence)
 class ConsequenceAdmin(admin.ModelAdmin):
-    list_display = ["label", "outcome_tier", "weight", "character_loss"]
-    list_filter = ["character_loss"]
+    list_display = ["label", "outcome_tier", "weight", "character_loss", "deliberately_free"]
+    list_filter = ["character_loss", "deliberately_free"]
     search_fields = ["label"]
     list_select_related = ["outcome_tier"]
     inlines = [ConsequenceEffectInline]

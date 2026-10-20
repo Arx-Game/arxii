@@ -43,6 +43,7 @@ from world.magic.services.gift_acquisition import (
     get_technique_cap_for_gift,
     resolve_owned_gift,
 )
+from world.magic.types.training import TechniqueTeachingSources
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -202,6 +203,24 @@ def learn_technique(  # noqa: PLR0913
     )
 
     return ct
+
+
+def technique_teaching_sources(technique: Technique) -> TechniqueTeachingSources:
+    """Where ``technique`` is taught: Academy TRAIN offers and open player teaching offers."""
+    from world.magic.models import TechniqueTeachingOffer  # noqa: PLC0415
+    from world.npc_services.models import TrainOfferDetails  # noqa: PLC0415
+
+    academy_names = sorted(
+        set(
+            TrainOfferDetails.objects.filter(
+                technique=technique, offer__role__faction_affiliation__isnull=False
+            ).values_list("offer__role__faction_affiliation__name", flat=True)
+        )
+    )
+    return TechniqueTeachingSources(
+        academy_names=tuple(academy_names),
+        player_teacher_count=TechniqueTeachingOffer.objects.filter(technique=technique).count(),
+    )
 
 
 def learn_technique_from_ritual(*, character_sheet, ritual, **_kwargs):

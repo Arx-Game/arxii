@@ -83,6 +83,18 @@ const TIER4_PENDING: PendingAlteration = {
   } as unknown as Record<string, unknown>,
 };
 
+const COSMETIC_PENDING: PendingAlteration = {
+  ...PENDING,
+  id: 9,
+  is_cosmetic: true,
+  tier_caps: {
+    social_cap: 0,
+    weakness_cap: 0,
+    resonance_cap: 0,
+    visibility_required: false,
+  } as unknown as Record<string, unknown>,
+};
+
 const LIBRARY_ENTRY = {
   id: 11,
   name: 'Veins of Night',
@@ -130,6 +142,30 @@ async function openAuthorTab(user: ReturnType<typeof userEvent.setup>) {
   const authorTab = screen.getByRole('tab', { name: /author your own/i });
   await user.click(authorTab);
 }
+
+// ---------------------------------------------------------------------------
+// Tests — cosmetic scar (#4501)
+// ---------------------------------------------------------------------------
+
+describe('AlterationResolveDialog — cosmetic scar', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.getAlterationLibrary).mockResolvedValue([]);
+    vi.mocked(conditionsApi.fetchDamageTypes).mockResolvedValue([]);
+  });
+
+  it('names the scar cosmetic and offers no drawback fields', async () => {
+    const user = userEvent.setup();
+    renderDialog(COSMETIC_PENDING);
+    await openAuthorTab(user);
+
+    expect(screen.getByText(/resolve your cosmetic touched mage scar/i)).toBeInTheDocument();
+    expect(screen.getByText(/carries no drawbacks/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/weakness magnitude/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/resonance bonus/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/social reactivity/i)).not.toBeInTheDocument();
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Tests — library path

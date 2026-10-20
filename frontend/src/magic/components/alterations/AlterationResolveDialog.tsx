@@ -93,7 +93,10 @@ export function AlterationResolveDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Resolve your {pending.tier_display} Mage Scar</DialogTitle>
+          <DialogTitle>
+            Resolve your {pending.is_cosmetic ? 'cosmetic ' : ''}
+            {pending.tier_display} Mage Scar
+          </DialogTitle>
           <DialogDescription>
             {pending.character_name} was marked by {pending.origin_affinity_name} magic (
             {pending.origin_resonance_name}). This choice is permanent: take a known alteration from

@@ -92,7 +92,6 @@ def contribute_to_technique_progress(
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.magic.exceptions import MagicError  # noqa: PLC0415
-    from world.magic.services.technique_acquisition import learn_technique  # noqa: PLC0415
 
     if game_week is None:
         game_week = get_current_game_week()
@@ -136,29 +135,48 @@ def contribute_to_technique_progress(
         raise MagicError(msg)
     pool.spend(ap_to_spend_actual)
 
-    # 7. Add to meter (atomic).
-    progress = TechniqueProgress.objects.select_for_update().get(pk=progress.pk)
-    progress.points_accumulated += clamped
-    progress.save(update_fields=["points_accumulated", "updated_at"])
-
-    # 8. Update weekly tracker.
+    # 7. Update weekly tracker.
     weekly.points_contributed += clamped
     weekly.save(update_fields=["points_contributed"])
 
-    # 9. Check completion.
-    if progress.points_accumulated >= progress.total_required:
-        # completing_progress=True (#4097 fix round 2): the prerequisite check
-        # already ran when this meter was created (charge_and_learn, or
-        # learn_technique's own ap_cost>0 branch) — don't re-gate a meter the
-        # character has already paid AP into.
-        ct = learn_technique(
-            sheet,
-            progress.technique,
-            source=progress.source,
-            ap_cost=0,
-            completing_progress=True,
-        )
-        progress.delete()
-        return ct
+    # 8. Add to meter (atomic) and mint on full.
+    return credit_technique_progress(progress, clamped)
 
-    return None
+
+def _mint_if_full(sheet: CharacterSheet, progress: TechniqueProgress):
+    """Mint the technique and consume the meter once it is full; else None.
+
+    completing_progress=True (#4097 fix round 2): the prerequisite check already ran when
+    this meter was created (charge_and_learn, or learn_technique's own ap_cost>0 branch),
+    so don't re-gate a meter the character has already paid into.
+    """
+    from world.magic.services.technique_acquisition import learn_technique  # noqa: PLC0415
+
+    if progress.points_accumulated < progress.total_required:
+        return None
+    ct = learn_technique(
+        sheet,
+        progress.technique,
+        source=progress.source,
+        ap_cost=0,
+        completing_progress=True,
+    )
+    progress.delete()
+    return ct
+
+
+@transaction.atomic
+def credit_technique_progress(progress: TechniqueProgress, points: int):
+    """Add ``points`` to a training meter, minting the technique if it fills (#4501).
+
+    The add-points and mint-on-full steps of ``contribute_to_technique_progress``, on their
+    own: it charges no action points and writes no weekly tracker, because the caller (a
+    trial's own cost) paid for the points. Whether trial points count toward the weekly
+    training cap is Apostate's call (#4343, "For Apostate" item 2); today they do not.
+
+    Returns the minted ``CharacterTechnique`` if the meter filled, else None.
+    """
+    progress = TechniqueProgress.objects.select_for_update().get(pk=progress.pk)
+    progress.points_accumulated += points
+    progress.save(update_fields=["points_accumulated", "updated_at"])
+    return _mint_if_full(progress.character_sheet, progress)

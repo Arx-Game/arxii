@@ -829,6 +829,7 @@ class PendingAlterationSerializer(serializers.ModelSerializer):
             "tier",
             "tier_display",
             "tier_caps",
+            "is_cosmetic",
             "origin_affinity_name",
             "origin_resonance_name",
             "triggering_scene",
@@ -842,7 +843,11 @@ class PendingAlterationSerializer(serializers.ModelSerializer):
         return active_persona_for_sheet(obj.character).name
 
     def get_tier_caps(self, obj: PendingAlteration) -> dict:
-        return ALTERATION_TIER_CAPS.get(obj.tier, {})
+        caps = ALTERATION_TIER_CAPS.get(obj.tier, {})
+        if obj.is_cosmetic:
+            # A cosmetic scar has no drawbacks: the form shows no magnitude pickers (#4501).
+            return {**caps, "social_cap": 0, "weakness_cap": 0, "resonance_cap": 0}
+        return caps
 
 
 class LibraryEntrySerializer(serializers.ModelSerializer):
@@ -936,6 +941,7 @@ class AlterationResolutionSerializer(serializers.Serializer):
                 payload={"library_entry_pk": library_template.pk},
                 is_staff=is_staff,
                 character_sheet=self.context.get("character_sheet"),
+                is_cosmetic=pending.is_cosmetic,
             )
             if library_errors:
                 raise serializers.ValidationError(library_errors)
@@ -958,6 +964,7 @@ class AlterationResolutionSerializer(serializers.Serializer):
             payload=payload,
             is_staff=is_staff,
             character_sheet=self.context.get("character_sheet"),
+            is_cosmetic=pending.is_cosmetic,
         )
         if errors:
             raise serializers.ValidationError(errors)

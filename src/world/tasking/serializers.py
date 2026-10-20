@@ -97,7 +97,7 @@ class TaskFulfillmentSerializer(serializers.ModelSerializer):
         ]
 
     def get_agent_name(self, obj: TaskFulfillment) -> str:
-        return str(obj.npc_asset.asset_persona) if obj.npc_asset_id else ""
+        return obj.npc_asset.asset_persona.name if obj.npc_asset_id else ""
 
     def get_report(self, obj: TaskFulfillment) -> str:
         """The agent's report is readable only once the job resolved."""
@@ -180,7 +180,7 @@ class ListenerPostSerializer(serializers.ModelSerializer):
 
     def get_agent_name(self, obj) -> str:
         asset = obj.assignment.npc_asset
-        return str(asset.asset_persona) if asset else ""
+        return asset.asset_persona.name if asset else ""
 
     def get_pending_harvests(self, obj) -> int:
         return obj.harvests.filter(collected_at__isnull=True).count()

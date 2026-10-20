@@ -13,7 +13,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate, Gift
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
-  Personalized name; and Prepared Text (#4101)
+  Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
   Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
@@ -203,6 +203,11 @@ cooldown, draw weight, era replacement, visibility) plus contract bookkeeping
 entry and the stories glossary's StoryScenario entry for the sibling story-beat wrapper.
 _Avoid_: scenario (a mission with a giver is not what "scenario" names - reserve that word
 for the graph wrapped in a story beat).
+
+**Trial** (#4343):
+A mission whose good outcome tiers make a codex entry known, train or grant the technique it
+opens, and apply a cost. No trial model; see the missions glossary's Trial entry and the magic
+glossary's Cosmetic Mage Scar. _Avoid_: reveal (that is the Audere ultimates' set).
 
 ## Identity
 
