@@ -42,5 +42,6 @@ def work_in_item(
     lineage = ItemLineage.objects.create(
         item=item, source_item=source, source_name=source.display_name, points=points
     )
+    del item.cached_lineage  # examine's "Worked from" reads it
     destroy_consumed_item_instance(source, preserve=True, note=f"Worked into {item.display_name}")
     return lineage

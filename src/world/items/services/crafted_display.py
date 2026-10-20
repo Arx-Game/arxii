@@ -11,6 +11,7 @@ two surfaces can never drift.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -63,15 +64,50 @@ def _credit_sentences(
     return sentences
 
 
-def _facet_work_and_lineage(instance: ItemInstance) -> list[str]:
-    """ "Facet work by W." for each artist who did crafting-service work on it, and
-    "Worked from <name>." for what it was made from (marked when that is gone)."""
-    sentences: list[str] = []
+def _facet_workers(instance: ItemInstance) -> list[str]:
+    """Names of the artists who did crafting-service work on it, in order, once each."""
     workers: list[str] = []
     for sale in instance.cached_service_sales:
         seller = sale.seller_persona
         if seller is not None and seller.name not in workers:
             workers.append(seller.name)
+    return workers
+
+
+@dataclass(frozen=True)
+class CreditedNames:
+    """Who examine names on a piece (#4512): the maker, the designer and the facet workers."""
+
+    maker: str | None
+    designer: str | None
+    facet_workers: list[str]
+
+
+def _credit_personas(instance: ItemInstance) -> tuple[Persona | None, Persona | None]:
+    """The maker's and the designer's personas, with the documented fallback
+    (persona_display, then the sheet's primary persona)."""
+    maker = instance.crafter_persona_display or _primary_or_none(instance.crafter_character_sheet)
+    designer = instance.designer_persona_display or _primary_or_none(
+        instance.designer_character_sheet
+    )
+    return maker, designer
+
+
+def credited_names(instance: ItemInstance) -> CreditedNames:
+    """The names examine credits on ``instance`` (the commission form previews them)."""
+    maker, designer = _credit_personas(instance)
+    return CreditedNames(
+        maker=maker.name if maker is not None else None,
+        designer=designer.name if designer is not None else None,
+        facet_workers=_facet_workers(instance),
+    )
+
+
+def _facet_work_and_lineage(instance: ItemInstance) -> list[str]:
+    """ "Facet work by W." for each artist who did crafting-service work on it, and
+    "Worked from <name>." for what it was made from (marked when that is gone)."""
+    sentences: list[str] = []
+    workers = _facet_workers(instance)
     if workers:
         sentences.append(f"Facet work by {_join_prose(workers)}.")
     for row in instance.cached_lineage:
@@ -123,10 +159,7 @@ def crafted_provenance_line(instance: ItemInstance) -> str | None:
     # Credits (#2066 dual provenance, #4512): "Made by X for Y. Designed by Z. Facet work
     # by W." The designer is credited only when they wrote text; the maker's tie and the
     # fee are not shown. A piece worked from another item lists it, marked when it is gone.
-    maker = instance.crafter_persona_display or _primary_or_none(instance.crafter_character_sheet)
-    designer = instance.designer_persona_display or _primary_or_none(
-        instance.designer_character_sheet
-    )
+    maker, designer = _credit_personas(instance)
     sentences.extend(_credit_sentences(instance, maker, designer))
     sentences.extend(_facet_work_and_lineage(instance))
     if instance.destroyed_at is not None:

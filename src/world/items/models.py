@@ -25,6 +25,7 @@ from core.descriptors import ReverseOneToOneOrNone
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.contributors.models import CreditedContent
 from world.forms.models import ConcealmentLevel, DisguiseKind
@@ -1168,21 +1169,29 @@ class ItemInstance(SharedMemoryModel):
             )
         )
 
-    @cached_property
+    @PrunedCachedProperty
     def cached_service_sales(self) -> list[MarketSale]:
         """The crafting-service sales on this item, oldest first (#4512): who did facet or
-        style work on it for someone else. A prefetch can fill it; otherwise it queries.
-        To invalidate: del instance.cached_service_sales"""
+        style work on it for someone else. The carried-items handler prefetches it; otherwise it
+        queries. Whatever writes a service sale deletes this to refresh it.
+
+        To invalidate: del instance.cached_service_sales
+        """
+        from world.items.market.models import MarketSale  # noqa: PLC0415
+
         return list(
-            self.market_sales.filter(kind="service")
+            self.market_sales.filter(kind=MarketSale.SaleKind.SERVICE)
             .select_related("seller_persona")
             .order_by("occurred_at", "pk")
         )
 
-    @cached_property
+    @PrunedCachedProperty
     def cached_lineage(self) -> list[ItemLineage]:
-        """What this item was worked from (#4512), with each source loaded so examine can
-        mark one that is gone. A prefetch can fill it; otherwise it queries."""
+        """What this item was worked from (#4512), each source loaded so examine can mark
+        one that is gone. The carried-items handler prefetches it; otherwise it queries.
+
+        To invalidate: del instance.cached_lineage
+        """
         return list(self.lineage.select_related("source_item"))
 
     @cached_property

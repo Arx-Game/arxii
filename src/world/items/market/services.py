@@ -444,6 +444,7 @@ def run_service_craft(  # noqa: PLR0913 - the commissioner's words and dedicatio
         item_instance=item_instance,
         price=fee,
     )
+    del item_instance.cached_service_sales  # examine's "Facet work by" reads it (#4512)
     return result, fee
 
 

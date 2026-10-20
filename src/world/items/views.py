@@ -70,6 +70,7 @@ from world.items.serializers import (
     ItemFacetReadSerializer,
     ItemFacetWriteSerializer,
     ItemInstanceReadSerializer,
+    ItemMeaningSerializer,
     ItemStyleWriteSerializer,
     ItemTemplateDetailSerializer,
     ItemTemplateListSerializer,
@@ -596,6 +597,34 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         # requester their own items, where ``can_steal`` is trivially False.
         serializer = ItemInstanceReadSerializer(item)
         return Response(serializer.data)
+
+    @extend_schema(responses=ItemMeaningSerializer)
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="meaning")
+    def meaning(self, request: Request, pk: str | None = None) -> Response:
+        """What the item means to the character holding it (#4512).
+
+        The crafter reads this before choosing to work the item into a new piece. It
+        names the signals and their points for the holder only; players in a room never
+        see either.
+        """
+        from world.items.services.meaning_display import meaning_rail  # noqa: PLC0415
+
+        user = cast(AccountDB, request.user)
+        item_pk = _parse_int_param(pk)
+        if item_pk is None:
+            raise NotFound
+        try:
+            item = ItemInstance.objects.in_play().select_related("game_object").get(pk=item_pk)
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
+        if not user.is_staff:
+            holder = item.game_object.db_location if item.game_object is not None else None
+            if holder is None or not _user_plays_pk(user, holder.pk):
+                raise NotFound
+        rail = meaning_rail(item)
+        if rail is None:
+            raise NotFound
+        return Response(ItemMeaningSerializer(rail).data)
 
     @extend_schema(request=UseItemSerializer, responses=UseItemResultSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="use")

@@ -324,6 +324,22 @@ class CraftingQuoteSerializer(serializers.Serializer):
     station_status = StationStatusSerializer(allow_null=True)
 
 
+class ItemMeaningLineSerializer(serializers.Serializer):
+    """One signal that makes an item matter to its holder (#4512)."""
+
+    label = serializers.CharField(read_only=True)
+    detail = serializers.CharField(read_only=True)
+    points = serializers.IntegerField(read_only=True)
+
+
+class ItemMeaningSerializer(serializers.Serializer):
+    """What an item means to the character holding it: its signals and their sum. Shown to
+    the holder before they choose to work the item into a new piece (#4512)."""
+
+    total = serializers.IntegerField(read_only=True)
+    lines = ItemMeaningLineSerializer(many=True, read_only=True)
+
+
 class CraftableTemplateSerializer(serializers.ModelSerializer):
     """A template a character can mint via item-creation crafting (#2240)."""
 
@@ -432,6 +448,18 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
     # slightly alluring. Made by X for Y. Designed by Z. Facet work by W." Null for
     # uncrafted items.
     crafted_provenance = serializers.SerializerMethodField()
+    # #4512: what the commission form needs to know about the piece. The names are the
+    # ones examine already shows; ``designer_is_holder`` says whether the holder may
+    # rewrite the words on it.
+    custom_name = serializers.CharField(read_only=True)
+    custom_description = serializers.CharField(read_only=True)
+    dedicated_to_name = serializers.CharField(
+        source="dedicated_to_persona.name", read_only=True, allow_null=True, default=None
+    )
+    designer_is_holder = serializers.SerializerMethodField()
+    crafter_name = serializers.SerializerMethodField()
+    designer_name = serializers.SerializerMethodField()
+    facet_workers = serializers.SerializerMethodField()
     # #2886: structured accent rows for the removal UI.
     accents = serializers.SerializerMethodField()
     # #2907: the piece's form (crafter-picked or template default), null = formless.
@@ -457,10 +485,42 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
             "is_currency_instrument",
             "can_steal",
             "crafted_provenance",
+            "custom_name",
+            "custom_description",
+            "dedicated_to_name",
+            "designer_is_holder",
+            "crafter_name",
+            "designer_name",
+            "facet_workers",
             "accents",
             "silhouette",
         ]
         read_only_fields = fields
+
+    def get_designer_is_holder(self, obj: ItemInstance) -> bool:
+        """Whether the holder wrote the piece's words (#4512)."""
+        return (
+            obj.designer_character_sheet_id is not None
+            and obj.designer_character_sheet_id == obj.holder_character_sheet_id
+        )
+
+    def get_crafter_name(self, obj: ItemInstance) -> str | None:
+        """The persona that signed the work, as examine names them (#4512)."""
+        from world.items.services.crafted_display import credited_names  # noqa: PLC0415
+
+        return credited_names(obj).maker
+
+    def get_designer_name(self, obj: ItemInstance) -> str | None:
+        """The persona credited as designer, as examine names them (#4512)."""
+        from world.items.services.crafted_display import credited_names  # noqa: PLC0415
+
+        return credited_names(obj).designer
+
+    def get_facet_workers(self, obj: ItemInstance) -> list[str]:
+        """Artists who did facet or style work on the piece for someone (#4512)."""
+        from world.items.services.crafted_display import credited_names  # noqa: PLC0415
+
+        return credited_names(obj).facet_workers
 
     def get_display_image_url(self, obj: ItemInstance) -> str | None:
         """Return the cloudinary URL for the item's display image, if any."""

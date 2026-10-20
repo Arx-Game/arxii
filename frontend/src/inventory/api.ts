@@ -366,12 +366,25 @@ export async function craftCreateItem(payload: {
   template: number;
   custom_name?: string;
   custom_description?: string;
+  /** Persona the piece is made for (#4512); permanent. */
+  made_for?: number;
+  /** A held item to use up and record as the piece's lineage (#4512). */
+  worked_from?: number;
 }): Promise<CreateItemResult> {
   const res = await apiFetch(`${BASE_URL}/crafting/create/`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await readError(res, 'Failed to craft item'));
+  return res.json();
+}
+
+export type ItemMeaning = components['schemas']['ItemMeaning'];
+
+/** What a held item means to its holder: its signals and points (#4512). */
+export async function getItemMeaning(itemId: number): Promise<ItemMeaning> {
+  const res = await apiFetch(`${BASE_URL}/inventory/${itemId}/meaning/`);
+  if (!res.ok) throw new Error(await readError(res, 'Failed to load what the item means'));
   return res.json();
 }
 
