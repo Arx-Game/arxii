@@ -5220,6 +5220,13 @@ state is node position + snapshots + already-applied consequences, never a scrat
   option's routes carry consequences with `GRANT_CODEX` (`grants_known`), `TECHNIQUE_TRAINING` and
   a cost effect. See Mechanics' "Added in #4501" and `docs/systems/checks.md`; the save rules are
   `world/checks/trial_rules.py`. Missions charge no action points yet, so a trial has no AP cost.
+  **Authoring page (#4513):** `web/admin/trial_builder/` (`/admin/_trial_builder/<option>/`, superuser):
+  `state.py` reads an option's routes back per outcome tier, `proposal.py` builds unsaved
+  `Consequence`/`ConsequenceEffect` rows and asks slice 1's rules (no second copy), `live.py` is the
+  rail, `save.py` writes routes + consequences + effects in one transaction (credited to the
+  operator's contributor), `views.py` also serves the live check (`.../check/`, writes nothing),
+  `.../delete/` and an index. A consequence another row also uses is shown read-only. A
+  `MAGICAL_SCARS` effect no longer needs a condition template (the handler reads only severity).
 - **Models:** `MissionTemplate` (authored graph: entry node + availability metadata — level
   band, risk tier, draw weight, visibility) → `MissionNode` (`track_successes`/
   `track_failures`/`track_success_target`/`track_failure_target`/`track_success_beat_outcome`/

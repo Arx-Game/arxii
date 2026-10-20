@@ -1,0 +1,46 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a> &rsaquo; Trial builder
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="trial-index-root">
+  {% if invalid_option %}<p class="errornote">The option is a number: its id on the mission option list.</p>{% endif %}
+  <p class="help">A trial is a mission option whose routes make a codex entry known, train a technique and
+    cost something. Open one from its change page ("Open in Trial builder"), or give its id here.</p>
+  <form method="get" class="module aligned">
+    <div class="form-row">
+      <div><div class="flex-container">
+        <label for="trial-option">Mission option id</label>
+        <input type="number" name="option" id="trial-option" min="1">
+        <input type="submit" value="Open">
+      </div></div>
+    </div>
+  </form>
+  <div class="module">
+    <h2>Options that already carry a trial</h2>
+    <table>
+      <thead><tr><th>Mission</th><th>Node</th><th>Option</th></tr></thead>
+      <tbody>
+      {% for option, url in options %}
+        <tr><td>{{ option.node.template.name }}</td><td>{{ option.node.key }}</td>
+          <td><a href="{{ url }}">{{ option.key }}</a></td></tr>
+      {% empty %}
+        <tr><td colspan="3">No option carries a trial yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

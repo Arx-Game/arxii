@@ -64,6 +64,12 @@ from web.admin.tradition_slate.views import (
     tradition_slate_pick,
     tradition_slate_review,
 )
+from web.admin.trial_builder.views import (
+    trial_builder,
+    trial_builder_check,
+    trial_builder_delete,
+    trial_builder_index,
+)
 from web.admin.tuning.ops_views import (
     ops_dashboard,
     ops_economy_fragment,
@@ -309,6 +315,18 @@ urlpatterns = [
         "_soulfray_builder/<int:stage_pk>/review/",
         soulfray_builder_review,
         name="admin_soulfray_builder_review",
+    ),
+    path("_trial_builder/", trial_builder_index, name="admin_trial_builder_index"),
+    path("_trial_builder/<int:option_pk>/", trial_builder, name="admin_trial_builder"),
+    path(
+        "_trial_builder/<int:option_pk>/check/",
+        trial_builder_check,
+        name="admin_trial_builder_check",
+    ),
+    path(
+        "_trial_builder/<int:option_pk>/delete/",
+        trial_builder_delete,
+        name="admin_trial_builder_delete",
     ),
     path("", arx_admin_site.urls),
 ]

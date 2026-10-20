@@ -1,0 +1,130 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+A custom page extending `base_site.html` gets base.css, dark_mode.css and responsive.css
+only. `forms.css` (form rows, help, submit-row) is linked by `change_form.html`, so this
+page links it itself (#3667), and `widgets.css` with it for the autocomplete pickers.
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% url 'admin:jsi18n' %}"></script>
+{{ media }}
+<script src="{% static 'admin/js/trial_builder.js' %}" defer></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:arxii_missionoption_changelist' %}">Mission options</a>
+  &rsaquo; <a href="{{ option_url }}">{{ option.node.key }}</a>
+  &rsaquo; Trial builder
+</div>
+{% endblock %}
+
+{# The page draws its own heading beside the object tools; admin's default title would repeat it. #}
+{% block content_title %}{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/trial_builder/_css.html" %}
+<div id="trial-builder-root">
+  <div class="tb-head">
+    <h1>Trial builder: {{ option.node.key }}</h1>
+    <ul class="object-tools">
+      <li><a href="{{ option_url }}">Edit option</a></li>
+      <li><a href="{{ index_url }}">Trials</a></li>
+    </ul>
+  </div>
+
+  {% if needs_setup %}
+    {% include "admin/upbringing_builder/_setup.html" %}
+  {% else %}
+
+  <div class="tb-columns">
+    <div class="tb-main">
+      <form method="post" id="trial-form" novalidate data-check-url="{{ check_url }}">
+        {% csrf_token %}
+        {% if refused %}<p class="errornote" data-testid="refused">Please correct the errors below. Nothing was saved.</p>{% endif %}
+
+        <fieldset class="module aligned" id="tb-trial-module">
+          <h2>Trial <span class="tb-chip">read-only</span></h2>
+          <div class="form-row"><div><div class="flex-container"><span class="tb-label">Mission</span>
+            <div class="tb-field"><a href="{{ template_url }}">{{ template.name }}</a> (template)</div></div></div></div>
+          <div class="form-row"><div><div class="flex-container"><span class="tb-label">Node</span>
+            <div class="tb-field"><a href="{{ node_url }}">{{ option.node.key }}</a></div></div></div></div>
+          <div class="form-row"><div><div class="flex-container"><span class="tb-label">Option</span>
+            <div class="tb-field">{% if option.authored_ic_framing %}{{ option.authored_ic_framing }}{% else %}{{ option.key }}{% endif %}</div></div></div></div>
+          <div class="form-row"><div><div class="flex-container"><span class="tb-label">Check</span>
+            <div class="tb-field">{% if option.authored_check_type %}{{ option.authored_check_type.name }}{% else %}[no check type set]{% endif %}
+              at base risk {{ option.authored_base_risk }}. <a href="{{ option_url }}">Edit option</a></div></div></div></div>
+        </fieldset>
+
+        <fieldset class="module aligned" id="tb-opens-module">
+          <h2>What it opens</h2>
+          {% if header.non_field_errors %}<p class="errornote">{{ header.non_field_errors }}</p>{% endif %}
+          <div class="form-row{% if header.codex_entry.errors %} errors{% endif %}" data-field="codex_entry">
+            {{ header.codex_entry.errors }}
+            <div><div class="flex-container">
+              {{ header.codex_entry.label_tag }}
+              <div class="tb-field">
+                {{ header.codex_entry }}
+                <div class="help" data-testid="opens">
+                  {% for t in opened %}
+                  Opens: <a href="{{ t.url }}">{{ t.name }}</a> ({{ t.gift }}).
+                  Its other prerequisites: {% if t.prerequisites %}{{ t.prerequisites|join:"; " }}{% else %}none{% endif %}.
+                  Technique cap for {{ t.gift }}: checked per character when the trial runs.
+                  {% empty %}
+                  The technique this entry opens is listed here once it is picked and saved.
+                  {% endfor %}
+                </div>
+              </div>
+            </div></div>
+          </div>
+          {% include "admin/trial_builder/_row.html" with field=header.technique %}
+          <div class="form-row{% if header.meter_size.errors %} errors{% endif %}" data-field="meter_size">
+            {{ header.meter_size.errors }}
+            <div><div class="flex-container">
+              {{ header.meter_size.label_tag }}
+              <div class="tb-field">
+                {{ header.meter_size }}
+                <div class="help">{{ header.meter_size.help_text }}
+                  {% if taught %}For comparison: {{ taught|join:"; " }}.{% endif %}</div>
+              </div>
+            </div></div>
+          </div>
+        </fieldset>
+
+        {% for block in blocks %}{% include "admin/trial_builder/_tier.html" %}{% endfor %}
+
+        <div class="submit-row">
+          <input type="submit" name="save" value="Save" class="default">
+          <input type="submit" name="save_continue" value="Save and continue editing">
+          {% if has_trial_routes %}
+          <button type="submit" class="button tb-delete" formaction="{{ delete_url }}"
+                  formnovalidate data-confirm="Delete all of this option's routes and the consequences only they use?">Delete trial routes</button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    <aside class="tb-rail" id="tb-rail">
+      {% include "admin/trial_builder/_rail.html" %}
+      <div class="module">
+        <h2>Credit</h2>
+        <p class="help tb-note">Saved rows are credited to your linked contributor.</p>
+      </div>
+    </aside>
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}
