@@ -362,14 +362,16 @@ class AwardCheckDevelopmentTest(TestCase):
 
 
 class AwardCheckDevelopmentSkillIndependenceTest(TestCase):
-    """#2115 regression: check-driven dev never touches ``CharacterSkillValue``.
+    """#2115 regression: check-driven dev leaves a skill's training counters alone.
 
     Weekly training (``world.skills.services._apply_development_to_skill``) and
     check-driven dev (``award_check_development``) are two independently-tracked
-    "skill value" write paths (see the #2115 spec's "Verified interaction with
-    check-driven dev" finding). This PR only fixes the training path's
-    XP-boundary discard bug; it must not change check-driven dev's behavior —
-    including that it stays oblivious to XP boundaries on ``CharacterSkillValue``.
+    development counters (see the #2115 spec's "Verified interaction with
+    check-driven dev" finding). Check-driven dev stays oblivious to XP boundaries
+    and never adds to ``CharacterSkillValue.development_points`` or its rust. Since
+    #4496 it does write the skill's *rating* to both stores when it levels the skill
+    (``integration_tests/test_trained_skills_journeys.py``); this test is about the
+    counters, at a boundary-parked rating that no award here moves.
     """
 
     @classmethod
@@ -403,7 +405,7 @@ class AwardCheckDevelopmentSkillIndependenceTest(TestCase):
         )
 
     def test_award_check_development_leaves_character_skill_value_untouched(self) -> None:
-        """award_check_development writes DevelopmentPoints/CharacterTraitValue only."""
+        """award_check_development adds no training dev points and pays no rust."""
         award_check_development(
             character_sheet=self.sheet,
             check_type=self.check_type,

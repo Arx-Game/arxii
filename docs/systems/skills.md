@@ -48,6 +48,30 @@ Character skills and specializations with development tracking, linked to the Tr
 - Only affects parent skills; specializations are immune
 - Encourages specialization over jack-of-all-trades builds
 
+### One rating, two stores (#4496)
+
+A skill's rating is stored twice: `CharacterSkillValue.value` is what the character
+sheet shows, and the matching `traits.CharacterTraitValue` (on `skill.trait`) is what
+every check reads. **Every writer of a skill's value after creation keeps both equal**
+and records a `traits.CharacterTraitChange`:
+
+| Writer | Source stamped |
+|--------|----------------|
+| Character creation and staff edit (`set_skill_values`) | the caller's (`CHARACTER_CREATION`, `STAFF_EDIT`) |
+| Weekly training (`_apply_development_to_skill`) | `DEVELOPMENT_LEVEL_UP` |
+| XP breakthrough (`purchase_skill_breakthrough`) | `XP_BREAKTHROUGH` |
+| Level-up from use (`DevelopmentPoints.award_points`, a SKILL trait) | `DEVELOPMENT_LEVEL_UP` |
+
+The helpers live in `world/skills/services.py`: `set_skill_trait` (the trait row, with its
+`CharacterTraitChange`), `set_skill_sheet_value` (the sheet row, created if missing) and
+`reconcile_skill_stores`, which raises both stores to the higher of the two before a writer
+adds its progress, so a character whose rows diverged before #4496 is never lowered.
+Rust changes no rating (it only accrues `rust_points`), so it needs no sync. The two
+**development counters stay separate**: `CharacterSkillValue.development_points` (weekly
+training and its `(value - 9) x 100` cost) and `DevelopmentPoints.total_earned` (use, with
+`cumulative_dp_for_level`). Merging them, or retiring one store, is a design question.
+Journeys: `integration_tests/test_trained_skills_journeys.py`.
+
 ### XP Boundaries (19, 29, 39, 49) — plateau, not a stop (#2115)
 
 A skill value ending in 9 (`_is_at_xp_boundary`, `services.py`) is a **breakthrough
@@ -206,6 +230,7 @@ per `(character, skill)` and `(character, specialization)`.
 | `calculate_training_development(allocation)` | Computes development points from the training formula |
 | `process_weekly_training()` | Processes all allocations, awards dev points, consumes AP |
 | `apply_weekly_rust(trained_skills)` | Adds rust to untrained skills |
+| `set_skill_trait(sheet, skill, value, source)` / `set_skill_sheet_value(sheet, skill, value)` / `reconcile_skill_stores(sheet, skill)` | Keep a skill's two stores equal (#4496) |
 | `run_weekly_skill_cron()` | Orchestrator: training then rust; registered as `skills.weekly_training` in `world/game_clock/tasks.py` |
 
 ### Training Formula

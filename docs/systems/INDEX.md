@@ -907,6 +907,10 @@ allocations that convert AP to development points.
 
 - **Models:** `Skill`, `Specialization`, `CharacterSkillValue`,
   `CharacterSpecializationValue`, `TrainingAllocation`
+- **One rating, two stores (#4496):** `CharacterSkillValue` is what the sheet shows and
+  `traits.CharacterTraitValue` is what checks read; weekly training, the XP breakthrough and a
+  level-up from use all write both (`set_skill_trait`, `set_skill_sheet_value`,
+  `reconcile_skill_stores` in `world/skills/services.py`). See skills.md.
 - **Actions:** `ManageTrainingAction` (`registry_key="manage_training"`) — shared by
   web `TrainingAllocationViewSet` and telnet `training` command
 - **Cron:** `run_weekly_skill_cron()` registered as `skills.weekly_training` in

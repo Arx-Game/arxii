@@ -62,6 +62,7 @@ class _TrainedSkillCase(JourneyCase):
         self.ysmay = self.make_player("Ysmay", room=self.lantern)
         self.sheet = self.ysmay.sheet_data
         self.skill = SkillFactory()
+        self._checks: dict[int, CheckType] = {}
 
     def made_with(self, skill: Skill, rating: int) -> None:
         """Ysmay leaves character creation with ``skill`` at ``rating`` in both stores."""
@@ -74,11 +75,14 @@ class _TrainedSkillCase(JourneyCase):
         )
 
     def check_on(self, skill: Skill) -> CheckType:
-        check_type = CheckTypeFactory(
-            name=f"Roll {skill.name}", category=CheckCategoryFactory(name=f"Rolls {skill.pk}")
-        )
-        CheckTypeTraitFactory(check_type=check_type, trait=skill.trait, weight=Decimal("1.0"))
-        return check_type
+        """The check type that rolls only ``skill``, built once per skill."""
+        if skill.pk not in self._checks:
+            check_type = CheckTypeFactory(
+                name=f"Roll {skill.name}", category=CheckCategoryFactory(name=f"Rolls {skill.pk}")
+            )
+            CheckTypeTraitFactory(check_type=check_type, trait=skill.trait, weight=Decimal("1.0"))
+            self._checks[skill.pk] = check_type
+        return self._checks[skill.pk]
 
     def roll_points(self, skill: Skill, effort: str | None = None) -> int:
         """The skill points a check on ``skill`` is worth to Ysmay right now."""
@@ -132,7 +136,9 @@ class TrainingASkillByTheWeek(_TrainedSkillCase):
         """Alpha rows once written by training alone: sheet 14, roll 11. The next tick
         keeps the 14 she earned and brings the roll up to it."""
         self.made_with(self.skill, 11)
-        CharacterSkillValue.objects.filter(character=self.sheet, skill=self.skill).update(value=14)
+        sheet_row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.skill)
+        sheet_row.value = 14
+        sheet_row.save()
         self.telnet(self.ysmay, f"training add skill={self.skill.pk} ap=10")
         run_weekly_skill_cron()
         self.assertSheetAndRollAgree(self.skill, 14)
@@ -195,10 +201,9 @@ class LevellingASkillByUse(_TrainedSkillCase):
         """Alpha rows once written by use alone: roll 14, sheet 11. The next roll with
         effort keeps the 14 she earned and brings the sheet up to it."""
         self.made_with(self.skill, 11)
-        CharacterTraitValue.objects.filter(character=self.sheet, trait=self.skill.trait).update(
-            value=14
-        )
-        CharacterTraitValue.flush_instance_cache()
+        trait_row = CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill.trait)
+        trait_row.value = 14
+        trait_row.save()
         perform_check(self.ysmay, self.check_on(self.skill), effort_level=EffortLevel.HIGH)
         self.assertSheetAndRollAgree(self.skill, 14)
 
