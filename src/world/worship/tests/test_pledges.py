@@ -478,6 +478,38 @@ class SacrificeTests(PledgeTestBase):
             (2, "Silk", True, "Success"),
         )
 
+    def test_the_gm_detail_carries_the_ease_difficulty_and_odds_from_the_charts(self) -> None:
+        from world.traits.factories import CheckRankFactory, ResultChartFactory
+        from world.traits.models import ResultChart, ResultChartOutcome
+        from world.worship.answer_services import sacrifice_detail
+
+        # A two-rung ladder and one chart: the odds are whatever that chart's bands say.
+        for rank, points, name in ((0, 0, "Novice"), (1, 25, "Able"), (2, 40, "Competent")):
+            CheckRankFactory(rank=rank, min_points=points, name=name)
+        chart = ResultChartFactory(rank_difference=0)
+        ResultChart.clear_cache()
+        ResultChartOutcome.objects.create(
+            chart=chart, min_roll=1, max_roll=40, outcome=self.outcomes["Failure"]
+        )
+        ResultChartOutcome.objects.create(
+            chart=chart, min_roll=41, max_roll=100, outcome=self.outcomes["Success"]
+        )
+        config = get_devotion_config()
+        config.odds_reference_roller_points = 48
+        config.save(update_fields=["odds_reference_roller_points"])
+
+        _, capture = self._sacrifice("Success", self._carried_item(facet=self.silk))
+        detail = sacrifice_detail(CeremonyOffering.objects.get())
+
+        # 2 points doubled for Silk = 4, 10 an eased point: 40 off the invocation difficulty.
+        self.assertEqual(detail.ease_points, 40)
+        self.assertEqual(detail.difficulty_points, capture.target_difficulty)
+        self.assertEqual(detail.odds.reference_rank_name, "Competent")
+        self.assertEqual(
+            [(line.outcome_name, line.percent) for line in detail.odds.lines],
+            [("Failure", 40), ("Success", 60)],
+        )
+
     def test_a_bought_item_earns_nothing_whatever_it_cost(self) -> None:
         item = self._carried_item(400, meaningful=False, days=200)
         pool_before = self.being.resonance_pool

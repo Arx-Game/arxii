@@ -54316,6 +54316,16 @@ export interface components {
       xp_cost: number;
       dev_points_to_boundary: number;
     };
+    _Odds: {
+      difficulty_points: number;
+      reference_rank_name: string;
+      lines: components['schemas']['_OddsLine'][];
+    };
+    _OddsLine: {
+      outcome_name: string;
+      success_level: number;
+      percent: number;
+    };
     _OutcomeTier: {
       id: number;
       name: string;
@@ -54368,12 +54378,16 @@ export interface components {
      */
     _SacrificeDetail: {
       item_name: string;
+      offered_by_name: string;
       signals: components['schemas']['_SacrificeSignal'][];
       points: number;
       effective_points: number;
       facet_name: string;
       counted: boolean;
       outcome_name: string;
+      ease_points: number;
+      difficulty_points: number | null;
+      odds: components['schemas']['_Odds'] | null;
     };
     _SacrificeSignal: {
       kind_name: string;

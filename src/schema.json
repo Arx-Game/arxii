@@ -98330,6 +98330,34 @@ components:
       - dev_points_to_boundary
       - thread_id
       - xp_cost
+    _Odds:
+      type: object
+      properties:
+        difficulty_points:
+          type: integer
+        reference_rank_name:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/_OddsLine'
+      required:
+      - difficulty_points
+      - lines
+      - reference_rank_name
+    _OddsLine:
+      type: object
+      properties:
+        outcome_name:
+          type: string
+        success_level:
+          type: integer
+        percent:
+          type: integer
+      required:
+      - outcome_name
+      - percent
+      - success_level
     _OutcomeTier:
       type: object
       properties:
@@ -98432,6 +98460,8 @@ components:
       properties:
         item_name:
           type: string
+        offered_by_name:
+          type: string
         signals:
           type: array
           items:
@@ -98446,11 +98476,24 @@ components:
           type: boolean
         outcome_name:
           type: string
+        ease_points:
+          type: integer
+        difficulty_points:
+          type: integer
+          nullable: true
+        odds:
+          allOf:
+          - $ref: '#/components/schemas/_Odds'
+          nullable: true
       required:
       - counted
+      - difficulty_points
+      - ease_points
       - effective_points
       - facet_name
       - item_name
+      - odds
+      - offered_by_name
       - outcome_name
       - points
       - signals

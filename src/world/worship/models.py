@@ -827,6 +827,15 @@ class DevotionConfig(SharedMemoryModel):
             "item, never below Trivial. Nothing here reads an item's price."
         ),
     )
+    odds_reference_roller_points = models.PositiveIntegerField(
+        default=48,
+        db_default=48,
+        help_text=(
+            "Check points of the reference roller the odds read-outs use (Devotion config "
+            "and the GM's sacrifice detail). 48 is a Competent roller. A read-out only: "
+            "no roll uses it."
+        ),
+    )
     sacrifices_per_week = models.PositiveIntegerField(
         default=3,
         db_default=3,

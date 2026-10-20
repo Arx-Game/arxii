@@ -215,6 +215,14 @@ class CeremonyOffering(SharedMemoryModel):
             "past the week's limit, and a ceremony offering, whose rite roll is its check."
         ),
     )
+    difficulty_points = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The difficulty, in points, the sacrifice check rolled against, after the "
+            "item's meaning eased it. Empty when the item did not roll."
+        ),
+    )
     game_week = models.ForeignKey(
         "arxii.GameWeek",
         null=True,

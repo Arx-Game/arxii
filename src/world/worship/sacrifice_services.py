@@ -19,13 +19,14 @@ from typing import TYPE_CHECKING
 from django.db.models import Q
 
 from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX
-from world.scenes.action_constants import MIN_DIFFICULTY_POINTS
+from world.scenes.action_constants import DIFFICULTY_VALUES, MIN_DIFFICULTY_POINTS
 from world.worship.constants import FavorAwardKind
 from world.worship.invocation_services import (
     get_devotion_config,
     invocation_check_type,
     invocation_difficulty,
 )
+from world.worship.types import SacrificeOdds, SacrificeOddsBand, SacrificeOddsLine
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -81,12 +82,13 @@ def sacrifice_configured(being: WorshippedBeing) -> bool:
     return invocation_check_type(being) is not None
 
 
-def roll_sacrifice(sheet: CharacterSheet, being: WorshippedBeing, points: int) -> CheckResult:
-    """Roll ``sheet``'s invocation check type for a sacrifice worth ``points``.
+def roll_sacrifice(sheet: CharacterSheet, being: WorshippedBeing, difficulty: int) -> CheckResult:
+    """Roll ``sheet``'s invocation check type for a sacrifice at ``difficulty`` points.
 
     The check type is the being's own, else the devotion config's, with the being's
-    tradition specialization, as for an invocation. Raises nothing for a missing type:
-    callers check ``sacrifice_configured`` first.
+    tradition specialization, as for an invocation. ``difficulty`` comes from
+    ``sacrifice_difficulty`` (the caller stores it on the offering). Raises nothing for a
+    missing type: callers check ``sacrifice_configured`` first.
     """
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.magic.constants import MagicActivity  # noqa: PLC0415
@@ -95,10 +97,82 @@ def roll_sacrifice(sheet: CharacterSheet, being: WorshippedBeing, points: int) -
     return perform_check_with_modifiers(
         sheet.character,
         invocation_check_type(being),
-        target_difficulty=sacrifice_difficulty(sheet, being, points),
+        target_difficulty=difficulty,
         specialization=being.tradition.rites_specialization,
         extra_traits=activity_skill_terms(MagicActivity.INVOCATION),
     )
+
+
+def sacrifice_odds(
+    difficulty_points: int, *, roller_points: int | None = None
+) -> SacrificeOdds | None:
+    """The odds of a check at ``difficulty_points`` for a reference roller (#4500).
+
+    Read from the same tables the check pipeline rolls against: the rank gap between the
+    roller's points and the difficulty (``CheckRank.get_rank_difference``) picks the
+    ``ResultChart`` (``get_chart_for_difference``), and each ``ResultChartOutcome`` band
+    (1 to 100) is that outcome's chance in percent. Nothing is hardcoded. The reference
+    roller is ``DevotionConfig.odds_reference_roller_points``. None when no chart exists.
+    """
+    from world.traits.models import CheckRank, ResultChart  # noqa: PLC0415
+
+    roller = (
+        roller_points
+        if roller_points is not None
+        else (get_devotion_config().odds_reference_roller_points)
+    )
+    chart = ResultChart.get_chart_for_difference(
+        CheckRank.get_rank_difference(roller, difficulty_points)
+    )
+    if chart is None:
+        return None
+    rank = CheckRank.get_rank_for_points(roller)
+    lines = [
+        SacrificeOddsLine(
+            outcome_name=row.outcome.name,
+            success_level=row.outcome.success_level,
+            percent=row.max_roll - row.min_roll + 1,
+        )
+        for row in chart.outcomes.select_related("outcome").order_by("min_roll")
+    ]
+    return SacrificeOdds(
+        difficulty_points=difficulty_points,
+        reference_rank_name=rank.name if rank is not None else "",
+        lines=lines,
+    )
+
+
+def sacrifice_odds_bands() -> list[SacrificeOddsBand]:
+    """The odds for a stranger's sacrifice by meaning points, merged into runs that roll
+    on the same chart: "1 to 2 points", "3 to 5", "6 or more" at the example settings.
+
+    Starts from ``DevotionConfig.base_difficulty`` and eases it by
+    ``sacrifice_ease_per_point`` a point until the Trivial floor. The bands are derived
+    from the charts and the config, never listed here. Empty without charts or ease.
+    """
+    config = get_devotion_config()
+    ease = config.sacrifice_ease_per_point
+    base = DIFFICULTY_VALUES[config.base_difficulty]
+    if ease <= 0:
+        return []
+    bands: list[SacrificeOddsBand] = []
+    points = 1
+    while True:
+        difficulty = max(base - points * ease, MIN_DIFFICULTY_POINTS)
+        odds = sacrifice_odds(difficulty)
+        if odds is None:
+            return []
+        at_floor = difficulty == MIN_DIFFICULTY_POINTS
+        previous = bands[-1] if bands else None
+        if previous is not None and previous.odds.lines == odds.lines:
+            bands[-1] = SacrificeOddsBand(previous.first_points, points, odds)
+        else:
+            bands.append(SacrificeOddsBand(points, points, odds))
+        if at_floor:
+            last = bands[-1]
+            bands[-1] = SacrificeOddsBand(last.first_points, None, last.odds)
+            return bands
+        points += 1
 
 
 def sacrifice_award(outcome: CheckOutcome | None) -> int:

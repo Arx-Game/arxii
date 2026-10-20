@@ -358,17 +358,33 @@ class _SacrificeSignalSerializer(serializers.Serializer):
     detail = serializers.CharField(allow_blank=True)
 
 
+class _OddsLineSerializer(serializers.Serializer):
+    outcome_name = serializers.CharField()
+    success_level = serializers.IntegerField()
+    percent = serializers.IntegerField()
+
+
+class _OddsSerializer(serializers.Serializer):
+    difficulty_points = serializers.IntegerField()
+    reference_rank_name = serializers.CharField(allow_blank=True)
+    lines = _OddsLineSerializer(many=True)
+
+
 class _SacrificeDetailSerializer(serializers.Serializer):
     """One sacrifice as the steward's answer panel reads it (#4500): the signals that made
     it count, never the item's price."""
 
     item_name = serializers.CharField()
+    offered_by_name = serializers.CharField()
     signals = _SacrificeSignalSerializer(many=True)
     points = serializers.IntegerField()
     effective_points = serializers.IntegerField()
     facet_name = serializers.CharField(allow_blank=True)
     counted = serializers.BooleanField()
     outcome_name = serializers.CharField(allow_blank=True)
+    ease_points = serializers.IntegerField()
+    difficulty_points = serializers.IntegerField(allow_null=True)
+    odds = _OddsSerializer(allow_null=True)
 
 
 class StewardPromptSerializer(serializers.Serializer):

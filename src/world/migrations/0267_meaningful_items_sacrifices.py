@@ -61,6 +61,15 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="ceremonyoffering",
+            name="difficulty_points",
+            field=models.PositiveSmallIntegerField(
+                blank=True,
+                help_text="The difficulty, in points, the sacrifice check rolled against, after the item's meaning eased it. Empty when the item did not roll.",
+                null=True,
+            ),
+        ),
+        migrations.AddField(
+            model_name="ceremonyoffering",
             name="game_week",
             field=models.ForeignKey(
                 blank=True,
@@ -90,6 +99,15 @@ class Migration(migrations.Migration):
                 db_default=3,
                 default=3,
                 help_text="Made by a tie: the pair tier between the holder and the item's maker, up to this many points. The best maker counts, never the sum.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="devotionconfig",
+            name="odds_reference_roller_points",
+            field=models.PositiveIntegerField(
+                db_default=48,
+                default=48,
+                help_text="Check points of the reference roller the odds read-outs use (Devotion config and the GM's sacrifice detail). 48 is a Competent roller. A read-out only: no roll uses it.",
             ),
         ),
         migrations.AddField(

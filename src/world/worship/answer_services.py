@@ -127,7 +127,7 @@ def pledge_sacrifices(details: PledgeDetails) -> list[CeremonyOffering]:
 
     return list(
         CeremonyOffering.objects.filter(pledge_details=details)
-        .select_related("facet", "outcome_tier")
+        .select_related("facet", "outcome_tier", "offered_by")
         # Read back as offering.signals.all() in sacrifice_detail, so a plain prefetch.
         .prefetch_related("signals")  # noqa: PREFETCH_STRING
         .order_by("pk")
@@ -146,17 +146,25 @@ def sacrifice_detail(offering: CeremonyOffering) -> SacrificeDetail:
         for signal in offering.signals.all()
     ]
     from world.ceremonies.models import get_ceremony_config  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+    from world.worship.sacrifice_services import sacrifice_odds  # noqa: PLC0415
 
     points = sum(signal.points for signal in signals)
     percent = get_ceremony_config().offering_favored_facet_multiplier_percent
+    effective = points * percent // 100 if offering.facet_id is not None else points
+    difficulty = offering.difficulty_points
     return SacrificeDetail(
         item_name=offering.item_name,
+        offered_by_name=offering.offered_by.name,
         signals=signals,
         points=points,
-        effective_points=points * percent // 100 if offering.facet_id is not None else points,
+        effective_points=effective,
         facet_name=offering.facet.name if offering.facet_id is not None else "",
         counted=offering.counted,
         outcome_name=offering.outcome_tier.name if offering.outcome_tier_id is not None else "",
+        ease_points=effective * get_devotion_config().sacrifice_ease_per_point,
+        difficulty_points=difficulty,
+        odds=sacrifice_odds(difficulty) if difficulty is not None else None,
     )
 
 

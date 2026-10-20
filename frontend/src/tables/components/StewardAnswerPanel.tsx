@@ -121,7 +121,7 @@ export function StewardAnswerPanel({
           {prompt.sacrificed.map((item, index) => (
             <div key={index} className="rounded-md border p-2 text-sm">
               <p className="font-medium">
-                {item.item_name}
+                {item.offered_by_name} sacrifices {item.item_name}.
                 {item.facet_name && (
                   <span className="ml-2 text-xs text-muted-foreground">
                     {item.facet_name}, favored
@@ -153,14 +153,22 @@ export function StewardAnswerPanel({
                 </table>
               )}
               {item.signals.length > 0 && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground" data-testid="sacrifice-odds-note">
                   {item.points} points
                   {item.effective_points !== item.points
                     ? `, ${item.facet_name} favored = ${item.effective_points} points`
                     : ''}
+                  {item.counted && item.difficulty_points != null
+                    ? `, eased ${item.ease_points}, difficulty ${item.difficulty_points}.`
+                    : '.'}
+                  {item.counted && item.odds
+                    ? ` For a ${item.odds.reference_rank_name} roller: ${item.odds.lines
+                        .map((line) => `${line.percent}% ${line.outcome_name}`)
+                        .join(', ')}.`
+                    : ''}
                   {item.counted
-                    ? `. Roll: ${item.outcome_name || 'none'}`
-                    : ". Past the week's limit: given up for nothing"}
+                    ? ` This roll: ${item.outcome_name || 'none'}.`
+                    : " Past the week's limit: given up for nothing."}
                 </p>
               )}
             </div>

@@ -1278,6 +1278,7 @@ def sacrifice_items(
         is_botch,
         roll_sacrifice,
         sacrifice_configured,
+        sacrifice_difficulty,
         sacrifice_slots_left,
     )
     from world.worship.types import SacrificedItem, SacrificeOutcome  # noqa: PLC0415
@@ -1310,9 +1311,11 @@ def sacrifice_items(
         for instance, reading in zip(item_instances, readings, strict=True):
             counted = reading.effective_points > 0 and slots_left > 0
             outcome = None
+            difficulty = None
             if counted:
                 slots_left -= 1
-                outcome = roll_sacrifice(sheet, target, reading.effective_points).outcome
+                difficulty = sacrifice_difficulty(sheet, target, reading.effective_points)
+                outcome = roll_sacrifice(sheet, target, difficulty).outcome
                 if is_botch(outcome):
                     slots_left = 0
             where = f"at {target.name}'s {site}" if site else f"to {target.name}"
@@ -1334,6 +1337,7 @@ def sacrifice_items(
                 worship_grant=offered.worship_grant,
                 offered_by=persona,
                 outcome_tier=outcome,
+                difficulty_points=difficulty,
                 game_week=week,
                 counted=counted,
             )
