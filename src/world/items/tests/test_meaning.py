@@ -11,10 +11,21 @@ from django.test import TestCase
 from django.utils import timezone
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.items.constants import MeaningSignalKind, OwnershipEventType
-from world.items.factories import ItemInstanceFactory, meaningful_item_for
+from world.items.constants import (
+    BodyRegion,
+    EquipmentLayer,
+    MeaningSignalKind,
+    OwnershipEventType,
+    ShowcaseMode,
+)
+from world.items.factories import (
+    ItemInstanceFactory,
+    OutfitFactory,
+    OutfitSlotFactory,
+    meaningful_item_for,
+)
 from world.items.market.models import MarketSale
-from world.items.models import OwnershipEvent
+from world.items.models import FashionShowing, ItemLineage, OwnershipEvent
 from world.items.services.holding import set_item_holder
 from world.items.services.meaning import item_meaning
 from world.relationships.factories import CharacterRelationshipFactory, RelationshipTierFactory
@@ -177,6 +188,148 @@ class ItemMeaningTests(TestCase):
 
         self.assertEqual(kinds[MeaningSignalKind.MADE_BY_TIE], 2)
         self.assertEqual(kinds[MeaningSignalKind.GIFT], 1)  # the further act, not the tie again
+
+
+class CommissionLoopSignalTests(TestCase):
+    """The signals the commission loop adds (#4512): designed by you, made for, made from,
+    shown. Example numbers: made for is 1 plus the claimed tier toward the dedicator, up to
+    4; made from is the recorded points up to 3; shown is 1 per 2 engagements, up to 3."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.config = get_devotion_config()
+        for number in (1, 2, 3):
+            RelationshipTierFactory(tier_number=number, depth_threshold=number * 100)
+        cls.holder = CharacterSheetFactory()
+        cls.maker = CharacterSheetFactory()
+
+    def _item(self, **kwargs):
+        return ItemInstanceFactory(
+            holder_character_sheet=self.holder,
+            held_since=timezone.now() - timedelta(days=30),
+            **kwargs,
+        )
+
+    def _dedicated(self, item, *, by=None, to=None) -> None:
+        by = by or self.maker
+        to = to or self.holder
+        item.dedicated_by_persona = by.primary_persona
+        item.dedicated_to_persona = to.primary_persona
+        item.dedicated_at = timezone.now()
+        item.save(update_fields=["dedicated_by_persona", "dedicated_to_persona", "dedicated_at"])
+
+    def test_designed_by_you_is_one_for_the_designer_and_nothing_for_a_payer(self) -> None:
+        written = self._item(designer_character_sheet=self.holder)
+        paid = self._item(designer_character_sheet=self.maker)
+
+        self.assertEqual(
+            _kinds(item_meaning(written, self.holder, config=self.config)),
+            {MeaningSignalKind.CARRIED: 1, MeaningSignalKind.DESIGNED: 1},
+        )
+        self.assertEqual(item_meaning(paid, self.holder, config=self.config).points, 0)
+
+    def test_made_for_is_one_plus_the_claimed_tier_toward_the_dedicator(self) -> None:
+        CharacterRelationshipFactory(source=self.holder, target=self.maker, tier=2)
+        item = self._item()
+        self._dedicated(item)
+
+        kinds = _kinds(item_meaning(item, self.holder, config=self.config))
+
+        self.assertEqual(kinds[MeaningSignalKind.MADE_FOR], 3)
+
+    def test_made_for_counts_only_for_the_dedicatee_and_not_when_bought_from_the_dedicator(
+        self,
+    ) -> None:
+        bystander = CharacterSheetFactory()
+        item = self._item()
+        self._dedicated(item, to=bystander)
+        self.assertEqual(item_meaning(item, self.holder, config=self.config).points, 0)
+
+        bought = self._item()
+        self._dedicated(bought)
+        MarketSale.objects.create(
+            kind=MarketSale.SaleKind.WARE,
+            buyer_persona=self.holder.primary_persona,
+            seller_persona=self.maker.primary_persona,
+            item_instance=bought,
+            price=900,
+        )
+        self.assertEqual(item_meaning(bought, self.holder, config=self.config).points, 0)
+
+    def test_the_makers_tie_counts_once_and_the_dedication_adds_one(self) -> None:
+        CharacterRelationshipFactory(source=self.holder, target=self.maker, scene_depth=260)
+        item = self._item(crafter_character_sheet=self.maker, designer_character_sheet=self.holder)
+        self._dedicated(item)
+
+        kinds = _kinds(item_meaning(item, self.holder, config=self.config))
+
+        self.assertEqual(kinds[MeaningSignalKind.MADE_BY_TIE], 2)
+        self.assertEqual(kinds[MeaningSignalKind.MADE_FOR], 1)
+        self.assertEqual(kinds[MeaningSignalKind.DESIGNED], 1)
+
+    def test_made_from_is_the_recorded_points_to_the_cap_and_ignores_the_source_after(
+        self,
+    ) -> None:
+        item = self._item(crafter_character_sheet=self.holder)
+        ItemLineage.objects.create(item=item, source_item=None, source_name="worn saddle", points=4)
+
+        meaning = item_meaning(item, self.holder, config=self.config)
+
+        self.assertEqual(_kinds(meaning)[MeaningSignalKind.MADE_FROM], 3)
+
+    def test_made_from_does_not_pass_to_a_stranger(self) -> None:
+        item = self._item(crafter_character_sheet=self.maker)
+        ItemLineage.objects.create(item=item, source_item=None, source_name="saddle", points=4)
+
+        self.assertEqual(item_meaning(item, self.holder, config=self.config).points, 0)
+
+    def test_shown_counts_settled_successful_showings_without_the_carry_gate(self) -> None:
+        fresh = ItemInstanceFactory(holder_character_sheet=self.holder)
+        for roll_success, settled, engaged in (
+            (True, True, 3),  # one point
+            (True, True, 5),  # two points
+            (False, True, 9),  # a failed roll counts nothing
+            (True, False, 9),  # unsettled counts nothing
+        ):
+            FashionShowing.objects.create(
+                character_sheet=self.holder,
+                mode=ShowcaseMode.PIECE,
+                statement_item=fresh,
+                stake=1,
+                roll_success=roll_success,
+                settled=settled,
+                engagement_count=engaged,
+            )
+
+        meaning = item_meaning(fresh, self.holder, config=self.config)
+
+        # Brand-new, so carried and every personal signal wait for the gate; shown does not.
+        self.assertEqual(_kinds(meaning), {MeaningSignalKind.SHOWN: 3})
+
+    def test_shown_reads_a_showing_of_the_statement_outfit_and_stops_at_the_cap(self) -> None:
+        item = self._item()
+        wardrobe = ItemInstanceFactory(holder_character_sheet=self.holder)
+        outfit = OutfitFactory(character_sheet=self.holder, wardrobe=wardrobe)
+        OutfitSlotFactory(
+            outfit=outfit,
+            item_instance=item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        for _ in range(3):
+            FashionShowing.objects.create(
+                character_sheet=self.holder,
+                mode=ShowcaseMode.ENSEMBLE,
+                statement_outfit=outfit,
+                stake=1,
+                roll_success=True,
+                settled=True,
+                engagement_count=8,
+            )
+
+        kinds = _kinds(item_meaning(item, self.holder, config=self.config))
+
+        self.assertEqual(kinds, {MeaningSignalKind.CARRIED: 1, MeaningSignalKind.SHOWN: 3})
 
 
 class SetItemHolderTests(TestCase):

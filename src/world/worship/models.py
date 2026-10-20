@@ -819,6 +819,35 @@ class DevotionConfig(SharedMemoryModel):
             "this many points. The best maker counts, never the sum."
         ),
     )
+    made_for_max_points = models.PositiveIntegerField(
+        default=4,
+        db_default=4,
+        help_text=(
+            "Made for: 1 plus the holder's claimed tier toward whoever dedicated the piece, "
+            "up to this many points. Nothing when the holder bought it from the dedicator."
+        ),
+    )
+    made_from_max_points = models.PositiveIntegerField(
+        default=3,
+        db_default=3,
+        help_text=(
+            "Made from: the meaning the worked-in item had to the crafter when it was used "
+            "up, up to this many points."
+        ),
+    )
+    shown_window_weeks = models.PositiveIntegerField(
+        default=4,
+        db_default=4,
+        help_text="Shown: only settled, successful showings in this many game weeks count.",
+    )
+    shown_engagements_per_point = models.PositiveIntegerField(
+        default=2,
+        db_default=2,
+        help_text="Shown: other players' engagements it takes to earn one point, per showing.",
+    )
+    shown_max_points = models.PositiveIntegerField(
+        default=3, db_default=3, help_text="Shown: most points all showings of an item give."
+    )
     sacrifice_ease_per_point = models.PositiveIntegerField(
         default=10,
         db_default=10,

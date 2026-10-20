@@ -1,0 +1,37 @@
+{% extends "admin/change_form.html" %}
+{% comment %}
+The stock item change form with a read-only rail (#4512): what the item means to its
+current holder, from item_meaning. Extends the site's own change_form override (which
+links admin/css/forms.css), so only the rail is new; its rules live in extrastyle.
+{% endcomment %}
+{% block extrastyle %}
+{{ block.super }}
+<style>
+.item-meaning-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (min-width: 980px) { .item-meaning-cols { grid-template-columns: minmax(0, 1fr) 17rem; } }
+.item-meaning-main { min-width: 0; }
+.item-meaning-rail { min-width: 0; border: 1px solid var(--hairline-color); }
+.item-meaning-rail p { font-size: 12px; color: var(--body-quiet-color); padding: 4px 8px; margin: 0; }
+.item-meaning-total { font-weight: bold; color: var(--body-fg) !important; }
+</style>
+{% endblock %}
+{% block field_sets %}
+<div class="item-meaning-cols">
+  <div class="item-meaning-main">{{ block.super }}</div>
+  <aside class="item-meaning-rail module" aria-label="Meaning for the current holder">
+    <h2>Meaning for the current holder</h2>
+    {% if meaning_rail %}
+      <p>Held by {{ meaning_rail.holder }}.</p>
+      {% for line in meaning_rail.lines %}
+      <p>{{ line.label }}{% if line.detail %}: {{ line.detail }}{% endif %}: {{ line.points }}</p>
+      {% empty %}
+      <p>No signals: this piece means nothing to its holder yet.</p>
+      {% endfor %}
+      <p class="item-meaning-total">{{ meaning_rail.total }} points</p>
+      <p>{{ meaning_rail.note }}</p>
+    {% else %}
+      <p>Nobody holds this item, so it means nothing to anyone now.</p>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

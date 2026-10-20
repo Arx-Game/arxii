@@ -27,7 +27,7 @@ _USAGE = (
     "  market/list <stall-id>=<item-id>,<price>\n"
     "  market/finish <pass-id>=<name>;<description>\n"
     "  market/offer <recipe kind>=<fee>\n"
-    "  market/commission <offer-id>=<item-id>,<target-id>"
+    "  market/commission <offer-id>=<item-id>,<target-id>[;<name>;<description>;<made for>]"
 )
 
 
@@ -159,15 +159,32 @@ class CmdMarket(ArxCommand):
         self._run("market_set_service_offer", recipe_kind=kind.strip(), fee=int(fee.strip()))
 
     def _commission(self, args: str) -> None:
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        head, *words = (part.strip() for part in args.split(";"))
         try:
-            offer_part, rest = args.split("=", 1)
+            offer_part, rest = head.split("=", 1)
             item_part, target_part = rest.split(",", 1)
         except ValueError as exc:
-            msg = "Usage: market/commission <offer-id>=<item-id>,<target-id>"
+            msg = (
+                "Usage: market/commission <offer-id>=<item-id>,<target-id>"
+                "[;<name>;<description>;<made for>]"
+            )
             raise CommandError(msg) from exc
+        name, description, made_for = [*words, "", "", ""][:3]
+        kwargs: dict[str, Any] = {}
+        if made_for:
+            persona = Persona.objects.filter(name__iexact=made_for).first()
+            if persona is None:
+                msg = f"No one called '{made_for}'."
+                raise CommandError(msg)
+            kwargs["dedicate_to_id"] = persona.pk
         self._run(
             "market_service_craft",
             offer_id=int(offer_part),
             item_instance_id=int(item_part),
             target_id=int(target_part),
+            name=name,
+            description=description,
+            **kwargs,
         )

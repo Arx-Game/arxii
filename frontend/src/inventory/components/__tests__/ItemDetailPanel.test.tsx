@@ -133,6 +133,13 @@ function makeItem(overrides: Partial<ItemInstance> = {}): ItemInstance {
     suggested_value: 0,
     can_steal: false,
     crafted_provenance: null,
+    custom_name: '',
+    custom_description: '',
+    dedicated_to_name: null,
+    designer_is_holder: false,
+    crafter_name: null,
+    designer_name: null,
+    facet_workers: [],
     silhouette: null,
     accents: [],
     template: {
@@ -208,6 +215,24 @@ describe('ItemDetailPanel', () => {
     // List items render
     expect(screen.getByText('looping vines')).toBeInTheDocument();
     expect(screen.getByText('a single garnet')).toBeInTheDocument();
+  });
+
+  it('shows who made, designed and worked on the piece (#4512)', () => {
+    renderWithQueryClient(
+      <ItemDetailPanel
+        item={makeItem({
+          crafted_provenance:
+            'Made by Corwen for Linnet. Designed by Linnet. Facet work by Corwen.',
+        })}
+        open
+        onOpenChange={vi.fn()}
+        accountId={6}
+        characterId={42}
+      />
+    );
+    expect(screen.getByTestId('item-credits')).toHaveTextContent(
+      'Made by Corwen for Linnet. Designed by Linnet. Facet work by Corwen.'
+    );
   });
 
   it('renders the stats grid (weight, size, value)', () => {

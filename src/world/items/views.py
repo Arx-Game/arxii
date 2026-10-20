@@ -70,6 +70,7 @@ from world.items.serializers import (
     ItemFacetReadSerializer,
     ItemFacetWriteSerializer,
     ItemInstanceReadSerializer,
+    ItemMeaningSerializer,
     ItemStyleWriteSerializer,
     ItemTemplateDetailSerializer,
     ItemTemplateListSerializer,
@@ -596,6 +597,34 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         # requester their own items, where ``can_steal`` is trivially False.
         serializer = ItemInstanceReadSerializer(item)
         return Response(serializer.data)
+
+    @extend_schema(responses=ItemMeaningSerializer)
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="meaning")
+    def meaning(self, request: Request, pk: str | None = None) -> Response:
+        """What the item means to the character holding it (#4512).
+
+        The crafter reads this before choosing to work the item into a new piece. It
+        names the signals and their points for the holder only; players in a room never
+        see either.
+        """
+        from world.items.services.meaning_display import meaning_rail  # noqa: PLC0415
+
+        user = cast(AccountDB, request.user)
+        item_pk = _parse_int_param(pk)
+        if item_pk is None:
+            raise NotFound
+        try:
+            item = ItemInstance.objects.in_play().select_related("game_object").get(pk=item_pk)
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
+        if not user.is_staff:
+            holder = item.game_object.db_location if item.game_object is not None else None
+            if holder is None or not _user_plays_pk(user, holder.pk):
+                raise NotFound
+        rail = meaning_rail(item)
+        if rail is None:
+            raise NotFound
+        return Response(ItemMeaningSerializer(rail).data)
 
     @extend_schema(request=UseItemSerializer, responses=UseItemResultSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="use")
@@ -1709,6 +1738,29 @@ class GemCutViewSet(viewsets.ViewSet):
         return Response(GemCutQuoteSerializer(quote).data)
 
 
+def _resolve_commission_loop_inputs(
+    made_for_pk: object, worked_from_pk: object, actor_sheet: object
+) -> tuple[object | None, ItemInstance | None]:
+    """The persona a piece is made for and the held item worked into it (#4512), or a 400."""
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    dedicate_to = None
+    if made_for_pk:
+        dedicate_to = Persona.objects.filter(pk=made_for_pk).first()
+        if dedicate_to is None:
+            raise serializers.ValidationError({"made_for": "No such character."})
+    worked_from = None
+    if worked_from_pk:
+        worked_from = ItemInstance.objects.filter(
+            pk=worked_from_pk, holder_character_sheet=actor_sheet, destroyed_at__isnull=True
+        ).first()
+        if worked_from is None:
+            raise serializers.ValidationError(
+                {"worked_from": "You can only work in an item you are holding."}
+            )
+    return dedicate_to, worked_from
+
+
 @extend_schema(tags=["items"])
 class ItemCreateCraftViewSet(viewsets.ViewSet):
     """ViewSet for item-creation crafting: browse recipes, quote, and mint (#2211/#2240).
@@ -1787,6 +1839,8 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
         accent_pks = request.data.get("accent_targets") or []
         style_pks = request.data.get("styles") or []
         silhouette_id = request.data.get("silhouette")
+        made_for_pk = request.data.get("made_for")
+        worked_from_pk = request.data.get("worked_from")
         if not template_pk:
             raise serializers.ValidationError({"template": "This field is required."})
         try:
@@ -1804,6 +1858,9 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
         if len(styles) != len(set(style_pks)):
             raise serializers.ValidationError({"styles": "One or more styles are unknown."})
         actor_sheet = _resolve_actor_sheet(request, body_key="crafter_sheet_id")
+        dedicate_to, worked_from = _resolve_commission_loop_inputs(
+            made_for_pk, worked_from_pk, actor_sheet
+        )
         action_result = CreateItemAction().run(
             actor=actor_sheet.character,
             output_template=template,
@@ -1812,6 +1869,8 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
             accent_targets=accent_targets,
             silhouette_id=silhouette_id,
             styles=styles,
+            dedicate_to=dedicate_to,
+            worked_from=worked_from,
         )
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})

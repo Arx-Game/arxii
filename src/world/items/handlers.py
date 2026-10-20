@@ -213,7 +213,8 @@ class CharacterCarriedItemsHandler:
     @property
     def _items(self) -> list[ItemInstance]:
         if self._cached is None:
-            from world.items.models import ItemFacet, ItemInstance  # noqa: PLC0415
+            from world.items.market.models import MarketSale  # noqa: PLC0415
+            from world.items.models import ItemFacet, ItemInstance, ItemLineage  # noqa: PLC0415
 
             qs = (
                 ItemInstance.objects.filter(game_object__db_location=self._character)
@@ -224,8 +225,23 @@ class CharacterCarriedItemsHandler:
                     "image",
                     "template__image",
                     "currency_instrument",
+                    "dedicated_to_persona",
                 )
                 .prefetch_related(
+                    # Examine's credits (#4512): who did facet work, and what it was
+                    # worked from.
+                    Prefetch(
+                        "market_sales",
+                        queryset=MarketSale.objects.filter(kind=MarketSale.SaleKind.SERVICE)
+                        .select_related("seller_persona")
+                        .order_by("occurred_at", "pk"),
+                        to_attr="cached_service_sales",
+                    ),
+                    Prefetch(
+                        "lineage",
+                        queryset=ItemLineage.objects.select_related("source_item"),
+                        to_attr="cached_lineage",
+                    ),
                     Prefetch(
                         "item_facets",
                         queryset=ItemFacet.attached().select_related(

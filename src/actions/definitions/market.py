@@ -263,7 +263,8 @@ class ServiceCraftAction(_MarketAction):
     """Craft using a crafter's standing offer, at their shop.
 
     Kwargs: ``offer_id``, ``item_instance_id``, ``target_id`` (facet or style
-    pk per the offer's recipe kind).
+    pk per the offer's recipe kind); optional ``name``, ``description`` (the
+    commissioner's own words) and ``dedicate_to_id`` (a Persona pk, permanent) (#4512).
     """
 
     key: str = "market_service_craft"
@@ -275,16 +276,23 @@ class ServiceCraftAction(_MarketAction):
     ) -> ActionResult:
         from django.core.exceptions import ValidationError  # noqa: PLC0415
 
+        from world.items.exceptions import ItemError  # noqa: PLC0415
         from world.items.market.models import CraftingServiceOffer  # noqa: PLC0415
         from world.items.market.services import (  # noqa: PLC0415
             MarketServiceError,
             run_service_craft,
         )
         from world.items.models import ItemInstance  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
 
         persona = _active_persona(actor)
         if persona is None:
             return ActionResult(success=False, message=_MSG_NO_PERSONA)
+        dedicate_to = None
+        if kwargs.get("dedicate_to_id"):
+            dedicate_to = Persona.objects.filter(pk=kwargs["dedicate_to_id"]).first()
+            if dedicate_to is None:
+                return ActionResult(success=False, message="No such character to make it for.")
         offer = CraftingServiceOffer.objects.filter(pk=kwargs.get("offer_id")).first()
         instance = ItemInstance.objects.filter(pk=kwargs.get("item_instance_id")).first()
         if offer is None or instance is None:
@@ -299,8 +307,11 @@ class ServiceCraftAction(_MarketAction):
                 buyer_character=actor,
                 item_instance=instance,
                 target=target,
+                name=(kwargs.get("name") or "").strip(),
+                description=(kwargs.get("description") or "").strip(),
+                dedicate_to=dedicate_to,
             )
-        except MarketServiceError as exc:
+        except (MarketServiceError, ItemError) as exc:
             return ActionResult(success=False, message=exc.user_message)
         except ValidationError as exc:
             return ActionResult(success=False, message="; ".join(exc.messages))

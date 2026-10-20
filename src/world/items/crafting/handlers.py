@@ -19,8 +19,10 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemFacet, ItemInstance, ItemStyle, QualityTier, Style
     from world.magic.models import Facet
+    from world.scenes.models import Persona
 
 from world.items.exceptions import ItemError
 
@@ -209,6 +211,7 @@ class ItemCreateHandler(CraftingHandler):
         custom_name = overrides.get("custom_name", "")
         custom_description = overrides.get("custom_description", "")
         crafter_character = overrides.get("crafter_character")
+        has_text = bool(custom_name or custom_description)
         from world.scenes.models import Persona  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
@@ -231,10 +234,11 @@ class ItemCreateHandler(CraftingHandler):
             holder_character_sheet=crafter_sheet,
             crafter_character_sheet=crafter_sheet,
             crafter_persona_display=active_persona,
-            # The crafter authored the name/description, so they are also the
-            # designer — record it explicitly (#2066 dual provenance, #2243).
-            designer_character_sheet=crafter_sheet,
-            designer_persona_display=active_persona,
+            # The designer is whoever wrote the name or description (#2066 dual
+            # provenance, #2243). Blank text leaves the designer empty, so a piece
+            # whose design someone else writes later is credited to them (#4512).
+            designer_character_sheet=crafter_sheet if has_text else None,
+            designer_persona_display=active_persona if has_text else None,
         )
         OwnershipEvent.objects.create(
             item_instance=instance,
@@ -243,7 +247,30 @@ class ItemCreateHandler(CraftingHandler):
             to_persona_display=active_persona,
         )
         materialize_item_game_object(instance, crafter_sheet)
+        self._record_commission_loop(instance, crafter_sheet, active_persona, overrides)
         return instance
+
+    @staticmethod
+    def _record_commission_loop(
+        instance: ItemInstance,
+        crafter_sheet: CharacterSheet,
+        active_persona: Persona | None,
+        overrides: dict,
+    ) -> None:
+        """Write the optional dedication and lineage chosen at making (#4512).
+
+        The item worked from is used up here, after the piece exists. Both were validated
+        before the roll in ``craft_create_item``.
+        """
+        from world.items.services.dedication import dedicate_item  # noqa: PLC0415
+        from world.items.services.lineage import work_in_item  # noqa: PLC0415
+
+        dedicate_to = overrides.get("dedicate_to")
+        if dedicate_to is not None and active_persona is not None:
+            dedicate_item(instance, by=active_persona, to=dedicate_to)
+        worked_from = overrides.get("worked_from")
+        if worked_from is not None:
+            work_in_item(instance, worked_from, crafter=crafter_sheet)
 
 
 # ---------------------------------------------------------------------------

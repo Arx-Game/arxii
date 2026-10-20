@@ -40,6 +40,13 @@ function makeItem(id: number, name: string): ItemInstance {
     suggested_value: 0,
     can_steal: false,
     crafted_provenance: null,
+    custom_name: '',
+    custom_description: '',
+    dedicated_to_name: null,
+    designer_is_holder: false,
+    crafter_name: null,
+    designer_name: null,
+    facet_workers: [],
     silhouette: null,
     accents: [],
     template: {

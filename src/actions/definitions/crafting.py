@@ -265,7 +265,11 @@ class CreateItemAction(Action):
     """Roll the ITEM_CREATE recipe and (on success) mint a new ItemInstance.
 
     The player may supply a custom name and description for the created item
-    (mirrors the market's ``finish_ware`` pattern — player prose, not generated).
+    (mirrors the market's ``finish_ware`` pattern — player prose, not generated); the
+    maker is credited as designer only when they write one. Optional ``dedicate_to`` (a
+    Persona) makes the piece for one other character, permanently, and ``worked_from``
+    (an ItemInstance the maker holds) is used up and recorded as the piece's lineage
+    (#4512).
     No ``OwnsItemInstancePrerequisite`` — there is no pre-existing item to own.
     """
 
@@ -292,6 +296,8 @@ class CreateItemAction(Action):
         accent_targets = kwargs.get("accent_targets") or []
         silhouette_id = kwargs.get("silhouette_id")
         styles = kwargs.get("styles") or []
+        dedicate_to = kwargs.get("dedicate_to")
+        worked_from = kwargs.get("worked_from")
         crafter_account = get_account_for_character(actor)
         if crafter_account is None:
             return ActionResult(success=False, message=_NO_ACCOUNT_MSG)
@@ -305,6 +311,8 @@ class CreateItemAction(Action):
                 accent_targets=accent_targets,
                 silhouette_id=silhouette_id,
                 styles=styles,
+                dedicate_to=dedicate_to,
+                worked_from=worked_from,
             )
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)

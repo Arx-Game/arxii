@@ -72,7 +72,7 @@ export function WardrobePage() {
   // display, `activeCharacter` (the live session name) stays the target for
   // every `executeAction` call and the room-characters lookup below, exactly
   // as ADR-0247 requires for live-session concerns.
-  const { entryId: browsingEntryId, entry: activeEntry } = useBrowsingIdentity();
+  const { entryId: browsingEntryId, entry: activeEntry, name: myName } = useBrowsingIdentity();
   const activeCharacter = useAppSelector((state) => state.game.active);
   const accountId = useAppSelector((state) => state.auth.account?.id ?? null);
   const { isLoading: entriesLoading } = useMyRosterEntriesQuery();
@@ -473,7 +473,12 @@ export function WardrobePage() {
         reachableWardrobes={reachableWardrobes}
       />
 
-      <CreateItemDialog open={craftOpen} onOpenChange={setCraftOpen} />
+      <CreateItemDialog
+        open={craftOpen}
+        onOpenChange={setCraftOpen}
+        items={inventory}
+        myName={myName}
+      />
 
       {editingOutfit && (
         <EditOutfitDialog

@@ -12326,6 +12326,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/inventory/{id}/meaning/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description What the item means to the character holding it (#4512).
+     *
+     *     The crafter reads this before choosing to work the item into a new piece. It
+     *     names the signals and their points for the holder only; players in a room never
+     *     see either.
+     */
+    get: operations['items_inventory_meaning_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/inventory/{id}/recycle/': {
     parameters: {
       query?: never;
@@ -36499,8 +36522,34 @@ export interface components {
       readonly can_steal: boolean;
       /** @description The crafted mechanical line + persona credits, or None (#2878). */
       readonly crafted_provenance: string | null;
+      readonly custom_name: string;
+      readonly custom_description: string;
+      readonly dedicated_to_name: string | null;
+      /** @description Whether the holder wrote the piece's words (#4512). */
+      readonly designer_is_holder: boolean;
+      /** @description The persona that signed the work, as examine names them (#4512). */
+      readonly crafter_name: string | null;
+      /** @description The persona credited as designer, as examine names them (#4512). */
+      readonly designer_name: string | null;
+      /** @description Artists who did facet or style work on the piece for someone (#4512). */
+      readonly facet_workers: string[];
       readonly accents: components['schemas']['ItemAccentRead'][];
       readonly silhouette: components['schemas']['SilhouetteRead'] | null;
+    };
+    /**
+     * @description What an item means to the character holding it: its signals and their sum. Shown to
+     *     the holder before they choose to work the item into a new piece (#4512).
+     */
+    ItemMeaning: {
+      readonly total: number;
+      readonly lines: components['schemas']['ItemMeaningLine'][];
+      readonly made_from_cap: number;
+    };
+    /** @description One signal that makes an item matter to its holder (#4512). */
+    ItemMeaningLine: {
+      readonly label: string;
+      readonly detail: string;
+      readonly points: number;
     };
     /** @description Read serializer for ItemStyle (GET list/detail). */
     ItemStyleRead: {
@@ -70618,6 +70667,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ItemInstanceRead'];
+        };
+      };
+    };
+  };
+  items_inventory_meaning_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ItemMeaning'];
         };
       };
     };

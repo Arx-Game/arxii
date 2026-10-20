@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import Media
     from world.conditions.models import DamageType
     from world.items.crafting.models import ItemAccent
+    from world.items.market.models import MarketSale
     from world.mechanics.models import ModifierTarget
 
 from django.core.exceptions import ValidationError
@@ -24,6 +25,7 @@ from core.descriptors import ReverseOneToOneOrNone
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.contributors.models import CreditedContent
 from world.forms.models import ConcealmentLevel, DisguiseKind
@@ -913,7 +915,7 @@ class ItemInstance(SharedMemoryModel):
         db_default=Now(),
         help_text=(
             "When the current holder got this item. Starts the carry clock that "
-            "gates an item's personal meaning signals. Written by set_item_holder."
+            "gates an item's personal meaning signals."
         ),
     )
     holding_event = models.ForeignKey(
@@ -924,8 +926,7 @@ class ItemInstance(SharedMemoryModel):
         related_name="+",
         help_text=(
             "The ownership event that brought the item to the current holder, if one was "
-            "written (a gift, an inheritance). Null for an item the holder made or bought. "
-            "Written by set_item_holder."
+            "written (a gift, an inheritance). Null for an item the holder made or bought."
         ),
     )
     crafter_character_sheet = models.ForeignKey(
@@ -970,9 +971,9 @@ class ItemInstance(SharedMemoryModel):
         related_name="designed_items",
         help_text=(
             "The body that named/described this item (#2066 dual provenance — "
-            "Arx 1 erased the prose author). Equal to the crafter on "
-            "self-finished work; the ware finishing pass and service crafting "
-            "stamp the buyer."
+            "Arx 1 erased the prose author). Stamped only when that character "
+            "writes a name or description: at making, on the ware finishing pass, "
+            "or on a commission. A fee never makes anyone a designer."
         ),
     )
     designer_persona_display = models.ForeignKey(
@@ -982,9 +983,31 @@ class ItemInstance(SharedMemoryModel):
         blank=True,
         related_name="+",
         help_text=(
-            "The persona the designer was presenting as. Renders as "
-            "'Crafted by X, Designed by Y', collapsing when equal."
+            "The persona the designer was presenting as. Examine reads "
+            "'Made by X. Designed by Y.', collapsing when equal."
         ),
+    )
+    dedicated_to_persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dedicated_items",
+        help_text=(
+            "The persona this piece was made for. Written once, at making or on a "
+            "commission, and permanent: an item has at most one dedication."
+        ),
+    )
+    dedicated_by_persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The persona who dedicated it: the maker at making, the commissioner otherwise.",
+    )
+    dedicated_at = models.DateTimeField(
+        null=True, blank=True, help_text="When the dedication was written."
     )
     contained_in = models.ForeignKey(
         "self",
@@ -1145,6 +1168,31 @@ class ItemInstance(SharedMemoryModel):
             )
         )
 
+    @PrunedCachedProperty
+    def cached_service_sales(self) -> list[MarketSale]:
+        """The crafting-service sales on this item, oldest first (#4512): who did facet or
+        style work on it for someone else. The carried-items handler prefetches it; otherwise it
+        queries. Whatever writes a service sale deletes this to refresh it.
+
+        To invalidate: del instance.cached_service_sales
+        """
+        from world.items.market.models import MarketSale  # noqa: PLC0415
+
+        return list(
+            self.market_sales.filter(kind=MarketSale.SaleKind.SERVICE)
+            .select_related("seller_persona")
+            .order_by("occurred_at", "pk")
+        )
+
+    @PrunedCachedProperty
+    def cached_lineage(self) -> list[ItemLineage]:
+        """What this item was worked from (#4512), each source loaded so examine can mark
+        one that is gone. The carried-items handler prefetches it; otherwise it queries.
+
+        To invalidate: del instance.cached_lineage
+        """
+        return list(self.lineage.select_related("source_item"))
+
     @cached_property
     def cached_item_styles(self) -> list[ItemStyle]:
         """Styles attached to this item instance (#546).
@@ -1179,7 +1227,9 @@ class ItemInstance(SharedMemoryModel):
         # A silhouette or style is part of the design a given-up or destroyed item keeps
         # (#4500, owner ruling 2026-10-18). The designer is not tested here: making stamps
         # the crafter as designer on every crafted item (the purge spares it, cleanup.py).
-        if self.silhouette_id or self.item_styles.exists():
+        if self.silhouette_id or self.dedicated_at is not None or self.item_styles.exists():
+            return True
+        if self.lineage.exists():
             return True
         if self.has_facet_history:
             return True
@@ -1506,6 +1556,39 @@ class OwnershipEvent(SharedMemoryModel):
     def __str__(self) -> str:
         display = self.item_instance.display_name if self.item_instance else "deleted"
         return f"{display}: {self.get_event_type_display()}"
+
+
+class ItemLineage(SharedMemoryModel):
+    """The record that a piece was worked from another item its maker chose (#4512, #4462).
+
+    The source is used up by the making, so ``source_item`` is SET_NULL and the name and
+    the source's meaning points to the crafter at that moment are snapshots. A table
+    rather than a field so a later design can allow more than one source. Recipe
+    materials are allocated by template as before and record nothing here.
+    """
+
+    item = models.ForeignKey(ItemInstance, on_delete=models.CASCADE, related_name="lineage")
+    source_item = models.ForeignKey(
+        ItemInstance,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="worked_into",
+        help_text="The item that was worked in. Null once it is purged.",
+    )
+    source_name = models.CharField(
+        max_length=300, help_text="The source's name when it was used up."
+    )
+    points = models.PositiveSmallIntegerField(
+        verbose_name="Points at consumption",
+        help_text="The source's meaning points to the crafter when it was used up.",
+    )
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return f"{self.item_id} worked from {self.source_name}"
 
 
 class RecycleRequest(SharedMemoryModel):
