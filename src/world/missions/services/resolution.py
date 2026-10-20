@@ -931,7 +931,9 @@ def _announce_conditions_put_on_actor(
     sheet = character.character_sheet
     if sheet is None or consequence.pk is None:
         return
-    effects = consequence.effects.select_related("condition_template").order_by("execution_order")
+    effects = consequence.effects.select_related("condition_template").order_by(
+        "execution_order", "pk"
+    )
     for effect, result in zip(effects, applied, strict=False):
         if (
             effect.effect_type != EffectType.APPLY_CONDITION

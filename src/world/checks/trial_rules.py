@@ -122,12 +122,12 @@ def effect_trial_errors(effect: ConsequenceEffect) -> dict[str, str]:
 
 
 def is_cost_effect(effect: ConsequenceEffect) -> bool:
-    """A real cost: a Mage Scar that is not cosmetic, or a condition put on the actor."""
+    """A real cost: a non-cosmetic Mage Scar or a condition, on the actor."""
+    if effect.target != EffectTarget.SELF:
+        return False
     if effect.effect_type == EffectType.MAGICAL_SCARS:
         return not effect.scar_is_cosmetic
-    if effect.effect_type == EffectType.APPLY_CONDITION:
-        return effect.target == EffectTarget.SELF
-    return False
+    return effect.effect_type == EffectType.APPLY_CONDITION
 
 
 def is_opening_effect(effect: ConsequenceEffect) -> bool:

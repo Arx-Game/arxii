@@ -101,15 +101,21 @@ def grant_codex_entry(
 
 
 def techniques_opened_by(sheet: CharacterSheet, entry: CodexEntry) -> list[Technique]:
-    """Techniques ``entry`` opens for ``sheet``: learnable now that it is known (#4501).
+    """Techniques ``entry`` opens for ``sheet``: what ``learn_technique`` would accept now.
 
-    A technique whose ``CodexKnowledgeRequirement`` names ``entry``, that the character does
-    not already know, whose gift they hold, and whose every other prerequisite they meet.
-    Not an ultimate (only Audere reaches one). Call after the entry is KNOWN: the codex
-    requirement itself is then met, which is the point.
+    A technique whose active ``CodexKnowledgeRequirement`` names ``entry``, that the character
+    does not know and is not already training toward, whose gift they hold
+    (``resolve_owned_gift``) with room under the gift's technique cap, and whose every other
+    prerequisite they meet (``check_requirements_for_technique``). Never an ultimate (only
+    Audere reaches one). Call after the entry is KNOWN: the codex requirement itself is then
+    met, which is the point.
     """
-    from world.magic.models import CharacterTechnique  # noqa: PLC0415
-    from world.magic.services.gift_acquisition import resolve_owned_gift  # noqa: PLC0415
+    from world.magic.models import CharacterTechnique, TechniqueProgress  # noqa: PLC0415
+    from world.magic.services.gift_acquisition import (  # noqa: PLC0415
+        count_techniques_for_gift,
+        get_technique_cap_for_gift,
+        resolve_owned_gift,
+    )
     from world.progression.services.spends import (  # noqa: PLC0415
         check_requirements_for_technique,
     )
@@ -117,16 +123,26 @@ def techniques_opened_by(sheet: CharacterSheet, entry: CodexEntry) -> list[Techn
     candidates = [
         req.technique
         for req in gated_technique_requirements(entry).select_related("technique__gift")
-        if not req.technique.is_ultimate
     ]
-    known_ids = set(
+    taken_ids = set(
         CharacterTechnique.objects.filter(character=sheet, technique__in=candidates).values_list(
             "technique_id", flat=True
         )
+    ) | set(
+        TechniqueProgress.objects.filter(
+            character_sheet=sheet, technique__in=candidates
+        ).values_list("technique_id", flat=True)
     )
     opened: list[Technique] = []
     for technique in dict.fromkeys(candidates):
-        if technique.pk in known_ids or resolve_owned_gift(sheet, technique.gift) is None:
+        if technique.pk in taken_ids:
+            continue
+        owned_gift = resolve_owned_gift(sheet, technique.gift)
+        if owned_gift is None:
+            continue
+        if count_techniques_for_gift(sheet, owned_gift) >= get_technique_cap_for_gift(
+            sheet, owned_gift
+        ):
             continue
         # One check per candidate; an entry opens a handful of techniques at most.
         met, _failed = check_requirements_for_technique(sheet.character, technique)
@@ -160,9 +176,12 @@ def announce_opened_techniques(sheet: CharacterSheet, entry: CodexEntry) -> None
     Every route that makes an entry known comes through ``grant_codex_entry``, so a trial, a
     pledge answer and a clue all get this notice (#4501). Silent when it opens nothing.
     """
+    from world.achievements.discovery import is_cg_catalog_content  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
+    if is_cg_catalog_content(entry):
+        return
     opened = techniques_opened_by(sheet, entry)
     if not opened:
         return
@@ -185,11 +204,18 @@ def entry_gates_technique(entry: CodexEntry) -> bool:
 
 
 def gated_technique_requirements(entry: CodexEntry):
-    """The active technique-learning requirements that name ``entry`` (#4501)."""
+    """The active requirements that make ``entry`` gate an ordinary technique (#4501).
+
+    An ultimate is skipped: only Audere reaches one, so an entry that gates only an ultimate
+    opens nothing a trial could grant.
+    """
     from world.progression.models import CodexKnowledgeRequirement  # noqa: PLC0415
 
     return CodexKnowledgeRequirement.objects.filter(
-        codex_entry=entry, technique__isnull=False, is_active=True
+        codex_entry=entry,
+        technique__isnull=False,
+        technique__is_ultimate=False,
+        is_active=True,
     )
 
 

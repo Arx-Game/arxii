@@ -73,7 +73,7 @@ def apply_all_effects(
     """
     if consequence.pk is None:
         return []
-    effects = consequence.effects.all().order_by("execution_order")
+    effects = consequence.effects.all().order_by("execution_order", "pk")
     return [apply_effect(e, context) for e in effects if e.effect_type not in skip_effect_types]
 
 
@@ -823,7 +823,8 @@ def _apply_magical_scars(
         scene=None,  # Deferred: thread scene through ResolutionContext when available
         is_cosmetic=effect.scar_is_cosmetic,
     )
-    _announce_queued_scar(sheet, tier, cosmetic=effect.scar_is_cosmetic)
+    if result.created or result.previous_tier is not None:
+        _announce_queued_scar(sheet, tier, cosmetic=effect.scar_is_cosmetic)
 
     verb = "escalated" if not result.created else "acquired"
     kind = "cosmetic alteration" if effect.scar_is_cosmetic else "alteration"
@@ -1602,26 +1603,19 @@ def _send_system_notice(sheet: "CharacterSheet", body: str) -> None:
     )
 
 
-def _training_refusal_text(
-    error: Exception, technique: "Technique", *, names_requirements: bool
-) -> str:
+def _training_refusal_text(error: Exception, technique: "Technique", *, earned_names: bool) -> str:
     """What a refused trial grant tells the player (#4501).
 
-    Only a Success or better names the unmet requirements: below that the trial has not
-    made the entry known, and "Need to know: <entry>" would hand the entry's name out for
-    free (hidden information comes only from a successful check).
+    Only a Success or better has earned the technique's name, its gift and the missing
+    requirements: below that the trial has not made the entry known, and naming any of them
+    would hand out hidden information for free (it comes only from a successful check).
     """
-    from world.magic.exceptions import (  # noqa: PLC0415
-        GiftNotOwned,
-        TechniqueRequirementsNotMet,
-    )
+    from world.magic.exceptions import GiftNotOwned  # noqa: PLC0415
 
+    if not earned_names:
+        return "Your training did not begin: you do not yet meet what it needs."
     if isinstance(error, GiftNotOwned):
         return f"Technique not granted: you do not hold {technique.gift.name}."
-    if isinstance(error, TechniqueRequirementsNotMet):
-        if names_requirements:
-            return f"Technique not granted: {error.user_message}"
-        return f"Training toward {technique.name} did not begin: you do not yet meet what it needs."
     return f"Technique not granted: {error.user_message}"
 
 
@@ -1664,7 +1658,7 @@ def _technique_training(
             skip_reason="Already knows the technique",
         )
 
-    names_requirements = effect.consequence.outcome_tier.success_level >= SUCCESS_TIER_MIN_LEVEL
+    earned_names = effect.consequence.outcome_tier.success_level >= SUCCESS_TIER_MIN_LEVEL
     meter = TechniqueProgress.objects.filter(character_sheet=sheet, technique=technique).first()
     try:
         if effect.grants_technique_outright:
@@ -1691,7 +1685,7 @@ def _technique_training(
             )
         minted = credit_technique_progress(meter, effect.training_points)
     except MagicError as error:
-        text = _training_refusal_text(error, technique, names_requirements=names_requirements)
+        text = _training_refusal_text(error, technique, earned_names=earned_names)
         _send_system_notice(sheet, text)
         return AppliedEffect(
             effect_type=EffectType.TECHNIQUE_TRAINING,

@@ -63,7 +63,7 @@ class Migration(migrations.Migration):
                 blank=True,
                 help_text="TECHNIQUE_TRAINING: the technique the trial trains. Never an ultimate.",
                 null=True,
-                on_delete=django.db.models.deletion.CASCADE,
+                on_delete=django.db.models.deletion.PROTECT,
                 related_name="consequence_effects",
                 to="arxii.technique",
             ),
