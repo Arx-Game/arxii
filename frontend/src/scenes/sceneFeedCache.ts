@@ -62,10 +62,17 @@ export function refreshSceneFeedRow(
   inFlight.set(args.interactionId, entry);
   entry.done = (async () => {
     try {
-      do {
+      // A failed fetch must not drop a frame that arrived meanwhile: go again, and
+      // throw the failure only when nothing newer is waiting.
+      for (;;) {
         entry.dirty = false;
-        await fetchIntoFeed(queryClient, args);
-      } while (entry.dirty);
+        try {
+          await fetchIntoFeed(queryClient, args);
+        } catch (error) {
+          if (!entry.dirty) throw error;
+        }
+        if (!entry.dirty) return;
+      }
     } finally {
       inFlight.delete(args.interactionId);
     }
@@ -105,9 +112,9 @@ async function fetchIntoFeed(
   );
 }
 
-/** True when the row predates every loaded row: paging will bring it, so do not add it now. */
+/** True when the row is no newer than the oldest loaded row: paging will bring it, so do not add it now. */
 function isOlderThanLoaded(row: Interaction, data: InfiniteData<FeedPage>): boolean {
   const loaded = data.pages.flatMap((page) => page.results);
   const oldest = loaded.at(-1);
-  return oldest !== undefined && Date.parse(row.timestamp) < Date.parse(oldest.timestamp);
+  return oldest !== undefined && Date.parse(row.timestamp) <= Date.parse(oldest.timestamp);
 }

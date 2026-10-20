@@ -38,10 +38,12 @@ describe('sceneFeedCache keys', () => {
 
 function deferred() {
   let resolve!: (value: Interaction) => void;
-  const promise = new Promise<Interaction>((r) => {
-    resolve = r;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<Interaction>((res, rej) => {
+    resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 describe('refreshSceneFeedRow', () => {
@@ -86,6 +88,14 @@ describe('refreshSceneFeedRow', () => {
     );
   });
 
+  it('does not add a row tied with the oldest loaded row', async () => {
+    seed();
+    fetchInteractionMock.mockResolvedValue({ ...row(99), timestamp: row(4).timestamp });
+    await refreshSceneFeedRow(client, { interactionId: 99, sceneId: 7 });
+    const ids = client.getQueryData<Pages>(key)!.pages.flatMap((p) => p.results.map((r) => r.id));
+    expect(ids).toEqual([6, 5, 4]);
+  });
+
   it('does not fetch when no feed for the scene is cached', async () => {
     await refreshSceneFeedRow(client, { interactionId: 5, sceneId: 7 });
     expect(fetchInteractionMock).not.toHaveBeenCalled();
@@ -100,6 +110,17 @@ describe('refreshSceneFeedRow', () => {
     );
     expect(fetchInteractionMock).toHaveBeenCalledTimes(1);
     first.resolve(row(5));
+    await Promise.all(calls);
+    expect(fetchInteractionMock).toHaveBeenCalledTimes(2);
+    expect(client.getQueryData<Pages>(key)!.pages[0].results[1].pose_endorsers).toHaveLength(1);
+  });
+
+  it('still runs the follow-up fetch when the in-flight one fails', async () => {
+    seed();
+    const first = deferred();
+    fetchInteractionMock.mockReturnValueOnce(first.promise).mockResolvedValue(row(5, [{}]));
+    const calls = [1, 2].map(() => refreshSceneFeedRow(client, { interactionId: 5, sceneId: 7 }));
+    first.reject(new ApiError('boom', { status: 500 }));
     await Promise.all(calls);
     expect(fetchInteractionMock).toHaveBeenCalledTimes(2);
     expect(client.getQueryData<Pages>(key)!.pages[0].results[1].pose_endorsers).toHaveLength(1);
