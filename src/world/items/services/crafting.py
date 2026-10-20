@@ -175,7 +175,7 @@ def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 acce
         custom_description: Player-authored description override.
         dedicate_to: The persona the piece is made for (#4512); permanent.
         worked_from: One item the crafter holds, used up by the making and recorded as
-            the piece's lineage (#4512). Kept if the roll fails.
+            the piece's lineage (#4512). A making never fails to make, so it is always used.
 
     Returns:
         ItemCreateResult with created=True and item_instance set on success,

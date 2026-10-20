@@ -259,9 +259,8 @@ class ItemCreateHandler(CraftingHandler):
     ) -> None:
         """Write the optional dedication and lineage chosen at making (#4512).
 
-        The item worked from is used up here, after the piece exists, so a failed roll
-        (which never reaches ``apply``) costs the crafter nothing of it. Both were
-        validated before the roll in ``craft_create_item``.
+        The item worked from is used up here, after the piece exists. Both were validated
+        before the roll in ``craft_create_item``.
         """
         from world.items.services.dedication import dedicate_item  # noqa: PLC0415
         from world.items.services.lineage import work_in_item  # noqa: PLC0415

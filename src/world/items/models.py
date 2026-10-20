@@ -971,9 +971,9 @@ class ItemInstance(SharedMemoryModel):
         related_name="designed_items",
         help_text=(
             "The body that named/described this item (#2066 dual provenance — "
-            "Arx 1 erased the prose author). Equal to the crafter on "
-            "self-finished work; the ware finishing pass and service crafting "
-            "stamp the buyer."
+            "Arx 1 erased the prose author). Stamped only when that character "
+            "writes a name or description: at making, on the ware finishing pass, "
+            "or on a commission. A fee never makes anyone a designer."
         ),
     )
     designer_persona_display = models.ForeignKey(
@@ -983,8 +983,8 @@ class ItemInstance(SharedMemoryModel):
         blank=True,
         related_name="+",
         help_text=(
-            "The persona the designer was presenting as. Renders as "
-            "'Crafted by X, Designed by Y', collapsing when equal."
+            "The persona the designer was presenting as. Examine reads "
+            "'Made by X. Designed by Y.', collapsing when equal."
         ),
     )
     dedicated_to_persona = models.ForeignKey(

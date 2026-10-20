@@ -429,7 +429,8 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
     # *suggestion* for the market, never an enforced price.
     suggested_value = serializers.SerializerMethodField()
     # #2878: the examine layer — "Of divine quality, quite menacing and
-    # slightly alluring. Designed by X; crafted by Y." Null for uncrafted items.
+    # slightly alluring. Made by X for Y. Designed by Z. Facet work by W." Null for
+    # uncrafted items.
     crafted_provenance = serializers.SerializerMethodField()
     # #2886: structured accent rows for the removal UI.
     accents = serializers.SerializerMethodField()
