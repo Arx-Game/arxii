@@ -35,7 +35,8 @@ export default function AlterationResolutionPage() {
         <h1 className="text-2xl font-bold">Mage Scars</h1>
         <p className="text-muted-foreground">
           Overburned magic leaves its mark. Each unresolved scar locks that character&apos;s XP
-          spending until you decide what shape it takes.
+          spending until you decide what shape it takes. A cosmetic scar is a reward: it holds
+          nothing back.
         </p>
       </div>
 
@@ -64,7 +65,9 @@ export default function AlterationResolutionPage() {
           <Card key={pending.id}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Badge variant="destructive">Tier {pending.tier}</Badge>
+                <Badge variant={pending.is_cosmetic ? 'secondary' : 'destructive'}>
+                  Tier {pending.tier}
+                </Badge>
                 {pending.is_cosmetic ? 'Cosmetic ' : ''}
                 {pending.tier_display} Mage Scar
               </CardTitle>
@@ -75,9 +78,9 @@ export default function AlterationResolutionPage() {
             </CardHeader>
             <CardContent className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                Caps for this tier: social {caps.social_cap}, weakness {caps.weakness_cap},
-                resonance {caps.resonance_cap}
-                {caps.visibility_required ? ', always visible' : ''}
+                {pending.is_cosmetic
+                  ? 'A reward: no drawbacks, and it does not hold back advancement. Describe it when you like.'
+                  : `Caps for this tier: social ${caps.social_cap}, weakness ${caps.weakness_cap}, resonance ${caps.resonance_cap}${caps.visibility_required ? ', always visible' : ''}`}
               </p>
               <Button onClick={() => setResolving(pending)}>Resolve</Button>
             </CardContent>
