@@ -24,6 +24,10 @@ vi.mock('@/store/store', () => ({
   store: { getState: getStateMock },
 }));
 
+const { refreshRowMock } = vi.hoisted(() => ({ refreshRowMock: vi.fn() }));
+
+vi.mock('@/scenes/sceneFeedCache', () => ({ refreshSceneFeedRow: refreshRowMock }));
+
 vi.mock('@/queryClient', () => ({
   queryClient: {
     getQueryData: getQueryDataMock,
@@ -131,6 +135,30 @@ describe('handleInteractionPayload', () => {
     expect(dispatch).toHaveBeenCalledWith(
       addSceneInteraction({ character: 'Bob', interaction: payload })
     );
+  });
+
+  it('refreshes a live entrance that carries entry endorsers (#4508)', () => {
+    const endorser = { sheet_id: 1, name: 'Ann', resonance_id: 2, resonance_name: 'Fire' };
+    const payload = makeWhisperPayload({
+      id: 494,
+      mode: 'pose',
+      entry_endorsers: [endorser] as unknown as InteractionWsPayload['entry_endorsers'],
+    });
+    handleInteractionPayload('Bob', payload, dispatch, navigate);
+    expect(refreshRowMock).toHaveBeenCalledWith(expect.anything(), {
+      interactionId: 494,
+      sceneId: 9,
+    });
+  });
+
+  it('does not refresh a live pose with no entry endorsers', () => {
+    handleInteractionPayload(
+      'Bob',
+      makeWhisperPayload({ id: 495, mode: 'pose' }),
+      dispatch,
+      navigate
+    );
+    expect(refreshRowMock).not.toHaveBeenCalled();
   });
 
   it('fires a toast for a whisper delivered to a background session', () => {

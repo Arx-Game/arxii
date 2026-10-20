@@ -2,6 +2,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { createSelector } from '@reduxjs/toolkit';
 import { fetchInteractions } from '../queries';
+import { sceneFeedQueryKey } from '../sceneFeedCache';
 import type { Interaction } from '../types';
 import { useAppSelector } from '@/store/hooks';
 import type { InteractionWsMetadata, InteractionWsPayload } from '@/hooks/types';
@@ -91,14 +92,11 @@ export function useSceneInteractions(sceneId: string | undefined, viewerKey?: st
     results: Interaction[];
     next?: string;
   }>({
-    queryKey: [
-      'scene-interactions',
-      accountId ?? 'anonymous',
-      sceneId ?? 'none',
-      queryViewerKey ?? 'all',
-      // Cursor pages are scoped to the authorized snapshot/filter identity.
-      'retained',
-    ],
+    queryKey: sceneFeedQueryKey({
+      sceneId: sceneId ?? 'none',
+      accountId,
+      viewerKey: queryViewerKey,
+    }),
     queryFn: ({ pageParam }) =>
       fetchInteractions(sceneId as string, pageParam as string | undefined),
     getNextPageParam: (lastPage) => {

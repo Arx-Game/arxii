@@ -10,6 +10,7 @@ import type {
   SceneScenarioPayload,
   SceneStakesSummary,
 } from './types';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -429,7 +430,7 @@ export function useCreatePoseEndorsement(sceneId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createPoseEndorsement,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }),
   });
 }
 
@@ -437,7 +438,7 @@ export function useDeletePoseEndorsement(sceneId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: deletePoseEndorsement,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }),
   });
 }
 
@@ -445,7 +446,7 @@ export function useCreateSceneEntryEndorsement(sceneId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createSceneEntryEndorsement,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }),
   });
 }
 
@@ -475,7 +476,7 @@ export function useCreateStyleEndorsement(sceneId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createStyleEndorsement,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }),
   });
 }
 

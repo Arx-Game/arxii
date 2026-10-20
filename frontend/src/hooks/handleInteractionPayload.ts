@@ -17,6 +17,7 @@ import type { EncounterDetail } from '@/combat/types';
 import { getThreadKey } from '@/scenes/hooks/useThreading';
 import { wsPayloadToInteraction } from '@/scenes/hooks/useSceneInteractions';
 import { narrativeBodyCache } from '@/game/narrativeRetention';
+import { refreshSceneFeedRow } from '@/scenes/sceneFeedCache';
 
 export function handleInteractionPayload(
   character: MyRosterEntry['name'],
@@ -30,6 +31,13 @@ export function handleInteractionPayload(
     dispatch(addAmbientInteraction({ character, interaction: payload }));
   } else {
     dispatch(addSceneInteraction({ character, interaction: payload }));
+    // An entrance carries the endorsers of the whole entry only on a re-read (#4508).
+    if (payload.entry_endorsers?.length) {
+      void refreshSceneFeedRow(queryClient, {
+        interactionId: payload.id,
+        sceneId: payload.scene_id,
+      });
+    }
   }
   maybeToastWhisperAttention(character, payload, dispatch, navigate);
   refreshEncounterOnOutcome(payload);
