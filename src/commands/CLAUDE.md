@@ -40,7 +40,11 @@ SCENE_ADAPTIVE backend.
   - **Switches are opt-in: a command that reads `self.switches` sets
     `takes_switches = True`.** `parse()` then splits them off the arguments through
     `split_switches`: `market/finish 12` gives `switches == ["finish"]` (lower-cased) and
-    `args == " 12"`, the leading space being the shape `args` has with no switch. Every
+    `args == " 12"`, the leading space being the shape `args` has with no switch. A switch
+    ends at whitespace or at `=`: `ceremony/sermon=The Tide` is the switch `sermon` and the
+    rest `=The Tide` (#3657 tranche 16: it had taken `sermon=The`, lower-cased, so a rite
+    with no honoree and a named being was an unknown subverb; the fuzz contract in
+    `integration_tests/fuzz/test_command_parsing.py` pins it). Every
     other command gets its typed line untouched. Splitting for all of them would drop an
     unread switch and run the rest (`retire/x` would retire), and `CmdNoMatch` is handed
     the whole unmatched line as `args`, slash included. Evennia's base `Command.parse`
@@ -362,6 +366,42 @@ actions, backends, and service functions.
   same `world.npc_services.allegiance.actor_holds_sway_present` predicate the persona menu's
   "Send away"/"Take into service" items and the won-over digest row's flags also consult.
 - **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator. The menu, an answer by name and by number with the conflict gauge read, and every refusal are typed in `integration_tests/test_granting_and_staging_journeys.py` (`AnsweringAWrong`, #3657 tranche 15; the hand-built `tests/test_grievance_command.py` is gone).
+- **`ceremonies.py`**: `CmdCeremony` (`ceremony`, #2289) — the rite family, thin over the Actions
+  in `actions/definitions/ceremonies.py`: `ceremony/<funeral|blessing|sermon|wedding|coronation|
+  conversion|rite> [<name>,...][=<being or title>]` opens one (`OpenCeremonyAction`; the space
+  form `ceremony funeral Hobb` works too), `ceremony/offering <item>[,...]`, `/speech
+  <name>[=<honoree>]`, `/finish` and `/abandon` direct it (the officiant's, abandon also
+  staff's), bare `ceremony` shows the rite underway here. `conversion` joined the open
+  subverbs in #3657 tranche 16: the action always took the type, but telnet could not open
+  the rite that mints the convert's `WorshipConversionOffer`; `seance` stays TehomCD's. The
+  hub and the refusals name a character by key and a persona by `.name` (they had read
+  "Sheet for Hobb" and "Ysmay (Primary)"), and the usage line keeps spaces around its
+  separators (a bare `|b`, `|s` or `|r` is a colour code). A blessing, a funeral, a sermon
+  and a tier 3 rite, the offering, the speech, the finish and the abandon are typed in
+  `integration_tests/test_keeping_the_faith_journeys.py` (`ConductingACeremony`; the
+  hand-built `tests/test_ceremony_command.py`, whose caller was a `MagicMock`, is gone).
+  Wedding and coronation keep their world-level tests (`world/ceremonies/tests`).
+- **`conversion.py`**: `CmdConversion` (`conversion`, #2361) — the convert's inbox: bare
+  `conversion`/`offers` lists PENDING offers whose rite is still open
+  (`pending_conversion_offers_for_account`, the web inbox's own read; tranche 16: it had
+  listed a closed rite's offer, whose answer was then refused), `conversion accept|decline
+  <id>` answers through `RespondConversionOfferAction` (telnet accepts sincerely; the
+  lip-service choice is the web dialog's). Typed in `AnsweringAConversion`, with the rite
+  opened by `ceremony/conversion` and concluded by `ceremony/finish`, the convert's worship
+  read back (the hand-built `tests/test_conversion_command.py` is gone).
+- **`worship.py`**: `CmdPray` (`pray <being>=<words>`, `PrayAction`: a holy-site prayer pays
+  the week's devotion once), `CmdVision` (`vision[/reveal] <character>/<being>=<prose>`,
+  `vision/prayer <id> ...`, `cmd:perm(Admin)`, `SendVisionAction` spending the being's pool
+  and delivering the prose as a VISIONS narrative message), `CmdInvoke`, `CmdPledge` and
+  `CmdSacrifice` (#3779, #4333). `pray` and `vision` are typed in `PrayingAndTheVision`
+  (#3657 tranche 16; the hand-built `tests/test_worship_commands.py`, which mocked the
+  actions, is gone); `pledge` and `sacrifice` in `integration_tests/pipeline/
+  test_pledge_telnet_e2e.py` and `test_item_that_fed_resonance_journeys.py`.
+- **`sphinx.py`**: `CmdSphinx` (`sphinx <vow>`, #2640) — the Sphinx of Black Quartz's
+  read-only verdict over `world.covenants.sphinx.judge_vow`, the same call the REST
+  `CovenantRoleViewSet.sphinx` makes. Typed in `AskingTheSphinx` (tranche 16; the
+  hand-built `tests/test_sphinx_command.py` is gone; its no-sheet refusal is unreachable
+  through the handler for a played character).
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
   `PerformRitualAction` and multi-participant session lifecycle:
   - `ritual <name> [k=v ...]` — single-actor ritual performance (SERVICE rituals execute

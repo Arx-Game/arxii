@@ -135,7 +135,8 @@ def _validate_honorees_for_type(
             raise CeremonyError(msg)
         for sheet in honoree_sheets:
             if not is_dead(sheet):
-                msg = f"{sheet} still lives; the rite of passing is not theirs."
+                # The character's name: ``str(sheet)`` reads "Sheet for Hobb" (#3657).
+                msg = f"{sheet.character.key} still lives; the rite of passing is not theirs."
                 raise CeremonyError(msg)
     if ceremony_type.key == CeremonyTypeKey.CONVERSION and len(honoree_sheets) != 1:
         msg = "A conversion rite has exactly one convert."
@@ -197,14 +198,15 @@ def _validate_coronation_open(
         msg = "A coronation honors exactly one sovereign."
         raise CeremonyError(msg)
     honoree_sheet = honoree_sheets[0]
+    honoree_name = honoree_sheet.character.key  # ``str(sheet)`` reads "Sheet for Hobb"
     if Coronation.objects.filter(honoree_sheet=honoree_sheet, title=title).exists():
-        msg = f"{honoree_sheet} has already been crowned for {title}."
+        msg = f"{honoree_name} has already been crowned for {title}."
         raise CeremonyError(msg)
     if is_staff_fiat:
         return
     holder_kin = Kinsperson.objects.filter(sheet=honoree_sheet).first()
     if holder_kin is None or title.holder_id != holder_kin.pk:
-        msg = f"{honoree_sheet} does not hold {title} — there is nothing to solemnize."
+        msg = f"{honoree_name} does not hold {title} — there is nothing to solemnize."
         raise CeremonyError(msg)
 
 
@@ -928,15 +930,19 @@ def respond_to_conversion_offer(
 def pending_conversion_offers_for_account(
     account: object,
 ) -> "QuerySet[WorshipConversionOffer]":
-    """PENDING conversion offers addressed to any character this account has ever held.
+    """PENDING conversion offers addressed to any character this account has ever held,
+    whose rite is still open.
 
-    Mirrors ``pending_seance_offers_for_account`` (#2393).
+    Mirrors ``pending_seance_offers_for_account`` (#2393). A rite that concluded or
+    was abandoned before the convert answered leaves its offer PENDING, and an answer
+    to it is refused, so the inbox leaves it out (#3657 tranche 16).
     """
     from world.ceremonies.models import WorshipConversionOffer  # noqa: PLC0415
 
     return (
         WorshipConversionOffer.objects.filter(
             status=ConversionOfferStatus.PENDING,
+            ceremony_honoree__ceremony__status=CeremonyStatus.OPEN,
             ceremony_honoree__honoree_sheet__roster_entry__tenures__player_data__account=account,
             ceremony_honoree__honoree_sheet__roster_entry__tenures__end_date__isnull=True,
         )
