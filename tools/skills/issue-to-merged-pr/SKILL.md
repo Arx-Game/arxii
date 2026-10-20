@@ -571,7 +571,10 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
   - `DROPPED` (exit 9): the queue ejected it or a check failed there. Read the checks,
     enter the CI-fix phase, re-enqueue, re-arm the watcher.
   - `CLOSED` (exit 7): tell the user; exit.
-  - `TIMEOUT` (exit 6, a day by default) or exit 1 (`gh` kept failing): re-arm it.
+  - `TIMEOUT` (exit 6, after 110 minutes by default), exit 1 (`gh` kept failing), or
+    the background run ending with no word at all (the harness killed it): re-arm it.
+    The cap sits under the harness's two-hour limit on a background command, so
+    normally the script says TIMEOUT first; any other ending also means re-arm.
   While it waits, answer an open evidence challenge round (Step 6a) as usual.
 
   **Before judging any PR "ready", read

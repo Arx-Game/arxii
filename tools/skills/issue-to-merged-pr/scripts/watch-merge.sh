@@ -15,14 +15,15 @@
 # Exits:
 #   0  MERGED        - run post-merge-cleanup.sh
 #   1  usage, or gh failed three polls in a row
-#   6  TIMEOUT       - still waiting at the cap (approval can take a day)
+#   6  TIMEOUT       - still waiting at the cap; re-arm it (approval can take a day)
 #   7  CLOSED        - closed without merging
 #   8  CONFLICTING   - merge conflicts with main; merge main in, push, re-enqueue
 #   9  DROPPED       - open, but neither queued nor armed (the queue ejected it,
 #                      a check failed in the queue, or auto-merge was turned off)
 #
 # Env: WATCH_MERGE_INTERVAL (seconds between polls, default 120),
-#      WATCH_MERGE_CAP (seconds, default 86400).
+#      WATCH_MERGE_CAP (seconds, default 6600: under the harness's two-hour limit on a
+#      background command, so the script says TIMEOUT before anything kills it).
 set -euo pipefail
 
 usage() { echo "Usage: $0 <pr-number>" >&2; exit 1; }
@@ -32,7 +33,7 @@ PR="$1"
 [[ "$PR" =~ ^[0-9]+$ ]] || usage
 
 INTERVAL="${WATCH_MERGE_INTERVAL:-120}"
-CAP="${WATCH_MERGE_CAP:-86400}"
+CAP="${WATCH_MERGE_CAP:-6600}"
 
 # shellcheck disable=SC2016  # GraphQL variables, not shell expansions.
 QUERY='query($o:String!,$r:String!,$p:Int!){repository(owner:$o,name:$r){
