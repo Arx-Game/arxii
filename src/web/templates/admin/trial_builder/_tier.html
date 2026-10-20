@@ -1,0 +1,125 @@
+{% comment %}
+One outcome tier's fieldset (#4513). A control the tier may not use is not drawn; the
+model's save rules still refuse it, which covers the stock admin. `block.errors` are the
+messages slice 1's rules gave this tier; the check script rewrites them as the form changes.
+{% endcomment %}
+{% with form=block.form state=block.state %}
+<fieldset class="module aligned tb-tier" id="tier-{{ form.tier.pk }}" data-tier="{{ form.tier.pk }}" data-level="{{ form.level }}">
+  <h2>{{ form.tier.name }} <span class="tb-chip">route {{ block.number }} of {{ block.total }}</span></h2>
+  {% if form.non_field_errors %}<p class="errornote">{{ form.non_field_errors }}</p>{% endif %}
+  {% include "admin/trial_builder/_row.html" with field=form.next_node %}
+  {% if not state.shared %}{% include "admin/trial_builder/_row.html" with field=form.label %}{% endif %}
+  {% include "admin/trial_builder/_row.html" with field=form.outcome_text %}
+
+  {% if state.shared %}
+  <div class="form-row" data-field="shared">
+    <div>
+      <div class="flex-container">
+        <label>Consequence</label>
+        <div class="tb-field tb-note" data-testid="shared-{{ form.tier.pk }}">
+          This route's consequence is also used by {{ state.shared_with|join:", " }}, so it is
+          edited on <a href="{{ block.shared_url }}">its own page</a>, not here.
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="form-row{% if form.codex_mode.errors or form.codex_entry.errors %} errors{% endif %}" data-field="codex_mode">
+    {{ form.codex_mode.errors }}{{ form.codex_entry.errors }}
+    <div><div class="flex-container">
+      <label for="{{ form.codex_mode.id_for_label }}">Codex entry</label>
+      <div class="tb-field">
+        <div class="tb-inline">
+          {{ form.codex_mode }}
+          <span class="tb-entry">{{ form.codex_entry }}</span>
+        </div>
+        <div class="help">{{ form.codex_entry.help_text }}</div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="form-row{% if form.training_points.errors %} errors{% endif %}" data-field="training">
+    {{ form.training_points.errors }}
+    <div><div class="flex-container">
+      <label for="{{ form.training_points.id_for_label }}">Training</label>
+      <div class="tb-field">
+        {% if form.can_train %}
+        <div class="tb-inline">
+          {% if form.can_outright %}
+          {{ form.grant_outright }} <label class="vCheckboxLabel" for="{{ form.grant_outright.id_for_label }}">Grant outright</label>
+          <span>or points {{ form.training_points }}</span>
+          {% else %}
+          <span>points {{ form.training_points }}</span>
+          {% endif %}
+        </div>
+        {% if form.can_outright %}<div class="help">With "grant outright" the points are not used.</div>{% endif %}
+        {% else %}
+        <div class="tb-note">Not allowed on {{ form.tier.name }}.</div>
+        {% endif %}
+      </div>
+    </div></div>
+  </div>
+
+  <div class="form-row{% if form.cost_kind.errors or form.cost_template.errors or form.cost_severity.errors %} errors{% endif %}" data-field="cost">
+    {{ form.cost_kind.errors }}{{ form.cost_template.errors }}{{ form.cost_severity.errors }}
+    <div><div class="flex-container">
+      <label for="{{ form.cost_kind.id_for_label }}">Cost</label>
+      <div class="tb-field">
+        <div class="tb-inline">
+          {{ form.cost_kind }}
+          <span class="tb-entry" title="Condition template, for a staged condition">{{ form.cost_template }}</span>
+          <span>tier / severity {{ form.cost_severity }}</span>
+        </div>
+        <div class="help">Mage Scars cost the character a scar they describe before they advance; a staged condition is applied to them. Pick the template only for a condition.</div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="form-row{% if form.reward_kind.errors or form.reward_tier.errors %} errors{% endif %}" data-field="reward">
+    {{ form.reward_kind.errors }}{{ form.reward_tier.errors }}
+    <div><div class="flex-container">
+      <label for="{{ form.reward_kind.id_for_label }}">Reward</label>
+      <div class="tb-field">
+        {% if form.can_reward %}
+        <div class="tb-inline">
+          {{ form.reward_kind }}
+          <span>tier {{ form.reward_tier }}</span>
+        </div>
+        <div class="help">No drawbacks and no wait on advancement. A reward, not a cost.</div>
+        {% else %}
+        <div class="tb-note">Not allowed below Success.</div>
+        {% endif %}
+      </div>
+    </div></div>
+  </div>
+
+  {% if form.can_train %}
+  <div class="form-row{% if form.deliberately_free.errors or form.free_reason.errors %} errors{% endif %}" data-field="free">
+    {{ form.deliberately_free.errors }}{{ form.free_reason.errors }}
+    <div><div class="flex-container">
+      <label for="{{ form.deliberately_free.id_for_label }}">Deliberately free</label>
+      <div class="tb-field">
+        <div class="tb-inline">
+          {{ form.deliberately_free }} <label class="vCheckboxLabel" for="{{ form.deliberately_free.id_for_label }}">Free</label>
+          <span class="tb-reason">{{ form.free_reason }}</span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+
+  {% if block.other_effects %}
+  <div class="form-row" data-field="others">
+    <div><div class="flex-container">
+      <label>Other effects</label>
+      <div class="tb-field tb-note">Left as they are: {{ block.other_effects|join:"; " }}.</div>
+    </div></div>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <ul class="errorlist tb-tier-errors" id="tier-errors-{{ form.tier.pk }}" data-testid="tier-errors-{{ form.tier.pk }}">
+    {% for message in block.errors %}<li>{{ message }}</li>{% endfor %}
+  </ul>
+</fieldset>
+{% endwith %}

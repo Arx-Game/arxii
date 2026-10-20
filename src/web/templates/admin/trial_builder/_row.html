@@ -1,0 +1,17 @@
+{% comment %}
+One aligned admin form row (the markup `admin/includes/fieldset.html` emits): the label and
+the widget share a `.flex-container`, the help line sits under the widget. `extra` (optional)
+is drawn after the widget, inside the same cell.
+{% endcomment %}
+<div class="form-row{% if field.errors %} errors{% endif %}" data-field="{{ field.name }}">
+  {{ field.errors }}
+  <div>
+    <div class="flex-container">
+      {{ field.label_tag }}
+      <div class="tb-field">
+        {{ field }}
+        {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>

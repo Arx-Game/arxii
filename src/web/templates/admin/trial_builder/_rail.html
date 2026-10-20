@@ -1,0 +1,42 @@
+{% comment %}
+The Trial builder's rail (#4513): recomputed from the form on every render, and again, by
+`trial_builder_check`, while the author edits. Read-only; nothing here is posted.
+{% endcomment %}
+<div class="module" id="tb-warnings-module">
+  <h2>Warnings</h2>
+  <ul class="tb-list" id="tb-warnings" data-testid="warnings">
+    {% if rail.all_clear %}<li class="tb-ok">{{ rail.ok_line }}</li>{% endif %}
+    {% for w in rail.warnings %}
+    {% if w.kind == 'block' %}<li class="tb-block">Blocks save: {{ w.text }}</li>
+    {% else %}<li class="tb-info">{{ w.text }}</li>{% endif %}
+    {% empty %}{% if not rail.all_clear %}<li class="tb-none">Nothing to warn about yet.</li>{% endif %}
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="module" id="tb-summary-module">
+  <h2>Per tier</h2>
+  <table class="tb-summary" data-testid="summary">
+    {% for name, line in rail.summary %}
+    <tr><td><b>{{ name }}</b></td><td>{{ line }}</td></tr>
+    {% empty %}
+    <tr><td class="tb-none">No tier filled in yet.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="module" id="tb-taught-module">
+  <h2>Where it is taught</h2>
+  <ul class="tb-list" data-testid="taught">
+    {% for line in rail.taught %}<li>{{ line }}</li>
+    {% empty %}<li class="tb-none">Pick the technique to see where it is taught.</li>{% endfor %}
+  </ul>
+</div>
+
+<div class="module" id="tb-elsewhere-module">
+  <h2>Same entry made known elsewhere</h2>
+  <ul class="tb-list" data-testid="elsewhere">
+    {% for link in rail.elsewhere %}<li><a href="{{ link.url }}">{{ link.text }}</a></li>
+    {% empty %}<li>None</li>{% endfor %}
+  </ul>
+</div>
