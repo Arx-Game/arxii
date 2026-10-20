@@ -12,9 +12,10 @@ challenge) is shown read-only: editing it here would change those other places t
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 
-from django.db.models import Model
+from django.db.models import Count, Model
 
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.models import Consequence, ConsequenceEffect
@@ -57,31 +58,50 @@ class TierState:
         return [e for e in (self.codex, self.training, self.cost, self.reward) if e is not None]
 
 
-def referencing_rows(
-    obj: Model, *, skip: tuple[type[Model], ...] = (), exclude: Model | None = None
-) -> list[str]:
-    """Counts of the rows that point at ``obj`` through a foreign key, as readable names.
+def _reverse_relations(model: type[Model], skip: tuple[type[Model], ...]) -> list:
+    """The reverse foreign-key relations of ``model``, hidden ones included.
 
-    Read off the model's own reverse relations, so a user added later is caught without a
-    hand-kept list. ``skip`` leaves out model classes that are part of ``obj`` (a
-    consequence's own effects); ``exclude`` is one row to ignore (the route being edited).
+    ``include_hidden``: a relation declared ``related_name="+"`` (a mission route's
+    consequence) is hidden from ``related_objects`` yet is exactly a user of the row.
     """
-    users: list[str] = []
-    # ``include_hidden``: a relation declared ``related_name="+"`` (a mission route's
-    # consequence) is hidden from ``related_objects`` yet is exactly a user of the row.
-    for rel in type(obj)._meta.get_fields(include_hidden=True):  # noqa: SLF001
-        if not (rel.auto_created and not rel.concrete and (rel.one_to_many or rel.one_to_one)):
-            continue
-        if rel.related_model in skip:
-            continue
+    return [
+        rel
+        for rel in model._meta.get_fields(include_hidden=True)  # noqa: SLF001
+        if rel.auto_created
+        and not rel.concrete
+        and (rel.one_to_many or rel.one_to_one)
+        and rel.related_model not in skip
+    ]
+
+
+def referencing_rows(
+    objs: list[Model], *, skip: tuple[type[Model], ...] = (), exclude: list[Model] | None = None
+) -> dict[int, list[str]]:
+    """Per object pk: counts of the rows that point at it through a foreign key, readable.
+
+    One grouped query per reverse relation of the model, however many objects are asked about
+    (a constant, not a query per object). Read off the model's own reverse relations, so a user
+    added later is caught without a hand-kept list. ``skip`` leaves out model classes that are
+    part of the object (a consequence's own effects); ``exclude`` are rows to ignore (the routes
+    being edited).
+    """
+    found: dict[int, list[str]] = {obj.pk: [] for obj in objs}
+    if not objs:
+        return found
+    excluded = {(type(row), row.pk) for row in exclude or []}
+    for rel in _reverse_relations(type(objs[0]), skip):
         model: type[Model] = rel.related_model
-        rows = model._default_manager.filter(**{rel.field.name: obj})  # noqa: SLF001
-        if exclude is not None and isinstance(exclude, model):
-            rows = rows.exclude(pk=exclude.pk)
-        count = rows.count()
-        if count:
-            users.append(f"{count} {model._meta.verbose_name}")  # noqa: SLF001
-    return users
+        rows = model._default_manager.filter(  # noqa: SLF001
+            **{f"{rel.field.name}__in": [obj.pk for obj in objs]}
+        )
+        skipped = [pk for kind, pk in excluded if kind is model]
+        if skipped:
+            rows = rows.exclude(pk__in=skipped)
+        for row in rows.values(rel.field.attname).annotate(n=Count("pk")):
+            found[row[rel.field.attname]].append(
+                f"{row['n']} {model._meta.verbose_name}"  # noqa: SLF001
+            )
+    return found
 
 
 def _classify(state: TierState, effects: list[ConsequenceEffect]) -> None:
@@ -111,23 +131,28 @@ def load(option: MissionOption) -> list[TierState]:
     for route in option.routes.select_related("consequence", "target_node").order_by("pk"):
         if route.outcome_tier_id is not None:
             routes.setdefault(route.outcome_tier_id, route)
+    consequences = [r.consequence for r in routes.values() if r.consequence_id is not None]
+    effects_by_consequence: dict[int, list[ConsequenceEffect]] = {c.pk: [] for c in consequences}
+    for effect in (
+        ConsequenceEffect.objects.filter(consequence__in=consequences)
+        .select_related("codex_entry", "technique", "condition_template")
+        .order_by("execution_order", "pk")
+    ):
+        effects_by_consequence[effect.consequence_id].append(effect)
+    shared = referencing_rows(
+        consequences, skip=(ConsequenceEffect,), exclude=list(routes.values())
+    )
+    own_uses = Counter(c.pk for c in (r.consequence for r in routes.values()) if c is not None)
     states = []
     for tier in tiers():
         state = TierState(tier=tier, route=routes.get(tier.pk))
         route = state.route
         if route is not None and route.consequence_id is not None:
             state.consequence = route.consequence
-            state.shared_with = referencing_rows(
-                route.consequence, skip=(ConsequenceEffect,), exclude=route
-            )
-            _classify(
-                state,
-                list(
-                    route.consequence.effects.select_related(
-                        "codex_entry", "technique", "condition_template"
-                    ).order_by("execution_order", "pk")
-                ),
-            )
+            state.shared_with = list(shared[route.consequence_id])
+            if own_uses[route.consequence_id] > 1:
+                state.shared_with.append("another tier of this option")
+            _classify(state, effects_by_consequence[route.consequence_id])
         states.append(state)
     return states
 

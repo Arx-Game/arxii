@@ -370,7 +370,8 @@ class ATrialBuiltOnThePage(JourneyCase):
                 f"tier{tier}-training_points": "15",
                 f"tier{tier}-cost_kind": "scar",
                 f"tier{tier}-cost_severity": "2",
-                f"tier{tier}-reward_kind": "none",
+                f"tier{tier}-reward_kind": "cosmetic",
+                f"tier{tier}-reward_tier": "3",
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -386,5 +387,7 @@ class ATrialBuiltOnThePage(JourneyCase):
         self.assertEqual(known.status, CodexKnowledgeStatus.KNOWN)
         meter = TechniqueProgress.objects.get(character_sheet=self.sheet, technique=self.technique)
         self.assertEqual((meter.points_accumulated, meter.total_required), (15, 40))
-        (scar,) = PendingAlteration.objects.filter(character=self.sheet)
-        self.assertEqual((scar.tier, scar.is_cosmetic), (2, False))
+        # The cost and the cosmetic reward, both saved with no condition template.
+        costly = PendingAlteration.objects.get(character=self.sheet, is_cosmetic=False)
+        cosmetic = PendingAlteration.objects.get(character=self.sheet, is_cosmetic=True)
+        self.assertEqual((costly.tier, cosmetic.tier), (2, 3))

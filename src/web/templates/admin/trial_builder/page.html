@@ -57,13 +57,13 @@ page links it itself (#3667), and `widgets.css` with it for the autocomplete pic
 
         <fieldset class="module aligned" id="tb-trial-module">
           <h2>Trial <span class="tb-chip">read-only</span></h2>
-          <div class="form-row"><div><div class="flex-container"><label>Mission</label>
+          <div class="form-row"><div><div class="flex-container"><span class="tb-label">Mission</span>
             <div class="tb-field"><a href="{{ template_url }}">{{ template.name }}</a> (template)</div></div></div></div>
-          <div class="form-row"><div><div class="flex-container"><label>Node</label>
+          <div class="form-row"><div><div class="flex-container"><span class="tb-label">Node</span>
             <div class="tb-field"><a href="{{ node_url }}">{{ option.node.key }}</a></div></div></div></div>
-          <div class="form-row"><div><div class="flex-container"><label>Option</label>
+          <div class="form-row"><div><div class="flex-container"><span class="tb-label">Option</span>
             <div class="tb-field">{% if option.authored_ic_framing %}{{ option.authored_ic_framing }}{% else %}{{ option.key }}{% endif %}</div></div></div></div>
-          <div class="form-row"><div><div class="flex-container"><label>Check</label>
+          <div class="form-row"><div><div class="flex-container"><span class="tb-label">Check</span>
             <div class="tb-field">{% if option.authored_check_type %}{{ option.authored_check_type.name }}{% else %}[no check type set]{% endif %}
               at base risk {{ option.authored_base_risk }}. <a href="{{ option_url }}">Edit option</a></div></div></div></div>
         </fieldset>

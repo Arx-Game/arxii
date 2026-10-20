@@ -54,6 +54,62 @@ def _messages(error: ValidationError) -> list[str]:
     return list(error.messages)
 
 
+def _codex_effect(
+    consequence: Consequence, data: dict[str, object], head: dict[str, object]
+) -> ConsequenceEffect | None:
+    mode = data.get("codex_mode") or CODEX_NONE
+    if mode == CODEX_NONE:
+        return None
+    return ConsequenceEffect(
+        consequence=consequence,
+        effect_type=EffectType.GRANT_CODEX,
+        execution_order=SLOT_ORDER["codex"],
+        codex_entry=data.get("codex_entry") or head.get("codex_entry"),
+        grants_known=mode == CODEX_KNOWN,
+    )
+
+
+def _training_effect(
+    consequence: Consequence, data: dict[str, object], head: dict[str, object]
+) -> ConsequenceEffect | None:
+    if not (data.get("training_points") or data.get("grant_outright")):
+        return None
+    return ConsequenceEffect(
+        consequence=consequence,
+        effect_type=EffectType.TECHNIQUE_TRAINING,
+        execution_order=SLOT_ORDER["training"],
+        technique=head.get("technique"),
+        training_points=None if data.get("grant_outright") else data.get("training_points"),
+        training_meter_size=head.get("meter_size"),
+        grants_technique_outright=bool(data.get("grant_outright")),
+    )
+
+
+def _cost_effect(consequence: Consequence, data: dict[str, object]) -> ConsequenceEffect | None:
+    cost = data.get("cost_kind") or COST_NONE
+    if cost == COST_NONE:
+        return None
+    return ConsequenceEffect(
+        consequence=consequence,
+        effect_type=EffectType.MAGICAL_SCARS if cost == COST_SCAR else EffectType.APPLY_CONDITION,
+        execution_order=SLOT_ORDER["cost"],
+        condition_template=data.get("cost_template") if cost == COST_CONDITION else None,
+        condition_severity=data.get("cost_severity"),
+    )
+
+
+def _reward_effect(consequence: Consequence, data: dict[str, object]) -> ConsequenceEffect | None:
+    if (data.get("reward_kind") or "") != REWARD_COSMETIC:
+        return None
+    return ConsequenceEffect(
+        consequence=consequence,
+        effect_type=EffectType.MAGICAL_SCARS,
+        execution_order=SLOT_ORDER["reward"],
+        condition_severity=data.get("reward_tier"),
+        scar_is_cosmetic=True,
+    )
+
+
 def _effects(
     consequence: Consequence,
     data: dict[str, object],
@@ -61,56 +117,16 @@ def _effects(
     errors: list[str],
 ) -> list[ConsequenceEffect]:
     head = header.cleaned_data
-    effects: list[ConsequenceEffect] = []
-    mode = data.get("codex_mode") or CODEX_NONE
-    if mode != CODEX_NONE:
-        effects.append(
-            ConsequenceEffect(
-                consequence=consequence,
-                effect_type=EffectType.GRANT_CODEX,
-                execution_order=SLOT_ORDER["codex"],
-                codex_entry=data.get("codex_entry") or head.get("codex_entry"),
-                grants_known=mode == CODEX_KNOWN,
-            )
-        )
-    if data.get("training_points") or data.get("grant_outright"):
-        if head.get("technique") is None:
-            errors.append(NO_TECHNIQUE_ERROR)
-        effects.append(
-            ConsequenceEffect(
-                consequence=consequence,
-                effect_type=EffectType.TECHNIQUE_TRAINING,
-                execution_order=SLOT_ORDER["training"],
-                technique=head.get("technique"),
-                training_points=None if data.get("grant_outright") else data.get("training_points"),
-                training_meter_size=head.get("meter_size"),
-                grants_technique_outright=bool(data.get("grant_outright")),
-            )
-        )
-    cost = data.get("cost_kind") or COST_NONE
-    if cost != COST_NONE:
-        effects.append(
-            ConsequenceEffect(
-                consequence=consequence,
-                effect_type=(
-                    EffectType.MAGICAL_SCARS if cost == COST_SCAR else EffectType.APPLY_CONDITION
-                ),
-                execution_order=SLOT_ORDER["cost"],
-                condition_template=data.get("cost_template") if cost == COST_CONDITION else None,
-                condition_severity=data.get("cost_severity"),
-            )
-        )
-    if (data.get("reward_kind") or "") == REWARD_COSMETIC:
-        effects.append(
-            ConsequenceEffect(
-                consequence=consequence,
-                effect_type=EffectType.MAGICAL_SCARS,
-                execution_order=SLOT_ORDER["reward"],
-                condition_severity=data.get("reward_tier"),
-                scar_is_cosmetic=True,
-            )
-        )
-    return effects
+    training = _training_effect(consequence, data, head)
+    if training is not None and head.get("technique") is None:
+        errors.append(NO_TECHNIQUE_ERROR)
+    slots = (
+        _codex_effect(consequence, data, head),
+        training,
+        _cost_effect(consequence, data),
+        _reward_effect(consequence, data),
+    )
+    return [effect for effect in slots if effect is not None]
 
 
 def _input_errors(data: dict[str, object]) -> list[str]:

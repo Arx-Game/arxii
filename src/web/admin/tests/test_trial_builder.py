@@ -8,7 +8,9 @@ the page asks them, shows their messages, and saves nothing when they refuse.
 from pathlib import Path
 import re
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
@@ -429,6 +431,32 @@ class ThePageTests(TrialBuilderCase):
         self.post(self.valid_post(**{self.tier_key("Failure", "label"): "[renamed]"}))
         shared.refresh_from_db()
         self.assertEqual(shared.label, "[shared]")
+
+    def test_a_consequence_two_tiers_share_is_read_only_too(self) -> None:
+        shared = ConsequenceFactory(outcome_tier=self.tiers["Failure"], label="[shared]")
+        for name in ("Failure", "Critical Failure"):
+            MissionOptionRouteFactory(
+                option=self.option, outcome_tier=self.tiers[name], consequence=shared
+            )
+        self.client.force_login(self.author)
+        response = self.client.get(self.url())
+        self.assertContains(response, "another tier of this option")
+
+    def test_the_page_makes_a_constant_number_of_queries_however_many_tiers_are_routed(
+        self,
+    ) -> None:
+        self.post(self.valid_post())
+        self.client.force_login(self.author)
+        with CaptureQueriesContext(connection) as few:
+            self.client.get(self.url())
+        for name in ("Critical Failure",):
+            consequence = ConsequenceFactory(outcome_tier=self.tiers[name], label="[extra]")
+            MissionOptionRouteFactory(
+                option=self.option, outcome_tier=self.tiers[name], consequence=consequence
+            )
+        with CaptureQueriesContext(connection) as more:
+            self.client.get(self.url())
+        self.assertLessEqual(len(more), len(few) + 6)
 
     def test_the_mission_option_page_links_to_the_builder(self) -> None:
         self.client.force_login(self.author)

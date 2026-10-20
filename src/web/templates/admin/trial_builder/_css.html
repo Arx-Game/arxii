@@ -25,6 +25,11 @@ variable, so light and dark follow admin's own selectors.
     display: flex; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; align-items: baseline;
   }
   #trial-builder-root fieldset.module > h2.tb-crit { background: #a8431f; }
+  /* A read-only row's name: the look of admin's `.aligned label`, on a span (no control to label). */
+  #trial-builder-root .tb-label {
+    display: block; min-width: 160px; width: 160px; padding: 4px 10px 0 0; word-wrap: break-word;
+    font-size: 0.8125rem; color: var(--body-quiet-color);
+  }
   #trial-builder-root .tb-chip {
     display: inline-block; padding: 0.05rem 0.45rem; border-radius: 2px;
     background: rgba(255, 255, 255, 0.18); font-size: 0.6875rem; white-space: nowrap;
@@ -53,5 +58,7 @@ variable, so light and dark follow admin's own selectors.
   #trial-builder-root .tb-ok { color: var(--tb-ok); }
   #trial-builder-root .tb-none { color: var(--body-quiet-color); }
   #trial-builder-root .tb-summary { width: 100%; font-size: 0.75rem; }
-  #trial-builder-root .tb-summary td { padding: 0.25rem 0.6rem; vertical-align: top; }
+  #trial-builder-root .tb-summary td, #trial-builder-root .tb-summary th {
+    padding: 0.25rem 0.6rem; vertical-align: top; text-align: left;
+  }
 </style>

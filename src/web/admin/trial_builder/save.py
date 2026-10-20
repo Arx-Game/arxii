@@ -70,35 +70,27 @@ def save(
             stamp_written(route, contributor)
 
 
-def blockers(state: TierState) -> list[str]:
-    """What stops this tier's route being deleted: rows that hang off it."""
-    assert state.route is not None  # noqa: S101
-    return referencing_rows(state.route)
-
-
 def delete_trial_routes(states: list[TierState]) -> tuple[int, list[str]]:
     """Delete the option's tier routes: the whole trial this page edits.
 
     A route with rewards, candidates or renown hanging off it is left alone and named: deleting
     it would take those authored rows with it. A consequence nothing else uses goes with its
-    route. Returns how many routes were deleted and the refusals.
+    routes. Returns how many routes were deleted and the refusals.
     """
-    deleted = 0
-    refused: list[str] = []
+    routed = [s for s in states if s.route is not None]
+    held = referencing_rows([s.route for s in routed])
+    refused = [
+        f"{s.tier.name}: still has {', '.join(held[s.route.pk])}"
+        for s in routed
+        if held[s.route.pk]
+    ]
+    doomed = [s for s in routed if not held[s.route.pk]]
+    consequences = [s.consequence for s in doomed if s.consequence is not None]
     with transaction.atomic():
-        for state in states:
-            route = state.route
-            if route is None:
-                continue
-            held = blockers(state)
-            if held:
-                refused.append(f"{state.tier.name}: still has {', '.join(held)}")
-                continue
-            consequence = state.consequence
-            route.delete()
-            deleted += 1
-            if consequence is not None and not referencing_rows(
-                consequence, skip=(ConsequenceEffect,)
-            ):
+        for state in doomed:
+            state.route.delete()
+        still_used = referencing_rows(consequences, skip=(ConsequenceEffect,))
+        for consequence in consequences:
+            if not still_used[consequence.pk]:
                 consequence.delete()
-    return deleted, refused
+    return len(doomed), refused

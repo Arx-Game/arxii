@@ -15,7 +15,7 @@ messages slice 1's rules gave this tier; the check script rewrites them as the f
   <div class="form-row" data-field="shared">
     <div>
       <div class="flex-container">
-        <label>Consequence</label>
+        <span class="tb-label">Consequence</span>
         <div class="tb-field tb-note" data-testid="shared-{{ form.tier.pk }}">
           This route's consequence is also used by {{ state.shared_with|join:", " }}, so it is
           edited on <a href="{{ block.shared_url }}">its own page</a>, not here.
@@ -111,7 +111,7 @@ messages slice 1's rules gave this tier; the check script rewrites them as the f
   {% if block.other_effects %}
   <div class="form-row" data-field="others">
     <div><div class="flex-container">
-      <label>Other effects</label>
+      <span class="tb-label">Other effects</span>
       <div class="tb-field tb-note">Left as they are: {{ block.other_effects|join:"; " }}.</div>
     </div></div>
   </div>

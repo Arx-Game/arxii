@@ -106,26 +106,33 @@ def _tier_cost(proposal: TierProposal) -> tuple[str, int] | None:
     return None
 
 
-def _info_warnings(
-    proposals: list[TierProposal], technique: Technique | None, has_all_routes: bool
-) -> list[RailWarning]:
-    out: list[RailWarning] = []
-    for proposal in proposals:
-        name, level = proposal.tier.name, proposal.tier.success_level
-        if not proposal.form.cleaned_data.get("outcome_text", "").strip():
-            out.append(RailWarning(INFO, f"{name}: outcome text is empty."))
-        if FAILURE_TIER_MAX_LEVEL < level < SUCCESS_TIER_MIN_LEVEL and any(
-            e.effect_type == EffectType.TECHNIQUE_TRAINING and e.training_points
+def _tier_notes(proposal: TierProposal) -> list[RailWarning]:
+    """Informational notes about one tier: empty text, points that apply only on a repeat."""
+    notes: list[RailWarning] = []
+    name, level = proposal.tier.name, proposal.tier.success_level
+    if not (proposal.form.cleaned_data.get("outcome_text") or "").strip():
+        notes.append(RailWarning(INFO, f"{name}: outcome text is empty."))
+    points = next(
+        (
+            e.training_points
             for e in proposal.effects
-        ):
-            points = next(e.training_points for e in proposal.effects if e.training_points)
-            out.append(
-                RailWarning(
-                    INFO,
-                    f"{name}: the {points} points apply only to a character who already knows "
-                    "the entry and meets the other prerequisites (a repeat attempt).",
-                )
+            if e.effect_type == EffectType.TECHNIQUE_TRAINING and e.training_points
+        ),
+        None,
+    )
+    if points and FAILURE_TIER_MAX_LEVEL < level < SUCCESS_TIER_MIN_LEVEL:
+        notes.append(
+            RailWarning(
+                INFO,
+                f"{name}: the {points} points apply only to a character who already knows "
+                "the entry and meets the other prerequisites (a repeat attempt).",
             )
+        )
+    return notes
+
+
+def _cost_comparison(proposals: list[TierProposal]) -> list[RailWarning]:
+    """A Critical Success that costs less than the Success of the same kind."""
     crit = next(
         (p for p in proposals if p.tier.success_level >= CRITICAL_SUCCESS_TIER_MIN_LEVEL), None
     )
@@ -137,15 +144,24 @@ def _info_warnings(
         ),
         None,
     )
-    if crit and success:
-        crit_cost, success_cost = _tier_cost(crit), _tier_cost(success)
-        if (
-            crit_cost
-            and success_cost
-            and crit_cost[0] == success_cost[0]
-            and crit_cost[1] < success_cost[1]
-        ):
-            out.append(RailWarning(INFO, "Critical Success costs less than Success. Intended?"))
+    if not (crit and success):
+        return []
+    crit_cost, success_cost = _tier_cost(crit), _tier_cost(success)
+    if (
+        crit_cost
+        and success_cost
+        and crit_cost[0] == success_cost[0]
+        and crit_cost[1] < success_cost[1]
+    ):
+        return [RailWarning(INFO, "Critical Success costs less than Success. Intended?")]
+    return []
+
+
+def _info_warnings(
+    proposals: list[TierProposal], technique: Technique | None, has_all_routes: bool
+) -> list[RailWarning]:
+    out = [note for proposal in proposals for note in _tier_notes(proposal)]
+    out.extend(_cost_comparison(proposals))
     if technique is not None and not technique_teaching_sources(technique).is_taught:
         out.append(
             RailWarning(

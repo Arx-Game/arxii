@@ -18,9 +18,9 @@ The Trial builder's rail (#4513): recomputed from the form on every render, and 
   <h2>Per tier</h2>
   <table class="tb-summary" data-testid="summary">
     {% for name, line in rail.summary %}
-    <tr><td><b>{{ name }}</b></td><td>{{ line }}</td></tr>
+    <tr><th scope="row">{{ name }}</th><td>{{ line }}</td></tr>
     {% empty %}
-    <tr><td class="tb-none">No tier filled in yet.</td></tr>
+    <tr><th scope="row" class="tb-none">No tier filled in yet.</th><td></td></tr>
     {% endfor %}
   </table>
 </div>
