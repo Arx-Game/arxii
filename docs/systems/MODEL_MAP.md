@@ -1332,7 +1332,7 @@
 - `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, facet: 'Facet | None', granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and feed ``being``'s pool from its value.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
-- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held.`
+- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held,`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `pending_wedding_consent_offers_for_account(account: object) -> 'QuerySet[WeddingConsentOffer]' - PENDING wedding consent offers addressed to any character this account holds (#2358).`
 - `record_offering(*, ceremony: world.ceremonies.models.Ceremony, item_instances: 'list[ItemInstance]') -> list[world.ceremonies.models.CeremonyOffering] - Sacrifice items: destroy them, feed the being's pool, log offerings.`
@@ -2327,14 +2327,14 @@
 - `apply_organization_codex_grants(membership) -> 'int' - A new member learns everything their organization grants (#3780). Called`
 - `entry_gates_technique(entry: 'CodexEntry') -> 'bool' - True when some technique's learning requires ``entry`` to be KNOWN (#4501).`
 - `file_entry_under(entry: 'CodexEntry', subject: 'CodexSubject', *, sort_order: 'int' = 0) -> 'CodexEntryFiling' - Cross-list ``entry`` in ``subject``'s listing, in addition to its home.`
-- `gated_technique_requirements(entry: 'CodexEntry') - The active technique-learning requirements that name ``entry`` (#4501).`
+- `gated_technique_requirements(entry: 'CodexEntry') - The active requirements that make ``entry`` gate an ordinary technique (#4501).`
 - `grant_codex_entry(roster_entry: 'RosterEntry', entry: 'CodexEntry', *, learned_from: 'RosterTenure | None' = None) -> 'tuple[CharacterCodexKnowledge, bool]' - Grant ``entry`` to ``roster_entry`` as fully KNOWN. Idempotent.`
 - `grant_entry_to_species_holders(entry: 'CodexEntry') -> 'int' - Hand a species-owned entry to every character of that species (#3775).`
 - `grant_organization_entry_to_members(grant) -> 'int' - Hand an ``OrganizationCodexGrant``'s entry to every current member; returns`
 - `grant_to_current_holders(grant) -> 'int' - Hand a grant row's entry to everyone already in its group (#3775).`
 - `resolve_codex_links(content: 'str | None', subject: 'CodexSubject', roster_entries: 'Sequence[RosterEntry]') -> 'list[dict]' - Parse ``[[Entry Name]]`` wikilinks from content and resolve to link refs.`
 - `species_holder_roster_entries(entry: 'CodexEntry') -> 'list' - Roster entries of every character whose species lineage owns ``entry`` (#3775).`
-- `techniques_opened_by(sheet: 'CharacterSheet', entry: 'CodexEntry') -> 'list[Technique]' - Techniques ``entry`` opens for ``sheet``: learnable now that it is known (#4501).`
+- `techniques_opened_by(sheet: 'CharacterSheet', entry: 'CodexEntry') -> 'list[Technique]' - Techniques ``entry`` opens for ``sheet``: what ``learn_technique`` would accept now.`
 - `unfile_entry(entry: 'CodexEntry', subject: 'CodexSubject') -> 'None' - Remove ``entry``'s filing under ``subject``, if any. No-op otherwise.`
 
 

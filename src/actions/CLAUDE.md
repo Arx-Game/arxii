@@ -155,7 +155,10 @@ They do not use the command system, dispatchers, or handlers.
   `GMAwardDistinctionAction` searches quietly and answers an absent name itself ("Could not
   find 'Nobody'.", as `GrantItemAction` does) and refuses a distinction already at its
   highest rank before the sheet-update request charges XP for a no-op; both are typed in
-  `integration_tests/test_granting_and_staging_journeys.py`;
+  `integration_tests/test_granting_and_staging_journeys.py`. Tranche 16's line here:
+  `ceremonies.py`'s `CeremonySpeechAction` names the speaker by `speech.speaker.name`
+  (`str(persona)` read "Marrow (Primary)"); the ceremony, conversion, prayer and vision
+  actions are typed in `integration_tests/test_keeping_the_faith_journeys.py`;
   `relationships.py` (#3957, was #1485) — the tie verbs, all REGISTRY backend, wrapping
   `world.relationships.services`: `DeclareLabelAction` (key `"declare_label"`, defaults
   Private awareness), `ShiftLabelAction` (`"shift_label"`), `EndLabelAction` (`"end_label"`),

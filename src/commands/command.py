@@ -51,7 +51,7 @@ def parse_greedy_kwargs(args: str, *, greedy_key: str | None = None) -> dict[str
 # ``/one/two`` straight after the command name. Evennia's default ``arg_regex`` only
 # matches a command followed by a space, a ``/`` or nothing, so a ``/`` here always
 # opens switches and never begins the text of a ``say``.
-_SWITCHES = re.compile(r"^/(?P<switches>\S+)(?P<rest>.*)$", re.DOTALL)
+_SWITCHES = re.compile(r"^/(?P<switches>[^\s=]+)(?P<rest>.*)$", re.DOTALL)
 
 
 def split_switches(args: str) -> tuple[list[str], str]:
@@ -59,7 +59,10 @@ def split_switches(args: str) -> tuple[list[str], str]:
 
     Switches come back lower-cased. The rest keeps its leading space, the shape
     ``args`` has when no switch was typed, so a command reads both the same way.
-    Input with no switch comes back unchanged.
+    Input with no switch comes back unchanged. A switch ends at whitespace or at
+    ``=``: ``ceremony/sermon=The Tide`` is the switch ``sermon`` and the rest
+    ``=The Tide`` (#3657 tranche 16: the switch had swallowed ``=The``, lower-cased,
+    so a rite with no honoree and a named being was an unknown subverb).
     """
     match = _SWITCHES.match(args)
     if match is None:

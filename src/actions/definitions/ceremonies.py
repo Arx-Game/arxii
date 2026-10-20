@@ -343,9 +343,10 @@ class CeremonySpeechAction(Action):
             )
         except CeremonyError as exc:
             return ActionResult(success=False, message=exc.user_message)
+        # ``speech.speaker.name``, never ``str(persona)`` ("Marrow (Primary)").
         return ActionResult(
             success=True,
-            message=f"{speech.speaker} is recognized before the gathering.",
+            message=f"{speech.speaker.name} is recognized before the gathering.",
         )
 
 

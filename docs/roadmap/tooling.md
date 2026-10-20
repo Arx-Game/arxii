@@ -260,6 +260,23 @@ house through `str(org)`; and `domain`'s usage line lost its "holding", "improve
 "stature" to Evennia's colour codes on telnet (a bare `|h`, `|i` or `|s`), which the
 tracing probe's stripped transcript showed as "officesoldingmprove".
 
+Tranche 16 moved the worship group onto the harness: `ceremony`, `conversion`, `pray`,
+`vision` and `sphinx`. The four hand-built modules (`test_ceremony_command`,
+`test_conversion_command`, `test_worship_commands` and `test_sphinx_command`) are removed;
+the new `integration_tests/test_keeping_the_faith_journeys.py` types each verb through the
+handler against real rows: a blessing opened, an item offered into the being's pool, a
+speaker recognized and the honor tallied as a deed; a funeral for the dead, a sermon staff
+abandon, a tier 3 rite; a conversion rite opened from telnet, answered from the convert's
+inbox and concluded with their worship repointed; a prayer at a shrine paying the week's
+devotion and a staff vision spending the being's pool; the Sphinx's three verdicts. Five
+fixes in place: a switch typed with `=` straight after it (`ceremony/sermon=The Tide`, the
+documented shape) swallowed the being's name, lower-cased, so `split_switches` now ends a
+switch at `=` as well as whitespace (the fuzz contract pins it); `ceremony`'s refusals and
+its hub printed a sheet as "Sheet for Hobb" and a persona as "Ysmay (Primary)"; its usage
+line lost "blessing", "sermon" and "rite" to colour codes on telnet; a conversion rite
+could not be opened from telnet at all (`ceremony/conversion`); and the conversion inbox,
+telnet and web alike, kept listing an offer whose rite had already closed.
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,

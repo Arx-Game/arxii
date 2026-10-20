@@ -1055,7 +1055,8 @@ officiant-or-staff. `conversion_offer_respond` (#2361) and
 for CORONATION (resolved by name; `is_staff_fiat` derives from
 `is_staff_observer(actor)`). Telnet: `ceremony` family
 (`commands/ceremonies.py`, switch or space subverbs —
-`ceremony/wedding <a>,<b>[=<being>]`, `ceremony/coronation <honoree>=<title>`);
+`ceremony/wedding <a>,<b>[=<being>]`, `ceremony/coronation <honoree>=<title>`,
+`ceremony/conversion <convert>[=<being>]` since #3657 tranche 16);
 `wedding` family (`commands/wedding.py`, mirrors `commands/seance.py`'s
 `offers`/`accept`/`decline` shape) answers a pending `WeddingConsentOffer`;
 `conversion` family (`commands/conversion.py`, same shape) answers a pending

@@ -5,7 +5,9 @@ Thin dispatch onto the ceremony Actions — no business logic here (ADR-0001).
 
 from commands.command import ArxCommand
 
-_OPEN_SUBVERBS = frozenset({"funeral", "blessing", "sermon", "wedding", "coronation", "rite"})
+_OPEN_SUBVERBS = frozenset(
+    {"funeral", "blessing", "sermon", "wedding", "coronation", "conversion", "rite"}
+)
 _SUBVERB_OFFERING = "offering"
 _SUBVERB_SPEECH = "speech"
 _SUBVERB_FINISH = "finish"
@@ -22,6 +24,7 @@ class CmdCeremony(ArxCommand):
         ceremony/sermon [<name>,…][=<being>]           - open a sermon
         ceremony/wedding <spouse1>,<spouse2>[=<being>] - open a wedding (both must consent)
         ceremony/coronation <honoree>=<title>          - solemnize an already-held title
+        ceremony/conversion <convert>[=<being>]        - open a conversion rite (they must accept)
         ceremony/rite <rite>[,<honoree>…][=<being>]    - hold a tier 3 worship rite
         ceremony/offering <item>[,<item2>…]            - sacrifice items (officiant)
         ceremony/speech <name>[=<honoree>]             - recognize a speaker (officiant)
@@ -65,8 +68,11 @@ class CmdCeremony(ArxCommand):
         elif subverb == _SUBVERB_SHOW:
             self._show_current()
         else:
+            # Spaces around the separators: a bare ``|b``, ``|s`` or ``|r`` is an
+            # Evennia colour code and telnet would eat it (#3657 tranche 16).
             self.msg(
-                "Usage: ceremony/<funeral|blessing|sermon|rite|offering|speech|finish|abandon>"
+                "Usage: ceremony/<funeral | blessing | sermon | conversion | rite | offering | "
+                "speech | finish | abandon>"
             )
 
     @staticmethod
@@ -147,12 +153,15 @@ class CmdCeremony(ArxCommand):
         if ceremony is None:
             self.msg("No ceremony is underway here.")
             return
+        # Names, never ``str()``: a sheet reads "Sheet for Hobb" and a persona
+        # "Ysmay (Primary)" (#3657 tranche 16).
         honorees = ", ".join(
-            str(h.honoree_sheet) for h in ceremony.honorees.select_related("honoree_sheet")
+            h.honoree_sheet.character.key
+            for h in ceremony.honorees.select_related("honoree_sheet__character")
         )
         lines = [
             f"{ceremony.ceremony_type.name} — in the name of {ceremony.presented_being.name}",
-            f"Officiant: {ceremony.officiant}",
+            f"Officiant: {ceremony.officiant.name}",
         ]
         if honorees:
             lines.append(f"Honoring: {honorees}")

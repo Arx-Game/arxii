@@ -34,6 +34,7 @@ class SplitSwitchesHoldsItsContract(unittest.TestCase):
         for switch in switches:
             self.assertTrue(switch, "an empty switch")
             self.assertNotIn("/", switch)
+            self.assertNotIn("=", switch)  # ``/sermon=The Tide`` is the switch ``sermon``
             self.assertEqual(switch, switch.lower())
         self.assertIsInstance(rest, str)
 

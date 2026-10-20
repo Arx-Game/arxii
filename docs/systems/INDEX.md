@@ -9392,9 +9392,12 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   Exceptions: `CeremonyError` (user_message). `respond_to_conversion_offer` (#2361,
   account-scoped accept/decline, mirrors `respond_to_seance_offer`; accepting records
   the heart-vs-lip-service choice on the offer — the actual repoint happens at finish),
-  `pending_conversion_offers_for_account`. Actions: `conversion_offer_respond`; telnet
-  `conversion` (offers/accept/decline, telnet accept is always sincere — the lip-service
-  choice is web-only); API `/api/ceremonies/conversion-offers/` (list + accept/decline,
+  `pending_conversion_offers_for_account` (PENDING offers whose rite is still OPEN; #3657
+  tranche 16, a closed rite's offer had stayed listed while its answer was refused).
+  Actions: `conversion_offer_respond`; telnet `ceremony/conversion <convert>[=<being>]`
+  opens the rite (tranche 16: the subverb was missing, so telnet could not mint an
+  offer) and `conversion` (offers/accept/decline, telnet accept is always sincere — the
+  lip-service choice is web-only); API `/api/ceremonies/conversion-offers/` (list + accept/decline,
   `WorshipConversionOfferSerializer`, `accept` body takes optional `sincere`); frontend
   `ConversionOfferBanner`/`ConversionOfferDialog` (mounted in `Layout.tsx` next to
   `SeanceOfferBanner`; the dialog's Switch carries the heart-vs-lip-service choice).
