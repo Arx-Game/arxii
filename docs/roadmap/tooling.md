@@ -243,6 +243,23 @@ purse could not cover both raised past the command; the craft verbs said nothing
 success or failure; agent names read "Wren (Established)" wherever `str(persona)` was
 used, the tasking API included.
 
+Tranche 15 moved the GM grants and staging group, the mission party and the house's domains
+onto the harness: `setstage`, `grant_distinction`, `mission invite|accept|decline`,
+`+grievance` and `domain`. The five hand-built modules (`test_setstage_command`,
+`test_grant_distinction`, `test_mission_invite_command`, `test_grievance_command` and
+`test_domain_command`) are removed; the new
+`integration_tests/test_granting_and_staging_journeys.py` types each verb through the
+handler against real rows: a position blueprint cloned into the room and restaged, a
+distinction awarded with the character's own XP, a mission contract's invitation accepted
+and declined, a learned secret answered with a real conflict swing, a house's holdings,
+steward, projects and stature. Five fixes in place: `setstage` staged the room and said
+nothing; `grant_distinction`, `mission invite` and `domain appoint` said Evennia's bare
+"Could not find" and then nothing of their own; `grant_distinction` at a distinction's
+highest rank charged XP and reported an award for a no-op; `domain offices` named the
+house through `str(org)`; and `domain`'s usage line lost its "holding", "improve" and
+"stature" to Evennia's colour codes on telnet (a bare `|h`, `|i` or `|s`), which the
+tracing probe's stripped transcript showed as "officesoldingmprove".
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,

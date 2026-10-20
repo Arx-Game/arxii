@@ -293,7 +293,7 @@ class SetTheStageAction(Action):
         replace = bool(kwargs.get("replace", False))
 
         try:
-            instantiate_blueprint(blueprint, actor.location, replace=replace)
+            positions = instantiate_blueprint(blueprint, actor.location, replace=replace)
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
@@ -301,4 +301,8 @@ class SetTheStageAction(Action):
         actor_state = sdm.initialize_state_for_object(actor)
         send_room_state(actor_state)
 
-        return ActionResult(success=True)
+        # Name what was staged: with data alone, telnet said nothing (#3657 tranche 15).
+        names = ", ".join(position.name for position in positions) or "no positions"
+        return ActionResult(
+            success=True, message=f"You set the stage with {blueprint.name}: {names}."
+        )

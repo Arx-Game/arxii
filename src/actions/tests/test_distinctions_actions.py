@@ -73,7 +73,8 @@ class GMAwardDistinctionActionTests(TestCase):
             "distinction_slug": self.distinction.slug,
         }
         defaults.update(kwargs)
-        with patch.object(actor, "search", return_value=self.target):
+        # A quiet search answers with a list (#3657 tranche 15).
+        with patch.object(actor, "search", return_value=[self.target]):
             return GMAwardDistinctionAction().run(actor, **defaults)
 
     def test_junior_gm_awards_distinction(self) -> None:
@@ -142,16 +143,17 @@ class GMAwardDistinctionActionTests(TestCase):
 
     def test_unknown_target_fails(self) -> None:
         actor = self._staff_actor(db_key="AwardDistinctionStaffNoTarget")
-        with patch.object(actor, "search", return_value=None):
+        with patch.object(actor, "search", return_value=[]):
             result = GMAwardDistinctionAction().run(
                 actor, target_name="Nobody", distinction_slug=self.distinction.slug
             )
         assert result.success is False
+        assert result.message == "Could not find 'Nobody'."
 
     def test_target_without_sheet_fails(self) -> None:
         no_sheet = CharacterFactory(db_key="AwardDistinctionNoSheet")
         actor = self._staff_actor(db_key="AwardDistinctionStaffNoSheet")
-        with patch.object(actor, "search", return_value=no_sheet):
+        with patch.object(actor, "search", return_value=[no_sheet]):
             result = GMAwardDistinctionAction().run(
                 actor, target_name=no_sheet.key, distinction_slug=self.distinction.slug
             )
