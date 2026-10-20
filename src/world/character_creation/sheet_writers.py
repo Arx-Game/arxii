@@ -106,24 +106,6 @@ def _check_skill_caps(
             raise SheetWriteError(msg)
 
 
-def _set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str) -> None:
-    """The skill's ``CharacterTraitValue`` the check engine reads (#2894), stamped (#3055)."""
-    from world.traits.models import CharacterTraitChange, CharacterTraitValue  # noqa: PLC0415
-
-    row = CharacterTraitValue.objects.filter(character=sheet, trait=skill.trait).first()
-    old = row.value if row else 0
-    if row is None:
-        CharacterTraitValue.objects.create(character=sheet, trait=skill.trait, value=value)
-    elif row.value != value:
-        row.value = value
-        row.save(update_fields=["value"])
-    else:
-        return
-    CharacterTraitChange.objects.create(
-        character_sheet=sheet, trait=skill.trait, old_value=old, new_value=value, source=source
-    )
-
-
 def set_skill_values(
     sheet: CharacterSheet,
     skills: Mapping[Skill, int],
@@ -139,24 +121,15 @@ def set_skill_values(
     ``max_skill_value`` / ``max_specialization_value``; character creation already
     validated its picks and passes False. Lowering a skill to 0 keeps its row at 0.
     """
-    from world.skills.models import (  # noqa: PLC0415
-        CharacterSkillValue,
-        CharacterSpecializationValue,
-    )
+    from world.skills.models import CharacterSpecializationValue  # noqa: PLC0415
+    from world.skills.services import set_skill_sheet_value, set_skill_trait  # noqa: PLC0415
 
     if enforce_caps:
         _check_skill_caps(skills, specializations)
     with transaction.atomic():
         for skill, value in skills.items():
-            row, created = CharacterSkillValue.objects.get_or_create(
-                character=sheet,
-                skill=skill,
-                defaults={"value": value, "development_points": 0, "rust_points": 0},
-            )
-            if not created and row.value != value:
-                row.value = value
-                row.save(update_fields=["value"])
-            _set_skill_trait(sheet, skill, value, source)
+            set_skill_sheet_value(sheet, skill, value)
+            set_skill_trait(sheet, skill, value, source)
         for spec, value in specializations.items():
             row, created = CharacterSpecializationValue.objects.get_or_create(
                 character=sheet,

@@ -64,7 +64,8 @@ The central spine connecting every system in the game. Characters develop throug
   `traits.CharacterTraitChange` records every `CharacterTraitValue.value` mutation
   (old_value/new_value/source) — written by the CG finalize baseline stamp, the
   `DevelopmentPoints.award_points` level-up, and the maturation spend/reconciliation
-  writers; `magic.CharacterTechnique`/`magic.CharacterGift` gained an `origin` field
+  writers (and, since #4496, weekly skill training and the skill XP breakthrough, which keep
+  `skills.CharacterSkillValue` and the skill's trait row equal); `magic.CharacterTechnique`/`magic.CharacterGift` gained an `origin` field
   (`AcquisitionOrigin`) stamped at every creation site. Existing receipts
   (`CharacterXPTransaction`, `ResonanceGrant`, `ClassLevelAdvancement`,
   `distinctions.DistinctionOrigin`) were already adequate and untouched. This is the
