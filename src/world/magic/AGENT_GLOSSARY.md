@@ -250,6 +250,10 @@ _Avoid_: visible spell, flashy technique, is_magical.
 The player-facing name for a magical alteration imprinted on a character by magical exposure — a queued, tiered cosmetic-to-profound change carrying social, weakness, and resonance effects. Backend class and table names retain the `MagicalAlteration` naming.
 _Avoid_: Magical Scar, Magical Alteration (as the player-facing name).
 
+**Cosmetic Mage Scar**:
+A Mage Scar with no drawbacks that does not hold back advancement (`PendingAlteration.is_cosmetic`, #4501). A trial's Success or Critical Success route may queue one as a reward (`ConsequenceEffect.scar_is_cosmetic`). The player still writes it and others see it as they see any scar, but its resolution must leave every magnitude at 0 (a library pick must be a drawback-free entry), `has_pending_alterations` ignores it, and it merges only with another cosmetic scar. It is never a cost. Not the same as tier 1, **Cosmetic Touch**, the smallest tier of an ordinary Mage Scar, which keeps its label and still gates advancement.
+_Avoid_: reward scar, free scar, cosmetic alteration (as the player-facing name).
+
 **Soul Tether**:
 A bond mechanic between two PCs whose tuning lives in the `SoulTetherConfig` singleton, providing a rescue-and-resolution mechanism with a dramatic advancement/modifier surface (sineating, rescue rituals, stage-advance bonuses). The Sinner and Sineater are its two roles.
 

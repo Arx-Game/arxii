@@ -1795,8 +1795,33 @@ now say "Mage Scars."
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `MagicalAlterationTemplate` | OneToOne on ConditionTemplate; magic-specific alteration metadata. `NaturalKeyMixin`, `CONTENT_MODELS` (`magic.magicalalterationtemplate`, #3034) — NK `["condition_template"]` (already DB-unique). Only staff/system rows (`authored_by` NULL) export; a player's "author from scratch" row is filtered via `EXPORT_FILTERS` | `tier`, `origin_affinity`, `origin_resonance`, `is_library`, `visibility_required` |
-| `PendingAlteration` | Queued unresolved Mage Scar | `character` FK, `status` (OPEN/RESOLVED/STAFF_CLEARED), `scene` FK, triggering-state snapshot fields |
+| `PendingAlteration` | Queued unresolved Mage Scar | `character` FK, `status` (OPEN/RESOLVED/STAFF_CLEARED), `scene` FK, triggering-state snapshot fields, `is_cosmetic` (#4501) |
 | `MagicalAlterationEvent` | Immutable provenance audit log | `pending`, `event_type`, `data`, `created_at` |
+
+**Cosmetic Mage Scars (#4501, spec #4343).** `PendingAlteration.is_cosmetic` marks a reward scar:
+no drawbacks and no wait on advancement. A trial's Success or Critical Success route queues one
+through `MAGICAL_SCARS` with `ConsequenceEffect.scar_is_cosmetic`; the handler passes it to
+`create_pending_alteration(..., is_cosmetic=)`. Rules, all in `world/magic/services/alterations.py`:
+`has_pending_alterations` (so `enforce_advancement_gate`, the XP dashboard and every spend site)
+ignores cosmetic rows; `validate_alteration_resolution(..., is_cosmetic=)` requires every
+magnitude and the weakness damage type to be 0 on the scratch path and accepts only a
+drawback-free library entry (three magnitudes 0 and no `ConditionOrStageEffect` row on its
+condition) on the library path; the same-scene merge in `create_pending_alteration` pairs only
+scars of the same `is_cosmetic`, so a reward never raises a cost's tier. The serializer returns
+zeroed drawback caps for a cosmetic row, which hides the form's magnitude pickers; the site
+banner and the XP page's gate alert skip it. It is never a trial's cost. Not tier 1 "Cosmetic
+Touch", which still gates advancement.
+
+**Trial training (#4501).** `AcquisitionOrigin.TRIAL` / `AccessChangeSource.TRIAL` ("enduring a
+trial") mark techniques and meters a trial produced. The `TECHNIQUE_TRAINING` consequence effect
+(`world/mechanics/effect_handlers.py`, `_technique_training`) never skips a gate: "grant outright"
+(Critical Success only) is `learn_technique(sheet, technique, source=TRIAL, ap_cost=0,
+origin=TRIAL)`, which still runs `enforce_technique_prerequisites` (only `GM_GRANT` skips it);
+points create a meter with `learn_technique(..., ap_cost=training_meter_size)` when the character
+has none, then `credit_technique_progress(meter, points)`. A refusal (`GiftNotOwned`,
+`TechniqueRequirementsNotMet`, `TechniqueCapExceeded`) mints nothing, credits nothing and tells
+the player why; the codex entry, the cost and any cosmetic scar still apply. Below Success the
+unmet requirements are not named (they could name the entry the trial did not grant).
 
 ### Specialization Engine (ADR-0055 — #1578)
 
@@ -2244,6 +2269,7 @@ neither model is expected to use every value:
 | `ALTERNATE_SELF_GRANT` | An alt-self's ability-suite grant (`world/forms/services`) | Technique-only; tied to a `ModifierSource`, revoked on revert. |
 | `AUTHORED` | `author_technique` (technique-authoring budget builder) | Technique-only. |
 | `GM_GRANT` | `GMAwardAction`'s `award_type="technique"` branch (#3055 slice 1c) | Technique-only — passed as `learn_technique(..., origin=AcquisitionOrigin.GM_GRANT)`, `ap_cost=0` for an immediate mint. |
+| `TRIAL` | The `TECHNIQUE_TRAINING` effect's "grant outright" (#4501) | Technique-only. Unlike `GM_GRANT` it does NOT skip `enforce_technique_prerequisites`. |
 
 `grant_gift_to_character` (the shared gift-acquisition primitive) takes an `origin=`
 kwarg (default `CHARACTER_CREATION`), stamped only on a freshly-minted `CharacterGift`

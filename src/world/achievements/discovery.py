@@ -147,6 +147,16 @@ def _cg_catalog_exclusions(gained):
     return excluded
 
 
+def is_cg_catalog_content(item) -> bool:
+    """True when ``item`` is common knowledge a character gets at creation (#4501).
+
+    The public face of ``_cg_catalog_exclusions`` for a single codex entry or technique:
+    callers that tell the player about a gain (the "this opens a technique" notice) skip
+    it for the same content the discovery ceremony skips, so creation stays quiet.
+    """
+    return (type(item), item.pk) in _cg_catalog_exclusions([item])
+
+
 def _cg_catalog_codex_entry_ids(entry_ids):
     """Entries granted by a Beginning/Tradition/Path/Distinction/Species/Resonance."""
     from django.db.models import Q  # noqa: PLC0415

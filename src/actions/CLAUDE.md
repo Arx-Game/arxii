@@ -141,7 +141,15 @@ They do not use the command system, dispatchers, or handlers.
   `EndNPCInteractionAction`, keys `"npc_start"`, `"npc_resolve"`, `"npc_end"` (#1493), REGISTRY
   backend, `target_type=SELF`; thin wrappers around `world.npc_services.services.start_interaction`,
   `resolve_offer`, and `end_interaction`. Shared by telnet `CmdHire` and the web
-  `InteractionViewSet`;
+  `InteractionViewSet`. The start message names whoever answered: the persona asked for
+  by id, the placement materialized in the room, or the nameless role (#3657 tranche 14:
+  a named persona had been greeted by the role's name). Three more tranche-14 lines in
+  this layer: `crafting.py`'s attach, create and detach actions now carry a message
+  ("You work Glow into plain sword (Common quality).", "The work fails; Glow does not
+  take.", "You craft Fang (Common quality).", "You strip Glow from plain sword."), since
+  data alone left telnet silent; and `tasking.py` names an agent by `persona.name`, never
+  `str(persona)` ("Wren (Established)"). The whole town group is typed in
+  `integration_tests/test_working_the_town_journeys.py`;
   `relationships.py` (#3957, was #1485) — the tie verbs, all REGISTRY backend, wrapping
   `world.relationships.services`: `DeclareLabelAction` (key `"declare_label"`, defaults
   Private awareness), `ShiftLabelAction` (`"shift_label"`), `EndLabelAction` (`"end_label"`),

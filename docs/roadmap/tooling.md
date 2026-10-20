@@ -227,6 +227,22 @@ the standing and the kinds, and `functionary` place/list/remove. One fix in plac
 reads the character's own permissions, so a staff account puppeting an ordinary character
 was refused; it now asks the account, the way a `perm()` lock does.
 
+Tranche 14 moved the town onto the harness: `hire`, `game`, `craft`, `network`, `identify`
+and `travel`. The seven hand-built modules (`test_hire_command`, `test_tavern_games`,
+`test_crafting`, `test_network_command`, `test_identification`, `test_travel_command` and
+`test_fatigue_command`, whose `rest` tranche 12 had already typed) are removed; the new
+`integration_tests/test_working_the_town_journeys.py` types each verb through the handler
+against real rows: a mission really issued by a barkeep, a hand of dice at a real Place
+with real purses, the Enchanting recipes authored at a real bench, a task dispatched and
+a listener posted and collected from, a mask rolled against with the seeded check, a
+walk over real public rooms with the scheduler stood in for. Five fixes in place, every
+one a line a player met: `hire` read `caller.session`, which a character does not have,
+so every `hire` typed in play raised; `hire <role> as <npc>` could never find a persona
+and greeted a named one by the role's name; bare `game` away from a Place and an ante a
+purse could not cover both raised past the command; the craft verbs said nothing on
+success or failure; agent names read "Wren (Established)" wherever `str(persona)` was
+used, the tasking API included.
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,

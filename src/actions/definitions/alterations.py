@@ -68,6 +68,7 @@ class ResolveAlterationAction(Action):
                 payload={"library_entry_pk": library_template.pk},
                 is_staff=is_staff,
                 character_sheet=sheet,
+                is_cosmetic=pending.is_cosmetic,
             )
             if errors:
                 return None, "; ".join(errors)
@@ -142,6 +143,7 @@ class ResolveAlterationAction(Action):
                 payload=payload,
                 is_staff=is_staff,
                 character_sheet=sheet,
+                is_cosmetic=pending.is_cosmetic,
             )
             if errors:
                 return None, "; ".join(errors)

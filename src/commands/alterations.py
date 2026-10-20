@@ -68,9 +68,11 @@ class CmdMageScar(ArxCommand):
         for p in pendings:
             scene = p.triggering_scene
             scene_text = f" (scene {scene.pk})" if scene else ""
+            cosmetic_text = " (cosmetic: no drawbacks, does not hold back advancement)"
             lines.append(
                 f"  [#{p.pk}] Tier {p.get_tier_display()} — "
                 f"{p.origin_affinity.name}/{p.origin_resonance.name}{scene_text}"
+                f"{cosmetic_text if p.is_cosmetic else ''}"
             )
         self.caller.msg("\n".join(lines))
 

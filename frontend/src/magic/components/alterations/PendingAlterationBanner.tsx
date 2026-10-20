@@ -10,7 +10,8 @@ import { usePendingAlterations } from '../../queries';
 
 export function PendingAlterationBanner() {
   const { data } = usePendingAlterations();
-  const pendings = data?.results ?? [];
+  // A cosmetic scar (#4501) is a reward that never holds back advancement: no banner for it.
+  const pendings = (data?.results ?? []).filter((pending) => !pending.is_cosmetic);
   if (pendings.length === 0) return null;
 
   const [first] = pendings;

@@ -53,12 +53,17 @@ def create_pending_alteration(  # noqa: PLR0913
     triggering_anima_deficit: int | None = None,
     triggering_soulfray_stage: int | None = None,
     audere_active: bool = False,
+    is_cosmetic: bool = False,
 ) -> PendingAlterationResult:
     """Create or escalate a PendingAlteration for a character.
 
     Same-scene dedup: if an OPEN pending exists for the same character +
     scene, upgrade its tier if the new tier is higher. Otherwise no-op.
     Different scenes (or scene=None) always create new pendings.
+
+    A cosmetic scar (a trial's reward, #4501) merges only with another cosmetic scar, and
+    a costly one only with a costly one: a reward never raises a cost's tier, and a cost
+    never turns a reward into a drawback-bearing scar.
     """
     from world.magic.constants import PendingAlterationStatus  # noqa: PLC0415
     from world.magic.models import PendingAlteration  # noqa: PLC0415
@@ -78,6 +83,7 @@ def create_pending_alteration(  # noqa: PLR0913
             character=character,
             triggering_scene=scene,
             status=PendingAlterationStatus.OPEN,
+            is_cosmetic=is_cosmetic,
         ).first()
 
         if existing is not None:
@@ -104,6 +110,7 @@ def create_pending_alteration(  # noqa: PLR0913
         origin_affinity=origin_affinity,
         origin_resonance=origin_resonance,
         triggering_scene=scene,
+        is_cosmetic=is_cosmetic,
         **snapshot_fields,
     )
     return PendingAlterationResult(
@@ -142,13 +149,14 @@ def _library_entry_mismatch_errors(
     return errors
 
 
-def _validate_library_alteration_resolution(
+def _validate_library_alteration_resolution(  # noqa: PLR0913 - cohesive validation context
     *,
     pending_tier: int,
     pending_affinity_id: int,
     pending_resonance_id: int,
     payload: dict,
     character_sheet: CharacterSheet | None,
+    is_cosmetic: bool = False,
 ) -> list[str]:
     """Library use-as-is resolution path — minimal checks only.
 
@@ -178,7 +186,30 @@ def _validate_library_alteration_resolution(
         condition=library_entry.condition_template,
     ).exists():
         errors.append("Character already has this condition active.")
+    if is_cosmetic and not _library_entry_is_drawback_free(library_entry):
+        errors.append("A cosmetic Mage Scar takes only a library entry that has no drawbacks.")
     return errors
+
+
+def _library_entry_is_drawback_free(library_entry: MagicalAlterationTemplate) -> bool:
+    """Three magnitudes at 0 and a condition carrying no effect rows (#4501)."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.conditions.models import ConditionOrStageEffect  # noqa: PLC0415
+
+    if (
+        library_entry.weakness_magnitude
+        or library_entry.resonance_bonus_magnitude
+        or library_entry.social_reactivity_magnitude
+    ):
+        return False
+    template_id = library_entry.condition_template_id
+    return not any(
+        model.objects.filter(
+            Q(condition_id=template_id) | Q(stage__condition_id=template_id)
+        ).exists()
+        for model in ConditionOrStageEffect.__subclasses__()
+    )
 
 
 def _scratch_magnitude_cap_errors(*, pending_tier: int, payload: dict, caps: dict) -> list[str]:
@@ -269,6 +300,7 @@ def validate_alteration_resolution(  # noqa: PLR0913 - cohesive validation-conte
     payload: dict,
     is_staff: bool,
     character_sheet: CharacterSheet | None = None,
+    is_cosmetic: bool = False,
 ) -> list[str]:
     """Validate a resolution payload against the pending's tier and origin.
 
@@ -289,15 +321,31 @@ def validate_alteration_resolution(  # noqa: PLR0913 - cohesive validation-conte
             pending_resonance_id=pending_resonance_id,
             payload=payload,
             character_sheet=character_sheet,
+            is_cosmetic=is_cosmetic,
         )
 
-    return _validate_scratch_alteration_resolution(
+    errors = _validate_scratch_alteration_resolution(
         pending_tier=pending_tier,
         pending_affinity_id=pending_affinity_id,
         pending_resonance_id=pending_resonance_id,
         payload=payload,
         is_staff=is_staff,
     )
+    if is_cosmetic:
+        errors.extend(_cosmetic_drawback_errors(payload))
+    return errors
+
+
+def _cosmetic_drawback_errors(payload: dict) -> list[str]:
+    """A cosmetic Mage Scar carries no drawbacks: every magnitude stays 0 (#4501)."""
+    if (
+        payload.get("weakness_magnitude", 0)
+        or payload.get("resonance_bonus_magnitude", 0)
+        or payload.get("social_reactivity_magnitude", 0)
+        or payload.get("weakness_damage_type_id")
+    ):
+        return ["A cosmetic Mage Scar has no drawbacks; leave every magnitude at 0."]
+    return []
 
 
 def get_library_entries(
@@ -499,10 +547,15 @@ def _get_or_create_alteration_category() -> ConditionCategory:
 
 
 def has_pending_alterations(character: CharacterSheet) -> bool:
-    """Check if this character has any unresolved Mage Scars."""
+    """Check if this character has any unresolved Mage Scar that holds back advancement.
+
+    A cosmetic scar (a trial's reward, #4501) is still owed a description but never
+    gates advancement, so it is not counted here.
+    """
     return PendingAlteration.objects.filter(
         character=character,
         status=PendingAlterationStatus.OPEN,
+        is_cosmetic=False,
     ).exists()
 
 

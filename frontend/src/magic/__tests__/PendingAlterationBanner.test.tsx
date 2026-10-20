@@ -169,6 +169,20 @@ describe('PendingAlterationBanner', () => {
     expect(banner).toHaveTextContent(/2 unresolved Mage Scars/);
   });
 
+  it('renders nothing for a cosmetic scar, which never holds back advancement (#4501)', async () => {
+    vi.mocked(api.getPendingAlterations).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [makePending({ is_cosmetic: true })],
+    });
+
+    renderWithProviders(<PendingAlterationBanner />);
+
+    await waitFor(() => expect(api.getPendingAlterations).toHaveBeenCalled());
+    expect(screen.queryByTestId('pending-alteration-banner')).not.toBeInTheDocument();
+  });
+
   it('renders nothing when logged out and does not call api', async () => {
     renderWithProviders(<PendingAlterationBanner />, false);
 

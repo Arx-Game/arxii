@@ -226,6 +226,14 @@ class PendingAlteration(SharedMemoryModel):
         blank=True,
     )
     audere_active = models.BooleanField(default=False)
+    is_cosmetic = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "A cosmetic scar (#4501): a reward with no drawbacks that does not hold back "
+            "advancement. The player still writes it. Not the same as tier 1, Cosmetic Touch."
+        ),
+    )
     origin_affinity = models.ForeignKey(
         Affinity,
         on_delete=models.PROTECT,

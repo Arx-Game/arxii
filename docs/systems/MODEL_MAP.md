@@ -2027,6 +2027,7 @@
   - capture_captor_organization -> societies.Organization [FK] (nullable)
   - capture_captive_template -> missions.MissionTemplate [FK] (nullable)
   - capture_rescue_template -> missions.MissionTemplate [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - crime_kinds -> justice.CrimeKind [M2M]
 **Pointed to by:**
   - named_organizations <- societies.NamedOrganization
@@ -2322,14 +2323,18 @@
 
 ### Service Functions
 - `active_member_roster_entries(organization) -> 'list' - The roster entries of an organization's active members (#3780).`
+- `announce_opened_techniques(sheet: 'CharacterSheet', entry: 'CodexEntry') -> 'None' - Tell the player which techniques a newly KNOWN entry opens, and where each is taught.`
 - `apply_organization_codex_grants(membership) -> 'int' - A new member learns everything their organization grants (#3780). Called`
+- `entry_gates_technique(entry: 'CodexEntry') -> 'bool' - True when some technique's learning requires ``entry`` to be KNOWN (#4501).`
 - `file_entry_under(entry: 'CodexEntry', subject: 'CodexSubject', *, sort_order: 'int' = 0) -> 'CodexEntryFiling' - Cross-list ``entry`` in ``subject``'s listing, in addition to its home.`
+- `gated_technique_requirements(entry: 'CodexEntry') - The active technique-learning requirements that name ``entry`` (#4501).`
 - `grant_codex_entry(roster_entry: 'RosterEntry', entry: 'CodexEntry', *, learned_from: 'RosterTenure | None' = None) -> 'tuple[CharacterCodexKnowledge, bool]' - Grant ``entry`` to ``roster_entry`` as fully KNOWN. Idempotent.`
 - `grant_entry_to_species_holders(entry: 'CodexEntry') -> 'int' - Hand a species-owned entry to every character of that species (#3775).`
 - `grant_organization_entry_to_members(grant) -> 'int' - Hand an ``OrganizationCodexGrant``'s entry to every current member; returns`
 - `grant_to_current_holders(grant) -> 'int' - Hand a grant row's entry to everyone already in its group (#3775).`
 - `resolve_codex_links(content: 'str | None', subject: 'CodexSubject', roster_entries: 'Sequence[RosterEntry]') -> 'list[dict]' - Parse ``[[Entry Name]]`` wikilinks from content and resolve to link refs.`
 - `species_holder_roster_entries(entry: 'CodexEntry') -> 'list' - Roster entries of every character whose species lineage owns ``entry`` (#3775).`
+- `techniques_opened_by(sheet: 'CharacterSheet', entry: 'CodexEntry') -> 'list[Technique]' - Techniques ``entry`` opens for ``sheet``: learnable now that it is known (#4501).`
 - `unfile_entry(entry: 'CodexEntry', subject: 'CodexSubject') -> 'None' - Remove ``entry``'s filing under ``subject``, if any. No-op otherwise.`
 
 
@@ -6207,6 +6212,7 @@
   - target_prerequisites -> mechanics.Prerequisite [M2M]
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
+  - consequence_effects <- checks.ConsequenceEffect
   - conditions_caused <- conditions.ConditionInstance
   - battle_declarations <- battles.BattleActionDeclaration
   - battle_property_affinities <- battles.TechniquePropertyAffinity
@@ -6527,7 +6533,7 @@
 - `compute_effective_cap(thread: 'Thread') -> 'int' - Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4).`
 - `compute_path_cap(character_sheet: 'CharacterSheet') -> 'int' - Return the path-side cap for a character (Spec A §2.4).`
 - `compute_thread_weaving_xp_cost(unlock: 'ThreadWeavingUnlock', learner: 'CharacterSheet') -> 'int' - Compute the XP cost for a learner to acquire a ThreadWeavingUnlock (Spec A §6.2).`
-- `create_pending_alteration(*, character: 'CharacterSheet', tier: 'int', origin_affinity: 'Affinity', origin_resonance: 'ResonanceModel', scene: 'Scene | None', triggering_technique: 'Technique | None' = None, triggering_intensity: 'int | None' = None, triggering_control: 'int | None' = None, triggering_anima_cost: 'int | None' = None, triggering_anima_deficit: 'int | None' = None, triggering_soulfray_stage: 'int | None' = None, audere_active: 'bool' = False) -> 'PendingAlterationResult' - Create or escalate a PendingAlteration for a character.`
+- `create_pending_alteration(*, character: 'CharacterSheet', tier: 'int', origin_affinity: 'Affinity', origin_resonance: 'ResonanceModel', scene: 'Scene | None', triggering_technique: 'Technique | None' = None, triggering_intensity: 'int | None' = None, triggering_control: 'int | None' = None, triggering_anima_cost: 'int | None' = None, triggering_anima_deficit: 'int | None' = None, triggering_soulfray_stage: 'int | None' = None, audere_active: 'bool' = False, is_cosmetic: 'bool' = False) -> 'PendingAlterationResult' - Create or escalate a PendingAlteration for a character.`
 - `cross_thread_xp_lock(character_sheet: 'CharacterSheet', thread: 'Thread', boundary_level: 'int') -> 'ThreadLevelUnlock' - Pay XP to unlock an XP-locked level boundary on a thread.`
 - `deduct_anima(character: 'ObjectDB', effective_cost: 'int', *, lethal: 'bool' = True) -> 'int' - Deduct anima from character, returning the overburn deficit.`
 - `get_character_anima_ritual(character) - The character's authored SCENE_ACTION ritual (with check_config), or None.`
@@ -6540,7 +6546,7 @@
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" - Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' - Total damage-type-specific resistance from gift threads (#1580).`
 - `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
-- `has_pending_alterations(character: 'CharacterSheet') -> 'bool' - Check if this character has any unresolved Mage Scars.`
+- `has_pending_alterations(character: 'CharacterSheet') -> 'bool' - Check if this character has any unresolved Mage Scar that holds back advancement.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `involved_trait_ids(check_type: 'CheckType', extra_traits: 'Sequence[ExtraTraitTerm]') -> 'tuple[int, ...]' - Trait ids a roll involves: the check type's traits, then the terms', once each.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' - Return threads whose dev_points are within `within` of the next XP-locked boundary.`
@@ -6564,7 +6570,7 @@
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' - Update the narrative name and/or description of a thread.`
 - `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
-- `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' - Validate a resolution payload against the pending's tier and origin.`
+- `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None, is_cosmetic: 'bool' = False) -> 'list[str]' - Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' - Create a new Thread anchored to the given target.`
 
 

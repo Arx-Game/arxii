@@ -114,7 +114,8 @@ class ListOrgTasksAction(Action):
         ]
         for post in posts.distinct():
             asset = post.assignment.npc_asset
-            agent = str(asset.asset_persona) if asset else "?"
+            # The persona's name, never str(): that reads "Wren (Established)" (#3657 t14).
+            agent = asset.asset_persona.name if asset else "?"
             pending = post.harvests.filter(collected_at__isnull=True).count()
             ready = f" — {pending} to collect" if pending else ""
             lines.append(
@@ -237,7 +238,7 @@ class AssignTaskAgentAction(Action):
         return ActionResult(
             success=True,
             message=(
-                f"{npc_asset.asset_persona} slips away on task #{task.pk}. "
+                f"{npc_asset.asset_persona.name} slips away on task #{task.pk}. "
                 f"They report back by {task.deadline:%Y-%m-%d %H:%M}."
             ),
         )
@@ -343,7 +344,9 @@ class PostListenerAction(Action):
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
             success=True,
-            message=f"{npc_asset.asset_persona} settles in here, ears open (post #{post.pk}).",
+            message=(
+                f"{npc_asset.asset_persona.name} settles in here, ears open (post #{post.pk})."
+            ),
             data={"post_id": post.pk},
         )
 

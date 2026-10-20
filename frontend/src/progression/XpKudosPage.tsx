@@ -263,7 +263,8 @@ function ClaimKudosDialog({
  */
 function AlterationGateAlert() {
   const { data } = usePendingAlterations();
-  const pendings = data?.results ?? [];
+  // A cosmetic scar (#4501) never gates advancement.
+  const pendings = (data?.results ?? []).filter((pending) => !pending.is_cosmetic);
   if (pendings.length === 0) return null;
   const uniqueNames = [...new Set(pendings.map((p) => p.character_name))];
   const names = uniqueNames.join(', ');

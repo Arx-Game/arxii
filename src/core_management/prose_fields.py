@@ -105,6 +105,7 @@ NON_PROSE_TEXT_FIELDS = frozenset(
         "crest_asset",
         "display_name",
         "formal_name",  # a realm's long name (#3725): a title, not prose
+        "free_reason",  # #4501: why a trial consequence is free of cost; a staff authoring note
         "draft_validator_path",
         "fatigue_category",
         "gm_notes",
