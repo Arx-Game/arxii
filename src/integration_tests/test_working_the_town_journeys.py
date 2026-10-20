@@ -368,6 +368,12 @@ class CraftingAtTheBench(JourneyCase):
         self.rock = ObjectDBFactory(db_key="rock", db_typeclass_path="typeclasses.objects.Object")
         self.rock.location = self.ysmay
         self.rock.save()
+        # Lying on the floor, not in her hands.
+        self.loose_stone = ObjectDBFactory(
+            db_key="loose stone", db_typeclass_path="typeclasses.objects.Object"
+        )
+        self.loose_stone.location = self.workshop
+        self.loose_stone.save()
         self.glow = FacetFactory(name="Glow")
         FacetFactory(name="Hum")
         StyleFactory(name="Sharp")
@@ -383,12 +389,15 @@ class CraftingAtTheBench(JourneyCase):
             ("craft facet Glow", "Usage: craft facet <name> item=<id>"),
             ("craft facet Glow item=abc", "Usage: craft facet <name> item=<id>"),
             ("craft facet Glow item=99999", "You aren't holding that item."),
+            (f"craft facet Glow item={self.loose_stone.pk}", "That isn't an item."),
             (f"craft facet Glow item={self.rock.pk}", "That isn't an item."),
             (f"craft facet Nothing item={sword}", "No facet called 'Nothing'."),
             (f"craft quote item={sword}", "Usage: craft facet <name> item=<id>"),
             (f"craft quote style=Nothing item={sword}", "No style called 'Nothing'."),
         ):
             self.assertIn(reply, self.telnet(self.ysmay, line))
+        # An unknown or unheld id is the command's one line, never Evennia's as well.
+        self.assertNotTold(self.ysmay, "Could not find")
         self.assertIn(
             "Affordable: True. Max quality tier: Fine.",
             self.telnet(self.ysmay, f"craft quote facet=Glow item={sword}"),
