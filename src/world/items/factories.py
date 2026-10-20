@@ -1,5 +1,6 @@
 """FactoryBoy factories for item test data."""
 
+from datetime import timedelta
 from decimal import Decimal
 
 import factory
@@ -130,6 +131,20 @@ class ItemInstanceFactory(factory.django.DjangoModelFactory):
     custom_description = ""
     quantity = 1
     durability = None
+
+
+def meaningful_item_for(sheet, *, days: int = 30, **kwargs) -> ItemInstance:
+    """An item ``sheet`` made and has held ``days`` days: own work 1 plus carried 1, two
+    meaning points (#4500). Extra ``kwargs`` go to ``ItemInstanceFactory``. An item made by
+    the holder is the cheapest honest history to build; its template value is irrelevant."""
+    from django.utils import timezone
+
+    return ItemInstanceFactory(
+        holder_character_sheet=sheet,
+        crafter_character_sheet=sheet,
+        held_since=timezone.now() - timedelta(days=days),
+        **kwargs,
+    )
 
 
 class TemplateSlotFactory(factory.django.DjangoModelFactory):

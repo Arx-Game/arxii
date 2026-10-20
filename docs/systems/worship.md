@@ -490,9 +490,10 @@ pledge progress (Ruling 9).
   (`PledgeCreditSource`: DEED, SACRIFICE, RITE, PRAYER, CEREMONY_OFFERING, CEREMONY, CLOSING,
   LAPSE, OTHER), `base`, `earning_rate_percent`, `credited`, `game_week`, and the typed
   source (`resonance_grant` O2O, `offering` O2O, `rite_performance`).
-- `DevotionConfig` gains `favored_deed_percent` (100), `associated_deed_percent` (50),
-  `weekly_deed_favor_cap` (8, base favor) and `sacrifice_value_per_favor` (10).
-  `FavorOutcomeAward` CLOSING rows are the closing awards (seeded 8 / 5 / 3 / 2 / 0).
+- `DevotionConfig` gains `favored_deed_percent` (100), `associated_deed_percent` (50) and
+  `weekly_deed_favor_cap` (8, base favor). `FavorOutcomeAward` CLOSING rows are the closing
+  awards (seeded 8 / 5 / 3 / 2 / 0). Its `sacrifice_value_per_favor` was removed in #4500
+  (see "Sacrifices count by meaning" below).
 - `CeremonyOffering` (ceremonies) gains nullable `being`, `pledge_details` and `facet`;
   `ceremony` is nullable; a CHECK requires exactly one of ceremony or being (migration 0234,
   its own migration after the columns in 0233).
@@ -527,13 +528,49 @@ pledge progress (Ruling 9).
   by `close_pledge` after this resolution commits, never from inside it.
 - `service_terms(sheet, being)`, `pledge_card(details)`, `holy_sites_here(sheet)`,
   `open_pledge_for` / `latest_pledge_for`, `broadcast_room_line`.
-- Sacrifices: `ceremonies.services.sacrifice_items(sheet, items, *, being=None)` at a shrine
-  in the room or a temple over it (the being chooses when both are present for different
-  beings); each carried item goes through `give_up_item` (the step extracted from
-  `record_offering`: soft-destroy the item (`destroyed_at`, #4461), feed the pool, favored-facet multiplier), base favor = value //
-  `sacrifice_value_per_favor` (at least 1) x the multiplier for a favored facet, and one room
-  line "<name> sacrifices <item> at <being>'s shrine." `record_offering` keeps its flat
-  `devotion_per_offering` and now records the facet too.
+- Sacrifices (#4500, ADR-4462): see "Sacrifices count by meaning" below.
+
+**Sacrifices count by meaning** (`ceremonies.services.sacrifice_items(sheet, items, *,
+being=None)`, `worship/sacrifice_services.py`) [BUILT & WIRED]
+
+No favor, pool grant or prestige reads an item's price, a fee or a material cost. A
+sacrifice (at a shrine in the room or a temple over it) is a check eased by what each item
+means to the one giving it up:
+
+- Each item is read once (`ceremonies.services.read_item`): `item_meaning` returns its
+  signals (carried, gift, heirloom, own work, made by a tie, and since #4512 designed by you,
+  made for, made from and shown; see `docs/systems/items.md`),
+  and a carried facet the being favors multiplies the points by
+  `CeremonyConfig.offering_favored_facet_multiplier_percent`.
+- An item with 0 points is given up with no roll, no favor, no pool grant and no use of the
+  weekly limit. An item with points rolls the being's invocation check type (else the
+  devotion config's) at the `invocation_difficulty` (Chosen ease, favor ease and favor
+  invocation modifiers keep applying) eased by points x
+  `DevotionConfig.sacrifice_ease_per_point`, never below Trivial. A piece's design and
+  dedication survive its being given up (#4512): examine still credits its maker, designer
+  and facet workers, marked "Gone: given up to <being>". With no check type
+  configured the sacrifice is refused before anything is given up.
+- The outcome tier selects the `FavorOutcomeAward` of kind SACRIFICE (seeded 6 / 4 / 2 / 0 /
+  0 by `ensure_favor_terms`; a missing row pays nothing). That is the base favor;
+  `bump_devotion` applies the earning rate and credits an open pledge, as before.
+- At most `DevotionConfig.sacrifices_per_week` items with points count per being, per
+  character, per game week, shrines and ceremonies together (`sacrifice_slots_left`); items
+  past it are given up for nothing, and a Critical Failure closes the being's hand to that
+  character until the next week.
+- Every counted item grants `effective points x CeremonyConfig.offering_pool_per_point` to
+  the being's pool whatever the roll (`give_up_item`).
+- The item is soft-destroyed with `preserve=True` (design kept, #4461); the
+  `CeremonyOffering` records the roll (`outcome_tier`), the week (`game_week`), whether it
+  `counted`, and one `OfferingSignal` per signal (kind, points, detail), since the item and
+  its holder are gone. The GM's steward panel lists each sacrificed item with its signals and
+  roll (`answer_services.sacrifice_detail`); the pledge card credit and the being's
+  dashboard row read the same signals. One room line, "<name> sacrifices <item> at
+  <being>'s shrine.", is unchanged.
+- `record_offering` (ceremonies) uses the same reading: the officiant's devotion is
+  `effective points x CeremonyConfig.devotion_per_offering_point` and is not rolled (the
+  rite's own roll is the check); it shares the weekly limit. `finish_ceremony` prestige drops
+  the offering-value term (`offering_prestige_per_value` was removed) and keeps the
+  deed-legend term.
 
 **Surfaces**
 

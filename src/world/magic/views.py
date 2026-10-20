@@ -178,7 +178,7 @@ from world.magic.services import (
     preview_resonance_pull,
 )
 from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
-from world.magic.services.gain import account_for_sheet
+from world.magic.services.gain import account_for_sheet, retract_pose_endorsement
 from world.magic.services.pull_applicability import PullActionContext, compute_thread_applicability
 from world.magic.services.technique_builder import (
     PlayerPolicy,
@@ -1503,7 +1503,7 @@ class PoseEndorsementViewSet(
         # Alt-guard: only the endorsing account can retract.
         if account_for_sheet(endorsement.endorser_sheet) != request.user:
             raise PermissionDenied
-        endorsement.delete()
+        retract_pose_endorsement(endorsement)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

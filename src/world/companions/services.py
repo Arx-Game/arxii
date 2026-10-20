@@ -535,6 +535,7 @@ def narrate_companion_loss(companion_name: str, scene, *, fallback_recipients=No
         mode=interaction.mode,
         timestamp=interaction.timestamp.isoformat(),
         scene_id=interaction.scene_id,
+        interaction=interaction,
     )
 
     if room is not None:

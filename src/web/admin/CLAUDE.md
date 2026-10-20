@@ -1487,3 +1487,21 @@ The export uses natural keys so data can be:
 3. All relationships resolve correctly (using names, not IDs)
 
 This requires all config models to have `NaturalKeyMixin` from `core.natural_keys`.
+
+### Trial builder (#4513, slice 2 of #4343)
+
+**Purpose:** one custom page per CHECK `MissionOption` that edits its whole trial: the header (codex
+entry, technique trained, meter size), then one fieldset per outcome tier (next node, label, outcome
+text, codex effect none/lead/known, training points or grant outright, cost scar/condition, cosmetic
+reward, deliberately free with reason). `web/admin/trial_builder/`: `state.py` (read saved routes),
+`forms.py` (plain forms, so validating never writes onto identity-mapped rows), `proposal.py`
+(unsaved rows checked by slice 1's rules, `checks.trial_rules`), `live.py` (rail), `save.py`,
+`views.py`. URLs `_trial_builder/`, `_trial_builder/<option>/` (+ `check/`, `delete/`). Linked from the
+option's change page through `authoring.links.builder_url`.
+
+- The rail is rendered from the same code on page load and by `trial_builder_check` (JS posts the
+  form after each edit); blocking messages are slice 1's own text. Save re-runs it and writes nothing
+  when anything blocks.
+- The page owns four effect slots per tier (codex 0, training 1, cost 2, reward 3); other effects on
+  the consequence are left and moved after them. A consequence another row also uses is read-only.
+- Links `admin/css/forms.css` itself (#3667); `StylingTests` assert the stylesheet reaches the page.

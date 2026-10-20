@@ -19,7 +19,7 @@ from django.db.models import ProtectedError
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from world.ceremonies.services import give_up_item
+from world.ceremonies.services import give_up_item, read_item
 from world.items.models import ItemFacet, ItemInstance
 from world.items.services.cleanup import purge_expired_soft_deleted_items
 from world.items.services.facets import attach_facet_to_item, remove_facet_from_item
@@ -50,7 +50,14 @@ class OutfitGrantHistorySurvivesTests(TestCase):
     def test_giving_up_a_worn_item_soft_destroys_it_and_keeps_the_grant(self) -> None:
         being = WorshippedBeingFactory()
 
-        give_up_item(self.item, being, facet=None, granted_by=self.sheet, reason="test")
+        give_up_item(
+            self.item,
+            being,
+            reading=read_item(self.item, self.sheet, facet=None),
+            counted=False,
+            granted_by=self.sheet,
+            reason="test",
+        )
 
         stored = ItemInstance.objects.get(pk=self.item.pk)
         self.assertIsNotNone(stored.destroyed_at)

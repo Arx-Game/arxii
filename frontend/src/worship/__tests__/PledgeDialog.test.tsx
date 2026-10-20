@@ -32,7 +32,10 @@ vi.mock('../queries', () => ({
       rate: { base: 100, chosen_bonus: 100, modifiers: 0, total: 200 },
       lines: [
         { label: 'Deeds that grant [favored resonance] (favored)', amount: '100% of amount' },
-        { label: 'Sacrifices at a shrine or temple of Ombrin', amount: '1 per 10 value' },
+        {
+          label: 'Sacrifices at a shrine or temple of Ombrin',
+          amount: 'a check, eased by what each item means to you; 3 a week',
+        },
       ],
       weekly_deed_cap: 8,
     },

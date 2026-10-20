@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 from django.forms import ModelForm
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse
 
 from world.admin_utils import OneRowPerFormSet
 from world.contributors.admin import CREDIT_FIELDSET
@@ -32,6 +32,7 @@ from world.items.models import (
     InteractionType,
     ItemCheckModifier,
     ItemInstance,
+    ItemLineage,
     ItemStyle,
     ItemTemplate,
     ItemTemplateAppearanceEffect,
@@ -347,13 +348,38 @@ class ItemStyleInline(admin.TabularInline):
     autocomplete_fields = ["style"]
 
 
+class ItemLineageInline(admin.TabularInline):
+    """What the piece was worked from, read-only (#4512): written once, at making."""
+
+    model = ItemLineage
+    fk_name = "item"
+    extra = 0
+    can_delete = False
+    fields = ["source", "source_name", "points"]
+    readonly_fields = ["source", "source_name", "points"]
+
+    @admin.display(description="Source item")
+    def source(self, obj: ItemLineage) -> str:
+        source = obj.source_item
+        if source is None or source.destroyed_at is not None:
+            return "(used up)"
+        return str(source)
+
+    def _read_only(self, request: HttpRequest, obj: ItemInstance | None = None) -> bool:
+        """Nobody adds or edits a lineage row by hand: it is written once, at making."""
+        del request, obj
+        return False
+
+    has_add_permission = _read_only
+    has_change_permission = _read_only
+
+
 @admin.register(ItemInstance)
 class ItemInstanceAdmin(admin.ModelAdmin):
+    change_form_template = "admin/items/iteminstance/change_form.html"
     autocomplete_fields = [
         "attuned_to_character_sheet",
         "contained_in",
-        "designer_character_sheet",
-        "designer_persona_display",
     ]
     list_display = [
         "display_name",
@@ -365,7 +391,22 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "crafter_character_sheet",
     ]
     list_filter = ["quality_tier", "template"]
-    readonly_fields = ["is_broken", "destroyed_at", "last_holder"]
+    readonly_fields = [
+        "is_broken",
+        "destroyed_at",
+        "last_holder",
+        "holder_character_sheet",
+        "held_since",
+        "holding_event",
+        "crafter_character_sheet",
+        "crafter_persona_display",
+        "designer_character_sheet",
+        "designer_persona_display",
+        "legend_deed_list",
+        "dedicated_to_persona",
+        "dedicated_by_persona",
+        "dedicated_at",
+    ]
     list_select_related = [
         "template",
         "quality_tier",
@@ -380,26 +421,83 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "holder_character_sheet",
         "crafter_character_sheet",
         "crafter_persona_display",
+        "designer_character_sheet",
+        "designer_persona_display",
+        "dedicated_to_persona",
+        "dedicated_by_persona",
         "image",
     ]
-    fields = [
-        "template",
-        "custom_name",
-        "custom_description",
-        "quality_tier",
-        "quantity",
-        "charges",
-        "durability",
-        "is_open",
-        "access_policy",
-        "holder_character_sheet",
-        "destroyed_at",
-        "last_holder",
-        "crafter_character_sheet",
-        "crafter_persona_display",
-        "image",
+    fieldsets = [
+        (
+            None,
+            {
+                "fields": [
+                    "template",
+                    "quality_tier",
+                    "quantity",
+                    "charges",
+                    "durability",
+                    "is_open",
+                    "access_policy",
+                    "destroyed_at",
+                    "last_holder",
+                    "image",
+                ]
+            },
+        ),
+        ("Design", {"fields": ["custom_name", "custom_description"]}),
+        (
+            "Provenance (read-only)",
+            {
+                "fields": [
+                    "crafter_character_sheet",
+                    "crafter_persona_display",
+                    "designer_character_sheet",
+                    "designer_persona_display",
+                    "legend_deed_list",
+                ],
+                "description": (
+                    "The designer is recorded only when that character wrote the name or "
+                    "description. Legend deeds are the deeds this item is a trophy of."
+                ),
+            },
+        ),
+        (
+            "Holding (read-only)",
+            {"fields": ["holder_character_sheet", "held_since", "holding_event"]},
+        ),
+        (
+            "Dedication (read-only)",
+            {
+                "fields": ["dedicated_to_persona", "dedicated_by_persona", "dedicated_at"],
+                "description": "Written once, at making or on a commission. It is permanent.",
+            },
+        ),
     ]
-    inlines = [ItemStyleInline]
+    inlines = [ItemStyleInline, ItemLineageInline]
+
+    def render_change_form(  # noqa: PLR0913 - Django's own signature
+        self,
+        request: HttpRequest,
+        context: dict,
+        add: bool = False,
+        change: bool = False,
+        form_url: str = "",
+        obj: ItemInstance | None = None,
+    ) -> HttpResponse:
+        """Add the rail: what the item means to its current holder, computed (#4512)."""
+        from world.items.services.meaning_display import meaning_rail  # noqa: PLC0415
+
+        context["meaning_rail"] = meaning_rail(obj) if obj is not None else None
+        return super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+
+    @admin.display(description="Legend deeds")
+    def legend_deed_list(self, obj: ItemInstance) -> str:
+        """Deeds this item is a trophy of (read-only)."""
+        deeds = [str(deed) for deed in obj.legend_deeds.all()]
+        return ", ".join(deeds) if deeds else "-"
 
     def save_model(
         self, request: HttpRequest, obj: ItemInstance, form: ModelForm, change: bool

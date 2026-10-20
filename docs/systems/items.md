@@ -47,7 +47,7 @@ from world.items.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ItemInstance` | A specific item in the game world | `template` (FK, PROTECT), `game_object` (OneToOne to ObjectDB), `custom_name`, `custom_description`, `quality_tier` (FK), `quantity`, `charges`, `is_open`, `holder_character_sheet` (FK to CharacterSheet), `crafter_character_sheet` (FK to CharacterSheet), `lore_value`, `destroyed_at`, `attuned_to_character_sheet` (FK to CharacterSheet, `SET_NULL`, nullable — the character this touchstone instance is personally bound to) + `attuned_at` (DateTimeField, nullable; set by `attune_touchstone()`, #707) |
+| `ItemInstance` | A specific item in the game world | `template` (FK, PROTECT), `game_object` (OneToOne to ObjectDB), `custom_name`, `custom_description`, `quality_tier` (FK), `quantity`, `charges`, `is_open`, `holder_character_sheet` (FK to CharacterSheet), `dedicated_to_persona` / `dedicated_by_persona` (FK Persona, SET_NULL) + `dedicated_at` (who it was made for, written once and permanent, #4512), `held_since` + `holding_event` (FK `OwnershipEvent`, SET_NULL; when and how the current holder got it, written only by `set_item_holder`, #4500), `crafter_character_sheet` (FK to CharacterSheet), `lore_value`, `destroyed_at`, `attuned_to_character_sheet` (FK to CharacterSheet, `SET_NULL`, nullable — the character this touchstone instance is personally bound to) + `attuned_at` (DateTimeField, nullable; set by `attune_touchstone()`, #707) |
 | `MakeoverConsentRequest` | A stylist's offer to restyle another character, waiting on their answer (#4187) | `stylist_persona` / `target_persona` (FK Persona), `item_instance` (FK, CASCADE), `option` (FK FormTraitOption, nullable), `blend`, `descriptor`, `status` (`ActionRequestStatus`), `requested_at`, `responded_at`; partial unique: one pending per pair (`makeover_models.py`) |
 | `EquippedItem` | Tracks equipped item at a body slot | `character` (FK to ObjectDB), `item_instance` (FK), `body_region`, `equipment_layer`. Unique on (character, body_region, equipment_layer) |
 
@@ -139,7 +139,8 @@ Items move through three states:
 
 **`differs_from_template`** (property) — `True` if the instance carries any
 per-instance data worth preserving: a `custom_name`, `custom_description`, `lore_value`,
-non-default `quality_tier`, any facet attached now or ever (`has_facet_history`: a removed
+non-default `quality_tier`, a `silhouette` or any `ItemStyle` (the design, #4500), any facet
+attached now or ever (`has_facet_history`: a removed
 facet counts), or any `OwnershipEvent` beyond
 `CREATED`. Used by `destroy_consumed_item_instance` (see below) to decide soft-delete
 vs. hard-delete when consumption empties an item.
@@ -224,6 +225,73 @@ boon pointers, showcase and event lookups. `sell_to_fence` also refuses a destro
 Without this, a fenced item with a history could be fenced again for a second payout.
 The helper also unequips the item (`unequip_item`) before it leaves play.
 
+### Item meaning (#4500, #4512, ADR-4462) [BUILT & WIRED]
+
+`item_meaning(item, holder_sheet, *, config)` in `world/items/services/meaning.py` answers
+"what does this item mean to the character holding it" for every use (today a sacrifice at
+a shrine and a ceremony offering; the worn-piece and GM-detail uses are slice 6b). It returns
+an `ItemMeaning` (signals and their sum, `world/items/types.py`) from records only; **it
+never reads a price, a fee or a material cost**, so a bought item with no history is worth
+0. The signals (`MeaningSignalKind`), numbers on `DevotionConfig`:
+
+| Signal | Points | Source |
+|---|---|---|
+| Carried | 1 at `sacrifice_min_carried_days`, +1 per `sacrifice_carried_days_per_point` after, at most `sacrifice_carried_max_points`; counts only with another signal | `held_since` |
+| Gift | 1 + the holder's claimed tier toward the giver | `holding_event` of type GIVEN |
+| Heirloom | 1 per INHERITED event, at most 3 | ownership history |
+| Own work | 1 | holder is `crafter_character_sheet` |
+| Made by a tie | `pair_tier` (holder, maker), at most `maker_tie_max_points`; the best maker, never the sum, never the holder | crafter, or the seller of a SERVICE `MarketSale` on the item |
+| Designed by you (#4512) | 1 | holder is `designer_character_sheet`, which is stamped only when that character wrote the name or description |
+| Made for (#4512) | 1 + the holder's claimed tier toward the dedicator, at most `made_for_max_points`; nothing when the holder bought it from the dedicator | the dedication; the holder must be the dedicatee |
+| Made from (#4512) | the source's recorded points, at most `made_from_max_points` | `ItemLineage`; counts for the crafter and the dedicatee |
+| Shown (#4512) | per settled, successful `FashionShowing` of the item (statement item, or in the statement outfit) in the last `shown_window_weeks` game weeks: 1 per `shown_engagements_per_point` engagements, at most `shown_max_points` in all | `FashionShowing`; no carry gate (earned in a scene) |
+
+Every signal except shown is gated by the carry clock: nothing personal counts before the
+item has been held `sacrifice_min_carried_days`. One person's tie counts once, in the first
+of made by a tie, gift and made for that applies, and each further act by the same person
+adds a flat 1 (owner ruling, 2026-10-18). `set_item_holder(item,
+sheet, *, event=None)` (`world/items/services/holding.py`) is the single writer of a new
+holder: it restarts `held_since` and records the event behind the move (the take, give,
+steal, trade, boon, estate, org vault, reclamation, market-purchase and gem-pry paths).
+`pair_tier(sheet_a, sheet_b)` is in `world/relationships/helpers.py`. Staff see the
+computed signals for an item's current holder on the item admin's rail
+(`world/items/services/meaning_display.py`); a crafter reads one held item's points on
+`GET /api/items/inventory/{id}/meaning/` before working it in.
+
+A given-up item is soft-destroyed by `give_up_item` with `preserve=True` and keeps its
+design; see the cleanup section below for what the purge spares.
+
+### The commission loop (#4512, slice 2 of #4462) [BUILT & WIRED]
+
+- **Design text and designer credit.** `ItemInstance.designer_character_sheet` is stamped
+  only when that character writes a name or description: at making (`ItemCreateHandler`;
+  blank text leaves the designer empty), on the finishing pass (`finish_ware`), or on a
+  commission. A fee never makes anyone a designer.
+- **Commission** (`run_service_craft`, `market_service_craft`, `market/commission`): the
+  buyer may pass `name`, `description` and `dedicate_to`. A field may be written only where
+  the item has none or the buyer is already its designer (`DesignAlreadyWritten` otherwise,
+  before the fee is paid). The words and the dedication are the buyer's own act and are
+  written whatever the roll, like the fee.
+- **Dedication** (`world/items/services/dedication.py`): `ItemInstance.dedicated_to_persona`,
+  `dedicated_by_persona`, `dedicated_at`, written once by the maker at making or the
+  commissioner on a commission. Permanent (`ItemAlreadyDedicated`), never to oneself
+  (`CannotDedicateToSelf`). Dedicating does not move the piece; giving it is the ordinary
+  `give`.
+- **Lineage** (`world/items/services/lineage.py`): `craft create ... from=<item>` /
+  `CreateItemAction(worked_from=)` uses up one held item (soft-destroyed with its design
+  kept) and records an `ItemLineage` row with the points it meant to the crafter. A making
+  never fails to make, so the item is always used up. Recipe materials record nothing.
+- **Examine** (`crafted_provenance_line`): "Made by X for Y. Designed by Z. Facet work by W."
+  then "Worked from <name>." (marked "which is gone" when the source is) and, for a piece no
+  longer in play, "Gone: <note>." Facet workers are the sellers of SERVICE `MarketSale` rows.
+  The credits survive the piece: a purge spares a dedication and a lineage, and
+  `differs_from_template` counts both.
+- **Surfaces:** web commission form `CommissionDialog` on the market page (`/market`), the
+  Made for and Worked from fields on `CreateItemDialog`, the item admin's Dedication
+  fieldset, Lineage inline and meaning rail; telnet `market/commission <offer>=<item>,<target>
+  [;<name>;<description>;<made for>]` and `craft create <template>=<name>, <desc> [for=<persona>]
+  [from=<item id>]`.
+
 ### Time-based cleanup of soft-deleted items
 
 **Service:** `purge_expired_soft_deleted_items(*, grace=None)` in
@@ -236,8 +304,10 @@ Runs daily as the `items.soft_delete_cleanup` cron task (registered in
    days, configurable via the `ITEM_SOFT_DELETE_GRACE_DAYS` env var, default **30**).
 2. Queries all `ItemInstance` rows with `destroyed_at < cutoff` **and**
    `lore_value=0` **and** zero `ItemFacet` rows (removed ones included) **and** zero transfer-provenance events
-   (GIVEN/STOLEN/TRANSFERRED), excluding PROTECT-referenced rows (Mantle /
-   ProjectContribution).
+   (GIVEN/STOLEN/TRANSFERRED) **and** no design (#4500, #4512: no `custom_name` or
+   `custom_description`, no designer, no silhouette, no `ItemStyle`, no dedication, no lineage; a design is never
+   permanently deleted, owner ruling 2026-10-18), excluding PROTECT-referenced rows
+   (Mantle / ProjectContribution).
 3. Calls `hard_delete_item_instance` for each out-of-world row in its own savepoint,
    returning the count purged.
 

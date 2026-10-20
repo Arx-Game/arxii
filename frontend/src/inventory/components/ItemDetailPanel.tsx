@@ -333,6 +333,12 @@ function ItemContent({
           </div>
         )}
 
+        {item.crafted_provenance && (
+          <p className="text-sm text-muted-foreground" data-testid="item-credits">
+            {item.crafted_provenance}
+          </p>
+        )}
+
         <StatsGrid item={item} />
 
         {liveFacets.length > 0 && (

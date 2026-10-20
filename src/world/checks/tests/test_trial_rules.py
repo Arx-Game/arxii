@@ -129,6 +129,13 @@ class TrialRuleTests(TestCase):
             scar_is_cosmetic=True,
         ).clean()
 
+    def test_a_mage_scar_names_no_condition_template(self) -> None:
+        """The handler reads only the severity, so the Trial builder saves a scar without one."""
+        self._effect(self.success, EffectType.MAGICAL_SCARS, condition_severity=2).clean()
+        self._effect(
+            self.success, EffectType.MAGICAL_SCARS, condition_severity=2, scar_is_cosmetic=True
+        ).clean()
+
     def test_opening_a_technique_needs_a_real_cost(self) -> None:
         consequence = ConsequenceFactory(outcome_tier=self.success)
         opening = self._effect(

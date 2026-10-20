@@ -32,6 +32,7 @@ from world.items.models import (
     OwnershipEvent,
     ReclamationClaim,
 )
+from world.items.services.holding import set_item_holder
 from world.items.services.provenance import stolen_victim
 
 if TYPE_CHECKING:
@@ -321,14 +322,13 @@ def _return_item(claim: ReclamationClaim, status: str) -> None:
         msg = f"claim {claim.pk}: item {item.pk} is no longer in play"
         raise ReclamationError(msg, user_message="That item is gone beyond recovery.")
     previous_holder = item.holder_character_sheet
-    item.holder_character_sheet = claim.claimant_sheet
-    item.save(update_fields=["holder_character_sheet"])
-    OwnershipEvent.objects.create(
+    event = OwnershipEvent.objects.create(
         item_instance=item,
         event_type=OwnershipEventType.RECOVERED,
         from_character_sheet=previous_holder,
         to_character_sheet=claim.original_claimant_sheet,
     )
+    set_item_holder(item, claim.claimant_sheet, event=event)
     claim.status = status
     claim.resolved_at = timezone.now()
     claim.save(update_fields=["status", "resolved_at"])

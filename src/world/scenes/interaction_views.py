@@ -17,7 +17,7 @@ from rest_framework.serializers import BaseSerializer
 
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
-from world.magic.models import CharacterResonance, PoseEndorsement, SceneEntryEndorsement
+from world.magic.models import CharacterResonance, PoseEndorsement
 from world.relationships.reads import resolve_viewer_sheet
 from world.scenes.block_services import flag_blocked_contact_attempt, hidden_persona_ids_for_viewer
 from world.scenes.constants import (
@@ -51,6 +51,7 @@ from world.scenes.interaction_services import (
     mark_very_private,
     personas_for_characters,
     resolve_characters_by_name,
+    scene_entry_endorsements_for,
 )
 from world.scenes.models import (
     Interaction,
@@ -306,21 +307,19 @@ class InteractionViewSet(
         scene_id = self.request.query_params.get("scene")  # noqa: USE_FILTERSET
         entry_map: dict[int, list] = {}
         if scene_id:
-            rows = (
-                SceneEntryEndorsement.objects.filter(scene_id=scene_id)
-                .select_related("endorser_sheet", "resonance")
-                .prefetch_related(
-                    Prefetch(
-                        "endorser_sheet__personas",
-                        queryset=Persona.objects.filter(persona_type=PersonaType.PRIMARY),
-                        to_attr="cached_primary_persona",
-                    )
-                )
-            )
-            for r in rows:
-                entry_map.setdefault(r.endorsee_sheet_id, []).append(r)
+            entry_map = scene_entry_endorsements_for(int(scene_id))
         context["scene_entry_endorsements"] = entry_map
         return context
+
+    def retrieve(self, request: Request, *args: object, **kwargs: object) -> Response:
+        # One row. The refetch a live frame triggers names no ``?scene=`` (#4508), so the
+        # row's own scene says whose entrance endorsers to load. A comment, not a
+        # docstring: a docstring becomes the OpenAPI description and drifts api.d.ts.
+        instance = self.get_object()
+        context = self.get_serializer_context()
+        if instance.scene_id is not None and not request.query_params.get("scene"):  # noqa: USE_FILTERSET
+            context["scene_entry_endorsements"] = scene_entry_endorsements_for(instance.scene_id)
+        return Response(self.get_serializer_class()(instance, context=context).data)
 
     def get_queryset(self) -> QuerySet[Interaction]:
         # Deferred: world.combat imports world.scenes at module scope elsewhere;

@@ -21,12 +21,15 @@ import {
   getMarketSquares,
   getServiceOffers,
   type MarketSquare,
+  type ServiceOffer,
   type WareListing,
 } from './api';
+import { CommissionDialog } from './CommissionDialog';
 
 export function MarketPage() {
-  const { entry: activeEntry } = useBrowsingIdentity();
+  const { entry: activeEntry, name: myName } = useBrowsingIdentity();
   const characterId = activeEntry?.character_id ?? undefined;
+  const [commissioning, setCommissioning] = useState<ServiceOffer | null>(null);
 
   const { data: squares = [], isLoading } = useQuery({
     queryKey: ['market-squares'],
@@ -43,7 +46,7 @@ export function MarketPage() {
         <h1 className="theme-heading text-3xl font-bold">The Markets</h1>
         <p className="mt-2 text-muted-foreground">
           Materials and ready wares trade in the squares. Unfinished pieces are yours to name and
-          describe. For custom work, visit a crafter&apos;s shop.
+          describe. For custom work, commission a crafter at their shop.
         </p>
       </div>
 
@@ -67,15 +70,36 @@ export function MarketPage() {
                     <span className="font-medium">{offer.crafter_name}</span> -{' '}
                     {offer.recipe_kind.replace('_', ' ')}
                   </span>
-                  <span className="text-muted-foreground">
-                    {offer.fee}c · visit their shop to commission
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    {offer.fee}c
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!characterId}
+                      onClick={() => setCommissioning(offer)}
+                    >
+                      Commission
+                    </Button>
                   </span>
                 </li>
               ))}
             </ul>
           )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            A commission runs in the crafter&apos;s shop: you must be standing there to commission.
+          </p>
         </CardContent>
       </Card>
+
+      {commissioning && characterId != null && (
+        <CommissionDialog
+          open
+          onOpenChange={(next) => !next && setCommissioning(null)}
+          offer={commissioning}
+          characterId={characterId}
+          myName={myName ?? 'You'}
+        />
+      )}
     </div>
   );
 }

@@ -859,6 +859,7 @@ def announce_fired_perks(
             mode=interaction.mode,
             timestamp=interaction.timestamp.isoformat(),
             scene_id=interaction.scene_id,
+            interaction=interaction,
         )
         _broadcast_to_location(location, payload)
         # Telnet companion (CRITICAL review fix — ruling 1, HARD): deliver

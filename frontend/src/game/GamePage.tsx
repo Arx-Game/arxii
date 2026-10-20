@@ -390,16 +390,15 @@ function NpcPlayCards({ activeEntry, interactions, onPoseAs }: NpcPlayCardsProps
 interface GameCenterProps {
   sceneId?: string;
   accountId: number;
-  activeCharacter?: string | null;
   gameWindow: ComponentProps<typeof GameWindow>;
 }
 
-function GameCenter({ sceneId, accountId, activeCharacter, gameWindow }: GameCenterProps) {
+function GameCenter({ sceneId, accountId, gameWindow }: GameCenterProps) {
   return (
     <>
-      {sceneId && <ConsentPrompt sceneId={sceneId} viewerKey={activeCharacter ?? undefined} />}
+      {sceneId && <ConsentPrompt sceneId={sceneId} />}
       <GameWindow {...gameWindow} draftScopePrefix={`account:${accountId}`} />
-      {sceneId && <ActionPanel sceneId={sceneId} viewerKey={activeCharacter ?? undefined} />}
+      {sceneId && <ActionPanel sceneId={sceneId} />}
     </>
   );
 }
@@ -1113,12 +1112,7 @@ export function GamePage() {
           ) : undefined
         }
         center={
-          <GameCenter
-            sceneId={sceneId}
-            accountId={account.id}
-            activeCharacter={active}
-            gameWindow={gameWindowProps}
-          />
+          <GameCenter sceneId={sceneId} accountId={account.id} gameWindow={gameWindowProps} />
         }
         sidebar={
           <PlaySidebar

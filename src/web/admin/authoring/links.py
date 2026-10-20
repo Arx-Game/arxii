@@ -19,7 +19,8 @@ from world.combat.models import CreatureTemplate
 from world.conditions.models import ConditionStage
 from world.distinctions.models import Distinction
 from world.magic.services.soulfray import is_soulfray_stage
-from world.missions.models import MissionOptionOpponentLine
+from world.missions.constants import OptionKind
+from world.missions.models import MissionOption, MissionOptionOpponentLine
 from world.societies.models import Organization, Society
 from world.worship.models import WorshippedBeing
 
@@ -34,6 +35,7 @@ _BUILDER_ROUTES: tuple[tuple[type[Model], str], ...] = (
     (Society, "admin_faction_rules_society"),
     (MissionOptionOpponentLine, "admin_placement_mission"),
     (WorshippedBeing, "admin_being_service"),
+    (MissionOption, "admin_trial_builder"),
 )
 
 
@@ -50,12 +52,14 @@ def builder_url(obj: object) -> str:
     ``CreatureTemplate`` opens on the Standoff Profile Builder (#4354). An ``Organization``
     or ``Society`` opens on its Faction Rules page, and a mission option opponent line on
     its Placement page (#4361). A ``WorshippedBeing`` opens on the Being Service
-    builder (#4333).
+    builder (#4333). A CHECK ``MissionOption`` opens on the Trial builder (#4513).
     """
     if isinstance(obj, ConditionStage):
         if obj.pk and is_soulfray_stage(obj):
             return reverse("admin_soulfray_builder", args=[obj.pk])
         return ""
+    if isinstance(obj, MissionOption) and obj.option_kind != OptionKind.CHECK:
+        return ""  # a trial's routes are keyed by a check's outcome tiers
     for model, url_name in _BUILDER_ROUTES:
         if isinstance(obj, model):
             return reverse(url_name, args=[obj.pk]) if obj.pk else ""
@@ -80,6 +84,8 @@ def builder_label(obj: object) -> str:
         return "Edit its faction rules"
     if isinstance(obj, MissionOptionOpponentLine):
         return "Open the Placement page"
+    if isinstance(obj, MissionOption):
+        return "Open in Trial builder"
     return ""
 
 

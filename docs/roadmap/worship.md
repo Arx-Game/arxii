@@ -30,6 +30,25 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   (secretly serving the officiant's hidden god) leak consent-gated clues. Corpse
   gear routes through steal unless the dead player's friends list trusts the taker.
   Bounded abandonment via the hourly `ceremonies.auto_abandon` sweep.
+- **Meaningful items, slice 1 (#4500, phase 6a of #4462, 2026-10-20):** a sacrifice or ceremony
+  offering counts by what the item means to the one giving it up, never by price. Built: the
+  `item_meaning` reader (carried, gift, heirloom, own work, made by a tie), `set_item_holder`
+  / `held_since` / `holding_event`, `pair_tier`, the sacrifice check (eased per meaning
+  point, outcome sets the SACRIFICE award, weekly limit shared with ceremonies), soft-destroy
+  of given-up items with the purge sparing designs, `OfferingSignal` records, the GM's
+  steward-panel sacrifice detail and the pledge card credits. Removed: every price path
+  (`sacrifice_value_per_favor`, `offering_prestige_per_value`; the two ceremony numbers were
+  renamed per meaning point). Not built (slice 6b of #4462): worn pieces counting at
+  invocation, resonance fed, keepsakes, trophies, requested items.
+- **Meaningful items, slice 2 (#4512, the commission loop of #4462, 2026-10-20):** built: the
+  Commission Crafting form's Name, Description and permanent Dedicate to (designer credit only
+  when the commissioner writes text, never over someone else's words), making for someone and
+  working a held item in (`ItemLineage`, `craft create ... for= from=`), the designed-by-you,
+  made-for, made-from and shown signals in `item_meaning`, examine credits ("Made by X for Y.
+  Designed by Z. Facet work by W.", sources and destroyed pieces marked gone), the item admin's
+  Dedication, Lineage and meaning rail, the web `CommissionDialog` and the Made for and Worked
+  from fields on the crafting dialog. Still to build (slice 3 and 4 of #4462): worn pieces
+  counting at invocation with resonance fed, keepsakes, trophies, requested items.
 - **Worship rites & rewards (#3777, 2026-09-16):** tiered rites over the pantheon
   foundations (#3776). `RiteKind` (1 Devotional / 2 Demanding / 3 Perilous) is the shared
   catalog; each being instantiates its own `WorshipRite` (flavor, check type, one of its

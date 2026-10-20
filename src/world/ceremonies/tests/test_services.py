@@ -683,11 +683,11 @@ class CeremonyFlowTests(TestCase):
         return ceremony, sheet, dead
 
     def test_offering_soft_destroys_item_and_feeds_pool_and_devotion(self) -> None:
-        from world.items.factories import ItemInstanceFactory
+        from world.items.factories import meaningful_item_for
         from world.items.models import ItemInstance
 
         ceremony, officiant_sheet, _ = self._open_funeral()
-        instance = ItemInstanceFactory(template__value=10)
+        instance = meaningful_item_for(officiant_sheet, template__value=10)
         instance_pk = instance.pk
         record_offering(ceremony=ceremony, item_instances=[instance])
         # Soft-destroyed, not deleted: the item keeps its design (owner ruling, #4461).

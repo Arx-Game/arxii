@@ -2,6 +2,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { createSelector } from '@reduxjs/toolkit';
 import { fetchInteractions } from '../queries';
+import { sceneFeedQueryKey } from '../sceneFeedCache';
 import type { Interaction } from '../types';
 import { useAppSelector } from '@/store/hooks';
 import type { InteractionWsMetadata, InteractionWsPayload } from '@/hooks/types';
@@ -23,10 +24,13 @@ export function wsPayloadToInteraction(
     // it from the bounded body cache and older payloads fall back to content.
     line: ('line' in payload ? payload.line : undefined) ?? getNarrativeBody(payload)?.line,
     mode: payload.mode,
-    visibility: 'default',
+    visibility: payload.visibility ?? 'default',
     timestamp: payload.timestamp,
     scene: payload.scene_id,
-    reactions: [],
+    reactions: payload.reactions ?? [],
+    reaction_windows: payload.reaction_windows,
+    dramatic_moment_tags: payload.dramatic_moment_tags,
+    availability: payload.availability,
     is_favorited: false,
     place: payload.place_id,
     place_name: payload.place_name,
@@ -42,13 +46,14 @@ export function wsPayloadToInteraction(
       payload.attributed_companion_id != null
         ? { id: payload.attributed_companion_id, name: payload.attributed_companion_name ?? '' }
         : null,
-    // Endorsement fields are not present in WS payloads; initialise as empty.
-    pose_kind: 'standard',
-    endorsee_sheet_id: null,
-    endorsable_resonances: [],
-    pose_endorsers: [],
+    // The room-wide endorsement fields ride the frame (#4508); an older frame falls back
+    // to empty. The viewer's own (`my_*`, `entry_endorsed_by_me`) are never broadcast.
+    pose_kind: payload.pose_kind ?? 'standard',
+    endorsee_sheet_id: payload.endorsee_sheet_id ?? null,
+    endorsable_resonances: payload.endorsable_resonances ?? [],
+    pose_endorsers: payload.pose_endorsers ?? [],
     my_pose_endorsement: null,
-    entry_endorsers: [],
+    entry_endorsers: payload.entry_endorsers ?? [],
     entry_endorsed_by_me: false,
   };
 }
@@ -87,14 +92,11 @@ export function useSceneInteractions(sceneId: string | undefined, viewerKey?: st
     results: Interaction[];
     next?: string;
   }>({
-    queryKey: [
-      'scene-interactions',
-      accountId ?? 'anonymous',
-      sceneId ?? 'none',
-      queryViewerKey ?? 'all',
-      // Cursor pages are scoped to the authorized snapshot/filter identity.
-      'retained',
-    ],
+    queryKey: sceneFeedQueryKey({
+      sceneId: sceneId ?? 'none',
+      accountId,
+      viewerKey: queryViewerKey,
+    }),
     queryFn: ({ pageParam }) =>
       fetchInteractions(sceneId as string, pageParam as string | undefined),
     getNextPageParam: (lastPage) => {
@@ -122,8 +124,8 @@ export function useSceneInteractions(sceneId: string | undefined, viewerKey?: st
       .filter((ws) => !restIds.has(ws.id))
       .map(wsPayloadToInteraction);
 
-    // REST data is sorted by cursor pagination; WS data arrives chronologically (always newer).
-    // No sort needed — just append WS interactions after REST. (Fix #3)
+    // REST pages are newest-first and WS rows arrive chronologically; this order is not
+    // display order. Display order comes from the reader's timestamp sort (game/feedRows.ts).
     return [...restInteractions, ...newFromWs];
   }, [interactionsQuery.data?.pages, wsInteractions]);
 

@@ -70,7 +70,10 @@ export interface ContributorRow {
 export interface OfferingRow {
   item_name: string;
   offered_by: string;
-  item_value: number;
+  /** Sum of the item's meaning signals when it was given up; never its price (#4500). */
+  meaning_points: number;
+  signals: string[];
+  outcome_name: string;
   amount: number | null;
   /** Null for a sacrifice at a shrine or temple outside a ceremony (#4333). */
   ceremony_id: number | null;

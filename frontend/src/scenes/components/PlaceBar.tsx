@@ -7,6 +7,7 @@ import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { fetchPlaces, joinPlace, leavePlace } from '../actionQueries';
 import type { Place } from '../actionTypes';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 interface Props {
   sceneId: string;
@@ -48,11 +49,8 @@ export function PlaceBar({
     mutationFn: (placeId: number) => joinPlace(sceneId, placeId),
     onSuccess: (_data, placeId) => {
       if (!controlled) setLocalPlaceId(placeId);
-      // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
-      // real key is 'scene-interactions' (useSceneInteractions).
       queryClient.invalidateQueries({
-        queryKey: ['scene-interactions', sceneId, ...(character ? [character] : [])],
-        exact: true,
+        queryKey: sceneFeedSceneKey(sceneId),
       });
     },
   });
@@ -61,11 +59,8 @@ export function PlaceBar({
     mutationFn: (placeId: number) => leavePlace(sceneId, placeId),
     onSuccess: () => {
       if (!controlled) setLocalPlaceId(null);
-      // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
-      // real key is 'scene-interactions' (useSceneInteractions).
       queryClient.invalidateQueries({
-        queryKey: ['scene-interactions', sceneId, ...(character ? [character] : [])],
-        exact: true,
+        queryKey: sceneFeedSceneKey(sceneId),
       });
     },
   });

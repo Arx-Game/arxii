@@ -81,6 +81,10 @@ kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave 
   frame) clears it.
 - **`handleRoomStatePayload.ts`**: Updates room state from server messages
 - **`handleScenePayload.ts`**: Processes scene-related updates
+- **`handleInteractionChangedPayload.ts`** (#4508): the `interaction_changed` frame, ids only.
+  It calls `refreshSceneFeedRow` (`scenes/sceneFeedCache.ts`) to refetch that pose for this
+  viewer. A 403 or 404 is quiet (the viewer may not see the row); any other failure is reported.
+  The live `interaction` frame also refreshes an entrance that already has endorsers.
 
 ### Utility Hooks
 

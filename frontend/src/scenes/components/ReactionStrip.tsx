@@ -15,6 +15,7 @@ import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { reactToWindow } from '../queries';
 import type { ReactionWindowPayload } from '../types';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 interface ReactionStripProps {
   windows: ReactionWindowPayload[];
@@ -40,7 +41,7 @@ export function ReactionStrip({ windows, sceneId }: ReactionStripProps) {
   const mutation = useMutation({
     mutationFn: ({ windowId, choice }: { windowId: number; choice: string }) =>
       reactToWindow(windowId, { persona_id: personaId as number, choice }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }),
   });
   return (
     <div data-testid="reaction-strip" className="mt-1 flex flex-col gap-1">

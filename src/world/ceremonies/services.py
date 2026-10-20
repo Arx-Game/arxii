@@ -25,6 +25,7 @@ from world.ceremonies.models import (
     CeremonyOffering,
     CeremonySpeech,
     CeremonyType,
+    OfferingSignal,
     get_ceremony_config,
 )
 
@@ -38,11 +39,13 @@ if TYPE_CHECKING:
     )
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
+    from world.items.types import ItemMeaning
     from world.magic.models import Facet
     from world.scenes.models import Persona
     from world.societies.models import PhilosophicalArchetype
+    from world.traits.models import CheckOutcome
     from world.worship.models import WorshipGrant, WorshippedBeing, WorshipRite
-    from world.worship.types import SacrificeOutcome
+    from world.worship.types import SacrificedItem, SacrificeOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -298,66 +301,103 @@ def _create_open_side_offers(ceremony: Ceremony, officiant_sheet: "CharacterShee
 
 
 @dataclass(frozen=True)
-class OfferedItem:
-    """One item given up to a being, read before it was destroyed (#4333 slice 2).
+class ItemReading:
+    """What an item means to the one giving it up, read before it is destroyed (#4500).
 
-    ``percent`` is the favored-facet multiplier that applied (100 for none) and
-    ``facet`` the favored facet it carried, if any.
+    ``percent`` is the favored-facet multiplier that applied (100 for none) and ``facet``
+    the favored facet it carried, if any. ``effective_points`` is the meaning points times
+    that multiplier: they ease a sacrifice check and set a ceremony offering's pool grant
+    and devotion. Nothing here reads the item's price.
+    """
+
+    meaning: "ItemMeaning"
+    percent: int
+    facet: "Facet | None"
+
+    @property
+    def effective_points(self) -> int:
+        return self.meaning.points * self.percent // 100
+
+
+@dataclass(frozen=True)
+class OfferedItem:
+    """One item given up to a being (#4333 slice 2, #4500).
+
+    ``value`` and ``legend_value`` are snapshots for the record; only ``legend_value`` is
+    ever read (ceremony prestige). ``counted`` is True when the item had meaning points and
+    a place in the week's limit.
     """
 
     name: str
     value: int
     legend_value: int
-    percent: int
-    facet: "Facet | None"
+    reading: ItemReading
+    counted: bool
     worship_grant: "WorshipGrant | None"
 
 
-def give_up_item(
+def read_item(
+    instance: "ItemInstance", sheet: "CharacterSheet", *, facet: "Facet | None"
+) -> ItemReading:
+    """The item's meaning points for ``sheet``, with the favored-facet multiplier."""
+    from world.items.services.meaning import item_meaning  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+    percent = get_ceremony_config().offering_favored_facet_multiplier_percent if facet else 100
+    meaning = item_meaning(instance, sheet, config=get_devotion_config())
+    return ItemReading(meaning=meaning, percent=percent, facet=facet)
+
+
+def give_up_item(  # noqa: PLR0913 - the item, the being and what it was read as are co-equal
     instance: "ItemInstance",
     being: "WorshippedBeing",
     *,
-    facet: "Facet | None",
+    reading: ItemReading,
+    counted: bool,
     granted_by: "CharacterSheet",
     reason: str,
 ) -> OfferedItem:
-    """Take an offered item out of play and feed ``being``'s pool from its value.
+    """Take an offered item out of play and, when it counts, feed ``being``'s pool.
 
-    The item is soft-destroyed (``destroyed_at``), not deleted.
-
-    The shared step of a ceremony offering and a shrine sacrifice (#3777, #4333):
-    an item carrying one of the being's favored facets multiplies the pool grant
-    by the configured ``offering_favored_facet_multiplier_percent``.
+    The shared step of a ceremony offering and a shrine sacrifice (#3777, #4333, #4500).
+    The item is soft-destroyed, never deleted (owner ruling 2026-10-18, #4461): it keeps
+    its design and the record that it was crafted, and an item that fed its wearer outfit
+    resonance cannot be deleted without losing that history. ``preserve=True`` is passed
+    explicitly because a given-up item keeps its design whatever ``differs_from_template``
+    says; a bare throwaway is soft-deleted too and the purge removes it after its grace
+    period. A counted item grants ``effective_points x offering_pool_per_point`` to the
+    pool whatever the roll; an item with no meaning points, or past the week's limit,
+    feeds nothing. Its price is never read.
     """
-    from world.items.constants import OwnershipEventType  # noqa: PLC0415
     from world.items.services.usage import destroy_consumed_item_instance  # noqa: PLC0415
     from world.worship.services import grant_worship  # noqa: PLC0415
 
     config = get_ceremony_config()
-    percent = config.offering_favored_facet_multiplier_percent if facet is not None else 100
     value = instance.template.value
     legend_value = instance.legend_value
     name = str(instance)
-    # Soft-destroy, never hard-delete (owner ruling 2026-10-18, #4461): a given-up item
-    # keeps its design and the record that it was crafted, and an item that fed its
-    # wearer outfit resonance cannot be deleted without losing that history.
-    destroy_consumed_item_instance(
-        instance,
-        preserve=True,
-        note=f"Given up to {being}: {reason}",
-        event_type=OwnershipEventType.TRANSFERRED,
-    )
+    destroy_consumed_item_instance(instance, preserve=True, note=f"Given up to {being}: {reason}")
     grant = None
-    credited = value * config.offering_resonance_per_value * percent // 100
+    credited = reading.effective_points * config.offering_pool_per_point if counted else 0
     if credited > 0:
         grant = grant_worship(being, credited, granted_by=granted_by, reason=reason)
     return OfferedItem(
         name=name,
         value=value,
         legend_value=legend_value,
-        percent=percent,
-        facet=facet,
+        reading=reading,
+        counted=counted,
         worship_grant=grant,
+    )
+
+
+def write_offering_signals(offering: CeremonyOffering, reading: ItemReading) -> None:
+    """Snapshot the item's meaning signals onto its offering record (#4500)."""
+    OfferingSignal.objects.bulk_create(
+        OfferingSignal(
+            offering=offering, kind=signal.kind, points=signal.points, detail=signal.detail
+        )
+        for signal in reading.meaning.signals
     )
 
 
@@ -370,23 +410,38 @@ def record_offering(
     devotion follows the being they *believe* they served (presented when the
     rite is twisted — here the offerer is the officiant, who always knows the
     truth, so their devotion tracks the true being).
+
+    #4500: an item counts by what it means to the officiant, never its price. Its meaning
+    points (doubled for a favored facet) set the pool grant and the officiant's devotion
+    (``devotion_per_offering_point``); an item with no points, or past the week's limit
+    shared with shrine sacrifices, is given up for nothing. A ceremony offering is not
+    rolled separately: the ceremony's own rite roll is its check.
     """
     _require_open(ceremony)
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
+    from world.worship.sacrifice_services import sacrifice_slots_left  # noqa: PLC0415
     from world.worship.services import bump_devotion  # noqa: PLC0415
     from world.worship.types import FavorSource  # noqa: PLC0415
 
     config = get_ceremony_config()
     officiant_sheet = ceremony.officiant.character_sheet
+    week = get_current_game_week()
+    slots_left = sacrifice_slots_left(officiant_sheet, ceremony.being, game_week=week)
     facets = favored_facets_by_item(ceremony.being, item_instances)
     offerings: list[CeremonyOffering] = []
     for instance in item_instances:
         # #3777: an item carrying a facet the TRUE being favors pleases it more;
-        # the multiplier scales the pool grant and the offerer's devotion alike.
+        # the multiplier scales its meaning points.
+        reading = read_item(instance, officiant_sheet, facet=facets.get(instance.pk))
+        counted = reading.effective_points > 0 and slots_left > 0
+        if counted:
+            slots_left -= 1
         offered = give_up_item(
             instance,
             ceremony.being,
-            facet=facets.get(instance.pk),
+            reading=reading,
+            counted=counted,
             granted_by=officiant_sheet,
             reason=f"ceremony:{ceremony.pk}",
         )
@@ -397,15 +452,19 @@ def record_offering(
             item_legend_value=offered.legend_value,
             worship_grant=offered.worship_grant,
             offered_by=ceremony.officiant,
-            facet=offered.facet,
+            facet=reading.facet,
+            game_week=week,
+            counted=counted,
         )
+        write_offering_signals(offering, reading)
         offerings.append(offering)
-        bump_devotion(
-            officiant_sheet,
-            ceremony.being,
-            config.devotion_per_offering * offered.percent // 100,
-            source=FavorSource(kind=PledgeCreditSource.CEREMONY_OFFERING, offering=offering),
-        )
+        if counted:
+            bump_devotion(
+                officiant_sheet,
+                ceremony.being,
+                reading.effective_points * config.devotion_per_offering_point,
+                source=FavorSource(kind=PledgeCreditSource.CEREMONY_OFFERING, offering=offering),
+            )
     return offerings
 
 
@@ -542,15 +601,10 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
         25, 100 + quality_level * config.quality_multiplier_percent_per_level
     )  # percent; floor keeps a botched rite from zeroing the honors (PLACEHOLDER)
 
-    offering_value_total = sum(o.item_value for o in ceremony.offerings.all())
     offering_legend_total = sum(o.item_legend_value for o in ceremony.offerings.all())
     honorees = list(ceremony.honorees.select_related("honoree_sheet"))
     speeches = list(ceremony.speeches.all())
-    honoree_base = (
-        config.base_honoree_prestige
-        + offering_value_total * config.offering_prestige_per_value
-        + offering_legend_total
-    )
+    honoree_base = config.base_honoree_prestige + offering_legend_total
     total_awarded = 0
     for honoree in honorees:
         amount = _award_honoree(
@@ -1165,34 +1219,75 @@ def _sacrifice_site(
     return sites[0].being, sites[0].site
 
 
+def _pay_sacrifice(
+    sheet: "CharacterSheet",
+    target: "WorshippedBeing",
+    offering: CeremonyOffering,
+    *,
+    counted: bool,
+    outcome: "CheckOutcome | None",
+) -> "SacrificedItem":
+    """Pay a sacrifice's favor: the SACRIFICE award for its roll, through ``bump_devotion``
+    (the earning rate, and credit to an open pledge). A sacrifice that did not count, or
+    whose tier pays nothing, writes no favor."""
+    from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
+    from world.worship.pledge_services import sacrifice_calculation  # noqa: PLC0415
+    from world.worship.sacrifice_services import sacrifice_award  # noqa: PLC0415
+    from world.worship.services import bump_devotion  # noqa: PLC0415
+    from world.worship.types import FavorSource, SacrificedItem  # noqa: PLC0415
+
+    base = sacrifice_award(outcome) if counted else 0
+    credited, rate = 0, 100
+    if base > 0:
+        bump = bump_devotion(
+            sheet,
+            target,
+            base,
+            source=FavorSource(kind=PledgeCreditSource.SACRIFICE, offering=offering),
+        )
+        credited, rate = bump.credited, bump.earning_rate_percent
+    return SacrificedItem(
+        name=offering.item_name,
+        credited=credited,
+        calculation=sacrifice_calculation(offering, base=base, rate=rate, credited=credited),
+    )
+
+
 def sacrifice_items(
     sheet: "CharacterSheet",
     item_instances: "list[ItemInstance]",
     *,
     being: "WorshippedBeing | None" = None,
 ) -> "SacrificeOutcome":
-    """Give items up to a being at its shrine or temple, outside a ceremony.
+    """Give items up to a being at its shrine or temple, outside a ceremony (#4500).
 
-    Each item is destroyed through ``give_up_item`` (the step ceremony offerings
-    share), feeding the being's pool. Base favor per item is its value divided
-    by ``DevotionConfig.sacrifice_value_per_favor``, at least 1, multiplied by
-    the favored-facet multiplier when it carries one of the being's favored
-    facets; ``bump_devotion`` then applies the earning rate and credits an open
-    pledge to the being. Each item writes a ``CeremonyOffering`` with ``being``
-    set, the open pledge (if it is to this being) and the recorded facet, and
-    one room line: "<name> sacrifices <item> at <being>'s shrine."
+    A sacrifice is a check eased by what each item means to the one giving it up, never
+    by its price. Each item is read once (``read_item``: meaning points, doubled when it
+    carries a facet the being favors). An item with no points is given up with no roll, no
+    favor and no pool grant, and does not use the week's limit
+    (``DevotionConfig.sacrifices_per_week``, shared with ceremonies; a Critical Failure
+    closes the being's hand to the character for the week). Each item with points and a
+    place in the limit rolls the invocation check type, eased by its points; the outcome
+    tier selects the SACRIFICE ``FavorOutcomeAward`` that is the base favor, and
+    ``bump_devotion`` then applies the earning rate and credits an open pledge to the
+    being. A counted item also feeds the pool (``give_up_item``), whatever the roll. Each
+    item writes a ``CeremonyOffering`` with ``being`` set, the open pledge (if it is to
+    this being), the recorded facet, the roll and the item's signals, and one room line:
+    "<name> sacrifices <item> at <being>'s shrine."
     """
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-    from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
     from world.worship.exceptions import SacrificeRefused  # noqa: PLC0415
-    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
-    from world.worship.pledge_services import (  # noqa: PLC0415
-        broadcast_room_line,
-        multiplier_label,
-        open_pledge_for,
+    from world.worship.invocation_services import MSG_NOT_CONFIGURED  # noqa: PLC0415
+    from world.worship.pledge_services import broadcast_room_line, open_pledge_for  # noqa: PLC0415
+    from world.worship.sacrifice_services import (  # noqa: PLC0415
+        is_botch,
+        roll_sacrifice,
+        sacrifice_configured,
+        sacrifice_difficulty,
+        sacrifice_slots_left,
     )
-    from world.worship.services import bump_devotion  # noqa: PLC0415
-    from world.worship.types import FavorSource, SacrificedItem, SacrificeOutcome  # noqa: PLC0415
+    from world.worship.types import SacrificedItem, SacrificeOutcome  # noqa: PLC0415
 
     if not item_instances:
         msg = "Sacrifice what?"
@@ -1206,49 +1301,56 @@ def sacrifice_items(
             msg = f"You are not carrying {instance}."
             raise SacrificeRefused(msg)
     persona = active_persona_for_sheet(sheet)
-    per_favor = max(get_devotion_config().sacrifice_value_per_favor, 1)
     details = open_pledge_for(sheet)
     if details is not None and details.pledge.being_id != target.pk:
         details = None
     facets = favored_facets_by_item(target, item_instances)
+    # Read every item first: the holder is cleared when one is destroyed, and a being
+    # with no check type configured must refuse before anything is given up.
+    readings = [read_item(i, sheet, facet=facets.get(i.pk)) for i in item_instances]
+    if any(r.effective_points > 0 for r in readings) and not sacrifice_configured(target):
+        raise SacrificeRefused(MSG_NOT_CONFIGURED)
+    week = get_current_game_week()
+    slots_left = sacrifice_slots_left(sheet, target, game_week=week)
     sacrificed: list[SacrificedItem] = []
     with transaction.atomic():
-        for instance in item_instances:
+        for instance, reading in zip(item_instances, readings, strict=True):
+            counted = reading.effective_points > 0 and slots_left > 0
+            outcome = None
+            difficulty = None
+            if counted:
+                slots_left -= 1
+                difficulty = sacrifice_difficulty(sheet, target, reading.effective_points)
+                outcome = roll_sacrifice(sheet, target, difficulty).outcome
+                if is_botch(outcome):
+                    slots_left = 0
+            where = f"at {target.name}'s {site}" if site else f"to {target.name}"
             offered = give_up_item(
                 instance,
                 target,
-                facet=facets.get(instance.pk),
+                reading=reading,
+                counted=counted,
                 granted_by=sheet,
                 reason=f"sacrifice:{site}",
             )
             offering = CeremonyOffering.objects.create(
                 being=target,
                 pledge_details=details,
-                facet=offered.facet,
+                facet=reading.facet,
                 item_name=offered.name,
                 item_value=offered.value,
                 item_legend_value=offered.legend_value,
                 worship_grant=offered.worship_grant,
                 offered_by=persona,
+                outcome_tier=outcome,
+                difficulty_points=difficulty,
+                game_week=week,
+                counted=counted,
             )
-            raw = max(offered.value // per_favor, 1)
-            base = raw * offered.percent // 100
-            bump = bump_devotion(
-                sheet,
-                target,
-                base,
-                source=FavorSource(kind=PledgeCreditSource.SACRIFICE, offering=offering),
-            )
-            calculation = f"Value {offered.value}: {raw} base"
-            if offered.facet is not None:
-                calculation += (
-                    f", {multiplier_label(offered.percent)} {offered.facet.name} = {base}"
-                )
-            calculation += f", at {bump.earning_rate_percent}% = +{bump.credited}"
+            write_offering_signals(offering, reading)
             sacrificed.append(
-                SacrificedItem(name=offered.name, credited=bump.credited, calculation=calculation)
+                _pay_sacrifice(sheet, target, offering, counted=counted, outcome=outcome)
             )
-            where = f"at {target.name}'s {site}" if site else f"to {target.name}"
             broadcast_room_line(
                 persona,
                 f"{persona.name} sacrifices {offered.name} {where}.",

@@ -25,6 +25,7 @@ from world.items.org_vault_models import (
     VaultHolding,
     VaultTransit,
 )
+from world.items.services.holding import set_item_holder
 from world.items.services.materialize import materialize_item_game_object
 from world.items.services.usage import dematerialize_item_instance, release_item_for_custody
 
@@ -319,8 +320,7 @@ def withdraw_item_from_vault(
 
     recipient = to_persona or persona
     holding.delete()
-    item.holder_character_sheet = recipient.character_sheet
-    item.save(update_fields=["holder_character_sheet"])
+    set_item_holder(item, recipient.character_sheet)
     if item.game_object is None:
         # The vault kept the row only; the recipient's inventory is object-based.
         materialize_item_game_object(item, recipient.character_sheet)

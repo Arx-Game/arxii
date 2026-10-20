@@ -693,7 +693,9 @@ class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         EffectType.LAUNCH_FLOW: [("flow_definition", "flow_definition_id")],
         EffectType.GRANT_CODEX: [("codex_entry", "codex_entry_id")],
         EffectType.GRANT_SECRET: [("secret", "secret_id")],
-        EffectType.MAGICAL_SCARS: [("condition_template", "condition_template_id")],
+        # MAGICAL_SCARS names no template: the handler reads only the severity (the scar's
+        # tier); a template here was left over from before it queued a PendingAlteration
+        # (#4513, so the Trial builder's scar cost and cosmetic reward need no stand-in row).
         EffectType.CREATE_POSITION: [("position_name", "position_name")],
         EffectType.SEVER_EDGE: [
             ("position_name", "position_name"),

@@ -738,6 +738,7 @@ def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outco
             mode=source.mode,
             timestamp=source.timestamp.isoformat(),
             scene_id=source.scene_id,
+            interaction=source,
         )
 
     if not concealed:

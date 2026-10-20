@@ -296,7 +296,11 @@ def _worship_tab(being: WorshippedBeing) -> dict[str, Any]:
         {
             "item_name": offering.item_name,
             "offered_by": offering.offered_by.name if offering.offered_by_id else "",
-            "item_value": offering.item_value,
+            "meaning_points": sum(signal.points for signal in offering.signals.all()),
+            "signals": [
+                f"{signal.get_kind_display()} {signal.points}" for signal in offering.signals.all()
+            ],
+            "outcome_name": offering.outcome_tier.name if offering.outcome_tier_id else "",
             "amount": offering.worship_grant.amount if offering.worship_grant_id else None,
             "ceremony_id": offering.ceremony_id,
             "when": offering.worship_grant.created_at if offering.worship_grant_id else None,
@@ -304,7 +308,9 @@ def _worship_tab(being: WorshippedBeing) -> dict[str, Any]:
         # A ceremony offering reaches the being through its ceremony; a shrine
         # sacrifice (#4333) names the being itself.
         for offering in CeremonyOffering.objects.filter(Q(ceremony__being=being) | Q(being=being))
-        .select_related("offered_by", "worship_grant")
+        .select_related("offered_by", "worship_grant", "outcome_tier")
+        # Read back as offering.signals.all() below, so a plain prefetch.
+        .prefetch_related("signals")  # noqa: PREFETCH_STRING
         .order_by("-pk")[:TAB_ROWS]
     ]
     most_devoted = [

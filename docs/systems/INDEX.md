@@ -2901,15 +2901,19 @@ hostile floor refuses service outright.
 - **Models:** `MarketSquare`, `MarketStall` (host-org cuts,
   `shopkeeper_persona`), `StockListing` (`min_regard`), `WareListing`,
   `FinishingPass`, `CraftingServiceOffer` (`min_regard`), `MarketSale`;
-  `ItemInstance.designer_*` pair
+  `ItemInstance.designer_*` pair (stamped only when that character writes
+  text, #4512), `ItemInstance.dedicated_*` (who a piece was made for, permanent),
+  `ItemLineage` (what a piece was worked from)
 - **Services:** `world.items.market.services` — purchase_stock/list_ware/
   purchase_ware/finish_ware/set_service_offer/run_service_craft (offering
   crafter as skill source, shop-anchored, regard-gated + regard-adjusted
-  price), dual_provenance_line, `_shopkeeper_regard`/`_regard_adjusted_price`/
+  price; the buyer may write name, description and a dedication, #4512; the
+  words and dedication rules live in `world.items.services.dedication` /
+  `lineage`, the credits in `crafted_display.crafted_provenance_line`), dual_provenance_line, `_shopkeeper_regard`/`_regard_adjusted_price`/
   `_check_regard_gate` (`world.items.market.constants` bands/floor)
 - **Surfaces:** 6 `market_*` REGISTRY actions; `/api/items/market-squares/`
   + `/service-offers/` (read-only; directory advertises, execution requires
-  visiting; regard-gated rows hidden per-viewer); web `/market`; telnet
+  visiting; regard-gated rows hidden per-viewer); web `/market` (`CommissionDialog`); telnet
   `market` namespace; seeds cluster `market`
 - **Source:** `src/world/items/market/`
 - **Details:** [market.md](market.md)
@@ -5220,6 +5224,13 @@ state is node position + snapshots + already-applied consequences, never a scrat
   option's routes carry consequences with `GRANT_CODEX` (`grants_known`), `TECHNIQUE_TRAINING` and
   a cost effect. See Mechanics' "Added in #4501" and `docs/systems/checks.md`; the save rules are
   `world/checks/trial_rules.py`. Missions charge no action points yet, so a trial has no AP cost.
+  **Authoring page (#4513):** `web/admin/trial_builder/` (`/admin/_trial_builder/<option>/`, superuser):
+  `state.py` reads an option's routes back per outcome tier, `proposal.py` builds unsaved
+  `Consequence`/`ConsequenceEffect` rows and asks slice 1's rules (no second copy), `live.py` is the
+  rail, `save.py` writes routes + consequences + effects in one transaction (credited to the
+  operator's contributor), `views.py` also serves the live check (`.../check/`, writes nothing),
+  `.../delete/` and an index. A consequence another row also uses is shown read-only. A
+  `MAGICAL_SCARS` effect no longer needs a condition template (the handler reads only severity).
 - **Models:** `MissionTemplate` (authored graph: entry node + availability metadata — level
   band, risk tier, draw weight, visibility) → `MissionNode` (`track_successes`/
   `track_failures`/`track_success_target`/`track_failure_target`/`track_success_beat_outcome`/
@@ -9277,13 +9288,16 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `PledgeDetails` (the PLEDGE `Project`'s sidecar: sheet, pledge, prayer, closing
   performance, close attempts), `PledgeCredit` (one favor credit with base, earning rate,
   credited and its deed / sacrifice / rite), `DevotionConfig` deed percents, weekly deed cap
-  and sacrifice value per favor, `CeremonyOffering.being`/`pledge_details`/`facet` (a
-  sacrifice outside a ceremony). Services (`worship/pledge_services.py`): `take_pledge`,
+  and the sacrifice-by-meaning numbers (#4500: carry gate, ease per point, sacrifices per
+  week), `CeremonyOffering.being`/`pledge_details`/`facet` (a sacrifice outside a ceremony)
+  with `outcome_tier`/`game_week`/`counted` and its `OfferingSignal` rows. Services (`worship/pledge_services.py`): `take_pledge`,
   `record_pledge_credit` (from `bump_devotion`: progress is favor), `credit_pledge_deed`
   (from `grant_resonance`; passive sources skipped via `PASSIVE_DEED_SOURCES`), `close_pledge` (one retry after a failed first close; atomic
   RESOLVING + `resolve_project`), `resolve_pledge_project` (CLOSING award, or on a lapse the
   Partial Success award at half the target), `service_terms`, `pledge_card`,
-  `holy_sites_here`; `ceremonies.services.sacrifice_items` / `give_up_item`;
+  `holy_sites_here`; `ceremonies.services.sacrifice_items` / `give_up_item` / `read_item`
+  and `worship/sacrifice_services.py` (the sacrifice check, award and weekly limit; items
+  never pay by price, ADR-4462);
   `perform_worship_rite(..., pay_award=False)`. Actions `pledge_take`, `pledge_close`,
   `sacrifice`; API `pledges/`, `pledge-cards/`, `beings/{id}/service-terms/`,
   `beings/holy-site/`; telnet `pledge`, `pledge/close`, `sacrifice`; admin Being Service
@@ -9377,9 +9391,10 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   PENDING/ACCEPTED/DECLINED + `is_sincere`, mirrors `SeanceManifestationOffer`).
 - **Ceremony services**: `open_ceremony` (twisted-rite being/presented mapping; validates
   honoree count/liveness per type — CONVERSION needs exactly one, the convert),
-  `record_offering` (pool → TRUE being; devotion follows belief; an item carrying a facet the
-  TRUE being favors is credited at `CeremonyConfig.offering_favored_facet_multiplier_percent`
-  on grant and devotion alike, #3777), `record_speech`
+  `record_offering` (pool → TRUE being; devotion follows belief; an item counts by its meaning
+  points, never its price, within the weekly limit it shares with shrine sacrifices; one
+  carrying a facet the TRUE being favors has its points multiplied by
+  `CeremonyConfig.offering_favored_facet_multiplier_percent`, #3777, #4500), `record_speech`
   (Performance/Oratory), `finish_ceremony` (Rites + tradition-spec quality roll; a RITE
   ceremony pays its tier 3 rite award off that roll through `apply_rite_award`, #3777; honoree deeds
   via `create_solo_deed` — `_mint_ceremony_deed` takes optional `archetypes`/`scene` kwargs,

@@ -248,7 +248,33 @@ class RunWithAccentsTests(TestCase):
 
         assert isinstance(result.row, ItemInstance)
         self.assertEqual(result.row.crafter_persona_display, persona)
+        # No name or description was written, so nobody is credited as designer (#4512).
+        self.assertIsNone(result.row.designer_persona_display)
+        self.assertIsNone(result.row.designer_character_sheet)
+
+    def test_a_created_item_with_text_credits_its_maker_as_designer(self) -> None:
+        from world.items.factories import CraftingRecipeFactory
+
+        persona = self.sheet.primary_persona
+        template = ItemTemplateFactory(is_craftable=True)
+        CraftingRecipeFactory(
+            kind=CraftingRecipeKind.ITEM_CREATE,
+            output_item_template=template,
+            requires_station=False,
+            check_type=self.recipe.check_type,
+            skill_trait=self.recipe.skill_trait,
+            min_success_level=1,
+        )
+        with force_check_outcome(CheckOutcomeFactory(name="AccOkText", success_level=3)):
+            result = run_crafting_recipe(
+                kind=CraftingRecipeKind.ITEM_CREATE,
+                crafter_account=self.account,
+                crafter_character=self.character,
+                output_overrides={"output_template": template, "custom_name": "Fang"},
+            )
+
         self.assertEqual(result.row.designer_persona_display, persona)
+        self.assertEqual(result.row.designer_character_sheet, self.sheet)
 
 
 class CraftedProvenanceLineTests(TestCase):
@@ -300,7 +326,7 @@ class CraftedProvenanceLineTests(TestCase):
         self.item.save(update_fields=["crafter_persona_display", "designer_persona_display"])
         line = crafted_provenance_line(self.item)
         assert line is not None
-        self.assertIn(f"Crafted by {maker.name}, designed by {designer.name}.", line)
+        self.assertIn(f"Made by {maker.name}. Designed by {designer.name}.", line)
 
     def test_uncrafted_item_returns_none(self) -> None:
         from world.items.services.crafted_display import crafted_provenance_line

@@ -13,6 +13,7 @@ from django.db.models import F, IntegerField, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from web.webclient.message_types import WebsocketMessageType
 from world.scenes.block_services import social_control_excluded_target_ids
 from world.scenes.constants import (
     InteractionMode,
@@ -37,7 +38,12 @@ from world.scenes.thread_services import (
     thread_anchor_ids,
     thread_root_id,
 )
-from world.scenes.types import InteractionPayload, PersonaPayload, ReplyParentPayload
+from world.scenes.types import (
+    FeedFieldsPayload,
+    InteractionPayload,
+    PersonaPayload,
+    ReplyParentPayload,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -46,7 +52,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.companions.models import Companion
-    from world.magic.models import FuryTier
+    from world.magic.models import FuryTier, SceneEntryEndorsement
     from world.scenes.models import SceneRound
     from world.scenes.types import NarratedEventPayload
     from world.species.models import Language
@@ -754,6 +760,8 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     attributed_companion_name: str | None = None,
     reply_to: ReplyParentPayload | None = None,
     narrates: NarratedEventPayload | None = None,
+    interaction: Interaction | None = None,
+    scene: Scene | None = None,
 ) -> InteractionPayload:
     """Build a structured interaction payload for WebSocket delivery.
 
@@ -763,7 +771,14 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     cannot have a parent (combat outcomes, companion emotes, tavern games, GM
     adjudications, ephemeral pushes); ``push_interaction`` is the one builder that
     resolves it. See ``_reply_parent_payload`` for the privacy gate.
+
+    ``interaction`` (#4508) is the persisted row, when there is one: the room-wide feed
+    fields (``pose_kind``, endorsements, tags, reactions...) are read off it by
+    ``_feed_fields_payload``. Without a row they take the defaults a bare row would get,
+    with ``scene`` (the ephemeral pusher has it in hand) deciding ``conversation`` and
+    ``availability``.
     """
+    feed = _feed_fields_payload(interaction, scene_id=scene_id, scene=scene)
     payload = InteractionPayload(
         id=interaction_id,
         persona=PersonaPayload(
@@ -789,9 +804,100 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         reply_to=reply_to,
         narrates=narrates,
         action_links=[],
+        visibility=feed["visibility"],
+        pose_kind=feed["pose_kind"],
+        endorsee_sheet_id=feed["endorsee_sheet_id"],
+        endorsable_resonances=feed["endorsable_resonances"],
+        conversation=feed["conversation"],
+        availability=feed["availability"],
+        pose_endorsers=feed["pose_endorsers"],
+        entry_endorsers=feed["entry_endorsers"],
+        reactions=feed["reactions"],
+        reaction_windows=feed["reaction_windows"],
+        dramatic_moment_tags=feed["dramatic_moment_tags"],
     )
     payload["line"] = _line_for(payload, content)
     return payload
+
+
+def scene_entry_endorsements_for(scene: Scene | int) -> dict[int, list[SceneEntryEndorsement]]:
+    """A scene's entry endorsements keyed by the endorsee's sheet id (#1138).
+
+    The one lookup the REST feed's serializer context and the live push both read, so
+    ``entry_endorsers`` is the same list on either path. Each row has its endorser's
+    primary persona prefetched as ``cached_primary_persona``.
+    """
+    from django.db.models import Prefetch  # noqa: PLC0415
+
+    from world.magic.models import SceneEntryEndorsement  # noqa: PLC0415
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    rows = (
+        SceneEntryEndorsement.objects.filter(scene=scene)
+        .select_related("endorser_sheet", "resonance")
+        .prefetch_related(
+            Prefetch(
+                "endorser_sheet__personas",
+                queryset=Persona.objects.filter(persona_type=PersonaType.PRIMARY),
+                to_attr="cached_primary_persona",
+            )
+        )
+    )
+    by_endorsee: dict[int, list[SceneEntryEndorsement]] = {}
+    for row in rows:
+        by_endorsee.setdefault(row.endorsee_sheet_id, []).append(row)
+    return by_endorsee
+
+
+def _feed_fields_payload(
+    interaction: Interaction | None, *, scene_id: int | None, scene: Scene | None
+) -> FeedFieldsPayload:
+    """The room-wide REST feed fields for a live frame (#4508).
+
+    Runs ``InteractionListSerializer``'s own field methods on the row with a context
+    that has no viewer, so the shapes cannot drift from the REST feed and a per-viewer
+    sub-field (``reacted``, ``my_reaction``) comes out false or null. One consequence
+    of "no viewer": ``endorsee_sheet_id`` and ``dramatic_moment_tags[].character_sheet_id``
+    follow the persona-reveal rule for a stranger, so a disguised author's sheet id is
+    null on the push even when a given reader could see it over REST.
+    """
+    from world.scenes.interaction_serializers import (  # noqa: PLC0415
+        InteractionListSerializer,
+        availability_for,
+        conversation_for,
+    )
+
+    if interaction is None:
+        return FeedFieldsPayload(
+            visibility=InteractionVisibility.DEFAULT,
+            pose_kind=PoseKind.STANDARD,
+            endorsee_sheet_id=None,
+            endorsable_resonances=[],
+            conversation=conversation_for(scene_id),
+            availability=availability_for(scene),
+            pose_endorsers=[],
+            entry_endorsers=[],
+            reactions=[],
+            reaction_windows=[],
+            dramatic_moment_tags=[],
+        )
+    context: dict[str, Any] = {}
+    if interaction.pose_kind == PoseKind.ENTRY and interaction.scene_id is not None:
+        context["scene_entry_endorsements"] = scene_entry_endorsements_for(interaction.scene_id)
+    serializer = InteractionListSerializer(interaction, context=context)
+    return FeedFieldsPayload(
+        visibility=interaction.visibility,
+        pose_kind=interaction.pose_kind,
+        endorsee_sheet_id=serializer.get_endorsee_sheet_id(interaction),
+        endorsable_resonances=serializer.get_endorsable_resonances(interaction),
+        conversation=serializer.get_conversation(interaction),
+        availability=serializer.get_availability(interaction),
+        pose_endorsers=serializer.get_pose_endorsers(interaction),
+        entry_endorsers=serializer.get_entry_endorsers(interaction),
+        reactions=cast("list[dict[str, Any]]", serializer.get_reactions(interaction)),
+        reaction_windows=serializer.get_reaction_windows(interaction),
+        dramatic_moment_tags=serializer.get_dramatic_moment_tags(interaction),
+    )
 
 
 def _action_links_payload(interaction: Interaction) -> list[dict[str, Any]]:
@@ -1020,6 +1126,69 @@ def _narrates_for(interaction: Interaction) -> NarratedEventPayload | None:
     return narrated_event_payload(interaction)
 
 
+def _delivery_audience(
+    interaction: Interaction,
+    *,
+    receiver_characters: list[ObjectDB],  # noqa: OBJECTDB_PARAM - receivers are any puppet
+    receiver_ids: list[int],
+) -> tuple[bool, list[ObjectDB] | None]:
+    """Who a row reaches: ``(receiver_scoped, writer + receivers or None)``.
+
+    The one audience rule ``push_interaction`` and ``notify_interaction_changed`` share:
+    a receiver-scoped row (whisper, place-scoped, escalated visibility) reaches its
+    writer's character and its receivers; any other row reaches the room, which the
+    caller broadcasts to ``location``. The list is ``None`` for a room-heard row.
+    """
+    receiver_scoped = _is_delivery_receiver_scoped(interaction, has_receivers=bool(receiver_ids))
+    if not receiver_scoped:
+        return False, None
+    writer_char = interaction.persona.character_sheet.character
+    # dict.fromkeys: a writer who is also a receiver is listed once, order kept.
+    return True, list(dict.fromkeys([writer_char, *receiver_characters]))
+
+
+def notify_interaction_changed(interaction: Interaction) -> None:
+    """Tell a pose's audience it changed so each page refetches it (#4508).
+
+    An endorsement, reaction or tag landed on (or left) ``interaction``. The frame
+    carries ids only: what each viewer may see of the pose is per-viewer, so each page
+    refetches through the REST retrieve instead of trusting a room-wide payload.
+    Registered on commit, so a write that rolls back never announces. The audience is
+    ``push_interaction``'s: writer + receivers for a receiver-scoped pose, else the
+    room of the scene the pose belongs to (the writer's own location when the scene
+    holds no room, as a battle scene does). A pose in no scene has no feed to refresh.
+    """
+    if interaction.scene_id is None:
+        return
+
+    def _send() -> None:
+        r_ids, r_chars = _query_receivers(interaction)
+        scoped, objects = _delivery_audience(
+            interaction, receiver_characters=r_chars, receiver_ids=r_ids
+        )
+        if not scoped:
+            # The scene's room, not the writer's present one: a writer who walked
+            # away before the commit must not move the frame to the wrong room.
+            location = interaction.scene.room
+            if location is None:
+                location = interaction.persona.character_sheet.character.location
+            if location is None:
+                return
+            objects = list(location.contents)
+        _send_changed_frame(
+            objects or [],
+            {"interaction_id": interaction.pk, "scene_id": interaction.scene_id},
+        )
+
+    transaction.on_commit(_send)
+
+
+def _send_changed_frame(objects: Iterable[ObjectDB], frame: dict[str, int | None]) -> None:
+    """Send the ids-only ``interaction_changed`` frame to each object."""
+    for obj in objects:
+        obj.msg(**{WebsocketMessageType.INTERACTION_CHANGED.value: ((), frame)})
+
+
 def push_interaction(
     interaction: Interaction,
     *,
@@ -1068,7 +1237,9 @@ def push_interaction(
         r_ids = receiver_persona_ids
         r_chars = receiver_characters
 
-    receiver_scoped = _is_delivery_receiver_scoped(interaction, has_receivers=bool(r_ids))
+    receiver_scoped, audience = _delivery_audience(
+        interaction, receiver_characters=r_chars, receiver_ids=r_ids
+    )
     if not receiver_scoped and location is None:
         return
 
@@ -1103,6 +1274,7 @@ def push_interaction(
         ),
         reply_to=_reply_parent_payload(interaction),
         narrates=_narrates_for(interaction),
+        interaction=interaction,
     )
     payload["action_links"] = _action_links_payload(interaction)
 
@@ -1110,8 +1282,7 @@ def push_interaction(
         # Receiver-scoped modes (whisper, place-scoped, escalated visibility) keep
         # full text to their explicit receivers — the speaker chose this audience,
         # so it never gets the language garble (#2993).
-        writer_char = persona.character_sheet.character
-        _send_to_objects([writer_char, *r_chars], payload)
+        _send_to_objects(audience or [], payload)
     else:
         _broadcast_to_location(
             location,
@@ -1172,9 +1343,11 @@ def send_outcome_text_to_non_web(
     twice.
     """
     r_ids, r_chars = _query_receivers(interaction)
-    if _is_delivery_receiver_scoped(interaction, has_receivers=bool(r_ids)):
-        writer_char = interaction.persona.character_sheet.character
-        recipients: Iterable[ObjectDB] = [writer_char, *r_chars]
+    _scoped, audience = _delivery_audience(
+        interaction, receiver_characters=r_chars, receiver_ids=r_ids
+    )
+    if audience is not None:
+        recipients: Iterable[ObjectDB] = audience
     elif location is not None:
         recipients = location.contents
     else:
@@ -1232,6 +1405,7 @@ def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors per
         mode=mode,
         timestamp=now.isoformat(),
         scene_id=scene.pk,
+        scene=scene,
         place_id=place_id,
         place_name=place_name,
         receiver_persona_ids=receiver_persona_ids,
@@ -1718,11 +1892,14 @@ def _open_entrance(interaction: Interaction, scene: Scene, *, entrance: bool) ->
     ``room_state`` so the Here panel's mark leaves the entrant's row at once.
     """
     from world.scenes.constants import ReactionWindowKind  # noqa: PLC0415
-    from world.scenes.reaction_services import open_reaction_window  # noqa: PLC0415
+    from world.scenes.reaction_services import _get_or_create_window  # noqa: PLC0415
 
     if not entrance:
         return
-    open_reaction_window(interaction=interaction, kind=ReactionWindowKind.ENTRANCE)
+    # Not open_reaction_window: that announces a new window to the room, and this one is
+    # created before the pose's own push, whose frame already carries it. An announcement
+    # would only make every viewer refetch a pose they just received.
+    _get_or_create_window(interaction=interaction, kind=ReactionWindowKind.ENTRANCE)
     room = scene.room
     if room is None:
         return
@@ -2010,6 +2187,7 @@ def narrate_privately(
         scene_id=interaction.scene_id,
         receiver_persona_ids=[persona.pk],
         target_persona_ids=[persona.pk],
+        interaction=interaction,
     )
     _send_to_objects([character], payload)
     # The web reads the pushed row; only telnet needs the line as text (#4418).
@@ -2132,6 +2310,7 @@ def broadcast_scene_outcome(
         mode=interaction.mode,
         timestamp=interaction.timestamp.isoformat(),
         scene_id=interaction.scene_id,
+        interaction=interaction,
     )
     _broadcast_to_location(room, payload)
     return interaction

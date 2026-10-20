@@ -50,10 +50,17 @@
   residence or outfit trickle, a distinction grant, a staff grant): favor comes only from a
   character's actions.
 - **Sacrifice** — an item given up to a being at its shrine or temple outside a ceremony
-  (`sacrifice_items`): destroyed, feeding the pool, earning 1 base favor per
-  `sacrifice_value_per_favor` of value (more for a favored facet). Recorded as a
-  `CeremonyOffering` with `being` set and no ceremony. _Avoid_: "offering" for this (an
-  offering is made during a ceremony).
+  (`sacrifice_items`): a check eased by the item's **meaning points** (what it means to the
+  one giving it up), whose outcome tier selects the SACRIFICE `FavorOutcomeAward` that is the
+  base favor; the item is soft-destroyed and keeps its design. An item with no meaning is
+  given up for nothing, whatever it cost: no favor, pool grant or prestige reads a price.
+  Recorded as a `CeremonyOffering` with `being` set and no ceremony, its roll, and one
+  `OfferingSignal` per signal. _Avoid_: "offering" for this (an offering is made during a
+  ceremony); "value" or "price" for what it earns by.
+- **Meaning signal / meaning points** — one fact that makes an item matter to the character
+  holding it, worth points; an item's points are the sum, read by `item_meaning`
+  (`world/items/services/meaning.py`) from records, never from a price. 6a signals: carried,
+  gift, heirloom, own work, made by a tie. See the items system doc.
 - **Pledge credit** — one favor write credited to a pledge, with its calculation
   (`PledgeCredit`: base, earning rate, credited, and the deed, sacrifice or rite it was for).
   The audit trail behind the pledge card, not a counter (ADR-4362).

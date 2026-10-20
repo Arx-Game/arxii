@@ -2,14 +2,17 @@
 
 Numbers follow the issue's walkthrough A: a Chosen of the being earns at 200%; a
 favor target of 20 within two game weeks; favored deeds at 100% of the grant,
-associated at 50%; 1 base favor per 10 item value, x2 for a favored facet; a weekly
-deed cap of 8 base favor; closing awards of 8 / 5 / 3 / 2 / 0 by outcome. Check
-rolls are forced through ``force_check_outcome``; everything else is the real path.
+associated at 50%; a sacrifice is a check eased by what the item means to its giver
+(never its price) whose outcome pays 6 / 4 / 2 / 0 / 0 base favor, x2 points for a
+favored facet; a weekly deed cap of 8 base favor; closing awards of 8 / 5 / 3 / 2 / 0 by
+outcome. Check rolls are forced through ``force_check_outcome``; everything else is the
+real path.
 """
 
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -21,8 +24,10 @@ from world.action_points.factories import ActionPointPoolFactory
 from world.ceremonies.models import CeremonyOffering
 from world.ceremonies.services import sacrifice_items
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
+from world.items.constants import MeaningSignalKind
 from world.items.factories import (
     EquippedItemFactory,
     ItemFacetFactory,
@@ -43,6 +48,7 @@ from world.magic.services.resonance import grant_resonance
 from world.projects.constants import ProjectKind, ProjectStatus
 from world.projects.services import scan_active_projects
 from world.roster.factories import grant_test_tenure
+from world.scenes.action_constants import MIN_DIFFICULTY_POINTS
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction
@@ -73,7 +79,7 @@ from world.worship.factories import (
     WorshipRiteFactory,
     WorshipRiteTierAwardFactory,
 )
-from world.worship.invocation_services import get_devotion_config
+from world.worship.invocation_services import get_devotion_config, invocation_difficulty
 from world.worship.models import (
     DevotionStanding,
     PatronageValence,
@@ -100,6 +106,7 @@ _OUTCOMES = (
     ("Critical Failure", -2),
 )
 _CLOSING = {"Critical Success": 8, "Success": 5, "Partial Success": 3, "Failure": 2}
+_SACRIFICE = {"Critical Success": 6, "Success": 4, "Partial Success": 2}
 
 
 class PledgeTestBase(TestCase):
@@ -118,6 +125,15 @@ class PledgeTestBase(TestCase):
                 outcome_tier=cls.outcomes[name],
                 amount=amount,
             )
+        for name, amount in _SACRIFICE.items():
+            FavorOutcomeAwardFactory(
+                config=config,
+                kind=FavorAwardKind.SACRIFICE,
+                outcome_tier=cls.outcomes[name],
+                amount=amount,
+            )
+        config.invocation_check_type = CheckTypeFactory()
+        config.save(update_fields=["invocation_check_type"])
         for outcome in cls.outcomes.values():
             WorshipRiteTierAwardFactory(
                 tier=RiteTier.DEVOTIONAL, outcome_tier=outcome, resonance_amount=4, favor_amount=2
@@ -158,11 +174,21 @@ class PledgeTestBase(TestCase):
     def _favor(self) -> int:
         return DevotionStanding.objects.get(character_sheet=self.sheet, being=self.being).favor
 
-    def _carried_item(self, value: int, facet=None) -> ItemInstance:
+    def _carried_item(
+        self, value: int = 20, facet=None, *, meaningful: bool = True, days: int = 30
+    ) -> ItemInstance:
+        """An item the sheet carries. ``meaningful``: the sheet made it and has held it
+        ``days`` days, so own work 1 plus carried 1 is 2 meaning points. Otherwise it is
+        bought off a stall with no history at all, worth nothing whatever its ``value``."""
         obj = ObjectDBFactory(db_key="offering", db_typeclass_path="typeclasses.objects.Object")
         obj.db_location = self.sheet.character
         obj.save(update_fields=["db_location"])
         item = ItemInstanceFactory(template__value=value, game_object=obj)
+        item.holder_character_sheet = self.sheet
+        item.held_since = timezone.now() - timedelta(days=days)
+        if meaningful:
+            item.crafter_character_sheet = self.sheet
+        item.save(update_fields=["holder_character_sheet", "held_since", "crafter_character_sheet"])
         if facet is not None:
             ItemFacetFactory(item_instance=item, facet=facet)
         return item
@@ -229,12 +255,13 @@ class TakePledgeTests(PledgeTestBase):
 class ProgressTests(PledgeTestBase):
     def test_walkthrough_a_progress_reaches_twenty(self) -> None:
         """A mission-like grant of 3 favored (+6), an endorsement-like grant of 2
-        associated (+2), a sacrifice worth 20 with Silk (+8) and the rite (+4)."""
+        associated (+2), a sacrifice of 2 points with Silk (+8) and the rite (+4)."""
         details = take_pledge(self.sheet, self.pledge)
 
         self._grant(self.favored, 3)
         self._grant(self.associated, 2)
-        sacrifice_items(self.sheet, [self._carried_item(20, facet=self.silk)])
+        with force_check_outcome(self.outcomes["Success"]):
+            sacrifice_items(self.sheet, [self._carried_item(facet=self.silk)])
         with force_check_outcome(self.outcomes["Success"]):
             perform_worship_rite(self.sheet, self.rite, scene=self.scene)
 
@@ -252,7 +279,12 @@ class ProgressTests(PledgeTestBase):
         card = pledge_card(open_pledge_for(self.sheet))
         self.assertEqual(card.state, PledgeState.READY)
         self.assertEqual(card.progress, 20)
-        self.assertEqual(card.credits[2].calculation, "value 20: 2 base, x2 Silk = 4, at 200% = +8")
+        self.assertEqual(
+            card.credits[2].calculation,
+            "carried 1 (held 30 days), own work 1 (made by the holder) = 2, "
+            "x2 Silk = 4 points, eased 40."
+            " Success: 4 base, at 200% = +8",
+        )
         self.assertEqual(self._favor(), 20)
 
     def test_bump_devotion_updates_open_pledge_progress(self) -> None:
@@ -396,12 +428,17 @@ class DeedTests(PledgeTestBase):
 
 
 class SacrificeTests(PledgeTestBase):
+    def _sacrifice(self, outcome_name: str, *items, **kwargs):
+        with force_check_outcome(self.outcomes[outcome_name]) as capture:
+            result = sacrifice_items(self.sheet, list(items), **kwargs)
+        return result, capture
+
     def test_shrine_sacrifice_offering_row(self) -> None:
         details = take_pledge(self.sheet, self.pledge)
         item = self._carried_item(20, facet=self.silk)
         pool_before = self.being.resonance_pool
 
-        outcome = sacrifice_items(self.sheet, [item])
+        outcome, _ = self._sacrifice("Success", item)
 
         offering = CeremonyOffering.objects.get()
         self.assertIsNone(offering.ceremony)
@@ -409,23 +446,151 @@ class SacrificeTests(PledgeTestBase):
         self.assertEqual(offering.pledge_details, details)
         self.assertEqual(offering.facet, self.silk)
         self.assertEqual(offering.item_value, 20)
+        self.assertEqual(offering.outcome_tier, self.outcomes["Success"])
+        self.assertTrue(offering.counted)
+        self.assertEqual(
+            [(s.kind, s.points) for s in offering.signals.all()],
+            [(MeaningSignalKind.CARRIED, 1), (MeaningSignalKind.OWN_WORK, 1)],
+        )
         # Soft-destroyed: out of play, design kept (#4461).
         self.assertIsNotNone(ItemInstance.objects.get(pk=item.pk).destroyed_at)
         self.being.refresh_from_db()
-        self.assertGreater(self.being.resonance_pool, pool_before)
+        # 2 points doubled for Silk = 4, at the config's 5 pool per point.
+        self.assertEqual(self.being.resonance_pool, pool_before + 20)
         self.assertEqual(outcome.site, "shrine")
         self.assertEqual(outcome.items[0].credited, 8)
         line = Interaction.objects.get(mode=InteractionMode.OUTCOME)
         self.assertIn("sacrifices", line.content)
         self.assertIn("at Ombrin's shrine", line.content)
 
-    def test_sacrifice_value_and_facet(self) -> None:
-        plain = sacrifice_items(self.sheet, [self._carried_item(35)])
-        cheap = sacrifice_items(self.sheet, [self._carried_item(3)])
+    def test_the_gm_sees_the_signals_and_the_roll_of_a_sacrifice(self) -> None:
+        from world.worship.answer_services import sacrifice_detail
 
-        self.assertEqual(plain.items[0].credited, 6)  # 3 base at 200%
-        self.assertEqual(cheap.items[0].credited, 2)  # at least 1 base
-        self.assertIsNone(CeremonyOffering.objects.first().pledge_details)
+        self._sacrifice("Success", self._carried_item(facet=self.silk))
+
+        detail = sacrifice_detail(CeremonyOffering.objects.get())
+
+        self.assertEqual(
+            [(s.kind_name, s.points) for s in detail.signals], [("Carried", 1), ("Own work", 1)]
+        )
+        self.assertEqual(
+            (detail.points, detail.facet_name, detail.counted, detail.outcome_name),
+            (2, "Silk", True, "Success"),
+        )
+
+    def test_the_gm_detail_carries_the_ease_difficulty_and_odds_from_the_charts(self) -> None:
+        from world.traits.factories import CheckRankFactory, ResultChartFactory
+        from world.traits.models import ResultChart, ResultChartOutcome
+        from world.worship.answer_services import sacrifice_detail
+
+        # A two-rung ladder and one chart: the odds are whatever that chart's bands say.
+        for rank, points, name in ((0, 0, "Novice"), (1, 25, "Able"), (2, 40, "Competent")):
+            CheckRankFactory(rank=rank, min_points=points, name=name)
+        chart = ResultChartFactory(rank_difference=0)
+        ResultChart.clear_cache()
+        ResultChartOutcome.objects.create(
+            chart=chart, min_roll=1, max_roll=40, outcome=self.outcomes["Failure"]
+        )
+        ResultChartOutcome.objects.create(
+            chart=chart, min_roll=41, max_roll=100, outcome=self.outcomes["Success"]
+        )
+        config = get_devotion_config()
+        config.odds_reference_roller_points = 48
+        config.save(update_fields=["odds_reference_roller_points"])
+
+        _, capture = self._sacrifice("Success", self._carried_item(facet=self.silk))
+        detail = sacrifice_detail(CeremonyOffering.objects.get())
+
+        # 2 points doubled for Silk = 4, 10 an eased point: 40 off the invocation difficulty.
+        self.assertEqual(detail.ease_points, 40)
+        self.assertEqual(detail.difficulty_points, capture.target_difficulty)
+        self.assertEqual(detail.odds.reference_rank_name, "Competent")
+        self.assertEqual(
+            [(line.outcome_name, line.percent) for line in detail.odds.lines],
+            [("Failure", 40), ("Success", 60)],
+        )
+
+    def test_a_bought_item_earns_nothing_whatever_it_cost(self) -> None:
+        item = self._carried_item(400, meaningful=False, days=200)
+        pool_before = self.being.resonance_pool
+
+        with force_check_outcome(self.outcomes["Critical Success"]) as capture:
+            outcome = sacrifice_items(self.sheet, [item])
+
+        self.assertIsNone(capture.check_type)  # no roll
+        self.assertEqual(outcome.items[0].credited, 0)
+        self.assertEqual(self._favor(), 0)
+        self.being.refresh_from_db()
+        self.assertEqual(self.being.resonance_pool, pool_before)
+        offering = CeremonyOffering.objects.get()
+        self.assertFalse(offering.counted)
+        self.assertIsNone(offering.outcome_tier)
+        self.assertEqual(offering.signals.count(), 0)
+        self.assertIsNotNone(ItemInstance.objects.get(pk=item.pk).destroyed_at)
+
+    def test_meaning_eases_the_check_and_the_price_never_does(self) -> None:
+        """Daunting 75 with the Chosen ease (favor 0), 2 points x 10 eased off."""
+        cheap = self._carried_item(1)
+        dear = self._carried_item(9000)
+
+        _, first = self._sacrifice("Success", cheap)
+        _, second = self._sacrifice("Success", dear)
+
+        self.assertEqual(first.target_difficulty, second.target_difficulty)
+        base = invocation_difficulty(self.sheet, self.being).points
+        self.assertEqual(first.target_difficulty, max(base - 20, MIN_DIFFICULTY_POINTS))
+
+    def test_the_outcome_picks_the_base_favor(self) -> None:
+        results = {
+            name: self._sacrifice(name, self._carried_item())[0].items[0].credited
+            for name in ("Partial Success", "Success")
+        }
+
+        # The Chosen earns at 200%: 2 and 4 base.
+        self.assertEqual(results, {"Partial Success": 4, "Success": 8})
+
+    def test_a_failed_roll_pays_nothing_but_the_pool_still_grows(self) -> None:
+        pool_before = self.being.resonance_pool
+
+        outcome, _ = self._sacrifice("Failure", self._carried_item())
+
+        self.assertEqual(outcome.items[0].credited, 0)
+        self.being.refresh_from_db()
+        self.assertEqual(self.being.resonance_pool, pool_before + 10)
+
+    def test_the_weekly_limit_counts_items_with_points_only(self) -> None:
+        limit = get_devotion_config().sacrifices_per_week
+        bought = self._carried_item(500, meaningful=False)
+        items = [self._carried_item() for _ in range(limit + 1)]
+
+        # force_check_outcome is single-shot, so every roll in this batch is stubbed.
+        with patch(
+            "world.worship.sacrifice_services.roll_sacrifice",
+            return_value=SimpleNamespace(outcome=self.outcomes["Success"]),
+        ):
+            outcome = sacrifice_items(self.sheet, [bought, *items])
+
+        credited = [item.credited for item in outcome.items]
+        self.assertEqual(credited, [0] + [8] * limit + [0])
+        self.assertEqual(CeremonyOffering.objects.filter(counted=True).count(), limit)
+
+    def test_a_critical_failure_closes_the_beings_hand_for_the_week(self) -> None:
+        self._sacrifice("Critical Failure", self._carried_item())
+
+        outcome, capture = self._sacrifice("Critical Success", self._carried_item())
+
+        self.assertIsNone(capture.check_type)
+        self.assertEqual(outcome.items[0].credited, 0)
+
+    def test_sacrifice_refuses_before_giving_anything_up_without_a_check_type(self) -> None:
+        config = get_devotion_config()
+        config.invocation_check_type = None
+        config.save(update_fields=["invocation_check_type"])
+        item = self._carried_item()
+
+        with self.assertRaises(SacrificeRefused):
+            sacrifice_items(self.sheet, [item])
+        self.assertIsNone(ItemInstance.objects.get(pk=item.pk).destroyed_at)
 
     def test_sacrifice_needs_a_holy_site(self) -> None:
         elsewhere = ObjectDBFactory(db_key="Road", db_typeclass_path="typeclasses.rooms.Room")
@@ -670,12 +835,16 @@ class WebDispatchTests(PledgeTestBase):
         prayed = PrayAction().run(actor=character, being=self.being.pk, text="[prayer]")
         taken = TakePledgeAction().run(actor=character, pledge=self.pledge.pk, prayer="")
         item = self._carried_item(20, facet=self.silk)
-        given = SacrificeAction().run(actor=character, item_ids=[item.pk], being=self.being.pk)
+        with force_check_outcome(self.outcomes["Success"]):
+            given = SacrificeAction().run(actor=character, item_ids=[item.pk], being=self.being.pk)
 
         self.assertTrue(prayed.success, prayed.message)
         self.assertTrue(taken.success, taken.message)
         self.assertIn("Your earning rate with Ombrin: 200% (100% + 100% Chosen).", taken.message)
         self.assertTrue(given.success, given.message)
         self.assertIn(
-            "Value 20: 2 base, x2 Silk = 4, at 200% = +8 favor with Ombrin.", given.message
+            "carried 1 (held 30 days), own work 1 (made by the holder) = 2, "
+            "x2 Silk = 4 points, eased 40."
+            " Success: 4 base, at 200% = +8 favor.",
+            given.message,
         )

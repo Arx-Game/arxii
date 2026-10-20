@@ -206,8 +206,8 @@ def _maybe_render_location_board_posts(room_profile, looker) -> str | None:
 def _maybe_render_crafted_provenance(obj) -> str | None:
     """The crafted mechanical line + credits for an item, or None (#2878).
 
-    "Of divine quality, quite menacing and slightly alluring. Designed by X;
-    crafted by Y." — the examine layer at the bottom of the desc, shared with
+    "Of divine quality, quite menacing and slightly alluring. Made by X for Y.
+    Designed by Z. Facet work by W." — the examine layer at the bottom of the desc, shared with
     the web serializer via ``crafted_provenance_line``.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415

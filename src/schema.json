@@ -19309,6 +19309,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/ItemInstanceRead'
           description: ''
+  /api/items/inventory/{id}/meaning/:
+    get:
+      operationId: items_inventory_meaning_retrieve
+      description: |-
+        What the item means to the character holding it (#4512).
+
+        The crafter reads this before choosing to work the item into a new piece. It
+        names the signals and their points for the holder only; players in a room never
+        see either.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemMeaning'
+          description: ''
   /api/items/inventory/{id}/recycle/:
     post:
       operationId: items_inventory_recycle_create
@@ -63795,6 +63821,37 @@ components:
           nullable: true
           description: The crafted mechanical line + persona credits, or None (#2878).
           readOnly: true
+        custom_name:
+          type: string
+          readOnly: true
+        custom_description:
+          type: string
+          readOnly: true
+        dedicated_to_name:
+          type: string
+          readOnly: true
+          nullable: true
+        designer_is_holder:
+          type: boolean
+          description: Whether the holder wrote the piece's words (#4512).
+          readOnly: true
+        crafter_name:
+          type: string
+          nullable: true
+          description: The persona that signed the work, as examine names them (#4512).
+          readOnly: true
+        designer_name:
+          type: string
+          nullable: true
+          description: The persona credited as designer, as examine names them (#4512).
+          readOnly: true
+        facet_workers:
+          type: array
+          items:
+            type: string
+          description: Artists who did facet or style work on the piece for someone
+            (#4512).
+          readOnly: true
         accents:
           type: array
           items:
@@ -63812,9 +63869,16 @@ components:
       - charges
       - contained_in
       - crafted_provenance
+      - crafter_name
+      - custom_description
+      - custom_name
+      - dedicated_to_name
+      - designer_is_holder
+      - designer_name
       - display_description
       - display_image_url
       - display_name
+      - facet_workers
       - game_object_id
       - id
       - is_currency_instrument
@@ -63825,6 +63889,44 @@ components:
       - silhouette
       - suggested_value
       - template
+    ItemMeaning:
+      type: object
+      description: |-
+        What an item means to the character holding it: its signals and their sum. Shown to
+        the holder before they choose to work the item into a new piece (#4512).
+      properties:
+        total:
+          type: integer
+          readOnly: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemMeaningLine'
+          readOnly: true
+        made_from_cap:
+          type: integer
+          readOnly: true
+      required:
+      - lines
+      - made_from_cap
+      - total
+    ItemMeaningLine:
+      type: object
+      description: One signal that makes an item matter to its holder (#4512).
+      properties:
+        label:
+          type: string
+          readOnly: true
+        detail:
+          type: string
+          readOnly: true
+        points:
+          type: integer
+          readOnly: true
+      required:
+      - detail
+      - label
+      - points
     ItemStyleRead:
       type: object
       description: Read serializer for ItemStyle (GET list/detail).
@@ -91259,7 +91361,7 @@ components:
         sacrificed:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/_SacrificeDetail'
         prayer_text:
           type: string
         options:
@@ -98330,6 +98432,34 @@ components:
       - dev_points_to_boundary
       - thread_id
       - xp_cost
+    _Odds:
+      type: object
+      properties:
+        difficulty_points:
+          type: integer
+        reference_rank_name:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/_OddsLine'
+      required:
+      - difficulty_points
+      - lines
+      - reference_rank_name
+    _OddsLine:
+      type: object
+      properties:
+        outcome_name:
+          type: string
+        success_level:
+          type: integer
+        percent:
+          type: integer
+      required:
+      - outcome_name
+      - percent
+      - success_level
     _OutcomeTier:
       type: object
       properties:
@@ -98424,6 +98554,64 @@ components:
       - flavor_text
       - lifetime_earned
       - resonance_id
+    _SacrificeDetail:
+      type: object
+      description: |-
+        One sacrifice as the steward's answer panel reads it (#4500): the signals that made
+        it count, never the item's price.
+      properties:
+        item_name:
+          type: string
+        offered_by_name:
+          type: string
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/_SacrificeSignal'
+        points:
+          type: integer
+        effective_points:
+          type: integer
+        facet_name:
+          type: string
+        counted:
+          type: boolean
+        outcome_name:
+          type: string
+        ease_points:
+          type: integer
+        difficulty_points:
+          type: integer
+          nullable: true
+        odds:
+          allOf:
+          - $ref: '#/components/schemas/_Odds'
+          nullable: true
+      required:
+      - counted
+      - difficulty_points
+      - ease_points
+      - effective_points
+      - facet_name
+      - item_name
+      - odds
+      - offered_by_name
+      - outcome_name
+      - points
+      - signals
+    _SacrificeSignal:
+      type: object
+      properties:
+        kind_name:
+          type: string
+        points:
+          type: integer
+        detail:
+          type: string
+      required:
+      - detail
+      - kind_name
+      - points
     _SocietyReputation:
       type: object
       description: 'One reputation entry: society + tier label (no raw number).'

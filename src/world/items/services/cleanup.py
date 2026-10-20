@@ -20,8 +20,12 @@ logger = logging.getLogger(__name__)
 def purge_expired_soft_deleted_items(*, grace: timedelta | None = None) -> int:
     """Hard-delete soft-deleted ItemInstance rows that are past the grace
     period AND not lore-critical (no facets, no transfer provenance, no
-    ``lore_value``). Deletes each row's whole footprint via
-    ``hard_delete_item_instance`` (no dangling FKs). Returns the count purged.
+    ``lore_value``) and carry no design: a player-written name or description, a
+    designer, a silhouette, a style, a dedication or a lineage (#4500, #4512, owner
+    ruling 2026-10-18: a design is never permanently deleted, so a replica can be made
+    from it later). Deletes each
+    row's whole footprint via ``hard_delete_item_instance`` (no dangling FKs). Returns
+    the count purged.
 
     ``grace`` defaults to ``settings.ITEM_SOFT_DELETE_GRACE_DAYS`` days.
 
@@ -42,16 +46,25 @@ def purge_expired_soft_deleted_items(*, grace: timedelta | None = None) -> int:
     eligible = list(
         ItemInstance.objects.filter(destroyed_at__lt=cutoff, lore_value=0)
         .filter(mantle__isnull=True, project_contributions__isnull=True)
+        .filter(
+            custom_name="",
+            custom_description="",
+            designer_character_sheet__isnull=True,
+            silhouette__isnull=True,
+            dedicated_at__isnull=True,
+            lineage__isnull=True,
+        )
         .select_related("game_object")
         .annotate(
             facet_count=Count("item_facets", distinct=True),
+            style_count=Count("item_styles", distinct=True),
             transfer_count=Count(
                 "ownership_events",
                 filter=Q(ownership_events__event_type__in=PROVENANCE_EVENT_TYPES),
                 distinct=True,
             ),
         )
-        .filter(facet_count=0, transfer_count=0)
+        .filter(facet_count=0, style_count=0, transfer_count=0)
     )
 
     # (``facet_count=0`` above counts removed facets too: a removed ItemFacet is the

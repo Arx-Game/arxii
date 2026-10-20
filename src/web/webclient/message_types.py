@@ -30,6 +30,7 @@ class WebsocketMessageType(str, Enum):
     ESTATE_SETTLEMENT_OPENED = "estate_settlement_opened"
     OOB = "oob"
     GM_PROMPT = "gm_prompt"
+    INTERACTION_CHANGED = "interaction_changed"
 
 
 @dataclass

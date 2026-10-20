@@ -277,6 +277,7 @@ def _relocate_staked_item(
 ) -> None:
     """Move one staked item to the other party — mirrors ``give()``'s shape."""
     from world.items.services.equip import unequip_item  # noqa: PLC0415
+    from world.items.services.holding import set_item_holder  # noqa: PLC0415
 
     previous_holder_sheet = item.holder_character_sheet
     for equipped in list(item.equipped_slots.all()):
@@ -285,13 +286,10 @@ def _relocate_staked_item(
     if item.game_object is None or not item.game_object.move_to(to_sheet.character, quiet=True):
         raise TradeItemUnavailable
 
-    item.holder_character_sheet = to_sheet
-    item.save(update_fields=["holder_character_sheet"])
-
     giver_persona = (
         previous_holder_sheet.primary_persona if previous_holder_sheet is not None else None
     )
-    OwnershipEvent.objects.create(
+    event = OwnershipEvent.objects.create(
         item_instance=item,
         event_type=OwnershipEventType.TRANSFERRED,
         from_character_sheet=previous_holder_sheet,
@@ -300,6 +298,7 @@ def _relocate_staked_item(
         to_persona_display=to_sheet.primary_persona,
         notes=f"trade #{session.pk}",
     )
+    set_item_holder(item, to_sheet, event=event)
     if previous_holder_sheet is not None:
         previous_holder_sheet.character.carried_items.invalidate()
     to_sheet.character.carried_items.invalidate()

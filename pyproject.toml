@@ -479,6 +479,8 @@ line-ending = "auto"
 
 [tool.uv]
 package = true
+# eMudhra root removal: retain the patched CA bundle on future resolutions.
+constraint-dependencies = ["certifi>=2026.10.19"]
 # Security overrides — force vulnerable Evennia transitives onto patched
 # versions without dragging in the Evennia 6 upgrade (which also requires
 # Django 6 and is out of scope for this security sweep). Remove individual

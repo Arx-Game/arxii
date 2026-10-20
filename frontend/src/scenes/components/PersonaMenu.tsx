@@ -90,6 +90,7 @@ import type { SceneDetail } from '../types';
 import { WhisperReceiverPicker } from './WhisperReceiverPicker';
 import { TreatActionPanel } from '@/conditions/components/TreatActionPanel';
 import { GiveMissionDialog } from './GiveMissionDialog';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 /** The whisper action awaiting a recipient choice (#907). */
 interface PendingWhisper {
@@ -323,7 +324,7 @@ export function PersonaMenu({
       }),
     onError: (error: Error) => toast.error(error.message),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      if (sceneId !== null) queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
     },
   });

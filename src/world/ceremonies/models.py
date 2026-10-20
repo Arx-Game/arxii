@@ -16,6 +16,7 @@ from world.ceremonies.constants import (
     ConversionOfferStatus,
     SeanceOfferStatus,
 )
+from world.items.constants import MeaningSignalKind
 
 _PERSONA_MODEL = "arxii.Persona"
 
@@ -203,6 +204,42 @@ class CeremonyOffering(SharedMemoryModel):
     offered_by = models.ForeignKey(
         _PERSONA_MODEL, on_delete=models.PROTECT, related_name="ceremony_offerings"
     )
+    outcome_tier = models.ForeignKey(
+        "arxii.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The sacrifice roll. Empty for an item with no meaning points, an item "
+            "past the week's limit, and a ceremony offering, whose rite roll is its check."
+        ),
+    )
+    difficulty_points = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The difficulty, in points, the sacrifice check rolled against, after the "
+            "item's meaning eased it. Empty when the item did not roll."
+        ),
+    )
+    game_week = models.ForeignKey(
+        "arxii.GameWeek",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The game week the item was given up in; the weekly limit counts by it.",
+    )
+    counted = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "True when the item had meaning points and a place in the week's limit, so it "
+            "paid (a sacrifice rolled, an offering fed the pool). An item with no points, "
+            "or past the limit, is given up for nothing and is not counted."
+        ),
+    )
 
     class Meta:
         ordering = ["id"]
@@ -220,6 +257,31 @@ class CeremonyOffering(SharedMemoryModel):
         if self.ceremony_id is None:
             return f"{self.item_name} sacrificed to {self.being}"
         return f"{self.item_name} offered at {self.ceremony}"
+
+
+class OfferingSignal(SharedMemoryModel):
+    """One meaning signal of an item at the moment it was given up (#4500, #4462).
+
+    The item is soft-destroyed and its holder cleared, so what it meant to the one who
+    gave it up is captured here. The GM's sacrifice detail, the pledge card and the
+    being's dashboard read these rows; the points were computed by
+    ``world.items.services.meaning.item_meaning``, which reads records and never a price.
+    """
+
+    offering = models.ForeignKey(CeremonyOffering, on_delete=models.CASCADE, related_name="signals")
+    kind = models.CharField(max_length=20, choices=MeaningSignalKind.choices)
+    points = models.PositiveSmallIntegerField()
+    detail = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="What made it count, such as the maker's persona name or the days held.",
+    )
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()} {self.points}"
 
 
 class CeremonySpeech(SharedMemoryModel):
@@ -259,11 +321,13 @@ class CeremonyConfig(SharedMemoryModel):
     officiant_cut_percent = models.PositiveIntegerField(
         default=20, help_text="Officiant's prestige cut as % of the honoree award."
     )
-    offering_resonance_per_value = models.PositiveIntegerField(
-        default=1, help_text="Worship resonance granted per point of offered item value."
-    )
-    offering_prestige_per_value = models.PositiveIntegerField(
-        default=1, help_text="Honoree prestige per point of offered item value."
+    offering_pool_per_point = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Worship pool granted per meaning point of each counted item given up. "
+            "Renamed from 'offering resonance per value': it was per point of the item's "
+            "value, so review this number. Nothing reads an item's price."
+        ),
     )
     speech_prestige_base = models.PositiveIntegerField(
         default=10, help_text="Base honoree prestige per successful speech level."
@@ -277,8 +341,12 @@ class CeremonyConfig(SharedMemoryModel):
     leak_detect_difficulty = models.PositiveIntegerField(
         default=30, help_text="Perception difficulty for sensing a twisted rite."
     )
-    devotion_per_offering = models.PositiveIntegerField(
-        default=5, help_text="Devotion favor an offerer gains per offering."
+    devotion_per_offering_point = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Officiant favor per meaning point of each counted ceremony offering. "
+            "Renamed from 'devotion per offering': review this number."
+        ),
     )
     devotion_officiant = models.PositiveIntegerField(
         default=10, help_text="Devotion favor the officiant gains at finish."
@@ -286,8 +354,8 @@ class CeremonyConfig(SharedMemoryModel):
     offering_favored_facet_multiplier_percent = models.PositiveIntegerField(
         default=200,
         help_text=(
-            "Percent multiplier on an offering's pool grant and devotion bump when the "
-            "offered item carries a Facet the being favors (BeingFacet), #3777. 100 = no bonus."
+            "Percent multiplier on an item's meaning points when it carries a Facet the "
+            "being favors (BeingFacet), #3777. 100 = no bonus."
         ),
     )
 

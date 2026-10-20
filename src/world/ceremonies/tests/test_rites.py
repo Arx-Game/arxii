@@ -18,7 +18,7 @@ from world.ceremonies.services import (
 )
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.items.factories import ItemFacetFactory, ItemInstanceFactory
+from world.items.factories import ItemFacetFactory, ItemInstanceFactory, meaningful_item_for
 from world.magic.constants import GainSource
 from world.magic.models.grant import ResonanceGrant
 from world.roster.factories import grant_test_tenure
@@ -33,6 +33,7 @@ from world.worship.factories import (
     WorshipRiteFactory,
     WorshipRiteTierAwardFactory,
 )
+from world.worship.invocation_services import get_devotion_config
 from world.worship.models import DevotionStanding, WorshipDeclaration, WorshipRitePerformance
 
 
@@ -195,8 +196,8 @@ class FavoredOfferingTests(RiteCeremonyTestBase):
         config.offering_favored_facet_multiplier_percent = 300
         config.save(update_fields=["offering_favored_facet_multiplier_percent"])
         favored = BeingFacetFactory(being=self.being)
-        plain = ItemInstanceFactory(template__value=10)
-        blessed = ItemInstanceFactory(template__value=10)
+        plain = meaningful_item_for(self.sheet, template__value=10)
+        blessed = meaningful_item_for(self.sheet, template__value=10)
         ItemFacetFactory(item_instance=blessed, facet=favored.facet)
         ItemFacetFactory(item_instance=plain)  # some other facet the being does not favor
         ceremony = self._funeral_less_ceremony()
@@ -206,13 +207,14 @@ class FavoredOfferingTests(RiteCeremonyTestBase):
         by_name = {o.item_name: o for o in CeremonyOffering.objects.filter(ceremony=ceremony)}
         plain_grant = by_name[str(plain)].worship_grant
         blessed_grant = by_name[str(blessed)].worship_grant
-        self.assertEqual(plain_grant.amount, 10 * config.offering_resonance_per_value)
-        self.assertEqual(blessed_grant.amount, 3 * 10 * config.offering_resonance_per_value)
+        # Two meaning points each (own work, carried); the favored one is tripled to six.
+        self.assertEqual(plain_grant.amount, 2 * config.offering_pool_per_point)
+        self.assertEqual(blessed_grant.amount, 6 * config.offering_pool_per_point)
         standing = DevotionStanding.objects.get(character_sheet=self.sheet, being=self.being)
-        self.assertEqual(standing.favor, config.devotion_per_offering * (1 + 3))
+        self.assertEqual(standing.favor, config.devotion_per_offering_point * (2 + 6))
 
     def test_a_being_that_favors_nothing_credits_every_item_plainly(self) -> None:
-        item = ItemInstanceFactory(template__value=10)
+        item = meaningful_item_for(self.sheet, template__value=10)
         ItemFacetFactory(item_instance=item)
         ceremony = self._funeral_less_ceremony()
         config = CeremonyConfig.objects.first() or CeremonyConfig.objects.create()
@@ -220,4 +222,29 @@ class FavoredOfferingTests(RiteCeremonyTestBase):
         record_offering(ceremony=ceremony, item_instances=[item])
 
         offering = CeremonyOffering.objects.get(ceremony=ceremony)
-        self.assertEqual(offering.worship_grant.amount, 10 * config.offering_resonance_per_value)
+        self.assertEqual(offering.worship_grant.amount, 2 * config.offering_pool_per_point)
+
+    def test_a_bought_item_feeds_nothing_whatever_it_cost(self) -> None:
+        item = ItemInstanceFactory(template__value=5000, holder_character_sheet=self.sheet)
+        ceremony = self._funeral_less_ceremony()
+
+        record_offering(ceremony=ceremony, item_instances=[item])
+
+        offering = CeremonyOffering.objects.get(ceremony=ceremony)
+        self.assertIsNone(offering.worship_grant)
+        self.assertFalse(offering.counted)
+        self.assertFalse(
+            DevotionStanding.objects.filter(
+                character_sheet=self.sheet, being=self.being, favor__gt=0
+            ).exists()
+        )
+
+    def test_ceremony_offerings_share_the_weekly_limit(self) -> None:
+        limit = get_devotion_config().sacrifices_per_week
+        items = [meaningful_item_for(self.sheet) for _ in range(limit + 1)]
+        ceremony = self._funeral_less_ceremony()
+
+        record_offering(ceremony=ceremony, item_instances=items)
+
+        counted = [o.counted for o in CeremonyOffering.objects.filter(ceremony=ceremony)]
+        self.assertEqual(counted, [True] * limit + [False])

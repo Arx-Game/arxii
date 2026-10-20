@@ -29,8 +29,8 @@ base_packages:
 # (the apt repos do not yet ship uv). To bump: change both values together;
 # the SHA is the x86_64-unknown-linux-gnu tarball SHA256 from the release's
 # published checksums.
-base_uv_version: "0.11.15"
-base_uv_sha256: "b03e572f010bea94a4a52d42671ba72981e12894f71576181a1d26ff68546da7"
+base_uv_version: "0.13.4"
+base_uv_sha256: "2b428396f12572d4429cf210ca234dd599a33b3af0958a4d5ed569d63e3f344f"
 base_uv_bin: /usr/local/bin/uv
 # AWS CLI v2, pinned + sha256-verified, same idiom as uv above. Ubuntu 24.04
 # dropped the `awscli` package from the archive entirely (universe included),

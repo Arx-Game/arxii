@@ -4,6 +4,7 @@ import { useAppSelector } from '@/store/hooks';
 import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { reactToInteraction } from '../queries';
+import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 // Matches ReactionWindowKind.KUDOS's wire value (src/world/scenes/constants.py).
 export const KUDOS_KIND = 'kudos';
@@ -30,7 +31,7 @@ export function useKudos(sceneId: string, interactionId: number) {
         kind: KUDOS_KIND,
         choice: KUDOS_KIND,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }),
   });
   return {
     personaId,

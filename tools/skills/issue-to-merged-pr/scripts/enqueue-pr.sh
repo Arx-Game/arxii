@@ -14,7 +14,7 @@
 #
 # Exits:
 #   0  auto-merge enabled (or already enabled)
-#   1  usage / generic error
+#   1  usage / generic error / unresolved review threads
 set -euo pipefail
 
 DRY_RUN=0
@@ -142,6 +142,46 @@ Do one of:
 
 Read them with:
   gh api "repos/<owner>/<repo>/code-scanning/alerts?ref=refs/pull/PR/head"
+MSG
+  exit 1
+fi
+
+# The ruleset requires every review thread resolved before merge (#4510). An
+# agent that replied to the code reviewer's threads and enqueued anyway left the
+# maintainer to find and close each one. Threads from any author count.
+# ENQUEUE_THREADS_JSON_FILE substitutes the GraphQL response (tests, no network).
+# shellcheck disable=SC2016  # GraphQL variables, not shell expansions.
+THREADS_QUERY='
+query($owner:String!,$repo:String!,$pr:Int!){
+  repository(owner:$owner,name:$repo){
+    pullRequest(number:$pr){
+      reviewThreads(first:100){
+        nodes{ id isResolved path line comments(first:1){ nodes{ body } } }
+      }
+    }
+  }
+}'
+if [[ -n "${ENQUEUE_THREADS_JSON_FILE:-}" ]]; then
+  THREADS_JSON=$(cat "$ENQUEUE_THREADS_JSON_FILE")
+else
+  THREADS_JSON=$(gh api graphql -f query="$THREADS_QUERY" \
+    -f owner="$REPO_OWNER" -f repo="$REPO_NAME" -F pr="$PR")
+fi
+UNRESOLVED=$(jq -r '.data.repository.pullRequest.reviewThreads.nodes[]
+  | select(.isResolved == false)
+  | "  \(.path):\(.line // "?")  \(.comments.nodes[0].body | split("\n")[0])  (thread \(.id))"' \
+  <<<"$THREADS_JSON")
+if [[ -n "$UNRESOLVED" ]]; then
+  echo "ERROR: PR #$PR has unresolved review threads:" >&2
+  echo "$UNRESOLVED" >&2
+  cat >&2 <<'MSG'
+
+The ruleset blocks the merge until every thread is resolved. For each one: fix
+the code or reply with why the finding is wrong, then resolve the thread yourself
+(checklist section 4; you do not need a human to close a thread you answered):
+
+  gh api graphql -f query='mutation($t:ID!){resolveReviewThread(input:{threadId:$t}){
+    thread{isResolved}}}' -f t=<thread-id>
 MSG
   exit 1
 fi

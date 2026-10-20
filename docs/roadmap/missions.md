@@ -39,16 +39,16 @@ Missions are branching narrative quest chains — the primary way characters int
 - **Mission awards name organizations (#4473 ✅ shipped)**: a `MissionRenownAward` carries `NamedOrganization` rows (admin inline): an organization helped or harmed by the route that fired. A mission reaction is sized by `RenownMagnitudeAward.named_organization_award` for the award's magnitude (one route per outcome tier, so authors size it per tier), adjusted by the organization's own principles, and applied at once; a harmed row marked "only if exposed" is held as a victim on a secret about the award holder instead. The Mission Studio does not author these yet (admin only).
 - **Legend risk floor (#2051 ✅ shipped)**: a `MissionOptionRouteReward` with `sink=LEGEND_POINTS` or a `MissionRenownAward` with legend-paying risk (HIGH/EXTREME) requires the parent template's `risk_tier ≥ LEGEND_RISK_FLOOR_TIER` (4). Hard-blocked at save time via `clean()`; a one-time legacy audit (`arx manage audit_legend_floor`) lists existing violations. Solo characters accepting a legend-risk mission see the darkness warning: "You are alone. Your threads are quiet. This will very likely kill you." See ADR-0107.
 
-## Trials (#4343) - slice 1 BUILT (#4501), slice 2 (Trial builder admin page) open
+## Trials (#4343) - slice 1 BUILT (#4501), slice 2 (Trial builder admin page) BUILT (#4513)
 A trial is a mission whose good tiers make a codex entry known, train or grant the technique it
 opens, and cost something. Built in slice 1: `GRANT_CODEX.grants_known`, the `TECHNIQUE_TRAINING`
 effect (points on the technique's meter, or "grant outright" at Critical Success through
 `learn_technique` with the `TRIAL` origin, every prerequisite still checked), cosmetic Mage Scars
 as a Success reward, the "this opens a technique" notice, a mission route's "Condition: name (severity n)" notice for a condition it puts on the actor, and the save rules in
-`world/checks/trial_rules.py`. Not built: the Trial builder page (slice 2), a trial's action point
+`world/checks/trial_rules.py`. Slice 2 (#4513): the Trial builder at `/admin/_trial_builder/<option>/` edits one CHECK mission option's whole trial on one page (header: entry, technique, meter size; a fieldset per outcome tier for next node, label, outcome text, codex effect, training, cost, cosmetic reward, deliberately free), with a rail of blocking and informational warnings that update as the author edits, where the technique is taught, and where else the entry is made known. Opened from the option's change page or the builder's index. Not built: a trial's action point
 cost and whether trial points count toward the weekly training cap (the action-point owner's call),
-a GM-facing log row of the effects a trial applied (the demo's GM tab; applied effects are not persisted anywhere today, so it needs a stored surface and a decision on one), and GM-assigned activities paced by real time. A trial run today is authored on the stock
-Consequence page (effects inline).
+a GM-facing log row of the effects a trial applied (the demo's GM tab; applied effects are not persisted anywhere today, so it needs a stored surface and a decision on one), and GM-assigned activities paced by real time. A trial can still be authored by hand on the stock
+Consequence page (effects inline); both refuse the same things.
 
 ## Open Gaps (from the 2026-06-10 code audit; #923 economy work closes the money one)
 - **Reward sinks**: money now lands for real at the report step (#1753 — `apply_deed_rewards` delivers via `deliver_mission_money`). **CRIME_WATCH is live** (#1765 — `integrations/crime_watch.flag_crime` mints pursuit heat + the society-reputation sting via the justice app; `ref` carries the `CrimeKind` slug). Beat records in-memory; rumor remains a stub pending tidings. Renown is already real. Criminality is declared at deed birth: renown emission tags every minted legend entry with the run's CRIME_WATCH kinds, so tellings of a mission deed mint heat wherever a law matches.

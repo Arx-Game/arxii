@@ -629,3 +629,50 @@ class RecycleNeedsGMApproval(ItemError):
             "before it can be unmade."
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# The commission loop (#4512): design text, dedication and lineage
+# ---------------------------------------------------------------------------
+
+
+class ItemAlreadyDedicated(ItemError):
+    """The piece already has a dedication; a dedication is permanent."""
+
+    user_message = "That piece is already made for someone, and a dedication is permanent."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That piece is already made for someone, and a dedication is permanent."}
+    )
+
+
+class CannotDedicateToSelf(ItemError):
+    """A dedication names one other character."""
+
+    user_message = "A piece can only be made for someone else."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"A piece can only be made for someone else."}
+    )
+
+
+class DesignAlreadyWritten(ItemError):
+    """The item already carries someone else's name or description."""
+
+    user_message = (
+        "That piece already has a name or description from someone else, "
+        "so you cannot write over it."
+    )
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "That piece already has a name or description from someone else, "
+            "so you cannot write over it."
+        }
+    )
+
+
+class WorkedFromUnavailable(ItemError):
+    """The item chosen to be worked in is not one the crafter can use up."""
+
+    user_message = "You can only work in an item you are holding."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You can only work in an item you are holding."}
+    )

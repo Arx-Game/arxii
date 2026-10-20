@@ -268,6 +268,15 @@ living in the repo; every ansible role's fail-closed asserts (host_firewall,
 django_hardening, ...) exist because a role must never silently converge against an empty,
 ungenerated config.
 
+**CA dependency update (#4505).** The project requires certifi 2026.10.19 or
+newer, and the base role installs uv 0.13.4 with a verified archive checksum.
+Apply the base role to update uv on an existing host, then deploy the
+updated lockfile to refresh the application venv. Restart the running services
+(including the Portal) so they reload the updated CA bundle; a Server reload
+alone does not refresh the Portal. Development uses the matching mise uv pin;
+the existing CI setup-uv configuration continues to install the latest release.
+Linux system and Node trust-policy assessment is tracked separately in #4506.
+
 The deploy is idempotent: re-runs are safe and mostly no-ops. Per release,
 after the box itself is provisioned, the app_deploy role runs (in order):
 
