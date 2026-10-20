@@ -21,8 +21,9 @@ def purge_expired_soft_deleted_items(*, grace: timedelta | None = None) -> int:
     """Hard-delete soft-deleted ItemInstance rows that are past the grace
     period AND not lore-critical (no facets, no transfer provenance, no
     ``lore_value``) and carry no design: a player-written name or description, a
-    designer, a silhouette or a style (#4500, owner ruling 2026-10-18: a design is
-    never permanently deleted, so a replica can be made from it later). Deletes each
+    designer, a silhouette, a style, a dedication or a lineage (#4500, #4512, owner
+    ruling 2026-10-18: a design is never permanently deleted, so a replica can be made
+    from it later). Deletes each
     row's whole footprint via ``hard_delete_item_instance`` (no dangling FKs). Returns
     the count purged.
 
@@ -50,6 +51,8 @@ def purge_expired_soft_deleted_items(*, grace: timedelta | None = None) -> int:
             custom_description="",
             designer_character_sheet__isnull=True,
             silhouette__isnull=True,
+            dedicated_at__isnull=True,
+            lineage__isnull=True,
         )
         .select_related("game_object")
         .annotate(

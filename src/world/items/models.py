@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import Media
     from world.conditions.models import DamageType
     from world.items.crafting.models import ItemAccent
+    from world.items.market.models import MarketSale
     from world.mechanics.models import ModifierTarget
 
 from django.core.exceptions import ValidationError
@@ -986,6 +987,28 @@ class ItemInstance(SharedMemoryModel):
             "'Crafted by X, Designed by Y', collapsing when equal."
         ),
     )
+    dedicated_to_persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dedicated_items",
+        help_text=(
+            "The persona this piece was made for (#4512). Written once, at making or on a "
+            "commission, and permanent: an item has at most one dedication."
+        ),
+    )
+    dedicated_by_persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The persona who dedicated it: the maker at making, the commissioner otherwise.",
+    )
+    dedicated_at = models.DateTimeField(
+        null=True, blank=True, help_text="When the dedication was written."
+    )
     contained_in = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
@@ -1146,6 +1169,23 @@ class ItemInstance(SharedMemoryModel):
         )
 
     @cached_property
+    def cached_service_sales(self) -> list[MarketSale]:
+        """The crafting-service sales on this item, oldest first (#4512): who did facet or
+        style work on it for someone else. A prefetch can fill it; otherwise it queries.
+        To invalidate: del instance.cached_service_sales"""
+        return list(
+            self.market_sales.filter(kind="service")
+            .select_related("seller_persona")
+            .order_by("occurred_at", "pk")
+        )
+
+    @cached_property
+    def cached_lineage(self) -> list[ItemLineage]:
+        """What this item was worked from (#4512), with each source loaded so examine can
+        mark one that is gone. A prefetch can fill it; otherwise it queries."""
+        return list(self.lineage.select_related("source_item"))
+
+    @cached_property
     def cached_item_styles(self) -> list[ItemStyle]:
         """Styles attached to this item instance (#546).
 
@@ -1179,7 +1219,9 @@ class ItemInstance(SharedMemoryModel):
         # A silhouette or style is part of the design a given-up or destroyed item keeps
         # (#4500, owner ruling 2026-10-18). The designer is not tested here: making stamps
         # the crafter as designer on every crafted item (the purge spares it, cleanup.py).
-        if self.silhouette_id or self.item_styles.exists():
+        if self.silhouette_id or self.dedicated_at is not None or self.item_styles.exists():
+            return True
+        if self.lineage.exists():
             return True
         if self.has_facet_history:
             return True
@@ -1506,6 +1548,38 @@ class OwnershipEvent(SharedMemoryModel):
     def __str__(self) -> str:
         display = self.item_instance.display_name if self.item_instance else "deleted"
         return f"{display}: {self.get_event_type_display()}"
+
+
+class ItemLineage(SharedMemoryModel):
+    """The record that a piece was worked from another item its maker chose (#4512, #4462).
+
+    The source is used up by the making, so ``source_item`` is SET_NULL and the name and
+    the source's meaning points to the crafter at that moment are snapshots. A table
+    rather than a field so a later design can allow more than one source. Recipe
+    materials are allocated by template as before and record nothing here.
+    """
+
+    item = models.ForeignKey(ItemInstance, on_delete=models.CASCADE, related_name="lineage")
+    source_item = models.ForeignKey(
+        ItemInstance,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="worked_into",
+        help_text="The item that was worked in. Null once it is purged.",
+    )
+    source_name = models.CharField(
+        max_length=300, help_text="The source's name when it was used up."
+    )
+    points = models.PositiveSmallIntegerField(
+        help_text="The source's meaning points to the crafter when it was used up."
+    )
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return f"{self.item_id} worked from {self.source_name}"
 
 
 class RecycleRequest(SharedMemoryModel):

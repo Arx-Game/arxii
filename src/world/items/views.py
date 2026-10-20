@@ -1780,6 +1780,7 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
         from actions.definitions.crafting import CreateItemAction  # noqa: PLC0415
         from world.items.models import Style  # noqa: PLC0415
         from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
 
         template_pk = request.data.get("template")
         custom_name = request.data.get("custom_name", "")
@@ -1787,6 +1788,8 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
         accent_pks = request.data.get("accent_targets") or []
         style_pks = request.data.get("styles") or []
         silhouette_id = request.data.get("silhouette")
+        made_for_pk = request.data.get("made_for")
+        worked_from_pk = request.data.get("worked_from")
         if not template_pk:
             raise serializers.ValidationError({"template": "This field is required."})
         try:
@@ -1804,6 +1807,20 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
         if len(styles) != len(set(style_pks)):
             raise serializers.ValidationError({"styles": "One or more styles are unknown."})
         actor_sheet = _resolve_actor_sheet(request, body_key="crafter_sheet_id")
+        dedicate_to = None
+        if made_for_pk:
+            dedicate_to = Persona.objects.filter(pk=made_for_pk).first()
+            if dedicate_to is None:
+                raise serializers.ValidationError({"made_for": "No such character."})
+        worked_from = None
+        if worked_from_pk:
+            worked_from = ItemInstance.objects.filter(
+                pk=worked_from_pk, holder_character_sheet=actor_sheet, destroyed_at__isnull=True
+            ).first()
+            if worked_from is None:
+                raise serializers.ValidationError(
+                    {"worked_from": "You can only work in an item you are holding."}
+                )
         action_result = CreateItemAction().run(
             actor=actor_sheet.character,
             output_template=template,
@@ -1812,6 +1829,8 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
             accent_targets=accent_targets,
             silhouette_id=silhouette_id,
             styles=styles,
+            dedicate_to=dedicate_to,
+            worked_from=worked_from,
         )
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})

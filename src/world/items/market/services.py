@@ -323,22 +323,74 @@ def set_service_offer(
     return offer
 
 
+def _may_write(instance: ItemInstance, buyer: Persona, *, current: str) -> bool:
+    """Whether ``buyer`` may write a name or description field: it is empty, or they are
+    already the item's designer."""
+    return not current or instance.designer_character_sheet_id == buyer.character_sheet_id
+
+
+def _check_commission_words(
+    instance: ItemInstance, buyer: Persona, *, name: str, description: str
+) -> None:
+    """Refuse text that would overwrite someone else's design (#4512)."""
+    from world.items.exceptions import DesignAlreadyWritten  # noqa: PLC0415
+
+    if name and not _may_write(instance, buyer, current=instance.custom_name):
+        raise DesignAlreadyWritten
+    if description and not _may_write(instance, buyer, current=instance.custom_description):
+        raise DesignAlreadyWritten
+
+
+def _write_commission_words(
+    instance: ItemInstance, buyer: Persona, *, name: str, description: str
+) -> None:
+    """Write the buyer's own words and credit them as designer (#4512). Without text the
+    designer stays as it was; the fee never makes anyone a designer."""
+    if not name and not description:
+        return
+    fields = ["designer_character_sheet", "designer_persona_display"]
+    if name:
+        instance.custom_name = name
+        fields.append("custom_name")
+    if description:
+        instance.custom_description = description
+        fields.append("custom_description")
+    instance.designer_character_sheet = buyer.character_sheet
+    instance.designer_persona_display = buyer
+    instance.save(update_fields=fields)
+    if name:
+        # A new name reaches the game object too, or look keeps the old one (#4338).
+        from world.items.services.materialize import sync_item_object_key  # noqa: PLC0415
+
+        sync_item_object_key(instance)
+
+
 @transaction.atomic
-def run_service_craft(
+def run_service_craft(  # noqa: PLR0913 - the commissioner's words and dedication ride along (#4512)
     *,
     offer: CraftingServiceOffer,
     buyer: Persona,
     buyer_character: ObjectDB,
     item_instance: ItemInstance,
     target: object,
+    name: str = "",
+    description: str = "",
+    dedicate_to: Persona | None = None,
 ) -> tuple[CraftRunResult, int]:
     """Run a crafting attempt with the OFFERING crafter's skill (#2066).
 
     Arx 1's loop made honest: the buyer must stand in the shop (crafting is
     station-anchored there), supplies the item and target, pays the fee up
     front (charged even on a failed roll — the smith worked either way);
-    the crafter's character rolls the check and gets the crafter credit;
-    the buyer takes designer credit. Works with the crafter offline.
+    the crafter's character rolls the check and gets the crafter credit. Works
+    with the crafter offline.
+
+    The buyer may also write the piece's ``name`` and ``description`` and
+    ``dedicate_to`` one other character (#4512). The buyer is credited as designer
+    only when they write text, and may write a field only where the item has none or
+    they are already its designer, so an artist's or earlier owner's words are never
+    overwritten. A dedication is permanent. Both are the buyer's own act, so they are
+    written whatever the roll, like the fee. The fee itself counts for nothing.
 
     Returns ``(result, charged_fee)`` — the fee actually charged, after the
     crafter's regard band (#2995; a no-op when ``crafter_persona`` is a PC).
@@ -362,6 +414,11 @@ def run_service_craft(
         msg = "buyer does not hold the instance"
         raise MarketServiceError(msg, user_message="You are not holding that item.")
     _check_regard_gate(offer.crafter_persona, buyer, offer.min_regard)
+    _check_commission_words(item_instance, buyer, name=name, description=description)
+    if dedicate_to is not None:
+        from world.items.services.dedication import validate_dedication  # noqa: PLC0415
+
+        validate_dedication(item_instance, by_sheet=buyer.character_sheet, to=dedicate_to)
     fee = _regard_adjusted_price(offer.fee, _shopkeeper_regard(offer.crafter_persona, buyer))
 
     crafter_sheet = offer.crafter_persona.character_sheet
@@ -375,9 +432,11 @@ def run_service_craft(
         item_instance=item_instance,
         target=target,
     )
-    item_instance.designer_character_sheet = buyer.character_sheet
-    item_instance.designer_persona_display = buyer
-    item_instance.save(update_fields=["designer_character_sheet", "designer_persona_display"])
+    _write_commission_words(item_instance, buyer, name=name, description=description)
+    if dedicate_to is not None:
+        from world.items.services.dedication import dedicate_item  # noqa: PLC0415
+
+        dedicate_item(item_instance, by=buyer, to=dedicate_to)
     MarketSale.objects.create(
         kind=MarketSale.SaleKind.SERVICE,
         buyer_persona=buyer,

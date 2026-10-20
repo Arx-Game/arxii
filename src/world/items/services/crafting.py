@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.items.models import ItemFacet, ItemInstance, ItemStyle, ItemTemplate, Style
     from world.magic.models import Facet
+    from world.scenes.models import Persona
 
 
 def compute_quality_score(check_result: CheckResult, *, step: int, min_success_level: int) -> int:
@@ -157,6 +158,8 @@ def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 acce
     accent_targets: list | None = None,
     silhouette_id: int | None = None,
     styles: list | None = None,
+    dedicate_to: Persona | None = None,
+    worked_from: ItemInstance | None = None,
 ) -> ItemCreateResult:
     """Run the ITEM_CREATE recipe and map the result onto ``ItemCreateResult``.
 
@@ -170,6 +173,9 @@ def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 acce
         output_template: The ItemTemplate to create an instance of.
         custom_name: Player-authored name override (empty = use template default).
         custom_description: Player-authored description override.
+        dedicate_to: The persona the piece is made for (#4512); permanent.
+        worked_from: One item the crafter holds, used up by the making and recorded as
+            the piece's lineage (#4512). Kept if the roll fails.
 
     Returns:
         ItemCreateResult with created=True and item_instance set on success,
@@ -182,6 +188,15 @@ def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 acce
         CraftingStationBroken: Station at 0 durability.
     """
     from world.items.crafting.services import run_crafting_recipe  # noqa: PLC0415
+    from world.items.services.dedication import validate_dedication  # noqa: PLC0415
+    from world.items.services.lineage import validate_worked_from  # noqa: PLC0415
+
+    # Refuse a bad dedication or lineage before any roll, so none is wasted on it.
+    crafter_sheet = crafter_character.character_sheet
+    if dedicate_to is not None:
+        validate_dedication(None, by_sheet=crafter_sheet, to=dedicate_to)
+    if worked_from is not None:
+        validate_worked_from(worked_from, crafter=crafter_sheet)
 
     result = run_crafting_recipe(
         kind=CraftingRecipeKind.ITEM_CREATE,
@@ -195,6 +210,8 @@ def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 acce
             "custom_description": custom_description,
             "silhouette_id": silhouette_id,
             "styles": styles,
+            "dedicate_to": dedicate_to,
+            "worked_from": worked_from,
         },
         accent_targets=accent_targets,
     )

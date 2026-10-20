@@ -23,7 +23,8 @@ from commands.exceptions import CommandError
 _USAGE = (
     "Usage: craft facet <name> item=<id> | craft removefacet <item_facet_id> | "
     "craft style <name> item=<id> | craft quote facet=<name>|style=<name> item=<id> | "
-    "craft create <template>=<custom name>, <custom description> | craft cut item=<id>"
+    "craft create <template>=<custom name>, <custom description> [for=<persona>] [from=<item id>] "
+    "| craft cut item=<id>"
 )
 
 
@@ -201,7 +202,30 @@ class CmdCraft(ArxCommand):
             self.msg(result.message)
 
     def _do_create(self, rest: str) -> None:
-        from world.items.models import ItemTemplate  # noqa: PLC0415
+        import re  # noqa: PLC0415
+
+        from world.items.models import ItemInstance, ItemTemplate  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        # Trailing options: ``for=<persona>`` makes the piece for one other character
+        # (permanent) and ``from=<item id>`` works a held item into it (#4512).
+        dedicate_to = None
+        worked_from = None
+        made_for = re.search(r'\bfor=("[^"]+"|\S+)', rest)
+        if made_for:
+            rest = rest.replace(made_for.group(0), "").strip()
+            persona_name = made_for.group(1).strip('"')
+            dedicate_to = Persona.objects.filter(name__iexact=persona_name).first()
+            if dedicate_to is None:
+                msg = f"No one called '{persona_name}'."
+                raise CommandError(msg)
+        from_item = re.search(r"\bfrom=(\d+)", rest)
+        if from_item:
+            rest = rest.replace(from_item.group(0), "").strip()
+            worked_from = ItemInstance.objects.filter(pk=int(from_item.group(1))).first()
+            if worked_from is None:
+                msg = "No such item to work in."
+                raise CommandError(msg)
 
         if "=" in rest:
             name_part, _, desc_part = rest.partition("=")
@@ -228,6 +252,8 @@ class CmdCraft(ArxCommand):
             output_template=template,
             custom_name=custom_name,
             custom_description=custom_desc,
+            dedicate_to=dedicate_to,
+            worked_from=worked_from,
         )
         if result.message:
             self.msg(result.message)
