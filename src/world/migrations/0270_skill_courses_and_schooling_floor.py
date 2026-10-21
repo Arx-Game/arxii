@@ -69,7 +69,8 @@ class Migration(migrations.Migration):
                 (
                     "session_ap_cost",
                     models.PositiveSmallIntegerField(
-                        help_text="Action points the learner pays for each session."
+                        help_text="Action points the learner pays for each session.",
+                        verbose_name="Session AP cost",
                     ),
                 ),
                 (
