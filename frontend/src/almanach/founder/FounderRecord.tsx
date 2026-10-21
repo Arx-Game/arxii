@@ -20,7 +20,7 @@ import type { HouseClaimStatus, HouseTemplateOption } from '@/character-creation
 import { submitHouseClaim } from '@/character-creation/api';
 import type { ClaimKinRelation } from '@/character-creation/types';
 
-import { REVIEW_NOTE } from '../copy';
+import { REVIEW_NOTE, houseHeading } from '../copy';
 import { tierNoun } from '../ladder/tree';
 import { useCharter } from '../queries';
 
@@ -170,7 +170,7 @@ export function FounderRecord({
   return (
     <main className="chapter">
       <h3>
-        House {draft.house_name}{' '}
+        {houseHeading(draft.house_name)}{' '}
         <span className="tier">
           {tierNoun(seatTier, 1)} of {seatName}
           {swornTo !== '' && <> · sworn to {swornTo}</>}

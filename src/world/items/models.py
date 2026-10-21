@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from world.items.crafting.models import ItemAccent
     from world.items.market.models import MarketSale
     from world.mechanics.models import ModifierTarget
+    from world.societies.models import LegendEntry
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
@@ -35,6 +36,7 @@ from world.items.constants import (
     ContainerAccessPolicy,
     EquipmentLayer,
     GearArchetype,
+    KeepsakeSubject,
     OwnershipEventType,
     RecycleRequestStatus,
     ShowcaseMode,
@@ -1193,6 +1195,24 @@ class ItemInstance(SharedMemoryModel):
         """
         return list(self.lineage.select_related("source_item"))
 
+    @PrunedCachedProperty
+    def cached_trophy_deeds(self) -> list[LegendEntry]:
+        """The active deeds this item is a trophy of (#4530), for examine. The carried-items
+        handler prefetches it; otherwise it queries.
+
+        To invalidate: del instance.cached_trophy_deeds
+        """
+        return list(self.legend_deeds.filter(is_active=True))
+
+    @PrunedCachedProperty
+    def cached_shown_keepsakes(self) -> list[Keepsake]:
+        """The keepsakes on this item whose words their keeper chose to show on examine
+        (#4530). The carried-items handler prefetches it; otherwise it queries.
+
+        To invalidate: del instance.cached_shown_keepsakes
+        """
+        return list(self.keepsakes.filter(shown_on_examine=True))
+
     @cached_property
     def cached_item_styles(self) -> list[ItemStyle]:
         """Styles attached to this item instance (#546).
@@ -1589,6 +1609,199 @@ class ItemLineage(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.item_id} worked from {self.source_name}"
+
+
+class Keepsake(SharedMemoryModel):
+    """An item a player declared stands for something in their character's life (#4530, #4462).
+
+    The subject is one of a tie, one of the character's own deeds, a being, an organization,
+    a person or a place, and **exactly the field for that kind is set** (a CHECK enforces it).
+    The game scores the subject: a tie by its claimed tier, a deed by its legend, anything
+    else by a flat point. ``text`` is the player's own words; it is shown to the GM and, when
+    ``shown_on_examine``, on examine, and **nothing ever scores it**. A keepsake counts after
+    ``DevotionConfig.keepsake_wait_days`` from ``created_at``, so declaring one the moment
+    before giving the item up earns nothing.
+
+    The subject FKs cascade on delete: a keepsake of a thing that no longer exists stands
+    for nothing, and SET_NULL would break the CHECK.
+    """
+
+    item_instance = models.ForeignKey(
+        ItemInstance, on_delete=models.CASCADE, related_name="keepsakes"
+    )
+    character_sheet = models.ForeignKey(
+        _CHARACTER_SHEET_FK, on_delete=models.CASCADE, related_name="keepsakes"
+    )
+    subject_kind = models.CharField(
+        max_length=20,
+        choices=KeepsakeSubject.choices,
+        help_text="Exactly the matching field below must be set.",
+    )
+    subject_relationship = models.ForeignKey(
+        "arxii.CharacterRelationship",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="keepsakes",
+        help_text="Tie: one of this character's own sides.",
+    )
+    subject_deed = models.ForeignKey(
+        "arxii.LegendEntry",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="keepsakes",
+        help_text="Deed: credited to one of this character's personas.",
+    )
+    subject_being = models.ForeignKey(
+        "arxii.WorshippedBeing",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="keepsakes",
+    )
+    subject_organization = models.ForeignKey(
+        "arxii.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="keepsakes",
+    )
+    subject_persona = models.ForeignKey(
+        _PERSONA_FK,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="keepsakes_of",
+        help_text="Person: the persona the item stands for.",
+    )
+    subject_label = models.CharField(
+        max_length=100, blank=True, default="", help_text="Place: free text."
+    )
+    text = models.TextField(
+        max_length=600,
+        blank=True,
+        default="",
+        help_text="The player's words. Shown to the GM and, if chosen, on examine. Never scored.",
+    )
+    shown_on_examine = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "character_sheet"], name="unique_keepsake_per_character"
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        subject_kind=KeepsakeSubject.TIE,
+                        subject_relationship__isnull=False,
+                        subject_deed__isnull=True,
+                        subject_being__isnull=True,
+                        subject_organization__isnull=True,
+                        subject_persona__isnull=True,
+                        subject_label="",
+                    )
+                    | models.Q(
+                        subject_kind=KeepsakeSubject.DEED,
+                        subject_relationship__isnull=True,
+                        subject_deed__isnull=False,
+                        subject_being__isnull=True,
+                        subject_organization__isnull=True,
+                        subject_persona__isnull=True,
+                        subject_label="",
+                    )
+                    | models.Q(
+                        subject_kind=KeepsakeSubject.BEING,
+                        subject_relationship__isnull=True,
+                        subject_deed__isnull=True,
+                        subject_being__isnull=False,
+                        subject_organization__isnull=True,
+                        subject_persona__isnull=True,
+                        subject_label="",
+                    )
+                    | models.Q(
+                        subject_kind=KeepsakeSubject.ORGANIZATION,
+                        subject_relationship__isnull=True,
+                        subject_deed__isnull=True,
+                        subject_being__isnull=True,
+                        subject_organization__isnull=False,
+                        subject_persona__isnull=True,
+                        subject_label="",
+                    )
+                    | models.Q(
+                        subject_kind=KeepsakeSubject.PERSON,
+                        subject_relationship__isnull=True,
+                        subject_deed__isnull=True,
+                        subject_being__isnull=True,
+                        subject_organization__isnull=True,
+                        subject_persona__isnull=False,
+                        subject_label="",
+                    )
+                    | (
+                        models.Q(
+                            subject_kind=KeepsakeSubject.PLACE,
+                            subject_relationship__isnull=True,
+                            subject_deed__isnull=True,
+                            subject_being__isnull=True,
+                            subject_organization__isnull=True,
+                            subject_persona__isnull=True,
+                        )
+                        & ~models.Q(subject_label="")
+                    )
+                ),
+                name="keepsake_exactly_its_subject",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_instance_id} kept by {self.character_sheet_id}: {self.subject_kind}"
+
+    #: The one subject field each kind sets (a place sets ``subject_label``).
+    SUBJECT_FIELD_BY_KIND: ClassVar[dict[str, str]] = {
+        KeepsakeSubject.TIE: "subject_relationship",
+        KeepsakeSubject.DEED: "subject_deed",
+        KeepsakeSubject.BEING: "subject_being",
+        KeepsakeSubject.ORGANIZATION: "subject_organization",
+        KeepsakeSubject.PERSON: "subject_persona",
+        KeepsakeSubject.PLACE: "subject_label",
+    }
+
+    def clean(self) -> None:
+        """Exactly the field for the kind is set, as the CHECK demands, with the error on the
+        field that is wrong rather than a database error."""
+        super().clean()
+        wanted = self.SUBJECT_FIELD_BY_KIND.get(self.subject_kind)
+        label_field = self.SUBJECT_FIELD_BY_KIND[KeepsakeSubject.PLACE]
+        errors: dict[str, str] = {}
+        for field in self.SUBJECT_FIELD_BY_KIND.values():
+            value = getattr(self, field)
+            filled = bool(value) if field == label_field else value is not None
+            if field == wanted and not filled:
+                errors[field] = "Set the subject this kind of keepsake stands for."
+            elif field != wanted and filled:
+                errors[field] = "Leave this empty; it is not the kind of subject chosen."
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def subject_name(self) -> str:
+        """What it stands for, for the GM and the admin: never the player's words."""
+        kind = self.subject_kind
+        if kind == KeepsakeSubject.TIE and self.subject_relationship is not None:
+            target = self.subject_relationship.target
+            return f"a tie with {target.primary_persona.name if target else 'a companion'}"
+        if kind == KeepsakeSubject.DEED and self.subject_deed is not None:
+            return f"the deed {self.subject_deed.title}"
+        if kind == KeepsakeSubject.BEING and self.subject_being is not None:
+            return self.subject_being.name
+        if kind == KeepsakeSubject.ORGANIZATION and self.subject_organization is not None:
+            return self.subject_organization.name
+        if kind == KeepsakeSubject.PERSON and self.subject_persona is not None:
+            return self.subject_persona.name
+        return self.subject_label
 
 
 class RecycleRequest(SharedMemoryModel):

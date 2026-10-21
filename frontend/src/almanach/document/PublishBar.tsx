@@ -15,7 +15,7 @@
  * the plate's example-specific "the seat" wording — nothing in
  * `AlmanachEstateEntry` says whether an estate IS the house's seat.
  */
-import { PUBLISH_STATUS } from '../copy';
+import { PUBLISH_STATUS, houseHeading } from '../copy';
 import type {
   AlmanachDocumentLands,
   AlmanachEstateEntry,
@@ -106,7 +106,7 @@ export function PublishBar({ house, family, lands, estate, onPublish }: PublishB
 
   return (
     <main className="chapter">
-      <h3>House {house.name}</h3>
+      <h3>{houseHeading(house.name)}</h3>
       <div className="scroll">
         <table className="lad">
           <thead>

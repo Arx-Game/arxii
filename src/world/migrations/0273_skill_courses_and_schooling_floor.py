@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0271_currency_transfer_not_void_reads_holder_kinds")]
+    dependencies = [("arxii", "0272_meaningful_items_keepsakes_trophies_requests")]
 
     operations = [
         migrations.CreateModel(

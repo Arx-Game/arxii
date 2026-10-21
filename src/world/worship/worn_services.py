@@ -1,4 +1,4 @@
-"""What she wears counts with her gods (#4520, #4462 section 6.4; folds #4333 slice 8).
+"""What she wears and carries counts with her gods (#4520, #4530; #4462 section 6.4).
 
 When a character invokes a being, the game reads the pieces she has on that carry at
 least one facet the being favors (``BeingFacet``). Each piece's meaning points
@@ -10,6 +10,12 @@ ease of all of them together is capped at ``invocation_meaning_ease_max``. A pie
 meaning adds nothing, so a bought piece with no other history never counts however many
 favored facets it carries.
 
+A keepsake of the being that she carries eases an invocation by its keepsake points times
+``invocation_ease_per_keepsake_point``, and the being's Relic by its ``invocation_points``
+times the same rate (#4530). They have no favored facet and no earning bonus, they are not
+held to ``worn_items_counted``, and an item already counted as a worn piece is not counted
+again as a keepsake. All of it together stays within ``invocation_meaning_ease_max``.
+
 The ease is added to ``invocation_difficulty`` as one more labelled ease, lowering the
 difficulty the invocation check rolls against. It is not also passed to the check as a
 ``ModifierContribution``: that would count the same piece twice, once in the displayed
@@ -20,7 +26,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.items.constants import MeaningSignalKind
 from world.items.services.meaning import item_meaning
+from world.worship.constants import InvocationPieceSource
 from world.worship.types import WornMeaning, WornPiece
 
 if TYPE_CHECKING:
@@ -28,6 +36,7 @@ if TYPE_CHECKING:
     from world.items.models import ItemInstance
     from world.worship.models import (
         BeingFacet,
+        DevotionConfig,
         FavorInvocation,
         InvocationPiece,
         WorshippedBeing,
@@ -57,24 +66,18 @@ def _favored_pieces(
     return found
 
 
-def worn_meaning(sheet: CharacterSheet, being: WorshippedBeing) -> WornMeaning:
-    """The worn pieces that count with ``being`` for ``sheet``, and what they add."""
-    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
-
-    config = get_devotion_config()
+def _worn_pieces(
+    sheet: CharacterSheet, being: WorshippedBeing, config: DevotionConfig
+) -> list[WornPiece]:
+    """The worn pieces carrying a facet ``being`` favors, counted ones first."""
     favored = {row.facet_id: row for row in being.being_facets.select_related("facet")}
-    empty = WornMeaning(
-        ease_cap=config.invocation_meaning_ease_max, items_counted_max=config.worn_items_counted
-    )
     if not favored:
-        return empty
+        return []
     read = []
     for item, row in _favored_pieces(sheet, favored).values():
         meaning = item_meaning(item, sheet, config=config, being=being)
         points = min(meaning.points, config.worn_item_max_points)
         read.append((points * row.invocation_ease_points, points, item, row, meaning))
-    if not read:
-        return empty
     read.sort(key=lambda entry: (-entry[1], -entry[0], entry[2].pk))
     pieces: list[WornPiece] = []
     counted = 0
@@ -93,6 +96,97 @@ def worn_meaning(sheet: CharacterSheet, being: WorshippedBeing) -> WornMeaning:
                 counted=counts,
             )
         )
+    return pieces
+
+
+def _carried_pieces(
+    sheet: CharacterSheet,
+    being: WorshippedBeing,
+    config: DevotionConfig,
+    *,
+    already_counted: set[int],
+) -> list[WornPiece]:
+    """The keepsakes of ``being`` she carries and its Relic she carries (#4530).
+
+    Carried is an item located on her character, worn or not. A keepsake counts by its
+    keepsake points (the subject and the match, never the words, once its wait has passed);
+    a Relic by the points staff set on it. An item in ``already_counted`` is a worn piece
+    that counted, and its keepsake points are in its meaning already.
+    """
+    from world.items.models import Keepsake  # noqa: PLC0415
+    from world.items.services.meaning import keepsake_signals  # noqa: PLC0415
+    from world.items.types import ItemMeaning, MeaningSignal  # noqa: PLC0415
+    from world.worship.models import Relic  # noqa: PLC0415
+
+    character = sheet.character
+    per_point = config.invocation_ease_per_keepsake_point
+    pieces: list[WornPiece] = []
+    seen = set(already_counted)
+    keepsakes = Keepsake.objects.filter(
+        character_sheet=sheet,
+        subject_being=being,
+        item_instance__destroyed_at__isnull=True,
+        item_instance__game_object__db_location=character,
+    ).select_related("item_instance")
+    for keepsake in keepsakes:
+        item = keepsake.item_instance
+        if item.pk in seen:
+            continue
+        signals = keepsake_signals(item, sheet, config, being=being)
+        points = sum(signal.points for signal in signals)
+        seen.add(item.pk)
+        pieces.append(
+            WornPiece(
+                item=item,
+                item_name=str(item),
+                facet_name="",
+                meaning=ItemMeaning(tuple(signals)),
+                points=points,
+                ease_per_point=per_point,
+                earning_bonus_percent=0,
+                counted=points > 0,
+                source=InvocationPieceSource.KEEPSAKE,
+            )
+        )
+    relics = Relic.objects.filter(
+        being=being,
+        invocation_points__gt=0,
+        item_instance__destroyed_at__isnull=True,
+        item_instance__game_object__db_location=character,
+    ).select_related("item_instance")
+    for relic in relics:
+        item = relic.item_instance
+        if item.pk in seen:
+            continue
+        seen.add(item.pk)
+        signal = MeaningSignal(
+            MeaningSignalKind.KEEPSAKE, relic.invocation_points, f"relic of {being.name}"
+        )
+        pieces.append(
+            WornPiece(
+                item=item,
+                item_name=str(item),
+                facet_name="",
+                meaning=ItemMeaning((signal,)),
+                points=relic.invocation_points,
+                ease_per_point=per_point,
+                earning_bonus_percent=0,
+                counted=True,
+                source=InvocationPieceSource.RELIC,
+            )
+        )
+    return pieces
+
+
+def worn_meaning(sheet: CharacterSheet, being: WorshippedBeing) -> WornMeaning:
+    """The pieces that count with ``being`` for ``sheet``, and what they add: worn pieces
+    carrying a favored facet, then keepsakes of the being and its Relic she carries."""
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+    config = get_devotion_config()
+    pieces = _worn_pieces(sheet, being, config)
+    counted_worn = {piece.item.pk for piece in pieces if piece.counted}
+    pieces.extend(_carried_pieces(sheet, being, config, already_counted=counted_worn))
     return WornMeaning(
         pieces=tuple(pieces),
         ease_cap=config.invocation_meaning_ease_max,
@@ -110,6 +204,7 @@ def record_invocation_pieces(
     for piece in worn.counted:
         row = InvocationPiece.objects.create(
             invocation=invocation,
+            source=piece.source,
             item_name=piece.item_name,
             facet_name=piece.facet_name,
             points=piece.points,

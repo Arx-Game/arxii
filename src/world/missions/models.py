@@ -2579,6 +2579,17 @@ class MissionDeedRewardLine(SharedMemoryModel):
         blank=True,
         help_text="Optional reference/discriminator (e.g., a rumor key).",
     )
+    granted_item = models.ForeignKey(
+        "arxii.ItemInstance",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Set when sink=ITEM once the item is minted: the instance this line granted. "
+            "Lets the item be linked to the deed it was won on as a trophy (#4530)."
+        ),
+    )
     project_contribution = models.ForeignKey(
         "arxii.Contribution",
         null=True,

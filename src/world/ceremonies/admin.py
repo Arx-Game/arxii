@@ -32,7 +32,7 @@ class OfferingSignalInline(admin.TabularInline):
     model = OfferingSignal
     extra = 0
     can_delete = False
-    readonly_fields = ("kind", "points", "detail")
+    readonly_fields = ("kind", "points", "detail", "requested_item")
 
     def has_add_permission(self, request: HttpRequest, obj: object = None) -> bool:
         del request, obj  # signals are computed at sacrifice time, never added by hand
@@ -46,7 +46,14 @@ class CeremonyOfferingAdmin(admin.ModelAdmin):
     list_display = ("item_name", "offered_by", "being", "ceremony", "outcome_tier", "counted")
     list_filter = ("counted",)
     raw_id_fields = ("ceremony", "being", "pledge_details", "offered_by", "worship_grant")
-    readonly_fields = ("outcome_tier", "game_week", "counted", "item_value", "item_legend_value")
+    readonly_fields = (
+        "outcome_tier",
+        "game_week",
+        "counted",
+        "item_value",
+        "item_legend_value",
+        "player_line",
+    )
     inlines = [OfferingSignalInline]
 
 

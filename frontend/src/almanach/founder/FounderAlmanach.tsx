@@ -25,7 +25,7 @@ import type { HouseClaimStatus, HouseTemplateOption } from '@/character-creation
 import type { CharacterDraft } from '@/character-creation/types';
 
 import '../almanach.css';
-import { FOUNDER_CRUMB, STATES } from '../copy';
+import { FOUNDER_CRUMB, STATES, houseHeading } from '../copy';
 import {
   crownOrRootSwornTo,
   defaultPressedTier,
@@ -52,6 +52,7 @@ import {
   permittedRank,
   type FounderStep,
 } from './steps';
+import { urls } from '@/utils/urls';
 
 /** No name field reaches these founder components yet (`CharacterDraft`
  * carries none) — every chapter that needs the founder's own display name
@@ -169,7 +170,7 @@ function LiegeRealmAside({
     <aside className="record">
       {immediateLiege && (
         <>
-          <h4>House {immediateLiege.house_name}</h4>
+          <h4>{houseHeading(immediateLiege.house_name)}</h4>
           <dl>
             <dt>holds</dt>
             <dd>{holdingsOf(rows, immediateLiege.house_name)}</dd>
@@ -180,7 +181,7 @@ function LiegeRealmAside({
       )}
       {liegeName !== '' && (
         <>
-          <h4>House {liegeName}</h4>
+          <h4>{houseHeading(liegeName)}</h4>
           <dl>
             <dt>crown</dt>
             <dd>{realm?.formal_name ? realm.formal_name : <abbr title="none">—</abbr>}</dd>
@@ -199,7 +200,7 @@ function LiegeRealmAside({
               {charter.succession_law.codex_entry_id != null && (
                 <>
                   {' · '}
-                  <a href={`/codex/${charter.succession_law.codex_entry_id}`}>codex</a>
+                  <a href={urls.codexEntry(charter.succession_law.codex_entry_id)}>codex</a>
                 </>
               )}
             </>

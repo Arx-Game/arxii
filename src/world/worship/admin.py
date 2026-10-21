@@ -9,6 +9,7 @@ from django.utils.safestring import SafeString
 
 from world.admin_utils import OneRowPerFormSet
 from world.scenes.action_constants import DIFFICULTY_VALUES, MIN_DIFFICULTY_POINTS, DifficultyChoice
+from world.worship.constants import InvocationPieceSource
 from world.worship.models import (
     Answer,
     AnswerSacrificeLine,
@@ -139,18 +140,28 @@ def worn_pieces_table(invocation: FavorInvocation) -> SafeString:
     rolled. Never a price."""
     pieces = list(invocation.pieces.prefetch_related("signals"))  # noqa: PREFETCH_STRING
     if not pieces:
-        return format_html("<p>No worn piece counted on this invocation.</p>")
+        return format_html("<p>No worn piece, keepsake or Relic counted on this invocation.</p>")
     rows = []
     for piece in pieces:
         signals = list(piece.signals.all())
-        rows.append(
-            format_html(
-                "<tr><td rowspan='{}'>{}</td><td>Favored facet</td>"
-                "<td>{} (the gate; ease {} per point)</td><td>-</td></tr>",
-                len(signals) + 1,
-                piece.item_name,
+        if piece.source == InvocationPieceSource.WORN:
+            gate = format_html(
+                "<td>Favored facet</td><td>{} (the gate; ease {} per point)</td>",
                 piece.facet_name,
                 piece.ease_per_point,
+            )
+        else:
+            gate = format_html(
+                "<td>{}</td><td>ease {} per point</td>",
+                piece.get_source_display(),
+                piece.ease_per_point,
+            )
+        rows.append(
+            format_html(
+                "<tr><td rowspan='{}'>{}</td>{}<td>-</td></tr>",
+                len(signals) + 1,
+                piece.item_name,
+                gate,
             )
         )
         rows.extend(
@@ -172,7 +183,7 @@ def worn_pieces_table(invocation: FavorInvocation) -> SafeString:
         invocation.outcome_tier.name,
     )
     return format_html(
-        "<table><thead><tr><th>Worn piece</th><th>Signal</th><th>Detail</th><th>Points</th></tr>"
+        "<table><thead><tr><th>Piece</th><th>Signal</th><th>Detail</th><th>Points</th></tr>"
         "</thead><tbody>{}</tbody></table>{}",
         format_html_join("", "{}", ((row,) for row in rows)),
         note,
@@ -541,7 +552,40 @@ class DevotionConfigAdmin(admin.ModelAdmin):
                     "worn_items_counted",
                     "resonance_fed_per_point",
                     "resonance_fed_max_points",
+                    "invocation_ease_per_keepsake_point",
                     "invocation_meaning_ease_max",
+                ),
+            },
+        ),
+        (
+            "Keepsakes and trophies",
+            {
+                "description": (
+                    "A keepsake counts by what it stands for, never by the words its keeper "
+                    "wrote. A trophy is an item won on a deed, scored by the deed's legend."
+                ),
+                "fields": (
+                    "keepsake_wait_days",
+                    "keepsakes_per_character",
+                    "keepsake_max_points",
+                    "keepsake_deed_legend_per_point",
+                    "trophy_legend_per_point",
+                    "trophy_max_points",
+                ),
+            },
+        ),
+        (
+            "Rites and requests",
+            {
+                "description": (
+                    "Items given up during a rite ease its roll. A requested item is a cheap "
+                    "item a pledge or rite asks for, set on the Being Service builder."
+                ),
+                "fields": (
+                    "rite_ease_per_point",
+                    "rite_items_counted",
+                    "requested_item_max_points",
+                    "requested_item_max_value",
                 ),
             },
         ),
@@ -676,10 +720,11 @@ class WorshipRitePerformanceAdmin(admin.ModelAdmin):
 
 @admin.register(Relic)
 class RelicAdmin(admin.ModelAdmin):
-    list_display = ("item_instance", "being", "created_at")
+    list_display = ("item_instance", "being", "invocation_points", "created_at")
     search_fields = ("being__name", "item_instance__custom_name", "item_instance__template__name")
     autocomplete_fields = ("being",)
     raw_id_fields = ("item_instance",)
+    fields = ("being", "item_instance", "invocation_points", "lore")
 
 
 @admin.register(ShrineDetails)

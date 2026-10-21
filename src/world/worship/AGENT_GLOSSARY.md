@@ -32,6 +32,15 @@
   `worn_items_counted` of them, all ease within `invocation_meaning_ease_max`. A piece with no
   meaning counts for nothing, however it was paid for. _Avoid_: "equipment bonus" (the
   modifier walk is a separate mechanism).
+- **Requested item** — a specific cheap item a pledge or a tier 1 or 2 rite asks for
+  (`RequestedItem`, #4530): one template or any item with one facet, a quantity, the points
+  each gives and a staff hint. Giving a matching one up at the shrine (while the pledge is
+  open) or during the rite eases that roll by its points, and the roll cannot botch. Cheap by
+  rule: a template above `requested_item_max_value` is refused. A scavenger-hunt errand, not a
+  purchase. _Avoid_: "tribute", "required offering" (nothing is required).
+- **Relic ease** — a Relic of the being, carried, eases the carrier's invocations as if it
+  were a keepsake of the being worth its `invocation_points` (#4530), within
+  `invocation_meaning_ease_max`.
 - **Resonance fed** — a meaning signal: the resonance an item's facets fed its current holder,
   in a resonance the being lists, counted only alongside another signal (#4520).
 - **Earning rate** — the percentage applied to all favor a character earns with one being

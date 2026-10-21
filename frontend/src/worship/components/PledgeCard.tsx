@@ -6,9 +6,11 @@
  * started if none runs; no shrine is needed). Read by the owner and staff only.
  */
 
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Entry, Subheading, Tag } from '@/character_sheets/components/sheet/primitives';
+import { useInventory } from '@/inventory/hooks/useInventory';
 import { useClosePledge } from '../queries';
 import { timeLeft } from '../pledgeText';
 import { PLEDGE_STATE, type PledgeCard as PledgeCardData } from '../types';
@@ -31,17 +33,31 @@ export function PledgeCard({ card, characterId }: PledgeCardProps) {
   const being = card.terms.being_name;
   const live = card.state === PLEDGE_STATE.open || card.state === PLEDGE_STATE.ready;
 
+  const [giveOpen, setGiveOpen] = useState(false);
+  const [chosen, setChosen] = useState<number[]>([]);
+  const { data: carried } = useInventory(giveOpen ? (characterId ?? undefined) : undefined);
+
+  function toggle(id: number) {
+    setChosen((current) =>
+      current.includes(id) ? current.filter((row) => row !== id) : [...current, id]
+    );
+  }
+
   function handleClose() {
-    close.mutate(undefined, {
-      onSuccess: (result) => {
-        if (result.success === false) {
-          toast.error(result.message);
-          return;
-        }
-        toast.success(result.message);
-      },
-      onError: (error: Error) => toast.error(error.message),
-    });
+    close.mutate(
+      { itemIds: chosen },
+      {
+        onSuccess: (result) => {
+          if (result.success === false) {
+            toast.error(result.message);
+            return;
+          }
+          toast.success(result.message);
+          setChosen([]);
+        },
+        onError: (error: Error) => toast.error(error.message),
+      }
+    );
   }
 
   return (
@@ -101,25 +117,98 @@ export function PledgeCard({ card, characterId }: PledgeCardProps) {
               ))}
             </ul>
           )}
+          {card.requests.length > 0 && (
+            <div className="space-y-1" data-testid="pledge-requests">
+              <Tag>{being} asks for · staff-authored</Tag>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted-foreground">
+                      <th className="py-0.5 pr-2 font-normal">Asked for</th>
+                      <th className="py-0.5 pr-2 font-normal">Hint</th>
+                      <th className="py-0.5 pr-2 font-normal">Given</th>
+                      <th className="py-0.5 font-normal">Points each</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {card.requests.map((request) => (
+                      <tr
+                        key={request.id}
+                        className="border-t border-dotted align-top"
+                        data-testid="pledge-request"
+                      >
+                        <td className="py-1 pr-2">
+                          {request.asked_for}
+                          {request.where === 'closing rite' && (
+                            <span className="block text-xs text-muted-foreground">
+                              at the closing rite
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-1 pr-2">{request.hint}</td>
+                        <td className="py-1 pr-2 tabular-nums">
+                          {request.given} of {request.quantity}
+                        </td>
+                        <td className="py-1 tabular-nums">{request.points}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Give a requested item up at the shrine and its points ease that item&apos;s own
+                sacrifice roll, which then cannot come out as a Critical Failure. Given up during
+                the pledge&apos;s rite, the points ease the rite&apos;s roll instead.
+              </p>
+            </div>
+          )}
           {card.retry_available && (
             <p className="text-xs text-muted-foreground">
               Your first closing rite failed; one more try is left within the span.
             </p>
           )}
           {characterId != null && card.state === PLEDGE_STATE.ready && (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                onClick={handleClose}
-                disabled={close.isPending}
-                data-testid="close-pledge-button"
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleClose}
+                  disabled={close.isPending}
+                  data-testid="close-pledge-button"
+                >
+                  Close the pledge with {card.pledge.closing_rite_name}
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  <b>Rule:</b> closing needs a live scene; no shrine is required. One is started if
+                  none is running.
+                </span>
+              </div>
+              <details
+                onToggle={(event) => setGiveOpen((event.currentTarget as HTMLDetailsElement).open)}
+                data-testid="close-give-items"
               >
-                Close the pledge with {card.pledge.closing_rite_name}
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                <b>Rule:</b> closing needs a live scene; no shrine is required. One is started if
-                none is running.
-              </span>
+                <summary className="cursor-pointer text-xs text-muted-foreground">
+                  Give items up during the rite
+                </summary>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  What an item means to you eases the rite&apos;s roll, and an item the pledge asked
+                  for eases it too. Items given up leave play; their design is kept.
+                </p>
+                <ul className="mt-1 max-h-48 space-y-1 overflow-y-auto">
+                  {(carried ?? []).map((item) => (
+                    <li key={item.id}>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={chosen.includes(item.id)}
+                          onChange={() => toggle(item.id)}
+                        />
+                        <span>{item.display_name}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </details>
             </div>
           )}
         </div>

@@ -30,7 +30,7 @@
  */
 import { Fragment, type ReactNode } from 'react';
 
-import { DRAFT_NOTE, STATES } from '../copy';
+import { STATES } from '../copy';
 import { tierNoun } from '../ladder/tree';
 import { useLandShapes } from '../queries';
 import { BaronyPage } from '../document/BaronyPage';
@@ -286,7 +286,6 @@ export function FounderLandsLeaf({
         </div>
       </div>
       <div className="savebar">
-        <span className="note">{DRAFT_NOTE}</span>
         <button type="button" className="btn" onClick={onNext}>
           Next
         </button>

@@ -27,11 +27,12 @@ from world.worship.factories import (
     BeingFacetFactory,
     BeingResonanceFactory,
     PledgeFactory,
+    RequestedItemFactory,
     RiteKindFactory,
     WorshippedBeingFactory,
     WorshipRiteFactory,
 )
-from world.worship.models import BeingFacet, Pledge
+from world.worship.models import BeingFacet, Pledge, RequestedItem
 
 
 def _superuser(name: str) -> AccountDB:
@@ -92,6 +93,10 @@ class ServiceBuilderTestCase(TestCase):
             "facets-1-facet": str(self.wolf.pk),
             "facets-1-invocation_ease_points": "1",
             "facets-1-earning_bonus_percent": "1",
+            "requests-TOTAL_FORMS": "0",
+            "requests-INITIAL_FORMS": "0",
+            "requests-MIN_NUM_FORMS": "0",
+            "requests-MAX_NUM_FORMS": "1000",
             "pledges-TOTAL_FORMS": "2",
             "pledges-INITIAL_FORMS": "1",
             "pledges-MIN_NUM_FORMS": "0",
@@ -247,6 +252,123 @@ class ServiceBuilderSaveTests(ServiceBuilderTestCase):
         self.client.force_login(self.author)
         self.client.post(reverse("admin_being_service_review", args=[self.being.pk]))
         self.assertEqual(Pledge.objects.get(pk=self.pledge.pk).reviewed_by, self.writer)
+
+
+class ServiceBuilderRequestedItemTests(ServiceBuilderTestCase):
+    """The items a being's pledges and rites ask for are written on the same page (#4530)."""
+
+    def _request_data(self, **overrides) -> dict:
+        data = self.post_data(
+            **{
+                "requests-TOTAL_FORMS": "1",
+                "requests-INITIAL_FORMS": "0",
+                "requests-0-target": f"pledge:{self.pledge.pk}",
+                "requests-0-item_template": str(
+                    ItemTemplateFactory(name="weathervane pin", value=2).pk
+                ),
+                "requests-0-facet": "",
+                "requests-0-quantity": "1",
+                "requests-0-points": "3",
+                "requests-0-hint": "[staff-authored hint]",
+            }
+        )
+        data.update(overrides)
+        return data
+
+    def test_the_page_has_the_requests_table_and_its_rule(self) -> None:
+        body = self.body()
+
+        self.assertIn("Requested items (pledges and rites)", body)
+        self.assertIn("Pledge: PLACEHOLDER pledge", body)
+        # A tier 3 rite is a ceremony: it is not offered as something that can ask.
+        self.assertNotIn("Rite: Great rite", body)
+        self.assertIn("Rite: Small rite", body)
+
+    def test_a_request_is_written_with_its_pledge_and_item(self) -> None:
+        self.client.force_login(self.author)
+
+        response = self.client.post(self.url(), self._request_data())
+
+        self.assertEqual(response.status_code, 302)
+        request = RequestedItem.objects.get()
+        self.assertEqual(request.pledge, self.pledge)
+        self.assertEqual(request.item_template.name, "weathervane pin")
+        self.assertEqual((request.quantity, request.points), (1, 3))
+        self.assertEqual(request.hint, "[staff-authored hint]")
+
+    def test_a_request_can_belong_to_a_rite_and_ask_for_a_facet(self) -> None:
+        self.client.force_login(self.author)
+        data = self._request_data(
+            **{
+                "requests-0-target": f"rite:{self.rite.pk}",
+                "requests-0-item_template": "",
+                "requests-0-facet": str(self.wolf.pk),
+            }
+        )
+
+        self.client.post(self.url(), data)
+
+        request = RequestedItem.objects.get()
+        self.assertEqual(
+            (request.rite, request.facet, request.pledge), (self.rite, self.wolf, None)
+        )
+
+    def test_a_template_worth_too_much_is_refused(self) -> None:
+        self.client.force_login(self.author)
+        data = self._request_data(
+            **{
+                "requests-0-item_template": str(
+                    ItemTemplateFactory(name="gilt mirror", value=400).pk
+                )
+            }
+        )
+
+        response = self.client.post(self.url(), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Requests must be cheap")
+        self.assertFalse(RequestedItem.objects.exists())
+
+    def test_a_row_must_name_exactly_one_of_a_template_or_a_facet(self) -> None:
+        self.client.force_login(self.author)
+        both = self._request_data(**{"requests-0-facet": str(self.wolf.pk)})
+        neither = self._request_data(**{"requests-0-item_template": ""})
+
+        for data in (both, neither):
+            response = self.client.post(self.url(), data)
+            self.assertEqual(response.status_code, 200)
+        self.assertFalse(RequestedItem.objects.exists())
+
+    def test_the_rail_says_where_each_request_can_be_found(self) -> None:
+        template = ItemTemplateFactory(name="wick trimmer", value=1)
+        RequestedItemFactory(pledge=self.pledge, item_template=template)
+
+        body = self.body()
+
+        self.assertIn("Where the requested items come from", body)
+        self.assertIn("nothing supplies it yet", body)
+
+    def test_a_request_can_be_deleted_from_the_table(self) -> None:
+        request = RequestedItemFactory(pledge=self.pledge)
+        self.client.force_login(self.author)
+        data = self.post_data(
+            **{
+                "requests-TOTAL_FORMS": "1",
+                "requests-INITIAL_FORMS": "1",
+                "requests-0-id": str(request.pk),
+                "requests-0-target": f"pledge:{self.pledge.pk}",
+                "requests-0-item_template": str(request.item_template_id),
+                "requests-0-facet": "",
+                "requests-0-quantity": "1",
+                "requests-0-points": "3",
+                "requests-0-hint": "",
+                "requests-0-DELETE": "on",
+            }
+        )
+
+        self.client.post(self.url(), data)
+
+        self.assertFalse(RequestedItem.objects.exists())
 
 
 class ServiceBuilderStylingTest(ServiceBuilderTestCase):

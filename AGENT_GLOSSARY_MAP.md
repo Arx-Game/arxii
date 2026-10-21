@@ -38,7 +38,8 @@ term is chosen and the rest are listed under `_Avoid_`.
   the answer terms (slice 3, ADR-4333-B): Answer, Sacrifice line, Held answer, and the
   amended Vision; and the steward terms (slice 4, ADR-4333-C): Steward, god sign, Catalogue
   clue; and the live route (slice 5): Live route / live answer; and the worn-piece terms
-  (#4520): Worn piece, Resonance fed
+  (#4520): Worn piece, Resonance fed; and the slice 4 terms (#4530): Requested item, Relic
+  ease
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333)
@@ -86,7 +87,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [beta_reset](src/world/beta_reset/AGENT_GLOSSARY.md)
 - [achievements](src/world/achievements/AGENT_GLOSSARY.md)
 - [goals](src/world/goals/AGENT_GLOSSARY.md)
-- [items](src/world/items/AGENT_GLOSSARY.md)
+- [items](src/world/items/AGENT_GLOSSARY.md) - also holds Keepsake and Trophy (#4530)
 - [traits](src/world/traits/AGENT_GLOSSARY.md)
 - [areas](src/world/areas/AGENT_GLOSSARY.md) - also holds Rung (#3983), the canonical
   feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to,

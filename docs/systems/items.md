@@ -38,6 +38,7 @@ from world.items.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
+| `Keepsake` (#4530) | An item a player declared stands for a tie, a deed, a being, an organization, a person or a place, in their own words | `item_instance`, `character_sheet`, `subject_kind` + the one matching `subject_*` field, `text`, `shown_on_examine`, `created_at`; unique per (item, character); see "Keepsakes, trophies and the items a being asks for" |
 | `DistinctionItemGrant` (#4398) | A keepsake a distinction mints into its holder's inventory at finalize, materialized as a physical object on the character like minted coin (a row-only grant is invisible to the inventory API); sidecar on the items side (ADR-0010), sibling of `currency.DistinctionStartingGrant`; see `docs/systems/distinctions.md` | `distinction` (FK), `item_template` (FK, PROTECT); unique `(distinction, item_template)`; natural key the same; a kit is several rows; a retired template (`is_active=False`) is neither minted nor advertised |
 | `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, `is_revealing` (#2846 — a garment whose covered regions still expose skin: contributes no sun coverage in `world.species.sun_exposure` and does not conceal body markings, #2985 — both read the shared `covered_regions` predicate), container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707), `weapon_class` (FK to `WeaponClass`, `PROTECT`, nullable — #2879; null falls back to the coarser `gear_archetype` stat map; see `world.combat.stat_mapping.weapon_stat_override`), `requires_attunement` (BooleanField, default `False` — #3430; gates `ItemCheckModifier`/on-use eligibility on `ItemInstance.attuned_to_character_sheet`, see "Enchantment authoring" below) |
 | `TemplateSlot` | Body region + layer an item occupies | `template` (FK), `body_region`, `equipment_layer` |
@@ -247,6 +248,10 @@ never reads a price, a fee or a material cost**, so a bought item with no histor
 | Made from (#4512) | the source's recorded points, at most `made_from_max_points` | `ItemLineage`; counts for the crafter and the dedicatee |
 | Resonance fed (#4520) | the resonance the item's attached facets fed the holder (`OUTFIT_TRICKLE` grants to the holder's sheet on or after `held_since`) in resonances the given being lists: 1 per `resonance_fed_per_point`, doubled for a favored resonance, at most `resonance_fed_max_points`; counts only alongside another signal besides carried, and only when `item_meaning` is given a `being` | `ResonanceGrant.outfit_item_facet`; `BeingResonance` |
 | Shown (#4512) | per settled, successful `FashionShowing` of the item (statement item, or in the statement outfit) in the last `shown_window_weeks` game weeks: 1 per `shown_engagements_per_point` engagements, at most `shown_max_points` in all | `FashionShowing`; no carry gate (earned in a scene) |
+| Trophy (#4530) | 1 + the legend of the best active deed over `trophy_legend_per_point`, at most `trophy_max_points`; the deed must be credited to one of the holder's personas | `ItemInstance.legend_deeds`; no carry gate (earned by risk) |
+| Keepsake (#4530) | 1 + the subject's scale, at most `keepsake_max_points`: a tie by its claimed tier, a deed by its legend over `keepsake_deed_legend_per_point`, a being, organization, person or place a flat 1; a keepsake of a deed the item is also a trophy of adds a flat 1 on top of the trophy. Counts only for the keeper, and only `keepsake_wait_days` after it was declared. **The player's words are never read.** | `Keepsake` |
+| Keepsake match (#4530) | on top of the cap: +2 when the subject is the being the reading is for; the tie's claimed tier when the subject is the tie with the item's giver or maker | `Keepsake`, `holding_event`, crafter and service sales |
+| Requested (#4530) | the request's points (at most `requested_item_max_points`), added by the sacrifice or rite that fills a `RequestedItem`, not by `item_meaning` itself (it depends on the open pledge or the rite); no carry gate | `RequestedItem`, `OfferingSignal.requested_item` |
 
 Every signal except shown is gated by the carry clock: nothing personal counts before the
 item has been held `sacrifice_min_carried_days`. One person's tie counts once, in the first
@@ -262,6 +267,46 @@ computed signals for an item's current holder on the item admin's rail
 
 A given-up item is soft-destroyed by `give_up_item` with `preserve=True` and keeps its
 design; see the cleanup section below for what the purge spares.
+
+### Keepsakes, trophies and the items a being asks for (#4530, slice 4 of #4462) [BUILT & WIRED]
+
+- **Keepsake** (`Keepsake`, `world/items/models.py`): an item a player declared stands for a tie
+  (one of their own `CharacterRelationship` sides), one of their own deeds (`LegendEntry`
+  credited to their persona), a being, an organization, a person (a persona that is not
+  theirs) or a place (free text), with exactly the field for that kind set (a CHECK, and
+  `Keepsake.clean()` for the admin). `text` is the player's own words (at most 600
+  characters), shown to the GM and, when `shown_on_examine`, on examine as "Kept as a
+  keepsake by <name>: <words>"; **nothing scores them**. One keepsake per item per character,
+  at most `keepsakes_per_character` on items still in play; it counts `keepsake_wait_days`
+  after `created_at`, so keeping an item the moment before giving it up earns nothing.
+  Releasing frees the slot and a later declaration restarts the wait. The subject FKs
+  cascade (SET_NULL would break the CHECK). The optional treasured checkbox sets the
+  Boundaries `TreasuredSubject` for the item.
+- **Services** (`world/items/services/keepsakes.py`): `declare_keepsake`, `release_keepsake`,
+  `keepsake_state` (the item panel's form data), `subject_choices` (the character's own ties
+  and deeds, the beings they hold a standing with or have declared, the organizations they
+  belong to), `find_subject_by_name` (telnet). Refusals are `KeepsakeRefused` with a message.
+- **Surfaces:** actions `keepsake_declare` / `keepsake_release`
+  (`actions/definitions/keepsakes.py`); telnet `keepsake [/show] [/treasured] <item> = <kind>
+  <subject> ; <words>`, `keepsake/release <item>` and `keepsake` (the list, with when each
+  counts); `GET /api/items/inventory/{id}/keepsake/` for the item panel's `KeepsakeSection`
+  and `KeepsakeDialog`; the **Keepsake** admin with a computed rail (`keepsake_rail`).
+- **Trophy** (`world/items/services/trophies.py`, `link_trophy`): an item linked to a deed in
+  `ItemInstance.legend_deeds` that is credited to its holder. A mission that grants an item
+  and mints a deed in the same run links it when the run ended at Success or better
+  (`link_mission_trophies`; the route's renown deeds link at item delivery and the cron's
+  Legend-points deed links when it is minted, `MissionDeedRewardLine.granted_item` remembering
+  the item); a won stake does the same after the completion's settlement mints its deeds
+  (`stake_resolution` collects the items its WIN lines minted; `beats._create_completion_and_fire_pool`
+  links them). Partial Success or worse links nothing. Linking makes the row-only reward a
+  physical object in the holder's inventory. This is **not** the crafting fame path:
+  `award_crafting_fame` returns early on purpose (an ordinary masterwork risks nothing, and
+  Legend is for risk, #3463), so crafting still mints no deed to link. Examine reads
+  "Trophy of <deed title>." for each active linked deed.
+- **Requested items and the Relic** are described in `docs/systems/worship.md`.
+- **Name clash.** `DistinctionItemGrant` calls the item a distinction mints at finalize a
+  "keepsake" (#4398); that is a starting item. A `Keepsake` here is an item the player says
+  stands for something.
 
 ### The commission loop (#4512, slice 2 of #4462) [BUILT & WIRED]
 

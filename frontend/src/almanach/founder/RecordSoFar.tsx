@@ -27,6 +27,7 @@ import { Fragment } from 'react';
 
 import type { FounderDraft } from './founderDraft';
 import type { FounderStep } from './steps';
+import { urls } from '@/utils/urls';
 
 export interface RecordSoFarProps {
   draft: FounderDraft;
@@ -169,7 +170,7 @@ export function RecordSoFar(props: RecordSoFarProps) {
                 <dt>{feature.name}</dt>
                 <dd>
                   {feature.codexEntryId != null ? (
-                    <a href={`/codex/${feature.codexEntryId}`}>codex</a>
+                    <a href={urls.codexEntry(feature.codexEntryId)}>codex</a>
                   ) : (
                     <abbr title="none">—</abbr>
                   )}

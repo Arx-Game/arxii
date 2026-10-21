@@ -18,7 +18,7 @@
  */
 import { useState, type ReactNode } from 'react';
 
-import { CLAIM, REVIEW_NOTE, STATES } from '../copy';
+import { CLAIM, REVIEW_NOTE, STATES, houseHeading } from '../copy';
 import { LadderTable } from '../ladder/LadderTable';
 import { LevelBar } from '../ladder/LevelBar';
 import {
@@ -171,7 +171,7 @@ export function SeatPicker({
             </ul>
           )}
         </span>
-        {liegeName !== '' && <span className="tier">vassal of House {liegeName}</span>}
+        {liegeName !== '' && <span className="tier">vassal of {houseHeading(liegeName)}</span>}
       </h3>
       <LevelBar
         rows={rows}
