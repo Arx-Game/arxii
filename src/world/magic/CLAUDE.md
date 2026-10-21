@@ -336,8 +336,10 @@ Every magical roll adds skills staff chose in admin; no skill is named in code. 
   `technique_skill_term(character, technique)` / `technique_skill_term_for_path(technique, path)`,
   `cast_check_type(personal_check, technique)` (ADR-0096 precedence, once), `resolve_cast_check`, `involved_trait_ids`, `cast_involved_trait_ids`. `loss_of_self_terms(template)`
   is in `world/conditions/services.py`. Terms ride the check engine's `extra_traits`.
-- **Technique skill order:** technique override, else the caster's current Path (Major Gift),
-  else the Gift (Minor Gift). Inactive skills give no term.
+- **Technique skill order:** technique override, else (Major Gift) the caster's current Path when
+  it is one of the technique's own Paths (`technique_paths`: the Paths whose `PathGiftGrant`
+  lists it), else the technique's first own Path in Path order, else the caster's current Path;
+  else the Gift (Minor Gift) (#4555, ADR-4555-A). Inactive skills give no term.
 - **Adding a magical roll:** add a `MagicActivity` member and pass
   `extra_traits=activity_skill_terms(MagicActivity.X)` at the roll. Import it inside the
   function when the caller is `world.conditions` or `world.species` (they sit below magic). A
@@ -1058,7 +1060,11 @@ resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
 *(Gift × Path)* leg as an **acquisition** (which techniques you get):
 
 - `PathGiftGrant` (`models/grants.py`, the `PathRitualGrant` through-model shape) authors,
-  per `(path, gift)`, a curated `starter_techniques` M2M subset of *that gift's* techniques.
+  per `(path, gift)`, a curated `starter_techniques` M2M subset of *that gift's* techniques:
+  the techniques for that Path and Gift (#4555, ADR-4555-A). A technique is offered only on the
+  Paths that list it; a `TraditionGiftGrant.special_techniques` listing restricts it to the
+  listing Traditions (`cg_catalog.tradition_listings` / `offered_to_tradition`), and
+  `grant_path_magic` skips a technique the character's active Tradition may not take.
   The same authored Gift grants a different set per path (a warrior-line and a spy-line path
   both grant Pyromancy, but different techniques from it). `clean()` rejects a starter
   technique not belonging to the grant's gift; unique per `(path, gift)`.

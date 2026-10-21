@@ -54,6 +54,12 @@ magic." Each is a filed issue — work these, not micro-hardening tickets.
    every gift while the old row read complete. Two stale-cache holes closed alongside: a dispel
    row edited on its own changelist, and a condition delivery-channel edit that changes
    what every technique applying it is worth.
+   **#4555 (2026-10-21): a technique is offered only on its Paths.** Character creation's
+   pool and gift list, Academy training eligibility and `grant_path_magic` now read
+   `PathGiftGrant.starter_techniques` as the techniques for that Path and Gift and
+   `TraditionGiftGrant.special_techniques` as a restriction to the listing Traditions; a cast
+   adds the skill of a Path the technique belongs to; a `tradition-techniques-on-a-path`
+   Required content row lists a Tradition technique no Path holds (ADR-4555-A).
 
 1. **✅ #1306 — RESOLVED: every technique minted through the builder is castable**
    (`priority:now` → done).
@@ -315,7 +321,7 @@ staff-authored catalog content instead:
   the CG *availability pool*, not an automatic grant — the same rows
   `grant_path_magic` mints from at the level-3 Durance semi-crossing (ADR-0063,
   unaffected). CG picks 1 + `Tradition Training` distinction rank from the
-  pool ∪ the tradition's signature extras.
+  pool, less the techniques other traditions keep for their own members (#4555).
 - **The Anima Check replaces a silent default.** CG's Gift stage now closes
   with an explicit stat + skill pick (`provision_player_anima_ritual` gained
   parameters instead of hardcoding Willpower + highest skill) and a ritual
@@ -388,8 +394,8 @@ never overwrite a staff-adjusted row.
   a Prospect who owes the debt must always be able to find someone to pay it to.
 - **Academy training (#2440)** — `npc_services.OfferKind.TRAIN` teaches a technique for
   AP + coin + 1 Golden Hare, gated on the obligation above being settled and on the
-  learner's own (Path × Gift) pool ∪ their active Tradition's signature list
-  (`magic.services.cg_catalog.get_technique_options`). Delegates acquisition to the same
+  learner's own Path's list for the gift, a Tradition-kept technique only for an active
+  member of a listing Tradition (#4555; `magic.services.cg_catalog.get_technique_options`). Delegates acquisition to the same
   `charge_and_learn` core player-to-player `TechniqueTeachingOffer` accepts use — one
   seam, two front doors. A learner short of the offer's coin is refused with the price and
   her balance before anything is charged (`TrainingFundsInsufficient`, #4523). **Great Archive self-study** is the same TRAIN shape, gated on a

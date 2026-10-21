@@ -455,7 +455,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     grant with a `signature_techniques` M2M — a tradition's CG gift list; the
     self-taught `Unbound` tradition carries the common starter set, no extras).
     `PathGiftGrant.starter_techniques` is now read as CG pick *availability*
-    (pool ∪ tradition signature extras), not an automatic grant — `grant_path_magic`
+    (the techniques for that Path and Gift; a `TraditionGiftGrant` listing restricts a
+    technique to the listing traditions, #4555, ADR-4555-A), not an automatic grant — `grant_path_magic`
     still mints from the same rows at the level-3 Durance semi-crossing (ADR-0063,
     unchanged). `EffectType.category` (`TechniqueCategory` choices — Offense/Defense/
     Enhancement/Affliction/Utility) is the player-facing archetype grouping, replacing
@@ -467,7 +468,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `draft.selected_tradition` / `draft.selected_path`); both filter pools through
     `cg_technique_queryset(*, include_unready, exclude_gated) -> QuerySet[Technique]`,
     and `cg_takeable_techniques()` is the picker's rule the Required content dashboard
-    also reads (#4545). The rankable
+    also reads (#4545); `tradition_listings(gift_ids)` / `offered_to_tradition(technique_id,
+    tradition_id, listings)` are the Tradition restriction, shared with Academy training and
+    `grant_path_magic` (#4555). The rankable
     **Tradition Training** distinction (`ModifierTarget` "Starting Technique Picks")
     adds +1 CG technique pick per rank above the Unbound baseline of 1, read via
     `CharacterDraft._get_distinction_bonus`. `Organization.tradition` (nullable FK →
@@ -4848,8 +4851,9 @@ register as additional kinds.
   selection; MENU-mode already lists every eligible offer as its own menu line). Handler
   (`run_train_offer`): resolve the Academy (`offer.role.faction_affiliation`) → obligation
   gate (`societies.obligation_services.has_open_obligation`, #2428 — an OWED Academy debt
-  blocks further training) → availability gate (the learner's own (Path × Gift) pool
-  (`PathGiftGrant`) ∪ their ACTIVE `CharacterTradition` membership's signature list
+  blocks further training) → availability gate (the learner's own Path's list for the gift
+  (`PathGiftGrant`); a technique a Tradition grant lists (#4555) needs their ACTIVE
+  `CharacterTradition` membership in a listing tradition
   (`TraditionGiftGrant`, `left_at__isnull=True` since #2441 Task 8 — see "Tradition
   membership lifecycle" below) via `magic.services.cg_catalog.get_technique_options`; a
   signature technique is teachable only when the trainer's own `teaches_tradition` matches
