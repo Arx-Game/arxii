@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import datetime
 
-from django.db.models import Case, Count, Q, QuerySet, Sum, When
+from django.db.models import Case, Count, QuerySet, Sum, When
 from django.db.models.functions import TruncWeek
 from django.utils import timezone
 
@@ -152,19 +152,18 @@ def level_distribution() -> list[tuple[int, int]]:
 def economy_series(*, weeks: int = 8) -> list[WeeklySeries]:
     """Minted, sunk, and transferred coppers, weekly.
 
-    Per `CurrencyTransfer` (see `currency/services.py:86-95`): a null source
-    (`from_purse` and `from_treasury` both null) is a mint/faucet; a null
-    destination (`to_purse` and `to_treasury` both null) is a sink; a row with
-    both source and destination populated is a plain transfer. Source and
-    destination can never both be null, so these three buckets are mutually
+    Per `CurrencyTransfer` (see `currency/services.py:86-95`): a source that
+    never had a holder (blank `from_holder_kind`) is a mint/faucet; a
+    destination that never had one (blank `to_holder_kind`) is a sink; a row
+    with both is a plain transfer. The kinds, not the holder FKs, decide: a
+    holder deleted later (#4467) nulls its FK but leaves the kind, so a transfer
+    out of a deleted character is still a transfer and not a mint. Source and
+    destination can never both be blank, so these three buckets are mutually
     exclusive and exhaustive.
     """
-    minted = CurrencyTransfer.objects.filter(from_purse__isnull=True, from_treasury__isnull=True)
-    sunk = CurrencyTransfer.objects.filter(to_purse__isnull=True, to_treasury__isnull=True)
-    transferred = CurrencyTransfer.objects.filter(
-        Q(from_purse__isnull=False) | Q(from_treasury__isnull=False),
-        Q(to_purse__isnull=False) | Q(to_treasury__isnull=False),
-    )
+    minted = CurrencyTransfer.objects.filter(from_holder_kind="")
+    sunk = CurrencyTransfer.objects.filter(to_holder_kind="")
+    transferred = CurrencyTransfer.objects.exclude(from_holder_kind="").exclude(to_holder_kind="")
     return [
         _weekly_series(
             minted, label="Minted", date_field="created_at", aggregate=Sum("amount"), weeks=weeks

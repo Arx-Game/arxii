@@ -28,21 +28,23 @@
  * `aria-disabled` alone already communicates "not available" without a
  * second, unapproved hover-text channel).
  *
- * Gentry is the one exception, ordered explicitly: it toggles like every
- * other `state` choice when `realmTheme === 'luxen'` (`_realm_payload`'s new
+ * Gentry is the one exception, ordered explicitly: it is a live option of
+ * the state select when `realmTheme === 'luxen'` (`_realm_payload`'s
  * `realm_theme`, final review I11 — Spec Decision 12 requires Gentry
- * reachable in Luxen), and stays disabled (`aria-disabled`,
- * `title="Luxen only"`) for every other theme — a `title` here was ruled a
- * keeper despite the constraint.
+ * reachable in Luxen), and stays a disabled option (`title="Luxen only"`)
+ * for every other theme — a `title` here was ruled a keeper despite the
+ * constraint. The state is one select rather than a row of tiles (#4533:
+ * four tiles scrunched "In exile" and read as spread-out toggles).
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { useDraft } from '@/world-builder/document/useDraft';
 
-import { HOUSE_STATES, DRAFT_NOTE, GENTRY_LUXEN_ONLY } from '../copy';
+import { HOUSE_STATES, GENTRY_LUXEN_ONLY, houseHeading } from '../copy';
 import { ObservanceRows, type ObservanceRow } from '../ObservanceRows';
 import type { AlmanachHouseDocumentHouse } from '../types';
+import { urls } from '@/utils/urls';
 
 export interface EditHouseFields {
   name?: string;
@@ -86,6 +88,16 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
   const colors = useDraft(house.id, 'house-colors', house.colors);
   const sigil = useDraft(house.id, 'house-sigil_description', house.sigil_description);
   const description = useDraft(house.id, 'house-description', house.description);
+  // The house's charter answers, grouped under the question each answers (#4533):
+  // an Umbral house has no Quiddity, so the heading is the question's own name and
+  // a house with no answers shows no block at all.
+  const facetGroups = Array.from(
+    house.aspects.reduce((groups, aspect) => {
+      const list = groups.get(aspect.definition) ?? [];
+      list.push(aspect);
+      return groups.set(aspect.definition, list);
+    }, new Map<string, typeof house.aspects>())
+  );
   // Staged like the state toggle, not a per-field draft: the list is one value
   // and the action replaces it wholesale (#4206).
   const [observances, setObservances] = useState<ObservanceRow[]>(() => editableObservances(house));
@@ -110,41 +122,29 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
 
   return (
     <main className="chapter">
-      <h3>House {house.name}</h3>
+      <h3>{houseHeading(house.name)}</h3>
       <div className="row3">
         <div className="field">
           <span className="label">state</span>
-          <div className="seg" role="group" aria-label="State">
+          <select
+            id="house-state"
+            aria-label="State"
+            value={houseState}
+            onChange={(e) => setHouseState(e.target.value)}
+          >
             {STATE_CHOICES.map((choice) => (
-              <button
-                key={choice.value}
-                type="button"
-                aria-pressed={houseState === choice.value}
-                onClick={() => setHouseState(choice.value)}
-              >
+              <option key={choice.value} value={choice.value}>
                 {choice.label}
-              </button>
+              </option>
             ))}
-            {realmTheme === 'luxen' ? (
-              <button
-                type="button"
-                aria-pressed={houseState === 'gentry'}
-                onClick={() => setHouseState('gentry')}
-              >
-                {HOUSE_STATES.gentry}
-              </button>
-            ) : (
-              <button
-                type="button"
-                aria-pressed={false}
-                disabled
-                aria-disabled
-                title={GENTRY_LUXEN_ONLY}
-              >
-                {HOUSE_STATES.gentry}
-              </button>
-            )}
-          </div>
+            <option
+              value="gentry"
+              disabled={realmTheme !== 'luxen'}
+              title={realmTheme === 'luxen' ? undefined : GENTRY_LUXEN_ONLY}
+            >
+              {HOUSE_STATES.gentry}
+            </option>
+          </select>
         </div>
         <div className="field">
           <span className="label">particle</span>
@@ -167,7 +167,9 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
                   <>
                     {' '}
                     ·{' '}
-                    <Link to={`/codex/${house.default_succession_law.codex_entry_id}`}>codex</Link>
+                    <Link to={urls.codexEntry(house.default_succession_law.codex_entry_id)}>
+                      codex
+                    </Link>
                   </>
                 )}
               </>
@@ -183,7 +185,9 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
           <div className="val">
             {house.patron.nickname}{' '}
             {house.patron.codex_entry_id != null ? (
-              <Link to={`/codex/${house.patron.codex_entry_id}`}>({house.patron.being_name})</Link>
+              <Link to={urls.codexEntry(house.patron.codex_entry_id)}>
+                ({house.patron.being_name})
+              </Link>
             ) : (
               <>({house.patron.being_name})</>
             )}
@@ -214,48 +218,50 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         <label htmlFor={`house-sigil-${house.id}`}>sigil</label>
         <textarea
           id={`house-sigil-${house.id}`}
-          className="prose"
+          className="prose short"
+          rows={2}
           value={sigil.value}
           onChange={(event) => sigil.setValue(event.target.value)}
         />
       </div>
       <div className="field">
-        <label htmlFor={`house-description-${house.id}`}>the house</label>
+        <label htmlFor={`house-description-${house.id}`}>description</label>
         <textarea
           id={`house-description-${house.id}`}
           className="prose"
+          rows={6}
           value={description.value}
           onChange={(event) => description.setValue(event.target.value)}
         />
       </div>
       <ObservanceRows idPrefix={`house-${house.id}`} rows={observances} onChange={setObservances} />
-      <div className="field">
-        <span className="label">
-          House Quiddity <span className="chip">seed copy · PLACEHOLDER</span>
-        </span>
-        <ul className="entries compact">
-          {house.aspects.map((aspect) => (
-            <li key={`${aspect.definition}-${aspect.option}`} className="on">
-              <span className="mark">◆</span>
-              <span>
-                {aspect.target_entry_id != null ? (
-                  <Link to={`/codex/${aspect.target_entry_id}`} className="nm">
-                    {aspect.option}
-                  </Link>
-                ) : (
-                  <span className="nm">{aspect.option}</span>
-                )}
-                <span className="ds">{aspect.description}</span>
-              </span>
-              <span className="rt">
-                <button type="button" disabled aria-disabled>
-                  ⊕ change
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {facetGroups.map(([definition, facets]) => (
+        <div className="field" key={definition}>
+          <span className="label">{definition}</span>
+          <ul className="entries compact">
+            {facets.map((aspect) => (
+              <li key={`${aspect.definition}-${aspect.option}`} className="on">
+                <span className="mark">◆</span>
+                <span>
+                  {aspect.target_entry_id != null ? (
+                    <Link to={urls.codexEntry(aspect.target_entry_id)} className="nm">
+                      {aspect.option}
+                    </Link>
+                  ) : (
+                    <span className="nm">{aspect.option}</span>
+                  )}
+                  <span className="ds">{aspect.description}</span>
+                </span>
+                <span className="rt">
+                  <button type="button" disabled aria-disabled>
+                    ⊕ change
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
       <div className="field">
         <span className="label">features</span>
         <div className="chips">
@@ -292,7 +298,6 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         </ul>
       </div>
       <div className="savebar">
-        <span className="note">{DRAFT_NOTE}</span>
         <button type="button" className="btn" onClick={save}>
           Save
         </button>

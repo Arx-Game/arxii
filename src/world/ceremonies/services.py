@@ -28,9 +28,11 @@ from world.ceremonies.models import (
     OfferingSignal,
     get_ceremony_config,
 )
+from world.items.constants import MeaningSignalKind
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
+    from evennia.objects.models import ObjectDB
 
     from world.ceremonies.models import (
         SeanceManifestationOffer,
@@ -44,11 +46,19 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona
     from world.societies.models import PhilosophicalArchetype
     from world.traits.models import CheckOutcome
-    from world.worship.models import WorshipGrant, WorshippedBeing, WorshipRite
+    from world.worship.models import (
+        PledgeDetails,
+        RequestedItem,
+        WorshipGrant,
+        WorshippedBeing,
+        WorshipRite,
+    )
     from world.worship.types import SacrificedItem, SacrificeOutcome
 
 logger = logging.getLogger(__name__)
 
+#: The longest line a giver may add to a sacrifice (#4530).
+PLAYER_LINE_MAX_LENGTH = 200
 CEREMONY_CHECK_TYPE_NAME = "Ceremony Rites"
 SPEECH_CHECK_TYPE_NAME = "Performance"
 SPEECH_SPECIALIZATION_NAME = "Oratory"
@@ -305,14 +315,16 @@ class ItemReading:
     """What an item means to the one giving it up, read before it is destroyed (#4500).
 
     ``percent`` is the favored-facet multiplier that applied (100 for none) and ``facet``
-    the favored facet it carried, if any. ``effective_points`` is the meaning points times
-    that multiplier: they ease a sacrifice check and set a ceremony offering's pool grant
-    and devotion. Nothing here reads the item's price.
+    the favored facet it carried, if any. ``request`` is the pledge or rite request it filled
+    (#4530), whose points are in ``meaning`` as a ``REQUESTED`` signal. ``effective_points``
+    is the meaning points times that multiplier: they ease a sacrifice check and set a
+    ceremony offering's pool grant and devotion. Nothing here reads the item's price.
     """
 
     meaning: "ItemMeaning"
     percent: int
     facet: "Facet | None"
+    request: "RequestedItem | None" = None
 
     @property
     def effective_points(self) -> int:
@@ -342,17 +354,24 @@ def read_item(
     *,
     facet: "Facet | None",
     being: "WorshippedBeing | None" = None,
+    request: "RequestedItem | None" = None,
 ) -> ItemReading:
     """The item's meaning points for ``sheet``, with the favored-facet multiplier.
 
     ``being`` is the being it is given up to: the resonance fed signal reads the
-    resonances that being lists (#4520)."""
+    resonances that being lists (#4520). ``request`` is the pledge or rite request the item
+    fills (#4530); its points join the item's signals as a ``REQUESTED`` one."""
     from world.items.services.meaning import item_meaning  # noqa: PLC0415
+    from world.items.types import ItemMeaning  # noqa: PLC0415
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+    from world.worship.request_services import requested_signal  # noqa: PLC0415
 
+    config = get_devotion_config()
     percent = get_ceremony_config().offering_favored_facet_multiplier_percent if facet else 100
-    meaning = item_meaning(instance, sheet, config=get_devotion_config(), being=being)
-    return ItemReading(meaning=meaning, percent=percent, facet=facet)
+    meaning = item_meaning(instance, sheet, config=config, being=being)
+    if request is not None:
+        meaning = ItemMeaning((*meaning.signals, requested_signal(request, config)))
+    return ItemReading(meaning=meaning, percent=percent, facet=facet, request=request)
 
 
 def give_up_item(  # noqa: PLR0913 - the item, the being and what it was read as are co-equal
@@ -402,7 +421,13 @@ def write_offering_signals(offering: CeremonyOffering, reading: ItemReading) -> 
     """Snapshot the item's meaning signals onto its offering record (#4500)."""
     OfferingSignal.objects.bulk_create(
         OfferingSignal(
-            offering=offering, kind=signal.kind, points=signal.points, detail=signal.detail
+            offering=offering,
+            kind=signal.kind,
+            points=signal.points,
+            detail=signal.detail,
+            requested_item=(
+                reading.request if signal.kind == MeaningSignalKind.REQUESTED else None
+            ),
         )
         for signal in reading.meaning.signals
     )
@@ -1228,6 +1253,62 @@ def _sacrifice_site(
     return sites[0].being, sites[0].site
 
 
+def _requests_filled(
+    details: "PledgeDetails | None", item_instances: "list[ItemInstance]"
+) -> "dict[int, RequestedItem]":
+    """The pledge request each item given up at a shrine fills, by item pk (#4530).
+
+    Only the open pledge's own requests count at a shrine, each until its quantity is
+    filled across the pledge; with no open pledge to the being nothing is requested.
+    """
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+    from world.worship.request_services import (  # noqa: PLC0415
+        assign_requests,
+        given_counts,
+        pledge_requests,
+    )
+
+    if details is None:
+        return {}
+    rows = pledge_requests(details)
+    if not rows:
+        return {}
+    filled = given_counts(rows, details)
+    return assign_requests(rows, item_instances, filled=filled, config=get_devotion_config())
+
+
+def _hear_player_line(
+    persona: "Persona",
+    line: str,
+    location: "ObjectDB | None",  # noqa: OBJECTDB_PARAM - the room the line is heard in
+) -> None:
+    """The giver's own line, verbatim, heard in the room after the system lines (#4530)."""
+    from world.worship.pledge_services import broadcast_room_line  # noqa: PLC0415
+
+    if line:
+        broadcast_room_line(persona, line, location=location)
+
+
+def _roll_item(
+    sheet: "CharacterSheet", target: "WorshippedBeing", reading: ItemReading
+) -> "tuple[CheckOutcome | None, int]":
+    """Roll one counted item's sacrifice check, eased by its meaning: (outcome, difficulty).
+
+    A roll a requested item eased cannot botch: a Critical Failure lands as Failure (#4530).
+    """
+    from world.worship.sacrifice_services import (  # noqa: PLC0415
+        lift_botch,
+        roll_sacrifice,
+        sacrifice_difficulty,
+    )
+
+    difficulty = sacrifice_difficulty(sheet, target, reading.effective_points)
+    outcome = roll_sacrifice(sheet, target, difficulty).outcome
+    if reading.request is not None:
+        outcome = lift_botch(outcome)
+    return outcome, difficulty
+
+
 def _pay_sacrifice(
     sheet: "CharacterSheet",
     target: "WorshippedBeing",
@@ -1267,6 +1348,7 @@ def sacrifice_items(
     item_instances: "list[ItemInstance]",
     *,
     being: "WorshippedBeing | None" = None,
+    player_line: str = "",
 ) -> "SacrificeOutcome":
     """Give items up to a being at its shrine or temple, outside a ceremony (#4500).
 
@@ -1282,7 +1364,8 @@ def sacrifice_items(
     being. A counted item also feeds the pool (``give_up_item``), whatever the roll. Each
     item writes a ``CeremonyOffering`` with ``being`` set, the open pledge (if it is to
     this being), the recorded facet, the roll and the item's signals, and one room line:
-    "<name> sacrifices <item> at <being>'s shrine."
+    "<name> sacrifices <item> at <being>'s shrine." ``player_line`` (#4530) is the giver's
+    own line: kept on each offering and heard in the room, verbatim, after the system lines.
     """
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
@@ -1291,9 +1374,7 @@ def sacrifice_items(
     from world.worship.pledge_services import broadcast_room_line, open_pledge_for  # noqa: PLC0415
     from world.worship.sacrifice_services import (  # noqa: PLC0415
         is_botch,
-        roll_sacrifice,
         sacrifice_configured,
-        sacrifice_difficulty,
         sacrifice_slots_left,
     )
     from world.worship.types import SacrificedItem, SacrificeOutcome  # noqa: PLC0415
@@ -1314,14 +1395,19 @@ def sacrifice_items(
     if details is not None and details.pledge.being_id != target.pk:
         details = None
     facets = favored_facets_by_item(target, item_instances)
+    requested = _requests_filled(details, item_instances)
     # Read every item first: the holder is cleared when one is destroyed, and a being
     # with no check type configured must refuse before anything is given up.
-    readings = [read_item(i, sheet, facet=facets.get(i.pk), being=target) for i in item_instances]
+    readings = [
+        read_item(i, sheet, facet=facets.get(i.pk), being=target, request=requested.get(i.pk))
+        for i in item_instances
+    ]
     if any(r.effective_points > 0 for r in readings) and not sacrifice_configured(target):
         raise SacrificeRefused(MSG_NOT_CONFIGURED)
     week = get_current_game_week()
     slots_left = sacrifice_slots_left(sheet, target, game_week=week)
     sacrificed: list[SacrificedItem] = []
+    line = player_line.strip()[:PLAYER_LINE_MAX_LENGTH]
     with transaction.atomic():
         for instance, reading in zip(item_instances, readings, strict=True):
             counted = reading.effective_points > 0 and slots_left > 0
@@ -1329,8 +1415,7 @@ def sacrifice_items(
             difficulty = None
             if counted:
                 slots_left -= 1
-                difficulty = sacrifice_difficulty(sheet, target, reading.effective_points)
-                outcome = roll_sacrifice(sheet, target, difficulty).outcome
+                outcome, difficulty = _roll_item(sheet, target, reading)
                 if is_botch(outcome):
                     slots_left = 0
             where = f"at {target.name}'s {site}" if site else f"to {target.name}"
@@ -1355,6 +1440,7 @@ def sacrifice_items(
                 difficulty_points=difficulty,
                 game_week=week,
                 counted=counted,
+                player_line=line,
             )
             write_offering_signals(offering, reading)
             sacrificed.append(
@@ -1365,4 +1451,5 @@ def sacrifice_items(
                 f"{persona.name} sacrifices {offered.name} {where}.",
                 location=character.location,
             )
+        _hear_player_line(persona, line, character.location)
     return SacrificeOutcome(being=target, site=site, items=sacrificed)

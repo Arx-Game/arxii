@@ -41,6 +41,7 @@ import { TitlePage } from './title/TitlePage';
 import { StaffFamilyPage } from './family/StaffFamilyPage';
 import type { AlmanachRealm } from './types';
 import './almanach.css';
+import { urls } from '@/utils/urls';
 
 /**
  * Exported for the Founder Almanach's own Seat picker (#3983 Plan B Task 4),
@@ -154,7 +155,9 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
     <div className="almanach">
       <div className="bar">
         <span className="crumb">
-          <span>Almanach de Catenys</span>
+          <span>
+            <Link to="/staff/almanach">Almanach de Catenys</Link>
+          </span>
           <span>{realm?.name ?? `Realm ${realmId}`}</span>
         </span>
         <span className="right">
@@ -250,7 +253,7 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
                   {charter.succession_law.codex_entry_id != null && (
                     <>
                       {' · '}
-                      <Link to={`/codex/${charter.succession_law.codex_entry_id}`}>codex</Link>
+                      <Link to={urls.codexEntry(charter.succession_law.codex_entry_id)}>codex</Link>
                     </>
                   )}
                 </>

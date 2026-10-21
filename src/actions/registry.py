@@ -302,6 +302,7 @@ from actions.definitions.journals import (
     SetJournalDispositionAction,
     SetRetortConsentAction,
 )
+from actions.definitions.keepsakes import DeclareKeepsakeAction, ReleaseKeepsakeAction
 from actions.definitions.language import SetLanguageAction, TrainLanguageAction
 from actions.definitions.locations import (
     AssignRoomTenantAction,
@@ -1192,6 +1193,9 @@ _ALL_ACTIONS: list[Action] = [
     SacrificeAction(),
     # #4333 slice 4: a stewarded being's table GM answers a closed pledge.
     AnswerBeingPromptAction(),
+    # #4530: an item kept as a keepsake of a tie, deed, being, organization, person or place.
+    DeclareKeepsakeAction(),
+    ReleaseKeepsakeAction(),
     # #2289 — ceremonies (worship rites over the events/scenes chassis).
     OpenCeremonyAction(),
     CeremonyOfferingAction(),

@@ -90,6 +90,12 @@ or a Guide plays one with an ordinary tenure or an active loan.
   `puppet` lock `can_play() or perm(Developer) or pperm(Developer)`. `can_play`
   (`server/conf/lockfuncs.py`) defers to `Account.can_puppet_character`, so a lent NPC
   is playable by the borrower and by its owner when not lent.
+  Character creation applies it too (#4544): `finalize_character` and
+  `finalize_gm_character` both create their character through
+  `character_creation.services._create_playable_character`, so a player who holds the
+  tenure can puppet it. `create_character_with_sheet` itself leaves Evennia's default
+  lock, because it also builds characters nobody plays (the narrator, functionaries,
+  NPC assets, trainers).
   `mint_story_npc(..., as_template, count_against_cap)`; a crowd voice is minted
   uncapped and never counts against the GM's story-NPC cap, and neither does the GM's
   own GM or Staff OOC character (`check_story_npc_cap` follows `is_story_npc`).

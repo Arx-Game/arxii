@@ -312,6 +312,70 @@ def facet_suppliers(being: WorshippedBeing) -> FacetSuppliers:
 
 
 @dataclass(frozen=True)
+class RequestSupplyRow:
+    """Where one requested item can be found, for the builder's side panel (#4530)."""
+
+    asked_for: str
+    supply: str
+    unsupplied: bool
+
+
+def request_suppliers(being: WorshippedBeing) -> list[RequestSupplyRow]:
+    """For each request on the being's pledges and rites, where a player can find it: the
+    stalls that stock the template, whether it can be crafted, or how many cheap templates
+    carry the facet. "Nothing supplies it yet" is a warning for staff, never a block.
+    Read-only; the stalls and the facet counts are each read in one query."""
+    from world.items.market.models import StockListing  # noqa: PLC0415
+    from world.worship.models import RequestedItem  # noqa: PLC0415
+
+    ceiling = _requested_value_ceiling()
+    requests = list(
+        RequestedItem.objects.filter(Q(pledge__being=being) | Q(rite__being=being))
+        .select_related("item_template", "facet")
+        .annotate(
+            cheap_templates=Count(
+                "facet__inherent_on_templates",
+                filter=Q(facet__inherent_on_templates__value__lte=ceiling),
+                distinct=True,
+            )
+        )
+        .order_by("pk")
+    )
+    stalls_by_template: dict[int, set[str]] = {}
+    for listing in StockListing.objects.filter(
+        template__in=[r.item_template_id for r in requests if r.item_template_id is not None],
+        is_active=True,
+    ).select_related("stall"):
+        stalls_by_template.setdefault(listing.template_id, set()).add(listing.stall.name)
+    rows: list[RequestSupplyRow] = []
+    for request in requests:
+        if request.item_template_id is not None:
+            template = request.item_template
+            stalls = sorted(stalls_by_template.get(template.pk, ()))
+            parts = [f"sold at {', '.join(stalls)}"] if stalls else []
+            if template.is_craftable:
+                parts.append("can be crafted")
+            supply = "; ".join(parts)
+        else:
+            count = request.cheap_templates
+            supply = f"{count} cheap template{'s' if count != 1 else ''} carry it" if count else ""
+        rows.append(
+            RequestSupplyRow(
+                asked_for=request.asked_for,
+                supply=supply or "nothing supplies it yet",
+                unsupplied=not supply,
+            )
+        )
+    return rows
+
+
+def _requested_value_ceiling() -> int:
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+    return get_devotion_config().requested_item_max_value
+
+
+@dataclass(frozen=True)
 class BeingStats:
     domains: str
     worshippers_with_favor: int

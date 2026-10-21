@@ -43,6 +43,8 @@ class PerformWorshipRiteAction(Action):
         rite: A ``WorshipRite`` (required unless ``rite_name`` is given).
         rite_name: The rite's name; ``being_name`` narrows it when two beings
             share one.
+        item_ids / item_names: optional items you carry and give up during the rite
+            (#4530); their meaning eases its roll.
     """
 
     key: str = "worship_rite"
@@ -75,8 +77,11 @@ class PerformWorshipRiteAction(Action):
         scene = get_active_scene(actor.location)
         if scene is None:
             return ActionResult(success=False, message="A rite is performed in a live scene.")
+        items, error = _offered_items(actor, kwargs)
+        if error is not None:
+            return error
         try:
-            outcome = perform_worship_rite(sheet, rite, scene=scene)
+            outcome = perform_worship_rite(sheet, rite, scene=scene, offered_items=items)
         except WorshipRiteError as exc:
             return ActionResult(success=False, message=exc.user_message)
         _broadcast_rite_line(sheet, rite, actor)
@@ -92,6 +97,7 @@ class PerformWorshipRiteAction(Action):
             parts.append(f"+{outcome.favor_granted} favor with {rite.being.name}.")
         elif outcome.favor_capped:
             parts.append(f"{rite.being.name} has already marked this rite of yours this week.")
+        parts.extend(_gift_sentences(outcome))
         return ActionResult(
             success=True,
             message=" ".join(parts),
@@ -631,8 +637,11 @@ class ClosePledgeAction(Action):
         scene, error = _scene_to_close_in(actor, sheet)
         if error is not None:
             return error
+        items, error = _offered_items(actor, kwargs)
+        if error is not None:
+            return error
         try:
-            outcome = close_pledge(sheet, scene=scene)
+            outcome = close_pledge(sheet, scene=scene, offered_items=items)
         except (PledgeError, WorshipRiteError) as exc:
             return ActionResult(success=False, message=exc.user_message)
         _broadcast_rite_line(sheet, outcome.rite, actor)
@@ -692,6 +701,7 @@ class SacrificeAction(Action):
     kwargs:
         item_ids: ItemInstance pks (web), or item_names to search your inventory (telnet).
         being / being_name: optional, when the place is holy to two beings.
+        player_line: optional, your own line, heard in the room after the system line (#4530).
     """
 
     key: str = "sacrifice"
@@ -718,7 +728,9 @@ class SacrificeAction(Action):
         if error is not None:
             return error
         try:
-            outcome = sacrifice_items(sheet, items, being=being)
+            outcome = sacrifice_items(
+                sheet, items, being=being, player_line=str(kwargs.get("player_line") or "")
+            )
         except PledgeError as exc:
             return ActionResult(success=False, message=exc.user_message)
         where = (
@@ -734,6 +746,28 @@ class SacrificeAction(Action):
             message="\n".join(lines),
             data={"credited": sum(item.credited for item in outcome.items)},
         )
+
+
+def _offered_items(actor: ObjectDB, kwargs: dict[str, Any]):
+    """(items, error): the items given up during a rite (#4530), none when none are named."""
+    if not (kwargs.get("item_ids") or kwargs.get("item_names")):
+        return [], None
+    return _carried_items(actor, kwargs)
+
+
+def _gift_sentences(outcome) -> list[str]:
+    """What the items given up during a rite did, for the action's message."""
+    if not outcome.items_given:
+        return []
+    given = ", ".join(outcome.items_given)
+    if outcome.items_ease:
+        return [f"You gave up {given}; it eased the rite by {outcome.items_ease}."]
+    if outcome.items_uncounted:
+        return [
+            f"You gave up {given}; it did not count, as you have already given up as many "
+            "as the rite or the week allows."
+        ]
+    return [f"You gave up {given}; it meant nothing to the rite."]
 
 
 def _carried_items(actor: ObjectDB, kwargs: dict[str, Any]):

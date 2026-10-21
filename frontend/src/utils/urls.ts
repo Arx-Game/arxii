@@ -20,6 +20,10 @@ export const urls = {
   // Family page (#4209): keyed by the Family pk, which is not an Organization pk.
   family: (id: number | string) => `/families/${id}`,
 
+  // A Codex entry opens on the one /codex route by its `entry` search param;
+  // there is no /codex/<id> route (#4549: every almanach link 404ed on it).
+  codexEntry: (id: number | string) => `/codex?entry=${id}`,
+
   // Scene URLs
   scene: (id: number | string) => `${ROUTES.SCENES}/${id}`,
 

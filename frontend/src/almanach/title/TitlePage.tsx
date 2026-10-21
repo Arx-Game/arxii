@@ -78,7 +78,9 @@ export function TitlePage({ titleId }: { titleId: number }) {
     <div className="almanach">
       <div className="bar">
         <span className="crumb">
-          <span>Almanach</span>
+          <span>
+            <Link to="/staff/almanach">Almanach</Link>
+          </span>
           <span>{title.realm}</span>
           <span>{title.name || 'unnamed'}</span>
         </span>

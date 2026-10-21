@@ -62,10 +62,11 @@ class MeaningSignalKind(models.TextChoices):
     """One fact that makes an item matter to the character holding it (#4500, #4462).
 
     The signals (carried, gift, heirloom, own work, made by a tie, and the commission
-    loop's designed by you, made for, made from and shown, #4512, and resonance fed, #4520)
-    are read from records
-    the game already keeps. ``OfferingSignal.kind`` snapshots them when an item is given
-    up. Nothing here reads a price, fee or material cost.
+    loop's designed by you, made for, made from and shown, #4512, resonance fed, #4520, and
+    trophy, keepsake, keepsake match and requested, #4530) are read from records the game
+    already keeps. ``OfferingSignal.kind`` snapshots them when an item is given up. Nothing
+    here reads a price, fee or material cost; the one exception is the requested-item value
+    ceiling, which only keeps a request cheap and never adds a point.
     """
 
     CARRIED = "carried", "Carried"
@@ -78,6 +79,26 @@ class MeaningSignalKind(models.TextChoices):
     MADE_FROM = "made_from", "Made from"
     SHOWN = "shown", "Shown"
     RESONANCE_FED = "resonance_fed", "Resonance fed"
+    TROPHY = "trophy", "Trophy"
+    KEEPSAKE = "keepsake", "Keepsake"
+    KEEPSAKE_MATCH = "keepsake_match", "Keepsake match"
+    REQUESTED = "requested", "Requested"
+
+
+class KeepsakeSubject(models.TextChoices):
+    """What a player declares an item stands for (#4530, #4462 section 6.4).
+
+    Each kind has one matching field on ``Keepsake``. The game scores the subject, never
+    the player's words: a tie by its claimed tier, a deed by its legend, and a being,
+    an organization, a person or a place by a flat point.
+    """
+
+    TIE = "tie", "A tie"
+    DEED = "deed", "One of my deeds"
+    BEING = "being", "A being"
+    ORGANIZATION = "organization", "An organization"
+    PERSON = "person", "A person"
+    PLACE = "place", "A place"
 
 
 # Ownership events that represent the item changing hands — the lore-relevant

@@ -38,6 +38,7 @@
  * (no secondary-membership data on the wire).
  */
 import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 
 import { useAlmanachMutation, useHouseDocument } from '../queries';
 import { PUBLISH_STATUS } from '../copy';
@@ -404,7 +405,9 @@ export function HouseDocument({ houseId }: { houseId: number }) {
     <div className="almanach">
       <div className="bar">
         <span className="crumb">
-          <span>Almanach de Catenys</span>
+          <span>
+            <Link to="/staff/almanach">Almanach de Catenys</Link>
+          </span>
           <span>{house.name}</span>
         </span>
         <span className="right">

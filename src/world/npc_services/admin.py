@@ -28,6 +28,8 @@ from world.npc_services.models import (
     PersonalityTrait,
     ProfileRecordingOfferDetails,
     RegardEventConfig,
+    SkillCourseEnrollment,
+    SkillCourseOfferDetails,
     StaffingProfile,
     StaffingProfileLine,
     StylingOfferDetails,
@@ -106,6 +108,78 @@ class TrainOfferDetailsAdmin(admin.ModelAdmin):
     search_fields = ["offer__label", "technique__name"]
     list_select_related = ["offer", "technique"]
     autocomplete_fields = ["offer", "technique"]
+
+
+@admin.register(SkillCourseOfferDetails)
+class SkillCourseOfferDetailsAdmin(admin.ModelAdmin):
+    """#4457 - one skill course on a kind=SKILL_COURSE offer."""
+
+    list_display = [
+        "offer",
+        "skill",
+        "total_development",
+        "session_development",
+        "session_ap_cost",
+        "coin_cost",
+        "check_type",
+    ]
+    search_fields = ["offer__label", "skill__trait__name"]
+    list_select_related = ["offer", "skill__trait", "check_type"]
+    # Any skill may be taught on a course (spec Decision 7); the category line only says
+    # which one it is, it never narrows the picker.
+    autocomplete_fields = ["offer", "skill", "check_type"]
+    readonly_fields = ["skill_category", "sold_by"]
+    fields = [
+        "offer",
+        ("skill", "skill_category"),
+        "sold_by",
+        "total_development",
+        "session_development",
+        "session_ap_cost",
+        "coin_cost",
+        "check_type",
+        "check_difficulty",
+    ]
+
+    @admin.display(description="Category")
+    def skill_category(self, obj: SkillCourseOfferDetails) -> str:
+        """The course skill's trait category, read from the skill rather than typed."""
+        if obj.skill_id is None:
+            return "Derived, read-only: shown once the course is saved with a skill."
+        return f"Derived, read-only: category {obj.skill.trait.get_category_display()}."
+
+    @admin.display(description="Sold by")
+    def sold_by(self, obj: SkillCourseOfferDetails) -> str:
+        """The offer's role and the house its coin is credited to."""
+        if obj.offer_id is None:
+            return "Derived, read-only: shown once the course is saved with an offer."
+        role = obj.offer.role
+        house = role.faction_affiliation
+        if house is None:
+            return f"Derived, read-only: {role.name} (no house)."
+        return f"Derived, read-only: {role.name}, for {house.name}."
+
+
+@admin.register(SkillCourseEnrollment)
+class SkillCourseEnrollmentAdmin(admin.ModelAdmin):
+    """#4457 - read-only view of who is taking which skill course."""
+
+    list_display = ["character_sheet", "course", "development_remaining", "completed_at"]
+    list_select_related = ["character_sheet", "course__offer"]
+    readonly_fields = [
+        "character_sheet",
+        "course",
+        "development_remaining",
+        "last_session_week",
+        "enrolled_at",
+        "completed_at",
+    ]
+
+    # Every field is read-only, so character_sheet never renders as a <select>.
+    large_table_widget_exempt = ["character_sheet"]
+
+    def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
 
 
 @admin.register(CourtGrantOfferDetails)

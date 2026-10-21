@@ -33,8 +33,8 @@
  * chapter-level savebar sits outside the tree instead) — `PersonPanel`
  * carries its own Save immediately under the fields it commits, since only
  * one panel is ever open at a time; there's also no top-level prose field
- * here for a chapter-wide "draft kept as you type" note to describe, so
- * this chapter renders no outer savebar at all (unlike House/Lands/Estate).
+ * here for a chapter-wide Save to commit, so this chapter renders no outer
+ * savebar at all (unlike House/Lands/Estate).
  */
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -101,8 +101,8 @@ export interface FamilyChapterProps {
   /** Rendered at the end of the `<main className="chapter">` this component
    * owns, after the add-kin dialog (#3983 Plan B Task 5) — this component
    * draws no savebar of its own (see the module docstring), but the founder
-   * Almanach's own chapters always need a "draft kept as you type" + Next
-   * savebar, and that savebar has to sit INSIDE the same `<main>` element
+   * Almanach's own chapters always need a Next savebar, and that savebar
+   * has to sit INSIDE the same `<main>` element
    * the plate's CSS grid expects, not as a trailing sibling. Omitted keeps
    * today's no-footer shape. */
   footer?: ReactNode;

@@ -12,6 +12,7 @@ import { timeLeft } from '../pledgeText';
 import type { PledgeCard as PledgeCardData } from '../types';
 
 const closeMutate = vi.fn();
+vi.mock('@/inventory/hooks/useInventory', () => ({ useInventory: () => ({ data: [] }) }));
 vi.mock('../queries', () => ({
   useClosePledge: vi.fn(() => ({ mutate: closeMutate, isPending: false })),
 }));
@@ -63,6 +64,7 @@ function card(overrides: Partial<PledgeCardData> = {}): PledgeCardData {
       },
     ],
     terms,
+    requests: [],
     ...overrides,
   };
 }
@@ -90,10 +92,56 @@ describe('PledgeCard', () => {
   it('closes with the closing rite when ready', () => {
     render(<PledgeCard card={card()} characterId={3} />, { wrapper });
     fireEvent.click(screen.getByTestId('close-pledge-button'));
-    expect(closeMutate).toHaveBeenCalled();
+    expect(closeMutate).toHaveBeenCalledWith({ itemIds: [] }, expect.anything());
     expect(screen.getByTestId('close-pledge-button')).toHaveTextContent(
       "Close the pledge with Ombrin's rite"
     );
+  });
+
+  it('lists what the pledge asks for with the count given and the points each', () => {
+    render(
+      <PledgeCard
+        card={card({
+          requests: [
+            {
+              id: 1,
+              asked_for: 'weathervane pin',
+              hint: '[staff-authored hint]',
+              quantity: 1,
+              given: 0,
+              points: 3,
+              where: 'pledge',
+            },
+            {
+              id: 2,
+              asked_for: 'any cheap item with the Kestrel facet',
+              hint: '[staff-authored hint]',
+              quantity: 2,
+              given: 1,
+              points: 2,
+              where: 'closing rite',
+            },
+          ],
+        })}
+        characterId={3}
+      />,
+      { wrapper }
+    );
+
+    const rows = screen.getAllByTestId('pledge-request');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('weathervane pin');
+    expect(rows[0]).toHaveTextContent('0 of 1');
+    expect(rows[1]).toHaveTextContent('at the closing rite');
+    expect(rows[1]).toHaveTextContent('1 of 2');
+    expect(screen.getByTestId('pledge-requests')).toHaveTextContent(
+      'cannot come out as a Critical Failure'
+    );
+  });
+
+  it('shows no requests table when the pledge asks for nothing', () => {
+    render(<PledgeCard card={card()} characterId={3} />, { wrapper });
+    expect(screen.queryByTestId('pledge-requests')).not.toBeInTheDocument();
   });
 
   it('offers no close before the target or to a non-owner', () => {

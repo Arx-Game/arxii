@@ -21,7 +21,7 @@ from world.character_creation.constants import (
     AnchorSource,
     OfferChapter,
     QuestionKind,
-    TraditionState,
+    schooling_max_rank,
 )
 from world.character_creation.models import (
     AGE_MAX,
@@ -339,7 +339,7 @@ class PathSerializer(serializers.ModelSerializer):
 
 
 class SchoolingLineSerializer(serializers.Serializer):
-    """One standard schooling stance under a ``living_masters`` tradition (#3675)."""
+    """One standard schooling stance under a tradition that opens stances (#3675, #4457)."""
 
     schooling_line_id = serializers.IntegerField()
     rank = serializers.IntegerField()
@@ -347,20 +347,21 @@ class SchoolingLineSerializer(serializers.Serializer):
     player_line = serializers.CharField()
     price = serializers.IntegerField()
     techniques = serializers.IntegerField()
+    magic_skill_floor = serializers.IntegerField()
     grants_distinction_id = serializers.IntegerField(allow_null=True)
     offer_id = serializers.IntegerField(allow_null=True)
 
 
 def schooling_rows() -> list[dict]:
-    """The three standard schooling lines under a living tradition, priced and offer-linked.
+    """The three standard schooling lines, priced and offer-linked.
 
-    Shared by every tradition whose slate entry is ``living_masters`` state (#3675),
-    not per-tradition data, so it is built once per request in
-    ``TraditionViewSet.get_serializer_context`` (key ``"schooling"``) and read from
-    there by every row's ``TraditionSerializer.get_schooling``. Also the fallback this
-    module-level function provides for the nested ``selected_tradition`` use inside
-    ``CharacterDraftSerializer``, where that context isn't set up (mirrors the
-    ``get_required_distinction_id`` fallback this replaces).
+    Shared by every tradition whose slate state opens stances (#3675), not per-tradition
+    data, so it is built once per request in ``TraditionViewSet.get_serializer_context``
+    (key ``"schooling"``) and read from there by every row's
+    ``TraditionSerializer.get_schooling``, which cuts it to the ranks the state opens
+    (#4457). Also the fallback this module-level function provides for the nested
+    ``selected_tradition`` use inside ``CharacterDraftSerializer``, where that context
+    isn't set up (mirrors the ``get_required_distinction_id`` fallback this replaces).
     """
     lines = list(SchoolingLine.objects.select_related("grants").order_by("rank"))
     offers = DistinctionOffer.objects.filter(
@@ -381,6 +382,7 @@ def schooling_rows() -> list[dict]:
             "player_line": line.player_line,
             "price": line.price,
             "techniques": 1 + line.rank,
+            "magic_skill_floor": line.magic_skill_floor,
             "grants_distinction_id": line.grants_id,
             "offer_id": offer_by_line_id.get(line.id),
         }
@@ -481,10 +483,13 @@ class TraditionSerializer(serializers.ModelSerializer):
     @extend_schema_field(SchoolingLineSerializer(many=True))
     def get_schooling(self, obj) -> list[dict]:
         bt = self._beginning_tradition(obj)
-        if bt is None or bt.state != TraditionState.LIVING_MASTERS:
+        max_rank = schooling_max_rank(bt.state) if bt is not None else None
+        if max_rank is None:
             return []
         rows = self.context.get("schooling")
-        return rows if rows is not None else schooling_rows()
+        if rows is None:
+            rows = schooling_rows()
+        return [row for row in rows if row["rank"] <= max_rank]
 
 
 class CGGiftOptionSerializer(serializers.ModelSerializer):
@@ -1314,6 +1319,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # base 1 + any distinction bonus; the GiftStage funnel's technique picker
     # needs it for the "n of m chosen" budget banner.
     starting_technique_picks = serializers.IntegerField(read_only=True)
+    starting_magic_skill_floor = serializers.IntegerField(read_only=True)
     # The age range CG accepts for this draft: the general cap tightened by
     # eternal youth and by the heritage's first appearance (#3663). The
     # appearance stage clamps to these instead of knowing the rule.
@@ -1391,6 +1397,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "starting_magic_skill_floor",
             "age_min",
             "age_max",
             "ic_month_names",
@@ -1421,6 +1428,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "starting_magic_skill_floor",
             "bundled_distinctions",
             "derived_anchors",
         ]

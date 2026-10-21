@@ -8,6 +8,7 @@ import { CompanionRail, CompanionSections } from './Companion';
 import { LoreSection, OOCSection } from './ContentSections';
 import type { CodexEntryDetail as CodexEntryDetailType } from '../types';
 import '../codex.css';
+import { urls } from '@/utils/urls';
 
 interface EntryDetailProps {
   entry: CodexEntryDetailType;
@@ -27,7 +28,7 @@ export function EntryDetail({
   // On the full page, inline links use React Router navigation so browser
   // back/forward works natively.
   const handleNavigate = (entryId: number) => {
-    navigate(`/codex?entry=${entryId}`);
+    navigate(urls.codexEntry(entryId));
   };
 
   const breadcrumbItems = entry.subject_path.map((segment) => ({

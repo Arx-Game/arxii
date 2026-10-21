@@ -242,10 +242,7 @@ def finalize_character(
     # Create Character + CharacterSheet + PRIMARY Persona atomically.
     # The service ensures every sheet has a PRIMARY persona, preserving the
     # invariant used everywhere else (tests, factories, etc.).
-    character, sheet, primary_persona = create_character_with_sheet(
-        character_key=full_name,
-        primary_persona_name=full_name,
-    )
+    character, sheet, primary_persona = _create_playable_character(full_name)
 
     # Apply Evennia room/home wiring (not handled by the service).
     if starting_room is not None:
@@ -1532,6 +1529,27 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     sheet.save()
 
 
+def _create_playable_character(full_name: str) -> tuple[ObjectDB, CharacterSheet, Persona]:
+    """Create the Character + CharacterSheet + PRIMARY Persona a player will play (#4544).
+
+    ``create_character_with_sheet`` leaves Evennia's default ``puppet:pperm(Developer)``,
+    so the player who holds the character's tenure passed ``can_puppet_character`` and was
+    then refused by ``puppet_object``. Both finalize paths (player and GM) create their
+    character here, so the roster entry they go on to make is playable by whoever the
+    availability check lets play it. The lock is set here, not inside
+    ``create_character_with_sheet``, because that primitive also builds characters nobody
+    plays (the narrator, functionaries, NPC assets, trainers), which keep the default.
+    """
+    from world.roster.services.staff_characters import ensure_playable_lock  # noqa: PLC0415
+
+    character, sheet, persona = create_character_with_sheet(
+        character_key=full_name,
+        primary_persona_name=full_name,
+    )
+    ensure_playable_lock(character)
+    return character, sheet, persona
+
+
 def _apply_character_mechanics(
     character: ObjectDB,
     draft: CharacterDraft,
@@ -2197,6 +2215,7 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
     unknown id is skipped with a warning, as before.
     """
     from world.character_creation.sheet_writers import set_skill_values  # noqa: PLC0415
+    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
     from world.skills.models import Skill, Specialization  # noqa: PLC0415
     from world.traits.models import TraitChangeSource  # noqa: PLC0415
 
@@ -2207,9 +2226,16 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
             logger.warning("Invalid ID %s in draft for character %s", pk, character.key)
         return {found[pk]: value for pk, value in wanted.items() if pk in found}
 
+    skills = by_id(Skill.objects.select_related("trait"), draft.draft_data.get("skills", {}))
+    # A schooled character starts with every Magic skill at the stance's floor (#4457).
+    # A draft's own points never reach a Magic skill (validation refuses them), so the
+    # floor is the value written.
+    floor = draft.starting_magic_skill_floor
+    if floor > 0:
+        skills |= dict.fromkeys(magic_category_skills().select_related("trait"), floor)
     set_skill_values(
         character.sheet_data,
-        by_id(Skill.objects.select_related("trait"), draft.draft_data.get("skills", {})),
+        skills,
         by_id(Specialization.objects.all(), draft.draft_data.get("specializations", {})),
         source=TraitChangeSource.CHARACTER_CREATION,
         enforce_caps=False,
@@ -3041,10 +3067,7 @@ def finalize_gm_character(
     full_name = _build_character_full_name(draft)
 
     # Create Character + Sheet + Primary Persona atomically.
-    character, sheet, primary_persona = create_character_with_sheet(
-        character_key=full_name,
-        primary_persona_name=full_name,
-    )
+    character, sheet, primary_persona = _create_playable_character(full_name)
 
     # Populate sheet demographics and mechanics (shared helpers).
     _apply_sheet_demographics(sheet, draft)

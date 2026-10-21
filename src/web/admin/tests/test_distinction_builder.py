@@ -233,6 +233,21 @@ class BuilderSaveTest(BuilderTestCase):
         assert resp.status_code == 200
         assert "need an opener" in resp.content.decode()
 
+    def test_a_refused_save_leaves_the_identity_mapped_distinction_as_stored(self):
+        """Validating the form wrote the refused name onto the shared instance; the next
+        reader (a plain query, as the game does) must still get the stored row."""
+        self.client.force_login(self.author)
+        stored_name = Distinction.objects.values_list("name", flat=True).get(pk=self.distinction.pk)
+        data = self._post_data(
+            name="Refused Rename",
+            **{"offers-0-chapter": OfferChapter.ACTORS_SHEET, "offers-0-origin_choice": ""},
+        )
+        resp = self.client.post(
+            reverse("admin_distinction_builder", args=[self.distinction.pk]), data
+        )
+        assert resp.status_code == 200
+        assert Distinction.objects.get(pk=self.distinction.pk).name == stored_name
+
     def test_unlinked_contributor_cannot_save(self):
         self.client.force_login(self.unlinked)
         resp = self.client.post(

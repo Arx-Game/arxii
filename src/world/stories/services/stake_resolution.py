@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.gm.models import GMProfile
+    from world.items.models import ItemInstance
     from world.scenes.models import Persona
     from world.stories.models import Beat, BeatCompletion, Stake, StakeContractActivation, Story
     from world.stories.types import AnyStoryProgress
@@ -232,6 +233,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     outcome_tier: CheckOutcome | None = None,
     outcome_key: str = "",
     skip_effect_types: frozenset[str] = frozenset(),
+    granted_items: list[ItemInstance] | None = None,
 ) -> list[StakeOutcome]:
     """Grade every open stake on a completing beat and fire the chosen branches.
 
@@ -267,6 +269,8 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
         resolution=None (audit honesty - an unready contract that ran anyway).
       - escalates_to_risk stays recorded on the fired resolution for authoring;
         no automatic scene-spawn here (the fuse walk validates reachability).
+      - ``granted_items`` (#4530) collects the items the WIN branches' reward lines minted, so
+        the caller can link them to the deed settlement mints afterwards (a trophy).
     """
     from world.stories.services.beats import _resolve_participants_for_pool  # noqa: PLC0415
     from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
@@ -301,6 +305,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
                 participants=participants,
                 outcome_tier=outcome_tier,
                 skip_effect_types=skip_effect_types,
+                granted_items=granted_items,
             )
         )
     return outcomes
@@ -546,6 +551,7 @@ def _fire_branch_and_record(  # noqa: PLR0913
     skip_effect_types: frozenset[str] = frozenset(),
     resolved_by: GMProfile | None = None,
     gm_notes: str = "",
+    granted_items: list[ItemInstance] | None = None,
 ) -> StakeOutcome:
     """Claim one stake's audit row, then fire its branch (pool + writer payloads).
 
@@ -600,7 +606,7 @@ def _fire_branch_and_record(  # noqa: PLR0913
             )
         _apply_branch_writers(resolution, stake, participants)
         if column == StakeResolutionColumn.WIN:
-            _apply_stake_rewards(resolution, stake, participants, activation)
+            _apply_stake_rewards(resolution, stake, participants, activation, granted_items)
     else:
         logger.warning(
             "Stake %s resolved at column %r with no authored branch "
@@ -920,6 +926,7 @@ def _apply_stake_rewards(
     stake: Stake,
     participants: list[Persona] | None,
     activation: StakeContractActivation | None,
+    granted_items: list[ItemInstance] | None = None,
 ) -> None:
     """Pay the WIN branch's authored reward lines (#1770 PR3, two-sided contract).
 
@@ -993,10 +1000,23 @@ def _apply_stake_rewards(
             "; ".join(band_problems),
         )
         return
+    _deliver_all_lines(lines, participants, stake, granted_items)
+
+
+def _deliver_all_lines(
+    lines: list[StakeRewardLine],
+    participants: list[Persona],
+    stake: Stake,
+    granted_items: list[ItemInstance] | None,
+) -> None:
+    """Deliver every line to every participant, one failure never stopping the rest, and
+    collect the items ITEM lines minted into ``granted_items`` (#4530)."""
     for line in lines:
         for participant in participants:
             try:
-                _deliver_reward_line(line, participant, stake)
+                item = _deliver_reward_line(line, participant, stake)
+                if item is not None and granted_items is not None:
+                    granted_items.append(item)
             except Exception:
                 logger.exception(
                     "StakeRewardLine %s: delivery to %s failed; continuing.",
@@ -1011,8 +1031,12 @@ def _reward_lines_for(resolution: StakeResolution) -> list[StakeRewardLine]:
     return resolution.prefetched_reward_lines
 
 
-def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Stake) -> None:
+def _deliver_reward_line(
+    line: StakeRewardLine, participant: Persona, stake: Stake
+) -> ItemInstance | None:
     """Deliver one reward line to one participant's sheet (skip-and-log).
+
+    Returns the item an ITEM line minted (#4530), else None.
 
     ITEM mints a touchstone item on the participant's sheet directly; items
     have no roster-entry dependency (a held ItemInstance is a sheet fact).
@@ -1035,7 +1059,7 @@ def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Sta
             ref=f"stake:{stake.pk}",
             reason_label="stake reward",
         )
-        return
+        return None
     if line.sink == StakeRewardSink.RESONANCE:
         if line.resonance is None:
             logger.warning(
@@ -1043,9 +1067,9 @@ def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Sta
                 "(deleted after authoring?); skipping.",
                 line.pk,
             )
-            return
+            return None
         grant_resonance(sheet, line.resonance, line.amount, source=GainSource.STAKE_REWARD)
-        return
+        return None
     if line.sink == StakeRewardSink.ITEM:
         if line.item_template is None:
             logger.warning(
@@ -1053,17 +1077,19 @@ def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Sta
                 "(deleted after authoring?); skipping.",
                 line.pk,
             )
-            return
-        grant_touchstone_item_to_character(character_sheet=sheet, template=line.item_template)
-        return
+            return None
+        return grant_touchstone_item_to_character(
+            character_sheet=sheet, template=line.item_template
+        )
     if line.sink in (StakeRewardSink.CLUE, StakeRewardSink.CODEX):
         _deliver_knowledge_reward_line(line, participant, sheet)
-        return
+        return None
     logger.warning(
         "StakeRewardLine %s: unknown sink %r; skipping.",
         line.pk,
         line.sink,
     )
+    return None
 
 
 def _deliver_knowledge_reward_line(

@@ -106,6 +106,32 @@ class TraditionState(models.TextChoices):
     LIVING_MASTERS = "living_masters", "Living masters"
 
 
+#: The highest schooling stance rank each tradition state opens (#4457 Decision 1). A
+#: living tradition offers ranks 0 to 2; an orphaned one (teachers gone) offers 0 and 1,
+#: since its teachers were lost before anyone could finish; a self-taught entry opens
+#: none. A game rule the maintainers ruled, not tuning; #4536 replaces this when the
+#: training level becomes a fact of its own.
+SCHOOLING_MAX_RANK_BY_STATE: dict[TraditionState, int] = {
+    TraditionState.LIVING_MASTERS: 2,
+    TraditionState.TEACHERS_GONE: 1,
+}
+
+
+def schooling_max_rank(state: str) -> int | None:
+    """The highest schooling stance rank ``state`` opens, or None when it opens none.
+
+    Called by the offers module (which Tradition Training offers a draft sees), the
+    tradition serializer (which stances are drawn) and
+    ``CharacterDraft.starting_magic_skill_floor``.
+    """
+    return SCHOOLING_MAX_RANK_BY_STATE.get(TraditionState(state))
+
+
+#: What the skills step says when skill points sit in a Magic skill or one of its
+#: specializations (#4457 Decision 4); the names follow it.
+MAGIC_SKILL_POINTS_REFUSAL = "Magic skills come from your Tradition training, not skill points: "
+
+
 class OfferChapter(models.TextChoices):
     """The CG chapter an offer line is shown in (#3675).
 

@@ -121,6 +121,25 @@ def _facet_work_and_lineage(instance: ItemInstance) -> list[str]:
     return sentences
 
 
+def _trophy_and_keepsake(instance: ItemInstance) -> list[str]:
+    """ "Trophy of <deed>." for each active deed the piece is linked to, and the holder's
+    keepsake words when they chose to show them (#4530). The words are the player's own and
+    are shown as written; examine never says what a keepsake is worth."""
+    sentences = [f"Trophy of {deed.title}." for deed in instance.cached_trophy_deeds]
+    holder = instance.holder_character_sheet
+    if holder is None:
+        return sentences
+    keepsake = next(
+        (row for row in instance.cached_shown_keepsakes if row.character_sheet_id == holder.pk),
+        None,
+    )
+    if keepsake is not None and keepsake.text:
+        persona = _primary_or_none(holder)
+        who = persona.name if persona is not None else "its holder"
+        sentences.append(f"Kept as a keepsake by {who}: {keepsake.text}")
+    return sentences
+
+
 def _gone_sentence(instance: ItemInstance) -> str:
     """Why a piece that is no longer in play is gone, from the note on its last event: the
     record of who made and designed it outlives it (#4512)."""
@@ -168,6 +187,7 @@ def crafted_provenance_line(instance: ItemInstance) -> str | None:
     maker, designer = _credit_personas(instance)
     sentences.extend(_credit_sentences(instance, maker, designer))
     sentences.extend(_facet_work_and_lineage(instance))
+    sentences.extend(_trophy_and_keepsake(instance))
     if instance.destroyed_at is not None:
         sentences.append(_gone_sentence(instance))
 

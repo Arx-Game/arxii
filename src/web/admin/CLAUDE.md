@@ -818,6 +818,18 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   row with a blank `entry_line`/`name` as missing too - the standard lines
   are shared by every Beginning, so a gap here is silent everywhere, not
   just on one Beginning's slate page.
+- **Magic skill floor (#4457, ADR-4457-A)** - each schooling row of rank 1 and 2 has a
+  `magic_skill_floor` input (`SchoolingLineForm`): the level that stance lifts every Magic-category
+  skill to at character creation. `clean_magic_skill_floor` refuses a value above
+  `SkillPointBudget.max_skill_value` (the creation skill cap); rank 0 has no field at all (the
+  form deletes it in `__init__`, so a posted value is never read, and a DB check constraint pins it
+  at 0). Under the input the page prints "Derived, read-only: " and then
+  `live.schooling_floor_preview(line, skill_names)` ("trains <skills> to <n>." or "trains none."),
+  derived from `magic_category_skills()` so it follows a skill's category rather than anything
+  typed. `views._render_page` passes it and `floor_cap` to
+  `page.html` as a fourth tuple element and a context value. Three TUNING Required content rows
+  (`schooling-magic-skill-floors`, `magic-skill-courses`, `path-suggestions-name-magic-skills`) list
+  what is unset. Tests: `web/admin/tests/test_tradition_slate.py`, `test_magic_skill_probes.py`.
 - **Credit** - `web/admin/authoring/credit.py:stamp_written`/`stamp_reviewed`
   take a single `CreditedContent` row rather than a whole route; the
   Upbringing Builder's own `credit.py` was generalised to loop its route's
@@ -831,6 +843,15 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   stamped. "Mark reviewed" likewise stamps every standard line, not the
   Beginning's own slate rows - the standard lines are shared, so review here
   is not per-Beginning.
+- **A refused save drops the lines from the identity map** - validating a ModelForm writes
+  the posted values onto the shared `SchoolingLine`/`TraditionStateLine`/`BeginningTradition`
+  instances, so `_save_slate` renders the errors first and then calls
+  `web.admin.authoring.identity_map.flush_refused_instances` over the three formsets (the
+  Distinction Builder and Upbringing Builder do the same). Without it the next load showed
+  the refused values and the corrected save found no change and skipped the write while
+  reporting success (#4457 real-testing). Guard:
+  `SchoolingFloorTest.test_a_correction_after_a_refused_save_is_written_to_the_database`.
+  Reviewer: `tools/agents/idmapper-form-binding-reviewer.md`.
 - **Save-time side effect (`views._sync_schooling_offers`)** - a POST that
   validates saves all three formsets in one `transaction.atomic()` block,
   then keeps every `SchoolingLine`'s TRADITION_STEP `DistinctionOffer` in

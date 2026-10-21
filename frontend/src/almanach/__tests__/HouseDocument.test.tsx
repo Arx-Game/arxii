@@ -114,13 +114,31 @@ test('Gentry toggles like any other state when the realm theme is luxen', async 
   } as never);
 
   renderWithProviders(<HouseDocument houseId={9} />);
-  const gentry = screen.getByRole('button', { name: 'Gentry' });
+  const state = screen.getByRole('combobox', { name: 'State' });
+  const gentry = screen.getByRole('option', { name: 'Gentry' });
   expect(gentry).not.toBeDisabled();
-  await userEvent.click(gentry);
-  expect(gentry).toHaveAttribute('aria-pressed', 'true');
+  await userEvent.selectOptions(state, 'gentry');
+  expect(state).toHaveValue('gentry');
 
   await userEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(mutate).toHaveBeenCalledWith({ org_id: 9, house_state: 'gentry' });
+});
+
+test('a house with no charter answers shows no Quiddity heading, and answers group under their question (#4533)', () => {
+  vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
+  const { unmount } = renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.getByText('Patron')).toBeInTheDocument();
+  expect(screen.queryByText(/House Quiddity/)).not.toBeInTheDocument();
+  unmount();
+
+  const umbralDoc: HouseDocumentPayload = { ...doc, house: { ...doc.house, aspects: [] } };
+  vi.mocked(queries.useHouseDocument).mockReturnValue({
+    data: umbralDoc,
+    isLoading: false,
+  } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.queryByText(/Quiddity/)).not.toBeInTheDocument();
+  expect(screen.queryByText('Patron')).not.toBeInTheDocument();
 });
 
 test("the patron reads by the house's own name and a pick that is a god opens its page (#4205)", () => {
@@ -132,8 +150,8 @@ test("the patron reads by the house's own name and a pick that is a god opens it
   renderWithProviders(<HouseDocument houseId={9} />);
   expect(screen.getByText('patron')).toBeInTheDocument();
   expect(screen.getByText(/The One True Knight/)).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: '(Calyx)' })).toHaveAttribute('href', '/codex/77');
-  expect(screen.getByRole('link', { name: 'Calyx' })).toHaveAttribute('href', '/codex/77');
+  expect(screen.getByRole('link', { name: '(Calyx)' })).toHaveAttribute('href', '/codex?entry=77');
+  expect(screen.getByRole('link', { name: 'Calyx' })).toHaveAttribute('href', '/codex?entry=77');
 });
 
 test('editing a day of remembrance saves the whole list, without the spelled date (#4206)', async () => {
@@ -169,7 +187,7 @@ test('editing a day of remembrance saves the whole list, without the spelled dat
 test('Gentry stays disabled ("Luxen only") when the realm theme is not luxen', () => {
   vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
   renderWithProviders(<HouseDocument houseId={9} />);
-  const gentry = screen.getByRole('button', { name: 'Gentry' });
+  const gentry = screen.getByRole('option', { name: 'Gentry' });
   expect(gentry).toBeDisabled();
   expect(gentry).toHaveAttribute('title', 'Luxen only');
 });
@@ -204,4 +222,26 @@ test('swearing a house prefills the tithe percent from the realm default', async
   await userEvent.click(screen.getByRole('button', { name: 'Swear a house' }));
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getByLabelText('tithe percent')).toHaveValue(10);
+});
+
+test('sigil is two rows without a handle, description is six, and the savebar carries only Save (#4549)', () => {
+  vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  const sigil = screen.getByLabelText('sigil');
+  expect(sigil).toHaveAttribute('rows', '2');
+  expect(sigil).toHaveClass('prose', 'short');
+  const description = screen.getByLabelText('description');
+  expect(description).toHaveAttribute('rows', '6');
+  expect(description).not.toHaveClass('short');
+  expect(screen.queryByText('draft kept as you type')).not.toBeInTheDocument();
+  const save = screen.getByRole('button', { name: 'Save' });
+  expect(save.parentElement?.children).toHaveLength(1);
+});
+
+test('a house whose name already says House is not headed House House (#4549)', () => {
+  const named: HouseDocumentPayload = { ...doc, house: { ...doc.house, name: 'House Katta' } };
+  vi.mocked(queries.useHouseDocument).mockReturnValue({ data: named, isLoading: false } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.getByRole('heading', { name: 'House Katta' })).toBeInTheDocument();
+  expect(screen.queryByText(/House House/)).not.toBeInTheDocument();
 });

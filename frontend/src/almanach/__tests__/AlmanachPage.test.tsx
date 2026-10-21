@@ -157,7 +157,7 @@ test('the record rail renders the Charter section from useCharter', () => {
     // collide as duplicate text matches.
     expect(screen.getByRole('heading', { name: 'Charter', level: 4 })).toBeInTheDocument();
     expect(screen.getByText(/Infernal Enatic/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'codex' })).toHaveAttribute('href', '/codex/7');
+    expect(screen.getByRole('link', { name: 'codex' })).toHaveAttribute('href', '/codex?entry=7');
     expect(screen.getByText('aza · azas')).toBeInTheDocument();
     expect(screen.getByText('What does this house tend to?')).toBeInTheDocument();
   } finally {

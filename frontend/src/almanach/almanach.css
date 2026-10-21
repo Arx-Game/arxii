@@ -67,6 +67,14 @@
   font-size: 0.85rem;
   color: hsl(var(--muted-foreground));
 }
+.almanach .bar .crumb a {
+  color: inherit;
+  text-decoration: none;
+}
+.almanach .bar .crumb a:hover,
+.almanach .bar .crumb a:focus-visible {
+  text-decoration: underline;
+}
 .almanach .bar .crumb span + span::before {
   content: '\203A';
   margin: 0 0.5rem;
@@ -471,6 +479,11 @@
   font-style: italic;
   color: hsl(var(--muted-foreground));
 }
+/* A savebar with nothing but its button (the chapters that lost the
+   "draft kept as you type" note, #4549) keeps that button on the right. */
+.almanach .savebar > .btn:only-child {
+  margin-left: auto;
+}
 .almanach .btn {
   font-size: 0.9rem;
   padding: 0.3rem 1rem;
@@ -664,17 +677,24 @@
 }
 /* An editable prose field (house words/colors/sigil/description, barony and
    estate description) — a real `<textarea class="prose">`, not the
-   read-only `.prose` div above, but styled to match it. */
+   read-only `.prose` div above, but styled to match it. It takes the whole
+   chapter column (#4549): the 62ch reading width stays on the read-only
+   block only. `rows` on the element sets the resting height; `.short` is
+   the sigil, a few words at best, so two rows and no drag handle. */
 .almanach textarea.prose {
   display: block;
   width: 100%;
+  max-width: none;
   min-height: 4rem;
-  max-width: 62ch;
   resize: vertical;
   background: transparent;
   color: inherit;
   font: inherit;
   white-space: pre-wrap;
+}
+.almanach textarea.prose.short {
+  min-height: 0;
+  resize: none;
 }
 .almanach textarea.prose:focus-visible {
   outline: 2px solid hsl(var(--primary));
