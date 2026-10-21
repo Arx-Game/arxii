@@ -2444,14 +2444,14 @@ acquisition-provenance record for in-place trait/skill value mutation,
 
 `resolve_training_check()` (`services/technique_training.py`, #2727) wraps
 `contribute_to_technique_progress` with a learning check — the learner rolls
-intellect + "Arcane Theory" against a difficulty derived from the technique's tier,
+intellect, plus the skills staff map to `TECHNIQUE_LEARNING`, against a difficulty derived from the technique's tier,
 the learner's level, and any teacher's skill bonus (self-study takes a flat
 penalty) — but shipped with no production caller: nothing dispatched it from telnet
 or the web. #2739 is that trigger, one seam for both surfaces:
 
 **Content dependency, loud failure (#3043).** The check rolled is the "Technique
-Training" `CheckType`, resolved by exact name. That row (plus the "Arcane Theory"
-trait it weights) is authored content, not seeded — as of 2026-08-07 it does not
+Training" `CheckType`, resolved by exact name. That row (which weights intellect only;
+the seed stopped inventing an "Arcane Theory" skill for it in #4547) is authored content, not seeded — as of 2026-08-07 it does not
 exist in any shipped content bundle (tracked in ArxII-lore#72). `resolve_training_check`
 used to fall back to `CheckType.objects.first()` on `DoesNotExist` — an arbitrary,
 unrelated check silently rolled in training's place on any deploy missing the row.

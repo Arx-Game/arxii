@@ -4934,8 +4934,9 @@ register as additional kinds.
 - **Check-based technique training (#2727):** `resolve_training_check()`
   (`world.magic.services.technique_training`) wraps
   `contribute_to_technique_progress` with a learning check. The learner
-  rolls intellect + the new "Arcane Theory" skill ("Technique Training"
-  `CheckType`, seeded by `ensure_technique_training_content()`). The
+  rolls intellect ("Technique Training" `CheckType`, seeded by
+  `ensure_technique_training_content()`) plus the skills staff map to
+  `TECHNIQUE_LEARNING`; the seed names no skill (#4547). The
   check outcome maps to a dev-point multiplier via
   `TrainingOutcomeAward(OutcomeTierAward)` (botch/failure=0×, partial=0.5×,
   success=1.0×, critical=1.5×). AP is always spent; only dev-point yield
