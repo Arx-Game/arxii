@@ -8,6 +8,7 @@ count and the preview are scoped to the one Beginning the page is open on.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from django.db.models import Case, IntegerField, Value, When
@@ -21,6 +22,7 @@ from world.character_creation.models import (
     SchoolingLine,
     TraditionStateLine,
 )
+from world.magic.services.magic_skills import magic_category_skills
 
 #: States whose standard line is expected to carry a drawback (#3675 spec,
 #: Decision 3): a character who never had a living teacher pays for it.
@@ -56,6 +58,24 @@ def schooling_line_display(line: SchoolingLine) -> LinePriceDisplay:
         else "nothing granted, nothing to price"
     )
     return LinePriceDisplay(text=price_text(line.price), help=help_text)
+
+
+def magic_skill_names() -> list[str]:
+    """Names of the active Magic-category skills, in name order (#4457)."""
+    return sorted(skill.name for skill in magic_category_skills().select_related("trait"))
+
+
+def schooling_floor_preview(line: SchoolingLine, skill_names: Sequence[str] | None = None) -> str:
+    """The read-only line under a floor input: which Magic skills the stance trains.
+
+    Derived from the skills' category, never typed, so it changes when staff move a
+    skill in or out of Magic. ``skill_names`` lets the caller read the skills once for
+    all three rows instead of once per row.
+    """
+    names = magic_skill_names() if skill_names is None else skill_names
+    if not line.magic_skill_floor or not names:
+        return "Trains none."
+    return f"Trains {', '.join(names)} to {line.magic_skill_floor}."
 
 
 def rail_counts(beginning: Beginnings) -> dict[str, int]:
