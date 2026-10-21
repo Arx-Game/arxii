@@ -237,11 +237,13 @@ def _save_slate(
     if contributor is None:
         return _render_page(request, beginning, forms, needs_setup=True)
     if not (forms.state.is_valid() and forms.schooling.is_valid() and forms.slate.is_valid()):
-        response = _render_page(request, beginning, forms)
         # The errors render from the posted values; only then drop the refused lines
         # from the identity map, or the next load and the corrected save read them.
-        flush_refused_instances(forms.state, forms.schooling, forms.slate)
-        return response
+        # finally: a template error must not leave them there either.
+        try:
+            return _render_page(request, beginning, forms)
+        finally:
+            flush_refused_instances(forms.state, forms.schooling, forms.slate)
 
     with transaction.atomic():
         saved_state = forms.state.save()

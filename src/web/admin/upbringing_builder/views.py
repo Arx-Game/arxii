@@ -198,12 +198,14 @@ def _save_route(
     if contributor is None:
         return _render_page(request, template, forms, needs_setup=True)
     if not _route_forms_valid(forms):
-        response = _render_page(request, template, forms)
-        # Drop the refused rows from the identity map once the errors have rendered.
-        flush_refused_instances(
-            forms.form, forms.questions, *forms.answers.values(), *forms.offers.values()
-        )
-        return response
+        # Drop the refused rows from the identity map once the errors have rendered,
+        # even when the render itself raises.
+        try:
+            return _render_page(request, template, forms)
+        finally:
+            flush_refused_instances(
+                forms.form, forms.questions, *forms.answers.values(), *forms.offers.values()
+            )
 
     deleted_choice_pks = _deleted_choice_pks(forms.answers)
     with transaction.atomic():

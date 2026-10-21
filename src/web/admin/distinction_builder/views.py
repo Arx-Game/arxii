@@ -177,10 +177,12 @@ def distinction_builder(request: HttpRequest, pk: int | None = None) -> HttpResp
                 _sync_tradition_step_offer_copy(saved, contributor)
             messages.success(request, "Saved and credited to you.")
             return redirect(reverse("admin_distinction_builder", args=[saved.pk]))
-        response = _render_page(request, distinction, forms)
-        # Drop the refused rows from the identity map once the errors have rendered.
-        flush_refused_instances(forms.form, forms.effects, forms.offers)
-        return response
+        # Drop the refused rows from the identity map once the errors have rendered,
+        # even when the render itself raises.
+        try:
+            return _render_page(request, distinction, forms)
+        finally:
+            flush_refused_instances(forms.form, forms.effects, forms.offers)
     return _render_page(request, distinction, forms, needs_setup=contributor is None)
 
 

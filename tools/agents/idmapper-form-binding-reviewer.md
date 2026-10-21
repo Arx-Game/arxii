@@ -35,7 +35,8 @@ the one test that posted a refused floor asserted the database column, which was
 
 ## The sanctioned shape
 
-Render the errors first (they need the posted values), then drop every saved row behind
+Render the errors first (they need the posted values; do it in a `try/finally` so a
+template error cannot skip the flush), then drop every saved row behind
 the bound forms from the identity map:
 
 `web.admin.authoring.identity_map.flush_refused_instances(*forms_and_formsets)` calls
@@ -75,11 +76,17 @@ it must still run after the render and cover every bound form.
    weaker finding than the refused-submit one when the code in the block cannot
    reasonably raise; name what can (a unique constraint, an offer sync, a missing
    related row) or say why nothing can.
-6. **The reader.** For each finding name one concrete reader of the mutated row after
+6. **Rows that reach the mutated instance through a cached FK.** A cached row whose FK
+   cache already points at the mutated instance (a `DistinctionOffer` holding its
+   `distinction`, a pool entry holding its pool) and is read without `select_related` or a
+   fresh query still sees the refused values after a flush of the parent alone, because
+   the flush removes the instance from the map but not from that row's FK cache. Check
+   that such rows are flushed too, or that the reader re-queries.
+7. **The reader.** For each finding name one concrete reader of the mutated row after
    the abandoned submit, with file:line: the page's own next GET (initial values, a
    `has_changed()` comparison on the corrected save), a player-facing endpoint, or a
    game service. A finding with no reader is a note, not a finding.
-7. **Plain forms are safe.** A `forms.Form` / `BaseFormSet` that never assigns onto a
+8. **Plain forms are safe.** A `forms.Form` / `BaseFormSet` that never assigns onto a
    model instance (the trial builder's forms, the tuning dashboards) cannot cause this;
    do not flag them. A new page that deliberately uses plain forms to avoid this should
    be said so in one line.
