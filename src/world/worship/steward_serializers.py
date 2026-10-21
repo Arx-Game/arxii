@@ -388,8 +388,9 @@ class _SacrificeDetailSerializer(serializers.Serializer):
 
 
 class _InvocationPieceSerializer(serializers.Serializer):
+    source = serializers.CharField()
     item_name = serializers.CharField()
-    facet_name = serializers.CharField()
+    facet_name = serializers.CharField(allow_blank=True)
     signals = _SacrificeSignalSerializer(many=True)
     points = serializers.IntegerField()
     ease_per_point = serializers.IntegerField()

@@ -191,6 +191,14 @@ mission reward distribution).
 | `clue` | FK → `clues.Clue` (null, PROTECT) | Required iff `sink=CLUE`; must be null otherwise. `target_kind` must be in `RESOLVABLE_CLUE_TARGET_KINDS` (codex, rescue, secret or persona link - an ITEM-target clue is a bare pointer, not a coherent reward, #3566) |
 | `codex_entry` | FK → `codex.CodexEntry` (null, PROTECT) | Required iff `sink=CODEX`; must be null otherwise (#3566) |
 
+A WIN `ITEM` line's item is a trophy of the deed the completion settles (#4530):
+`_deliver_reward_line` returns the item it minted, `resolve_stakes_for_completion` collects
+them in `granted_items`, and once `_settle_completion_legend` has minted its deeds the
+completion tail links each item to the deeds credited to its holder
+(`world.items.services.trophies.link_trophy`, which also makes the row-only reward a physical
+object). A WIN needs a Success outcome, so there is no separate outcome gate; a settlement
+that mints nothing (below the peril floor) links nothing. See `docs/systems/items.md`.
+
 ### `StakeOutcome` (PR2)
 
 The per-stake resolution audit + routing row — mirrors `EpisodeResolution` (GM

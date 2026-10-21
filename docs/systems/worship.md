@@ -120,7 +120,9 @@ issue bodies; the model decision is ADR-0132.
 - `Relic` (#3777) — a specific sacred item of a being: `being` FK
   (`related_name="relics"`), OneToOne `item_instance` → `items.ItemInstance`, `lore`.
   A particular named instance, never an archetype; distinct from the offering facet
-  bonus below. Surfaced on the being's dashboard (#3780).
+  bonus below. Surfaced on the being's dashboard (#3780). Since #4530 `invocation_points`
+  (default 0) are treated as meaning points of a keepsake of the being while the Relic is
+  carried: see "Keepsakes and a Relic ease the call" below.
 - `ShrineDetails` (#3778) — the room-level site: OneToOne `feature_instance` →
   `room_features.RoomFeatureInstance` (`related_name="shrine_details"`, a kind whose
   `service_strategy` is `SHRINE`), `being` FK (`related_name="shrines"`),
@@ -483,6 +485,22 @@ per `resonance_fed_per_point`, doubled for a favored resonance, at most
 `resonance_fed_max_points`), counted only alongside another signal besides carried. It also
 reads at a sacrifice and a ceremony offering (`read_item(..., being=)`).
 
+**Keepsakes and a Relic ease the call** (`worship/worn_services._carried_pieces`, #4530,
+slice 4 of #4462) [BUILT & WIRED]
+
+`worn_meaning` also lists, beside the worn pieces, the keepsakes of the being the character
+carries (`Keepsake.subject_being`, the item located on her character, worn or not, still in
+play) and the being's Relic she carries. A keepsake counts by its keepsake signals (the
+subject and the +2 match, from `keepsake_signals`, once its wait has passed; never the
+player's words); a Relic by its staff-set `invocation_points`. Each eases the invocation by
+points x `DevotionConfig.invocation_ease_per_keepsake_point`. They have no favored facet and no
+earning bonus, are not held to `worn_items_counted`, and an item already counted as a worn
+piece is not counted again (its meaning already holds its keepsake points). Worn, keepsake and
+Relic ease together stay within `invocation_meaning_ease_max`. `WornPiece.source`
+(`InvocationPieceSource`: worn, keepsake, relic) says which; the ease line reads "What you wear
+or carry: <pieces>" when any carried piece counts. The picker, `invoke <being>` ("Kept:" and
+"Relic:" lines) and the staff invocation page (`InvocationPiece.source`) show them.
+
 **Where the bonus lands**
 
 - Missions: `resolve_beat_option(..., invoke=InvocationChoice)` and `submit_group_pick`
@@ -599,13 +617,53 @@ means to the one giving it up:
   `counted`, and one `OfferingSignal` per signal (kind, points, detail), since the item and
   its holder are gone. The GM's steward panel lists each sacrificed item with its signals and
   roll (`answer_services.sacrifice_detail`); the pledge card credit and the being's
-  dashboard row read the same signals. One room line, "<name> sacrifices <item> at
-  <being>'s shrine.", is unchanged.
+  dashboard row read the same signals. The room hears "<name> sacrifices <item> at
+  <being>'s shrine." for each item, then, since #4530, the giver's own line verbatim when
+  they wrote one (`sacrifice_items(..., player_line=)`, at most 200 characters, kept on each
+  offering as `CeremonyOffering.player_line`; web dialog field, telnet `sacrifice <item> ;
+  <line>`).
 - `record_offering` (ceremonies) uses the same reading: the officiant's devotion is
   `effective points x CeremonyConfig.devotion_per_offering_point` and is not rolled (the
   rite's own roll is the check); it shares the weekly limit. `finish_ceremony` prestige drops
   the offering-value term (`offering_prestige_per_value` was removed) and keeps the
   deed-legend term.
+
+**Requested items** (`worship/request_services.py`, `RequestedItem`, #4530) [BUILT & WIRED]
+
+A pledge or a tier 1 or 2 rite can ask for specific, cheap items: exactly one of an item
+template or a facet, a `quantity`, the `points` each gives (at most
+`requested_item_max_points`) and a staff-written `hint`. These are scavenger-hunt errands
+staff write ahead (GM-assigned; the real-time-paced version of them is a later direction).
+They are cheap by rule: a template worth more than `requested_item_max_value` is refused by
+`RequestedItem.clean()` (the Being Service builder shows the error), and an item fills a
+request only when its template's value is within that ceiling, for a facet request too. This
+is the only place an item's value is read, and it adds no point. There is no carry gate:
+finding the item is the errand.
+
+- **At a shrine.** `sacrifice_items` assigns each item given up to the open pledge's
+  request it fills (`assign_requests`; the highest points first, each row until its quantity
+  is filled across the pledge). The item gets a `REQUESTED` signal (`OfferingSignal.requested_item`
+  names the request), so it rolls even with no history of its own, and a Critical Failure on
+  that roll lands as Failure (`sacrifice_services.lift_botch`, applied where the roll is made;
+  `_apply_outcome_guarantees` keys on a covenant vow and has no seam for an item). A pledge
+  with no such request changes nothing.
+- **During a rite** (`rite_services.perform_worship_rite(..., offered_items=, closing_of=)`,
+  `read_rite_gifts`). An item given up during a rite rolls no check of its own: its meaning
+  points (doubled for a favored facet, plus its request's points) ease the rite's own roll as
+  a labelled `ModifierContribution`, `DevotionConfig.rite_ease_per_point` each, at most
+  `rite_items_counted` items, each using one of the week's sacrifice slots. The pool grant and
+  the `CeremonyOffering` record are the sacrifice's. A pledge's closing rite
+  (`pledge_close` with `item_ids`, `pledge/close = <item>, ...`) also takes the pledge's own
+  requests. A roll a request eased cannot botch here either. `PerformWorshipRiteAction` takes
+  `item_ids` / `item_names` too.
+- **Shown to the player:** `PledgeCard.requests` (`RequestLine`: what is asked, the hint, how
+  many are given, the points each, and whether it is the pledge's or the closing rite's), the
+  web pledge card's table and "Give items up during the rite" list, telnet `pledge`.
+- **Authored** on the Being Service builder's "Requested items (pledges and rites)" table
+  (`RequestedItemFormSet`; the "For" picker lists the being's saved pledges and tier 1 and 2
+  rites) with a side panel of where each can be found (`live.request_suppliers`: the stalls
+  that stock the template, whether it can be crafted, how many cheap templates carry the
+  facet, or "nothing supplies it yet").
 
 **Surfaces**
 
@@ -621,7 +679,7 @@ means to the one giving it up:
   labelled parts with each credit's calculation and Close once ready); the room panel's
   holy-site line (`HolySiteBlock`).
 - Telnet: `pledge`, `pledge <being>`, `pledge <being>/<pledge>[=<prayer>]`, `pledge/close`,
-  `sacrifice <item>[,<item>...][=<being>]`.
+  `sacrifice <item>[,<item>...][=<being>][ ; <your own line>]`.
 - Admin: the **Being Service builder** (`/admin/_being_service/<being>/`,
   `web/admin/being_service/`): favored resonances (with deed favor and the last 30 days'
   grants to the being's worshippers by source), favored facets, every pledge type (with how

@@ -768,3 +768,46 @@ class ClaimBeforePayTests(EvenniaTestCase):
         purse = get_or_create_purse(sheet)
         purse.refresh_from_db()
         self.assertEqual(purse.balance, 300)  # paid once, not 600
+
+
+class WinItemTrophyTests(EvenniaTestCase):
+    """An item a won stake grants is a trophy of the deed the same completion settled
+    (#4530): linked once the deed exists, never for a lost stake."""
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_default_risk_calibrations()
+        cls.win_tier = CheckOutcomeFactory(name="Trophy Triumph", success_level=3)
+        cls.fail_tier = CheckOutcomeFactory(name="Trophy Rout", success_level=-2)
+
+    def _staked_beat_with_item(self):
+        sheet, beat, progress, _stake, win = _character_story_ready_beat(money=300)
+        template = ItemTemplateFactory(value=5)
+        StakeRewardLineFactory(
+            resolution=win, sink=StakeRewardSink.ITEM, item_template=template, amount=5
+        )
+        _level_sheet(sheet, 4)
+        activate_stakes_contract(beat, [sheet])
+        return sheet, beat, progress, template
+
+    def test_a_won_stake_links_its_item_to_the_deed_it_settled(self):
+        from world.societies.models import LegendEntry
+
+        sheet, beat, progress, template = self._staked_beat_with_item()
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.win_tier)
+
+        item = ItemInstance.objects.get(template=template, holder_character_sheet=sheet)
+        deeds = list(item.legend_deeds.all())
+        minted = list(LegendEntry.objects.filter(persona=sheet.primary_persona))
+        self.assertTrue(minted, "the won stake settled a deed for the winner")
+        self.assertEqual({d.pk for d in deeds}, {d.pk for d in minted})
+        item.refresh_from_db()
+        self.assertIsNotNone(item.game_object)
+
+    def test_a_lost_stake_grants_and_links_nothing(self):
+        _sheet, beat, progress, template = self._staked_beat_with_item()
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.fail_tier)
+
+        self.assertFalse(ItemInstance.objects.filter(template=template).exists())

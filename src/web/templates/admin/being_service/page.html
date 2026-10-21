@@ -222,6 +222,58 @@ for the pickers.
           </div>
         </div>
 
+        <div class="module" id="requests-module">
+          <h2>Requested items (pledges and rites)
+            <span class="bs-chip">scavenger-hunt errands; findable cheap items</span></h2>
+          {{ requests.management_form }}
+          {% if requests.non_form_errors %}<p class="errornote">{{ requests.non_form_errors }}</p>{% endif %}
+          <div class="bs-scroll">
+          <table class="tuning-table bs-table">
+            <thead><tr><th>For</th><th>Item template</th><th>or Facet</th><th>Quantity</th>
+              <th>Points</th><th>Hint</th><th>Delete?</th></tr></thead>
+            <tbody id="requests-body">
+              {% for f in requests.forms %}
+              <tr>
+                {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{{ f.target.errors }}{{ f.target }}</td>
+                <td>{{ f.item_template.errors }}{{ f.item_template }}</td>
+                <td>{{ f.facet.errors }}{{ f.facet }}</td>
+                <td>{{ f.quantity.errors }}{{ f.quantity }}</td>
+                <td>{{ f.points.errors }}{{ f.points }}</td>
+                <td>{{ f.hint.errors }}{{ f.hint }}</td>
+                <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
+              </tr>
+              {% if f.non_field_errors %}<tr><td colspan="7"><p class="errornote">{{ f.non_field_errors }}</p></td></tr>{% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+          </div>
+          <template id="empty-request-template">
+            <tr>
+              {% for hidden in requests.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <td>{{ requests.empty_form.target }}</td>
+              <td>{{ requests.empty_form.item_template }}</td>
+              <td>{{ requests.empty_form.facet }}</td>
+              <td>{{ requests.empty_form.quantity }}</td>
+              <td>{{ requests.empty_form.points }}</td>
+              <td>{{ requests.empty_form.hint }}</td>
+              <td></td>
+            </tr>
+          </template>
+          <div class="bs-addrow">
+            <button type="button" class="button" id="add-request-btn"
+                    data-prefix="{{ requests.prefix }}" data-target="requests-body"
+                    data-template="empty-request-template">+ Add another request</button>
+          </div>
+          <div class="help bs-note">Each row belongs to exactly one pledge or rite (save a new
+            pledge type first so it can be chosen) and sets exactly one of an item template or a
+            facet. Points at most {{ request_max_points }}. A template worth more than
+            {{ request_max_value }} is refused; a facet request is met only by items worth
+            {{ request_max_value }} or less. Giving a requested item up at the shrine eases its own
+            sacrifice roll, and during the pledge's rite eases the rite's roll; a roll eased by one
+            cannot be a critical failure.</div>
+        </div>
+
         <div class="submit-row">
           <input type="submit" name="save" value="Save" class="default">
           <input type="submit" name="save_continue" value="Save and continue editing">
@@ -254,6 +306,7 @@ for the pickers.
   wire("add-resonance-btn", "tbody");
   wire("add-facet-btn", "tbody");
   wire("add-pledge-btn", "div");
+  wire("add-request-btn", "tbody");
 })();
 </script>
 {% endblock %}

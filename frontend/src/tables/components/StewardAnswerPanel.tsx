@@ -190,14 +190,15 @@ export function StewardAnswerPanel({
               </p>
               {call.pieces.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  No worn piece counted: the roll was not eased by what was worn.
+                  No worn piece, keepsake or Relic counted: the roll was not eased by what was worn
+                  or carried.
                 </p>
               ) : (
                 <>
                   <table className="w-full text-xs">
                     <thead className="text-left text-muted-foreground">
                       <tr>
-                        <th>Worn piece</th>
+                        <th>Piece</th>
                         <th>Signal</th>
                         <th>Detail</th>
                         <th>Points</th>
@@ -208,10 +209,20 @@ export function StewardAnswerPanel({
                         <Fragment key={pieceIndex}>
                           <tr>
                             <td rowSpan={piece.signals.length + 1}>{piece.item_name}</td>
-                            <td>Favored facet</td>
-                            <td>
-                              {piece.facet_name} (the gate; ease {piece.ease_per_point} per point)
-                            </td>
+                            {piece.source === 'worn' ? (
+                              <>
+                                <td>Favored facet</td>
+                                <td>
+                                  {piece.facet_name} (the gate; ease {piece.ease_per_point} per
+                                  point)
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td>{piece.source === 'relic' ? 'Relic' : 'Keepsake'}</td>
+                                <td>ease {piece.ease_per_point} per point</td>
+                              </>
+                            )}
                             <td>-</td>
                           </tr>
                           {piece.signals.map((signal, signalIndex) => (
