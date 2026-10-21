@@ -1,7 +1,8 @@
 """Path-crossing magic grant (#1579, ADR-0055).
 
 Crossing into a more-advanced Path grants its authored Gift(s) plus a curated
-starter technique set (the ``PathGiftGrant`` rows for that path). This realizes
+starter technique set (the ``PathGiftGrant`` rows for that path), less any technique
+a Tradition grant reserves for Traditions the character is not in (#4555). This realizes
 the (Gift x Path) -> base-technique-set leg of ADR-0055 as an *acquisition* on
 crossing; #1578 built the complementary resonance-specialization leg that later
 re-skins each granted technique on read.
@@ -30,20 +31,33 @@ if TYPE_CHECKING:
 def grant_path_magic(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
     """Grant ``path``'s authored gift(s) + curated starter techniques to ``sheet``.
 
-    Idempotent: gifts/techniques the character already owns are skipped and are
-    not listed in the returned result. Safe to call for any path (a path with no
-    ``PathGiftGrant`` rows is a no-op).
+    A technique a Tradition grant lists goes only to a current member of one of the
+    listing Traditions, the same rule character creation offers by
+    (``cg_catalog.offered_to_tradition``, #4555). Idempotent: gifts/techniques the
+    character already owns are skipped and are not listed in the returned result. Safe
+    to call for any path (a path with no ``PathGiftGrant`` rows is a no-op).
     """
     from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
     from world.magic.models import (  # noqa: PLC0415
         CharacterTechnique,
+        CharacterTradition,
         PathGiftGrant,
+    )
+    from world.magic.services.cg_catalog import (  # noqa: PLC0415
+        offered_to_tradition,
+        tradition_listings,
     )
     from world.magic.specialization.services import (  # noqa: PLC0415
         grant_gift_to_character,
     )
 
-    grants = PathGiftGrant.objects.filter(path=path).select_related("gift")
+    grants = list(PathGiftGrant.objects.filter(path=path).select_related("gift"))
+    listings = tradition_listings([grant.gift_id for grant in grants])
+    tradition_id = (
+        CharacterTradition.objects.filter(character=sheet, left_at__isnull=True)
+        .values_list("tradition_id", flat=True)
+        .first()
+    )
 
     granted_gifts: list = []
     granted_techniques: list = []
@@ -53,6 +67,8 @@ def grant_path_magic(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
         if gift_created:
             granted_gifts.append(gift)
         for technique in grant.starter_techniques.all():
+            if not offered_to_tradition(technique.pk, tradition_id, listings):
+                continue
             _, tech_created = CharacterTechnique.objects.get_or_create(
                 character=sheet,
                 technique=technique,

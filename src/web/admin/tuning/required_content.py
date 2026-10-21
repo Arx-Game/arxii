@@ -417,52 +417,55 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
     Consumer: `world/magic/services/cg_catalog.py` `get_gift_options()` (#4545).
     For each active tradition and each active Prospect path (the ones character
     creation lets a player pick), a gift the tradition grants is offered only
-    when its pool, the path's starter techniques plus the tradition's special
-    techniques, holds a technique `cg_catalog.cg_takeable_techniques()` lets
-    through. That is the same queryset the gift catalog filters on, so this row
-    and the character creation screen cannot disagree. A path with no
-    `PathGiftGrant` for the gift contributes an empty pool, exactly as
-    `get_gift_options` reads it, so a gift the tradition grants and the path
-    never authored is reported too. A tradition and path pairing with no gift
+    when the path's list for that gift holds a technique offered to that
+    tradition (listed by no tradition grant, or by this one's,
+    `cg_catalog.offered_to_tradition`, #4555) that
+    `cg_catalog.cg_takeable_techniques()` lets through. Those are the rules the
+    gift catalog applies, so this row and the character creation screen cannot
+    disagree. A path with no `PathGiftGrant` for the gift contributes nothing,
+    exactly as `get_gift_options` reads it, so a gift the tradition grants and the
+    path never authored is reported too. A tradition and path pairing with no gift
     offered at all leaves a new character nothing to pick at the Gift stage.
 
     A fixed query count whatever the catalog size: one per requirement type for
-    the gated-technique ids, then the two takeable sets, the paths and the
-    tradition grants.
+    the gated-technique ids, then the path lists, the tradition listings, the paths
+    and the tradition grants.
     """
     from world.classes.models import Path, PathStage  # noqa: PLC0415
     from world.magic.admin import GAP_NOT_CASTABLE  # noqa: PLC0415
     from world.magic.models import PathGiftGrant, TraditionGiftGrant  # noqa: PLC0415
-    from world.magic.services.cg_catalog import cg_takeable_techniques  # noqa: PLC0415
+    from world.magic.services.cg_catalog import (  # noqa: PLC0415
+        cg_takeable_techniques,
+        offered_to_tradition,
+        tradition_listings,
+    )
 
     link = _technique_gap_link(GAP_NOT_CASTABLE)
-    takeable = cg_takeable_techniques()
-    path_ready = set(
-        PathGiftGrant.objects.filter(starter_techniques__in=takeable)
-        .values_list("path_id", "gift_id")
-        .distinct()
-    )
-    tradition_ready = set(
-        TraditionGiftGrant.objects.filter(special_techniques__in=takeable)
-        .values_list("pk", flat=True)
-        .distinct()
-    )
+    path_ready: dict[tuple[int, int], set[int]] = {}
+    for path_id, gift_id, technique_id in PathGiftGrant.starter_techniques.through.objects.filter(
+        technique__in=cg_takeable_techniques()
+    ).values_list("pathgiftgrant__path_id", "pathgiftgrant__gift_id", "technique_id"):
+        path_ready.setdefault((path_id, gift_id), set()).add(technique_id)
+    listings = tradition_listings()
     paths = list(
         Path.objects.filter(stage=PathStage.PROSPECT, is_active=True)
         .order_by("name")
         .values_list("id", "name")
     )
     tradition_grants = TraditionGiftGrant.objects.filter(tradition__is_active=True).values_list(
-        "pk", "tradition_id", "tradition__name", "gift_id", "gift__name"
+        "tradition_id", "tradition__name", "gift_id", "gift__name"
     )
 
     blocked: list[tuple[str, str, str]] = []
     pairings: set[tuple[int, int]] = set()
     offering: set[tuple[int, int]] = set()
-    for tg_pk, tradition_id, tradition_name, gift_id, gift_name in tradition_grants:
+    for tradition_id, tradition_name, gift_id, gift_name in tradition_grants:
         for path_id, path_name in paths:
             pairings.add((tradition_id, path_id))
-            if tg_pk in tradition_ready or (path_id, gift_id) in path_ready:
+            if any(
+                offered_to_tradition(technique_id, tradition_id, listings)
+                for technique_id in path_ready.get((path_id, gift_id), ())
+            ):
                 offering.add((tradition_id, path_id))
             else:
                 blocked.append((tradition_name, path_name, gift_name))
@@ -472,8 +475,9 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
     missing = tuple(f"{t} / {p} / {g}" for t, p, g in sorted(blocked))
     detail = (
         f"{len(missing)} tradition / path / gift combination(s) hold no technique a "
-        "player can take at character creation: no starter or tradition technique "
-        "with a cast template, outside the ultimates and without a requirement. "
+        "player can take at character creation: none on the path's list for the gift "
+        "that is open to the tradition, has a cast template, is not an ultimate and has "
+        "no requirement. "
     )
     if not offering:
         detail += (
@@ -489,6 +493,50 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail, admin_url=link)
 
 
+def _probe_tradition_techniques_on_a_path() -> ProbeResult:
+    """Every technique a tradition grant lists sits on some Path's list (#4555).
+
+    Consumer: `world/magic/services/cg_catalog.py` `get_technique_options()`. A
+    tradition grant's list restricts who may be offered a technique; the Path
+    lists (`PathGiftGrant.starter_techniques`) decide where it is offered at all.
+    A technique a tradition lists that no Path's list holds is offered nowhere: not
+    at character creation, not in Academy training, not on a crossing.
+    """
+    from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
+    from world.magic.models import PathGiftGrant, TraditionGiftGrant  # noqa: PLC0415
+
+    link = admin_changelist_url("PathGiftGrant")
+    on_a_path = set(
+        PathGiftGrant.starter_techniques.through.objects.values_list("technique_id", flat=True)
+    )
+    stranded: dict[str, set[str]] = {}
+    for (
+        technique_id,
+        technique_name,
+        gift_name,
+        tradition_name,
+    ) in TraditionGiftGrant.special_techniques.through.objects.values_list(
+        "technique_id",
+        "technique__name",
+        "technique__gift__name",
+        "traditiongiftgrant__tradition__name",
+    ):
+        if technique_id not in on_a_path:
+            stranded.setdefault(f"{gift_name} / {technique_name}", set()).add(tradition_name)
+    if not stranded:
+        return ProbeResult(present=True, admin_url=link)
+    missing = tuple(
+        f"{label} (listed by {', '.join(sorted(traditions))})"
+        for label, traditions in sorted(stranded.items())
+    )
+    detail = (
+        f"{len(missing)} technique(s) a tradition grant lists are on no Path's list for "
+        "their gift, so no character is ever offered them. Add each to the Path Gift "
+        "Grant of the Path(s) it belongs to."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail, admin_url=link)
+
+
 def _probe_cg_techniques_have_cast_effect() -> ProbeResult:
     """Techniques whose cast does nothing derivable: no effect rows authored (#4545).
 
@@ -499,7 +547,7 @@ def _probe_cg_techniques_have_cast_effect() -> ProbeResult:
     character creation pool says how many a new character can take today.
     """
     from world.magic.admin import GAP_UNDERSPECIFIED  # noqa: PLC0415
-    from world.magic.models import PathGiftGrant, Technique, TraditionGiftGrant  # noqa: PLC0415
+    from world.magic.models import PathGiftGrant, Technique  # noqa: PLC0415
     from world.magic.services.technique_effects import (  # noqa: PLC0415
         technique_is_underspecified,
         technique_payload_prefetches,
@@ -513,10 +561,10 @@ def _probe_cg_techniques_have_cast_effect() -> ProbeResult:
     if not effectless:
         return ProbeResult(present=True, admin_url=link)
 
+    # A technique is offered only on the Paths whose list holds it (#4555), so the
+    # Path lists are the whole of the character creation pools.
     in_pools = set(
         PathGiftGrant.starter_techniques.through.objects.values_list("technique_id", flat=True)
-    ) | set(
-        TraditionGiftGrant.special_techniques.through.objects.values_list("technique_id", flat=True)
     )
     pooled = tuple(technique.name for technique in effectless if technique.pk in in_pools)
     detail = (
@@ -2369,12 +2417,24 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/services/cg_catalog.py get_technique_options()",
             consequence=(
-                "The path offers nothing a new character can take for this gift. The "
-                "gift is offered only on the strength of the tradition's extras; where "
-                "those are not ready either, the gift is not offered at all (see "
-                "Gifts with nothing to take at character creation)."
+                "The path offers nothing a new character can take for this gift, so no "
+                "tradition can offer the gift on this path: a tradition's own techniques "
+                "are offered only on the paths whose list holds them (see Gifts with "
+                "nothing to take at character creation)."
             ),
             probe=CustomProbe(fn=_probe_path_gift_starter_pools),
+        ),
+        ContentDependency(
+            key="tradition-techniques-on-a-path",
+            label="Tradition techniques on no Path",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/cg_catalog.py get_technique_options()",
+            consequence=(
+                "The technique is offered nowhere: not at character creation, not in "
+                "Academy training, not on a Path crossing. A tradition's list only says "
+                "who may take a technique; a Path's list says where it is offered."
+            ),
+            probe=CustomProbe(fn=_probe_tradition_techniques_on_a_path),
         ),
         ContentDependency(
             key="cg-gift-pools-takeable",

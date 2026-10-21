@@ -88,15 +88,17 @@ class PathRitualGrant(models.Model):  # noqa: SHARED_MEMORY
 # Idmapper metaclass sets attrs["path"] which shadows the "path" FK.
 # Same pattern as PathRitualGrant above / PathCodexGrant in world.codex.models.
 class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
-    """Gift + curated starter technique set available to a Path.
+    """Gift + the techniques for this Path and Gift.
 
     The (Path x Gift) -> technique-set leg of ADR-0055 (#1579): the same authored
-    Gift yields a different starter set per Path (a warrior-line and a spy-line path
-    can both grant Pyromancy, but grant different techniques from it). As of #2426
-    this row is a (path x gift) *availability pool*, not solely a crossing payload:
-    character creation lets the player pick from it at level 1, and
-    ``world.magic.services.path_magic.grant_path_magic`` still mints CharacterGift +
-    CharacterTechnique rows from it on later path crossings.
+    Gift yields a different set per Path (a warrior-line and a spy-line path can both
+    grant Pyromancy, but grant different techniques from it). ``starter_techniques``
+    is the list of techniques for this Path and Gift (#4555): a technique is offered
+    only on the Paths whose list holds it, and a technique belongs to those Paths for
+    its cast skill (``magic_skills.technique_paths``). Character creation offers from
+    it, Academy training checks it, and ``grant_path_magic`` mints CharacterGift +
+    CharacterTechnique rows from it on a crossing, each less the techniques a
+    Tradition grant keeps for other Traditions (``cg_catalog.offered_to_tradition``).
     """
 
     path = models.ForeignKey(
@@ -114,7 +116,13 @@ class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
         blank=True,
         related_name="granted_by_path_gifts",
         limit_choices_to={"is_ultimate": False},
-        help_text=("Curated subset of this gift's techniques minted on crossing into this path."),
+        verbose_name="techniques for this Path and Gift",
+        help_text=(
+            "The techniques for this Path and Gift. A technique is offered only on the "
+            "Paths that list it: at character creation, in Academy training, and on "
+            "crossing into this Path. A Tradition grant that also lists a technique keeps "
+            "it for that Tradition's members."
+        ),
     )
     ultimate_techniques = models.ManyToManyField(
         "arxii.Technique",
@@ -162,13 +170,15 @@ class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
 
 
 class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
-    """Gift + curated signature technique set available to a Tradition (#2426).
+    """Gift + the techniques a Tradition keeps for its members (#2426, #4555).
 
-    The (Tradition x Gift) sibling of ``PathGiftGrant`` above — the CG-availability
-    pool a player picks from when choosing techniques for a Gift tied to their
-    Tradition. Distinct from ``OrganizationGiftGrant`` (``world.societies`` — a
-    project-acquired org capability granted through play, not an authored CG
-    availability pool).
+    The (Tradition x Gift) sibling of ``PathGiftGrant`` above. The row itself makes
+    the Gift pickable for the Tradition at character creation. ``special_techniques``
+    restricts: a technique listed by no Tradition grant is open to every Tradition, one
+    listed here is open only to the listing Traditions, and it is still offered only on
+    the Paths whose ``PathGiftGrant`` list holds it. Distinct from
+    ``OrganizationGiftGrant`` (``world.societies`` — a project-acquired org capability
+    granted through play, not an authored CG availability pool).
     """
 
     tradition = models.ForeignKey(
@@ -187,10 +197,10 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         related_name="granted_by_tradition_gifts",
         limit_choices_to={"is_ultimate": False},
         help_text=(
-            "Techniques special to this tradition for this gift — additive "
-            "extras on top of the path's starter pool. Empty = no "
-            "tradition-specific extras. For partial-depth access, list only "
-            "the restricted subset the tradition offers."
+            "Techniques this Tradition keeps for its own members. A technique listed by "
+            "no Tradition grant is open to every Tradition; one listed here is offered "
+            "only to the Traditions that list it, and only on the Paths whose list holds "
+            "it. Empty = this Tradition keeps none of its own."
         ),
     )
 

@@ -1,17 +1,25 @@
 """CG gift/technique availability service (#2426).
 
 Character creation's magic stage lets a player pick a Gift (from their chosen
-Tradition) and then techniques for that Gift, pooled from two curated authoring
-tables: the (path, gift) starter set (``PathGiftGrant``, #1579) and the
-(tradition, gift) special technique set (``TraditionGiftGrant``, #2426). This
-module is the read-only availability seam the CG catalog and pick-budget
-validators consume — it mints no rows (contrast with
-``services.path_magic.grant_path_magic``, which mints
-``CharacterGift``/``CharacterTechnique`` rows on a live path crossing).
+Tradition) and then techniques for that Gift. Two curated authoring tables decide
+which (#4555): the (path, gift) list (``PathGiftGrant.starter_techniques``, #1579)
+holds the techniques for that Path and Gift, and the (tradition, gift) list
+(``TraditionGiftGrant.special_techniques``, #2426) restricts. A technique no
+Tradition grant lists is open to every Tradition; a technique one or more
+Tradition grants list is open only to those Traditions. A technique is offered
+only on the Paths whose list holds it, Tradition or not.
+
+This module is the read-only availability seam the CG catalog and pick-budget
+validators consume; it mints no rows. ``tradition_listings`` and
+``offered_to_tradition`` are the restriction half of the rule, shared with
+``services.path_magic.grant_path_magic`` (which mints
+``CharacterGift``/``CharacterTechnique`` rows on a live path crossing) and the
+Required content dashboard.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch, Q, QuerySet
@@ -76,20 +84,53 @@ def cg_takeable_techniques() -> QuerySet[Technique]:
     return cg_technique_queryset(exclude_gated=True)
 
 
+def tradition_listings(gift_ids: Iterable[int] | None = None) -> dict[int, frozenset[int]]:
+    """Technique pk -> pks of the Traditions whose grant lists it (#4555).
+
+    A technique absent from the result is listed by no Tradition grant and is open
+    to every Tradition. One query; ``gift_ids`` narrows it to those gifts'
+    techniques (a grant only ever lists its own gift's techniques).
+    """
+    through = TraditionGiftGrant.special_techniques.through
+    rows = through.objects.all()
+    if gift_ids is not None:
+        rows = rows.filter(technique__gift_id__in=list(gift_ids))
+    listed: dict[int, set[int]] = {}
+    for technique_id, tradition_id in rows.values_list(
+        "technique_id", "traditiongiftgrant__tradition_id"
+    ):
+        listed.setdefault(technique_id, set()).add(tradition_id)
+    return {technique_id: frozenset(ids) for technique_id, ids in listed.items()}
+
+
+def offered_to_tradition(
+    technique_id: int, tradition_id: int | None, listings: dict[int, frozenset[int]]
+) -> bool:
+    """Whether a member of ``tradition_id`` may be offered the technique (#4555).
+
+    True when no Tradition grant lists the technique, or this Tradition's does.
+    ``tradition_id`` None (no Tradition) is offered only unlisted techniques.
+    ``listings`` is :func:`tradition_listings`' result.
+    """
+    listed_by = listings.get(technique_id)
+    return listed_by is None or tradition_id in listed_by
+
+
 def get_technique_options(
     path: Path,
     gift: Gift,
-    tradition: Tradition,
+    tradition: Tradition | None,
     *,
     include_unready: bool = False,
     exclude_gated: bool = False,
 ) -> TechniqueOptions:
     """Return the ready technique pool for one CG pick.
 
-    ``pool`` comes from the path's curated starter set (``PathGiftGrant``);
-    ``tradition`` comes from the tradition's special technique set
-    (``TraditionGiftGrant``). Either grant row may be absent (no authored row
-    for that combination), in which case that half of the pool is simply empty.
+    Both halves come from the Path's list for the Gift (``PathGiftGrant``), since a
+    technique is offered only on its Paths (#4555). ``pool`` holds the ones no
+    Tradition grant lists (open to every Tradition); ``tradition`` holds the ones
+    ``tradition``'s grant lists. A technique another Tradition's grant lists is in
+    neither. No authored ``PathGiftGrant`` for the combination means both are empty.
 
     A technique without an action template is unfinished and is not offered as
     a CG pick. ``include_unready`` is reserved for validation, which needs to
@@ -125,21 +166,20 @@ def get_technique_options(
         )
         .first()
     )
-    tradition_grant = (
-        TraditionGiftGrant.objects.filter(tradition=tradition, gift=gift)
-        .prefetch_related(
-            Prefetch(
-                "special_techniques",
-                queryset=technique_qs,
-                to_attr="cached_special_techniques",
-            )
-        )
-        .first()
-    )
+    if path_grant is None:
+        return TechniqueOptions()
 
-    pool = path_grant.cached_starter_techniques if path_grant else []
-    tradition_techniques = tradition_grant.cached_special_techniques if tradition_grant else []
-    return TechniqueOptions(pool=pool, tradition=tradition_techniques)
+    listings = tradition_listings([gift.pk])
+    tradition_id = tradition.pk if tradition is not None else None
+    path_techniques = path_grant.cached_starter_techniques
+    return TechniqueOptions(
+        pool=[technique for technique in path_techniques if technique.pk not in listings],
+        tradition=[
+            technique
+            for technique in path_techniques
+            if tradition_id in listings.get(technique.pk, frozenset())
+        ],
+    )
 
 
 def get_species_technique_options(
@@ -169,37 +209,34 @@ def get_species_technique_options(
 def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:
     """Gifts pickable under ``tradition`` that have >=1 technique available for ``path``.
 
-    A gift with an authored ``TraditionGiftGrant`` row but zero combined
-    (pool U tradition) techniques for this path has nothing to pick and is
-    excluded. "Available" is ``cg_takeable_techniques``, the same rule the
-    technique picker applies, so a gift whose pool holds only unready, ultimate
-    or gated techniques is not offered with an empty picker behind it (#4545).
-    Resolves both grant tables in two queries total, no per-gift query loop.
+    A gift needs an authored ``TraditionGiftGrant`` row for ``tradition`` and, on
+    ``path``'s list for that gift, a technique offered to ``tradition`` (listed by no
+    Tradition grant, or by this one's, #4555). "Available" is
+    ``cg_takeable_techniques``, the same rule the technique picker applies, so a gift
+    whose pool holds only unready, ultimate or gated techniques is not offered with an
+    empty picker behind it (#4545). A fixed query count, no per-gift query loop.
     """
-    technique_qs = cg_takeable_techniques()
-
     tradition_grants = list(
-        TraditionGiftGrant.objects.filter(tradition=tradition)
-        .select_related("gift")
-        .prefetch_related(
-            Prefetch(
-                "special_techniques",
-                queryset=technique_qs,
-                to_attr="cached_special_techniques",
-            )
-        )
+        TraditionGiftGrant.objects.filter(tradition=tradition).select_related("gift")
     )
     if not tradition_grants:
         return []
 
     gift_ids = [grant.gift_id for grant in tradition_grants]
+    listings = tradition_listings(gift_ids)
     path_grants = PathGiftGrant.objects.filter(path=path, gift_id__in=gift_ids).prefetch_related(
-        Prefetch("starter_techniques", queryset=technique_qs, to_attr="cached_starter_techniques")
+        Prefetch(
+            "starter_techniques",
+            queryset=cg_takeable_techniques(),
+            to_attr="cached_starter_techniques",
+        )
     )
-    pool_counts = {grant.gift_id: len(grant.cached_starter_techniques) for grant in path_grants}
-
-    return [
-        grant.gift
-        for grant in tradition_grants
-        if pool_counts.get(grant.gift_id, 0) or grant.cached_special_techniques
-    ]
+    offered = {
+        grant.gift_id
+        for grant in path_grants
+        if any(
+            offered_to_tradition(technique.pk, tradition.pk, listings)
+            for technique in grant.cached_starter_techniques
+        )
+    }
+    return [grant.gift for grant in tradition_grants if grant.gift_id in offered]
