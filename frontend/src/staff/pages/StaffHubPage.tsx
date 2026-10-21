@@ -180,6 +180,33 @@ export function StaffHubPage() {
           </Card>
         </Link>
 
+        <Link to="/staff/almanach">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>Almanach</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                The realms, their ladders of titles, the houses that hold them and the people in
+                them; plant a rung, publish a house, define a family.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link to="/staff/world-builder">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>World Builder</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                The Atlas: areas, region maps and the rooms placed in them.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
         <Link to="/staff/missions/givers">
           <Card className="cursor-pointer transition-colors hover:bg-muted/50">
             <CardHeader>
