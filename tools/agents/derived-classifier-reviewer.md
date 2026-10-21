@@ -1,6 +1,6 @@
 ---
 name: derived-classifier-reviewer
-description: Checks a derived classifier or predicate against the rows it will actually classify, not against factory defaults. Use when a diff adds or changes a function that derives a category, relationship, eligibility or safety decision from model fields, and when reviewing one. Catches a predicate that is green on every test and wrong on the whole authored catalog.
+description: Checks a derived classifier or predicate against the rows it will actually classify, not against factory defaults. Use when a diff adds or changes a function that derives a category, relationship, eligibility or safety decision from model fields, when it adds or changes a Required content probe or any readiness count that vouches for a player-facing surface, and when reviewing one. Catches a predicate that is green on every test and wrong on the whole authored catalog, and a sentinel that counts rows the surface it guards filters out.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -102,4 +102,48 @@ combat seeding, target validation). Finish with what the tests would need to
 assert to stop this recurring: a regression built on a value the catalog actually
 holds, not a factory default.
 
-If the diff has no derived classifier in it, say so and stop.
+## Second shape: a sentinel that counts what the surface filters out
+
+A Required content probe (`web/admin/tuning/required_content.py`), a readiness
+count on an admin page, or any "N of M ready" figure is a classifier too: it
+answers "can a player get this?" on behalf of a surface. When it counts rows with
+a filter different from the one that surface applies, it reads complete while the
+surface shows nothing.
+
+That is not hypothetical either. `_probe_path_gift_starter_pools` counted every
+starter technique on a `PathGiftGrant`. Character creation offers a gift only when
+its pool holds a technique with an `action_template`, not an ultimate and with no
+active requirement. On the 2026-10-21 production dump no technique had a template,
+so character creation offered no gift under any tradition and path and no new
+character could finish the Gift stage, while the dashboard said the pools were
+stocked (#4545). The probe's tests built techniques through the factory, whose
+template defaults to null, and never asked the gift list what it showed.
+
+For any probe or count in the diff:
+
+- **Find the surface it vouches for** (its `consumer=` string names it) and read
+  the queryset that surface filters on. Then read the probe's. Every condition on
+  the surface's side (`action_template__isnull=False`, `is_ultimate=False`, an
+  `exclude(pk__in=gated)`, `is_active=True`, a `stage=` on the selectable rows)
+  must be on the probe's side too, by calling the same function, never a copy. A
+  copy drifts the first time someone adds a condition to one side; #4545's fix is
+  `cg_catalog.cg_takeable_techniques()`, called by the gift list, the picker and
+  the dashboard alike.
+- **Run both against the authored rows.** Count what the probe calls present and
+  what the surface actually returns for the same combinations. Disagreement on
+  production data is the finding. "Probe says 0 gaps, `get_gift_options` returns
+  `[]` for every tradition and path" is the shape of it.
+- **Enumerate combinations the way the surface does.** A probe that builds its
+  combinations from an inner join (only where both grant rows exist) misses every
+  combination where one side has no row, which the surface reads as an empty side.
+  #4545's first cut paired tradition grants only with existing path grants and
+  missed three production pairings that offer no gift at all.
+- **Ask for a parity test**: one test that builds a catalog the surface hides
+  (values taken from the authored rows, named as such) and asserts the probe's
+  reported set equals exactly the set the surface drops.
+- **A surface whose rule changes in the diff** (a new readiness condition, a new
+  filter on a catalog function): find every probe and count that vouches for it
+  and check they moved too.
+
+If the diff has no derived classifier, sentinel or readiness count in it, say so
+and stop.

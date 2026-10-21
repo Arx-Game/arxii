@@ -464,7 +464,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (#2410) on every CG catalog card. Read service (`world/magic/services/cg_catalog.py`):
     `get_gift_options(tradition, path) -> list[Gift]` /
     `get_technique_options(path, gift, tradition) -> TechniqueOptions` (callers pass
-    `draft.selected_tradition` / `draft.selected_path`). The rankable
+    `draft.selected_tradition` / `draft.selected_path`); both filter pools through
+    `cg_technique_queryset(*, include_unready, exclude_gated) -> QuerySet[Technique]`,
+    and `cg_takeable_techniques()` is the picker's rule the Required content dashboard
+    also reads (#4545). The rankable
     **Tradition Training** distinction (`ModifierTarget` "Starting Technique Picks")
     adds +1 CG technique pick per rank above the Unbound baseline of 1, read via
     `CharacterDraft._get_distinction_bonus`. `Organization.tradition` (nullable FK →
