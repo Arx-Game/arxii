@@ -9,6 +9,8 @@ from __future__ import annotations
 from evennia_extensions.factories import RoomProfileFactory
 from integration_tests.harness import JourneyCase
 from world.checks.test_helpers import force_check_outcome
+from world.combat.constants import CombatAllegiance, OpponentStatus
+from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.companions.content import ensure_companion_content
 from world.companions.models import Companion, CompanionArchetype
 from world.companions.mount_content import MOUNTED_CONDITION_NAME, ensure_mount_conditions
@@ -271,6 +273,25 @@ class KeepingACompanion(JourneyCase):
             ),
         )
 
+        # A summon of her own, standing here, is promoted into a lasting companion
+        # through the same line (the charmed-enemy path is combat ground).
+        pell = CombatOpponentFactory(
+            encounter=CombatEncounterFactory(room=self.kennels), name="Pell"
+        )
+        pell.allegiance = CombatAllegiance.ALLY
+        pell.summoned_by = self.sheet
+        pell.status = OpponentStatus.ACTIVE
+        pell.save(update_fields=["allegiance", "summoned_by", "status"])
+        with force_check_outcome(CheckOutcomeFactory(name="Promote 2", success_level=2)):
+            told = self.telnet(
+                self.ysmay, "companion promote Pell archetype=Hawk gift=Beastlord name=Pell"
+            )
+        self.assertIn("Pell the Hawk is now bonded to you.", told)
+        self.assertEqual(Companion.objects.get(name="Pell").owner_id, self.sheet.pk)
+        self.assertIn(
+            "  Beastlord: 20/30 capacity (10 remaining)", self.telnet(self.ysmay, "companion")
+        )
+
         # Releasing the hawk destroys its body and keeps the row.
         self.assertIn(
             "Specify a companion: companion release <name or id>.",
@@ -299,7 +320,10 @@ class KeepingACompanion(JourneyCase):
         hub = self.telnet(self.ysmay, "companion")
         self.assertNotIn("Skree", hub)
         self.assertIn("Old Grey (Wolf, cost 10)", hub)
-        self.assertIn("  Beastlord: 10/30 capacity (20 remaining)", hub)
+        self.assertIn("  Beastlord: 15/30 capacity (15 remaining)", hub)
+        self.assertIn(
+            "Pell is released from your bond.", self.telnet(self.ysmay, "companion release Pell")
+        )
 
         # The web releases the wolf through the same action.
         result = self.web(self.ysmay, "release_companion", companion_id=old_grey.pk)

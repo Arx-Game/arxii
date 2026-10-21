@@ -1037,12 +1037,13 @@ actions, backends, and service functions.
   Namespaced subverbs avoid exit/channel/alias collisions (mirrors `CmdSanctum`/`CmdCombat`).
   No business logic in the command. The usage lines spell `<name or id>`: `<name|id>`
   reached telnet as `<named>`, a bare `|i` being a colour code (#3657 tranche 17). The
-  hub, a real Bind Attempt forced each way, emote, mount/dismount, release, and the
-  fighting verbs' refusals outside any fight are typed in
-  `integration_tests/test_keeping_what_is_yours_journeys.py` (`KeepingACompanion`; the
-  hand-built `tests/test_companion_command.py` is gone); the fight, deploy and order
-  inside a fight and the promotion of a charmed enemy stay with `world/companions/tests`
-  and `world/combat/tests`.
+  hub, a real Bind Attempt forced each way, emote, mount/dismount, release, the
+  fighting verbs' refusals outside any fight and the promotion of a summon of the
+  caller's own (a live `CombatOpponent` standing in the room, bound on a real roll) are
+  typed in `integration_tests/test_keeping_what_is_yours_journeys.py`
+  (`KeepingACompanion`; the hand-built `tests/test_companion_command.py` is gone); the
+  fight, deploy and order inside a fight and the promotion of a charmed enemy stay with
+  `world/companions/tests` and `world/combat/tests`.
 - **`crafting_station.py`**: `CmdLabStation` (`station`, #1234) — the Lab
   crafting-station namespace. One `DispatchCommand` routes a leading subverb
   (`station install [level=<n>]` / `station upgrade level=<n>` / `station repair
