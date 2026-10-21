@@ -240,8 +240,9 @@ all filter through it, so a gift is offered only when its pool holds a technique
 picker will show (before #4545 `get_gift_options` checked only the template, and a pool of
 gated techniques offered a gift with an empty picker behind it). The Required content
 dashboard calls the same function: `path-gift-starter-pools` counts only takeable
-starters, `cg-gift-pools-takeable` lists each (tradition, path, gift) combination whose
-pool holds none, and `cg-techniques-cast-effect` (Tuning) lists pooled techniques
+starters, `cg-gift-pools-takeable` lists each (active tradition, active Prospect path,
+gift) combination whose pool holds none (a path with no grant for the gift is an empty
+pool, as `get_gift_options` reads it), and `cg-techniques-cast-effect` (Tuning) lists pooled techniques
 `technique_is_underspecified` flags. On the 2026-10-21 production dump no technique had a
 template, so every gift was hidden while the old starter-pool row read complete.
 - `CharacterTechniqueHandler._state` (`handlers.py`) — reads explicit `CharacterTechnique`

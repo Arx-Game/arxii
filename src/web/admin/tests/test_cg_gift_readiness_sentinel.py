@@ -170,6 +170,25 @@ class GiftReadinessProbeTests(TestCase):
         self.assertEqual(result.missing, ("Wardens of the Ford / Path of Reeds / River Tongue",))
         self.assertIn("0 tradition and path pairing(s) offer no gift at all", result.detail)
 
+    def test_a_path_with_no_grant_for_the_gift_is_an_empty_pool(self) -> None:
+        """The authored shape on production: five traditions grant Radiance and Path of
+        Whispers has no Radiance grant, so with no tradition extras the gift never
+        reaches a Whispers character, and with no other gift the pairing offers none."""
+        whispers = PathFactory(name="Path of Whispers")
+        radiance = GiftFactory(name="Radiance")
+        TraditionGiftGrantFactory(tradition=self.tradition, gift=radiance)
+        PathGiftGrantFactory(path=self.path, gift=radiance).starter_techniques.add(
+            TechniqueFactory(gift=radiance, action_template=self.template)
+        )
+
+        result = _resolve("cg-gift-pools-takeable")
+
+        self.assertIn("Wardens of the Ford / Path of Whispers / Radiance", result.missing)
+        self.assertNotIn("Wardens of the Ford / Path of Reeds / Radiance", result.missing)
+        self.assertEqual(get_gift_options(self.tradition, whispers), [])
+        self.assertEqual(get_gift_options(self.tradition, self.path), [radiance])
+        self.assertIn("1 tradition and path pairing(s) offer no gift at all", result.detail)
+
     def test_paths_character_creation_cannot_pick_are_not_combinations(self) -> None:
         later = PathFactory(name="Path of the Delta", stage=PathStage.POTENTIAL)
         PathGiftGrantFactory(path=later, gift=self.gift)
@@ -184,14 +203,22 @@ class GiftReadinessProbeTests(TestCase):
         )
         self.path_grant.starter_techniques.add(TechniqueFactory(gift=self.gift))
 
+        ungranted_path = PathFactory(name="Path of Salt")
+
         hidden = {
             f"{self.tradition.name} / {path.name} / {self.gift.name}"
-            for path in (self.path, second_path)
+            for path in (self.path, second_path, ungranted_path)
             if self.gift not in get_gift_options(self.tradition, path)
         }
 
         self.assertEqual(set(self._blocked()), hidden)
-        self.assertEqual(hidden, {"Wardens of the Ford / Path of Reeds / River Tongue"})
+        self.assertEqual(
+            hidden,
+            {
+                "Wardens of the Ford / Path of Reeds / River Tongue",
+                "Wardens of the Ford / Path of Salt / River Tongue",
+            },
+        )
 
     def test_an_unready_path_pool_is_reported_beside_a_ready_tradition_extra(self) -> None:
         """The rows agree: the gift is offered, and the path pool is still a gap."""

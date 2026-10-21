@@ -133,6 +133,11 @@ For any probe or count in the diff:
   what the surface actually returns for the same combinations. Disagreement on
   production data is the finding. "Probe says 0 gaps, `get_gift_options` returns
   `[]` for every tradition and path" is the shape of it.
+- **Enumerate combinations the way the surface does.** A probe that builds its
+  combinations from an inner join (only where both grant rows exist) misses every
+  combination where one side has no row, which the surface reads as an empty side.
+  #4545's first cut paired tradition grants only with existing path grants and
+  missed three production pairings that offer no gift at all.
 - **Ask for a parity test**: one test that builds a catalog the surface hides
   (values taken from the authored rows, named as such) and asserts the probe's
   reported set equals exactly the set the surface drops.

@@ -412,22 +412,25 @@ def _probe_path_gift_starter_pools() -> ProbeResult:
 
 
 def _probe_cg_gift_pools_takeable() -> ProbeResult:
-    """Every gift a tradition and a path both grant has a technique a player can take.
+    """Every gift a tradition grants has a technique a player can take on every path.
 
     Consumer: `world/magic/services/cg_catalog.py` `get_gift_options()` (#4545).
-    For each active tradition and each Prospect path (the ones character
-    creation lets a player pick), a gift both grant is offered only when its
-    pool, the path's starter techniques plus the tradition's special
+    For each active tradition and each active Prospect path (the ones character
+    creation lets a player pick), a gift the tradition grants is offered only
+    when its pool, the path's starter techniques plus the tradition's special
     techniques, holds a technique `cg_catalog.cg_takeable_techniques()` lets
     through. That is the same queryset the gift catalog filters on, so this row
-    and the character creation screen cannot disagree. A tradition and path
-    pairing with no gift offered at all leaves a new character nothing to pick
-    at the Gift stage.
+    and the character creation screen cannot disagree. A path with no
+    `PathGiftGrant` for the gift contributes an empty pool, exactly as
+    `get_gift_options` reads it, so a gift the tradition grants and the path
+    never authored is reported too. A tradition and path pairing with no gift
+    offered at all leaves a new character nothing to pick at the Gift stage.
 
     A fixed query count whatever the catalog size: one per requirement type for
-    the gated-technique ids, then the two takeable sets and the two grant tables.
+    the gated-technique ids, then the two takeable sets, the paths and the
+    tradition grants.
     """
-    from world.classes.models import PathStage  # noqa: PLC0415
+    from world.classes.models import Path, PathStage  # noqa: PLC0415
     from world.magic.admin import GAP_NOT_CASTABLE  # noqa: PLC0415
     from world.magic.models import PathGiftGrant, TraditionGiftGrant  # noqa: PLC0415
     from world.magic.services.cg_catalog import cg_takeable_techniques  # noqa: PLC0415
@@ -436,7 +439,7 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
     takeable = cg_takeable_techniques()
     path_ready = set(
         PathGiftGrant.objects.filter(starter_techniques__in=takeable)
-        .values_list("pk", flat=True)
+        .values_list("path_id", "gift_id")
         .distinct()
     )
     tradition_ready = set(
@@ -444,11 +447,11 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
         .values_list("pk", flat=True)
         .distinct()
     )
-    path_grants_by_gift: dict[int, list[tuple[int, int, str]]] = {}
-    for pk, path_id, path_name, gift_id in PathGiftGrant.objects.filter(
-        path__stage=PathStage.PROSPECT, path__is_active=True
-    ).values_list("pk", "path_id", "path__name", "gift_id"):
-        path_grants_by_gift.setdefault(gift_id, []).append((pk, path_id, path_name))
+    paths = list(
+        Path.objects.filter(stage=PathStage.PROSPECT, is_active=True)
+        .order_by("name")
+        .values_list("id", "name")
+    )
     tradition_grants = TraditionGiftGrant.objects.filter(tradition__is_active=True).values_list(
         "pk", "tradition_id", "tradition__name", "gift_id", "gift__name"
     )
@@ -457,9 +460,9 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
     pairings: set[tuple[int, int]] = set()
     offering: set[tuple[int, int]] = set()
     for tg_pk, tradition_id, tradition_name, gift_id, gift_name in tradition_grants:
-        for pg_pk, path_id, path_name in path_grants_by_gift.get(gift_id, ()):
+        for path_id, path_name in paths:
             pairings.add((tradition_id, path_id))
-            if tg_pk in tradition_ready or pg_pk in path_ready:
+            if tg_pk in tradition_ready or (path_id, gift_id) in path_ready:
                 offering.add((tradition_id, path_id))
             else:
                 blocked.append((tradition_name, path_name, gift_name))
@@ -469,8 +472,8 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
     missing = tuple(f"{t} / {p} / {g}" for t, p, g in sorted(blocked))
     detail = (
         f"{len(missing)} tradition / path / gift combination(s) hold no technique a "
-        "player can take at character creation: every starter and tradition "
-        "technique has no cast template, is an ultimate or has a requirement. "
+        "player can take at character creation: no starter or tradition technique "
+        "with a cast template, outside the ultimates and without a requirement. "
     )
     if not offering:
         detail += (
