@@ -3736,7 +3736,7 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
   - distinction -> distinctions.Distinction [FK]
-  - secret -> secrets.Secret [OneToOne] (nullable)
+  - secret -> secrets.Secret [FK] (nullable)
   - from_glimpse -> magic.CharacterAura [FK] (nullable)
   - feature_trait -> forms.FormTrait [FK] (nullable)
   - feature_marking -> forms.FormMarking [FK] (nullable)
@@ -3820,7 +3820,7 @@
 ### Service Functions
 - `approve_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' - Approve a PENDING SheetUpdateRequest: XP debit + change firing.`
 - `cancel_sheet_update_request(request: 'SheetUpdateRequest', account: 'object') -> 'None' - Player-initiated cancellation of their own pending request.`
-- `clear_distinction_secret(character_distinction: 'CharacterDistinction') -> 'None' - Make a relocated distinction public again by deleting its Secret (#1334).`
+- `clear_distinction_secret(character_distinction: 'CharacterDistinction') -> 'None' - Make a relocated distinction public again (#1334).`
 - `compute_distinction_change_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' - Compute the XP cost for a sheet-update request.`
 - `compute_sheet_update_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' - Compute the XP cost for a sheet-update request.`
 - `create_sheet_update_request(character_sheet: 'CharacterSheet', request_type: 'str', *, justification: 'str', target_distinction: 'Distinction | None' = None, target_character_distinction: 'CharacterDistinction | None' = None, submitted_by: 'object | None' = None, origin: 'str' = DistinctionOrigin.UNLOCK_PURCHASE) -> 'SheetUpdateRequest' - Create a PENDING SheetUpdateRequest.`
@@ -3828,6 +3828,7 @@
 - `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '', feature_trait: 'FormTrait | None' = None, feature_marking: 'FormMarking | None' = None) -> 'CharacterDistinction' - Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
 - `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' - Relocate a distinction into a Secret, returning it (#1334).`
 - `remove_distinction(character_distinction: 'CharacterDistinction', *, sheet_update_request: 'SheetUpdateRequest') -> 'None' - Remove a CharacterDistinction, reconciling all dependent systems.`
+- `set_secret_distinctions(secret: 'Secret', chosen: 'Iterable[CharacterDistinction]') -> 'tuple[int, int]' - Link exactly ``chosen`` of the subject's held distinctions to ``secret`` (#4528).`
 
 
 ## world.downtime
@@ -8810,6 +8811,7 @@
   - opened_speaker_queues <- scenes.SpeakerQueue
   - speaker_queue_entries <- scenes.SpeakerQueueEntry
   - authored_secrets <- secrets.Secret
+  - secrets_about <- secrets.Secret
   - secret_victimhoods <- secrets.SecretVictim
   - constructed_ships <- ships.ShipConstructionDetails
   - mentored_allocations <- skills.TrainingAllocation
@@ -9090,6 +9092,8 @@
   - legend_deed -> societies.LegendEntry [FK] (nullable)
   - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
+  - about_persona -> scenes.Persona [FK] (nullable)
+  - story -> stories.Story [FK] (nullable)
   - subject_item_template -> items.ItemTemplate [FK] (nullable)
   - subject_item_instance -> items.ItemInstance [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
@@ -9099,7 +9103,7 @@
   - enemy_rows <- character_sheets.CharacterEnemy
   - clues <- clues.Clue
   - organization_reputation_events <- societies.OrganizationReputationEvent
-  - distinction <- distinctions.CharacterDistinction
+  - distinctions <- distinctions.CharacterDistinction
   - accusation_crime_claim <- justice.AccusationCrimeClaim
   - nullification <- justice.AccusationNullification
   - nullification_authorship <- justice.AccusationNullification
@@ -10557,6 +10561,7 @@
   - narrative_messages <- narrative.NarrativeMessage
   - gemits <- narrative.Gemit
   - muted_by <- narrative.UserStoryMute
+  - anchored_secrets <- secrets.Secret
   - participants <- stories.StoryParticipation
   - chapters <- stories.Chapter
   - feedback <- stories.StoryFeedback

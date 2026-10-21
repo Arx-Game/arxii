@@ -2307,6 +2307,7 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
 - **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);
   Secret = self-serve hidden fact about a concrete entity
 - **Source:** `src/world/secrets/`
+- **Links (#4528):** `Secret.about_persona` (who it is about when not the subject) and `Secret.story` (the story anchor), staff-set; `CharacterDistinction.secret` is a plain FK so one secret holds many distinctions, ticked from the Secret admin (`set_secret_distinctions`).
 - **Details:** [secrets.md](secrets.md)
 
 ### Justice (#1765)
