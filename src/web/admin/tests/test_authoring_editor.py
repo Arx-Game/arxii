@@ -4,6 +4,7 @@ import re
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -1030,3 +1031,31 @@ class TestARefusedEditLeavesTheCachedRowAsStored(AuthoringEditorTestCase):
             _db_values(self.entry.pk, "name", "summary"),
             ("The Renamed Entry", "A fixed summary."),
         )
+
+    def test_a_save_that_raises_after_full_clean_caches_nothing(self) -> None:
+        """A concurrent write or an outage can still fail the save after `full_clean()`."""
+        with (
+            patch.object(CodexEntry, "save", side_effect=IntegrityError("raced")),
+            self.assertRaises(IntegrityError),
+        ):
+            self._post("admin_authoring_editor_save", lore_content="Lore the database refused.")
+
+        self._assert_every_reader_sees_the_stored_row("Lore the database refused.")
+
+    def test_a_credit_or_review_stamp_whose_save_raises_leaves_no_stamp_cached(self) -> None:
+        """A credited model whose own `save()` calls `clean()` refuses an already-invalid row
+        at the stamp's save; the stamp must not stay on the cached row (#4543 review)."""
+        for view, stamp in (
+            ("admin_authoring_editor_credit", "written_by"),
+            ("admin_authoring_editor_review", "reviewed_by"),
+        ):
+            with self.subTest(view=view):
+                with (
+                    patch.object(
+                        CodexEntry, "save", side_effect=ValidationError("stored row invalid")
+                    ),
+                    self.assertRaises(ValidationError),
+                ):
+                    self._post(view)
+
+                self.assertIsNone(getattr(CodexEntry.objects.get(pk=self.entry.pk), stamp))

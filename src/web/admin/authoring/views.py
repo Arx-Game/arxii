@@ -87,6 +87,7 @@ from dataclasses import dataclass
 
 from django.contrib import messages
 from django.core.exceptions import FieldDoesNotExist, ValidationError
+from django.db import DatabaseError
 from django.db.models import CharField
 from django.http import HttpRequest, HttpResponse, QueryDict
 from django.shortcuts import redirect, render
@@ -94,6 +95,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import urlencode
 from django.views.decorators.http import require_POST
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.app_domains import credited_content_models, domain_of, resolve_model_by_name
 from core.identifier_dashes import contains_dash
@@ -699,9 +701,8 @@ def _apply_edits(
     The instance is the identity-mapped row every later reader in the
     process gets, so on any refusal it still carries the posted text: the
     caller renders it back and then must drop the row with
-    `flush_refused_instances` (`_render_refused_edit`, #4543). Past
-    `full_clean()` (which runs the unique and constraint checks) `save()` can
-    only fail on a concurrent write or a database outage, a server error.
+    `flush_refused_instances` (`_render_refused_edit`, #4543). A `save()`
+    that still raises past `full_clean()` drops the row too (`_save_or_flush`).
 
     Returns `full_clean()`'s `message_dict` on failure (nothing saved) or
     `None` on success, alongside whether the name actually changed - the
@@ -725,8 +726,23 @@ def _apply_edits(
         instance.full_clean()
     except ValidationError as exc:
         return exc.message_dict, False
-    instance.save()
+    _save_or_flush(instance)
     return None, name_changed
+
+
+def _save_or_flush(instance: SharedMemoryModel) -> None:
+    """Save a row this view assigned values onto; if the save raises, drop it from the map.
+
+    The values are already on the identity-mapped instance, so a failed write would leave
+    them for every later reader. A credited model whose own `save()` calls `clean()` (the
+    mission rows do) raises `ValidationError` when the stored row is already invalid; a
+    concurrent write or an outage raises `DatabaseError`. Either is still a server error.
+    """
+    try:
+        instance.save()
+    except (ValidationError, DatabaseError):
+        flush_refused_instances(instance)
+        raise
 
 
 def _render_refused_edit(
@@ -822,7 +838,7 @@ def authoring_editor_credit(request: HttpRequest) -> HttpResponse:
 
     target.instance.written_by = contributor
     target.instance.written_on = timezone.now().date()
-    target.instance.save()
+    _save_or_flush(target.instance)
     response = _render_editor_fragment(request, target, _EditorFlags(credited=True))
     response["HX-Trigger"] = _BACKLOG_CHANGED_EVENT
     return response
@@ -847,7 +863,7 @@ def authoring_editor_review(request: HttpRequest) -> HttpResponse:
 
     target.instance.reviewed_by = contributor
     target.instance.reviewed_on = timezone.now().date()
-    target.instance.save()
+    _save_or_flush(target.instance)
     response = _render_editor_fragment(request, target, _EditorFlags(reviewed=True))
     response["HX-Trigger"] = _BACKLOG_CHANGED_EVENT
     return response
