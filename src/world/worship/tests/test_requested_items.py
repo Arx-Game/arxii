@@ -392,3 +392,16 @@ class CarriedKeepsakeAndRelicTests(RequestedItemTestBase):
         Relic.objects.create(being=self.being, item_instance=self._held())
 
         self.assertEqual(worn_meaning(self.sheet, self.being).pieces, ())
+
+
+class FacetMergeTests(RequestedItemTestBase):
+    def test_a_request_for_a_merged_facet_follows_the_surviving_facet(self) -> None:
+        from world.magic.services.facets import merge_facets
+
+        winner, loser = FacetFactory(name="Kestrel"), FacetFactory(name="Kestril")
+        request = RequestedItemFactory(pledge=self.pledge, item_template=None, facet=loser)
+
+        merge_facets(winner, [loser])
+
+        request.refresh_from_db()
+        self.assertEqual(request.facet, winner)
