@@ -39,7 +39,7 @@ class AuthoringFormPagesTests(TestCase):
         cls.other_check_type = CheckTypeFactory()
         cls.mod = ConditionCheckModifierFactory(condition=cls.condition, check_type=cls.check_type)
         ConditionCheckModifierFactory(condition=cls.condition, check_type=cls.other_check_type)
-        cls.weapon_class = WeaponClass.objects.create(name="Test Blade Class")
+        cls.weapon_class = WeaponClass.objects.create(name="Test Blade Class", strength_tenths=5)
         cls.template = ItemTemplateFactory(weapon_class=cls.weapon_class)
 
     def setUp(self) -> None:
