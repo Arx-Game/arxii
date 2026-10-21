@@ -4884,8 +4884,10 @@ register as additional kinds.
   backstop for a TRAIN or SKILL_COURSE offer authored with a nonzero `ap_cost`. **Trainer menu
   price line:** `InteractionOfferSerializer.price` (`OfferPriceSerializer`) from `_offer_price` /
   `OfferPrice` (`npc_services/types.py`) and `format_offer_price`, the same line on the web menu and
-  in telnet `hire`; TRAIN's reads "<coin> - 1 Golden Hare - N points of training or more, paid in AP"
-  because `learn_ap_cost` is the training meter's base, not AP charged at acceptance. Journeys:
+  in telnet `hire`; TRAIN's reads "<coin> · 1 Golden Hare · N points of training or more, paid in AP"
+  because `learn_ap_cost` is the training meter's base, not AP charged at acceptance. An enrolled
+  course reads "Next session · ..." or, once this game week's session has run, "Next session next
+  week · ...". Journeys:
   `integration_tests/test_academy_skill_course_journeys.py`,
   `test_tradition_training_journeys.py`. Details: [magic.md](magic.md).
 - **Great Archive self-study (#2440 ruling 5):** the post-Vanishing path for orphaned
