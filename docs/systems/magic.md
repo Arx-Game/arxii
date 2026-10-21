@@ -705,7 +705,7 @@ Magic skill; a character who starts behind catches up in play, fastest through a
 Slice 1 above made rolls add skills; this slice gives a schooled character those skills.
 
 **The floor.** `SchoolingLine.magic_skill_floor` (`PositiveSmallIntegerField`, default 0) is the
-level each stance lifts every active Magic skill to (migration `0270_skill_courses_and_schooling_floor`).
+level each stance lifts every active Magic skill to (migration `0272_skill_courses_and_schooling_floor`).
 Rank 0 carries none: check constraint `schooling_rank_zero_grants_no_floor`. The set is every skill
 in `magic_category_skills()`, the same for every Tradition; a per-Tradition list is deferred.
 
