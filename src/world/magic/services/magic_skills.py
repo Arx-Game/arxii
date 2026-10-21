@@ -79,6 +79,19 @@ def technique_paths(technique_ids: Iterable[int]) -> dict[int, list[Path]]:
     return paths
 
 
+def invalidate_technique_own_paths() -> None:
+    """Drop every cached ``Technique.cached_own_paths`` (#4555).
+
+    Called by the admin saves that change which Paths list a technique (a Path Gift
+    Grant's list, a Path's grants, a Path's order). Techniques are identity-mapped, so
+    an answer cached before the edit would otherwise last the life of the process.
+    """
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    for technique in Technique.get_all_cached_instances():
+        technique.__dict__.pop("cached_own_paths", None)
+
+
 def skill_path(current_path: Path | None, own_paths: Sequence[Path]) -> Path | None:
     """The Path whose technique skill a Major Gift technique's cast adds (#4555).
 
@@ -102,7 +115,7 @@ def _skill_for_path(
     The technique's own skill wins. Otherwise a Major Gift technique takes the skill of the
     Path :func:`skill_path` picks and a Minor Gift technique takes the Gift's skill.
     ``own_paths`` is the technique's own Paths when the caller read them in bulk; None
-    reads them here.
+    reads ``technique.cached_own_paths``.
 
     An override wins even when its skill is inactive: the technique then adds no term and
     does NOT fall back to the Path or Gift skill. Staff deactivating a skill means that
@@ -114,7 +127,7 @@ def _skill_for_path(
     if gift.kind == GiftKind.MINOR:
         return gift.technique_skill
     if own_paths is None:
-        own_paths = technique_paths([technique.pk]).get(technique.pk, [])
+        own_paths = technique.cached_own_paths
     chosen = skill_path(path, own_paths)
     return chosen.technique_skill if chosen is not None else None
 

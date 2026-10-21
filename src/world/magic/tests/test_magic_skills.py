@@ -4,6 +4,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
@@ -17,9 +18,11 @@ from world.magic.constants import GiftKind, MagicActivity, RitualExecutionKind
 from world.magic.factories import (
     GiftFactory,
     MagicActivitySkillFactory,
+    PathGiftGrantFactory,
     RitualCheckConfigFactory,
     TechniqueFactory,
 )
+from world.magic.models import Technique
 from world.magic.models.rituals import Ritual
 from world.magic.services.magic_skills import (
     activity_skill_terms,
@@ -166,6 +169,52 @@ class TechniqueSkillTermTests(TestCase):
         self.assertIsNone(
             technique_skill_term_for_path(TechniqueFactory(gift=self.major_gift), None)
         )
+
+
+class TechniqueOwnPathSkillTests(TestCase):
+    """#4555: a technique adds the skill of a Path whose list holds it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.embers_skill = SkillFactory()
+        cls.ash_skill = SkillFactory()
+        cls.embers = PathFactory(name="Path of Embers", technique_skill=cls.embers_skill)
+        cls.ash = PathFactory(name="Path of Ash", technique_skill=cls.ash_skill)
+        cls.gift = GiftFactory()
+        cls.technique = TechniqueFactory(gift=cls.gift)
+        cls.embers_grant = PathGiftGrantFactory(path=cls.embers, gift=cls.gift)
+        cls.embers_grant.starter_techniques.add(cls.technique)
+        cls.sheet = CharacterSheetFactory()
+        CharacterPathHistoryFactory(character=cls.sheet, path=cls.ash)
+        cls.staff = AccountDB.objects.create_superuser("pathwarden", "pw@example.com", "pw-12345")
+
+    def _skill(self):
+        # The identity-mapped row, as a cast reads it; setUpTestData hands each test a copy.
+        technique = Technique.objects.get(pk=self.technique.pk)
+        term = technique_skill_term(self.sheet.character, technique)
+        return term.trait if term is not None else None
+
+    def test_a_technique_off_the_current_path_adds_its_own_paths_skill(self):
+        self.assertEqual(self._skill(), self.embers_skill.trait)
+
+    def test_a_staff_edit_to_the_paths_list_reaches_the_next_cast(self):
+        """The cached own Paths are cleared by the Path Gift Grant admin's save."""
+        self.assertEqual(self._skill(), self.embers_skill.trait)
+        ash_grant = PathGiftGrantFactory(path=self.ash, gift=self.gift)
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            reverse("admin:arxii_pathgiftgrant_change", args=[ash_grant.pk]),
+            {
+                "path": self.ash.pk,
+                "gift": self.gift.pk,
+                "starter_techniques": [self.technique.pk],
+                "ultimate_techniques": [],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302, response.content[:500])
+        self.assertEqual(self._skill(), self.ash_skill.trait)
 
 
 class ResolveCastCheckTests(TestCase):
