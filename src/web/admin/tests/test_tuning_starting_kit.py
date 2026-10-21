@@ -91,7 +91,8 @@ class StartingKitBuilderTests(TestCase):
         cls.ward = TechniqueFactory(gift=cls.gift, name="Ward", damage_profile=False)
         cls.hex = TechniqueFactory(gift=cls.gift, name="Hex", damage_profile=False)
         grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
-        grant.starter_techniques.add(cls.strike, cls.ward)
+        # Hex is on the Path's list and kept by the tradition (#4555).
+        grant.starter_techniques.add(cls.strike, cls.ward, cls.hex)
         special = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
         special.special_techniques.add(cls.hex)
         cls.species = SpeciesFactory()

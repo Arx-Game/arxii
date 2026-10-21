@@ -23,6 +23,7 @@ class GhostTutorE2ETest(TestCase):
         from world.magic.factories import (
             CharacterTraditionFactory,
             GiftFactory,
+            PathGiftGrantFactory,
             TechniqueFactory,
             TraditionFactory,
             TraditionGiftGrantFactory,
@@ -49,6 +50,8 @@ class GhostTutorE2ETest(TestCase):
         # Path so get_technique_options doesn't bail
         cls.path = PathFactory()
         CharacterPathHistoryFactory(character=cls.sheet, path=cls.path)
+        # The technique is on the learner's Path's list (#4555).
+        PathGiftGrantFactory(path=cls.path, gift=cls.gift).starter_techniques.add(cls.technique)
 
     def test_full_journey(self):
         """Summon -> GhostTutelage created -> signature available."""

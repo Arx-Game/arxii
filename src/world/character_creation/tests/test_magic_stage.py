@@ -71,11 +71,13 @@ class MagicStageValidationTest(TestCase):
             2, gift=cls.gift, action_template=cast_template
         )
         cls.unready_technique = TechniqueFactory(gift=cls.gift)
-        path_grant.starter_techniques.set([*cls.pool_techniques, cls.unready_technique])
-
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
         cls.special_technique = TechniqueFactory(gift=cls.gift, action_template=cast_template)
         tradition_grant.special_techniques.set([cls.special_technique])
+        # A tradition's technique is offered only on the Paths that list it (#4555).
+        path_grant.starter_techniques.set(
+            [*cls.pool_techniques, cls.unready_technique, cls.special_technique]
+        )
 
         # A gift with no TraditionGiftGrant for this tradition — never a valid pick.
         cls.other_gift = GiftFactory(name="Not Granted")
@@ -628,11 +630,11 @@ class CGTechniqueOptionEndpointTest(TestCase):
         cls.pool_techniques = TechniqueFactory.create_batch(
             2, gift=cls.gift, action_template=cast_template
         )
-        path_grant.starter_techniques.set(cls.pool_techniques)
-
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
         cls.special_technique = TechniqueFactory(gift=cls.gift, action_template=cast_template)
         tradition_grant.special_techniques.set([cls.special_technique])
+        # A tradition's technique is offered only on the Paths that list it (#4555).
+        path_grant.starter_techniques.set([*cls.pool_techniques, cls.special_technique])
         cls.species = SpeciesFactory(name="Endpoint Species Technique Test")
         cls.species_gift = GiftFactory(name="Endpoint Species Gift", kind=GiftKind.MINOR)
         SpeciesGiftGrantFactory(species=cls.species, gift=cls.species_gift)

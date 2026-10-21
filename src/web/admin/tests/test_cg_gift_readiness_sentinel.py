@@ -139,13 +139,22 @@ class GiftReadinessProbeTests(TestCase):
     def _blocked(self) -> tuple[str, ...]:
         return _resolve("cg-gift-pools-takeable").missing
 
-    def test_a_ready_technique_in_either_pool_offers_the_gift(self) -> None:
+    def test_a_ready_technique_the_tradition_keeps_on_this_path_offers_the_gift(self) -> None:
+        kept = TechniqueFactory(gift=self.gift, action_template=self.template)
+        self.path_grant.starter_techniques.add(kept)
+        self.tradition_grant.special_techniques.add(kept)
+
+        self.assertTrue(_resolve("cg-gift-pools-takeable").present)
+        self.assertEqual(get_gift_options(self.tradition, self.path), [self.gift])
+
+    def test_a_tradition_technique_on_no_path_list_offers_nothing(self) -> None:
+        """#4555: a tradition's list restricts; only a Path's list offers."""
         self.tradition_grant.special_techniques.add(
             TechniqueFactory(gift=self.gift, action_template=self.template)
         )
 
-        self.assertTrue(_resolve("cg-gift-pools-takeable").present)
-        self.assertEqual(get_gift_options(self.tradition, self.path), [self.gift])
+        self.assertEqual(self._blocked(), ("Wardens of the Ford / Path of Reeds / River Tongue",))
+        self.assertEqual(get_gift_options(self.tradition, self.path), [])
 
     def test_a_pool_of_only_gated_or_ultimate_techniques_is_reported(self) -> None:
         gated = TechniqueFactory(gift=self.gift, action_template=self.template)
@@ -220,16 +229,16 @@ class GiftReadinessProbeTests(TestCase):
             },
         )
 
-    def test_an_unready_path_pool_is_reported_beside_a_ready_tradition_extra(self) -> None:
-        """The rows agree: the gift is offered, and the path pool is still a gap."""
-        self.tradition_grant.special_techniques.add(
-            TechniqueFactory(gift=self.gift, action_template=self.template)
-        )
-        self.path_grant.starter_techniques.add(TechniqueFactory(gift=self.gift))
+    def test_a_technique_another_tradition_keeps_does_not_offer_the_gift(self) -> None:
+        """#4555: the keeper is offered the gift on this path; nobody else is."""
+        kept = TechniqueFactory(gift=self.gift, action_template=self.template)
+        self.path_grant.starter_techniques.add(kept)
+        keeper = TraditionFactory(name="Lanterns of the Weir")
+        TraditionGiftGrantFactory(tradition=keeper, gift=self.gift).special_techniques.add(kept)
 
-        self.assertTrue(_resolve("cg-gift-pools-takeable").present)
-        starter = _resolve("path-gift-starter-pools")
-        self.assertIn("Path of Reeds / River Tongue", starter.missing)
+        self.assertEqual(self._blocked(), ("Wardens of the Ford / Path of Reeds / River Tongue",))
+        self.assertEqual(get_gift_options(self.tradition, self.path), [])
+        self.assertEqual(get_gift_options(keeper, self.path), [self.gift])
 
     def test_declarations_tiers_and_links(self) -> None:
         deps = {dep.key: dep for dep in rc._declarations()}
