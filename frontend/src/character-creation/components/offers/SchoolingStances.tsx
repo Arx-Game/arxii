@@ -76,6 +76,16 @@ export function SchoolingStances({ draft, tradition, copy }: SchoolingStancesPro
                   <span className={row.rank > 0 ? 'grant' : undefined}>
                     {row.techniques} technique{row.techniques === 1 ? '' : 's'}
                   </span>
+                  {row.magic_skill_floor > 0 ? (
+                    <span className="grant">
+                      {(copy?.offers_magic_skill_floor ?? 'Magic skills {floor}').replace(
+                        '{floor}',
+                        String(row.magic_skill_floor)
+                      )}
+                    </span>
+                  ) : (
+                    <span>No magic skills</span>
+                  )}
                 </span>
               </button>
             </li>

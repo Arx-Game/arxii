@@ -30302,6 +30302,7 @@ export interface components {
       /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
       readonly starting_technique_picks: number;
+      readonly starting_magic_skill_floor: number;
       readonly age_min: number;
       readonly age_max: number;
       readonly ic_month_names: string[];
@@ -36317,6 +36318,7 @@ export interface components {
       is_final: boolean;
       rapport_requirement: number;
       risk_tier?: number | null;
+      price?: components['schemas']['OfferPrice'] | null;
     };
     InteractionReaction: {
       readonly id: number;
@@ -38941,6 +38943,7 @@ export interface components {
        *     * `styling` - Styling
        *     * `profile_recording` - Profile Recording
        *     * `clue_reveal` - Clue Reveal
+       *     * `skill_course` - Skill Course
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -38989,6 +38992,7 @@ export interface components {
      *     * `styling` - Styling
      *     * `profile_recording` - Profile Recording
      *     * `clue_reveal` - Clue Reveal
+     *     * `skill_course` - Skill Course
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -39010,7 +39014,8 @@ export interface components {
       | 'settle_obligation'
       | 'styling'
       | 'profile_recording'
-      | 'clue_reveal';
+      | 'clue_reveal'
+      | 'skill_course';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -39035,6 +39040,7 @@ export interface components {
        *     * `styling` - Styling
        *     * `profile_recording` - Profile Recording
        *     * `clue_reveal` - Clue Reveal
+       *     * `skill_course` - Skill Course
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -39315,6 +39321,17 @@ export interface components {
        * @description Earliest time `persona` can select this offer again.
        */
       available_at: string;
+    };
+    /** @description What accepting an Academy offer costs (#4457); ``display`` is the menu line. */
+    OfferPrice: {
+      ap: number;
+      coppers: number;
+      golden_hares: number;
+      per_session_ap: number | null;
+      development_remaining: number | null;
+      development_total: number | null;
+      training_points: number | null;
+      display: string;
     };
     /** @description Serializer for a directed-offer summons (#2050). */
     OfferSummons: {
@@ -44881,6 +44898,7 @@ export interface components {
        *     * `styling` - Styling
        *     * `profile_recording` - Profile Recording
        *     * `clue_reveal` - Clue Reveal
+       *     * `skill_course` - Skill Course
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -49182,7 +49200,7 @@ export interface components {
        */
       action: components['schemas']['SceneSummaryRevisionActionEnum'];
     };
-    /** @description One standard schooling stance under a ``living_masters`` tradition (#3675). */
+    /** @description One standard schooling stance under a tradition that opens stances (#3675, #4457). */
     SchoolingLine: {
       schooling_line_id: number;
       rank: number;
@@ -49190,6 +49208,7 @@ export interface components {
       player_line: string;
       price: number;
       techniques: number;
+      magic_skill_floor: number;
       grants_distinction_id: number | null;
       offer_id: number | null;
     };

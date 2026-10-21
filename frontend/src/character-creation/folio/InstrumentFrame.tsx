@@ -43,7 +43,7 @@ export function InstrumentGroup({
   );
 }
 
-interface StatRowProps {
+interface StatRowBaseProps {
   id: string;
   name: string;
   sub?: string;
@@ -51,11 +51,6 @@ interface StatRowProps {
   /** Bonus shown beside the value as "+1"; never folded into the number. */
   bonus?: number;
   max: number;
-  onChange: (value: number) => void;
-  canDecrease: boolean;
-  canIncrease: boolean;
-  decreaseTitle?: string;
-  increaseTitle?: string;
   /** When set, the name is a button that opens the gloss in the margin. */
   onWhy?: () => void;
   whyOpen?: boolean;
@@ -65,24 +60,22 @@ interface StatRowProps {
   step?: number;
 }
 
-export function StatRow({
-  id,
-  name,
-  sub,
-  value,
-  bonus,
-  max,
-  onChange,
-  canDecrease,
-  canIncrease,
-  decreaseTitle,
-  increaseTitle,
-  onWhy,
-  whyOpen,
-  gloss,
-  spec,
-  step = 1,
-}: StatRowProps) {
+/** An adjustable row has steppers; a read-only row (a value granted, not bought) has none. */
+type StatRowProps = StatRowBaseProps &
+  (
+    | {
+        readOnly?: false;
+        onChange: (value: number) => void;
+        canDecrease: boolean;
+        canIncrease: boolean;
+        decreaseTitle?: string;
+        increaseTitle?: string;
+      }
+    | { readOnly: true }
+  );
+
+export function StatRow(props: StatRowProps) {
+  const { id, name, sub, value, bonus, max, onWhy, whyOpen, gloss, spec, step = 1 } = props;
   const pipCount = Math.max(0, Math.min(max, Math.round(value / step)));
   const pipMax = Math.round(max / step);
   return (
@@ -103,7 +96,7 @@ export function StatRow({
         )}
         {sub && <small>{sub}</small>}
       </span>
-      <span className="stat-pips" aria-hidden="true">
+      <span className={props.readOnly ? 'stat-pips granted' : 'stat-pips'} aria-hidden="true">
         {Array.from({ length: pipMax }, (_, i) => (
           <i key={i} className={i < pipCount ? 'on' : undefined} />
         ))}
@@ -112,26 +105,28 @@ export function StatRow({
         {value}
         {bonus ? <small>{bonus > 0 ? `+${bonus}` : bonus}</small> : null}
       </output>
-      <span className="stat-step">
-        <button
-          type="button"
-          disabled={!canDecrease}
-          title={decreaseTitle}
-          aria-label={`Lower ${name}`}
-          onClick={() => onChange(value - step)}
-        >
-          −
-        </button>
-        <button
-          type="button"
-          disabled={!canIncrease}
-          title={increaseTitle}
-          aria-label={`Raise ${name}`}
-          onClick={() => onChange(value + step)}
-        >
-          +
-        </button>
-      </span>
+      {!props.readOnly && (
+        <span className="stat-step">
+          <button
+            type="button"
+            disabled={!props.canDecrease}
+            title={props.decreaseTitle}
+            aria-label={`Lower ${name}`}
+            onClick={() => props.onChange(value - step)}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            disabled={!props.canIncrease}
+            title={props.increaseTitle}
+            aria-label={`Raise ${name}`}
+            onClick={() => props.onChange(value + step)}
+          >
+            +
+          </button>
+        </span>
+      )}
       {gloss && <p className="stat-gloss">{gloss}</p>}
     </div>
   );

@@ -17,7 +17,8 @@ import {
 } from '@/components/ui/accordion';
 import { Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { InstrumentFrame, StatRow } from '../folio';
+import { MAGIC_SKILL_CATEGORY } from '../constants';
+import { InstrumentFrame, InstrumentGroup, StatRow } from '../folio';
 import {
   useCGExplanations,
   usePathSkillSuggestions,
@@ -28,14 +29,30 @@ import {
 import type { CharacterDraft, PathSkillSuggestion, Skill, Specialization } from '../types';
 
 /**
- * Build a skill-value map from a path's suggested starting values.
+ * Build a skill-value map from a path's suggested starting values. Magic
+ * skills are trained through the Tradition, never bought with points here, so
+ * a suggestion naming one is left out (#4457).
  */
-function skillsFromSuggestions(suggestions: PathSkillSuggestion[]): Record<number, number> {
+function skillsFromSuggestions(
+  suggestions: PathSkillSuggestion[],
+  magicSkillIds: ReadonlySet<number>
+): Record<number, number> {
   const initialSkills: Record<number, number> = {};
   for (const suggestion of suggestions) {
+    if (magicSkillIds.has(suggestion.skill_id)) continue;
     initialSkills[suggestion.skill_id] = suggestion.suggested_value;
   }
   return initialSkills;
+}
+
+/** The map without its Magic skills (a draft saved before they left the point pool). */
+function withoutMagic(
+  values: Record<number, number>,
+  magicSkillIds: ReadonlySet<number>
+): Record<number, number> {
+  return Object.fromEntries(
+    Object.entries(values).filter(([skillId]) => !magicSkillIds.has(Number(skillId)))
+  );
 }
 
 /**
@@ -131,6 +148,13 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
   const { data: suggestions } = usePathSkillSuggestions(draft.selected_path?.id);
   const updateDraft = useUpdateDraft();
 
+  // Magic skills are shown as trained, never bought (#4457).
+  const magicSkills = useMemo(
+    () => (skills ?? []).filter((skill) => skill.category === MAGIC_SKILL_CATEGORY),
+    [skills]
+  );
+  const magicSkillIds = useMemo(() => new Set(magicSkills.map((skill) => skill.id)), [magicSkills]);
+
   // Local state for skill and specialization values
   const [skillValues, setSkillValues] = useState<Record<number, number>>({});
   const [specValues, setSpecValues] = useState<Record<number, number>>({});
@@ -149,7 +173,7 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
 
     // If path changed, always reset to new path's suggestions
     if (pathChanged) {
-      const initialSkills = skillsFromSuggestions(suggestions);
+      const initialSkills = skillsFromSuggestions(suggestions, magicSkillIds);
       setSkillValues(initialSkills);
       setSpecValues({});
       // Persist the reset (2026-07 audit): the UI showed the new path's
@@ -166,7 +190,7 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
 
     const numericSkills = toNumericMap(draft.draft_data?.skills);
     if (numericSkills) {
-      setSkillValues(numericSkills);
+      setSkillValues(withoutMagic(numericSkills, magicSkillIds));
       // Preserve original behavior: set specs whenever they exist on the
       // draft (even an empty {}), converting string keys to numbers.
       if (draft.draft_data?.specializations) {
@@ -174,7 +198,7 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
       }
     } else if (suggestions.length > 0) {
       // Initialize from path suggestions
-      setSkillValues(skillsFromSuggestions(suggestions));
+      setSkillValues(skillsFromSuggestions(suggestions, magicSkillIds));
       setSpecValues({});
     }
 
@@ -187,6 +211,7 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
     draft.draft_data?.specializations,
     draft.selected_path,
     isInitialized,
+    magicSkillIds,
   ]);
 
   // Debounced save to backend
@@ -284,9 +309,10 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
     return null;
   }
 
-  // Group skills by category
+  // Group the skills points can buy by category; Magic has its own read-only group.
   const skillsByCategory = skills.reduce(
     (acc, skill) => {
+      if (skill.category === MAGIC_SKILL_CATEGORY) return acc;
       const cat = skill.category_display;
       if (!acc[cat]) acc[cat] = [];
       acc[cat].push(skill);
@@ -297,6 +323,8 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
 
   const remaining = budget.total_points - totalSpent;
   const canIncrease = remaining >= 10;
+  const appliedSuggestions = (suggestions ?? []).filter((s) => !magicSkillIds.has(s.skill_id));
+  const magicFloor = draft.starting_magic_skill_floor;
 
   return (
     <div>
@@ -306,12 +334,12 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
         </div>
       )}
 
-      {suggestions && suggestions.length > 0 && (
+      {appliedSuggestions.length > 0 && (
         // PLACEHOLDER: Apostate rewrite
         <p className="ledger-line">
           {draft.selected_path?.name} suggested skills:{' '}
-          {suggestions.map((s) => `${s.skill_name} ${s.suggested_value}`).join(', ')}. You can
-          freely redistribute all points.
+          {appliedSuggestions.map((s) => `${s.skill_name} ${s.suggested_value}`).join(', ')}. You
+          can freely redistribute all points.
         </p>
       )}
 
@@ -368,6 +396,36 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
             </Accordion>
           </div>
         ))}
+        {magicSkills.length > 0 && (
+          <InstrumentGroup
+            title={magicSkills[0].category_display}
+            gloss={
+              magicFloor > 0
+                ? (copy?.skills_magic_granted_heading ?? 'From your Tradition training')
+                : undefined
+            }
+          >
+            {magicFloor > 0 ? (
+              magicSkills.map((skill) => (
+                <StatRow
+                  key={skill.id}
+                  id={`lbl-skill-${skill.id}`}
+                  name={skill.name}
+                  sub={skill.tooltip}
+                  value={magicFloor}
+                  max={budget.max_skill_value}
+                  step={10}
+                  readOnly
+                />
+              ))
+            ) : (
+              <p className="ledger-line">
+                {copy?.skills_magic_granted_none ??
+                  'Your Magic skills start untrained. They grow with use and weekly training, faster with a mentor, and an Academy course speeds that up.'}
+              </p>
+            )}
+          </InstrumentGroup>
+        )}
       </InstrumentFrame>
     </div>
   );

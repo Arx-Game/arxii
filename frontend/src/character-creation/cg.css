@@ -924,6 +924,11 @@
   background: var(--cg-text-soft);
   border-color: var(--cg-text-soft);
 }
+/* A value the Tradition granted rather than the player bought (#4457). */
+.interview .stat-pips.granted i.on {
+  background: var(--cg-orn);
+  border-color: var(--cg-orn);
+}
 .interview .stat-val {
   font-variant-numeric: tabular-nums;
   text-align: center;

@@ -33,6 +33,7 @@ const newlyTakenIn: SchoolingLineRow = {
   player_line: 'Taken in after the Glimpse.',
   price: 0,
   techniques: 1,
+  magic_skill_floor: 0,
   grants_distinction_id: null,
   offer_id: null,
 };
@@ -44,6 +45,7 @@ const trainedForYears: SchoolingLineRow = {
   player_line: 'Trained since youth.',
   price: 1,
   techniques: 2,
+  magic_skill_floor: 20,
   grants_distinction_id: 77,
   offer_id: 201,
 };
@@ -55,6 +57,7 @@ const raisedWithinIt: SchoolingLineRow = {
   player_line: 'Born to it.',
   price: 2,
   techniques: 3,
+  magic_skill_floor: 30,
   grants_distinction_id: 77,
   offer_id: 202,
 };
@@ -80,6 +83,26 @@ describe('SchoolingStances', () => {
     expect(screen.getByText('1 technique')).toBeInTheDocument();
     expect(screen.getByText('2 techniques')).toBeInTheDocument();
     expect(screen.getByText('3 techniques')).toBeInTheDocument();
+  });
+
+  it("prints each stance's Magic skill floor, or that it grants none (#4457)", () => {
+    renderWithCharacterCreationProviders(
+      <SchoolingStances draft={createMockDraft()} tradition={tradition} />
+    );
+    expect(screen.getByText('No magic skills')).toBeInTheDocument();
+    expect(screen.getByText('Magic skills 20')).toBeInTheDocument();
+    expect(screen.getByText('Magic skills 30')).toBeInTheDocument();
+  });
+
+  it('the floor line routes through copy key offers_magic_skill_floor (#4457)', () => {
+    renderWithCharacterCreationProviders(
+      <SchoolingStances
+        draft={createMockDraft()}
+        tradition={tradition}
+        copy={{ offers_magic_skill_floor: 'Arcane skills at {floor}' }}
+      />
+    );
+    expect(screen.getByText('Arcane skills at 20')).toBeInTheDocument();
   });
 
   it('picking rank 2 syncs Tradition Training at rank 2 with its offer id', async () => {
