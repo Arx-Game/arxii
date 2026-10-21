@@ -27,7 +27,11 @@ tier 0) — see `world.companions.services.companion_capacity`/
 `typeclasses.companions.CompanionObject` extends `Character` (see
 ADR-0088). A new `Character.companions` cached-property handler
 (`world.companions.handlers.CharacterCompanionHandler`) exposes a PC's active
-companions; `Character.at_post_move` moves each active companion's
+companions: `active()` loads the list once per Character instance, `find(value)`
+resolves a pk or case-insensitive name against that list with no query, and
+`bind_companion`/`release_companion` call `invalidate()` after they write (the
+`companion` command's name lookups all read the handler; #3657 tranche 17).
+`Character.at_post_move` moves each active companion's
 `objectdb` to the owner's new location (`quiet=True`) so companions follow
 their owner between rooms. `CompanionObject.at_post_move` itself overrides
 `Character.at_post_move` to skip the narrative-agent side effects (mission

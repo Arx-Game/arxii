@@ -202,20 +202,17 @@ class CmdCompanion(DispatchCommand):
         return char_gift.gift
 
     def _resolve_companion_id(self, value: str) -> int:
-        """Resolve *value* (companion name iexact or pk) to a pk of an active owned companion."""
-        from world.companions.models import Companion  # noqa: PLC0415
+        """Resolve *value* (companion name or pk) to a pk of an active owned companion.
 
+        Reads the caller's cached companion handler, so a lookup costs no query once
+        the list is loaded.
+        """
         value = value.strip()
         if not value:
             msg = f"Specify a companion: companion {self._subverb} <name or id>."
             raise CommandError(msg)
-        sheet = self._sheet()
-        companion = self._resolve_by_name_or_pk(
-            Companion.objects.filter(owner=sheet, released_at__isnull=True),
-            value,
-            pk_field="pk",
-            name_field="name__iexact",
-        )
+        self._sheet()
+        companion = self.caller.companions.find(value)
         if companion is None:
             msg = f"No active companion found for '{value}'."
             raise CommandError(msg)
@@ -310,15 +307,13 @@ class CmdCompanion(DispatchCommand):
         The name is the longest leading run of tokens naming one of the caller's active
         companions, by name or pk (#3657 tranche 17: ``order Old Grey hold`` had looked
         for a companion called "Old"). When none fits, the refusal names what was typed
-        before the first order verb.
+        before the first order verb. Every candidate is matched against the caller's
+        cached companion handler, so the whole split costs no query.
         """
-        from world.companions.models import Companion  # noqa: PLC0415
-
-        owned = Companion.objects.filter(owner=self._sheet(), released_at__isnull=True)
+        self._sheet()
+        handler = self.caller.companions
         for count in range(len(parts), 0, -1):
-            companion = self._resolve_by_name_or_pk(
-                owned, " ".join(parts[:count]), pk_field="pk", name_field="name__iexact"
-            )
+            companion = handler.find(" ".join(parts[:count]))
             if companion is not None:
                 return companion.pk, parts[count:]
         first_verb = next((i for i, token in enumerate(parts) if token.lower() in _ORDER_VERBS), 1)

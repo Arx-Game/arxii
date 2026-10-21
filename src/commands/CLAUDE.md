@@ -1021,8 +1021,9 @@ actions, backends, and service functions.
   `companion release <name or id>`, `companion fight <name or id>`,
   `companion deploy <name or id>`, `companion order <name> <attack | hold | defend> [target]`
   (the name may hold spaces: it is the longest leading run of tokens naming one of the
-  caller's active companions; #3657 tranche 17, when `order Old Grey hold` looked for
-  "Old"), `companion promote <npc> archetype=<name or id> gift=<name or id> name=<text>` (#4091,
+  caller's active companions, each candidate matched against the cached
+  `caller.companions` handler's `find()` so the split costs no query; #3657 tranche 17, when
+  `order Old Grey hold` looked for "Old" and then ran one query per typed token), `companion promote <npc> archetype=<name or id> gift=<name or id> name=<text>` (#4091,
   `PromoteSummonAction`, key `promote_summon`): `name=` is the final token on both `bind` and
   `promote` (it greedily consumes the rest of the line so names with spaces work); `<npc>` may
   be an active summon or a charmed enemy the caster holds sway over, including a WON_OVER
