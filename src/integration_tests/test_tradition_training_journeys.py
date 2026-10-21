@@ -23,6 +23,7 @@ from world.character_creation.factories import (
     DistinctionOfferFactory,
     SchoolingLineFactory,
 )
+from world.character_creation.models import DistinctionOffer
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.distinctions.factories import DistinctionFactory
 from world.magic.factories import TraditionFactory, TraditionGiftGrantFactory
@@ -239,3 +240,24 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         self.assertEqual(response.status_code, 200, response.content)
         errors = response.json()["stage_errors"][str(draft.Stage.ATTRIBUTES)]
         self.assertIn(f"{MAGIC_SKILL_POINTS_REFUSAL}Thaumaturgy, Wards.", errors)
+
+    def test_a_stance_offer_saved_without_its_stance_is_not_offered(self) -> None:
+        # Nothing in the database requires a Tradition Step offer to name a stance, so a
+        # row saved without full_clean must not break the offers read for every draft.
+        stranded = DistinctionOffer.objects.create(
+            distinction=DistinctionFactory(name="Stranded Stance", max_rank=1),
+            chapter=OfferChapter.TRADITION_STEP,
+        )
+        draft = self._create_base_draft()
+        self._select(draft, self.living)
+
+        response = self.client.get(f"{self._draft_url(draft)}offers/?chapter=tradition_step")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        offered = {row["offer_id"] for row in response.json()["offers"]}
+        self.assertEqual(offered, {offer.pk for offer in self.offers.values()})
+        self.assertNotIn(stranded.pk, offered)
+        listing = self.client.get(
+            f"/api/character-creation/traditions/?beginning_id={self.beginnings.pk}"
+        )
+        self.assertEqual(listing.status_code, 200, listing.content)

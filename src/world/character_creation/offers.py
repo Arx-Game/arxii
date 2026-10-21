@@ -332,10 +332,13 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
         return offer.origin_choice_id in ctx["choice_ids"]
     if chapter == OfferChapter.TRADITION_STEP:
         # The state decides how many stances it opens (#4457): a living tradition all
-        # three, an orphaned one ranks 0 and 1, a self-taught one none.
+        # three, an orphaned one ranks 0 and 1, a self-taught one none. A line saved
+        # without its schooling stance (the database does not require one) is never open.
         line = ctx["slate_line"]
         max_rank = schooling_max_rank(line.state) if line is not None else None
-        return max_rank is not None and offer.schooling_line.rank <= max_rank
+        if max_rank is None or offer.schooling_line_id is None:
+            return False
+        return offer.schooling_line.rank <= max_rank
     if chapter == OfferChapter.ACTORS_SHEET:
         # The question is always on the leaf; the prompt only says which block (#3709).
         return bool(offer.prompt)
