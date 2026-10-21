@@ -145,6 +145,10 @@ class AuthoredSecretSerializer(serializers.ModelSerializer):
     provenance_display = serializers.CharField(source="get_provenance_display", read_only=True)
     category_name = serializers.CharField(source="category.name", read_only=True, default=None)
     is_act_anchored = serializers.BooleanField(read_only=True)
+    about_persona_name = serializers.CharField(
+        source="about_persona.name", read_only=True, default=None
+    )
+    story_title = serializers.CharField(source="story.title", read_only=True, default=None)
 
     class Meta:
         model = Secret
@@ -161,6 +165,10 @@ class AuthoredSecretSerializer(serializers.ModelSerializer):
             "provenance",
             "provenance_display",
             "is_act_anchored",
+            "about_persona",
+            "about_persona_name",
+            "story",
+            "story_title",
             "created_date",
             "updated_date",
         ]
@@ -170,7 +178,7 @@ class AuthoredSecretSerializer(serializers.ModelSerializer):
         from world.secrets.services import SecretError, author_secret  # noqa: PLC0415
 
         try:
-            return author_secret(
+            secret = author_secret(
                 subject_sheet=validated_data["subject_sheet"],
                 provenance=SecretProvenance.GM_AUTHORED,
                 level=validated_data.get("level", SecretLevel.UNCOMMON_KNOWLEDGE),
@@ -182,6 +190,12 @@ class AuthoredSecretSerializer(serializers.ModelSerializer):
             )
         except SecretError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
+        links = {k: validated_data[k] for k in ("about_persona", "story") if k in validated_data}
+        if links:
+            for field, value in links.items():
+                setattr(secret, field, value)
+            secret.save(update_fields=[*links, "updated_date"])
+        return secret
 
     def update(self, instance: Secret, validated_data: dict) -> Secret:
         validated_data.pop("subject_sheet", None)  # subject is immutable after mint

@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0274_realmcodexgrant"),
-    ]
+    dependencies = [("arxii", "0275_secret_links_and_many_distinctions_per_secret")]
 
     operations = [
         migrations.AlterField(

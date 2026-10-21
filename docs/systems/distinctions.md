@@ -401,7 +401,9 @@ A sensitive distinction is no longer flagged public/private; it is **relocated i
 - **Kind default** — `Distinction.secret_by_default` + `default_secret_level`. Taking a
   criminal / scandalous kind auto-mints a `Secret` at finalize, so it never lands on the public
   list. (Which kinds are secret is a content/author pass.)
-- **Per-grant state** — `CharacterDistinction.secret` (`OneToOneField(secrets.Secret, SET_NULL)`).
+- **Per-grant state** — `CharacterDistinction.secret` (`ForeignKey(secrets.Secret, SET_NULL)`;
+  a one-to-one until #4528, when one secret came to hold several of the subject's distinctions,
+  ticked from the secret's side on the Secret admin through `set_secret_distinctions`).
   **The FK's presence *is* the secret-state** — `CharacterDistinction.is_secret` reads it; there
   is no separate boolean. A player self-gating an otherwise-public distinction mints a
   player-flavor secret on that grant.
