@@ -3,7 +3,7 @@
  * founder's own house charter: name (live-validated against the picked
  * template's `name_pattern`), the styled-name preview, succession, words/
  * colors/sigil/backstory, the House Quiddity pick (the template's first
- * aspect definition — a founder Charter authors exactly one, unlike a name-
+ * charter question — a founder Charter authors exactly one, unlike a name-
  * path Family Template which can carry several), and the six principle
  * axes windowed to the template's own min/max. Every field writes straight
  * to the founder draft (`set`) — there is no per-field Save here, only the

@@ -109,7 +109,7 @@ function estateLineOf(estateName: string, capitalName: string | undefined): stri
   return estateName;
 }
 
-/** The picked template's first aspect definition's chosen option name(s)
+/** The picked template's first charter question's chosen option name(s)
  * (plate F-II's "quiddity" row, plate F-VI's `.row3` "quiddity" field) —
  * `''` before a template/pick exist. */
 function quiddityNameOf(

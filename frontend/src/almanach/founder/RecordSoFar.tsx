@@ -35,7 +35,7 @@ export interface RecordSoFarProps {
   seatName: string;
   /** Who the seat is sworn to, e.g. "Piropa" — '' when unknown. */
   swornTo: string;
-  /** The picked template's first aspect definition's chosen option name
+  /** The picked template's first charter question's chosen option name
    * (plate F-II's "quiddity" row) — omitted before a template/pick exist. */
   quiddityName?: string;
   /** The picked template's own cultural features (plate F-II's "features"
