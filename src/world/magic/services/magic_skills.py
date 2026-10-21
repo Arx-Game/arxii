@@ -70,6 +70,7 @@ def technique_paths(technique_ids: Iterable[int]) -> dict[int, list[Path]]:
             "pathgiftgrant__path__stage",
             "pathgiftgrant__path__sort_order",
             "pathgiftgrant__path__name",
+            "pathgiftgrant__path__pk",
         )
     )
     paths: dict[int, list[Path]] = {}
@@ -83,7 +84,8 @@ def skill_path(current_path: Path | None, own_paths: Sequence[Path]) -> Path | N
 
     The caster's current Path when it is one of the technique's own Paths
     (``own_paths``, from :func:`technique_paths`); otherwise the technique's first own
-    Path in Path order, so a technique cast after a Crossing, or learned from another
+    Path in Path order (stage, sort order, name, then pk), so a technique cast after a
+    Crossing, or learned from another
     Path's teacher, adds its own Path's skill. A technique on no Path's list keeps the
     caster's current Path.
     """

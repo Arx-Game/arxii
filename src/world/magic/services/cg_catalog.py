@@ -88,13 +88,13 @@ def tradition_listings(gift_ids: Iterable[int] | None = None) -> dict[int, froze
     """Technique pk -> pks of the Traditions whose grant lists it (#4555).
 
     A technique absent from the result is listed by no Tradition grant and is open
-    to every Tradition. One query; ``gift_ids`` narrows it to those gifts'
-    techniques (a grant only ever lists its own gift's techniques).
+    to every Tradition. One query; ``gift_ids`` narrows it to those gifts' grants, so a
+    narrowed and an unnarrowed read agree on every row a grant holds.
     """
     through = TraditionGiftGrant.special_techniques.through
     rows = through.objects.all()
     if gift_ids is not None:
-        rows = rows.filter(technique__gift_id__in=list(gift_ids))
+        rows = rows.filter(traditiongiftgrant__gift_id__in=list(gift_ids))
     listed: dict[int, set[int]] = {}
     for technique_id, tradition_id in rows.values_list(
         "technique_id", "traditiongiftgrant__tradition_id"
