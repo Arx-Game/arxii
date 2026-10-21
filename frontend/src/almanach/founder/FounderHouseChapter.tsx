@@ -7,7 +7,7 @@
  * path Family Template which can carry several), and the six principle
  * axes windowed to the template's own min/max. Every field writes straight
  * to the founder draft (`set`) — there is no per-field Save here, only the
- * savebar's Next (plate: "draft kept as you type").
+ * savebar's Next.
  *
  * Succession renders as a plain name + codex link, without the plate's own
  * `.tip`/`.bub` gloss: `SuccessionLawOption`/`AlmanachSuccessionLaw`
@@ -25,7 +25,6 @@ import { useId } from 'react';
 
 import type { HouseTemplateOption } from '@/character-creation/api';
 
-import { DRAFT_NOTE } from '../copy';
 import { tierNoun } from '../ladder/tree';
 import { ObservanceRows } from '../ObservanceRows';
 import { useCharter } from '../queries';
@@ -222,7 +221,8 @@ export function FounderHouseChapter({
         <label htmlFor="founder-house-sigil">sigil</label>
         <textarea
           id="founder-house-sigil"
-          className="prose"
+          className="prose short"
+          rows={2}
           value={draft.sigil_description}
           onChange={(event) => set('sigil_description', event.target.value)}
         />
@@ -232,6 +232,7 @@ export function FounderHouseChapter({
         <textarea
           id="founder-house-backstory"
           className="prose"
+          rows={6}
           value={draft.backstory}
           onChange={(event) => set('backstory', event.target.value)}
         />
@@ -312,7 +313,6 @@ export function FounderHouseChapter({
         })}
       </div>
       <div className="savebar">
-        <span className="note">{DRAFT_NOTE}</span>
         <button type="button" className="btn" onClick={onNext}>
           Next
         </button>

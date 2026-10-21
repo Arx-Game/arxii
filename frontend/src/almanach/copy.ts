@@ -12,8 +12,6 @@ export const STATES = {
 
 export const REVIEW_NOTE = 'Houses will be reviewed by staff before approval';
 
-export const DRAFT_NOTE = 'draft kept as you type';
-
 export const DISTRICT = 'district';
 
 /** Founder Almanach (#3983 Plan B) — the CG-mounted `.bar` crumb (plates

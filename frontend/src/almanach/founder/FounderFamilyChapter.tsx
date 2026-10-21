@@ -23,7 +23,6 @@ import { useMemo } from 'react';
 
 import type { CreateKinFields } from '../document/AddKinDialog';
 import { FamilyChapter } from '../document/FamilyChapter';
-import { DRAFT_NOTE } from '../copy';
 import { useAllHouses } from '../queries';
 import type { HouseTemplateOption } from '@/character-creation/api';
 
@@ -185,7 +184,6 @@ export function FounderFamilyChapter({
       statusOverrides={statusOverrides}
       footer={
         <div className="savebar">
-          <span className="note">{DRAFT_NOTE}</span>
           <button type="button" className="btn" onClick={onNext}>
             Next
           </button>

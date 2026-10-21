@@ -223,3 +223,17 @@ test('swearing a house prefills the tithe percent from the realm default', async
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getByLabelText('tithe percent')).toHaveValue(10);
 });
+
+test('sigil is two rows without a handle, description is six, and the savebar carries only Save (#4549)', () => {
+  vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  const sigil = screen.getByLabelText('sigil');
+  expect(sigil).toHaveAttribute('rows', '2');
+  expect(sigil).toHaveClass('prose', 'short');
+  const description = screen.getByLabelText('description');
+  expect(description).toHaveAttribute('rows', '6');
+  expect(description).not.toHaveClass('short');
+  expect(screen.queryByText('draft kept as you type')).not.toBeInTheDocument();
+  const save = screen.getByRole('button', { name: 'Save' });
+  expect(save.parentElement?.children).toHaveLength(1);
+});

@@ -41,7 +41,7 @@ import { Link } from 'react-router-dom';
 
 import { useDraft } from '@/world-builder/document/useDraft';
 
-import { HOUSE_STATES, DRAFT_NOTE, GENTRY_LUXEN_ONLY } from '../copy';
+import { HOUSE_STATES, GENTRY_LUXEN_ONLY } from '../copy';
 import { ObservanceRows, type ObservanceRow } from '../ObservanceRows';
 import type { AlmanachHouseDocumentHouse } from '../types';
 
@@ -213,7 +213,8 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         <label htmlFor={`house-sigil-${house.id}`}>sigil</label>
         <textarea
           id={`house-sigil-${house.id}`}
-          className="prose"
+          className="prose short"
+          rows={2}
           value={sigil.value}
           onChange={(event) => sigil.setValue(event.target.value)}
         />
@@ -223,6 +224,7 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         <textarea
           id={`house-description-${house.id}`}
           className="prose"
+          rows={6}
           value={description.value}
           onChange={(event) => description.setValue(event.target.value)}
         />
@@ -291,7 +293,6 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         </ul>
       </div>
       <div className="savebar">
-        <span className="note">{DRAFT_NOTE}</span>
         <button type="button" className="btn" onClick={save}>
           Save
         </button>
