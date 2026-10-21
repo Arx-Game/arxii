@@ -21,6 +21,7 @@ scored and never appear in the rail.
   <aside class="keepsake-rail module" aria-label="Computed">
     <h2>Computed (read-only)</h2>
     {% if keepsake_rail %}
+      {% if keepsake_rail.arithmetic %}<p>Subject points: {{ keepsake_rail.arithmetic }}</p>{% endif %}
       {% for line in keepsake_rail.lines %}
       <p>{{ line.label }}: {{ line.detail }}: {{ line.points }}</p>
       {% empty %}

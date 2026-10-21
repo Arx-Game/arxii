@@ -126,6 +126,7 @@ class KeepsakeAdminTests(TestCase):
         assert "Computed (read-only)" in body
         assert "Keepsake: stands for the deed" in body
         assert ": 3</p>" in body  # the deed's legend 20 over ten, plus one
+        assert "Subject points: deed legend 20 / 10 = 2, plus 1 = 3 (3 is the cap)" in body
         assert "Counts from:" in body
         assert "keepsake-rail" in body
         assert "admin/css/forms.css" in body

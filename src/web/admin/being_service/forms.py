@@ -114,19 +114,23 @@ class RequestedItemForm(forms.ModelForm):
     quantity, the points each gives and a hint line. ``target`` picks the pledge or rite
     the row belongs to. A template above the value limit is refused (requests are cheap)."""
 
-    target = forms.ChoiceField(label="For")
+    target = forms.ChoiceField(label="For", widget=forms.Select(attrs={"style": "max-width: 14em"}))
 
     class Meta:
         model = RequestedItem
         fields = ["item_template", "facet", "quantity", "points", "hint"]
         widgets = {
-            "quantity": forms.NumberInput(attrs={"min": 1, "style": "width: 5em"}),
-            "points": forms.NumberInput(attrs={"min": 1, "style": "width: 5em"}),
-            "hint": forms.TextInput(attrs={"size": 40}),
+            "quantity": forms.NumberInput(attrs={"min": 1, "style": "width: 4em"}),
+            "points": forms.NumberInput(attrs={"min": 1, "style": "width: 4em"}),
+            "hint": forms.TextInput(attrs={"style": "width: 8em"}),
+            "item_template": forms.Select(attrs={"style": "max-width: 17em"}),
+            "facet": forms.Select(attrs={"style": "max-width: 7em"}),
         }
 
     def __init__(self, *args, target_choices_for: list[tuple[str, str]], **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        # The value beside each name is the cheap-items cue: above the limit is refused.
+        self.fields["item_template"].label_from_instance = lambda t: f"{t.name} (value {t.value})"
         self.fields["target"].choices = target_choices_for
         instance = self.instance
         if instance.pk is not None:

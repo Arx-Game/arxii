@@ -18,6 +18,7 @@ from world.items.services.meaning import item_meaning
 
 if TYPE_CHECKING:
     from world.items.models import ItemInstance, Keepsake
+    from world.worship.models import DevotionConfig
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ class KeepsakeRail:
     counts_from: datetime
     wait_days: int
     counts_now: bool
+    arithmetic: str = ""
 
 
 def keepsake_rail(keepsake: Keepsake) -> KeepsakeRail:
@@ -90,6 +92,7 @@ def keepsake_rail(keepsake: Keepsake) -> KeepsakeRail:
     )
     labels = {str(value): str(label) for value, label in MeaningSignalKind.choices}
     counts_from = keepsake.created_at + timedelta(days=config.keepsake_wait_days)
+    subject_points = next((s.points for s in signals if s.kind == MeaningSignalKind.KEEPSAKE), 0)
     return KeepsakeRail(
         lines=tuple(
             RailLine(labels.get(signal.kind, signal.kind), signal.detail, signal.points)
@@ -98,4 +101,29 @@ def keepsake_rail(keepsake: Keepsake) -> KeepsakeRail:
         counts_from=counts_from,
         wait_days=config.keepsake_wait_days,
         counts_now=timezone.now() >= counts_from,
+        arithmetic=_subject_arithmetic(keepsake, config, subject_points, trophy_deed_ids),
     )
+
+
+def _subject_arithmetic(
+    keepsake: Keepsake, config: DevotionConfig, points: int, trophy_deed_ids: set[int]
+) -> str:
+    """The subject's points shown as the sum that made them, for the Keepsake rail."""
+    from world.items.constants import KeepsakeSubject  # noqa: PLC0415
+    from world.items.services.meaning import KEEPSAKE_BASE_POINTS  # noqa: PLC0415
+
+    cap = f" ({config.keepsake_max_points} is the cap)"
+    if keepsake.subject_kind == KeepsakeSubject.TIE and keepsake.subject_relationship is not None:
+        tier = keepsake.subject_relationship.tier
+        text = f"tie claimed tier {tier}, plus {KEEPSAKE_BASE_POINTS} = {points}"
+    elif keepsake.subject_kind == KeepsakeSubject.DEED and keepsake.subject_deed is not None:
+        deed = keepsake.subject_deed
+        if deed.pk in trophy_deed_ids:
+            return f"the item is also a trophy of this deed: a flat {points}"
+        legend = deed.get_total_value()
+        step = max(config.keepsake_deed_legend_per_point, 1)
+        scale = legend // step
+        text = f"deed legend {legend} / {step} = {scale}, plus {KEEPSAKE_BASE_POINTS} = {points}"
+    else:
+        return f"a flat {points}"
+    return text + (cap if points >= config.keepsake_max_points else "")
