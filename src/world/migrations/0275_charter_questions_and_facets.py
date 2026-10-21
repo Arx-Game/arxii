@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0273_skill_courses_and_schooling_floor")]
+    dependencies = [("arxii", "0274_realmcodexgrant")]
 
     operations = [
         migrations.RenameModel(old_name="HouseAspectDefinition", new_name="HouseCharterQuestion"),

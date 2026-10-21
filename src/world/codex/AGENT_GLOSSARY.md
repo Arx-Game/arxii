@@ -35,6 +35,14 @@ sections for the full mechanism — including the player-tenure/staff gate and t
 exclusion, which mean character-creation grants and common-knowledge entries never fire it (#2899).
 _Avoid_: reinventing a codex-local discovery/achievement mechanism.
 
+**Realm codex grant**:
+A `RealmCodexGrant` row (#4531): a `CodexEntry` every character who began in one `Realm`
+knows, "public within the realm". Granted at finalize from the starting area's realm and to
+current holders through `Profile.origin_realm`; never a perspective holder. The path to use
+for realm-wide lore (a succession law, a realm's own history) instead of one Beginnings grant
+per beginning of the realm, which misses every beginning added later.
+_Avoid_: "not public" as a visibility state; a `BeginningsCodexGrant` per beginning.
+
 **Organization codex grant**:
 An `OrganizationCodexGrant` row (#3780): a `CodexEntry` every active member of one
 `Organization` knows. The Deity Editor's "Obscure" visibility tier is exactly this (a being's

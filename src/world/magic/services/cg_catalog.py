@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch, Q, QuerySet
 
 from world.magic.models.grants import PathGiftGrant, TraditionGiftGrant
 from world.magic.models.techniques import Technique
@@ -44,6 +44,36 @@ def _gated_technique_ids() -> set[int]:
             )
         )
     return gated
+
+
+def cg_technique_queryset(
+    *, include_unready: bool = False, exclude_gated: bool = False
+) -> QuerySet[Technique]:
+    """The techniques character creation may put in a gift's pool, as one rule (#4545).
+
+    Never an ultimate; with an action template unless ``include_unready``; and
+    with no active requirement row when ``exclude_gated``. ``get_technique_options``
+    and ``get_gift_options`` filter their pools through this queryset, and so does
+    the Required content dashboard (``web/admin/tuning/required_content.py``), so
+    the dashboard cannot count a technique the player is never shown. Add a CG
+    readiness condition here, never beside a caller.
+    """
+    technique_qs = Technique.objects.select_related("effect_type").filter(is_ultimate=False)
+    if exclude_gated:
+        technique_qs = technique_qs.exclude(pk__in=_gated_technique_ids())
+    if not include_unready:
+        technique_qs = technique_qs.filter(action_template__isnull=False)
+    return technique_qs
+
+
+def cg_takeable_techniques() -> QuerySet[Technique]:
+    """Techniques a new character can take at character creation (#4545).
+
+    The rule the technique picker applies (``get_technique_options(...,
+    exclude_gated=True)``): ready, not an ultimate, not gated by a requirement.
+    A gift's pool that holds none of these offers the player nothing to pick.
+    """
+    return cg_technique_queryset(exclude_gated=True)
 
 
 def get_technique_options(
@@ -82,11 +112,9 @@ def get_technique_options(
     ``charge_and_learn``'s own per-character ``check_requirements_for_technique``
     call is the correct gate for them, not a blanket catalog-level exclusion.
     """
-    technique_qs = Technique.objects.select_related("effect_type").filter(is_ultimate=False)
-    if exclude_gated:
-        technique_qs = technique_qs.exclude(pk__in=_gated_technique_ids())
-    if not include_unready:
-        technique_qs = technique_qs.filter(action_template__isnull=False)
+    technique_qs = cg_technique_queryset(
+        include_unready=include_unready, exclude_gated=exclude_gated
+    )
 
     path_grant = (
         PathGiftGrant.objects.filter(path=path, gift=gift)
@@ -134,10 +162,8 @@ def get_species_technique_options(
         species_id__in=[ancestor.id for ancestor in ancestor_species], inheritable=True
     )
     gift_ids = SpeciesGiftGrant.objects.filter(grant_filter).values_list("gift_id", flat=True)
-    technique_qs = Technique.objects.filter(gift_id__in=gift_ids, is_ultimate=False)
-    if not include_unready:
-        technique_qs = technique_qs.filter(action_template__isnull=False)
-    return list(technique_qs.select_related("effect_type").order_by("name", "id"))
+    technique_qs = cg_technique_queryset(include_unready=include_unready)
+    return list(technique_qs.filter(gift_id__in=gift_ids).order_by("name", "id"))
 
 
 def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:
@@ -145,12 +171,12 @@ def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:
 
     A gift with an authored ``TraditionGiftGrant`` row but zero combined
     (pool U tradition) techniques for this path has nothing to pick and is
-    excluded. Resolves both grant tables in two queries total — no per-gift
-    query loop.
+    excluded. "Available" is ``cg_takeable_techniques``, the same rule the
+    technique picker applies, so a gift whose pool holds only unready, ultimate
+    or gated techniques is not offered with an empty picker behind it (#4545).
+    Resolves both grant tables in two queries total, no per-gift query loop.
     """
-    technique_qs = Technique.objects.select_related("effect_type").filter(
-        action_template__isnull=False
-    )
+    technique_qs = cg_takeable_techniques()
 
     tradition_grants = list(
         TraditionGiftGrant.objects.filter(tradition=tradition)
