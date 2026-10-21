@@ -6,7 +6,7 @@
  * Every field writes straight to the founder draft (`set`), same as
  * `FounderHouseChapter` — no per-field Save, only the savebar's Next.
  */
-import { DISTRICT, DRAFT_NOTE } from '../copy';
+import { DISTRICT } from '../copy';
 import { useCharter } from '../queries';
 
 import type { FounderDraft, UseFounderDraftResult } from './founderDraft';
@@ -59,7 +59,6 @@ export function FounderEstateLeaf({ draft, set, realmId, onNext }: FounderEstate
         />
       </div>
       <div className="savebar">
-        <span className="note">{DRAFT_NOTE}</span>
         <button type="button" className="btn" onClick={onNext}>
           Next
         </button>

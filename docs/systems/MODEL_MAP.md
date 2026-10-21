@@ -1317,6 +1317,7 @@
 ### OfferingSignal
 **Foreign Keys:**
   - offering -> ceremonies.CeremonyOffering [FK]
+  - requested_item -> worship.RequestedItem [FK] (nullable)
 
 ### SeanceManifestationOffer
 **Foreign Keys:**
@@ -1342,14 +1343,14 @@
 - `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held,`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `pending_wedding_consent_offers_for_account(account: object) -> 'QuerySet[WeddingConsentOffer]' - PENDING wedding consent offers addressed to any character this account holds (#2358).`
-- `read_item(instance: 'ItemInstance', sheet: 'CharacterSheet', *, facet: 'Facet | None', being: 'WorshippedBeing | None' = None) -> world.ceremonies.services.ItemReading - The item's meaning points for ``sheet``, with the favored-facet multiplier.`
+- `read_item(instance: 'ItemInstance', sheet: 'CharacterSheet', *, facet: 'Facet | None', being: 'WorshippedBeing | None' = None, request: 'RequestedItem | None' = None) -> world.ceremonies.services.ItemReading - The item's meaning points for ``sheet``, with the favored-facet multiplier.`
 - `record_offering(*, ceremony: world.ceremonies.models.Ceremony, item_instances: 'list[ItemInstance]') -> list[world.ceremonies.models.CeremonyOffering] - Sacrifice items: destroy them, feed the being's pool, log offerings.`
 - `record_speech(*, ceremony: world.ceremonies.models.Ceremony, speaker_persona: 'Persona', target_honoree: world.ceremonies.models.CeremonyHonoree | None = None) -> world.ceremonies.models.CeremonySpeech - Recognize a speaker; their Performance/Oratory roll shapes the tally.`
 - `respond_to_conversion_offer(offer: 'WorshipConversionOffer', *, account: object, accept: bool, sincere: bool = True) -> 'WorshipConversionOffer' - Accept or decline a pending public-conversion offer (#2361, Ratified amendment #1a).`
 - `respond_to_seance_offer(offer: 'SeanceManifestationOffer', *, account: object, accept: bool) -> 'SeanceManifestationOffer' - Accept or decline a pending seance manifestation offer (#2393).`
 - `respond_to_wedding_consent_offer(offer: 'WeddingConsentOffer', *, account: object, accept: bool) -> 'WeddingConsentOffer' - Accept or decline a pending wedding consent offer (#2358).`
 - `revoke_seance_manifestations(ceremony: world.ceremonies.models.Ceremony) -> None - Force-unpuppet any manifested RETIRED honoree when a Seance closes (#2393).`
-- `sacrifice_items(sheet: 'CharacterSheet', item_instances: 'list[ItemInstance]', *, being: 'WorshippedBeing | None' = None) -> 'SacrificeOutcome' - Give items up to a being at its shrine or temple, outside a ceremony (#4500).`
+- `sacrifice_items(sheet: 'CharacterSheet', item_instances: 'list[ItemInstance]', *, being: 'WorshippedBeing | None' = None, player_line: str = '') -> 'SacrificeOutcome' - Give items up to a being at its shrine or temple, outside a ceremony (#4500).`
 - `write_offering_signals(offering: world.ceremonies.models.CeremonyOffering, reading: world.ceremonies.services.ItemReading) -> None - Snapshot the item's meaning signals onto its offering record (#4500).`
 
 
@@ -1783,6 +1784,7 @@
   - equipped_items <- items.EquippedItem
   - items_given_away <- items.OwnershipEvent
   - items_received <- items.OwnershipEvent
+  - keepsakes <- items.Keepsake
   - recycle_requests <- items.RecycleRequest
   - outfits <- items.Outfit
   - fashion_presentations <- items.FashionPresentation
@@ -1794,6 +1796,7 @@
   - detected_traps <- room_features.Trap
   - prepared_ground <- room_features.PreparedGround
   - recipe_knowledge <- items.CharacterRecipeKnowledge
+  - skill_course_enrollments <- npc_services.SkillCourseEnrollment
   - expulsion_bars <- npc_services.ExpulsionBar
   - material_buckets <- items.MaterialBucket
   - material_grants_received <- items.OrgMaterialLedgerEntry
@@ -4772,6 +4775,7 @@
   - ownership_events <- items.OwnershipEvent
   - lineage <- items.ItemLineage
   - worked_into <- items.ItemLineage
+  - keepsakes <- items.Keepsake
   - recycle_requests <- items.RecycleRequest
   - item_facets <- items.ItemFacet
   - item_styles <- items.ItemStyle
@@ -4858,6 +4862,7 @@
   - stock_listings <- items.StockListing
   - distinction_grants <- items.DistinctionItemGrant
   - secrets_about <- secrets.Secret
+  - worship_requests <- worship.RequestedItem
 
 ### ItemTemplateAppearanceEffect
 **Foreign Keys:**
@@ -4869,6 +4874,16 @@
 **Foreign Keys:**
   - item_template -> items.ItemTemplate [FK]
   - property -> mechanics.Property [FK]
+
+### Keepsake
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - subject_relationship -> relationships.CharacterRelationship [FK] (nullable)
+  - subject_deed -> societies.LegendEntry [FK] (nullable)
+  - subject_being -> worship.WorshippedBeing [FK] (nullable)
+  - subject_organization -> societies.Organization [FK] (nullable)
+  - subject_persona -> scenes.Persona [FK] (nullable)
 
 ### LabStationDetails
 **Foreign Keys:**
@@ -5666,6 +5681,7 @@
   - vogue_momentum <- items.FacetVogueMomentum
   - fashion_styles <- items.FashionStyle
   - favored_by_beings <- worship.BeingFacet
+  - worship_requests <- worship.RequestedItem
   - answer_sacrifice_lines <- worship.AnswerSacrificeLine
 
 ### FacetAlias
@@ -6993,6 +7009,7 @@
   - resonance -> magic.Resonance [FK] (nullable)
   - item_template -> items.ItemTemplate [FK] (nullable)
   - followon_offer -> npc_services.NPCServiceOffer [FK] (nullable)
+  - granted_item -> items.ItemInstance [FK] (nullable)
   - project_contribution -> projects.Contribution [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
@@ -7383,6 +7400,7 @@
   - permit_offer_details <- npc_services.PermitOfferDetails
   - loan_offer_details <- npc_services.LoanOfferDetails
   - train_offer_details <- npc_services.TrainOfferDetails
+  - skill_course_offer_details <- npc_services.SkillCourseOfferDetails
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
   - summonses <- npc_services.OfferSummons
   - styling_offer_details <- npc_services.StylingOfferDetails
@@ -7462,6 +7480,20 @@
 
 ### RegardEventConfig
 
+### SkillCourseEnrollment
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - course -> npc_services.SkillCourseOfferDetails [FK]
+  - last_session_week -> game_clock.GameWeek [FK] (nullable)
+
+### SkillCourseOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - skill -> skills.Skill [FK]
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - enrollments <- npc_services.SkillCourseEnrollment
+
 ### StaffingProfile
 **Foreign Keys:**
   - building_kind -> buildings.BuildingKind [OneToOne]
@@ -7491,6 +7523,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' - Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' - Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' - Evaluate a predicate rule tree against an acting-character context.`
+- `format_offer_price(price: 'OfferPrice') -> 'str' - The trainer-menu line for ``price``, the same words on the web and in telnet (#4457).`
 - `incur_npc_debt(standing: 'NPCStanding', amount: 'int', *, current_affection: 'int', current_missions_completed: 'int') -> 'NPCStanding' - Add ``amount`` to ``standing.debt`` and re-stamp the repayment baseline.`
 - `mission_pool_count(*, role: 'NPCRole', persona: 'Persona', npc_persona: 'Persona | None') -> 'int' - POOL offer count to surface for ``persona`` at this NPC (#726, #1020).`
 - `outstanding_debt(standing: 'NPCStanding', *, current_affection: 'int', current_missions_completed: 'int', affection_divisor: 'int', mission_divisor: 'int') -> 'int' - Derive-on-read: net ``standing.debt`` against progress since the baseline.`
@@ -8075,6 +8108,7 @@
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
   - anchored_threads <- magic.Thread
+  - keepsakes <- items.Keepsake
   - labels <- relationships.RelationshipLabel
   - allocation <- relationships.RelationshipAllocation
   - depth_transactions <- relationships.RelationshipDepthTransaction
@@ -8746,6 +8780,7 @@
   - appearance_changes_made <- forms.AppearanceChangeLog
   - gm_table_memberships <- gm.GMTableMembership
   - dedicated_items <- items.ItemInstance
+  - keepsakes_of <- items.Keepsake
   - founded_styles <- items.Style
   - trendsetter_crownings <- items.Trendsetter
   - founded_vaults <- room_features.VaultDetails
@@ -9252,6 +9287,7 @@
   - technique_skill_gifts <- magic.Gift
   - override_techniques <- magic.Technique
   - magic_activity_rows <- magic.MagicActivitySkill
+  - course_offers <- npc_services.SkillCourseOfferDetails
   - specializations <- skills.Specialization
   - character_values <- skills.CharacterSkillValue
   - path_suggestions <- skills.PathSkillSuggestion
@@ -9285,6 +9321,7 @@
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' - Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
 - `is_skill_at_xp_boundary(value: 'int') -> 'bool' - Public wrapper for :func:`_is_at_xp_boundary` (#2115).`
+- `points_to_next_boundary(skill_value: 'CharacterSkillValue') -> 'int | None' - Development the skill can take before it parks at its next XP boundary.`
 - `process_weekly_training() -> 'dict[int, set[int]]' - Process all training allocations for the weekly tick.`
 - `purchase_skill_breakthrough(character: 'ObjectDB', skill: 'Skill') -> 'tuple[bool, str]' - Spend XP to break through a skill's XP-boundary plateau (#2115).`
 - `reconcile_skill_stores(sheet: 'CharacterSheet', skill: 'Skill') -> 'int' - Bring a skill's two stores up to the higher of the two, and return that rating.`
@@ -9295,6 +9332,7 @@
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
 - `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
 - `total_allocated_training_ap(character_id: 'int', exclude_pk: 'int | None' = None) -> 'int' - Get total AP currently allocated across all training for a character.`
+- `train_skill(sheet: 'CharacterSheet', skill: 'Skill', dev_points: 'int', *, description: 'str', stop_at_boundary: 'bool' = False) -> 'SkillTrainingResult' - Develop a skill from training and record the audit transaction.`
 - `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object>) -> 'TrainingAllocation' - Update an existing training allocation.`
 
 
@@ -9617,6 +9655,7 @@
   - covenant_credits <- societies.CovenantLegendCredit
   - audere_majora_crossing <- magic.AudereMajoraCrossing
   - linked_items <- items.ItemInstance
+  - keepsakes <- items.Keepsake
   - crime_tags <- justice.DeedCrimeTag
   - heat_sources <- justice.HeatSource
   - frame_claims <- justice.AccusationCrimeClaim
@@ -9812,6 +9851,7 @@
   - bequests_received <- estates.Bequest
   - estate_claims <- estates.EstateClaim
   - event_invitations <- events.EventInvitation
+  - keepsakes <- items.Keepsake
   - vault_access_entries <- room_features.VaultAccessEntry
   - npc_roles <- npc_services.NPCRole
   - loan_offers <- npc_services.LoanOfferDetails
@@ -11231,6 +11271,7 @@
   - being -> worship.WorshippedBeing [FK]
   - closing_rite -> worship.WorshipRite [FK]
 **Pointed to by:**
+  - requested_items <- worship.RequestedItem
   - taken <- worship.PledgeDetails
   - answers <- worship.Answer
 
@@ -11269,6 +11310,15 @@
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
   - item_instance -> items.ItemInstance [OneToOne]
+
+### RequestedItem
+**Foreign Keys:**
+  - pledge -> worship.Pledge [FK] (nullable)
+  - rite -> worship.WorshipRite [FK] (nullable)
+  - item_template -> items.ItemTemplate [FK] (nullable)
+  - facet -> magic.Facet [FK] (nullable)
+**Pointed to by:**
+  - filled_by <- ceremonies.OfferingSignal
 
 ### RiteKind
 **Pointed to by:**
@@ -11323,6 +11373,7 @@
   - ceremonies <- ceremonies.Ceremony
   - performances <- worship.WorshipRitePerformance
   - closing_for_pledges <- worship.Pledge
+  - requested_items <- worship.RequestedItem
 
 ### WorshipRitePerformance
 **Foreign Keys:**
@@ -11363,6 +11414,7 @@
   - house_aspect_options <- societies.HouseAspectOption
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - manifest_options <- magic.TechniqueManifestOption
+  - keepsakes <- items.Keepsake
   - feast_days <- worship.WorshipFeastDay
   - card_links <- worship.BeingTarotCard
   - being_facets <- worship.BeingFacet

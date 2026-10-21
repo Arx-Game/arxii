@@ -937,9 +937,49 @@ caster's personal Anima Check.
   activities, Paths and Minor Gifts).
 
 **Follow-ups, filed separately:** #4456 (fixed-value magic becomes checks that scale a cost or
-benefit by result tier), #4457 (Traditions train the magical skills; Orphans lack them), #4458
-(resonance-flavoured options on threads in magical skills). **Open tuning question:** trained
-casters' results shift upward against today's difficulty bands; check after play.
+benefit by result tier), #4457 (Traditions train the magical skills; Orphans lack them, built as
+slice 3 below), #4458 (resonance-flavoured options on threads in magical skills). **Open tuning
+question:** trained casters' results shift upward against today's difficulty bands; check after
+play.
+
+## Magical skills, slice 3: Traditions train them (#4457, ADR-4457-A, BUILT 2026-10-21)
+
+Before this a Tradition gave no skill content and any player could spend CG points on Magic skills,
+so a schooled character and a self-taught one started alike. Now the schooling stance a player pays
+for under Tradition Training sets the level every Magic skill starts at, CG points never buy a Magic
+skill, and a character who starts behind catches up in play, fastest through an Academy course.
+
+**Built:**
+- `SchoolingLine.magic_skill_floor` (rank 0 pinned at 0 by a check constraint). The set trained is
+  every skill in the MAGIC trait category (`magic_category_skills()`), the same for every Tradition.
+  Finalize writes the floor to each, one `CharacterTraitChange` apiece (source character creation).
+- Which Tradition states open which stances (`SCHOOLING_MAX_RANK_BY_STATE`): a living Tradition
+  ranks 0 to 2, an orphaned one (teachers gone) ranks 0 and 1, a self-taught one none. The Tradition
+  list and `TraditionSerializer.get_schooling` cut to those ranks; a pick the state no longer opens
+  is dropped by reconcile. A stance offer saved without its stance is never offered.
+- CG refuses points in a Magic skill and in a specialization of one; the skills step shows Magic
+  skills as a read-only "From your Tradition training" group (or a muted untrained line), drops Path
+  suggestions naming one, and ignores Magic ids on an older draft.
+- Tradition slate page: a "Magic skill floor" input per stance (refused above the creation skill cap)
+  with a read-only line naming the Magic skills it trains. Three Required content TUNING rows:
+  stances with no floor, Magic skills with no Academy course, Path suggestions naming a Magic skill.
+- Academy skill courses: `OfferKind.SKILL_COURSE`, `SkillCourseOfferDetails`, `SkillCourseEnrollment`
+  and `run_skill_course_offer` (enroll once for coin and a Golden Hare, then rolled AP sessions, one
+  per course per game week, scaled by `TrainingOutcomeAward`; development past an XP boundary waits in
+  the course; every refusal charges nothing; no Unbound surcharge). `train_skill` and
+  `points_to_next_boundary` in `world.skills.services`, shared with weekly training.
+- Trainer menu price line on the web and in telnet `hire` (`OfferPrice`, `format_offer_price`,
+  `InteractionOfferSerializer.price`) for skill courses and TRAIN. `AcademyOfferApCostError` replaced
+  `TrainOfferMisconfiguredError`; `_academy_for` is shared by TRAIN, the course and settle-obligation.
+- Journeys: `integration_tests/test_tradition_training_journeys.py` and
+  `integration_tests/test_academy_skill_course_journeys.py`.
+
+**Deferred (not a gap in this build):** a per-Tradition skill list (needs a design call: does a
+Tradition train different skills, and does that replace or add to the uniform floor); a floor
+weighted toward the Path's technique skill (rejected here, it would make one Tradition train
+differently by Path rather than by stance); separating training level from Academy sponsorship and
+retiring the "Unbound" name (#4536). Authoring the floors, the courses and their check types is staff
+work on the Required content rows above; there is no placeholder data.
 
 ---
 

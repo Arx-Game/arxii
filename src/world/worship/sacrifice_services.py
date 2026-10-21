@@ -176,6 +176,26 @@ def sacrifice_odds_bands() -> list[SacrificeOddsBand]:
         points += 1
 
 
+def lift_botch(outcome: CheckOutcome | None) -> CheckOutcome | None:
+    """A Critical Failure lands as the lowest outcome above the botch boundary (Failure).
+
+    A roll a requested item eased cannot botch (#4530, #4462 section 6.4). Any other
+    outcome comes back as it was. This is applied where the roll is made rather than through
+    ``_apply_outcome_guarantees``, which fires from a covenant vow's situation and has no
+    seam for an item; the rule is the same floor (the least-bad non-botch outcome).
+    """
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    if not is_botch(outcome):
+        return outcome
+    lifted = (
+        CheckOutcome.objects.filter(success_level__gt=BOTCH_SUCCESS_LEVEL_MAX)
+        .order_by("success_level", "pk")
+        .first()
+    )
+    return lifted if lifted is not None else outcome
+
+
 def sacrifice_award(outcome: CheckOutcome | None) -> int:
     """The SACRIFICE base favor for ``outcome``; no row (or no outcome) pays nothing."""
     from world.worship.models import FavorOutcomeAward  # noqa: PLC0415

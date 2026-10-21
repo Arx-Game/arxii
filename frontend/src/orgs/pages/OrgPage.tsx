@@ -226,7 +226,7 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
             <p>
               <span className="text-muted-foreground">Patron:</span> {house.patron.nickname}{' '}
               {house.patron.codex_entry_id != null ? (
-                <Link to={`/codex/${house.patron.codex_entry_id}`} className="underline">
+                <Link to={urls.codexEntry(house.patron.codex_entry_id)} className="underline">
                   ({house.patron.being_name})
                 </Link>
               ) : (
@@ -245,7 +245,7 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
                 const key = `${aspect.definition}-${aspect.option}`;
                 // A pick that IS a god, a totem or a lore entry opens it (#4205).
                 return aspect.target_entry_id != null ? (
-                  <Link key={key} to={`/codex/${aspect.target_entry_id}`}>
+                  <Link key={key} to={urls.codexEntry(aspect.target_entry_id)}>
                     {badge}
                   </Link>
                 ) : (

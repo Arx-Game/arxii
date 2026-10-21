@@ -37,6 +37,7 @@ from world.items.models import (
     ItemTemplate,
     ItemTemplateAppearanceEffect,
     ItemTemplateProperty,
+    Keepsake,
     MakeoverConsentRequest,
     Mantle,
     MantleLevelDefinition,
@@ -372,6 +373,86 @@ class ItemLineageInline(admin.TabularInline):
 
     has_add_permission = _read_only
     has_change_permission = _read_only
+
+
+@admin.register(Keepsake)
+class KeepsakeAdmin(admin.ModelAdmin):
+    """An item a player declared stands for something (#4530, #4462).
+
+    Staff see it on its own change form with its computed points read-only in the rail. The
+    player's words are shown here and nowhere scored. The subject fields are exactly one of
+    six: the kind picks which one must be set.
+    """
+
+    change_form_template = "admin/items/keepsake/change_form.html"
+    list_display = (
+        "item_instance",
+        "character_sheet",
+        "subject_kind",
+        "subject_name",
+        "shown_on_examine",
+    )
+    list_filter = ("subject_kind", "shown_on_examine")
+    search_fields = ("item_instance__custom_name", "item_instance__template__name")
+    raw_id_fields = (
+        "item_instance",
+        "character_sheet",
+        "subject_relationship",
+        "subject_deed",
+        "subject_being",
+        "subject_organization",
+        "subject_persona",
+    )
+    list_select_related = ("item_instance", "item_instance__template", "character_sheet")
+    fieldsets = (
+        (
+            "Keepsake",
+            {
+                "fields": (
+                    "item_instance",
+                    "character_sheet",
+                    "text",
+                    "shown_on_examine",
+                )
+            },
+        ),
+        (
+            "Subject",
+            {
+                "description": "Exactly the field matching the subject kind must be set.",
+                "fields": (
+                    "subject_kind",
+                    "subject_relationship",
+                    "subject_deed",
+                    "subject_being",
+                    "subject_organization",
+                    "subject_persona",
+                    "subject_label",
+                ),
+            },
+        ),
+    )
+
+    @admin.display(description="Stands for")
+    def subject_name(self, obj: Keepsake) -> str:
+        return obj.subject_name
+
+    def render_change_form(  # noqa: PLR0913 - Django's own signature
+        self,
+        request: HttpRequest,
+        context: dict,
+        add: bool = False,
+        change: bool = False,
+        form_url: str = "",
+        obj: Keepsake | None = None,
+    ) -> HttpResponse:
+        """Add the rail: the points its subject is worth, computed, never the words'."""
+        from world.items.services.meaning_display import keepsake_rail  # noqa: PLC0415
+
+        context["keepsake_rail"] = keepsake_rail(obj) if obj is not None and obj.pk else None
+        return super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
 
 
 @admin.register(ItemInstance)

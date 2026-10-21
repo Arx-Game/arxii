@@ -24,6 +24,23 @@
   `extra_traits`; cast thread pulls now include the cast's stat and skills. The Anima Check
   pick excludes MAGIC-category skills, and three Required content probes list unmapped
   activities, Paths and Minor Gifts. Details: [magic.md](magic.md) "Magical skills".
+- **Tradition training and Academy skill courses (#4457, ADR-4457-A):** a Tradition's schooling
+  stance sets the level every Magic skill starts at. `SchoolingLine.magic_skill_floor` (0 on rank 0,
+  check constraint) is read by `offers.schooling_magic_skill_floor(draft)`, exposed as
+  `CharacterDraft.starting_magic_skill_floor` and `schooling[].magic_skill_floor` on the Tradition
+  list, and written to every `magic_category_skills()` skill at finalize. `SCHOOLING_MAX_RANK_BY_STATE`
+  (`character_creation/constants.py`) sets which states open which stances: LIVING_MASTERS up to
+  rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. CG skill points never buy a Magic skill or
+  one of its specializations. A character catches up by use, weekly training, or an Academy
+  `SKILL_COURSE` offer: `SkillCourseOfferDetails` and `SkillCourseEnrollment` in `npc_services`,
+  the handler `run_skill_course_offer` (enroll once for coin and a Golden Hare, then rolled
+  sessions at AP each, one per course per game week, development scaled by `TrainingOutcomeAward`,
+  every refusal charging nothing). Trainer-menu price line: `OfferPrice`, `format_offer_price`,
+  `InteractionOfferSerializer.price`. `train_skill` and `points_to_next_boundary` in
+  `world.skills.services`. `AcademyOfferApCostError` replaced `TrainOfferMisconfiguredError`;
+  `_academy_for` is shared by TRAIN, the course and settle-obligation. Three Required content
+  TUNING rows. Details: [magic.md](magic.md) "Tradition training and Academy skill courses".
+
 - **Facet vocabulary guards (#4197, ADR-4197):** `Facet` is a flat vocabulary typed by many
   hands. `world/magic/services/facets.py` holds the one spelling rule (`facet_key`),
   `find_facet` / `near_facets` (what a spelling resolves to, and what it is near; aliases
@@ -930,7 +947,10 @@ allocations that convert AP to development points.
 - **Magic skills (#4450):** staff map skills to magical rolls (`MagicActivitySkill`) and to
   casts (`Path.technique_skill`, `Gift.technique_skill`, `Technique.skill`), so a trained
   skill adds points to those rolls and develops from them. The Anima Check pick in character
-  creation excludes MAGIC-category skills. See [magic.md](magic.md) "Magical skills".
+  creation excludes MAGIC-category skills. See [magic.md](magic.md) "Magical skills". Since #4457 a schooled
+  character starts with them at the stance floor and CG points never buy one; `train_skill` (the one
+  writer for development from training, shared with weekly training) and `points_to_next_boundary`
+  are in `world.skills.services`.
 - **Integrates with:** traits (skill checks), character_creation (skill selection),
   action_points (weekly AP spend), progression (`DevelopmentTransaction` rows),
   relationships (the shared weekly AP budget above)
@@ -2878,8 +2898,9 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   tradition's slate line (`BeginningTradition.state`, `TraditionState`:
   SELF_TAUGHT/TEACHERS_GONE/LIVING_MASTERS) prints one of three staff-authored standard lines
   (`TraditionStateLine`, per-tradition `own_wording` override, never its own price) and, for
-  LIVING_MASTERS, offers the standard schooling set (`SchoolingLine`, rank 0-2, each granting a
-  distinction at its rank, priced `grants.cost_per_rank * rank`). `OriginTemplate
+  LIVING_MASTERS (ranks 0-2) and TEACHERS_GONE (ranks 0-1, #4457), offers the standard schooling
+  set (`SchoolingLine`, each granting a distinction at its rank, priced
+  `grants.cost_per_rank * rank`, and carrying a `magic_skill_floor`, #4457). `OriginTemplate
   .closed_distinctions`/`.closed_reason` names distinctions a route never offers, in any
   chapter. `GET /api/character-creation/drafts/{id}/offers/?chapter=<chapter>` returns
   `{"offers": [...], "closed": [...]}` for one chapter; `reconcile_offer_picks` runs after every
@@ -4802,7 +4823,7 @@ register as additional kinds.
 - **Constants:** `OfferKind` (PERMIT / MISSION / LOAN / COLLECTION / IMPROVEMENT (#930) /
   INFORMANT / CONTACT / PERSONAL_FAVOR / GUARD / FAN / MINOR_ALLY / ASSET_TASK_INTEL /
   ASSET_TASK_COLLECT / TRAIN (#2440) / SETTLE_OBLIGATION (#2428 whole-branch fix) /
-  STYLING / PROFILE_RECORDING (#2632) / CLUE_REVEAL (#3428);
+  STYLING / PROFILE_RECORDING (#2632) / CLUE_REVEAL (#3428) / SKILL_COURSE (#4457);
   `RecordedProfileStatus` (COMMISSIONED/RECORDED); future POLITICAL_FAVOR/...),
   `DrawMode` (MENU, POOL).
   `NPCServiceOffer.ap_cost` (#930) charges the resolving character before any effect
@@ -4814,8 +4835,8 @@ register as additional kinds.
   MISSION (registered by `world.missions.apps.ready`), `grant_loan`, the #930
   domain-running pair `run_collection` / `run_improvement` (over
   `currency.collect_org_income` / `improve_org_domain`; org resolved via the shared
-  `_resolve_authority_org` single-treasury-authority rule), and `run_train_offer` (#2440,
-  below).
+  `_resolve_authority_org` single-treasury-authority rule), `run_train_offer` (#2440,
+  below), and `run_skill_course_offer` (#4457, below).
 - **TRAIN offers — Academy training (#2440):** `NPCRole.teaches_tradition` (nullable FK →
   `magic.Tradition`, `SET_NULL`) scopes which tradition's signature techniques a trainer
   role can teach; `TrainOfferDetails` (1:1 per-offer details — `technique` FK, `learn_ap_cost`,
@@ -4842,6 +4863,33 @@ register as additional kinds.
   Academy-specific venue tokens (ruling on #2428). The generic `hire` command/
   `InteractionSession` loop lists and resolves TRAIN offers with no command-layer changes —
   the offer kind is fully expressible through the existing eligibility/dispatch machinery.
+- **Academy skill courses (#4457, ADR-4457-A):** `OfferKind.SKILL_COURSE` is an Academy teacher's
+  course in one skill (staff pick the skill on each offer; any skill, with one per Magic skill kept
+  by a Required content row). `SkillCourseOfferDetails` (1:1 per offer: `skill`,
+  `total_development`, `session_development`, `session_ap_cost`, `coin_cost`, `check_type`,
+  `check_difficulty`; `clean()` requires `NPCServiceOffer.ap_cost` 0) and `SkillCourseEnrollment`
+  (`character_sheet`, `course`, `development_remaining`, `last_session_week`, `completed_at`; one
+  open enrollment per sheet and course). Handler `run_skill_course_offer`: `_academy_for` (the
+  role's `faction_affiliation`, and the owed-obligation refusal; shared with TRAIN and
+  settle-obligation) -> lock the learner's AP pool -> every refusal checked before any charge
+  (already trained this course this game week, the skill at an XP boundary, short of AP, and when
+  enrolling short of coin or of a Golden Hare). Enrolling pays the coin (skipped when 0) and one
+  Hare once and runs the first session; each later acceptance is a session costing
+  `session_ap_cost`, rolled against `check_type` and `check_difficulty`, development =
+  floor(`session_development` x the `TrainingOutcomeAward` multiplier) capped at what is left, applied
+  by `skills.services.train_skill(..., stop_at_boundary=True)` so development past an XP boundary
+  stays in the course. One session per course per game week across enrollments, recorded on the
+  enrollment, not as an offer cooldown (`resolve_offer` writes one even on a refusal). No Unbound
+  surcharge. `AcademyOfferApCostError` (replacing `TrainOfferMisconfiguredError`) is the runtime
+  backstop for a TRAIN or SKILL_COURSE offer authored with a nonzero `ap_cost`. **Trainer menu
+  price line:** `InteractionOfferSerializer.price` (`OfferPriceSerializer`) from `_offer_price` /
+  `OfferPrice` (`npc_services/types.py`) and `format_offer_price`, the same line on the web menu and
+  in telnet `hire`; TRAIN's reads "<coin> · 1 Golden Hare · N points of training or more, paid in AP"
+  because `learn_ap_cost` is the training meter's base, not AP charged at acceptance. An enrolled
+  course reads "Next session · ..." or, once this game week's session has run, "Next session next
+  week · ...". Journeys:
+  `integration_tests/test_academy_skill_course_journeys.py`,
+  `test_tradition_training_journeys.py`. Details: [magic.md](magic.md).
 - **Great Archive self-study (#2440 ruling 5):** the post-Vanishing path for orphaned
   traditions — a quest-completion flag unlocks self-teaching, mechanically a TRAIN offer
   set on a "Great Archive Librarian" `NPCRole` (`faction_affiliation` = Shroudwatch
@@ -5481,8 +5529,9 @@ encounter seam, combat domain). Obligations/withholding ride collection declarat
 an idle org reaches stasis in both directions (loan interest still accrues — opted-in risk).
 
 - **Models:** `CharacterPurse`, `OrganizationTreasury`, `CurrencyTransfer` (audit; each side snapshots
-  `*_holder_kind` / `*_holder_name` on save, the first step of #4467 - a second step moves
-  `currency_transfer_not_void` onto the kinds so a holder can be deleted with its history kept),
+  `*_holder_kind` / `*_holder_name` on save, so deleting a character sheet or organization keeps
+  its money history - the holder FKs go null, the snapshot stays, and `currency_transfer_not_void`
+  reads the kinds, #4467),
   `OrgIncomeStream` (`uncollected_pool`, optional `area` FK — authored anchor for a future
   local order/crime difficulty modifier; optional `room_profile` FK and kind `TERRITORY`
   since #4060 — a held rung's base land value, gross recomputed at accrual), `IncomeDeclaration` (actual-vs-declared),
@@ -6947,7 +6996,12 @@ then choose lawful seizure vs steal-back; linked from the inventory sidebar). Th
 holder is never notified a claim exists.
 
 - **Models:**
-  - `DistinctionItemGrant` (#4398, a keepsake a distinction mints at finalize; sibling of
+  - `Keepsake` (#4530, an item a player declared stands for a tie, deed, being, organization,
+    person or place; scored by its subject after `keepsake_wait_days`, never by its words;
+    `services/keepsakes.py`, actions `keepsake_declare` / `keepsake_release`, telnet
+    `keepsake`, `GET /api/items/inventory/{id}/keepsake/`; trophies: `services/trophies.link_trophy`,
+    `MissionDeedRewardLine.granted_item`; see `items.md`)
+  - `DistinctionItemGrant` (#4398, a starting item a distinction mints at finalize; sibling of
     `currency.DistinctionStartingGrant`, see `distinctions.md`)
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `WeaponClass` (#2879 — weighted
     strength/agility blend for `ItemTemplate.weapon_class`, replaces the small/medium/heavy
@@ -7380,7 +7434,9 @@ holder is never notified a claim exists.
   ritual material consumption via shared `gather_consumable_pks`; touchstone
   `tied_resonance`/`resonance_tier` FKs into `magic.Resonance`/`ResonanceTier`, #707),
   covenants (gear archetype compatibility), checks (`perform_check` + consequence pool),
-  missions (`DeedRewardSink.ITEM` reward line grants via `grant_touchstone_item_to_character`)
+  missions (`DeedRewardSink.ITEM` reward line grants via `grant_touchstone_item_to_character`;
+  a Success run links the item to its deed as a trophy, #4530), stories (a won stake's ITEM
+  line does the same after settlement)
 - **Source:** `src/world/items/`
 - **Details:** [items.md](items.md)
 
@@ -9313,6 +9369,15 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   invocation detail), `MeaningSignalKind.RESONANCE_FED`; `worship/worn_services.worn_meaning`
   (worn pieces ease `invocation_difficulty` and raise `earning_rate`), the staff Favor
   invocation page, the Being Service builder's favored-facet rates and supplier panel.
+  **Keepsakes, trophies and requests** (#4530, slice 4 of #4462): `RequestedItem` (a pledge's
+  or tier 1 or 2 rite's cheap item, template or facet, quantity, points, hint),
+  `OfferingSignal.requested_item`, `CeremonyOffering.player_line`, `Relic.invocation_points`, `InvocationPiece.source`,
+  `DevotionConfig` `invocation_ease_per_keepsake_point` / `keepsake_*` / `trophy_*` /
+  `rite_*` / `requested_item_*`; `worship/request_services.py` (`assign_requests`,
+  `request_lines`), `sacrifice_services.lift_botch`, `rite_services.read_rite_gifts` and
+  `perform_worship_rite(..., offered_items=, closing_of=)`, `worn_services._carried_pieces`
+  (keepsakes of the being and its Relic ease the call), `PledgeCard.requests`; the Being
+  Service builder's requested-items table and supplier panel.
   `perform_worship_rite(..., pay_award=False)`. Actions `pledge_take`, `pledge_close`,
   `sacrifice`; API `pledges/`, `pledge-cards/`, `beings/{id}/service-terms/`,
   `beings/holy-site/`; telnet `pledge`, `pledge/close`, `sacrifice`; admin Being Service

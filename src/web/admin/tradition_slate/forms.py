@@ -15,6 +15,8 @@ about a standard line's identity is ever typed in - only ``entry_line``/
 
 from __future__ import annotations
 
+from typing import Any
+
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import AutocompleteSelect
@@ -29,6 +31,7 @@ from world.character_creation.models import (
     SchoolingLine,
     TraditionStateLine,
 )
+from world.skills.models import SkillPointBudget
 
 
 class TraditionStateLineForm(forms.ModelForm):
@@ -46,17 +49,39 @@ class TraditionStateLineForm(forms.ModelForm):
 
 
 class SchoolingLineForm(forms.ModelForm):
+    """One schooling stance. Rank 0 has no Magic skill floor field at all (#4457).
+
+    Rank 0 grants nothing, so it trains nothing, and the DB check constraint pins
+    its floor at 0. The field is dropped rather than disabled so a posted value
+    for it is never read.
+    """
+
     rank = forms.IntegerField(widget=forms.HiddenInput())
 
     class Meta:
         model = SchoolingLine
-        fields = ["rank", "name", "player_line", "grants"]
+        fields = ["rank", "name", "player_line", "grants", "magic_skill_floor"]
         widgets = {
+            "magic_skill_floor": forms.NumberInput(attrs={"class": "vIntegerField", "min": 0}),
             "grants": AutocompleteSelect(
                 SchoolingLine._meta.get_field("grants"),  # noqa: SLF001
                 admin.site,
             ),
         }
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        rank = self.instance.rank if self.instance.pk else self.initial.get("rank")
+        if rank == 0:
+            del self.fields["magic_skill_floor"]
+
+    def clean_magic_skill_floor(self) -> int:
+        floor = self.cleaned_data["magic_skill_floor"]
+        cap = SkillPointBudget.get_active_budget().max_skill_value
+        if floor > cap:
+            msg = f"A floor cannot exceed the creation skill cap of {cap}."
+            raise forms.ValidationError(msg)
+        return floor
 
 
 class SlateForm(forms.ModelForm):

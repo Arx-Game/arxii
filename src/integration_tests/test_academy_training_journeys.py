@@ -45,6 +45,8 @@ from world.societies.factories import OrganizationFactory
 # What staff priced the training at: 2 gold and 5 silver, written in coppers.
 PRICE = 250
 STARTING_AP = 200
+# The trainer's menu line: the coin and Hare paid now, then training sized by learn_ap_cost.
+MENU_LINE = "2g 5s · 1 Golden Hare · 5 points of training or more, paid in AP"
 
 
 class TrainingAtTheAcademy(JourneyCase):
@@ -148,3 +150,36 @@ class TrainingAtTheAcademy(JourneyCase):
         self.assertIn("begins your training", told)
         self.assertEqual(get_or_create_purse(self.ysmay.sheet_data).balance, 90)
         self.assertFalse(self._hare_is_unspent("Ysmay"))
+
+    def test_telnet_line_names_the_hare_and_coin_and_no_ap_charge(self) -> None:
+        menu = strip_ansi(self.telnet(self.hobb, "hire Master Orsolya"))
+        self.assertRegex(menu, rf"Learn a technique.*{MENU_LINE}")
+
+        # The line is right: accepting took the coin and the Hare, not a single AP.
+        self.telnet(self.hobb, f"hire offer {self.offer.pk}")
+        self.assertEqual(
+            ActionPointPool.get_or_create_for_character(self.hobb).current, STARTING_AP
+        )
+        self.assertEqual(get_or_create_purse(self.hobb.sheet_data).balance, 400 - PRICE)
+        self.assertFalse(self._hare_is_unspent("Hobb"))
+
+    def test_web_menu_carries_the_same_line(self) -> None:
+        client = self.api(self.account_of(self.hobb))
+        response = client.post(
+            "/api/npc-services/interactions/start/", {"role_id": self.role.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        (offer,) = response.data["available_offers"]
+        self.assertEqual(
+            offer["price"],
+            {
+                "ap": 0,
+                "coppers": PRICE,
+                "golden_hares": 1,
+                "per_session_ap": None,
+                "development_remaining": None,
+                "development_total": None,
+                "training_points": 5,
+                "display": MENU_LINE,
+            },
+        )

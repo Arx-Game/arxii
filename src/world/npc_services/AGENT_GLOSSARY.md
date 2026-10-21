@@ -117,6 +117,29 @@ _Avoid_: "teaching offer" for TRAIN specifically (that term is
 `magic.TechniqueTeachingOffer`, the player-to-player path — a different model
 entirely, though both converge on the same acquisition seam).
 
+**Skill course / Course enrollment** (#4457, ADR-4457-A):
+`OfferKind.SKILL_COURSE` is an Academy teacher's course in one skill (any
+skill, chosen by staff on each offer; the Required content dashboard keeps one
+per Magic skill). One `NPCServiceOffer`/`SkillCourseOfferDetails` row per
+course: `skill`, `total_development`, `session_development`,
+`session_ap_cost`, `coin_cost`, `check_type`, `check_difficulty`. A **Course
+enrollment** (`SkillCourseEnrollment`) is a character's place in one course:
+`development_remaining` counts down, `last_session_week` holds the game week
+of the latest session, `completed_at` closes it, and a sheet holds at most one
+open enrollment per course (a finished course may be taken again). The first
+acceptance enrolls (coin, skipped when 0, and one Golden Hare, paid once) and
+runs the first session; every later acceptance of the same offer is one
+session costing `session_ap_cost`, rolled against the course's check type and
+difficulty, with development = floor(`session_development` x the
+`TrainingOutcomeAward` multiplier) capped at what is left. Development past an
+XP boundary stays in the course (`train_skill(..., stop_at_boundary=True)`).
+One session per course per game week across enrollments, held on the
+enrollment because `resolve_offer` writes an offer cooldown even when a
+handler refuses; every refusal charges nothing. No surcharge applies to a
+character without formal training, whatever the reason.
+_Avoid_: remedial training, TRAIN offer (TRAIN teaches a technique through the
+training meter; a course develops a skill).
+
 **Great Archive self-study** (#2440 ruling 5):
 The post-Vanishing path for orphaned traditions — TRAIN offers on a "Great
 Archive Librarian" `NPCRole` (same Academy `faction_affiliation`, same AP +

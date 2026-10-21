@@ -204,6 +204,26 @@ class EconomySeriesTests(TestCase):
             economy_series(weeks=8)
 
 
+class EconomySeriesAfterHolderDeletionTests(TestCase):
+    """A deleted holder nulls its FK but keeps its kind, so the buckets do not move (#4467)."""
+
+    def test_a_deleted_holders_transfers_keep_their_bucket(self) -> None:
+        payer, payee = CharacterSheetFactory(), CharacterSheetFactory()
+        payer_purse = get_or_create_purse(payer)
+        transfer(amount=100, reason="mint test", to_purse=payer_purse)
+        transfer(
+            amount=30,
+            reason="transfer test",
+            from_purse=payer_purse,
+            to_purse=get_or_create_purse(payee),
+        )
+
+        payer.delete()
+
+        series = {s.label: s.points[-1].value for s in economy_series(weeks=8)}
+        assert series == {"Minted": 100.0, "Sunk": 0.0, "Transferred": 30.0}
+
+
 class MoneySupplyTests(TestCase):
     def test_totals_sum_purses_and_treasuries(self) -> None:
         sheet = CharacterSheetFactory()

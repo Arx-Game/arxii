@@ -12,6 +12,7 @@ from django.db.models import Max, Sum
 
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.classes.models import CharacterClassLevel
+from world.progression.constants import DP_BASE_LEVEL
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.relationships.helpers import get_relationship_tier
@@ -25,6 +26,7 @@ from world.skills.models import (
     Specialization,
     TrainingAllocation,
 )
+from world.skills.types import SkillTrainingResult
 from world.traits.models import CharacterTraitChange, CharacterTraitValue, TraitChangeSource
 
 if TYPE_CHECKING:
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Persona
+    from world.traits.models import Trait
 
 logger = logging.getLogger(__name__)
 
@@ -493,6 +496,91 @@ def _apply_development_to_skill(skill_value: CharacterSkillValue, dev_points: in
     return message
 
 
+def points_to_next_boundary(skill_value: CharacterSkillValue) -> int | None:
+    """Development the skill can take before it parks at its next XP boundary.
+
+    Counts unpaid rust first (rust is paid before any level), then the cost of each
+    level from the current value up to the next boundary (19, 29, 39, 49), less the
+    ``development_points`` already banked toward the current level. A skill already
+    sitting at a boundary can take only its rust, since anything more dissipates. Returns
+    ``None`` above 49, where no boundary lies ahead. A caller that must not lose any
+    development to dissipation clamps what it applies to this number.
+    """
+    value = skill_value.value
+    if _is_at_xp_boundary(value):
+        return skill_value.rust_points
+    if value > _XP_BOUNDARY_MAX:
+        return None
+    boundary = next(
+        v
+        for v in range(max(value, _XP_BOUNDARY_MIN), _XP_BOUNDARY_MAX + 1)
+        if _is_at_xp_boundary(v)
+    )
+    level_cost = sum(_development_cost(v) for v in range(value, boundary))
+    return skill_value.rust_points + max(level_cost - skill_value.development_points, 0)
+
+
+def train_skill(
+    sheet: CharacterSheet,
+    skill: Skill,
+    dev_points: int,
+    *,
+    description: str,
+    stop_at_boundary: bool = False,
+) -> SkillTrainingResult:
+    """Develop a skill from training and record the audit transaction.
+
+    The one writer for development from training: weekly training and an Academy course
+    both come through here. Creates the sheet's ``CharacterSkillValue`` at the base level
+    when it has none, applies ``dev_points`` through :func:`_apply_development_to_skill`
+    (which keeps the sheet row and the check engine's trait row equal), and writes one
+    ``DevelopmentTransaction`` for the points applied, with any plateau message appended
+    to ``description``. With ``stop_at_boundary`` the points are clamped to
+    :func:`points_to_next_boundary`, so none dissipates at a boundary; the excess is
+    simply not applied and the caller keeps it.
+    """
+    skill_value, _created = CharacterSkillValue.objects.get_or_create(
+        character=sheet,
+        skill=skill,
+        defaults={"value": DP_BASE_LEVEL, "development_points": 0, "rust_points": 0},
+    )
+    skill_value.value = max(skill_value.value, reconcile_skill_stores(sheet, skill))
+    old_value = skill_value.value
+    points_applied = dev_points
+    if stop_at_boundary:
+        room = points_to_next_boundary(skill_value)
+        if room is not None:
+            points_applied = min(dev_points, room)
+    plateau_message = _apply_development_to_skill(skill_value, points_applied)
+    _record_training_transaction(sheet, skill.trait, points_applied, description, plateau_message)
+    return SkillTrainingResult(
+        old_value=old_value,
+        new_value=skill_value.value,
+        points_applied=points_applied,
+        plateau_message=plateau_message,
+    )
+
+
+def _record_training_transaction(
+    sheet: CharacterSheet,
+    trait: Trait,
+    amount: int,
+    description: str,
+    plateau_message: str | None,
+) -> None:
+    """Write the ``DevelopmentTransaction`` audit row for a training award."""
+    if plateau_message:
+        description = f"{description} — {plateau_message}"
+    DevelopmentTransaction.objects.create(
+        character_sheet=sheet,
+        trait=trait,
+        source=DevelopmentSource.TRAINING,
+        amount=amount,
+        reason=ProgressionReason.SYSTEM_AWARD,
+        description=description,
+    )
+
+
 def _develop_skill_value(skill_value: CharacterSkillValue, dev_points: int) -> str | None:
     """Apply development points to a skill, handling rust payoff, level-ups, and plateau.
 
@@ -758,18 +846,11 @@ def process_weekly_training() -> dict[int, set[int]]:
             allocation, _teaching_skill=teaching_skill, _path_levels=path_levels
         )
 
-        plateau_message: str | None = None
+        description = f"Weekly training: {allocation}"
         if allocation.skill:
-            trait = allocation.skill.trait
-            skill_value, _created = CharacterSkillValue.objects.get_or_create(
-                character=character,
-                skill=allocation.skill,
-                defaults={"value": 10, "development_points": 0, "rust_points": 0},
-            )
-            plateau_message = _apply_development_to_skill(skill_value, dev_points)
+            train_skill(character, allocation.skill, dev_points, description=description)
             trained_skills[character.pk].add(allocation.skill.pk)
         elif allocation.specialization:
-            trait = allocation.specialization.parent_skill.trait
             spec_value, _created = CharacterSpecializationValue.objects.get_or_create(
                 character=character,
                 specialization=allocation.specialization,
@@ -777,22 +858,15 @@ def process_weekly_training() -> dict[int, set[int]]:
             )
             _apply_development_to_specialization(spec_value, dev_points)
             trained_skills[character.pk].add(allocation.specialization.parent_skill_id)
+            _record_training_transaction(
+                character,
+                allocation.specialization.parent_skill.trait,
+                dev_points,
+                description,
+                None,
+            )
         else:
             continue  # pragma: no cover — XOR constraint prevents this
-
-        # Record audit trail. allocation.character IS the sheet now.
-        sheet = character
-        description = f"Weekly training: {allocation}"
-        if plateau_message:
-            description = f"{description} — {plateau_message}"
-        DevelopmentTransaction.objects.create(
-            character_sheet=sheet,
-            trait=trait,
-            source=DevelopmentSource.TRAINING,
-            amount=dev_points,
-            reason=ProgressionReason.SYSTEM_AWARD,
-            description=description,
-        )
 
         # Consume AP. Training still processes if pool is missing or has
         # insufficient AP — allocations represent reserved budget, and the

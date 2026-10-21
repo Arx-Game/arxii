@@ -97,9 +97,10 @@ def _holder_snapshot(
 class CurrencyTransfer(SharedMemoryModel):
     """Audit row for every movement of money (#923: exact numbers in the ledger).
 
-    Source/destination are typed nullable FKs: a null source is a **mint**
-    (money entering the world — faucets), a null destination is a **sink**
-    (money leaving it). A transfer never has neither end.
+    Source/destination are typed nullable FKs: a source that never had a holder is a **mint**
+    (money entering the world — faucets), a destination that never had one is a **sink**
+    (money leaving it). A transfer always had a holder on at least one side, though
+    once that holder is deleted its FKs may all be null; the kinds below still say so.
 
     Each side also snapshots who its holder was (``*_holder_kind`` and
     ``*_holder_name``, written the first time a side is saved). The holder FKs are SET_NULL so a
@@ -107,9 +108,8 @@ class CurrencyTransfer(SharedMemoryModel):
     that its money history stays: a side whose FK is now null but whose kind is
     set was a real holder that has since been deleted, and the snapshot says who.
     A side with a blank kind never had a holder (a mint's source, a sink's
-    destination). ``currency_transfer_not_void`` still reads the FKs for now; the
-    follow-up step of #4467 moves it onto the kinds once every row carries one, which
-    is what lets a holder actually be deleted.
+    destination). ``currency_transfer_not_void`` reads the kinds, never the FKs,
+    for exactly that reason: a holder's deletion nulls an FK but leaves its kind.
     """
 
     from_purse = models.ForeignKey(
@@ -191,12 +191,7 @@ class CurrencyTransfer(SharedMemoryModel):
                 name="currency_transfer_single_destination",
             ),
             models.CheckConstraint(
-                condition=~(
-                    models.Q(from_purse__isnull=True)
-                    & models.Q(from_treasury__isnull=True)
-                    & models.Q(to_purse__isnull=True)
-                    & models.Q(to_treasury__isnull=True)
-                ),
+                condition=~(models.Q(from_holder_kind="") & models.Q(to_holder_kind="")),
                 name="currency_transfer_not_void",
             ),
             models.CheckConstraint(

@@ -402,8 +402,9 @@ over the last N ISO weeks (default 8) so a week with no rows still renders a bar
 - `level_distribution() -> list[tuple[int, int]]` — `(level, character_count)` for
   primary `CharacterClassLevel` rows, one query.
 - `economy_series(*, weeks: int = 8) -> list[WeeklySeries]` — minted / sunk /
-  transferred coppers from `CurrencyTransfer`, bucketed by null source (mint), null
-  destination (sink), or both populated (transfer) — mutually exclusive and exhaustive
+  transferred coppers from `CurrencyTransfer`, bucketed by a source with no holder
+  kind (mint), a destination with none (sink), or both kinds set (transfer; a holder deleted
+  later nulls its FK but keeps its kind, #4467) — mutually exclusive and exhaustive
   per `currency/services.py:86-95`.
 - `money_supply() -> dict[str, int]` — `{"purses": n, "treasuries": n, "total": n}`,
   summed balances (not row counts).

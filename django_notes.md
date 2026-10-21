@@ -539,6 +539,12 @@ The actual bug is always a specific code shape: validation that could have run f
 ran after a mutation instead. Ordering it correctly costs nothing and eliminates the
 hazard at the source.
 
+**A refused ModelForm is the sanctioned exception to "never flush":** validating a bound
+ModelForm or formset writes the posted values onto the cached instance, so after rendering
+the errors, per-row `flush_from_cache(force=True)` of each instance the refused form
+mutated is correct (it is not the "flush after save" anti-pattern); use
+`web.admin.authoring.identity_map.flush_refused_instances`, in a `try/finally` around the render.
+
 **Test-side convention:** a test that intentionally triggers a rollback inside an
 atomic service call and then re-reads the row **must** call
 `Model.flush_instance_cache()` before the read, or the assertion silently checks the

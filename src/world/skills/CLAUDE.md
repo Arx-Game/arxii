@@ -70,6 +70,15 @@ Parent skills and specializations for character abilities. Skills are linked to 
 - `apply_weekly_rust(trained_skills)` — adds rust to untrained skills
 - `run_weekly_skill_cron()` — orchestrator: training then rust
 
+**Development from training (#4457):**
+- `train_skill(sheet, skill, dev_points, *, description, stop_at_boundary=False) -> SkillTrainingResult`
+  (`world/skills/types.py`) — the one writer: creates the row at `DP_BASE_LEVEL`, applies the points
+  through `_apply_development_to_skill`, writes the `DevelopmentTransaction`. Weekly training's skill
+  branch and Academy courses both call it. `stop_at_boundary=True` clamps to
+  `points_to_next_boundary` so nothing dissipates; the caller keeps the excess.
+- `points_to_next_boundary(skill_value) -> int | None` — rust + level costs up to the next boundary,
+  less banked points; only rust at a boundary; `None` above 49.
+
 **XP-Boundary Breakthrough (#2115):**
 - `purchase_skill_breakthrough(character, skill) -> tuple[bool, str]` — spends XP against
   an authored `TraitRatingUnlock` to clear a boundary-parked skill's gate; resets

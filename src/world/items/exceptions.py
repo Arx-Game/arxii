@@ -676,3 +676,11 @@ class WorkedFromUnavailable(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {"You can only work in an item you are holding."}
     )
+
+
+class KeepsakeRefused(ItemError):
+    """A keepsake could not be declared or released; the message says why (#4530)."""
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message

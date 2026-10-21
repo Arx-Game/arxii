@@ -24,6 +24,12 @@ const createTestQueryClient = () =>
   });
 
 const mockUpdateDraftMutate = vi.fn();
+let mockSuggestions: Array<{
+  skill_id: number;
+  skill_name: string;
+  suggested_value: number;
+}> = [];
+let mockCopy: Record<string, string> | undefined;
 vi.mock('../queries', () => ({
   useSkills: () => ({
     data: [
@@ -60,6 +66,39 @@ vi.mock('../queries', () => ({
         is_active: true,
         specializations: [],
       },
+      {
+        id: 3,
+        name: 'Occult',
+        category: 'magic',
+        category_display: 'Magic',
+        description: '',
+        tooltip: '',
+        display_order: 3,
+        is_active: true,
+        specializations: [
+          {
+            id: 30,
+            name: 'Wards',
+            description: '',
+            tooltip: '',
+            display_order: 1,
+            is_active: true,
+            parent_skill_id: 3,
+            parent_skill_name: 'Occult',
+          },
+        ],
+      },
+      {
+        id: 4,
+        name: 'Ritualism',
+        category: 'magic',
+        category_display: 'Magic',
+        description: '',
+        tooltip: '',
+        display_order: 4,
+        is_active: true,
+        specializations: [],
+      },
     ],
     isLoading: false,
     error: null,
@@ -78,13 +117,15 @@ vi.mock('../queries', () => ({
     isLoading: false,
     error: null,
   }),
-  usePathSkillSuggestions: () => ({ data: [], isLoading: false, error: null }),
-  useCGExplanations: () => ({ data: undefined, isLoading: false }),
+  usePathSkillSuggestions: () => ({ data: mockSuggestions, isLoading: false, error: null }),
+  useCGExplanations: () => ({ data: mockCopy, isLoading: false }),
   useUpdateDraft: () => ({ mutate: mockUpdateDraftMutate, isLoading: false }),
 }));
 
 describe('SkillsSection', () => {
   beforeEach(() => {
+    mockSuggestions = [];
+    mockCopy = undefined;
     vi.useFakeTimers();
   });
 
@@ -181,5 +222,110 @@ describe('SkillsSection', () => {
     renderSkillsSection(draft);
 
     expect(screen.getByRole('button', { name: /specializations/i })).toHaveClass('quiet-link');
+  });
+
+  describe('Magic skills (#4457)', () => {
+    const lastSavedSkills = () => {
+      const call = mockUpdateDraftMutate.mock.calls.at(-1);
+      return call?.[0].data.draft_data.skills as Record<string, number>;
+    };
+
+    it('offers no stepper for a Magic skill', () => {
+      renderSkillsSection(draft);
+
+      expect(screen.queryByRole('button', { name: /raise occult/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /lower occult/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /raise stealth/i })).toBeInTheDocument();
+    });
+
+    it("lists each Magic skill at the Tradition stance's floor, read-only", () => {
+      renderSkillsSection({ ...draft, starting_magic_skill_floor: 20 });
+
+      expect(screen.getByText('From your Tradition training')).toBeInTheDocument();
+      expect(screen.getByLabelText('Occult')).toHaveTextContent('20');
+      expect(screen.getByLabelText('Ritualism')).toHaveTextContent('20');
+      expect(screen.queryByText(/your magic skills start untrained/i)).not.toBeInTheDocument();
+    });
+
+    it('says the Magic skills start untrained when the floor is 0', () => {
+      renderSkillsSection({ ...draft, starting_magic_skill_floor: 0 });
+
+      expect(
+        screen.getByText(
+          'Your Magic skills start untrained. They grow with use and weekly training, faster with a mentor, and an Academy course speeds that up.'
+        )
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText('Occult')).not.toBeInTheDocument();
+      expect(screen.queryByText('From your Tradition training')).not.toBeInTheDocument();
+    });
+
+    it('reads both lines from the explanation copy when staff wrote them', () => {
+      mockCopy = {
+        skills_magic_granted_heading: 'Schooling',
+        skills_magic_granted_none: 'Nothing yet.',
+      };
+      const { unmount } = renderSkillsSection({ ...draft, starting_magic_skill_floor: 20 });
+      expect(screen.getByText('Schooling')).toBeInTheDocument();
+      unmount();
+
+      renderSkillsSection({ ...draft, starting_magic_skill_floor: 0 });
+      expect(screen.getByText('Nothing yet.')).toBeInTheDocument();
+    });
+
+    it('does not apply a path suggestion that names a Magic skill', () => {
+      mockSuggestions = [
+        { skill_id: 1, skill_name: 'Blades', suggested_value: 20 },
+        { skill_id: 3, skill_name: 'Occult', suggested_value: 20 },
+      ];
+      renderSkillsSection({ ...draft, draft_data: {} });
+
+      expect(screen.getByLabelText('Blades')).toHaveTextContent('20');
+      expect(screen.getByText(/suggested skills: Blades 20\./)).toBeInTheDocument();
+      expect(screen.queryByText(/Occult 20/)).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /raise stealth/i }));
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(lastSavedSkills()).toEqual({ '1': 20, '2': 10 });
+    });
+
+    it("drops points in a Magic skill's specialization out of the next save", () => {
+      const legacy: CharacterDraft = {
+        ...draft,
+        starting_magic_skill_floor: 20,
+        draft_data: { skills: { '1': 20, '3': 20 }, specializations: { '10': 10, '30': 10 } },
+      };
+      renderSkillsSection(legacy);
+
+      // 20 on Blades + 10 on Fencing; the Magic skill and its specialization are free.
+      expect(screen.getByText('30')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /raise stealth/i }));
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(mockUpdateDraftMutate.mock.calls.at(-1)?.[0].data.draft_data.specializations).toEqual({
+        '10': 10,
+      });
+    });
+
+    it('drops Magic points loaded from the draft out of the next save', () => {
+      const legacy: CharacterDraft = {
+        ...draft,
+        starting_magic_skill_floor: 20,
+        draft_data: { skills: { '1': 20, '3': 20 } },
+      };
+      renderSkillsSection(legacy);
+
+      // The purse counts only the 20 spent on Blades, not the 20 in Occult.
+      expect(screen.getByText('40')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /raise stealth/i }));
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(lastSavedSkills()).toEqual({ '1': 20, '2': 10 });
+    });
   });
 });

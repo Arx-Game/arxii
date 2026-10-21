@@ -12,10 +12,10 @@ Difficulty, in points: ``DevotionConfig.base_difficulty`` minus the Chosen ease
 (``ChosenFavorConfig.invocation_ease_points``) for an active patronage of the
 being, minus the favor ease at the configured thresholds, minus the character's
 favor invocation total for the being (``favor_modifier_total``). Never below
-Trivial. Eases add (ruling 12). The worn pieces carrying a facet the being favors
-ease it too (``worn_services.worn_meaning``, #4520), within
-``DevotionConfig.invocation_meaning_ease_max``; a sacrifice does not read them, because
-the item given up is its own ease.
+Trivial. Eases add (ruling 12). The worn pieces carrying a facet the being favors, the keepsakes
+of the being she carries and its Relic ease it too (``worn_services.worn_meaning``, #4520,
+#4530), within ``DevotionConfig.invocation_meaning_ease_max``; a sacrifice does not read
+them, because the item given up is its own ease.
 """
 
 from __future__ import annotations
@@ -65,6 +65,7 @@ CHOSEN_EASE_LABEL = "You are {being}'s Chosen"
 FAVOR_EASE_LABEL = "Favor {favor} ({threshold} or more)"
 MODIFIER_EASE_LABEL = "Favor invocation modifiers for {being}"
 WORN_EASE_LABEL = "What you wear: {pieces}"
+CARRIED_EASE_LABEL = "What you wear or carry: {pieces}"
 
 
 def get_devotion_config() -> DevotionConfig:
@@ -155,9 +156,8 @@ def invocation_difficulty(
         worn = worn if worn is not None else worn_meaning(sheet, being)
         if worn.ease:
             names = ", ".join(piece.item_name for piece in worn.counted)
-            eases.append(
-                InvocationEase(label=WORN_EASE_LABEL.format(pieces=names), points=worn.ease)
-            )
+            label = CARRIED_EASE_LABEL if worn.has_carried else WORN_EASE_LABEL
+            eases.append(InvocationEase(label=label.format(pieces=names), points=worn.ease))
     points = max(base_points - sum(ease.points for ease in eases), MIN_DIFFICULTY_POINTS)
     return InvocationDifficulty(
         base_points=base_points,
