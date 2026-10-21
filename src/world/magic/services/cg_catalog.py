@@ -174,7 +174,7 @@ def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:
     excluded. "Available" is ``cg_takeable_techniques``, the same rule the
     technique picker applies, so a gift whose pool holds only unready, ultimate
     or gated techniques is not offered with an empty picker behind it (#4545).
-    Resolves both grant tables in two queries total — no per-gift query loop.
+    Resolves both grant tables in two queries total, no per-gift query loop.
     """
     technique_qs = cg_takeable_techniques()
 
