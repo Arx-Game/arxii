@@ -1,0 +1,391 @@
+>>> connect rt4457player3 ****
+
+>>> hire Magister Cadwen
+You become Maudry Fatui.
+[NARRATIVE] Through your origins, you can now use: Grave Bolt.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Unbound.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Path of Tomes.
+[NARRATIVE] Through learning a piece of lore, you can now use: Arx, City of Heroes.
+[NARRATIVE] Through learning a piece of lore, you can now use: Arx, the Empty City.
+[NARRATIVE] Through learning a piece of lore, you can now use: Shroudwatch Academy & the Pact.
+[NARRATIVE] Through learning a piece of lore, you can now use: Slaver Demons & the Afflictions.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Age of Chains.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Caretakers.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Durance.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Echoes.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Eclipse of Mirrors.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Glimpse.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Great Archive.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Great Callings.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Keeping.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Penitent.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Portals.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Shroud.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Tree of Souls.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Vanishing & the Eclipse of Mirrors.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Vigil.
+[NARRATIVE] Through learning a piece of lore, you can now use: The Humans.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> connect rt4457player3 ****
+
+>>> hire Magister Cadwen
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+You already have an interaction in progress. Use 'hire end' first.
+
+>>> hire offer 43
+Shroudwatch Academy won't take you on further until your debt is settled.
+
+>>> connect rt4457player3 ****
+
+>>> hire Magister Cadwen
+
+>>> hire offer 43
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+You carry no Golden Hare for Shroudwatch Academy to call in. Nothing was charged.
+
+>>> connect rt4457player3 ****
+
+>>> hire Magister Cadwen
+
+>>> hire offer 43
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+Enrolling costs 2s and you have 1s. Nothing was charged.
+
+>>> connect rt4457player3 ****
+
+>>> hire Magister Cadwen
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+Enrolling costs 2s and you have 1s. Nothing was charged.
+
+>>> connect rt4457player3 ****
+
+>>> hire Magister Cadwen
+
+>>> hire offer 43
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+A session costs 6 AP and you have 3. Nothing was charged.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+A session costs 6 AP and you have 3. Nothing was charged.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Next session next week · 6 AP · 1200 of 1500 left
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+You have already trained in this course this week. Nothing was charged.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Next session next week · 6 AP · 1200 of 1500 left
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 44
+You carry no Golden Hare for Shroudwatch Academy to call in. Nothing was charged.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Next session · 6 AP · 1200 of 1500 left
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+Success. occult rises from 12 to 13. The course has 900 of 1500 left.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Next session · 6 AP · 900 of 1500 left
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+Partial Success. You learn nothing this session; 6 AP spent. The course has 900 of 1500 left. Break through to continue the course.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Next session · 6 AP · 900 of 1500 left
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+occult is at 19 and needs a breakthrough before the course can continue. Nothing was charged.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Next session · 6 AP · 900 of 1500 left
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+Failure. You learn nothing this session; 6 AP spent. The course has 900 of 1500 left.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Next session · 6 AP · 900 of 1500 left
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+Failure. You learn nothing this session; 6 AP spent. The course has 900 of 1500 left.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Next session · 6 AP · 900 of 1500 left
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+Critical Success. occult rises from 18 to 19. The course has 800 of 1500 left. Break through to continue the course.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Next session · 6 AP · 100 of 1500 left
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+Failure. You learn nothing this session; 6 AP spent. The course has 100 of 1500 left.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Next session · 6 AP · 100 of 1500 left
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire offer 43
+Success. occult stays at 14, closer to 15. The course is complete.
+
+>>> connect rt4457player3 ****
+You become Maudry Fatui.
+The City Center
+The City Center of Arx is a vast open forum of marble that was said to be the crossroads of every road that stretched through the Compact of Arvum. Once the largest open air marketplace in the world, it is now a place of quiet solemnity that might find scattered tents of merchants or those idling by the great fountain in the center, built to celebrate the end of the Reckoning thousands of years ago.
+Characters: Path of Steel Trainer, Path of Whispers Trainer, Path of the Chosen Trainer, Path of the Voice Trainer, Path of Tomes Trainer, Ysolde Fatui, and Maudry Fatui
+You see: a faint scorch mark on the wall, a wall of chalked marks PLACEHOLDER, and a weathered notice board
+Here you can speak with: Threshold Warden, Town Crier, Magister Cadwen
+Now controlling Maudry Fatui.
+
+>>> hire Magister Cadwen
+You begin speaking with Magister Cadwen.
+Available offers:
+  [#7] Learn: Shadow Blade (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#8] Learn: Shattering Chorus (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#9] Learn: Force Sigil (final) [train] - 1 Golden Hare · 5 points of training or more, paid in AP
+  [#43] Course: Occult (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+  [#44] Course: Ritualism (final) [skill_course] - Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now
+
+>>> hire end
+You conclude the conversation.
