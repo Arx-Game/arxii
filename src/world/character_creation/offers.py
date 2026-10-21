@@ -204,10 +204,12 @@ def schooling_magic_skill_floor(draft: CharacterDraft) -> int:
     }
     if not distinction_by_offer:
         return 0
+    # A legacy pick of an offer saved without its stance names no line, so it lifts nothing.
     offers = DistinctionOffer.objects.filter(
         pk__in=distinction_by_offer,
         chapter=OfferChapter.TRADITION_STEP,
         is_active=True,
+        schooling_line__isnull=False,
     ).select_related("schooling_line")
     return max(
         (

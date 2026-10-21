@@ -5,12 +5,18 @@ self-taught one none; the stance a player pays for lifts every active Magic skil
 floor when the character is made, and CG skill points can never buy a Magic skill or one
 of its specializations. Driven over the REST seam the browser uses: the Tradition list,
 the distinctions sync, the draft PATCH and detail, and staff adding the draft to the roster.
+A finalized character's cast then rolls her Path's Magic skill at the stance floor, through
+``dispatch_player_action`` on ``cast_technique`` as the web client casts.
 """
 
 from __future__ import annotations
 
+from decimal import Decimal
+from unittest.mock import patch
+
 from evennia.objects.models import ObjectDB
 
+from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
 from world.character_creation.constants import (
@@ -25,16 +31,34 @@ from world.character_creation.factories import (
 )
 from world.character_creation.models import DistinctionOffer
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
+from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
+from world.checks.services import perform_check
+from world.checks.test_helpers import force_check_outcome
+from world.checks.types import CheckResult, ExtraTraitTerm
 from world.distinctions.factories import DistinctionFactory
-from world.magic.factories import TraditionFactory, TraditionGiftGrantFactory
+from world.magic.factories import (
+    BinaryEffectTypeFactory,
+    GiftFactory,
+    TechniqueFactory,
+    TraditionFactory,
+    TraditionGiftGrantFactory,
+)
+from world.magic.models import CharacterAnima
+from world.scenes.factories import SceneFactory
+from world.scenes.tests.cast_test_helpers import grant_technique
 from world.skills.factories import SkillFactory, SpecializationFactory
 from world.skills.models import CharacterSkillValue
+from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import (
     CharacterTraitChange,
     CharacterTraitValue,
+    CheckOutcome,
+    PointConversionRange,
     TraitCategory,
     TraitChangeSource,
+    TraitType,
 )
+from world.vitals.models import CharacterVitals
 
 #: Floors staff set per stance: rank 0 trains none, rank 1 a little, rank 2 more.
 FLOORS = {0: 0, 1: 20, 2: 30}
@@ -241,6 +265,84 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         errors = response.json()["stage_errors"][str(draft.Stage.ATTRIBUTES)]
         self.assertIn(f"{MAGIC_SKILL_POINTS_REFUSAL}Thaumaturgy, Wards.", errors)
 
+    def _cast_and_read_the_roll(
+        self, character: ObjectDB, technique
+    ) -> tuple[tuple[ExtraTraitTerm, ...], CheckResult]:
+        """Cast ``technique`` on the web seam; return the terms its roll carried and the roll."""
+        rolled: list[CheckResult] = []
+
+        def spy(*args, **kwargs) -> CheckResult:
+            result = perform_check(*args, **kwargs)
+            rolled.append(result)
+            return result
+
+        success = CheckOutcome.objects.get(name="Success")
+        with (
+            force_check_outcome(success) as capture,
+            patch("actions.services.perform_check", side_effect=spy),
+        ):
+            outcome = self.web(character, "cast_technique", technique_id=technique.pk)
+        self.assertTrue(outcome.detail.success, outcome.detail.message)
+        self.assertEqual(len(rolled), 1)
+        return capture.extra_traits, rolled[0]
+
+    def test_a_schooled_cast_rolls_its_magic_skill_at_the_stance_floor(self) -> None:
+        # The CG Path's technique skill is a Magic skill, so a cast on it adds that skill.
+        CheckSystemSetupFactory.create()
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.SKILL,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+        self.path.technique_skill = self.thaumaturgy
+        self.path.save(update_fields=["technique_skill"])
+        check_type = CheckTypeFactory()
+        CheckTypeTraitFactory(check_type=check_type, trait=StatTraitFactory(), weight=1)
+        technique = TechniqueFactory(
+            gift=GiftFactory(),
+            anima_cost=1,
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(check_type=check_type),
+        )
+        lantern = self.make_room("The Lantern")
+        SceneFactory(room=lantern)
+
+        schooled_draft = self._create_base_draft(first_name="Ysmay")
+        self._select(schooled_draft, self.living)
+        self.assertEqual(self._sync(schooled_draft, 1).status_code, 200)
+        self_taught_draft = self._create_base_draft(first_name="Hobb")
+        self._select(self_taught_draft, self.self_taught)
+
+        casters = []
+        for draft in (schooled_draft, self_taught_draft):
+            sheet = self._finalize(draft)
+            character = sheet.character
+            character.location = lantern
+            character.save()
+            grant_technique(sheet.primary_persona, technique)
+            CharacterAnima.objects.update_or_create(
+                character=sheet, defaults={"current": 20, "maximum": 30}
+            )
+            CharacterVitals.objects.update_or_create(
+                character_sheet=sheet,
+                defaults={"health": 50, "max_health": 50, "base_max_health": 50},
+            )
+            casters.append(character)
+        schooled, self_taught = casters
+
+        term = ExtraTraitTerm(trait=self.thaumaturgy.trait, weight=Decimal("1.00"))
+        terms, schooled_roll = self._cast_and_read_the_roll(schooled, technique)
+        self.assertEqual(terms, (term,))
+        terms, self_taught_roll = self._cast_and_read_the_roll(self_taught, technique)
+        self.assertEqual(terms, (term,))
+        self.assertFalse(
+            CharacterTraitValue.objects.filter(
+                character=self_taught.sheet_data, trait=self.thaumaturgy.trait
+            )
+        )
+        self.assertEqual(schooled_roll.trait_points - self_taught_roll.trait_points, FLOORS[1])
+
     def test_a_stance_offer_saved_without_its_stance_is_not_offered(self) -> None:
         # Nothing in the database requires a Tradition Step offer to name a stance, so a
         # row saved without full_clean must not break the offers read for every draft.
@@ -261,3 +363,12 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
             f"/api/character-creation/traditions/?beginning_id={self.beginnings.pk}"
         )
         self.assertEqual(listing.status_code, 200, listing.content)
+
+        # A legacy pick of that offer, written before the offers read refused it, still
+        # opens the draft, and lifts no Magic skill.
+        draft.refresh_from_db()
+        draft.draft_data["distinctions"] = [
+            {"distinction_id": stranded.distinction_id, "rank": 1, "offer_ids": [stranded.pk]}
+        ]
+        draft.save(update_fields=["draft_data"])
+        self.assertEqual(self._floor(draft), 0)
