@@ -51051,6 +51051,7 @@ export interface components {
       pledge_name: string;
       outcome_tier_name: string;
       sacrificed: components['schemas']['_SacrificeDetail'][];
+      invoked: components['schemas']['_InvocationDetail'][];
       prayer_text: string;
       options: components['schemas']['_AnswerOption'][];
       may_write_free_text: boolean;
@@ -54366,6 +54367,24 @@ export interface components {
       tier_multiplier: number;
       next_tier: string | null;
       next_tier_threshold: number | null;
+    };
+    /**
+     * @description One invocation of the being as the steward's answer panel reads it (#4520): the
+     *     roll and the worn pieces that eased it, never a price.
+     */
+    _InvocationDetail: {
+      invoked_by_name: string;
+      outcome_name: string;
+      worn_ease: number;
+      pieces: components['schemas']['_InvocationPiece'][];
+    };
+    _InvocationPiece: {
+      item_name: string;
+      facet_name: string;
+      signals: components['schemas']['_SacrificeSignal'][];
+      points: number;
+      ease_per_point: number;
+      ease: number;
     };
     /** @description The public journal an honor is mirrored onto — safe to inline in full. */
     _JournalSummary: {

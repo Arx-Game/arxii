@@ -342,9 +342,11 @@ class InvocationUsesWornPiecesTests(WornPiecesTestBase):
 
     def test_the_invocation_records_the_pieces_that_counted_with_their_signals(self) -> None:
         self.made_piece(self.kestrel, days=400, template__name="riding coat")
-        with force_check_outcome(CheckOutcomeFactory(name="Success", success_level=1)):
+        with force_check_outcome(CheckOutcomeFactory(name="Success", success_level=1)) as capture:
             outcome = invoke_favor(self.sheet, self.being, actor_name="Linnet")
 
+        # The roll itself is eased once, by the same 8 the record shows.
+        self.assertEqual(capture.target_difficulty, self.base - 8)
         invocation = outcome.invocation
         self.assertEqual(invocation.worn_ease, 8)
         (piece,) = InvocationPiece.objects.filter(invocation=invocation)

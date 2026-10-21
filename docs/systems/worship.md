@@ -45,6 +45,10 @@ issue bodies; the model decision is ADR-0132.
   unique per (being, facet). The deity page picks through the shared `FacetPicker`
   (#4197): search, "Did you mean" near-matches, and a staff-only **Create** for a
   spelling that resolves to nothing, so the vocabulary grows from the page that needs it.
+  Since #4520 each row also sets what a worn piece carrying the facet does for that being,
+  per meaning point: `invocation_ease_points` (difficulty points eased on an invocation,
+  default 2) and `earning_bonus_percent` (percent added to the earning rate, default 1).
+  Edited on the Being Service builder's favored-facets table.
 - `BeingNickname` (#3776) — an alternate name a being's worshippers use:
   `being` FK (`related_name="nicknames"`), `name`, unique per (being, name).
   No reverent/irreverent field — tone is prose, not data. Reached
@@ -425,15 +429,21 @@ one reader: over the category's targets for the being and for any being, it sums
 equipment walk) and `get_condition_modifier_total` (conditions). Both favor categories are
 in `EQUIPMENT_RELEVANT_CATEGORIES`, and for them the walk counts a covenant role once
 (`covenant_role_base_total`). Facet, mantle and motif bonuses reach targets only through a
-resonance, so they add nothing here (slice 8 covers favored facets).
+resonance, so they add nothing here. Worn favored facets are a separate reader, not a
+modifier: see "What she wears counts with her gods" below (#4520, which absorbed the old
+#4333 slice 8).
 `earning_rate(sheet, being)` feeds `bump_devotion`, which applies it and returns the rate on
 `DevotionBump.earning_rate_percent`.
 
 **Invocation** (`worship/invocation_services.py`)
 
-- `invocation_difficulty(sheet, being)` → `InvocationDifficulty`: base points minus the
-  Chosen ease (active patronage of the being), the favor ease (by threshold), and the
-  favor invocation total; never below Trivial (15). Each ease is labelled for the picker.
+- `invocation_difficulty(sheet, being, *, worn=None, include_worn=True)` →
+  `InvocationDifficulty`: base points minus the Chosen ease (active patronage of the being),
+  the favor ease (by threshold), the favor invocation total and the worn-piece ease (#4520,
+  one labelled "What you wear: <pieces>" line); never below Trivial (15). Each ease is
+  labelled for the picker. The worn ease lowers the difficulty the check rolls against and is
+  never also passed as a `ModifierContribution`, so a piece is not counted twice. A sacrifice
+  passes `include_worn=False` (the item given up is its own ease).
 - `invocation_refusal(sheet, being)` / `check_can_invoke` — favor above zero, a use left
   this week (every invocation counts, failures too), a check type configured.
 - `invoke_favor(sheet, being, *, actor_name, player_line, scene, mission_instance,
@@ -447,6 +457,31 @@ resonance, so they add nothing here (slice 8 covers favored facets).
   actor still gets their own. The bonus is never in a room line.
 - `invocation_options(sheet)` / `invocation_bonus_table()` — the picker's data; also
   served at `GET /api/worship/beings/invocation-options/` (`entry_id` names the character).
+
+**What she wears counts with her gods** (`worship/worn_services.py`, #4520, slice 3 of
+#4462; folds #4333's old slice 8) [BUILT & WIRED]
+
+`worn_meaning(sheet, being)` → `WornMeaning` reads the character's worn pieces
+(`character.equipped_items`, a multi-slot piece once, facets still attached only) that
+carry at least one facet the being favors (`BeingFacet`). Each piece's meaning points come
+from `item_meaning(item, sheet, config=, being=)` (never a price), are capped at
+`DevotionConfig.worn_item_max_points`, and are multiplied by the best matching facet's
+`invocation_ease_points`. At most `worn_items_counted` pieces count, highest meaning first;
+a piece with 0 points counts for nothing, so a bought piece with no other history adds
+nothing however many favored facets it carries. The pieces' ease together is capped at
+`invocation_meaning_ease_max` and lands in `invocation_difficulty`. The same points times
+`earning_bonus_percent` raise `earning_rate` (and `EarningRateBreakdown.worn_bonus`) while
+worn; giving a piece up or taking it off removes both. The picker (`InvocationOption.worn`,
+the web `CallOnFavor` table, telnet `invoke <being>`) shows the wearer each piece with its
+signals and ease; the other players in the room see nothing. `invoke_favor` snapshots the
+counted pieces onto the `FavorInvocation` (`worn_ease`, `InvocationPiece`,
+`InvocationPieceSignal`), which the staff **Favor invocation** admin page renders as the GM's
+invocation detail. Resonance fed (`MeaningSignalKind.RESONANCE_FED`) is a signal of
+`item_meaning` when a being is given: `OUTFIT_TRICKLE` grants to the holder's sheet on or
+after `held_since`, through facets still on the item, in resonances the being lists (1 point
+per `resonance_fed_per_point`, doubled for a favored resonance, at most
+`resonance_fed_max_points`), counted only alongside another signal besides carried. It also
+reads at a sacrifice and a ceremony offering (`read_item(..., being=)`).
 
 **Where the bonus lands**
 

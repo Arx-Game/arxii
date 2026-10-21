@@ -9298,6 +9298,13 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `holy_sites_here`; `ceremonies.services.sacrifice_items` / `give_up_item` / `read_item`
   and `worship/sacrifice_services.py` (the sacrifice check, award and weekly limit; items
   never pay by price, ADR-4462);
+  **What she wears** (#4520, slice 3 of #4462): `BeingFacet.invocation_ease_points` /
+  `earning_bonus_percent`, `DevotionConfig` `worn_item_max_points` / `worn_items_counted` /
+  `resonance_fed_per_point` / `resonance_fed_max_points` / `invocation_meaning_ease_max`,
+  `FavorInvocation.worn_ease` with `InvocationPiece` and `InvocationPieceSignal` (the GM's
+  invocation detail), `MeaningSignalKind.RESONANCE_FED`; `worship/worn_services.worn_meaning`
+  (worn pieces ease `invocation_difficulty` and raise `earning_rate`), the staff Favor
+  invocation page, the Being Service builder's favored-facet rates and supplier panel.
   `perform_worship_rite(..., pay_award=False)`. Actions `pledge_take`, `pledge_close`,
   `sacrifice`; API `pledges/`, `pledge-cards/`, `beings/{id}/service-terms/`,
   `beings/holy-site/`; telnet `pledge`, `pledge/close`, `sacrifice`; admin Being Service

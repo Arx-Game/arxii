@@ -108,6 +108,26 @@ const prompt: StewardPrompt = {
       },
     },
   ],
+  invoked: [
+    {
+      invoked_by_name: '[name]',
+      outcome_name: 'Success',
+      worn_ease: 10,
+      pieces: [
+        {
+          item_name: '[gown]',
+          facet_name: '[facet]',
+          signals: [
+            { kind_name: 'Made by a tie', points: 2, detail: '[cousin], pair tier 2' },
+            { kind_name: 'Carried', points: 3, detail: 'held 150 days' },
+          ],
+          points: 5,
+          ease_per_point: 2,
+          ease: 10,
+        },
+      ],
+    },
+  ],
   prayer_text: '[player-written prayer]',
   options: [
     {
@@ -169,6 +189,22 @@ describe('TableBeings', () => {
     expect(screen.getByText('[name] sacrifices [item].')).toBeInTheDocument();
     expect(screen.getByTestId('sacrifice-odds-note')).toHaveTextContent(
       '2 points, eased 20, difficulty 55. For a Competent roller: 40% Failure, 60% Success. This roll: Success.'
+    );
+  });
+
+  it('shows the GM each worn piece that eased an invocation with its signals and ease', async () => {
+    mockData([prompt]);
+    const user = userEvent.setup();
+    render(<TableBeings table={table} />);
+    await user.click(screen.getByRole('button', { name: 'Open' }));
+
+    const invoked = screen.getByTestId('steward-invoked');
+    expect(invoked).toHaveTextContent('[name] calls on Wisket.');
+    expect(invoked).toHaveTextContent('[gown]');
+    expect(invoked).toHaveTextContent('[facet] (the gate; ease 2 per point)');
+    expect(invoked).toHaveTextContent('Made by a tie');
+    expect(screen.getByTestId('invocation-ease-note')).toHaveTextContent(
+      '5 points x 2 = eased 10. The players in the scene do not see the numbers.'
     );
   });
 

@@ -455,6 +455,29 @@ class SacrificeOddsBand:
 
 
 @dataclass(frozen=True)
+class InvocationPieceLine:
+    """One worn piece that counted on an invocation, as it was when the check rolled
+    (#4520): the favored facet that made it count, its signals and the ease it gave."""
+
+    item_name: str
+    facet_name: str
+    signals: list[SacrificeSignalLine]
+    points: int
+    ease_per_point: int
+    ease: int
+
+
+@dataclass(frozen=True)
+class InvocationDetail:
+    """A GM's view of one invocation: the roll and the worn pieces that eased it (#4520)."""
+
+    invoked_by_name: str
+    outcome_name: str
+    worn_ease: int
+    pieces: list[InvocationPieceLine]
+
+
+@dataclass(frozen=True)
 class SacrificeDetail:
     """A GM's view of one sacrifice: why it counted and how the roll went (#4500)."""
 
