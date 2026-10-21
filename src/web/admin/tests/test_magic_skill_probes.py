@@ -168,8 +168,11 @@ class MagicSkillCourseProbeTests(TestCase):
     def _resolve(self) -> rc.ProbeResult:
         return _dependency("magic-skill-courses").probe.resolve(None)
 
-    def _course(self, skill: Skill, *, affiliated: bool = True) -> None:
-        role = NPCRoleFactory(faction_affiliation=OrganizationFactory() if affiliated else None)
+    def _course(self, skill: Skill, *, affiliated: bool = True, active: bool = True) -> None:
+        role = NPCRoleFactory(
+            faction_affiliation=OrganizationFactory() if affiliated else None,
+            is_active=active,
+        )
         offer_row = NPCServiceOfferFactory(role=role, kind=OfferKind.SKILL_COURSE)
         SkillCourseOfferDetailsFactory(offer=offer_row, skill=skill)
 
@@ -193,6 +196,12 @@ class MagicSkillCourseProbeTests(TestCase):
     def test_a_course_on_a_role_with_no_faction_does_not_count(self) -> None:
         skill = _magic_skill()
         self._course(skill, affiliated=False)
+
+        self.assertEqual(self._resolve().missing, (skill.trait.name,))
+
+    def test_a_course_on_an_inactive_role_does_not_count(self) -> None:
+        skill = _magic_skill()
+        self._course(skill, active=False)
 
         self.assertEqual(self._resolve().missing, (skill.trait.name,))
 

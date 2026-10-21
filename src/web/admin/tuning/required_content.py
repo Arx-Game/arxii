@@ -839,8 +839,10 @@ def _probe_magic_skill_courses() -> ProbeResult:
 
     Consumer: `world/npc_services/effects.py:846` `run_skill_course_offer()`. A course
     counts when it is a `SKILL_COURSE` offer with a `SkillCourseOfferDetails` row on an
-    `NPCRole` that has a `faction_affiliation`: the coin is credited to that house, so
-    a role without one cannot take it. The Magic skill set is `magic_category_skills()`.
+    active `NPCRole` that has a `faction_affiliation`: the coin is credited to that house,
+    so a role without one cannot take it, and `available_offers` never shows an inactive
+    role's offers (an offer has no active flag of its own). The Magic skill set is
+    `magic_category_skills()`.
     """
     from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
     from world.npc_services.constants import OfferKind  # noqa: PLC0415
@@ -848,6 +850,7 @@ def _probe_magic_skill_courses() -> ProbeResult:
 
     covered = SkillCourseOfferDetails.objects.filter(
         offer__kind=OfferKind.SKILL_COURSE,
+        offer__role__is_active=True,
         offer__role__faction_affiliation__isnull=False,
     ).values("skill_id")
     missing = tuple(
