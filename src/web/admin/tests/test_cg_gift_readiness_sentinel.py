@@ -32,7 +32,7 @@ from world.magic.factories import (
     TraditionGiftGrantFactory,
     UltimateTechniqueFactory,
 )
-from world.magic.models import Technique
+from world.magic.models import PathGiftGrant, Technique
 from world.magic.seeds_cast import get_standalone_cast_template
 from world.magic.services.cg_catalog import get_gift_options
 from world.progression.factories import TechniqueKnownRequirementFactory
@@ -41,6 +41,7 @@ from world.progression.services.spends import concrete_requirement_types
 CG_ROW = "Gifts with nothing to take at character creation"
 STARTER_ROW = "Path starter technique pools"
 EFFECT_ROW = "Techniques with no cast effect"
+NO_PATH_ROW = "Tradition techniques on no Path"
 
 
 def _resolve(key: str) -> rc.ProbeResult:
@@ -100,6 +101,21 @@ class GiftReadinessDashboardJourney(TestCase):
         self.assertIn(f"{link}>{STARTER_ROW}</a>", missing)
         self.assertIn("Path of Embers / Ashen Voice", missing)
         self.assertIn("1 of them have starter techniques authored that are not ready", missing)
+
+    def test_a_tradition_technique_on_no_path_is_reported_until_a_path_lists_it(self) -> None:
+        """#4555: Lamp Hymn is listed by the tradition and by no Path, so nobody is offered it."""
+        missing = self._missing_required()
+
+        link = f'href="{reverse("admin:arxii_pathgiftgrant_changelist")}"'
+        self.assertIn(f"{link}>{NO_PATH_ROW}</a>", missing)
+        self.assertIn("Ashen Voice / Lamp Hymn (listed by Order of the Quiet Lamp)", missing)
+        self.assertIn("so no character is ever offered them", missing)
+
+        PathGiftGrant.objects.get(path=self.path, gift=self.gift).starter_techniques.add(
+            self.special
+        )
+
+        self.assertNotIn(NO_PATH_ROW, self._missing_required())
 
     def test_the_row_link_lands_on_the_techniques_to_fix(self) -> None:
         self.client.force_login(self.staff)
