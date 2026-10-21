@@ -2197,6 +2197,7 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
     unknown id is skipped with a warning, as before.
     """
     from world.character_creation.sheet_writers import set_skill_values  # noqa: PLC0415
+    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
     from world.skills.models import Skill, Specialization  # noqa: PLC0415
     from world.traits.models import TraitChangeSource  # noqa: PLC0415
 
@@ -2207,9 +2208,16 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
             logger.warning("Invalid ID %s in draft for character %s", pk, character.key)
         return {found[pk]: value for pk, value in wanted.items() if pk in found}
 
+    skills = by_id(Skill.objects.select_related("trait"), draft.draft_data.get("skills", {}))
+    # A schooled character starts with every Magic skill at the stance's floor (#4457).
+    # A draft's own points never reach a Magic skill (validation refuses them), so the
+    # floor is the value written.
+    floor = draft.starting_magic_skill_floor
+    if floor > 0:
+        skills |= dict.fromkeys(magic_category_skills().select_related("trait"), floor)
     set_skill_values(
         character.sheet_data,
-        by_id(Skill.objects.select_related("trait"), draft.draft_data.get("skills", {})),
+        skills,
         by_id(Specialization.objects.all(), draft.draft_data.get("specializations", {})),
         source=TraitChangeSource.CHARACTER_CREATION,
         enforce_caps=False,

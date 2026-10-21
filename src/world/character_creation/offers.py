@@ -25,6 +25,7 @@ from world.character_creation.constants import (
     OfferChapter,
     QuestionKind,
     TraditionState,
+    schooling_max_rank,
 )
 from world.character_creation.models import (
     BeginningTradition,
@@ -183,6 +184,41 @@ def picked_offer_ids(draft: CharacterDraft) -> set[int]:
     }
 
 
+def schooling_magic_skill_floor(draft: CharacterDraft) -> int:
+    """The level every Magic skill starts at for this draft's schooling stance (#4457).
+
+    0 unless the picked tradition's slate state opens stances. Otherwise the highest
+    ``magic_skill_floor`` among the Tradition Step offers the draft picked, counting a
+    pick only when its schooling line grants the very distinction the pick holds. Called
+    by ``CharacterDraft.starting_magic_skill_floor``; computed on every call, never
+    memoised (a draft is idmapper-shared).
+    """
+    line = _slate_line(draft)
+    if line is None or schooling_max_rank(line.state) is None:
+        return 0
+    distinction_by_offer = {
+        offer_id: entry.get("distinction_id")
+        for entry in draft.draft_data.get("distinctions", [])
+        for offer_id in entry.get("offer_ids", [])
+        if isinstance(offer_id, int)
+    }
+    if not distinction_by_offer:
+        return 0
+    offers = DistinctionOffer.objects.filter(
+        pk__in=distinction_by_offer,
+        chapter=OfferChapter.TRADITION_STEP,
+        is_active=True,
+    ).select_related("schooling_line")
+    return max(
+        (
+            offer.schooling_line.magic_skill_floor
+            for offer in offers
+            if offer.schooling_line.grants_id == distinction_by_offer[offer.pk]
+        ),
+        default=0,
+    )
+
+
 def _draft_beat_states(draft: CharacterDraft) -> dict[int, dict]:
     """The draft's own state per beat id, read off ``draft_data[BEATS_KEY]``."""
     raw = draft.draft_data.get(BEATS_KEY) or {}
@@ -295,8 +331,11 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
     if chapter == OfferChapter.LINEAGE:
         return offer.origin_choice_id in ctx["choice_ids"]
     if chapter == OfferChapter.TRADITION_STEP:
+        # The state decides how many stances it opens (#4457): a living tradition all
+        # three, an orphaned one ranks 0 and 1, a self-taught one none.
         line = ctx["slate_line"]
-        return line is not None and line.state == TraditionState.LIVING_MASTERS
+        max_rank = schooling_max_rank(line.state) if line is not None else None
+        return max_rank is not None and offer.schooling_line.rank <= max_rank
     if chapter == OfferChapter.ACTORS_SHEET:
         # The question is always on the leaf; the prompt only says which block (#3709).
         return bool(offer.prompt)

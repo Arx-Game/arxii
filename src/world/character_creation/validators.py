@@ -537,8 +537,9 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
         get_species_technique_options,
         get_technique_options,
     )
+    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
     if not draft.selected_tradition:
         return ["Select a tradition"]
@@ -600,7 +601,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     skill_valid = (
         bool(skill_id)
         and Skill.objects.filter(pk=skill_id, is_active=True)
-        .exclude(trait__category=TraitCategory.MAGIC)
+        .exclude(pk__in=magic_category_skills())
         .exists()
     )
     if not (stat_valid and skill_valid):
