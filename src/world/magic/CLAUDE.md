@@ -338,8 +338,9 @@ Every magical roll adds skills staff chose in admin; no skill is named in code. 
   is in `world/conditions/services.py`. Terms ride the check engine's `extra_traits`.
 - **Technique skill order:** technique override, else (Major Gift) the caster's current Path when
   it is one of the technique's own Paths (`technique_paths`: the Paths whose `PathGiftGrant`
-  lists it), else the technique's first own Path in Path order, else the caster's current Path;
-  else the Gift (Minor Gift) (#4555, ADR-4555-A). Inactive skills give no term.
+  lists it, cached as `Technique.cached_own_paths` and cleared by the Path Gift Grant and Path
+  admins via `invalidate_technique_own_paths`), else the technique's first own Path in Path order,
+  else the caster's current Path; else the Gift (Minor Gift) (#4555, ADR-4555-A). Inactive skills give no term.
 - **Adding a magical roll:** add a `MagicActivity` member and pass
   `extra_traits=activity_skill_terms(MagicActivity.X)` at the roll. Import it inside the
   function when the caller is `world.conditions` or `world.species` (they sit below magic). A

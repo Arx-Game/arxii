@@ -666,7 +666,7 @@ nothing, the roll runs without the added skill; there is no placeholder data.
 **Technique skill resolution order.** The technique's own `skill`, if set; otherwise for a Major
 Gift technique the `technique_skill` of the Path it is cast from (#4555, ADR-4555-A): the
 technique's own Paths are those whose `PathGiftGrant.starter_techniques` lists it
-(`technique_paths`, one query for many techniques); `skill_path` takes the caster's current Path
+(`technique_paths`, one query for many techniques; a single cast reads `Technique.cached_own_paths`, which the Path Gift Grant and Path admins clear on save through `invalidate_technique_own_paths`, so casting adds no query); `skill_path` takes the caster's current Path
 (`current_path_for_character`) when it is one of them, otherwise the technique's first own Path in
 Path order (stage, sort order, name, then pk), so a technique learned on the Path of Embers and cast after a
 Crossing into the Path of Ash still adds the Embers skill. A Path never inherits its parent's
