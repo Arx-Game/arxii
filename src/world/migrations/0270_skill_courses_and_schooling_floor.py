@@ -75,7 +75,8 @@ class Migration(migrations.Migration):
                 (
                     "coin_cost",
                     models.PositiveIntegerField(
-                        help_text="Coppers the learner pays once, when enrolling, credited to the teacher's house."
+                        help_text="Coppers the learner pays once, when enrolling, credited to the teacher's house.",
+                        verbose_name="Coin cost (coppers)",
                     ),
                 ),
                 (
@@ -93,7 +94,7 @@ class Migration(migrations.Migration):
             name="magic_skill_floor",
             field=models.PositiveSmallIntegerField(
                 default=0,
-                help_text="Development each Magic skill the tradition teaches is raised to, at least, when a character takes this stance. 0 = no floor.",
+                help_text="The level every Magic-category skill starts at for a character who picks this stance, the same for every Tradition. A skill level, not development. 0 = no Magic skills.",
             ),
         ),
         migrations.AlterField(
@@ -124,6 +125,22 @@ class Migration(migrations.Migration):
                 ],
                 help_text="Discriminator: routes to per-kind details model + effect handler registered in `world.npc_services.effects.OFFER_EFFECT_HANDLERS`.",
                 max_length=32,
+            ),
+        ),
+        migrations.AlterField(
+            model_name="npcserviceoffer",
+            name="ap_cost",
+            field=models.PositiveSmallIntegerField(
+                default=0,
+                help_text="Action points charged to the resolving character before the effect dispatches (#930 — collection/improvement dispatches cost AP; the generic knob is available to every kind). 0 = free. Must stay 0 on TRAIN and Skill Course offers; they charge their own AP.",
+            ),
+        ),
+        migrations.AlterField(
+            model_name="trainofferdetails",
+            name="learn_ap_cost",
+            field=models.PositiveIntegerField(
+                default=5,
+                help_text="Base of the training meter's AP total, multiplied by the first-technique, major-gift and cross-path multipliers. No AP is charged when the offer is accepted; the learner pays it session by session afterwards (mirrors TechniqueTeachingOffer.learn_ap_cost).",
             ),
         ),
         migrations.AddConstraint(
@@ -200,6 +217,20 @@ class Migration(migrations.Migration):
             constraint=models.CheckConstraint(
                 condition=models.Q(("session_development__lte", models.F("total_development"))),
                 name="course_session_within_total",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="skillcourseofferdetails",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("total_development__gt", 0)),
+                name="course_total_development_positive",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="skillcourseofferdetails",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("session_development__gt", 0)),
+                name="course_session_development_positive",
             ),
         ),
         migrations.AddConstraint(
