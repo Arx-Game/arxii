@@ -323,16 +323,35 @@ def _probe_mfa_secrets_key() -> ProbeResult:
     return ProbeResult(present=True)
 
 
-def _probe_path_gift_starter_pools() -> ProbeResult:
-    """Every (path, gift) a tradition makes pickable has path starter techniques.
+def _technique_gap_link(gap: str) -> str | None:
+    """The Technique changelist filtered to one authoring gap (#4545).
 
-    Consumer: `world/magic/services/cg_catalog.py:28` `get_technique_options()`.
-    A gift becomes pickable at character creation if EITHER the path's
-    `PathGiftGrant.starter_techniques` or the tradition's
-    `TraditionGiftGrant.special_techniques` is non-empty. Ruled on #3682: there
-    will never be a gift a path offers nothing for, so an empty path pool is
-    missing authored content rather than a case to branch on. This reports it
-    instead of the code hiding it.
+    ``gap`` is a ``TechniqueAuthoringGapFilter`` value (``world/magic/admin.py``),
+    so a dashboard row lands staff on the techniques that need the fix.
+    """
+    from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
+    from world.magic.admin import TechniqueAuthoringGapFilter  # noqa: PLC0415
+
+    base = admin_changelist_url("Technique")
+    return f"{base}?{TechniqueAuthoringGapFilter.parameter_name}={gap}" if base else None
+
+
+def _probe_path_gift_starter_pools() -> ProbeResult:
+    """Every (path, gift) a tradition offers has a path starter technique a player can take.
+
+    Consumer: `world/magic/services/cg_catalog.py` `get_technique_options()`.
+    A tradition offers a gift by authoring special techniques for it on its
+    `TraditionGiftGrant`. Ruled on #3682: there will never be a gift a path
+    offers nothing for, so a path pool with nothing in it is missing authored
+    content rather than a case to branch on. This reports it instead of the
+    code hiding it.
+
+    "Something in it" means a technique character creation would show, by
+    `cg_catalog.cg_takeable_techniques()`, the picker's own rule (#4545). A pool
+    of techniques with no cast template is as empty to a player as no pool, and
+    counting it as stocked let this row read complete while every gift was
+    hidden. The tradition side stays the authored offer, ready or not, so an
+    offer whose techniques are all unready still has its path pools checked.
 
     Deliberately NOT reported: a `TraditionGiftGrant` carrying no specials. That
     is a legitimate authored state meaning "this tradition teaches this gift and
@@ -341,40 +360,171 @@ def _probe_path_gift_starter_pools() -> ProbeResult:
     bury the real gaps.
     """
     from world.classes.models import Path  # noqa: PLC0415
+    from world.magic.admin import GAP_NOT_CASTABLE  # noqa: PLC0415
     from world.magic.models import PathGiftGrant, TraditionGiftGrant  # noqa: PLC0415
+    from world.magic.services.cg_catalog import cg_takeable_techniques  # noqa: PLC0415
 
-    # Gifts a tradition can put in front of a player, i.e. those whose grant
-    # actually carries specials. A tradition grant with an empty pool adds no
-    # availability of its own and cannot create this gap.
+    link = _technique_gap_link(GAP_NOT_CASTABLE)
     offered_gifts = set(
         TraditionGiftGrant.objects.filter(special_techniques__isnull=False)
         .values_list("gift_id", "gift__name")
         .distinct()
     )
     if not offered_gifts:
-        return ProbeResult(present=True)
+        return ProbeResult(present=True, admin_url=link)
 
-    stocked = set(
+    authored = set(
         PathGiftGrant.objects.filter(starter_techniques__isnull=False)
+        .values_list("path_id", "gift_id")
+        .distinct()
+    )
+    stocked = set(
+        PathGiftGrant.objects.filter(starter_techniques__in=cg_takeable_techniques())
         .values_list("path_id", "gift_id")
         .distinct()
     )
     paths = list(Path.objects.values_list("id", "name"))
 
-    missing = tuple(
-        f"{path_name} / {gift_name}"
+    gaps = [
+        (path_id, gift_id, f"{path_name} / {gift_name}")
         for path_id, path_name in paths
         for gift_id, gift_name in sorted(offered_gifts, key=lambda row: row[1])
         if (path_id, gift_id) not in stocked
-    )
-    if not missing:
-        return ProbeResult(present=True)
+    ]
+    if not gaps:
+        return ProbeResult(present=True, admin_url=link)
+    missing = tuple(label for _path_id, _gift_id, label in gaps)
+    unready = sum(1 for path_id, gift_id, _label in gaps if (path_id, gift_id) in authored)
+    if not unready:
+        # Every gap is a pool with nothing authored: the fix is the grant's own
+        # page, not the Technique list.
+        from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
+
+        link = admin_changelist_url("PathGiftGrant")
     detail = (
-        f"{len(missing)} (path, gift) pair(s) are pickable through a tradition "
-        "with no path starter techniques: the gift appears in character creation "
-        "and delivers only that tradition's extras."
+        f"{len(missing)} (path, gift) pair(s) a tradition offers have no path starter "
+        "technique a player can take at character creation. "
+        f"{unready} of them have starter techniques authored that are not ready "
+        "(no cast template, or a requirement a new character cannot meet); the "
+        "rest have none authored."
     )
-    return ProbeResult(present=False, missing=missing, detail=detail)
+    return ProbeResult(present=False, missing=missing, detail=detail, admin_url=link)
+
+
+def _probe_cg_gift_pools_takeable() -> ProbeResult:
+    """Every gift a tradition grants has a technique a player can take on every path.
+
+    Consumer: `world/magic/services/cg_catalog.py` `get_gift_options()` (#4545).
+    For each active tradition and each active Prospect path (the ones character
+    creation lets a player pick), a gift the tradition grants is offered only
+    when its pool, the path's starter techniques plus the tradition's special
+    techniques, holds a technique `cg_catalog.cg_takeable_techniques()` lets
+    through. That is the same queryset the gift catalog filters on, so this row
+    and the character creation screen cannot disagree. A path with no
+    `PathGiftGrant` for the gift contributes an empty pool, exactly as
+    `get_gift_options` reads it, so a gift the tradition grants and the path
+    never authored is reported too. A tradition and path pairing with no gift
+    offered at all leaves a new character nothing to pick at the Gift stage.
+
+    A fixed query count whatever the catalog size: one per requirement type for
+    the gated-technique ids, then the two takeable sets, the paths and the
+    tradition grants.
+    """
+    from world.classes.models import Path, PathStage  # noqa: PLC0415
+    from world.magic.admin import GAP_NOT_CASTABLE  # noqa: PLC0415
+    from world.magic.models import PathGiftGrant, TraditionGiftGrant  # noqa: PLC0415
+    from world.magic.services.cg_catalog import cg_takeable_techniques  # noqa: PLC0415
+
+    link = _technique_gap_link(GAP_NOT_CASTABLE)
+    takeable = cg_takeable_techniques()
+    path_ready = set(
+        PathGiftGrant.objects.filter(starter_techniques__in=takeable)
+        .values_list("path_id", "gift_id")
+        .distinct()
+    )
+    tradition_ready = set(
+        TraditionGiftGrant.objects.filter(special_techniques__in=takeable)
+        .values_list("pk", flat=True)
+        .distinct()
+    )
+    paths = list(
+        Path.objects.filter(stage=PathStage.PROSPECT, is_active=True)
+        .order_by("name")
+        .values_list("id", "name")
+    )
+    tradition_grants = TraditionGiftGrant.objects.filter(tradition__is_active=True).values_list(
+        "pk", "tradition_id", "tradition__name", "gift_id", "gift__name"
+    )
+
+    blocked: list[tuple[str, str, str]] = []
+    pairings: set[tuple[int, int]] = set()
+    offering: set[tuple[int, int]] = set()
+    for tg_pk, tradition_id, tradition_name, gift_id, gift_name in tradition_grants:
+        for path_id, path_name in paths:
+            pairings.add((tradition_id, path_id))
+            if tg_pk in tradition_ready or (path_id, gift_id) in path_ready:
+                offering.add((tradition_id, path_id))
+            else:
+                blocked.append((tradition_name, path_name, gift_name))
+    if not blocked:
+        return ProbeResult(present=True, admin_url=link)
+
+    missing = tuple(f"{t} / {p} / {g}" for t, p, g in sorted(blocked))
+    detail = (
+        f"{len(missing)} tradition / path / gift combination(s) hold no technique a "
+        "player can take at character creation: no starter or tradition technique "
+        "with a cast template, outside the ultimates and without a requirement. "
+    )
+    if not offering:
+        detail += (
+            "No tradition and path offers any gift, which blocks every new character "
+            "at the Gift stage."
+        )
+    else:
+        empty = len(pairings - offering)
+        detail += (
+            f"{empty} tradition and path pairing(s) offer no gift at all, which blocks "
+            "a new character who picks one at the Gift stage."
+        )
+    return ProbeResult(present=False, missing=missing, detail=detail, admin_url=link)
+
+
+def _probe_cg_techniques_have_cast_effect() -> ProbeResult:
+    """Techniques whose cast does nothing derivable: no effect rows authored (#4545).
+
+    Uses `technique_is_underspecified` (`world/magic/services/technique_effects.py`),
+    the same test the Technique admin's "No effects authored" filter applies: no
+    condition applied or removed, no damage profile, no treatment. Such a
+    technique casts and changes nothing. The count of those sitting in a
+    character creation pool says how many a new character can take today.
+    """
+    from world.magic.admin import GAP_UNDERSPECIFIED  # noqa: PLC0415
+    from world.magic.models import PathGiftGrant, Technique, TraditionGiftGrant  # noqa: PLC0415
+    from world.magic.services.technique_effects import (  # noqa: PLC0415
+        technique_is_underspecified,
+        technique_payload_prefetches,
+    )
+
+    link = _technique_gap_link(GAP_UNDERSPECIFIED)
+    techniques = Technique.objects.prefetch_related(*technique_payload_prefetches()).order_by(
+        "name"
+    )
+    effectless = [technique for technique in techniques if technique_is_underspecified(technique)]
+    if not effectless:
+        return ProbeResult(present=True, admin_url=link)
+
+    in_pools = set(
+        PathGiftGrant.starter_techniques.through.objects.values_list("technique_id", flat=True)
+    ) | set(
+        TraditionGiftGrant.special_techniques.through.objects.values_list("technique_id", flat=True)
+    )
+    pooled = tuple(technique.name for technique in effectless if technique.pk in in_pools)
+    detail = (
+        f"{len(effectless)} technique(s) have no cast effect authored (no condition "
+        f"applied or removed, no damage, no treatment). {len(pooled)} of them sit in a "
+        "character creation pool; those are listed."
+    )
+    return ProbeResult(present=False, missing=pooled, detail=detail, admin_url=link)
 
 
 def _probe_audere_majora_thresholds() -> ProbeResult:
@@ -2217,13 +2367,38 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="path-gift-starter-pools",
             label="Path starter technique pools",
             tier=DependencyTier.REQUIRED,
-            consumer="world/magic/services/cg_catalog.py:28 get_technique_options()",
+            consumer="world/magic/services/cg_catalog.py get_technique_options()",
             consequence=(
-                "The gift is offered at character creation on the strength of the "
-                "tradition alone, and a player who picks it receives only that "
-                "tradition's extras - the path contributes nothing it was meant to."
+                "The path offers nothing a new character can take for this gift. The "
+                "gift is offered only on the strength of the tradition's extras; where "
+                "those are not ready either, the gift is not offered at all (see "
+                "Gifts with nothing to take at character creation)."
             ),
             probe=CustomProbe(fn=_probe_path_gift_starter_pools),
+        ),
+        ContentDependency(
+            key="cg-gift-pools-takeable",
+            label="Gifts with nothing to take at character creation",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/cg_catalog.py get_gift_options()",
+            consequence=(
+                "The gift is never offered at character creation under that tradition "
+                "and path. When a tradition and path offer no gift at all, it blocks "
+                "every new character who picks them at the Gift stage."
+            ),
+            probe=CustomProbe(fn=_probe_cg_gift_pools_takeable),
+        ),
+        ContentDependency(
+            key="cg-techniques-cast-effect",
+            label="Techniques with no cast effect",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/technique_effects.py technique_is_underspecified()",
+            consequence=(
+                "The technique can be taken and cast, and the cast changes nothing: no "
+                "condition, no damage, no treatment. The player's sheet calls its "
+                "effects not yet catalogued."
+            ),
+            probe=CustomProbe(fn=_probe_cg_techniques_have_cast_effect),
         ),
         ContentDependency(
             key="audere-majora-thresholds",

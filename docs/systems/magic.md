@@ -230,6 +230,21 @@ combinations at the time it was added. A `TraditionGiftGrant` carrying no specia
 deliberately never reported: that is a legitimate authored state meaning "this tradition
 teaches this gift and adds no extras of its own", it creates no availability of its own,
 and 39 of 69 authored rows are in it.
+
+**"Non-empty" means a technique a player can take (#4545).** `cg_technique_queryset`
+(`cg_catalog.py`) is the one CG readiness rule: never an ultimate, an `action_template`
+set unless `include_unready`, no active requirement row when `exclude_gated`.
+`cg_takeable_techniques()` is that rule as the technique picker applies it (ready,
+ungated). `get_technique_options`, `get_species_technique_options` and `get_gift_options`
+all filter through it, so a gift is offered only when its pool holds a technique the
+picker will show (before #4545 `get_gift_options` checked only the template, and a pool of
+gated techniques offered a gift with an empty picker behind it). The Required content
+dashboard calls the same function: `path-gift-starter-pools` counts only takeable
+starters, `cg-gift-pools-takeable` lists each (active tradition, active Prospect path,
+gift) combination whose pool holds none (a path with no grant for the gift is an empty
+pool, as `get_gift_options` reads it), and `cg-techniques-cast-effect` (Tuning) lists pooled techniques
+`technique_is_underspecified` flags. On the 2026-10-21 production dump no technique had a
+template, so every gift was hidden while the old starter-pool row read complete.
 - `CharacterTechniqueHandler._state` (`handlers.py`) — reads explicit `CharacterTechnique`
   rows. Once an inherited technique is learned the row exists. Inheritance is an
   acquisition-eligibility concern, not an inventory one.

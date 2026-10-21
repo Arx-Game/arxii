@@ -15,6 +15,7 @@ from world.codex.models import (
     DistinctionCodexGrant,
     OrganizationCodexGrant,
     PathCodexGrant,
+    RealmCodexGrant,
     TraditionCodexGrant,
 )
 
@@ -154,4 +155,15 @@ class OrganizationCodexGrantFactory(DjangoModelFactory):
         model = OrganizationCodexGrant
 
     organization = factory.SubFactory("world.societies.factories.OrganizationFactory")
+    entry = factory.SubFactory(CodexEntryFactory)
+
+
+class RealmCodexGrantFactory(DjangoModelFactory):
+    """Factory for creating RealmCodexGrant instances (#4531)."""
+
+    class Meta:
+        model = RealmCodexGrant
+        django_get_or_create = ("realm", "entry")
+
+    realm = factory.SubFactory("world.character_creation.factories.RealmFactory")
     entry = factory.SubFactory(CodexEntryFactory)
