@@ -94,6 +94,33 @@ describe('SchoolingStances', () => {
     expect(screen.getByText('Magic skills 30')).toBeInTheDocument();
   });
 
+  it('a ranked stance whose floor is unset shows no Magic line (#4457)', () => {
+    renderWithCharacterCreationProviders(
+      <SchoolingStances
+        draft={createMockDraft()}
+        tradition={{
+          ...tradition,
+          schooling: [newlyTakenIn, { ...trainedForYears, magic_skill_floor: 0 }, raisedWithinIt],
+        }}
+      />
+    );
+    expect(screen.getAllByText('No magic skills')).toHaveLength(1);
+    const unset = screen.getByRole('button', { name: /Trained for years/ });
+    expect(unset).not.toHaveTextContent(/magic skills/i);
+  });
+
+  it('the no-floor line routes through copy key offers_magic_skill_floor_none (#4457)', () => {
+    renderWithCharacterCreationProviders(
+      <SchoolingStances
+        draft={createMockDraft()}
+        tradition={tradition}
+        copy={{ offers_magic_skill_floor_none: 'No arcane schooling' }}
+      />
+    );
+    expect(screen.getByText('No arcane schooling')).toHaveClass('none');
+    expect(screen.queryByText('No magic skills')).not.toBeInTheDocument();
+  });
+
   it('the floor line routes through copy key offers_magic_skill_floor (#4457)', () => {
     renderWithCharacterCreationProviders(
       <SchoolingStances

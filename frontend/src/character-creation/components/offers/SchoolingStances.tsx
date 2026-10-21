@@ -7,12 +7,36 @@
  * Picking a stance syncs a Tradition Training entry at that stance's rank
  * (rank 0 clears the pick); every other CHOICE distinction on the draft is
  * resent unchanged, same as `ChapterOffers`.
+ *
+ * Each stance prints its Magic skill floor (#4457). Rank 0 grants none and says so; a
+ * rank 1 or 2 stance whose floor staff have not set yet shows no Magic line at all.
  */
 
 import { useCallback } from 'react';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
 import type { CGExplanations, CharacterDraft, SchoolingLineRow, Tradition } from '../../types';
 import { choiceEntries } from './syncHelpers';
+
+/**
+ * A stance's Magic skill line: its floor once staff set one, "No magic skills" on rank 0
+ * (which grants none), and nothing for a rank 1 or 2 stance whose floor is still unset.
+ */
+function MagicSkillLine({ row, copy }: { row: SchoolingLineRow; copy?: CGExplanations }) {
+  if (row.magic_skill_floor > 0) {
+    return (
+      <span className="grant">
+        {(copy?.offers_magic_skill_floor ?? 'Magic skills {floor}').replace(
+          '{floor}',
+          String(row.magic_skill_floor)
+        )}
+      </span>
+    );
+  }
+  if (row.rank === 0) {
+    return <span className="none">{copy?.offers_magic_skill_floor_none ?? 'No magic skills'}</span>;
+  }
+  return null;
+}
 
 interface SchoolingStancesProps {
   draft: CharacterDraft;
@@ -76,16 +100,7 @@ export function SchoolingStances({ draft, tradition, copy }: SchoolingStancesPro
                   <span className={row.rank > 0 ? 'grant' : undefined}>
                     {row.techniques} technique{row.techniques === 1 ? '' : 's'}
                   </span>
-                  {row.magic_skill_floor > 0 ? (
-                    <span className="grant">
-                      {(copy?.offers_magic_skill_floor ?? 'Magic skills {floor}').replace(
-                        '{floor}',
-                        String(row.magic_skill_floor)
-                      )}
-                    </span>
-                  ) : (
-                    <span className="none">No magic skills</span>
-                  )}
+                  <MagicSkillLine row={row} copy={copy} />
                 </span>
               </button>
             </li>
