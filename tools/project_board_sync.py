@@ -11,7 +11,12 @@ Two modes:
 * ``event``    (default) — react to the GitHub Actions event in
   ``GITHUB_EVENT_PATH`` (``issues`` or ``pull_request``).
 * ``backfill`` — one-time sweep: add every open issue to the board and set its
-  Status/Stage from current assignment + labels.
+  Status/Stage and ``status:in-progress`` label from the active-work rule.
+  ``backfill --dry-run`` only prints the issues whose label or Status differs.
+
+"In progress" means active work, not assignment (#4539): an open issue is
+active iff it carries ``status:spec-draft`` or ``status:implementing``, or has
+an open PR that closes it. Assignment alone changes nothing.
 
 Everything is resolved by *name* at runtime (project, fields, options), so the
 script keeps working when option IDs change or the ``Cancelled`` option is
@@ -48,6 +53,10 @@ STAGE_IMPLEMENTATION = "Implementation"
 STAGE_IN_REVIEW = "In review"
 
 CLAIMED_LABEL = "status:in-progress"
+
+# Labels that mean someone is working the issue right now. ``status:spec-review``
+# (waiting on the owner) is deliberately absent: it shows through Stage.
+ACTIVE_LABELS = ("status:spec-draft", "status:implementing")
 
 # Label -> Stage, highest lifecycle priority first.
 STAGE_BY_LABEL = [
@@ -159,8 +168,11 @@ class Board:
 # --------------------------------------------------------------------------- #
 
 
-def ensure_item(board: Board, content_id: str) -> str:
-    """Return the project item id for an issue/PR node, adding it if missing."""
+def ensure_item(board: Board, content_id: str, create: bool = True) -> str | None:
+    """Return the project item id for an issue/PR node, adding it if missing.
+
+    With ``create=False`` a missing item returns None instead of being added.
+    """
     data = gql(
         """
         query($id:ID!) {
@@ -175,6 +187,8 @@ def ensure_item(board: Board, content_id: str) -> str:
     for item in data["node"]["projectItems"]["nodes"]:
         if item["project"]["id"] == board.id:
             return item["id"]
+    if not create:
+        return None
     added = gql(
         """
         mutation($proj:ID!, $content:ID!) {
@@ -275,10 +289,16 @@ def set_issue_labels(repo: str, number: int, add: list[str], remove: list[str]) 
 # --------------------------------------------------------------------------- #
 
 
-def compute_status(issue: dict) -> str:
+def is_active(label_names: set[str], has_open_pr: bool) -> bool:
+    """True when the issue is being actively worked (not merely assigned)."""
+    return has_open_pr or any(name in label_names for name in ACTIVE_LABELS)
+
+
+def compute_status(issue: dict, has_open_pr: bool = False) -> str:
+    """Board Status for an issue payload. Assignment alone never matters."""
     if issue.get("state") == "closed":
         return STATUS_CANCELLED if issue.get("state_reason") == "not_planned" else STATUS_DONE
-    if issue.get("assignees"):
+    if is_active(label_names_of(issue), has_open_pr):
         return STATUS_IN_PROGRESS
     return STATUS_BACKLOG
 
@@ -294,6 +314,34 @@ def label_names_of(issue: dict) -> set[str]:
     return {label["name"] for label in issue.get("labels", [])}
 
 
+def has_open_linked_pr(issue_node_id: str) -> bool:
+    """True when an open PR closes this issue (``Closes #N``)."""
+    data = gql(
+        """
+        query($id:ID!) {
+          node(id:$id) {
+            ... on Issue {
+              closedByPullRequestsReferences(first:20, includeClosedPrs:false) {
+                nodes { state }
+              }
+            }
+          }
+        }
+        """,
+        {"id": issue_node_id},
+    )
+    nodes = data["node"]["closedByPullRequestsReferences"]["nodes"]
+    return any(n["state"] == "OPEN" for n in nodes)
+
+
+def sync_claimed_label(repo: str, number: int, active: bool) -> None:
+    """Make ``status:in-progress`` follow the active-work rule (idempotent)."""
+    if active:
+        set_issue_labels(repo, number, add=[CLAIMED_LABEL], remove=[])
+    else:
+        set_issue_labels(repo, number, add=[], remove=[CLAIMED_LABEL])
+
+
 # --------------------------------------------------------------------------- #
 # Event handlers                                                              #
 # --------------------------------------------------------------------------- #
@@ -306,7 +354,9 @@ def handle_issue(board: Board, repo: str, event: dict) -> None:
     print(f"issue #{number} action={action}")
     item_id = ensure_item(board, issue["node_id"])
 
-    set_single_select(board, item_id, "Status", compute_status(issue))
+    open_pr = issue.get("state") != "closed" and has_open_linked_pr(issue["node_id"])
+    status = compute_status(issue, open_pr)
+    set_single_select(board, item_id, "Status", status)
 
     # Stage is label-driven, but "In review" is owned by the PR handler - never
     # let an issue event downgrade it (only the PR closing does).
@@ -317,10 +367,10 @@ def handle_issue(board: Board, repo: str, event: dict) -> None:
         else:
             clear_field(board, item_id, "Stage")
 
-    if action == "assigned":
-        set_issue_labels(repo, number, add=[CLAIMED_LABEL], remove=[])
-    elif action == "unassigned" and not issue.get("assignees"):
-        set_issue_labels(repo, number, add=[], remove=[CLAIMED_LABEL])
+    # The claimed label follows Status (assignment is irrelevant); a closed
+    # issue is left as it is.
+    if issue.get("state") != "closed":
+        sync_claimed_label(repo, number, status == STATUS_IN_PROGRESS)
 
 
 def handle_pull_request(board: Board, repo: str, event: dict) -> None:
@@ -334,7 +384,13 @@ def handle_pull_request(board: Board, repo: str, event: dict) -> None:
             pullRequest(number:$num) {
               merged
               closingIssuesReferences(first:20) {
-                nodes { number node_id: id state labels(first:50){ nodes { name } } }
+                nodes {
+                  number node_id: id state
+                  labels(first:50){ nodes { name } }
+                  closedByPullRequestsReferences(first:20, includeClosedPrs:false) {
+                    nodes { number state }
+                  }
+                }
               }
             }
           }
@@ -342,20 +398,30 @@ def handle_pull_request(board: Board, repo: str, event: dict) -> None:
         """,
         {"owner": owner, "repo": name, "num": pr["number"]},
     )
+    merged = data["repository"]["pullRequest"]["merged"]
     refs = data["repository"]["pullRequest"]["closingIssuesReferences"]["nodes"]
     print(f"PR #{pr['number']} action={action} closes={[r['number'] for r in refs]}")
     for ref in refs:
         if ref["state"] != "OPEN":
             continue
         item_id = ensure_item(board, ref["node_id"])
+        labels = {n["name"] for n in ref["labels"]["nodes"]}
         if action in ("opened", "reopened"):
-            if current_value(item_id, "Status") == STATUS_BACKLOG:
-                set_single_select(board, item_id, "Status", STATUS_IN_PROGRESS)
+            # A linked open PR makes the issue active.
+            set_single_select(board, item_id, "Status", STATUS_IN_PROGRESS)
             set_single_select(board, item_id, "Stage", STAGE_IN_REVIEW)
-        elif action == "closed":
+            sync_claimed_label(repo, ref["number"], True)
+        elif action == "closed" and not merged:
             # PR went away without merging (merge closes the issue -> Done).
-            labels = {n["name"] for n in ref["labels"]["nodes"]}
-            stage = compute_stage(labels)
+            # Recompute: another open PR or an active label keeps it In progress.
+            other_open = any(
+                n["state"] == "OPEN" and n["number"] != pr["number"]
+                for n in ref["closedByPullRequestsReferences"]["nodes"]
+            )
+            status = STATUS_IN_PROGRESS if is_active(labels, other_open) else STATUS_BACKLOG
+            set_single_select(board, item_id, "Status", status)
+            sync_claimed_label(repo, ref["number"], status == STATUS_IN_PROGRESS)
+            stage = STAGE_IN_REVIEW if other_open else compute_stage(labels)
             if stage:
                 set_single_select(board, item_id, "Stage", stage)
             else:
@@ -367,10 +433,16 @@ def handle_pull_request(board: Board, repo: str, event: dict) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def backfill(board: Board, repo: str) -> None:
+def backfill(board: Board, repo: str, dry_run: bool = False) -> None:
+    """Reconcile every open issue with the active-work rule.
+
+    ``dry_run`` writes nothing: it prints each issue whose ``status:in-progress``
+    label or board Status differs from the rule.
+    """
     owner, name = repo.split("/")
     cursor = None
     seen = 0
+    mismatched = 0
     while True:
         data = gql(
             """
@@ -381,8 +453,10 @@ def backfill(board: Board, repo: str) -> None:
                   pageInfo { hasNextPage endCursor }
                   nodes {
                     number node_id: id state
-                    assignees(first:1) { totalCount }
                     labels(first:50) { nodes { name } }
+                    closedByPullRequestsReferences(first:20, includeClosedPrs:false) {
+                      nodes { state }
+                    }
                   }
                 }
               }
@@ -393,17 +467,37 @@ def backfill(board: Board, repo: str) -> None:
         page = data["repository"]["issues"]
         for issue in page["nodes"]:
             seen += 1
+            labels = {n["name"] for n in issue["labels"]["nodes"]}
+            prs = issue["closedByPullRequestsReferences"]["nodes"]
+            open_pr = any(n["state"] == "OPEN" for n in prs)
+            active = is_active(labels, open_pr)
+            status = STATUS_IN_PROGRESS if active else STATUS_BACKLOG
+            item_id = ensure_item(board, issue["node_id"], create=not dry_run)
+            board_status = current_value(item_id, "Status") if item_id else None
+            label_wrong = (CLAIMED_LABEL in labels) != active
+            if dry_run:
+                if label_wrong or board_status != status:
+                    mismatched += 1
+                    print(
+                        f"#{issue['number']}: want {status}"
+                        f"{' + label' if active else ', no label'}; "
+                        f"has Status={board_status}, label={CLAIMED_LABEL in labels}"
+                    )
+                continue
             print(f"backfill #{issue['number']}")
-            item_id = ensure_item(board, issue["node_id"])
-            status = STATUS_IN_PROGRESS if issue["assignees"]["totalCount"] > 0 else STATUS_BACKLOG
             set_single_select(board, item_id, "Status", status)
-            stage = compute_stage({n["name"] for n in issue["labels"]["nodes"]})
-            if stage:
-                set_single_select(board, item_id, "Stage", stage)
+            sync_claimed_label(repo, issue["number"], active)
+            if current_value(item_id, "Stage") != STAGE_IN_REVIEW:
+                stage = compute_stage(labels)
+                if stage:
+                    set_single_select(board, item_id, "Stage", stage)
         if not page["pageInfo"]["hasNextPage"]:
             break
         cursor = page["pageInfo"]["endCursor"]
-    print(f"backfill complete: {seen} open issues reconciled")
+    if dry_run:
+        print(f"dry run: {mismatched} of {seen} open issues differ from the rule")
+    else:
+        print(f"backfill complete: {seen} open issues reconciled")
 
 
 # --------------------------------------------------------------------------- #
@@ -419,7 +513,7 @@ def main() -> None:
 
     mode = sys.argv[1] if len(sys.argv) > 1 else "event"
     if mode == "backfill":
-        backfill(board, repo)
+        backfill(board, repo, dry_run="--dry-run" in sys.argv[2:])
         return
 
     event_name = os.environ.get("GITHUB_EVENT_NAME", "")

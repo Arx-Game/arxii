@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # One-time, idempotent sweep that reconciles the existing backlog with the new
 # automation: adds every OPEN issue to the org Project and sets its Status (from
+# the active-work rule, not
 # assignment) and Stage (from status:* / spec:* labels). Safe to re-run.
+# Pass --dry-run to list the issues that differ without writing anything.
 #
 # Usage (needs a PAT that can write the project -- e.g. the maintainer PAT):
 #   GH_TOKEN=<pat> tools/backfill_project_board.sh
@@ -16,4 +18,4 @@ export GITHUB_REPOSITORY PROJECT_NUMBER
 export GITHUB_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-$(gh auth token)}}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-python3 "${script_dir}/project_board_sync.py" backfill
+python3 "${script_dir}/project_board_sync.py" backfill "$@"
