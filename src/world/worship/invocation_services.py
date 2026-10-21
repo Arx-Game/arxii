@@ -12,7 +12,10 @@ Difficulty, in points: ``DevotionConfig.base_difficulty`` minus the Chosen ease
 (``ChosenFavorConfig.invocation_ease_points``) for an active patronage of the
 being, minus the favor ease at the configured thresholds, minus the character's
 favor invocation total for the being (``favor_modifier_total``). Never below
-Trivial. Eases add (ruling 12).
+Trivial. Eases add (ruling 12). The worn pieces carrying a facet the being favors
+ease it too (``worn_services.worn_meaning``, #4520), within
+``DevotionConfig.invocation_meaning_ease_max``; a sacrifice does not read them, because
+the item given up is its own ease.
 """
 
 from __future__ import annotations
@@ -40,6 +43,7 @@ from world.worship.types import (
     InvocationOption,
     InvocationOutcome,
     InvocationRequest,
+    WornMeaning,
 )
 
 if TYPE_CHECKING:
@@ -60,6 +64,7 @@ MSG_NO_SUCH_BEING = "There is no such being to call on."
 CHOSEN_EASE_LABEL = "You are {being}'s Chosen"
 FAVOR_EASE_LABEL = "Favor {favor} ({threshold} or more)"
 MODIFIER_EASE_LABEL = "Favor invocation modifiers for {being}"
+WORN_EASE_LABEL = "What you wear: {pieces}"
 
 
 def get_devotion_config() -> DevotionConfig:
@@ -95,9 +100,21 @@ def favor_with(sheet: CharacterSheet, being: WorshippedBeing) -> int:
     return standing.favor if standing is not None else 0
 
 
-def invocation_difficulty(sheet: CharacterSheet, being: WorshippedBeing) -> InvocationDifficulty:
-    """How hard ``sheet``'s invocation check against ``being`` is, with each ease."""
+def invocation_difficulty(
+    sheet: CharacterSheet,
+    being: WorshippedBeing,
+    *,
+    worn: WornMeaning | None = None,
+    include_worn: bool = True,
+) -> InvocationDifficulty:
+    """How hard ``sheet``'s invocation check against ``being`` is, with each ease.
+
+    The worn pieces that count with ``being`` ease it by their capped total
+    (``worn_meaning``; pass ``worn`` when the caller already read it). A sacrifice passes
+    ``include_worn=False``: the item given up is its own ease.
+    """
     from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
+    from world.worship.worn_services import worn_meaning  # noqa: PLC0415
 
     config = get_devotion_config()
     base_points = DIFFICULTY_VALUES[config.base_difficulty]
@@ -134,6 +151,13 @@ def invocation_difficulty(sheet: CharacterSheet, being: WorshippedBeing) -> Invo
             points=favor_modifier_total(sheet, being, FAVOR_INVOCATION_CATEGORY_NAME),
         )
     )
+    if include_worn:
+        worn = worn if worn is not None else worn_meaning(sheet, being)
+        if worn.ease:
+            names = ", ".join(piece.item_name for piece in worn.counted)
+            eases.append(
+                InvocationEase(label=WORN_EASE_LABEL.format(pieces=names), points=worn.ease)
+            )
     points = max(base_points - sum(ease.points for ease in eases), MIN_DIFFICULTY_POINTS)
     return InvocationDifficulty(
         base_points=base_points,
@@ -260,6 +284,7 @@ def invocation_options(sheet: CharacterSheet) -> list[InvocationOption]:
     """
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.worship.models import DevotionStanding  # noqa: PLC0415
+    from world.worship.worn_services import worn_meaning  # noqa: PLC0415
 
     week = get_current_game_week()
     per_week = get_devotion_config().invocations_per_week
@@ -273,14 +298,18 @@ def invocation_options(sheet: CharacterSheet) -> list[InvocationOption]:
         being = standing.being
         refusal = invocation_refusal(sheet, being, game_week=week)
         used = invocations_used(sheet, being, game_week=week)
+        worn = worn_meaning(sheet, being) if standing.favor > 0 else None
         options.append(
             InvocationOption(
                 being=being,
                 favor=standing.favor,
-                difficulty=invocation_difficulty(sheet, being) if standing.favor > 0 else None,
+                difficulty=(
+                    invocation_difficulty(sheet, being, worn=worn) if worn is not None else None
+                ),
                 uses_left=max(per_week - used, 0),
                 uses_per_week=per_week,
                 refusal=refusal,
+                worn=worn,
             )
         )
     return options
@@ -339,10 +368,12 @@ def invoke_favor(  # noqa: PLR0913 - the check's context is co-equal keyword dat
     from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.worship.models import FavorInvocation  # noqa: PLC0415
+    from world.worship.worn_services import record_invocation_pieces, worn_meaning  # noqa: PLC0415
 
     check_can_invoke(sheet, being)
     check_type = invocation_check_type(being)
-    difficulty = invocation_difficulty(sheet, being)
+    worn = worn_meaning(sheet, being)
+    difficulty = invocation_difficulty(sheet, being, worn=worn)
     with transaction.atomic():
         result = perform_check_with_modifiers(
             sheet.character,
@@ -359,11 +390,13 @@ def invoke_favor(  # noqa: PLR0913 - the check's context is co-equal keyword dat
             game_week=get_current_game_week(),
             outcome_tier=result.outcome,
             bonus=bonus,
+            worn_ease=worn.ease,
             player_line=player_line.strip(),
             scene=scene,
             mission_instance=mission_instance,
             scene_action_request=scene_action_request,
         )
+        record_invocation_pieces(invocation, worn)
     contribution = invocation_contribution(invocation)
     public, private, outcome_line = invocation_lines(
         actor_name=actor_name,

@@ -8,6 +8,7 @@ from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
 from world.clues.models import Clue
+from world.items.types import MeaningSignal
 from world.stories.models import Episode
 from world.worship.models import Miracle, Pledge, Prayer, Vision, WorshippedBeing, WorshipRite
 from world.worship.types import InvocationDifficulty
@@ -209,6 +210,46 @@ class InvocationDifficultySerializer(serializers.Serializer):
         return DifficultyChoice(obj.band).label
 
 
+class WornSignalSerializer(serializers.Serializer):
+    """One reason a worn piece means something to its wearer (#4520)."""
+
+    kind = serializers.CharField()
+    kind_name = serializers.SerializerMethodField()
+    points = serializers.IntegerField()
+    detail = serializers.CharField(allow_blank=True)
+
+    def get_kind_name(self, obj: MeaningSignal) -> str:
+        from world.items.constants import MeaningSignalKind  # noqa: PLC0415
+
+        return MeaningSignalKind(obj.kind).label
+
+
+class WornPieceSerializer(serializers.Serializer):
+    """A worn piece carrying a facet the being favors, as the wearer sees it in the Call on
+    favor picker: what it means, whether it counts and the ease it gives (#4520)."""
+
+    item_name = serializers.CharField()
+    facet_name = serializers.CharField()
+    signals = WornSignalSerializer(source="meaning.signals", many=True)
+    points = serializers.IntegerField()
+    ease_per_point = serializers.IntegerField()
+    ease = serializers.IntegerField()
+    earning_percent = serializers.IntegerField()
+    counted = serializers.BooleanField()
+
+
+class WornMeaningSerializer(serializers.Serializer):
+    """What the worn pieces do for one being: the pieces, the capped ease and the earning
+    bonus (#4520)."""
+
+    pieces = WornPieceSerializer(many=True)
+    ease = serializers.IntegerField()
+    raw_ease = serializers.IntegerField()
+    ease_cap = serializers.IntegerField()
+    items_counted_max = serializers.IntegerField()
+    earning_percent = serializers.IntegerField()
+
+
 class InvocationOptionSerializer(serializers.Serializer):
     """One being the acting character could call on (#4333). ``refusal`` is the
     player-facing reason it cannot be invoked now, or ""."""
@@ -221,6 +262,7 @@ class InvocationOptionSerializer(serializers.Serializer):
     uses_left = serializers.IntegerField()
     uses_per_week = serializers.IntegerField()
     difficulty = InvocationDifficultySerializer(allow_null=True)
+    worn = WornMeaningSerializer(allow_null=True)
 
 
 class InvocationBonusRowSerializer(serializers.Serializer):
@@ -263,6 +305,7 @@ class EarningRateSerializer(serializers.Serializer):
     base = serializers.IntegerField()
     chosen_bonus = serializers.IntegerField()
     modifiers = serializers.IntegerField()
+    worn_bonus = serializers.IntegerField()
     total = serializers.IntegerField()
 
 

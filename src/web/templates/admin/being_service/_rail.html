@@ -33,3 +33,17 @@ the main form, since "Mark reviewed" is its own POST and nested forms are invali
     </div>
   </form>
 </div>
+
+{% if supplier_rail.rows %}
+<div class="module" id="facet-suppliers">
+  <h2>Who supplies these facets</h2>
+  {% for row in supplier_rail.rows %}
+  <p class="bs-supply"><b>{{ row.facet }}</b>:
+    {% if row.artists %}facet commission offers from
+      {% for name, url in row.artists %}{% if url %}<a href="{{ url }}">{{ name }}</a>{% else %}{{ name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}<span class="bs-warn">no artist offers facet work yet</span>{% endif %};
+    {{ row.templates }} template{{ row.templates|pluralize }} carry it.<br>
+    <span class="bs-context">{{ row.preview }}</span></p>
+  {% endfor %}
+  <p class="bs-context"><b>Worn ease preview.</b> {{ supplier_rail.note }}</p>
+</div>
+{% endif %}

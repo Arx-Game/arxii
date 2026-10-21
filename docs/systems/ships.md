@@ -172,7 +172,7 @@ the same REGISTRY seam the web will use — to the Actions in
 ship                                            — status hub
 ship status [ship_id=<n>]                       — status hub, or one ship's report
 ship commission ship_type=<name> [covenant=<name>] name=<ship name>
-ship upgrade stat=handling|armament|hull level=<n> [ship_id=<n>]
+ship upgrade stat=<handling | armament | hull> level=<n> [ship_id=<n>]
 ship repair [ship_id=<n>]
 ```
 
@@ -180,8 +180,15 @@ ship repair [ship_id=<n>]
 (mirrors `crafting_station.py`'s `feature_kind`/`room_profile` contract);
 `upgrade`/`repair`/`status` resolve their target ship inside the Action itself
 (`_resolve_ship` — explicit `ship_id`, else the actor's current room) and the
-command only forwards `ship_id` when supplied. `name=` is a greedy token (must
-come last) so a ship name may contain spaces.
+command only forwards `ship_id` when supplied. `ship_type=`, `covenant=` and
+`name=` may each hold spaces: the values run to the next `key=` token, through
+the shared `parse_kv_and_flags` tokenizer (#3657 tranche 17: only `name=` had,
+so `covenant=The Tide` was looked up as "The"). A ship reads as its area name
+(`ShipDetails.__str__`, `Sloop 'Wavecutter'`), on the status line and in the
+upgrade and repair projects' descriptions; it had read "Sloop (building 12)".
+The quay, the deck, both upgrades, the repair gate and every refusal are typed
+in `integration_tests/test_keeping_what_is_yours_journeys.py`
+(`CommissioningAShip`).
 
 ## Actions (`actions/definitions/ships.py`, all REGISTRY, `category="ships"`)
 

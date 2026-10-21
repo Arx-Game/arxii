@@ -38,7 +38,13 @@ from world.worship.constants import (
 )
 from world.worship.exceptions import VisionError, VisionPoolInsufficient
 from world.worship.models import Answer, PendingAnswer, Vision
-from world.worship.types import AnswerDelivery, SacrificeDetail, SacrificeSignalLine
+from world.worship.types import (
+    AnswerDelivery,
+    InvocationDetail,
+    InvocationPieceLine,
+    SacrificeDetail,
+    SacrificeSignalLine,
+)
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -47,7 +53,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.clues.models import Clue
     from world.traits.models import CheckOutcome
-    from world.worship.models import PledgeDetails
+    from world.worship.models import FavorInvocation, PledgeDetails
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +137,50 @@ def pledge_sacrifices(details: PledgeDetails) -> list[CeremonyOffering]:
         # Read back as offering.signals.all() in sacrifice_detail, so a plain prefetch.
         .prefetch_related("signals")  # noqa: PREFETCH_STRING
         .order_by("pk")
+    )
+
+
+def pledge_invocations(details: PledgeDetails) -> list[FavorInvocation]:
+    """The character's invocations of the pledged being since the pledge opened, oldest
+    first, with their worn pieces and signals read in two queries."""
+    from world.worship.models import FavorInvocation  # noqa: PLC0415
+
+    return list(
+        FavorInvocation.objects.filter(
+            character_sheet=details.character_sheet,
+            being_id=details.pledge.being_id,
+            created_at__gte=details.project.started_at,
+        )
+        .select_related("outcome_tier", "character_sheet")
+        # Read back as invocation.pieces.all() and piece.signals.all() in invocation_detail.
+        .prefetch_related("pieces__signals")  # noqa: PREFETCH_STRING
+        .order_by("pk")
+    )
+
+
+def invocation_detail(invocation: FavorInvocation) -> InvocationDetail:
+    """The GM's view of one invocation: the roll, and each worn piece that eased it with
+    the signals that made it count, as they were when it rolled (#4520). Never a price."""
+    persona = invocation.character_sheet.primary_persona
+    pieces = [
+        InvocationPieceLine(
+            item_name=piece.item_name,
+            facet_name=piece.facet_name,
+            signals=[
+                SacrificeSignalLine(signal.get_kind_display(), signal.points, signal.detail)
+                for signal in piece.signals.all()
+            ],
+            points=piece.points,
+            ease_per_point=piece.ease_per_point,
+            ease=piece.ease,
+        )
+        for piece in invocation.pieces.all()
+    ]
+    return InvocationDetail(
+        invoked_by_name=persona.name if persona is not None else str(invocation.character_sheet),
+        outcome_name=invocation.outcome_tier.name,
+        worn_ease=invocation.worn_ease,
+        pieces=pieces,
     )
 
 

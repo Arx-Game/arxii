@@ -387,6 +387,25 @@ class _SacrificeDetailSerializer(serializers.Serializer):
     odds = _OddsSerializer(allow_null=True)
 
 
+class _InvocationPieceSerializer(serializers.Serializer):
+    item_name = serializers.CharField()
+    facet_name = serializers.CharField()
+    signals = _SacrificeSignalSerializer(many=True)
+    points = serializers.IntegerField()
+    ease_per_point = serializers.IntegerField()
+    ease = serializers.IntegerField()
+
+
+class _InvocationDetailSerializer(serializers.Serializer):
+    """One invocation of the being as the steward's answer panel reads it (#4520): the
+    roll and the worn pieces that eased it, never a price."""
+
+    invoked_by_name = serializers.CharField()
+    outcome_name = serializers.CharField()
+    worn_ease = serializers.IntegerField()
+    pieces = _InvocationPieceSerializer(many=True)
+
+
 class StewardPromptSerializer(serializers.Serializer):
     """A ``BEING_ANSWER`` prompt as the steward's answer panel reads it."""
 
@@ -398,6 +417,7 @@ class StewardPromptSerializer(serializers.Serializer):
     pledge_name = serializers.CharField()
     outcome_tier_name = serializers.CharField()
     sacrificed = _SacrificeDetailSerializer(many=True)
+    invoked = _InvocationDetailSerializer(many=True)
     prayer_text = serializers.CharField()
     options = _AnswerOptionSerializer(many=True)
     may_write_free_text = serializers.BooleanField()
@@ -407,6 +427,8 @@ class StewardPromptSerializer(serializers.Serializer):
     def to_representation(self, prompt) -> dict:
         from world.gm.prompt_services import prompt_subject_name  # noqa: PLC0415
         from world.worship.answer_services import (  # noqa: PLC0415
+            invocation_detail,
+            pledge_invocations,
             pledge_sacrifices,
             sacrifice_detail,
         )
@@ -424,6 +446,9 @@ class StewardPromptSerializer(serializers.Serializer):
             "outcome_tier_name": tier.name if tier is not None else "",
             "sacrificed": _SacrificeDetailSerializer(
                 [sacrifice_detail(offering) for offering in pledge_sacrifices(details)], many=True
+            ).data,
+            "invoked": _InvocationDetailSerializer(
+                [invocation_detail(row) for row in pledge_invocations(details)], many=True
             ).data,
             "prayer_text": details.prayer.text if details.prayer is not None else "",
             "options": [

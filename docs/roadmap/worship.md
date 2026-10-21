@@ -49,6 +49,17 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   Dedication, Lineage and meaning rail, the web `CommissionDialog` and the Made for and Worked
   from fields on the crafting dialog. Still to build (slice 3 and 4 of #4462): worn pieces
   counting at invocation with resonance fed, keepsakes, trophies, requested items.
+- **Meaningful items, slice 3 (#4520, what she wears of #4462, 2026-10-20):** built: worn pieces
+  carrying a facet a being favors ease an invocation and raise the earning rate with it by
+  their meaning points (`worn_meaning`; per-facet `invocation_ease_points` and
+  `earning_bonus_percent` on the Being Service builder's favored-facets table with a
+  suppliers and worn-ease side panel; at most `worn_items_counted` pieces, each capped at
+  `worn_item_max_points`, all ease capped at `invocation_meaning_ease_max`), the resonance
+  fed signal in `item_meaning`, the Call on favor picker's worn-piece table and telnet
+  `invoke <being>` lines, and the `FavorInvocation` snapshot (`InvocationPiece`) behind the
+  staff invocation page. A bought piece with no other history counts for nothing. Still to
+  build (slice 4 of #4462): keepsakes, trophies, requested items and Relic points; the
+  invocation ease cap already leaves room for them.
 - **Worship rites & rewards (#3777, 2026-09-16):** tiered rites over the pantheon
   foundations (#3776). `RiteKind` (1 Devotional / 2 Demanding / 3 Perilous) is the shared
   catalog; each being instantiates its own `WorshipRite` (flavor, check type, one of its
@@ -187,7 +198,8 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   with `may_adapt_answers` can edit an answer's text; the clue, cost and follow-up are never
   editable. The miracle check is now one helper shared with the automatic intervention. Web
   (queue panel), telnet (`gm prompt answer`) and admin (the level's `may_adapt_answers`).
-  Next slices of #4333: rituals, Mysteries, favored facets on worn items.
+  Next slices of #4333: rituals, Mysteries. Favored facets on worn items moved into the
+  meaningful-items design (#4462 slice 3, #4520; built 2026-10-20).
 
 ## Not built (filed)
 

@@ -62,7 +62,8 @@ class MeaningSignalKind(models.TextChoices):
     """One fact that makes an item matter to the character holding it (#4500, #4462).
 
     The signals (carried, gift, heirloom, own work, made by a tie, and the commission
-    loop's designed by you, made for, made from and shown, #4512) are read from records
+    loop's designed by you, made for, made from and shown, #4512, and resonance fed, #4520)
+    are read from records
     the game already keeps. ``OfferingSignal.kind`` snapshots them when an item is given
     up. Nothing here reads a price, fee or material cost.
     """
@@ -76,6 +77,7 @@ class MeaningSignalKind(models.TextChoices):
     MADE_FOR = "made_for", "Made for"
     MADE_FROM = "made_from", "Made from"
     SHOWN = "shown", "Shown"
+    RESONANCE_FED = "resonance_fed", "Resonance fed"
 
 
 # Ownership events that represent the item changing hands — the lore-relevant

@@ -6070,7 +6070,9 @@ the hull stat IS `Building.fortification_level`, reused not duplicated. Full det
   Project clears it. `battles` imports nothing from `ships` (ADR-0010).
 - **Telnet:** `CmdShip` (`ship`, `src/commands/ships.py`) — `ship [status]`,
   `ship commission ship_type=<name> [covenant=<name>] name=<ship name>`,
-  `ship upgrade stat=handling|armament|hull level=<n>`, `ship repair`.
+  `ship upgrade stat=<handling | armament | hull> level=<n>`, `ship repair`; the three
+  commission values each run to the next `key=`, and a ship reads as its area name
+  (`Sloop 'Wavecutter'`; #3657 tranche 17).
 - **Actions** (`actions/definitions/ships.py`, REGISTRY, `category="ships"`):
   `CommissionShipAction` (`commission_ship`), `UpgradeShipAction` (`upgrade_ship`)
   / `RepairShipAction` (`repair_ship`, both gated `IsShipOwnerPrerequisite`),
@@ -8150,7 +8152,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   attack made with an equipped LANCE while not Mounted, regardless of maneuver.
   `GearArchetype.LANCE` (`world.items.constants`) joins `WEAPON_ARCHETYPES`; a starter
   "Lance" `ItemTemplate` seeds via `world.seeds.game_content.items.seed_lance_item`. Telnet:
-  `companion mount <name|id>` / `companion dismount` (`CmdCompanion`), `combat charge <opp>
+  `companion mount <name or id>` / `companion dismount` (`CmdCompanion`), `combat charge <opp>
   with <technique>` / `combat joust [with] <technique>` (`CmdCombat`) — no web/frontend
   surface (matches the several existing maneuvers that ship telnet-only since the web
   "available actions" endpoint excludes REGISTRY maneuvers without `ActionTemplate`
@@ -9304,6 +9306,13 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `holy_sites_here`; `ceremonies.services.sacrifice_items` / `give_up_item` / `read_item`
   and `worship/sacrifice_services.py` (the sacrifice check, award and weekly limit; items
   never pay by price, ADR-4462);
+  **What she wears** (#4520, slice 3 of #4462): `BeingFacet.invocation_ease_points` /
+  `earning_bonus_percent`, `DevotionConfig` `worn_item_max_points` / `worn_items_counted` /
+  `resonance_fed_per_point` / `resonance_fed_max_points` / `invocation_meaning_ease_max`,
+  `FavorInvocation.worn_ease` with `InvocationPiece` and `InvocationPieceSignal` (the GM's
+  invocation detail), `MeaningSignalKind.RESONANCE_FED`; `worship/worn_services.worn_meaning`
+  (worn pieces ease `invocation_difficulty` and raise `earning_rate`), the staff Favor
+  invocation page, the Being Service builder's favored-facet rates and supplier panel.
   `perform_worship_rite(..., pay_award=False)`. Actions `pledge_take`, `pledge_close`,
   `sacrifice`; API `pledges/`, `pledge-cards/`, `beings/{id}/service-terms/`,
   `beings/holy-site/`; telnet `pledge`, `pledge/close`, `sacrifice`; admin Being Service

@@ -131,12 +131,15 @@ def earning_rate(sheet: CharacterSheet, being: WorshippedBeing) -> int:
     """The percentage applied to all favor ``sheet`` earns with ``being`` (design 1a).
 
     100, plus ``ChosenFavorConfig.earn_bonus_percent`` for an active patronage of
-    the being, plus the character's favor earning total for it. Never below 0.
+    the being, plus the character's favor earning total for it, plus what the worn
+    pieces carrying a facet the being favors add (#4520). Never below 0.
     """
     from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
+    from world.worship.worn_services import worn_meaning  # noqa: PLC0415
 
     rate = FAVOR_EARNING_BASE_PERCENT
     if active_patronage_of(sheet, being) is not None:
         rate += get_chosen_favor_config().earn_bonus_percent
     rate += favor_modifier_total(sheet, being, FAVOR_EARNING_CATEGORY_NAME)
+    rate += worn_meaning(sheet, being).earning_percent
     return max(rate, 0)

@@ -120,7 +120,11 @@ class ShipDetails(SharedMemoryModel):
         return self.building.fortification_level
 
     def __str__(self) -> str:
-        return f"{self.ship_type.name} (building {self.building_id})"
+        """The ship's name as the quay knows it: its building's area name, which
+        ``complete_ship_construction`` writes as ``Sloop 'Wavecutter'``. The status
+        line and the project descriptions read this (#3657 tranche 17: it had read
+        "Sloop (building 12)")."""
+        return self.building.area.name
 
 
 class ShipDeployment(SharedMemoryModel):

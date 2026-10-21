@@ -1,5 +1,5 @@
 """The Being Service builder (#4333 slice 2, design 10): one being's favored
-resonances, favored facets and pledge types, written together.
+resonances, favored facets (with their worn rates, #4520) and pledge types, written together.
 
 Pattern: the Standoff Profile and Distinction Builders. One page writes every
 ``BeingResonance``, the being's ``BeingFacet`` rows and every ``Pledge`` in one
@@ -28,13 +28,13 @@ from web.admin.authoring.contributors import current_contributor
 from web.admin.authoring.credit import stamp_reviewed, stamp_written
 from web.admin.being_service import live
 from web.admin.being_service.forms import (
+    BeingFacetFormSet,
     BeingResonanceFormSet,
-    FavoredFacetsForm,
     PledgeFormSet,
 )
 from web.admin.tuning.views import superuser_required
 from world.worship.favor_services import ensure_being_modifier_targets
-from world.worship.models import BeingResonance, Pledge, WorshippedBeing
+from world.worship.models import BeingFacet, BeingResonance, Pledge, WorshippedBeing
 
 #: The submit button's name that stays on this page after saving; "Save" returns to
 #: the being's change page, as a stock change form does.
@@ -44,7 +44,7 @@ CONTINUE_BUTTON = "save_continue"
 @dataclass
 class _ServiceForms:
     resonances: BeingResonanceFormSet
-    facets: FavoredFacetsForm
+    facets: BeingFacetFormSet
     pledges: PledgeFormSet
 
     @property
@@ -65,10 +65,11 @@ def _build_forms(request: HttpRequest, being: WorshippedBeing) -> _ServiceForms:
             # Favored first: "favored" sorts after "associated", so the tier goes descending.
             queryset=BeingResonance.objects.select_related("resonance").order_by("-tier", "pk"),
         ),
-        facets=FavoredFacetsForm(
+        facets=BeingFacetFormSet(
             data,
+            instance=being,
             prefix="facets",
-            initial={"favored_facets": list(being.being_facets.values_list("facet", flat=True))},
+            queryset=BeingFacet.objects.select_related("facet").order_by("facet__name"),
         ),
         pledges=PledgeFormSet(
             data,
@@ -116,6 +117,7 @@ def _render_page(
             "resonances": forms.resonances,
             "resonance_rows": resonance_rows,
             "facets": forms.facets,
+            "supplier_rail": live.facet_suppliers(being),
             "pledges": forms.pledges,
             "pledge_rows": pledge_rows,
             "active_pledges": active_pledges,
@@ -136,7 +138,7 @@ def _forget_refused_edits(being: WorshippedBeing, forms: _ServiceForms) -> None:
     """Validating a ModelForm writes the posted values onto its instance, and those
     instances are the identity-mapped ones every other reader shares: drop them so
     the next reader loads what the database holds, not this refused edit."""
-    for form in (*forms.resonances.forms, *forms.pledges.forms):
+    for form in (*forms.resonances.forms, *forms.facets.forms, *forms.pledges.forms):
         if form.instance.pk is not None:
             form.instance.flush_from_cache(force=True)
     being.flush_from_cache(force=True)
@@ -159,7 +161,7 @@ def being_service(request: HttpRequest, being_pk: int) -> HttpResponse:
         return response
     with transaction.atomic():
         forms.resonances.save()
-        forms.facets.save(being)
+        forms.facets.save()
         saved_pledges = forms.pledges.save()
         for pledge in saved_pledges:
             stamp_written(pledge, contributor)

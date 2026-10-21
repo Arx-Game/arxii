@@ -24,7 +24,7 @@ function wrapper({ children }: { children: ReactNode }) {
 const terms = {
   being_id: 4,
   being_name: 'Ombrin',
-  rate: { base: 100, chosen_bonus: 100, modifiers: 0, total: 200 },
+  rate: { base: 100, chosen_bonus: 100, modifiers: 0, worn_bonus: 0, total: 200 },
   lines: [{ label: 'Deeds that grant [favored resonance] (favored)', amount: '100% of amount' }],
   weekly_deed_cap: 8,
 };

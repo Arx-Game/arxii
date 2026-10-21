@@ -244,6 +244,74 @@ def pledge_answers(pledge: Pledge) -> PledgeAnswers:
 
 
 @dataclass(frozen=True)
+class FacetSupplierRow:
+    """One favored facet's supply and what a worn piece carrying it does (#4520)."""
+
+    facet: str
+    artists: list[tuple[str, str]]
+    templates: int
+    preview: str
+
+
+@dataclass(frozen=True)
+class FacetSuppliers:
+    rows: list[FacetSupplierRow]
+    ease_cap: int
+    note: str
+
+
+def facet_suppliers(being: WorshippedBeing) -> FacetSuppliers:
+    """The Being Service builder's side panel for favored facets (#4520): which artists
+    take facet commissions, how many item templates carry each facet, and what a worn
+    piece of an example size would ease and add. Read-only, computed from saved rows.
+
+    A facet commission offer covers any facet (``CraftingServiceOffer.recipe_kind``), so
+    the artist list is every active facet offer.
+    """
+    from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
+    from world.items.market.models import CraftingServiceOffer  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+    config = get_devotion_config()
+    offers = CraftingServiceOffer.objects.filter(
+        recipe_kind=CraftingRecipeKind.FACET_ATTACH, is_active=True
+    ).select_related("crafter_persona")
+    artists = sorted({offer.crafter_persona for offer in offers}, key=lambda p: p.name)
+    artist_links = [
+        (persona.name, _admin_url("admin:arxii_persona_change", persona.pk)) for persona in artists
+    ]
+    example = max(config.worn_item_max_points // 2, 1)
+    rows: list[FacetSupplierRow] = []
+    favored = (
+        being.being_facets.select_related("facet")
+        .annotate(templates=Count("facet__inherent_on_templates", distinct=True))
+        .order_by("facet__name")
+    )
+    for row in favored:
+        templates = row.templates
+        top = config.worn_item_max_points
+        preview = (
+            f"A worn {row.facet.name} piece with {example} points eases "
+            f"{example * row.invocation_ease_points} and adds "
+            f"{example * row.earning_bonus_percent}%; with {top} points (the cap) eases "
+            f"{top * row.invocation_ease_points} and adds {top * row.earning_bonus_percent}%."
+        )
+        rows.append(
+            FacetSupplierRow(
+                facet=row.facet.name,
+                artists=artist_links,
+                templates=templates,
+                preview=preview,
+            )
+        )
+    note = (
+        f"Cap for all meaning ease on one invocation: {config.invocation_meaning_ease_max}. "
+        f"At most {config.worn_items_counted} worn pieces count."
+    )
+    return FacetSuppliers(rows=rows, ease_cap=config.invocation_meaning_ease_max, note=note)
+
+
+@dataclass(frozen=True)
 class BeingStats:
     domains: str
     worshippers_with_favor: int
@@ -297,7 +365,9 @@ def checks(being: WorshippedBeing) -> list[tuple[str, str]]:
     if not tiers:
         lines.append(("warn", "No resonance at all: no deed earns favor during a pledge."))
     if not being.being_facets.exists():
-        lines.append(("warn", "No favored facet: no sacrifice counts double."))
+        lines.append(
+            ("warn", "No favored facet: no sacrifice counts double and no worn piece counts.")
+        )
     general = Answer.objects.filter(being=being, pledge__isnull=True, is_active=True).exists()
     unanswered = [
         pledge.name

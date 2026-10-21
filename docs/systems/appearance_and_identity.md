@@ -124,7 +124,7 @@ artist changes persona with an *identical* body; a curse changes the body and
   returned by the action.
 - **Telnet `form` namespace** (`commands/form.py`, #1111 slice 4) — `form list` shows
   the active alternate self, the available alternate selves, and whether revert is
-  blocked; `form shift <name|id>` triggers `ShiftFormAction`; `form revert` triggers
+  blocked; `form shift <name or id>` triggers `ShiftFormAction`; `form revert` triggers
   `RevertFormAction`. All dispatch through `dispatch_player_action`, converging with
   the web form dispatcher on the same action seam.
 

@@ -8,7 +8,7 @@
  * window, sends an authored answer: the answer is never dropped.
  */
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -170,6 +170,72 @@ export function StewardAnswerPanel({
                     ? ` This roll: ${item.outcome_name || 'none'}.`
                     : " Past the week's limit: given up for nothing."}
                 </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {prompt.invoked.length > 0 && (
+        <div className="space-y-2" data-testid="steward-invoked">
+          <p className="text-sm text-muted-foreground">
+            Called on {prompt.being_name} during this pledge:
+          </p>
+          {prompt.invoked.map((call, index) => (
+            <div key={index} className="rounded-md border p-2 text-sm">
+              <p className="font-medium">
+                {call.invoked_by_name} calls on {prompt.being_name}.
+                <span className="ml-2 text-xs text-muted-foreground">
+                  Roll: {call.outcome_name}
+                </span>
+              </p>
+              {call.pieces.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No worn piece counted: the roll was not eased by what was worn.
+                </p>
+              ) : (
+                <>
+                  <table className="w-full text-xs">
+                    <thead className="text-left text-muted-foreground">
+                      <tr>
+                        <th>Worn piece</th>
+                        <th>Signal</th>
+                        <th>Detail</th>
+                        <th>Points</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {call.pieces.map((piece, pieceIndex) => (
+                        <Fragment key={pieceIndex}>
+                          <tr>
+                            <td rowSpan={piece.signals.length + 1}>{piece.item_name}</td>
+                            <td>Favored facet</td>
+                            <td>
+                              {piece.facet_name} (the gate; ease {piece.ease_per_point} per point)
+                            </td>
+                            <td>-</td>
+                          </tr>
+                          {piece.signals.map((signal, signalIndex) => (
+                            <tr key={signalIndex}>
+                              <td>{signal.kind_name}</td>
+                              <td>{signal.detail}</td>
+                              <td className="tabular-nums">{signal.points}</td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="text-xs text-muted-foreground" data-testid="invocation-ease-note">
+                    {call.pieces
+                      .map((piece) => `${piece.points} points x ${piece.ease_per_point}`)
+                      .join(' + ')}{' '}
+                    = eased {call.pieces.reduce((sum, piece) => sum + piece.ease, 0)}
+                    {call.worn_ease !== call.pieces.reduce((sum, piece) => sum + piece.ease, 0)
+                      ? `, capped at ${call.worn_ease}`
+                      : ''}
+                    . The players in the scene do not see the numbers.
+                  </p>
+                </>
               )}
             </div>
           ))}

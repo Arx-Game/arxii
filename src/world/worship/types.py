@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from world.ceremonies.models import CeremonyOffering
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult, ModifierContribution
+    from world.items.models import ItemInstance
+    from world.items.types import ItemMeaning
     from world.magic.models import ResonanceGrant
     from world.traits.models import CheckOutcome
     from world.worship.models import (
@@ -127,6 +129,7 @@ class InvocationOption:
     uses_left: int
     uses_per_week: int
     refusal: str
+    worn: WornMeaning | None = None
 
     @property
     def can_invoke(self) -> bool:
@@ -167,15 +170,78 @@ class InvocationOutcome:
 
 @dataclass(frozen=True)
 class EarningRateBreakdown:
-    """A character's earning rate with one being, in its parts (#4333, design 1a)."""
+    """A character's earning rate with one being, in its parts (#4333, design 1a).
+
+    ``worn_bonus`` is what the worn pieces carrying a facet the being favors add (#4520).
+    """
 
     base: int
     chosen_bonus: int
     modifiers: int
+    worn_bonus: int = 0
 
     @property
     def total(self) -> int:
-        return max(self.base + self.chosen_bonus + self.modifiers, 0)
+        return max(self.base + self.chosen_bonus + self.modifiers + self.worn_bonus, 0)
+
+
+@dataclass(frozen=True)
+class WornPiece:
+    """One worn piece carrying a facet a being favors, read for an invocation (#4520).
+
+    ``meaning`` is what the piece means to its wearer (``item_meaning``, which never reads
+    a price); ``points`` is those points after ``DevotionConfig.worn_item_max_points``.
+    ``counted`` is False for a piece with no meaning or past ``worn_items_counted``: it is
+    listed so the wearer sees why it adds nothing, and it eases nothing.
+    """
+
+    item: ItemInstance
+    item_name: str
+    facet_name: str
+    meaning: ItemMeaning
+    points: int
+    ease_per_point: int
+    earning_bonus_percent: int
+    counted: bool
+
+    @property
+    def ease(self) -> int:
+        return self.points * self.ease_per_point if self.counted else 0
+
+    @property
+    def earning_percent(self) -> int:
+        return self.points * self.earning_bonus_percent if self.counted else 0
+
+
+@dataclass(frozen=True)
+class WornMeaning:
+    """What a character's worn pieces do for one being (#4520, #4462 section 6.4).
+
+    ``ease`` is the difficulty points eased on an invocation after
+    ``DevotionConfig.invocation_meaning_ease_max``; ``earning_percent`` the percent added
+    to the earning rate. ``pieces`` lists every worn piece carrying a favored facet,
+    counted ones first.
+    """
+
+    pieces: tuple[WornPiece, ...] = ()
+    ease_cap: int = 0
+    items_counted_max: int = 0
+
+    @property
+    def counted(self) -> tuple[WornPiece, ...]:
+        return tuple(piece for piece in self.pieces if piece.counted)
+
+    @property
+    def raw_ease(self) -> int:
+        return sum(piece.ease for piece in self.pieces)
+
+    @property
+    def ease(self) -> int:
+        return min(self.raw_ease, self.ease_cap)
+
+    @property
+    def earning_percent(self) -> int:
+        return sum(piece.earning_percent for piece in self.pieces)
 
 
 @dataclass(frozen=True)
@@ -386,6 +452,29 @@ class SacrificeOddsBand:
     first_points: int
     last_points: int | None
     odds: SacrificeOdds
+
+
+@dataclass(frozen=True)
+class InvocationPieceLine:
+    """One worn piece that counted on an invocation, as it was when the check rolled
+    (#4520): the favored facet that made it count, its signals and the ease it gave."""
+
+    item_name: str
+    facet_name: str
+    signals: list[SacrificeSignalLine]
+    points: int
+    ease_per_point: int
+    ease: int
+
+
+@dataclass(frozen=True)
+class InvocationDetail:
+    """A GM's view of one invocation: the roll and the worn pieces that eased it (#4520)."""
+
+    invoked_by_name: str
+    outcome_name: str
+    worn_ease: int
+    pieces: list[InvocationPieceLine]
 
 
 @dataclass(frozen=True)

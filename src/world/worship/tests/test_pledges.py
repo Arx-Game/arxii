@@ -783,7 +783,8 @@ class PledgeApiTests(PledgeTestBase):
         self.assertEqual([row["id"] for row in pledges], [self.pledge.pk])
         self.assertEqual(pledges[0]["closing_rite_name"], "Ombrin's rite")
         self.assertEqual(
-            terms["rate"], {"base": 100, "chosen_bonus": 100, "modifiers": 0, "total": 200}
+            terms["rate"],
+            {"base": 100, "chosen_bonus": 100, "modifiers": 0, "worn_bonus": 0, "total": 200},
         )
         self.assertEqual(terms["weekly_deed_cap"], 8)
         self.assertEqual(terms["lines"][0]["amount"], "100% of amount")
