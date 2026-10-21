@@ -75,7 +75,18 @@ vi.mock('../queries', () => ({
         tooltip: '',
         display_order: 3,
         is_active: true,
-        specializations: [],
+        specializations: [
+          {
+            id: 30,
+            name: 'Wards',
+            description: '',
+            tooltip: '',
+            display_order: 1,
+            is_active: true,
+            parent_skill_id: 3,
+            parent_skill_name: 'Occult',
+          },
+        ],
       },
       {
         id: 4,
@@ -277,6 +288,26 @@ describe('SkillsSection', () => {
         vi.runAllTimers();
       });
       expect(lastSavedSkills()).toEqual({ '1': 20, '2': 10 });
+    });
+
+    it("drops points in a Magic skill's specialization out of the next save", () => {
+      const legacy: CharacterDraft = {
+        ...draft,
+        starting_magic_skill_floor: 20,
+        draft_data: { skills: { '1': 20, '3': 20 }, specializations: { '10': 10, '30': 10 } },
+      };
+      renderSkillsSection(legacy);
+
+      // 20 on Blades + 10 on Fencing; the Magic skill and its specialization are free.
+      expect(screen.getByText('30')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /raise stealth/i }));
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(mockUpdateDraftMutate.mock.calls.at(-1)?.[0].data.draft_data.specializations).toEqual({
+        '10': 10,
+      });
     });
 
     it('drops Magic points loaded from the draft out of the next save', () => {

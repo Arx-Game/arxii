@@ -45,7 +45,7 @@ function skillsFromSuggestions(
   return initialSkills;
 }
 
-/** The map without its Magic skills (a draft saved before they left the point pool). */
+/** The map without its Magic entries (a draft saved before they left the point pool). */
 function withoutMagic(
   values: Record<number, number>,
   magicSkillIds: ReadonlySet<number>
@@ -154,6 +154,11 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
     [skills]
   );
   const magicSkillIds = useMemo(() => new Set(magicSkills.map((skill) => skill.id)), [magicSkills]);
+  // A specialization of a Magic skill is refused with its parent (#4457).
+  const magicSpecIds = useMemo(
+    () => new Set(magicSkills.flatMap((skill) => skill.specializations.map((spec) => spec.id))),
+    [magicSkills]
+  );
 
   // Local state for skill and specialization values
   const [skillValues, setSkillValues] = useState<Record<number, number>>({});
@@ -194,7 +199,9 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
       // Preserve original behavior: set specs whenever they exist on the
       // draft (even an empty {}), converting string keys to numbers.
       if (draft.draft_data?.specializations) {
-        setSpecValues(toNumericMap(draft.draft_data.specializations) ?? {});
+        setSpecValues(
+          withoutMagic(toNumericMap(draft.draft_data.specializations) ?? {}, magicSpecIds)
+        );
       }
     } else if (suggestions.length > 0) {
       // Initialize from path suggestions
@@ -212,6 +219,7 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
     draft.selected_path,
     isInitialized,
     magicSkillIds,
+    magicSpecIds,
   ]);
 
   // Debounced save to backend

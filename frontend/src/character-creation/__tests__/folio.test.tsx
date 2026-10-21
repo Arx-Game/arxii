@@ -170,6 +170,16 @@ describe('StatRow', () => {
     expect(plus).toBeDisabled();
     expect(plus).toHaveAttribute('title', 'At 6, the most it can be');
   });
+
+  it('a read-only row has no steppers but keeps the grid cell they occupy (#4457)', () => {
+    const { container } = render(
+      <StatRow id="lbl-occult" name="Occult" value={20} max={30} step={10} readOnly />
+    );
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    const row = container.querySelector('.stat-row');
+    expect(row?.children).toHaveLength(4);
+    expect(row?.querySelector('.stat-pips')).toHaveClass('granted');
+  });
 });
 
 describe('ChoiceRow', () => {

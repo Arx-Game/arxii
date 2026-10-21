@@ -84,7 +84,7 @@ export function SchoolingStances({ draft, tradition, copy }: SchoolingStancesPro
                       )}
                     </span>
                   ) : (
-                    <span>No magic skills</span>
+                    <span className="none">No magic skills</span>
                   )}
                 </span>
               </button>

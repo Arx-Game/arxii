@@ -105,7 +105,10 @@ export function StatRow(props: StatRowProps) {
         {value}
         {bonus ? <small>{bonus > 0 ? `+${bonus}` : bonus}</small> : null}
       </output>
-      {!props.readOnly && (
+      {props.readOnly ? (
+        // Keeps the fourth grid cell so a read-only row lines up with the steppered ones.
+        <span />
+      ) : (
         <span className="stat-step">
           <button
             type="button"

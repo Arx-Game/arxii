@@ -89,7 +89,7 @@ describe('SchoolingStances', () => {
     renderWithCharacterCreationProviders(
       <SchoolingStances draft={createMockDraft()} tradition={tradition} />
     );
-    expect(screen.getByText('No magic skills')).toBeInTheDocument();
+    expect(screen.getByText('No magic skills')).toHaveClass('none');
     expect(screen.getByText('Magic skills 20')).toBeInTheDocument();
     expect(screen.getByText('Magic skills 30')).toBeInTheDocument();
   });
