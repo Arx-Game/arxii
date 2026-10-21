@@ -526,3 +526,70 @@ class ACourseAtABoundary(_AcademyCourseCase):
         self.assertEqual(self.open_enrollment().development_remaining, 800)
         row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.occult)
         self.assertEqual(row.development_points, SESSION)
+
+
+class TheTrainersMenu(_AcademyCourseCase):
+    """The menu says what an offer costs before it is spent, in telnet and on the web."""
+
+    ENROLL = "Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now"
+    NEXT = f"Next session · {SESSION_AP} AP · 1200 of {TOTAL} left"
+
+    def menu(self) -> str:
+        return strip_ansi(self.telnet(self.ysmay, "hire Magister Cadwen"))
+
+    def web_offers(self) -> dict[str, dict]:
+        """The offers the web client is sent when she starts, keyed by label."""
+        client = self.api(self.account_of(self.ysmay))
+        response = client.post(
+            "/api/npc-services/interactions/start/", {"role_id": self.role.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        client.post("/api/npc-services/interactions/end/", {}, format="json")
+        return {offer["label"]: offer for offer in response.data["available_offers"]}
+
+    def test_telnet_names_the_enroll_price_then_the_next_session(self) -> None:
+        menu = self.menu()
+        self.assertRegex(menu, rf"Course: Occult.*{self.ENROLL}")
+        self.assertNotIn("Next session", menu)
+
+        self.take_course("success")
+        menu = self.menu()
+        self.assertRegex(menu, rf"Course: Occult.*{self.NEXT}")
+        self.assertNotIn("Enroll:", menu)
+
+    def test_a_free_course_names_only_the_hare(self) -> None:
+        self.course.coin_cost = 0
+        self.course.save()
+        self.assertIn("Enroll: 1 Golden Hare · 6 AP a session, the first one now", self.menu())
+
+    def test_the_web_menu_carries_the_price_line_and_its_parts(self) -> None:
+        other = NPCServiceOfferFactory(role=self.role, kind=OfferKind.SETTLE_OBLIGATION)
+
+        offers = self.web_offers()
+
+        self.assertEqual(
+            offers["Course: Occult"]["price"],
+            {
+                "ap": SESSION_AP,
+                "coppers": COIN,
+                "golden_hares": 1,
+                "per_session_ap": SESSION_AP,
+                "development_remaining": None,
+                "development_total": None,
+                "training_points": None,
+                "display": self.ENROLL,
+            },
+        )
+        # An offer that is not an Academy course or training names no price.
+        self.assertIsNone(offers[other.label]["price"])
+
+    def test_the_web_menu_shows_the_next_session_once_enrolled(self) -> None:
+        self.take_course("success")
+
+        price = self.web_offers()["Course: Occult"]["price"]
+
+        self.assertEqual(price["display"], self.NEXT)
+        self.assertEqual((price["coppers"], price["golden_hares"], price["ap"]), (0, 0, SESSION_AP))
+        self.assertEqual(
+            (price["development_remaining"], price["development_total"]), (1200, TOTAL)
+        )

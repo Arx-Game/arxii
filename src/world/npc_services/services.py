@@ -18,7 +18,7 @@ every offer kind, not only NPC-rooted ones.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import logging
 import random
 from typing import TYPE_CHECKING
@@ -40,16 +40,19 @@ from world.npc_services.models import (
     NPCServiceOffer,
     NPCStanding,
     OfferCooldown,
+    SkillCourseEnrollment,
 )
 from world.npc_services.offer_policy import mission_pool_count
 from world.npc_services.serializers import (
     InteractionOfferSerializer,
     InteractionStateSerializer,
 )
+from world.npc_services.types import OfferPrice
 from world.predicates.predicates import CharacterPredicateContext, evaluate
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
+    from world.character_sheets.models import CharacterSheet
     from world.npc_services.models import RecordedProfile
     from world.scenes.models import Persona
 
@@ -454,6 +457,8 @@ def available_offers(
             "role",
             "permit_offer_details__building_kind",
             "mission_offer_details__mission_template",
+            "skill_course_offer_details",
+            "train_offer_details",
         )
         .prefetch_related(
             "permit_offer_details__default_approved_wards",  # noqa: PREFETCH_STRING
@@ -879,6 +884,106 @@ def _offer_risk_tier(offer: NPCServiceOffer) -> int | None:
     return details.mission_template.risk_tier
 
 
+def _open_enrollments_by_offer(sheet: CharacterSheet) -> dict[int, SkillCourseEnrollment]:
+    """The sheet's open skill-course enrollments, keyed by the course's offer pk (#4457).
+
+    One query for the whole menu. A sheet holds at most one open enrollment per course.
+    """
+    return {
+        enrollment.course.offer_id: enrollment
+        for enrollment in SkillCourseEnrollment.objects.filter(
+            character_sheet=sheet, completed_at__isnull=True
+        ).select_related("course")
+    }
+
+
+def _offer_price(
+    offer: NPCServiceOffer,
+    sheet: CharacterSheet,  # noqa: ARG001
+    open_enrollments: dict[int, SkillCourseEnrollment],
+) -> OfferPrice | None:
+    """What accepting ``offer`` charges ``sheet``, or None for an offer that names no price.
+
+    Only the Academy's offers carry a price line: a skill course (its coin and Hare
+    while she is not enrolled, then the next session's AP and what is left) and TRAIN
+    (its coin and Hare now; its ``learn_ap_cost`` is not an AP charge, see
+    :class:`~world.npc_services.types.OfferPrice`). An offer whose details row was
+    never authored names no price either. ``sheet`` is part of the signature because
+    the price is a learner's, though today both kinds quote the same price to everyone.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        if offer.kind == OfferKind.SKILL_COURSE:
+            course = offer.skill_course_offer_details
+            enrollment = open_enrollments.get(offer.pk)
+            if enrollment is not None:
+                return OfferPrice(
+                    ap=course.session_ap_cost,
+                    coppers=0,
+                    golden_hares=0,
+                    per_session_ap=course.session_ap_cost,
+                    development_remaining=enrollment.development_remaining,
+                    development_total=course.total_development,
+                )
+            return OfferPrice(
+                ap=course.session_ap_cost,
+                coppers=course.coin_cost,
+                golden_hares=1,
+                per_session_ap=course.session_ap_cost,
+                development_remaining=None,
+                development_total=None,
+            )
+        if offer.kind == OfferKind.TRAIN:
+            train = offer.train_offer_details
+            return OfferPrice(
+                ap=0,
+                coppers=train.gold_cost,
+                golden_hares=1,
+                per_session_ap=None,
+                development_remaining=None,
+                development_total=None,
+                training_points=train.learn_ap_cost,
+            )
+    except ObjectDoesNotExist:
+        return None
+    return None
+
+
+def format_offer_price(price: OfferPrice) -> str:
+    """The trainer-menu line for ``price``, the same words on the web and in telnet (#4457)."""
+    from world.currency.constants import format_coppers  # noqa: PLC0415
+
+    if price.development_remaining is not None:
+        return (
+            f"Next session \u00b7 {price.ap} AP \u00b7 "
+            f"{price.development_remaining} of {price.development_total} left"
+        )
+    paid_now = []
+    if price.coppers:
+        paid_now.append(format_coppers(price.coppers))
+    if price.golden_hares:
+        hares = "Golden Hare" if price.golden_hares == 1 else "Golden Hares"
+        paid_now.append(f"{price.golden_hares} {hares}")
+    if price.training_points is not None:
+        paid_now.append(f"{price.training_points} points of training or more, paid in AP")
+        return " \u00b7 ".join(paid_now)
+    paid_now.append(f"{price.per_session_ap} AP a session, the first one now")
+    return "Enroll: " + " \u00b7 ".join(paid_now)
+
+
+def _offer_price_payload(
+    offer: NPCServiceOffer,
+    sheet: CharacterSheet,
+    open_enrollments: dict[int, SkillCourseEnrollment],
+) -> dict | None:
+    """The offer's price as the wire shape, with its menu line; None when it names none."""
+    price = _offer_price(offer, sheet, open_enrollments)
+    if price is None:
+        return None
+    return {**asdict(price), "display": format_offer_price(price)}
+
+
 def serialize_npc_session_state(
     session: InteractionSession,
     *,
@@ -903,6 +1008,8 @@ def serialize_npc_session_state(
         if not session.closed
         else []
     )
+    sheet = session.persona.character_sheet
+    open_enrollments = _open_enrollments_by_offer(sheet) if offers else {}
     serialized_offers = InteractionOfferSerializer(
         [
             {
@@ -912,6 +1019,7 @@ def serialize_npc_session_state(
                 "is_final": o.is_final,
                 "rapport_requirement": o.rapport_requirement,
                 "risk_tier": _offer_risk_tier(o),
+                "price": _offer_price_payload(o, sheet, open_enrollments),
             }
             for o in offers
         ],
