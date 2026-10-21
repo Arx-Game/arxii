@@ -74,6 +74,7 @@ from world.items.serializers import (
     ItemStyleWriteSerializer,
     ItemTemplateDetailSerializer,
     ItemTemplateListSerializer,
+    KeepsakeStateSerializer,
     OutfitReadSerializer,
     OutfitRenameSerializer,
     OutfitSlotReadSerializer,
@@ -625,6 +626,42 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         if rail is None:
             raise NotFound
         return Response(ItemMeaningSerializer(rail).data)
+
+    @extend_schema(responses=KeepsakeStateSerializer)
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="keepsake")
+    def keepsake(self, request: Request, pk: str | None = None) -> Response:
+        """The keepsake form's data for an item the requester's character holds (#4530):
+        the keepsake it already is, the character's slots, what it could stand for and
+        the deeds it is a trophy of. Declaring and releasing go through the keepsake
+        actions."""
+        from world.items.services.keepsakes import keepsake_state  # noqa: PLC0415
+
+        user = cast(AccountDB, request.user)
+        item_pk = _parse_int_param(pk)
+        if item_pk is None:
+            raise NotFound
+        try:
+            item = ItemInstance.objects.in_play().select_related("game_object").get(pk=item_pk)
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
+        holder = item.game_object.db_location if item.game_object is not None else None
+        if holder is None or not _user_plays_pk(user, holder.pk):
+            raise NotFound
+        sheet = item.holder_character_sheet
+        if sheet is None:
+            raise NotFound
+        state = keepsake_state(sheet, item)
+        payload = {
+            "keepsake": state.keepsake,
+            "counts_now": state.counts_now,
+            "status": state.status,
+            "subjects": {
+                kind: [{"id": pk, "label": label} for pk, label in rows]
+                for kind, rows in state.subjects.items()
+            },
+            "trophy_of": state.trophy_of,
+        }
+        return Response(KeepsakeStateSerializer(payload).data)
 
     @extend_schema(request=UseItemSerializer, responses=UseItemResultSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="use")

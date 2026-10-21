@@ -54,6 +54,7 @@ from typing import TYPE_CHECKING, cast
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
+from world.items.services.trophies import link_trophy
 from world.roster.models import RosterEntry
 from world.stories.constants import (
     BeatKind,
@@ -76,8 +77,9 @@ if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePool
     from world.checks.types import ResolutionContext
     from world.gm.models import GMProfile
+    from world.items.models import ItemInstance
     from world.scenes.models import Persona, Scene as SceneModel
-    from world.societies.models import LegendSourceType
+    from world.societies.models import LegendEntry, LegendSourceType
     from world.stories.models import Episode, StakeContractActivation, Story
     from world.traits.models import CheckOutcome
 
@@ -348,10 +350,14 @@ def _settle_completion_legend(  # noqa: PLR0913
     scope: str,
     explicit_participants: list[Persona] | None,
     pool: ConsequencePool | None,
-) -> None:
-    """Settle one ordinary story completion through the authoritative seam."""
+) -> list[LegendEntry]:
+    """Settle one ordinary story completion through the authoritative seam.
+
+    Returns the Legend deeds it minted (#4530), so the items the completion's stake rewards
+    granted can be linked to them as trophies.
+    """
     if activation is None:
-        return
+        return []
     from world.stories.services.legend_settlement import (  # noqa: PLC0415
         settle_legend_for_activation,
     )
@@ -375,6 +381,7 @@ def _settle_completion_legend(  # noqa: PLR0913
     )
     if not report.minted:
         logger.info("Beat %s settled no Legend: %s", completion.beat_id, report.reason)
+    return list(report.entries)
 
 
 def _create_completion_and_fire_pool(  # noqa: PLR0913
@@ -468,6 +475,7 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             skip_effect_types=completion_skip,
         )
 
+        granted_items: list[ItemInstance] = []
         resolve_stakes_for_completion(
             beat=beat,
             outcome=outcome,
@@ -480,12 +488,13 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             skip_effect_types=(
                 frozenset({EffectType.LEGEND_AWARD}) if activation is not None else frozenset()
             ),
+            granted_items=granted_items,
         )
 
         # Expiry is a routing loss, not a completed perilous deed; retain the
         # existing no-Legend expiry rule even though it closes the activation.
         if outcome != BeatOutcome.EXPIRED:
-            _settle_completion_legend(
+            minted = _settle_completion_legend(
                 activation=activation,
                 completion=completion,
                 progress=progress,
@@ -493,6 +502,9 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
                 explicit_participants=explicit_participants,
                 pool=settlement_pool,
             )
+            # #4530: an item a won stake granted is a trophy of the deed it was won on.
+            for item in granted_items:
+                link_trophy(item, minted)
 
         from world.stories.services.stakes import resolve_open_activation  # noqa: PLC0415
 

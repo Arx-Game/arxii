@@ -624,6 +624,9 @@ class ActionRegistryTests(TestCase):
             "sacrifice",
             # #4333 slice 4 — a stewarded being's table GM answers a closed pledge.
             "gm_being_answer",
+            # #4530 — keeping an item as a keepsake, and letting go.
+            "keepsake_declare",
+            "keepsake_release",
             "ceremony_open",
             "ceremony_offering",
             "ceremony_speech",

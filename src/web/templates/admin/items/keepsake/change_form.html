@@ -1,0 +1,36 @@
+{% extends "admin/change_form.html" %}
+{% comment %}
+The Keepsake change form with a read-only rail (#4530): the points the subject is worth, from
+keepsake_signals, and when it starts to count. Extends the site's own change_form override
+(which links admin/css/forms.css), so only the rail is new. The player's words are never
+scored and never appear in the rail.
+{% endcomment %}
+{% block extrastyle %}
+{{ block.super }}
+<style>
+.keepsake-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (min-width: 980px) { .keepsake-cols { grid-template-columns: minmax(0, 1fr) 17rem; } }
+.keepsake-main { min-width: 0; }
+.keepsake-rail { min-width: 0; border: 1px solid var(--hairline-color); }
+.keepsake-rail p { font-size: 12px; color: var(--body-quiet-color); padding: 4px 8px; margin: 0; }
+</style>
+{% endblock %}
+{% block field_sets %}
+<div class="keepsake-cols">
+  <div class="keepsake-main">{{ block.super }}</div>
+  <aside class="keepsake-rail module" aria-label="Computed">
+    <h2>Computed (read-only)</h2>
+    {% if keepsake_rail %}
+      {% for line in keepsake_rail.lines %}
+      <p>{{ line.label }}: {{ line.detail }}: {{ line.points }}</p>
+      {% empty %}
+      <p>The subject is not one this character can keep it for, so it scores nothing.</p>
+      {% endfor %}
+      <p>Counts from: {{ keepsake_rail.counts_from|date:"Y-m-d" }} ({{ keepsake_rail.wait_days }} days after it was declared){% if keepsake_rail.counts_now %}; counting now{% else %}; still waiting{% endif %}.</p>
+      <p>A keepsake of a deed the item is also a trophy of adds a flat 1 on top of the trophy.</p>
+    {% else %}
+      <p>Save the keepsake to see what it is worth.</p>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

@@ -342,6 +342,42 @@ class ItemMeaningSerializer(serializers.Serializer):
     made_from_cap = serializers.IntegerField(read_only=True)
 
 
+class KeepsakeSubjectChoiceSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    label = serializers.CharField(read_only=True)
+
+
+class KeepsakeSerializer(serializers.Serializer):
+    """The keepsake an item already is for its holder: what it stands for and, if shown, the
+    player's own words (#4530). Nothing here says what it is worth."""
+
+    id = serializers.IntegerField(read_only=True)
+    subject_kind = serializers.CharField(read_only=True)
+    subject_name = serializers.CharField(read_only=True)
+    text = serializers.CharField(read_only=True)
+    shown_on_examine = serializers.BooleanField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
+
+class KeepsakeStatusSerializer(serializers.Serializer):
+    used = serializers.IntegerField(read_only=True)
+    limit = serializers.IntegerField(read_only=True)
+    wait_days = serializers.IntegerField(read_only=True)
+
+
+class KeepsakeStateSerializer(serializers.Serializer):
+    """The item panel's keepsake form: the keepsake the item already is (or null), whether it
+    counts yet, the character's slots, what it could stand for and its trophy deeds (#4530)."""
+
+    keepsake = KeepsakeSerializer(read_only=True, allow_null=True)
+    counts_now = serializers.BooleanField(read_only=True)
+    status = KeepsakeStatusSerializer(read_only=True)
+    subjects = serializers.DictField(
+        child=KeepsakeSubjectChoiceSerializer(many=True), read_only=True
+    )
+    trophy_of = serializers.ListField(child=serializers.CharField(), read_only=True)
+
+
 class CraftableTemplateSerializer(serializers.ModelSerializer):
     """A template a character can mint via item-creation crafting (#2240)."""
 

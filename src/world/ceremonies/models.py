@@ -276,6 +276,14 @@ class OfferingSignal(SharedMemoryModel):
         blank=True,
         help_text="What made it count, such as the maker's persona name or the days held.",
     )
+    requested_item = models.ForeignKey(
+        "arxii.RequestedItem",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="filled_by",
+        help_text="For a Requested signal: the request this item filled (#4530).",
+    )
 
     class Meta:
         ordering = ["id"]

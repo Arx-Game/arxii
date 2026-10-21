@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import factory
 
-from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
+from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, KeepsakeSubject
 from world.items.crafting.constants import CostConsumption, CraftingRecipeKind
 from world.items.gems.constants import GemAxis
 from world.items.models import (
@@ -22,6 +22,7 @@ from world.items.models import (
     ItemStyle,
     ItemTemplate,
     ItemTemplateProperty,
+    Keepsake,
     Mantle,
     MantleLevelClearance,
     MantleLevelDefinition,
@@ -145,6 +146,32 @@ def meaningful_item_for(sheet, *, days: int = 30, **kwargs) -> ItemInstance:
         held_since=timezone.now() - timedelta(days=days),
         **kwargs,
     )
+
+
+class KeepsakeFactory(factory.django.DjangoModelFactory):
+    """A keepsake (#4530) of a place by default; pass ``subject_kind`` and the matching
+    subject field for another kind. Declared 30 days ago, so its wait has passed. The words
+    are the player's own, so they are a labelled placeholder."""
+
+    class Meta:
+        model = Keepsake
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    character_sheet = factory.LazyAttribute(lambda o: o.item_instance.holder_character_sheet)
+    subject_kind = KeepsakeSubject.PLACE
+    subject_label = "[place]"
+    text = "[player-written meaning]"
+
+    @factory.post_generation
+    def declared_days_ago(self, create, extracted, **kwargs):
+        """Backdate ``created_at`` (auto_now_add) so the wait has passed: default 30 days."""
+        if not create:
+            return
+        from django.utils import timezone
+
+        days = 30 if extracted is None else extracted
+        self.created_at = timezone.now() - timedelta(days=days)
+        self.save(update_fields=["created_at"])
 
 
 class TemplateSlotFactory(factory.django.DjangoModelFactory):

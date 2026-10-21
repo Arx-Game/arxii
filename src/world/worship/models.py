@@ -30,6 +30,7 @@ from world.worship.constants import (
     ConsecrationScope,
     DireStraitsKind,
     FavorAwardKind,
+    InvocationPieceSource,
     MiracleTrigger,
     PledgeCreditSource,
     RiteTier,
@@ -923,8 +924,71 @@ class DevotionConfig(SharedMemoryModel):
         default=40,
         db_default=40,
         help_text=(
-            "Cap on the ease all meaning together gives one invocation (worn pieces now; "
-            "keepsakes and a Relic later)."
+            "Cap on the ease all meaning together gives one invocation: worn pieces, "
+            "keepsakes of the being and its Relic."
+        ),
+    )
+    invocation_ease_per_keepsake_point = models.PositiveIntegerField(
+        default=3,
+        db_default=3,
+        help_text=(
+            "Ease on an invocation per meaning point of a carried keepsake whose subject is "
+            "the being, and per invocation point of the being's Relic, within the cap above."
+        ),
+    )
+    keepsake_wait_days = models.PositiveIntegerField(
+        default=14,
+        db_default=14,
+        help_text="Days after declaring a keepsake before it counts.",
+    )
+    keepsakes_per_character = models.PositiveIntegerField(
+        default=5,
+        db_default=5,
+        help_text="Most keepsakes one character can hold on items still in play.",
+    )
+    keepsake_max_points = models.PositiveIntegerField(
+        default=3,
+        db_default=3,
+        help_text=(
+            "Cap on a keepsake's subject points; the match bonus adds on top. The words "
+            "the player writes are never scored."
+        ),
+    )
+    keepsake_deed_legend_per_point = models.PositiveIntegerField(
+        default=10,
+        db_default=10,
+        help_text="Deed legend per point for a keepsake whose subject is a deed.",
+    )
+    trophy_legend_per_point = models.PositiveIntegerField(
+        default=10,
+        db_default=10,
+        help_text="Deed legend per trophy point beyond the base 1.",
+    )
+    trophy_max_points = models.PositiveIntegerField(
+        default=4, db_default=4, help_text="Most meaning points a trophy holds."
+    )
+    rite_ease_per_point = models.PositiveIntegerField(
+        default=3,
+        db_default=3,
+        help_text="Ease on a rite's check per meaning point of an item given up during it.",
+    )
+    rite_items_counted = models.PositiveIntegerField(
+        default=3,
+        db_default=3,
+        help_text="Items counted per rite; they use the weekly sacrifice limit.",
+    )
+    requested_item_max_points = models.PositiveIntegerField(
+        default=4,
+        db_default=4,
+        help_text="Most points staff may set on one requested item.",
+    )
+    requested_item_max_value = models.PositiveIntegerField(
+        default=5,
+        db_default=5,
+        help_text=(
+            "Requests must be cheap: a template above this value is refused, and a facet "
+            "request is met only by items at or below it. The only place an item's price "
+            "is read, and it adds no points."
         ),
     )
 
@@ -1063,15 +1127,25 @@ class InvocationPiece(SharedMemoryModel):
     """
 
     invocation = models.ForeignKey(FavorInvocation, on_delete=models.CASCADE, related_name="pieces")
+    source = models.CharField(
+        max_length=10,
+        choices=InvocationPieceSource.choices,
+        default=InvocationPieceSource.WORN,
+        db_default=InvocationPieceSource.WORN,
+        help_text="Worn with a favored facet, a keepsake of the being, or its Relic.",
+    )
     item_name = models.CharField(max_length=200)
     facet_name = models.CharField(
-        max_length=100, help_text="The favored facet that made the piece count."
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="The favored facet that made a worn piece count. Empty for a keepsake or Relic.",
     )
     points = models.PositiveSmallIntegerField(
         help_text="Meaning points counted, after the worn-piece cap."
     )
     ease_per_point = models.PositiveIntegerField(
-        help_text="The facet's invocation ease per meaning point."
+        help_text="The facet's (or, for a keepsake or Relic, the keepsake) ease per point."
     )
 
     class Meta:
@@ -1271,6 +1345,15 @@ class Relic(SharedMemoryModel):
         "arxii.ItemInstance", on_delete=models.CASCADE, related_name="relic_of"
     )
     lore = models.TextField(blank=True, default="")
+    invocation_points = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "Treated as meaning points of a keepsake of this being while carried: each eases "
+            "the carrier's invocations of the being by the keepsake ease per point, within "
+            "the invocation meaning ease cap. 0 for a Relic that only has lore."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1573,6 +1656,118 @@ class Pledge(CreditedContent, SharedMemoryModel):
                 errors["closing_rite"] = (
                     "The closing rite must be tier 1 or 2; a tier 3 rite is a ceremony."
                 )
+        if errors:
+            raise ValidationError(errors)
+
+
+class RequestedItem(SharedMemoryModel):
+    """A specific cheap item a being's pledge or rite asks for (#4530, #4462 section 6.4).
+
+    Exactly one of ``pledge`` and ``rite`` names what asks, and exactly one of
+    ``item_template`` and ``facet`` names what is asked for: one template, or any item
+    carrying one facet. The items are errands, not purchases: a template worth more than
+    ``DevotionConfig.requested_item_max_value`` is refused, and a facet request is met only by
+    items worth no more than that, so money cannot buy a way to ease a roll. Each matching
+    item given up while the pledge is open (or during the rite) adds ``points`` to its own
+    roll, up to ``quantity`` items; there is no carry gate, because finding the item is the
+    errand. A roll eased this way cannot come out as a Critical Failure.
+
+    Same shape as the magic Ritual's ``RitualComponentRequirement``.
+    """
+
+    pledge = models.ForeignKey(
+        Pledge, null=True, blank=True, on_delete=models.CASCADE, related_name="requested_items"
+    )
+    rite = models.ForeignKey(
+        WorshipRite, null=True, blank=True, on_delete=models.CASCADE, related_name="requested_items"
+    )
+    item_template = models.ForeignKey(
+        "arxii.ItemTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="worship_requests",
+    )
+    facet = models.ForeignKey(
+        "arxii.Facet",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="worship_requests",
+    )
+    quantity = models.PositiveSmallIntegerField(
+        default=1, help_text="How many items fill the request."
+    )
+    points = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Meaning points each item gives its own roll. Staff set it for how hard the "
+            "item is to find."
+        ),
+    )
+    hint = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Shown with the request on the pledge card: where one might look.",
+    )
+
+    class Meta:
+        ordering = ["pledge_id", "rite_id", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(pledge__isnull=False, rite__isnull=True)
+                    | models.Q(pledge__isnull=True, rite__isnull=False)
+                ),
+                name="requested_item_pledge_xor_rite",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(item_template__isnull=False, facet__isnull=True)
+                    | models.Q(item_template__isnull=True, facet__isnull=False)
+                ),
+                name="requested_item_template_xor_facet",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(quantity__gte=1, points__gte=1),
+                name="requested_item_quantity_and_points_positive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.asked_for} for {self.asker}"
+
+    @property
+    def asker(self) -> str:
+        return str(self.pledge if self.pledge_id is not None else self.rite)
+
+    @property
+    def asked_for(self) -> str:
+        """The request in words: the template's name, or any item with the facet."""
+        if self.item_template_id is not None:
+            return self.item_template.name
+        return f"any cheap item with the {self.facet.name} facet"
+
+    def clean(self) -> None:
+        super().clean()
+        from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+        config = get_devotion_config()
+        errors: dict[str, str] = {}
+        if (self.pledge_id is None) == (self.rite_id is None):
+            errors["rite"] = "A request belongs to exactly one pledge or one rite."
+        if (self.item_template_id is None) == (self.facet_id is None):
+            errors["facet"] = "Ask for exactly one of an item template or a facet."
+        if self.points > config.requested_item_max_points:
+            errors["points"] = f"At most {config.requested_item_max_points} points."
+        if self.item_template_id is not None and (
+            self.item_template.value > config.requested_item_max_value
+        ):
+            errors["item_template"] = (
+                f"Requests must be cheap: this template is worth {self.item_template.value}, "
+                f"more than the limit of {config.requested_item_max_value}."
+            )
         if errors:
             raise ValidationError(errors)
 

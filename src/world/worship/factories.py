@@ -353,6 +353,22 @@ class PledgeFactory(factory.django.DjangoModelFactory):
     closing_rite = factory.LazyAttribute(lambda o: WorshipRiteFactory(being=o.being))
 
 
+class RequestedItemFactory(factory.django.DjangoModelFactory):
+    """An item a pledge or rite asks for (#4530). Pass ``pledge`` or ``rite`` (a pledge by
+    default) and either ``item_template`` (the default, a cheap one) or ``facet``."""
+
+    class Meta:
+        model = "arxii.RequestedItem"
+
+    pledge = factory.SubFactory(PledgeFactory)
+    rite = None
+    item_template = factory.SubFactory("world.items.factories.ItemTemplateFactory", value=2)
+    facet = None
+    quantity = 1
+    points = 3
+    hint = "[staff-authored hint]"
+
+
 class AnswerFactory(factory.django.DjangoModelFactory):
     """An answer written ahead for a being at one outcome tier (#4333 slice 3).
     Text fields are labelled placeholders: answer prose is staff-authored."""

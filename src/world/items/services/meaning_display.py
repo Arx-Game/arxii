@@ -8,13 +8,16 @@ a room never see either (examine credits people, never points).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
+
+from django.utils import timezone
 
 from world.items.constants import MeaningSignalKind
 from world.items.services.meaning import item_meaning
 
 if TYPE_CHECKING:
-    from world.items.models import ItemInstance
+    from world.items.models import ItemInstance, Keepsake
 
 
 @dataclass(frozen=True)
@@ -55,4 +58,44 @@ def meaning_rail(item: ItemInstance) -> MeaningRail | None:
         total=meaning.points,
         note=note,
         made_from_cap=get_devotion_config().made_from_max_points,
+    )
+
+
+@dataclass(frozen=True)
+class KeepsakeRail:
+    """The Keepsake change form's rail (#4530): the points its subject is worth, read-only
+    and computed. The player's words are never scored, so they never appear here."""
+
+    lines: tuple[RailLine, ...]
+    counts_from: datetime
+    wait_days: int
+    counts_now: bool
+
+
+def keepsake_rail(keepsake: Keepsake) -> KeepsakeRail:
+    """What ``keepsake`` is worth to its keeper once its wait has passed, and from when."""
+    from world.items.services.meaning import _trophy, keepsake_signals  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+    config = get_devotion_config()
+    item, sheet = keepsake.item_instance, keepsake.character_sheet
+    _trophy_signal, trophy_deed_ids = _trophy(item, sheet, config)
+    signals = keepsake_signals(
+        item,
+        sheet,
+        config,
+        being=keepsake.subject_being,
+        trophy_deed_ids=trophy_deed_ids,
+        ignore_wait=True,
+    )
+    labels = {str(value): str(label) for value, label in MeaningSignalKind.choices}
+    counts_from = keepsake.created_at + timedelta(days=config.keepsake_wait_days)
+    return KeepsakeRail(
+        lines=tuple(
+            RailLine(labels.get(signal.kind, signal.kind), signal.detail, signal.points)
+            for signal in signals
+        ),
+        counts_from=counts_from,
+        wait_days=config.keepsake_wait_days,
+        counts_now=timezone.now() >= counts_from,
     )

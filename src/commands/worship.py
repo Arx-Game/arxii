@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from commands.command import ArxCommand
+from world.worship.constants import InvocationPieceSource
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -190,7 +191,12 @@ def _render_worn(option: InvocationOption) -> list[str]:
         return []
     lines = []
     for piece in worn.pieces:
-        head = f"    Worn: {piece.item_name} ({piece.facet_name}, favored)"
+        if piece.source == InvocationPieceSource.KEEPSAKE:
+            head = f"    Kept: {piece.item_name} (a keepsake of {option.being.name})"
+        elif piece.source == InvocationPieceSource.RELIC:
+            head = f"    Relic: {piece.item_name} (a relic of {option.being.name})"
+        else:
+            head = f"    Worn: {piece.item_name} ({piece.facet_name}, favored)"
         if piece.counted:
             reasons = ", ".join(
                 f"{signal.kind.replace('_', ' ')} {signal.points}"
@@ -200,6 +206,8 @@ def _render_worn(option: InvocationOption) -> list[str]:
                 f"{head}: {piece.points} points x {piece.ease_per_point} = eased {piece.ease}"
                 f"; {reasons}"
             )
+        elif piece.points == 0 and piece.source != InvocationPieceSource.WORN:
+            lines.append(f"{head}: not counting yet; a keepsake counts once its wait has passed")
         elif piece.points == 0:
             lines.append(f"{head}: bought; no history beyond holding it, so it counts for nothing")
         else:
@@ -208,7 +216,8 @@ def _render_worn(option: InvocationOption) -> list[str]:
             )
     if worn.raw_ease > worn.ease:
         lines.append(
-            f"    What you wear eases at most {worn.ease_cap} (it would ease {worn.raw_ease})."
+            f"    What you wear and carry eases at most {worn.ease_cap} "
+            f"(it would ease {worn.raw_ease})."
         )
     if worn.earning_percent:
         lines.append(
@@ -228,7 +237,8 @@ class CmdPledge(ArxCommand):
         pledge                                  - your pledge and what it has earned
         pledge <being>                          - the pledges a being offers you
         pledge <being>/<pledge>[=<prayer>]      - take one, with optional words
-        pledge/close                            - close it with its closing rite
+        pledge/close[=<item>[,<item>...]]       - close it with its closing rite, giving
+                                                  up items to ease the rite
 
     A pledge has a favor target and a span. Every favor you earn with the being
     after pledging counts toward it: deeds that grant a resonance it values,
@@ -253,7 +263,8 @@ class CmdPledge(ArxCommand):
         if _SWITCH_CLOSE in switches:
             from actions.definitions.worship import ClosePledgeAction  # noqa: PLC0415
 
-            result = ClosePledgeAction().run(actor=self.caller)
+            names = [name.strip() for name in raw.lstrip("=").split(",") if name.strip()]
+            result = ClosePledgeAction().run(actor=self.caller, item_names=names)
             if result.message:
                 self.msg(result.message)
             return
@@ -301,6 +312,14 @@ def _render_own_pledge(sheet: CharacterSheet) -> str:
         head += f" {PledgeState(card.state).label}."
     lines = [head]
     lines.extend(f"  {line.label}: {line.calculation}" for line in card.credits)
+    if card.requests:
+        lines.append(f"{being} asks for:")
+        for request in card.requests:
+            hint = f" ({request.hint})" if request.hint else ""
+            lines.append(
+                f"  {request.asked_for}: {request.given} of {request.quantity} given, "
+                f"{request.points} points each, at the {request.where}{hint}"
+            )
     if card.retry_available:
         lines.append("Your first close failed; one more try is left within the span.")
     return "\n".join(lines)
@@ -340,10 +359,12 @@ class CmdSacrifice(ArxCommand):
     Usage:
         sacrifice <item>[,<item>...][=<being>]
 
-    The items are destroyed and feed the being's worship pool, and you earn
-    favor with the being in proportion to their value: more for an item carrying
-    a facet the being favors. Name the being when the place is holy to two. A
-    being your GM table stewards takes a sacrifice anywhere: name it.
+    The items are given up and feed the being's worship pool. Each one that means
+    something to you rolls a check eased by what it means, and the roll sets the favor you
+    earn: more for an item carrying a facet the being favors. An item the being asked for
+    on your pledge eases its own roll and cannot make it a critical failure. Name the
+    being when the place is holy to two. A being your GM table stewards takes a sacrifice
+    anywhere: name it.
     """
 
     key = "sacrifice"

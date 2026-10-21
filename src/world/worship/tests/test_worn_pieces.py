@@ -413,4 +413,6 @@ class InvocationDetailAdminTests(WornPiecesTestBase):
             reverse("admin:arxii_favorinvocation_change", args=(outcome.invocation.pk,))
         )
 
-        self.assertContains(response, "No worn piece counted on this invocation.")
+        self.assertContains(
+            response, "No worn piece, keepsake or Relic counted on this invocation."
+        )

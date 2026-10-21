@@ -32,7 +32,7 @@ class OfferingSignalInline(admin.TabularInline):
     model = OfferingSignal
     extra = 0
     can_delete = False
-    readonly_fields = ("kind", "points", "detail")
+    readonly_fields = ("kind", "points", "detail", "requested_item")
 
     def has_add_permission(self, request: HttpRequest, obj: object = None) -> bool:
         del request, obj  # signals are computed at sacrifice time, never added by hand
