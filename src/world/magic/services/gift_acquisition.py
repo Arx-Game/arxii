@@ -297,6 +297,24 @@ def enforce_technique_prerequisites(sheet: CharacterSheet, technique: Technique)
         raise TechniqueRequirementsNotMet(failed)
 
 
+def enforce_can_afford_training(sheet: CharacterSheet, gold_cost: int) -> None:
+    """Raise ``TrainingFundsInsufficient`` unless ``sheet``'s purse covers ``gold_cost`` (#4523).
+
+    A free training (``gold_cost`` 0) always passes without touching the purse. Locks the
+    purse row (the caller is inside a transaction) so a concurrent debit cannot slip
+    between this read and ``transfer``'s own row-locked check.
+    """
+    from world.currency.models import CharacterPurse  # noqa: PLC0415
+    from world.currency.services import get_or_create_purse  # noqa: PLC0415
+    from world.magic.exceptions import TrainingFundsInsufficient  # noqa: PLC0415
+
+    if gold_cost <= 0:
+        return
+    purse = CharacterPurse.objects.select_for_update().get(pk=get_or_create_purse(sheet).pk)
+    if purse.balance < gold_cost:
+        raise TrainingFundsInsufficient(gold_cost, purse.balance)
+
+
 @transaction.atomic
 def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params co-equal
     learner: CharacterSheet,
@@ -366,6 +384,8 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
         TechniqueCapExceeded: At the cap for this gift at current thread level.
         TechniqueRequirementsNotMet: An active requirement targeting this
             technique (Path, gift, technique, skill, ...) is not met.
+        TrainingFundsInsufficient: ``gold_cost`` exceeds the learner's purse
+            (checked before anything is charged, #4523).
         ValueError: Learner already knows this technique.
     """
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
@@ -396,6 +416,12 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
     if CharacterTechnique.objects.filter(character=sheet, technique=technique).exists():
         msg = f"{sheet} already knows {technique.name}."
         raise ValueError(msg)
+
+    # 1a. Coin (#4523): refuse a short purse by its cause before anything is charged, so
+    # the Academy TRAIN handler never reads transfer()'s "Insufficient funds"
+    # ValidationError as a lost Golden Hare race. The purse row is locked here, so the
+    # balance read stays true until the transfer in step 6b takes the same lock.
+    enforce_can_afford_training(sheet, gold_cost)
 
     # 1b. Prerequisites (#4097): Paths, gifts, techniques, skills the technique requires.
     enforce_technique_prerequisites(sheet, technique)

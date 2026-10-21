@@ -629,6 +629,8 @@ def run_train_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
         # redeem_favor_token lost the race after charge_and_learn already
         # ran in this transaction's savepoint — the whole atomic block above
         # rolled back (AP, coin, and the TechniqueProgress are all undone).
+        # A short purse never lands here: charge_and_learn refuses it first
+        # with TrainingFundsInsufficient (a MagicError, handled above, #4523).
         return EffectResult(
             kind=OfferKind.TRAIN.value,
             message="Someone else called in that Hare before you finished.",
