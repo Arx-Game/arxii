@@ -2484,6 +2484,11 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     ``grants.cost_per_rank * rank``. Staff author the three rows on the tradition
     slate page; read by the tradition serializer to draw the stances under a
     living tradition and by the offers module to open a Tradition Training offer.
+
+    ``magic_skill_floor`` (#4457) is the Magic-skill development a character at
+    this stance is lifted to when she takes the tradition: every Magic skill
+    the tradition teaches is raised to at least that value (never lowered). Rank
+    0 grants no floor, since it grants nothing.
     """
 
     rank = models.PositiveSmallIntegerField(unique=True)
@@ -2497,6 +2502,13 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="granted_by_schooling_lines",
         help_text="The distinction this line grants, at this line's rank.",
     )
+    magic_skill_floor = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Development each Magic skill the tradition teaches is raised to, at "
+            "least, when a character takes this stance. 0 = no floor."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -2504,6 +2516,12 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         verbose_name = "Schooling line"
         verbose_name_plural = "Schooling lines"
         ordering = ["rank"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(rank__gt=0) | models.Q(magic_skill_floor=0),
+                name="schooling_rank_zero_grants_no_floor",
+            ),
+        ]
 
     class NaturalKeyConfig:
         fields = ["rank"]

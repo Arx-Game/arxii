@@ -1027,6 +1027,134 @@ class TrainOfferDetails(SharedMemoryModel):
         return f"TrainOffer: {self.offer.label} teaches {self.technique.name}"
 
 
+class SkillCourseOfferDetails(SharedMemoryModel):
+    """Per-kind details for ``NPCServiceOffer`` rows of kind=SKILL_COURSE (#4457).
+
+    One offer row per teachable skill course at an Academy teacher. Taking the
+    course enrolls the learner (:class:`SkillCourseEnrollment`) for
+    ``total_development`` points of development in ``skill``; each session
+    (the ``run_skill_course_offer`` handler in ``effects.py``) costs
+    ``session_ap_cost`` AP and ``coin_cost`` coppers, rolls ``check_type`` at
+    ``check_difficulty`` and, on success, adds up to ``session_development``
+    points. The session AP is charged by the handler, not by
+    ``NPCServiceOffer.ap_cost`` (the generic pre-dispatch charge), so
+    ``clean()`` requires that field to be 0, as ``TrainOfferDetails`` does.
+    No field has a default: every course is authored deliberately.
+    """
+
+    offer = models.OneToOneField(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="skill_course_offer_details",
+        help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
+    )
+    skill = models.ForeignKey(
+        "arxii.Skill",
+        on_delete=models.PROTECT,
+        related_name="course_offers",
+        help_text="The skill this course develops.",
+    )
+    total_development = models.PositiveIntegerField(
+        help_text="Development points the whole course grants when finished."
+    )
+    session_development = models.PositiveIntegerField(
+        help_text="Most development points one session can add.",
+    )
+    session_ap_cost = models.PositiveSmallIntegerField(
+        help_text="Action points the learner pays for each session.",
+    )
+    coin_cost = models.PositiveIntegerField(
+        help_text="Coppers the learner pays for each session, credited to the teacher's house.",
+    )
+    check_type = models.ForeignKey(
+        "arxii.CheckType",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The check rolled each session.",
+    )
+    check_difficulty = models.IntegerField(
+        help_text="Target difficulty of the session check.",
+    )
+
+    class Meta:
+        verbose_name = "Skill Course Offer Details"
+        verbose_name_plural = "Skill Course Offer Details"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(session_development__lte=models.F("total_development")),
+                name="course_session_within_total",
+            ),
+        ]
+
+    def clean(self) -> None:
+        """Reject a nonzero ``offer.ap_cost`` - see the class docstring."""
+        if self.offer_id is not None and self.offer.ap_cost != 0:
+            msg = (
+                "SKILL_COURSE offers must author NPCServiceOffer.ap_cost=0 - the AP "
+                "charge flows entirely through session_ap_cost in the session handler; "
+                "a nonzero ap_cost would double-charge the learner."
+            )
+            raise ValidationError({"offer": msg})
+
+    def __str__(self) -> str:
+        return f"SkillCourse: {self.offer.label} develops {self.skill}"
+
+
+class SkillCourseEnrollment(SharedMemoryModel):
+    """A character's place in one skill course (#4457).
+
+    Opened when she takes the course and carried across sessions:
+    ``development_remaining`` counts down as sessions succeed, and
+    ``last_session_week`` records the game week of the latest session so the
+    handler can hold the course to one session a week. ``completed_at`` is
+    stamped when the course finishes; the history row stays, and she may
+    enroll again afterwards (only one *open* enrollment per course).
+    """
+
+    character_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="skill_course_enrollments",
+        help_text="The character taking the course.",
+    )
+    course = models.ForeignKey(
+        SkillCourseOfferDetails,
+        on_delete=models.PROTECT,
+        related_name="enrollments",
+        help_text="The course she is taking.",
+    )
+    development_remaining = models.PositiveIntegerField(
+        help_text="Development points the course still has to grant her.",
+    )
+    last_session_week = models.ForeignKey(
+        "arxii.GameWeek",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The game week of her latest session; null before the first.",
+    )
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the course finished; null while it is still open.",
+    )
+
+    class Meta:
+        ordering = ["-enrolled_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet", "course"],
+                condition=models.Q(completed_at__isnull=True),
+                name="one_open_enrollment_per_course",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"SkillCourseEnrollment({self.character_sheet_id} in course {self.course_id})"
+
+
 REGARD_MIN = -1000
 REGARD_MAX = 1000
 regard_validators = [MinValueValidator(REGARD_MIN), MaxValueValidator(REGARD_MAX)]

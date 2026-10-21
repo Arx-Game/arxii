@@ -28,6 +28,8 @@ from world.npc_services.models import (
     PersonalityTrait,
     ProfileRecordingOfferDetails,
     RegardEventConfig,
+    SkillCourseEnrollment,
+    SkillCourseOfferDetails,
     StaffingProfile,
     StaffingProfileLine,
     StylingOfferDetails,
@@ -106,6 +108,46 @@ class TrainOfferDetailsAdmin(admin.ModelAdmin):
     search_fields = ["offer__label", "technique__name"]
     list_select_related = ["offer", "technique"]
     autocomplete_fields = ["offer", "technique"]
+
+
+@admin.register(SkillCourseOfferDetails)
+class SkillCourseOfferDetailsAdmin(admin.ModelAdmin):
+    """#4457 - one skill course on a kind=SKILL_COURSE offer."""
+
+    list_display = [
+        "offer",
+        "skill",
+        "total_development",
+        "session_development",
+        "session_ap_cost",
+        "coin_cost",
+        "check_type",
+    ]
+    search_fields = ["offer__label", "skill__trait__name"]
+    list_select_related = ["offer", "skill__trait", "check_type"]
+    autocomplete_fields = ["offer", "skill", "check_type"]
+
+
+@admin.register(SkillCourseEnrollment)
+class SkillCourseEnrollmentAdmin(admin.ModelAdmin):
+    """#4457 - read-only view of who is taking which skill course."""
+
+    list_display = ["character_sheet", "course", "development_remaining", "completed_at"]
+    list_select_related = ["character_sheet", "course__offer"]
+    readonly_fields = [
+        "character_sheet",
+        "course",
+        "development_remaining",
+        "last_session_week",
+        "enrolled_at",
+        "completed_at",
+    ]
+
+    # Every field is read-only, so character_sheet never renders as a <select>.
+    large_table_widget_exempt = ["character_sheet"]
+
+    def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
 
 
 @admin.register(CourtGrantOfferDetails)

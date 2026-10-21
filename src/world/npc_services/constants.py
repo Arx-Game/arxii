@@ -42,6 +42,10 @@ class OfferKind(models.TextChoices):
     # #3428 — an NPC role reveals a pre-authored clue on resolve (optionally
     # gated by an authored check); see world.npc_services.effects.run_clue_reveal_offer.
     CLUE_REVEAL = "clue_reveal", "Clue Reveal"
+    # #4457 — an Academy teacher runs a multi-session skill course: each session
+    # costs AP + coin and rolls a check to develop one skill; see
+    # world.npc_services.effects.run_skill_course_offer.
+    SKILL_COURSE = "skill_course", "Skill Course"
     # Future kinds: marriage/attunement.
 
 
