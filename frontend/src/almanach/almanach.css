@@ -67,6 +67,14 @@
   font-size: 0.85rem;
   color: hsl(var(--muted-foreground));
 }
+.almanach .bar .crumb a {
+  color: inherit;
+  text-decoration: none;
+}
+.almanach .bar .crumb a:hover,
+.almanach .bar .crumb a:focus-visible {
+  text-decoration: underline;
+}
 .almanach .bar .crumb span + span::before {
   content: '\203A';
   margin: 0 0.5rem;

@@ -114,10 +114,11 @@ test('Gentry toggles like any other state when the realm theme is luxen', async 
   } as never);
 
   renderWithProviders(<HouseDocument houseId={9} />);
-  const gentry = screen.getByRole('button', { name: 'Gentry' });
+  const state = screen.getByRole('combobox', { name: 'State' });
+  const gentry = screen.getByRole('option', { name: 'Gentry' });
   expect(gentry).not.toBeDisabled();
-  await userEvent.click(gentry);
-  expect(gentry).toHaveAttribute('aria-pressed', 'true');
+  await userEvent.selectOptions(state, 'gentry');
+  expect(state).toHaveValue('gentry');
 
   await userEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(mutate).toHaveBeenCalledWith({ org_id: 9, house_state: 'gentry' });
@@ -169,7 +170,7 @@ test('editing a day of remembrance saves the whole list, without the spelled dat
 test('Gentry stays disabled ("Luxen only") when the realm theme is not luxen', () => {
   vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
   renderWithProviders(<HouseDocument houseId={9} />);
-  const gentry = screen.getByRole('button', { name: 'Gentry' });
+  const gentry = screen.getByRole('option', { name: 'Gentry' });
   expect(gentry).toBeDisabled();
   expect(gentry).toHaveAttribute('title', 'Luxen only');
 });

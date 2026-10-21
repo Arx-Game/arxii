@@ -28,12 +28,13 @@
  * `aria-disabled` alone already communicates "not available" without a
  * second, unapproved hover-text channel).
  *
- * Gentry is the one exception, ordered explicitly: it toggles like every
- * other `state` choice when `realmTheme === 'luxen'` (`_realm_payload`'s new
+ * Gentry is the one exception, ordered explicitly: it is a live option of
+ * the state select when `realmTheme === 'luxen'` (`_realm_payload`'s
  * `realm_theme`, final review I11 — Spec Decision 12 requires Gentry
- * reachable in Luxen), and stays disabled (`aria-disabled`,
- * `title="Luxen only"`) for every other theme — a `title` here was ruled a
- * keeper despite the constraint.
+ * reachable in Luxen), and stays a disabled option (`title="Luxen only"`)
+ * for every other theme — a `title` here was ruled a keeper despite the
+ * constraint. The state is one select rather than a row of tiles (#4533:
+ * four tiles scrunched "In exile" and read as spread-out toggles).
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -114,37 +115,25 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
       <div className="row3">
         <div className="field">
           <span className="label">state</span>
-          <div className="seg" role="group" aria-label="State">
+          <select
+            id="house-state"
+            aria-label="State"
+            value={houseState}
+            onChange={(e) => setHouseState(e.target.value)}
+          >
             {STATE_CHOICES.map((choice) => (
-              <button
-                key={choice.value}
-                type="button"
-                aria-pressed={houseState === choice.value}
-                onClick={() => setHouseState(choice.value)}
-              >
+              <option key={choice.value} value={choice.value}>
                 {choice.label}
-              </button>
+              </option>
             ))}
-            {realmTheme === 'luxen' ? (
-              <button
-                type="button"
-                aria-pressed={houseState === 'gentry'}
-                onClick={() => setHouseState('gentry')}
-              >
-                {HOUSE_STATES.gentry}
-              </button>
-            ) : (
-              <button
-                type="button"
-                aria-pressed={false}
-                disabled
-                aria-disabled
-                title={GENTRY_LUXEN_ONLY}
-              >
-                {HOUSE_STATES.gentry}
-              </button>
-            )}
-          </div>
+            <option
+              value="gentry"
+              disabled={realmTheme !== 'luxen'}
+              title={realmTheme === 'luxen' ? undefined : GENTRY_LUXEN_ONLY}
+            >
+              {HOUSE_STATES.gentry}
+            </option>
+          </select>
         </div>
         <div className="field">
           <span className="label">particle</span>
@@ -220,7 +209,7 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         />
       </div>
       <div className="field">
-        <label htmlFor={`house-description-${house.id}`}>the house</label>
+        <label htmlFor={`house-description-${house.id}`}>description</label>
         <textarea
           id={`house-description-${house.id}`}
           className="prose"
