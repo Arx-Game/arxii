@@ -7,7 +7,7 @@
  * path Family Template which can carry several), and the six principle
  * axes windowed to the template's own min/max. Every field writes straight
  * to the founder draft (`set`) — there is no per-field Save here, only the
- * savebar's Next (plate: "draft kept as you type").
+ * savebar's Next.
  *
  * Succession renders as a plain name + codex link, without the plate's own
  * `.tip`/`.bub` gloss: `SuccessionLawOption`/`AlmanachSuccessionLaw`
@@ -25,12 +25,13 @@ import { useId } from 'react';
 
 import type { HouseTemplateOption } from '@/character-creation/api';
 
-import { DRAFT_NOTE } from '../copy';
+import { houseHeading } from '../copy';
 import { tierNoun } from '../ladder/tree';
 import { ObservanceRows } from '../ObservanceRows';
 import { useCharter } from '../queries';
 
 import type { FounderDraft, UseFounderDraftResult } from './founderDraft';
+import { urls } from '@/utils/urls';
 
 export interface FounderHouseChapterProps {
   draft: FounderDraft;
@@ -145,7 +146,7 @@ export function FounderHouseChapter({
   return (
     <main className="chapter">
       <h3>
-        House {draft.house_name}{' '}
+        {houseHeading(draft.house_name)}{' '}
         <span className="tier">
           {tierNoun(seatTier, 1)} of {seatName}
         </span>
@@ -188,7 +189,10 @@ export function FounderHouseChapter({
                 {template.default_succession_law.codex_entry_id != null && (
                   <>
                     {' '}
-                    · <a href={`/codex/${template.default_succession_law.codex_entry_id}`}>codex</a>
+                    ·{' '}
+                    <a href={urls.codexEntry(template.default_succession_law.codex_entry_id)}>
+                      codex
+                    </a>
                   </>
                 )}
               </>
@@ -222,7 +226,8 @@ export function FounderHouseChapter({
         <label htmlFor="founder-house-sigil">sigil</label>
         <textarea
           id="founder-house-sigil"
-          className="prose"
+          className="prose short"
+          rows={2}
           value={draft.sigil_description}
           onChange={(event) => set('sigil_description', event.target.value)}
         />
@@ -232,6 +237,7 @@ export function FounderHouseChapter({
         <textarea
           id="founder-house-backstory"
           className="prose"
+          rows={6}
           value={draft.backstory}
           onChange={(event) => set('backstory', event.target.value)}
         />
@@ -263,7 +269,7 @@ export function FounderHouseChapter({
                   </span>
                   <span className="rt">
                     {option.target_entry_id != null && (
-                      <a href={`/codex/${option.target_entry_id}`}>
+                      <a href={urls.codexEntry(option.target_entry_id)}>
                         {option.being_name !== '' ? option.being_name : 'codex'}
                       </a>
                     )}
@@ -312,7 +318,6 @@ export function FounderHouseChapter({
         })}
       </div>
       <div className="savebar">
-        <span className="note">{DRAFT_NOTE}</span>
         <button type="button" className="btn" onClick={onNext}>
           Next
         </button>

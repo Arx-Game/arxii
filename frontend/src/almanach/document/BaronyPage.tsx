@@ -3,8 +3,8 @@
  * barony table for the disclosed row) — prose, hall, land-shape chips, an
  * Atlas link, and a read-only produces ledger.
  *
- * Only `description` is a `useDraft` textarea (the "draft kept as you type"
- * field the plate's savebar note describes) — `hall` and the land-shape
+ * Only `description` is a `useDraft` textarea (kept as a draft as you
+ * type) — `hall` and the land-shape
  * chips are short, low-effort-to-retype fields staged as plain local state
  * instead, the same choice `HouseChapter` makes for `state`.
  *
@@ -171,7 +171,6 @@ export function BaronyPage({ barony, onSave }: BaronyPageProps) {
         </button>
       </div>
       <div className="savebar">
-        <span className="note">draft kept as you type</span>
         <button type="button" className="btn" onClick={save}>
           Save
         </button>
