@@ -27,6 +27,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from web.admin.authoring.contributors import current_contributor
+from web.admin.authoring.identity_map import flush_refused_instances
 from web.admin.tuning.views import superuser_required
 from web.admin.upbringing_builder import live
 from web.admin.upbringing_builder.credit import stamp_reviewed, stamp_written
@@ -197,7 +198,12 @@ def _save_route(
     if contributor is None:
         return _render_page(request, template, forms, needs_setup=True)
     if not _route_forms_valid(forms):
-        return _render_page(request, template, forms)
+        response = _render_page(request, template, forms)
+        # Drop the refused rows from the identity map once the errors have rendered.
+        flush_refused_instances(
+            forms.form, forms.questions, *forms.answers.values(), *forms.offers.values()
+        )
+        return response
 
     deleted_choice_pks = _deleted_choice_pks(forms.answers)
     with transaction.atomic():

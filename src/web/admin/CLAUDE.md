@@ -843,6 +843,15 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   stamped. "Mark reviewed" likewise stamps every standard line, not the
   Beginning's own slate rows - the standard lines are shared, so review here
   is not per-Beginning.
+- **A refused save drops the lines from the identity map** - validating a ModelForm writes
+  the posted values onto the shared `SchoolingLine`/`TraditionStateLine`/`BeginningTradition`
+  instances, so `_save_slate` renders the errors first and then calls
+  `web.admin.authoring.identity_map.flush_refused_instances` over the three formsets (the
+  Distinction Builder and Upbringing Builder do the same). Without it the next load showed
+  the refused values and the corrected save found no change and skipped the write while
+  reporting success (#4457 real-testing). Guard:
+  `SchoolingFloorTest.test_a_correction_after_a_refused_save_is_written_to_the_database`.
+  Reviewer: `tools/agents/idmapper-form-binding-reviewer.md`.
 - **Save-time side effect (`views._sync_schooling_offers`)** - a POST that
   validates saves all three formsets in one `transaction.atomic()` block,
   then keeps every `SchoolingLine`'s TRADITION_STEP `DistinctionOffer` in

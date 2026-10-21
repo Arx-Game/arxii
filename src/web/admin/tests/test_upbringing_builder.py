@@ -267,6 +267,17 @@ class BuilderSaveTest(BuilderTestCase):
         )
         assert list(stored) == ["known"]
 
+    def test_a_refused_save_leaves_the_identity_mapped_route_as_stored(self):
+        """Validating the route form wrote the refused values onto the shared instance;
+        the next reader (a plain query, as the game does) must still get the stored row."""
+        self.client.force_login(self.author)
+        resp = self.client.post(
+            reverse("admin_upbringing_builder", args=[self.template.pk]),
+            self._post_data(parentage="adoptive"),
+        )
+        assert resp.status_code == 200
+        assert OriginTemplate.objects.get(pk=self.template.pk).parentage == "known"
+
     def test_save_with_a_text_question_succeeds(self):
         """Ruling G: a TEXT/PERSON question has no answers formset to bind."""
         self.client.force_login(self.author)

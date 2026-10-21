@@ -517,6 +517,63 @@ class SchoolingFloorTest(SlatePostDataMixin, SlateTestCase):
         assert f"A floor cannot exceed the creation skill cap of {cap}." in resp.content.decode()
         assert SchoolingLine.objects.get(rank=1).magic_skill_floor == 0
 
+    def _floors_in_database(self) -> dict[int, int]:
+        """Rank -> floor as the table holds it, read without the identity map."""
+        return dict(SchoolingLine.objects.values_list("rank", "magic_skill_floor"))
+
+    def _floor_inputs_on_page(self) -> dict[int, str]:
+        """Rank -> the value the rendered floor input shows."""
+        body = self.client.get(self.url).content.decode()
+        return {
+            rank: re.search(
+                rf'name="schooling-{rank}-magic_skill_floor"[^>]*value="(\d+)"', body
+            ).group(1)
+            for rank in (1, 2)
+        }
+
+    def test_a_correction_after_a_refused_save_is_written_to_the_database(self):
+        """A refused POST validates every stance form, and ModelForm validation writes the
+        posted values onto the identity-mapped lines. The refusal must not leave them
+        there: the corrected save would compare against the refused values, see no change
+        for rank 2 and report success without writing it (#4457 real-testing defect)."""
+        self.client.force_login(self.author)
+        cap = SkillPointBudget.get_active_budget().max_skill_value
+        state_lines = [
+            TraditionStateLineFactory(state=state, entry_line=f"{state} line")
+            for state in TraditionState.values
+        ]
+        schooling_lines = [
+            SchoolingLineFactory(rank=0, name="Schooling 0", player_line="A line."),
+            SchoolingLineFactory(rank=1, name="Schooling 1", player_line="A line."),
+            SchoolingLineFactory(
+                rank=2, name="Schooling 2", player_line="A line.", magic_skill_floor=30
+            ),
+        ]
+
+        def post(overrides):
+            return self.client.post(
+                self.url,
+                self._post_data(
+                    state_lines=state_lines,
+                    schooling_lines=schooling_lines,
+                    slate_rows=[],
+                    schooling_overrides=overrides,
+                ),
+            )
+
+        refused = post({1: {"magic_skill_floor": cap + 1}, 2: {"magic_skill_floor": 25}})
+        assert refused.status_code == 200
+        assert f"A floor cannot exceed the creation skill cap of {cap}." in (
+            refused.content.decode()
+        )
+        assert self._floors_in_database() == {0: 0, 1: 0, 2: 30}
+        assert self._floor_inputs_on_page() == {1: "0", 2: "30"}
+
+        saved = post({1: {"magic_skill_floor": 20}, 2: {"magic_skill_floor": 25}})
+        assert saved.status_code == 302
+        assert self._floors_in_database() == {0: 0, 1: 20, 2: 25}
+        assert self._floor_inputs_on_page() == {1: "20", 2: "25"}
+
     def test_floor_at_cap_saves(self):
         self.client.force_login(self.author)
         cap = SkillPointBudget.get_active_budget().max_skill_value
