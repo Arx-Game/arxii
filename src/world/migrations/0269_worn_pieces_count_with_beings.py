@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
             field=models.PositiveIntegerField(
                 db_default=1,
                 default=1,
-                help_text="Percent added to the earning rate with this being, per meaning point of a worn piece carrying this facet (#4520).",
+                help_text="Percent added to the earning rate with this being, per meaning point of a worn piece carrying this facet.",
             ),
         ),
         migrations.AddField(
@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
             field=models.PositiveIntegerField(
                 db_default=2,
                 default=2,
-                help_text="Difficulty points eased on an invocation of this being, per meaning point of a worn piece carrying this facet. A worn piece with no meaning adds nothing, whatever it cost (#4520).",
+                help_text="Difficulty points eased on an invocation of this being, per meaning point of a worn piece carrying this facet. A worn piece with no meaning adds nothing, whatever it cost.",
             ),
         ),
         migrations.AddField(
@@ -34,7 +34,7 @@ class Migration(migrations.Migration):
             field=models.PositiveIntegerField(
                 db_default=40,
                 default=40,
-                help_text="Cap on the ease all meaning together gives one invocation (worn pieces now; keepsakes and a Relic later) (#4520).",
+                help_text="Cap on the ease all meaning together gives one invocation (worn pieces now; keepsakes and a Relic later).",
             ),
         ),
         migrations.AddField(
@@ -43,7 +43,7 @@ class Migration(migrations.Migration):
             field=models.PositiveIntegerField(
                 db_default=3,
                 default=3,
-                help_text="Most meaning points the resonance fed signal gives one item (#4520).",
+                help_text="Most meaning points the resonance fed signal gives one item.",
             ),
         ),
         migrations.AddField(
@@ -52,7 +52,7 @@ class Migration(migrations.Migration):
             field=models.PositiveIntegerField(
                 db_default=10,
                 default=10,
-                help_text="Resonance an item's facets fed its holder, in a resonance the being lists, per meaning point; doubled for a favored resonance. Counts only alongside another signal, so a bought piece worn for months still adds nothing (#4520).",
+                help_text="Resonance an item's facets fed its holder, in a resonance the being lists, per meaning point; doubled for a favored resonance. Counts only alongside another signal, so a bought piece worn for months still adds nothing.",
             ),
         ),
         migrations.AddField(
@@ -61,7 +61,7 @@ class Migration(migrations.Migration):
             field=models.PositiveIntegerField(
                 db_default=8,
                 default=8,
-                help_text="Most meaning points one worn piece brings to an invocation (#4520).",
+                help_text="Most meaning points one worn piece brings to an invocation.",
             ),
         ),
         migrations.AddField(
@@ -70,7 +70,7 @@ class Migration(migrations.Migration):
             field=models.PositiveIntegerField(
                 db_default=3,
                 default=3,
-                help_text="Worn pieces carrying a facet the being favors that count per invocation, highest meaning first (#4520).",
+                help_text="Worn pieces carrying a facet the being favors that count per invocation, highest meaning first.",
             ),
         ),
         migrations.AddField(
@@ -79,7 +79,7 @@ class Migration(migrations.Migration):
             field=models.PositiveIntegerField(
                 db_default=0,
                 default=0,
-                help_text="Difficulty points the worn pieces eased this invocation by, after the cap (#4520). The pieces behind it are the rows under this one.",
+                help_text="Difficulty points the worn pieces eased this invocation by, after the cap. The pieces behind it are the rows under this one.",
             ),
         ),
         migrations.AlterField(

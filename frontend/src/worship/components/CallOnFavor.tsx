@@ -132,11 +132,11 @@ function WornPieces({ worn, beingName }: { worn: WornMeaning; beingName: string 
         </table>
       </div>
       <p className="text-xs text-muted-foreground" data-testid="invocation-worn-note">
-        Up to {worn.items_counted_max} worn pieces count, and what you wear eases at most{' '}
-        {worn.ease_cap}
-        {worn.raw_ease > worn.ease ? ` (it would ease ${worn.raw_ease})` : ''}.
+        Up to {worn.items_counted_max} worn pieces count, and the ease from what you wear is capped
+        at {worn.ease_cap}
+        {worn.raw_ease > worn.ease ? ` (these would ease ${worn.raw_ease})` : ''}.
         {worn.earning_percent
-          ? ` Your earning rate with ${beingName} is ${worn.earning_percent}% higher while you wear these.`
+          ? ` Earning rate with ${beingName} while you wear these: 100% + ${worn.earning_percent}%.`
           : ''}
       </p>
     </div>

@@ -258,7 +258,7 @@ class BeingFacet(SharedMemoryModel):
         help_text=(
             "Difficulty points eased on an invocation of this being, per meaning point of a "
             "worn piece carrying this facet. A worn piece with no meaning adds nothing, "
-            "whatever it cost (#4520)."
+            "whatever it cost."
         ),
     )
     earning_bonus_percent = models.PositiveIntegerField(
@@ -266,7 +266,7 @@ class BeingFacet(SharedMemoryModel):
         db_default=1,
         help_text=(
             "Percent added to the earning rate with this being, per meaning point of a worn "
-            "piece carrying this facet (#4520)."
+            "piece carrying this facet."
         ),
     )
 
@@ -895,14 +895,14 @@ class DevotionConfig(SharedMemoryModel):
     worn_item_max_points = models.PositiveIntegerField(
         default=8,
         db_default=8,
-        help_text="Most meaning points one worn piece brings to an invocation (#4520).",
+        help_text="Most meaning points one worn piece brings to an invocation.",
     )
     worn_items_counted = models.PositiveIntegerField(
         default=3,
         db_default=3,
         help_text=(
             "Worn pieces carrying a facet the being favors that count per invocation, "
-            "highest meaning first (#4520)."
+            "highest meaning first."
         ),
     )
     resonance_fed_per_point = models.PositiveIntegerField(
@@ -911,20 +911,20 @@ class DevotionConfig(SharedMemoryModel):
         help_text=(
             "Resonance an item's facets fed its holder, in a resonance the being lists, per "
             "meaning point; doubled for a favored resonance. Counts only alongside another "
-            "signal, so a bought piece worn for months still adds nothing (#4520)."
+            "signal, so a bought piece worn for months still adds nothing."
         ),
     )
     resonance_fed_max_points = models.PositiveIntegerField(
         default=3,
         db_default=3,
-        help_text="Most meaning points the resonance fed signal gives one item (#4520).",
+        help_text="Most meaning points the resonance fed signal gives one item.",
     )
     invocation_meaning_ease_max = models.PositiveIntegerField(
         default=40,
         db_default=40,
         help_text=(
             "Cap on the ease all meaning together gives one invocation (worn pieces now; "
-            "keepsakes and a Relic later) (#4520)."
+            "keepsakes and a Relic later)."
         ),
     )
 
@@ -1033,8 +1033,8 @@ class FavorInvocation(SharedMemoryModel):
         default=0,
         db_default=0,
         help_text=(
-            "Difficulty points the worn pieces eased this invocation by, after the cap "
-            "(#4520). The pieces behind it are the rows under this one."
+            "Difficulty points the worn pieces eased this invocation by, after the cap. "
+            "The pieces behind it are the rows under this one."
         ),
     )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -1086,7 +1086,7 @@ class InvocationPiece(SharedMemoryModel):
 
 
 class InvocationPieceSignal(SharedMemoryModel):
-    """One meaning signal of a worn piece on one invocation (#4520)."""
+    """One meaning signal of a worn piece on one invocation."""
 
     piece = models.ForeignKey(InvocationPiece, on_delete=models.CASCADE, related_name="signals")
     kind = models.CharField(max_length=20, choices=MeaningSignalKind.choices)

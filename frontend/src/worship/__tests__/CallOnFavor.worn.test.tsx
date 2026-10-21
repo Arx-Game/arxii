@@ -106,7 +106,9 @@ describe('CallOnFavor worn pieces', () => {
     await open();
     const note = screen.getByTestId('invocation-worn-note');
     expect(note).toHaveTextContent('Up to 3 worn pieces count');
-    expect(note).toHaveTextContent('eases at most 40');
-    expect(note).toHaveTextContent('5% higher while you wear these');
+    expect(note).toHaveTextContent('capped at 40');
+    expect(note).toHaveTextContent(
+      'Earning rate with the Highwind while you wear these: 100% + 5%'
+    );
   });
 });
