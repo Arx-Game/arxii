@@ -65,6 +65,9 @@ class RiteOutcome:
     #: Items given up during the rite (#4530) and the ease they gave its roll.
     items_given: tuple[str, ...] = ()
     items_ease: int = 0
+    #: How many given items meant something but did not count (past the rite's item limit
+    #: or the week's sacrifice limit).
+    items_uncounted: int = 0
 
 
 def rite_ap_cost(rite: WorshipRite) -> int:
@@ -473,7 +476,10 @@ def perform_worship_rite(  # noqa: PLR0913 - the rite's context is keyword-only 
             rite_outcome = apply_rite_award(character_sheet, rite, outcome, scene=scene)
         if not given:
             return rite_outcome
-        return replace(rite_outcome, items_given=given, items_ease=gifts.ease)
+        uncounted = sum(1 for g in gifts.gifts if g.reading.effective_points > 0 and not g.counted)
+        return replace(
+            rite_outcome, items_given=given, items_ease=gifts.ease, items_uncounted=uncounted
+        )
 
 
 def record_unpaid_performance(

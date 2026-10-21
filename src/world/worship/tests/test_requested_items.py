@@ -405,3 +405,43 @@ class FacetMergeTests(RequestedItemTestBase):
 
         request.refresh_from_db()
         self.assertEqual(request.facet, winner)
+
+
+class RiteGiftMessageTests(RequestedItemTestBase):
+    def test_an_item_past_the_weeks_limit_says_so_instead_of_meaning_nothing(self) -> None:
+        from actions.definitions.worship import PerformWorshipRiteAction
+
+        config = get_devotion_config()
+        config.sacrifices_per_week = 0
+        config.save(update_fields=["sacrifices_per_week"])
+        item = self._carried_item(days=30)
+
+        with force_check_outcome(self.outcomes["Success"]):
+            result = PerformWorshipRiteAction().run(
+                actor=self.sheet.character, rite=self.rite, item_ids=[item.pk]
+            )
+
+        self.assertTrue(result.success, result.message)
+        self.assertIn("it did not count", result.message)
+
+
+class UncountedGiftFillsNothingTests(RequestedItemTestBase):
+    def test_an_item_given_up_past_the_limit_does_not_use_up_the_request(self) -> None:
+        details = take_pledge(self.sheet, self.pledge)
+        first, second = self._held(value=2), self._held(value=2)
+        second.template = first.template
+        second.save(update_fields=["template"])
+        request = RequestedItemFactory(pledge=self.pledge, item_template=first.template)
+        config = get_devotion_config()
+        config.sacrifices_per_week = 0
+        config.save(update_fields=["sacrifices_per_week"])
+        self._sacrifice("Success", first)  # past the limit: counted nothing
+        config.sacrifices_per_week = 3
+        config.save(update_fields=["sacrifices_per_week"])
+
+        self._sacrifice("Success", second)
+
+        (line,) = request_lines(details)
+        self.assertEqual(line.given, 1)
+        self.assertTrue(CeremonyOffering.objects.order_by("-pk").first().counted)
+        self.assertEqual(request.pk, line.request.pk)

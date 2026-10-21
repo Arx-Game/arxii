@@ -762,6 +762,11 @@ def _gift_sentences(outcome) -> list[str]:
     given = ", ".join(outcome.items_given)
     if outcome.items_ease:
         return [f"You gave up {given}; it eased the rite by {outcome.items_ease}."]
+    if outcome.items_uncounted:
+        return [
+            f"You gave up {given}; it did not count, as you have already given up as many "
+            "as the rite or the week allows."
+        ]
     return [f"You gave up {given}; it meant nothing to the rite."]
 
 

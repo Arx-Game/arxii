@@ -70,8 +70,9 @@ def given_count(row: RequestedItem, details: PledgeDetails | None) -> int:
 
     if details is None:
         return 0
+    # An item given up past the week's limit counted for nothing, so it filled nothing.
     return OfferingSignal.objects.filter(
-        requested_item=row, offering__pledge_details=details
+        requested_item=row, offering__pledge_details=details, offering__counted=True
     ).count()
 
 
