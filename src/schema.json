@@ -46103,6 +46103,21 @@ components:
         is_act_anchored:
           type: boolean
           readOnly: true
+        about_persona:
+          type: integer
+          nullable: true
+          description: The persona this secret is about when not the subject (#4528);
+            staff-set.
+        about_persona_name:
+          type: string
+          readOnly: true
+        story:
+          type: integer
+          nullable: true
+          description: The story this secret belongs to, if any (#4528); staff-set.
+        story_title:
+          type: string
+          readOnly: true
         created_date:
           type: string
           format: date-time
@@ -46112,6 +46127,7 @@ components:
           format: date-time
           readOnly: true
       required:
+      - about_persona_name
       - category_name
       - created_date
       - id
@@ -46119,6 +46135,7 @@ components:
       - level_display
       - provenance
       - provenance_display
+      - story_title
       - subject_sheet
       - updated_date
     AuthoredSecretRequest:
@@ -46156,6 +46173,15 @@ components:
             False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten
             hasn''t discovered): excluded from the subject''s own-secrets shelf until
             a SecretKnowledge row grants it.'
+        about_persona:
+          type: integer
+          nullable: true
+          description: The persona this secret is about when not the subject (#4528);
+            staff-set.
+        story:
+          type: integer
+          nullable: true
+          description: The story this secret belongs to, if any (#4528); staff-set.
       required:
       - subject_sheet
     AvailableEnhancement:
@@ -77195,6 +77221,15 @@ components:
             False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten
             hasn''t discovered): excluded from the subject''s own-secrets shelf until
             a SecretKnowledge row grants it.'
+        about_persona:
+          type: integer
+          nullable: true
+          description: The persona this secret is about when not the subject (#4528);
+            staff-set.
+        story:
+          type: integer
+          nullable: true
+          description: The story this secret belongs to, if any (#4528); staff-set.
     PatchedBeatRequest:
       type: object
       description: Full serializer for Beat including all Phase 2 predicate config
