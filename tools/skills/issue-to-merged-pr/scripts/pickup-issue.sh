@@ -109,10 +109,12 @@ for spec in \
 done
 # Claim: assign self and move to the spec-draft lane. Strip any OTHER status:*
 # lane first so the lane is idempotent — a re-pickup or a manually-labeled issue
-# can already carry status:spec-review / status:implementing / status:in-progress,
-# and stacking lanes confuses the project board (#2060).
+# can already carry status:spec-review / status:implementing, and stacking lanes
+# confuses the project board (#2060). status:in-progress is NOT stripped: it is the
+# board sync's "active work" marker (#4539), and the status:spec-draft added below
+# is exactly what makes an issue active, so the sync adds it (or keeps it).
 gh issue edit "$ISSUE" --add-assignee "$CURRENT_USER" >/dev/null
-for stale in status:spec-review status:implementing status:in-progress; do
+for stale in status:spec-review status:implementing; do
   gh issue edit "$ISSUE" --remove-label "$stale" >/dev/null 2>&1 || true
 done
 gh issue edit "$ISSUE" --add-label "status:spec-draft" >/dev/null
