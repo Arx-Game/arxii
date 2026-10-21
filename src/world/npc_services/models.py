@@ -985,7 +985,7 @@ class TrainOfferDetails(SharedMemoryModel):
     has-gift/major-gift AP multiplier logic in ``charge_and_learn`` would
     double-charge against that flat knob, so TRAIN offers are authored with
     ``NPCServiceOffer.ap_cost=0`` (``clean()`` below enforces it; see also
-    ``world.npc_services.effects.TrainOfferMisconfiguredError``, the
+    ``world.npc_services.effects.AcademyOfferApCostError``, the
     runtime backstop for authoring paths that skip ``full_clean()``).
     """
 

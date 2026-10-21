@@ -26,7 +26,12 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.currency.models import FavorTokenDetails
     from world.magic.models import Technique
-    from world.npc_services.models import NPCRole, NPCServiceOffer
+    from world.npc_services.models import (
+        NPCRole,
+        NPCServiceOffer,
+        SkillCourseEnrollment,
+        SkillCourseOfferDetails,
+    )
     from world.scenes.models import Persona
     from world.societies.models import Organization
 
@@ -184,23 +189,24 @@ class NoAvailableFavorTokenError(LookupError):
         self.user_message = f"You carry no Golden Hare for {academy_name} to call in."
 
 
-class TrainOfferMisconfiguredError(RuntimeError):
-    """A TRAIN-kind ``NPCServiceOffer`` was authored with a nonzero ``ap_cost`` (#2440).
+class AcademyOfferApCostError(RuntimeError):
+    """An Academy offer that charges its own AP was authored with a nonzero ``ap_cost``.
 
-    TRAIN's AP charge flows entirely through ``charge_and_learn``'s has-gift/
-    major-gift multiplier logic (driven by ``TrainOfferDetails.learn_ap_cost``).
-    ``NPCServiceOffer.ap_cost`` must stay 0 for TRAIN offers — otherwise the
-    generic pre-dispatch charge in ``services._charge_offer_ap`` silently
-    double-charges the learner's AP pool before this handler even runs.
-    ``TrainOfferDetails.clean()`` is the authoring-time guard; this is the
-    runtime backstop, since no admin/serializer surface currently calls
-    ``full_clean()`` on ``TrainOfferDetails`` rows.
+    TRAIN (#2440) charges AP through ``charge_and_learn``'s has-gift/major-gift
+    multiplier logic (driven by ``TrainOfferDetails.learn_ap_cost``), and
+    SKILL_COURSE (#4457) charges ``SkillCourseOfferDetails.session_ap_cost`` inside
+    its handler, after every refusal. ``NPCServiceOffer.ap_cost`` must stay 0 for
+    both: otherwise the generic pre-dispatch charge in ``services._charge_offer_ap``
+    double-charges the learner's AP pool before the handler runs, and keeps it when
+    the handler refuses. The details rows' ``clean()`` is the authoring-time guard;
+    this is the runtime backstop, since no admin/serializer surface currently calls
+    ``full_clean()`` on those rows.
     """
 
-    def __init__(self, offer_pk: int, ap_cost: int) -> None:
+    def __init__(self, offer_pk: int, kind: str, ap_cost: int) -> None:
         super().__init__(
-            f"TRAIN offer pk={offer_pk} has ap_cost={ap_cost} (must be 0) — "
-            "_charge_offer_ap would double-charge AP on top of charge_and_learn."
+            f"{kind} offer pk={offer_pk} has ap_cost={ap_cost} (must be 0) - "
+            "_charge_offer_ap would double-charge AP on top of the handler's own charge."
         )
 
 
@@ -235,6 +241,43 @@ def _resolve_unredeemed_hare(sheet: CharacterSheet, academy: Organization) -> Fa
     if token is None:
         raise NoAvailableFavorTokenError(academy.name)
     return token
+
+
+# What an Academy offer says when its role has no ``faction_affiliation`` to front it.
+_ACADEMY_AUTHORING_ERRORS: dict[str, str] = {
+    OfferKind.TRAIN.value: "This trainer has no house to teach for. (Authoring error.)",
+    OfferKind.SKILL_COURSE.value: "This trainer has no house to teach for. (Authoring error.)",
+    OfferKind.SETTLE_OBLIGATION.value: "This registrar keeps no house's books. (Authoring error.)",
+}
+
+
+def _academy_for(
+    offer: NPCServiceOffer, sheet: CharacterSheet, kind: OfferKind
+) -> Organization | EffectResult:
+    """The Academy fronting ``offer``, or the refusal to return instead (#4457).
+
+    The Academy is the role's ``faction_affiliation``: TRAIN, SKILL_COURSE and
+    SETTLE_OBLIGATION offers are always fronted by an org, unlike LOAN's optional
+    per-offer override. No affiliation is an authoring error. A learner who still
+    owes the Academy her entrance Hare (``has_open_obligation``, #2428) is refused
+    teaching; SETTLE_OBLIGATION skips that gate, since paying the debt is what it is for.
+    """
+    from world.societies.obligation_services import has_open_obligation  # noqa: PLC0415
+
+    academy = offer.role.faction_affiliation
+    if academy is None:
+        return EffectResult(
+            kind=kind.value,
+            message=_ACADEMY_AUTHORING_ERRORS[kind.value],
+            payload={"offer_pk": offer.pk},
+        )
+    if kind != OfferKind.SETTLE_OBLIGATION and has_open_obligation(sheet, academy):
+        return EffectResult(
+            kind=kind.value,
+            message=f"{academy.name} won't take you on further until your debt is settled.",
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+    return academy
 
 
 def _resolve_authority_org(persona: Persona):
@@ -564,29 +607,17 @@ def run_train_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     )
     from world.magic.exceptions import MagicError  # noqa: PLC0415
     from world.magic.services.gift_acquisition import charge_and_learn  # noqa: PLC0415
-    from world.societies.obligation_services import has_open_obligation  # noqa: PLC0415
 
     if offer.ap_cost != 0:
-        raise TrainOfferMisconfiguredError(offer.pk, offer.ap_cost)
+        raise AcademyOfferApCostError(offer.pk, OfferKind.TRAIN.value, offer.ap_cost)
 
     sheet = persona.character_sheet
     details = offer.train_offer_details
     technique = details.technique
 
-    academy = offer.role.faction_affiliation
-    if academy is None:
-        return EffectResult(
-            kind=OfferKind.TRAIN.value,
-            message="This trainer has no house to teach for. (Authoring error.)",
-            payload={"offer_pk": offer.pk},
-        )
-
-    if has_open_obligation(sheet, academy):
-        return EffectResult(
-            kind=OfferKind.TRAIN.value,
-            message=f"{academy.name} won't take you on further until your debt is settled.",
-            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
-        )
+    academy = _academy_for(offer, sheet, OfferKind.TRAIN)
+    if isinstance(academy, EffectResult):
+        return academy
 
     if not _technique_available_to_learner(sheet, offer.role, technique):
         return EffectResult(
@@ -738,13 +769,9 @@ def run_settle_obligation_offer(offer: NPCServiceOffer, persona: Persona) -> Eff
     from world.societies.obligation_services import settle_obligation  # noqa: PLC0415
 
     sheet = persona.character_sheet
-    academy = offer.role.faction_affiliation
-    if academy is None:
-        return EffectResult(
-            kind=OfferKind.SETTLE_OBLIGATION.value,
-            message="This registrar keeps no house's books. (Authoring error.)",
-            payload={"offer_pk": offer.pk},
-        )
+    academy = _academy_for(offer, sheet, OfferKind.SETTLE_OBLIGATION)
+    if isinstance(academy, EffectResult):
+        return academy
 
     obligation = OrganizationObligation.objects.filter(
         debtor=sheet, creditor=academy, state=ObligationState.OWED
@@ -798,6 +825,261 @@ def run_settle_obligation_offer(offer: NPCServiceOffer, persona: Persona) -> Eff
 
 
 OFFER_EFFECT_HANDLERS[OfferKind.SETTLE_OBLIGATION.value] = run_settle_obligation_offer
+
+
+class _CourseRefusedError(Exception):
+    """A skill course refusal, raised inside the handler's transaction (#4457).
+
+    Raising rather than returning rolls back anything the acceptance touched, so a
+    refusal found after enrolment charges began (an AP or Hare race) still charges
+    nothing. ``reason`` is the player-facing sentence; the handler adds
+    "Nothing was charged." to it.
+    """
+
+    def __init__(self, reason: str, enrollment: SkillCourseEnrollment | None = None) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.enrollment = enrollment
+
+
+def run_skill_course_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """SKILL_COURSE effect handler (#4457): an Academy course in one skill, a session at a time.
+
+    The first acceptance enrolls the learner (coin to the Academy treasury and one
+    Golden Hare, charged once per course) and runs the first session; each later
+    acceptance of the same offer is one session. A session spends
+    ``session_ap_cost`` AP, rolls the course's check, and develops the skill by
+    ``session_development`` times the outcome's ``TrainingOutcomeAward`` multiplier
+    (no row, or no outcome, teaches nothing), never more than the course has left.
+    Development that would run past an XP boundary stays in the course
+    (``train_skill(stop_at_boundary=True)``), because the course was paid for up front.
+
+    Refusals, each before anything is charged: debt or no Academy (``_academy_for``),
+    already trained in this course this game week, the skill parked at a boundary,
+    short of AP, and when enrolling, short of coin or of a Hare. The week is recorded
+    on the enrollment, not as an offer cooldown, because ``resolve_offer`` writes a
+    cooldown even when the handler refuses. No surcharge applies to a learner without
+    formal training (spec Decision 11).
+    """
+    if offer.ap_cost != 0:
+        raise AcademyOfferApCostError(offer.pk, OfferKind.SKILL_COURSE.value, offer.ap_cost)
+
+    sheet = persona.character_sheet
+    course = offer.skill_course_offer_details
+    academy = _academy_for(offer, sheet, OfferKind.SKILL_COURSE)
+    if isinstance(academy, EffectResult):
+        return academy
+
+    try:
+        with transaction.atomic():
+            return _take_course_session(offer, course, sheet, academy)
+    except _CourseRefusedError as exc:
+        return EffectResult(
+            kind=OfferKind.SKILL_COURSE.value,
+            message=f"{exc.reason} Nothing was charged.",
+            payload={
+                "offer_pk": offer.pk,
+                "skill_pk": course.skill_id,
+                "enrollment_pk": exc.enrollment.pk if exc.enrollment else None,
+            },
+        )
+
+
+def _take_course_session(
+    offer: NPCServiceOffer,
+    course: SkillCourseOfferDetails,
+    sheet: CharacterSheet,
+    academy: Organization,
+) -> EffectResult:
+    """Check every refusal, enroll when not yet enrolled, then run one session.
+
+    Runs inside ``run_skill_course_offer``'s transaction; a refusal raises
+    ``_CourseRefusedError``.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+    from world.npc_services.models import SkillCourseEnrollment  # noqa: PLC0415
+    from world.skills.services import (  # noqa: PLC0415
+        is_skill_at_xp_boundary,
+        reconcile_skill_stores,
+    )
+
+    skill = course.skill
+    enrollment = (
+        SkillCourseEnrollment.objects.select_for_update()
+        .filter(character_sheet=sheet, course=course, completed_at__isnull=True)
+        .first()
+    )
+    week = get_current_game_week()
+    if enrollment is not None and enrollment.last_session_week_id == week.pk:
+        msg = "You have already trained in this course this week."
+        raise _CourseRefusedError(msg, enrollment)
+
+    rating = reconcile_skill_stores(sheet, skill)
+    if is_skill_at_xp_boundary(rating):
+        until = "a course can raise it" if enrollment is None else "the course can continue"
+        msg = f"{skill.name} is at {rating} and needs a breakthrough before {until}."
+        raise _CourseRefusedError(msg, enrollment)
+
+    pool = ActionPointPool.get_or_create_for_character(sheet.character)
+    if not pool.can_afford(course.session_ap_cost):
+        msg = f"A session costs {course.session_ap_cost} AP and you have {pool.current}."
+        raise _CourseRefusedError(msg, enrollment)
+
+    if enrollment is None:
+        enrollment = _enroll_in_course(course, sheet, academy)
+
+    if not pool.spend(course.session_ap_cost):
+        msg = f"A session costs {course.session_ap_cost} AP and you have {pool.current}."
+        raise _CourseRefusedError(msg, enrollment)
+    return _run_course_session(offer, course, sheet, enrollment, rating=rating, week_pk=week.pk)
+
+
+def _enroll_in_course(
+    course: SkillCourseOfferDetails, sheet: CharacterSheet, academy: Organization
+) -> SkillCourseEnrollment:
+    """Charge the coin and one Hare, and open the enrollment (#4457).
+
+    The coin and Hare checks both come before either charge; a short purse is named
+    with its cost and balance, a missing Hare with the existing Hare refusal.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from world.currency.constants import format_coppers  # noqa: PLC0415
+    from world.currency.services import (  # noqa: PLC0415
+        get_or_create_purse,
+        get_or_create_treasury,
+        redeem_favor_token,
+        transfer,
+    )
+    from world.magic.exceptions import TrainingFundsInsufficient  # noqa: PLC0415
+    from world.magic.services.gift_acquisition import enforce_can_afford_training  # noqa: PLC0415
+    from world.npc_services.models import SkillCourseEnrollment  # noqa: PLC0415
+
+    try:
+        enforce_can_afford_training(sheet, course.coin_cost)
+    except TrainingFundsInsufficient as exc:
+        msg = (
+            f"Enrolling costs {format_coppers(exc.cost)} "
+            f"and you have {format_coppers(exc.balance)}."
+        )
+        raise _CourseRefusedError(msg) from exc
+    try:
+        token = _resolve_unredeemed_hare(sheet, academy)
+    except NoAvailableFavorTokenError as exc:
+        raise _CourseRefusedError(exc.user_message) from exc
+
+    transfer(
+        amount=course.coin_cost,
+        reason=f"Academy course: {course.skill.name}",
+        from_purse=get_or_create_purse(sheet),
+        to_treasury=get_or_create_treasury(academy),
+    )
+    try:
+        redeem_favor_token(token, redeemer_org=academy)
+    except ValidationError as exc:
+        # Another acceptance redeemed this Hare after we resolved it.
+        msg = "Someone else called in that Hare before you finished."
+        raise _CourseRefusedError(msg) from exc
+    return SkillCourseEnrollment.objects.create(
+        character_sheet=sheet,
+        course=course,
+        development_remaining=course.total_development,
+    )
+
+
+def _run_course_session(  # noqa: PLR0913 - one session's inputs, all already resolved
+    offer: NPCServiceOffer,
+    course: SkillCourseOfferDetails,
+    sheet: CharacterSheet,
+    enrollment: SkillCourseEnrollment,
+    *,
+    rating: int,
+    week_pk: int,
+) -> EffectResult:
+    """Roll the session, develop the skill and count it off the enrollment (#4457).
+
+    The AP is already spent. ``rating`` is the skill's rating before the session,
+    reported when nothing is applied.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+    import math  # noqa: PLC0415
+
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.magic.models import TrainingOutcomeAward  # noqa: PLC0415
+    from world.skills.services import is_skill_at_xp_boundary, train_skill  # noqa: PLC0415
+
+    skill = course.skill
+    check_result = perform_check_with_modifiers(
+        sheet.character, course.check_type, target_difficulty=course.check_difficulty
+    )
+    award = (
+        TrainingOutcomeAward.objects.filter(outcome_tier=check_result.outcome).first()
+        if check_result.outcome is not None
+        else None
+    )
+    multiplier = award.dev_point_multiplier if award is not None else Decimal(0)
+    points = min(
+        math.floor(Decimal(course.session_development) * multiplier),
+        enrollment.development_remaining,
+    )
+
+    old_value = new_value = rating
+    applied = 0
+    if points > 0:
+        trained = train_skill(
+            sheet,
+            skill,
+            points,
+            description=f"Academy course: {skill.name}",
+            stop_at_boundary=True,
+        )
+        old_value, new_value, applied = trained.old_value, trained.new_value, trained.points_applied
+
+    enrollment.development_remaining -= applied
+    enrollment.last_session_week_id = week_pk
+    if enrollment.development_remaining == 0:
+        enrollment.completed_at = timezone.now()
+    enrollment.save(update_fields=["development_remaining", "last_session_week", "completed_at"])
+
+    outcome = check_result.outcome_name
+    if applied == 0:
+        said = f"{outcome}. You learn nothing this session; {course.session_ap_cost} AP spent."
+    elif new_value > old_value:
+        said = f"{outcome}. {skill.name} rises from {old_value} to {new_value}."
+    else:
+        said = f"{outcome}. {skill.name} stays at {new_value}, closer to {new_value + 1}."
+    if enrollment.completed_at is not None:
+        said += " The course is complete."
+    else:
+        said += (
+            f" The course has {enrollment.development_remaining} of "
+            f"{course.total_development} left."
+        )
+        if is_skill_at_xp_boundary(new_value):
+            said += " Break through to continue the course."
+
+    return EffectResult(
+        kind=OfferKind.SKILL_COURSE.value,
+        object_pk=enrollment.pk,
+        object_label=skill.name,
+        message=said,
+        payload={
+            "offer_pk": offer.pk,
+            "skill_pk": skill.pk,
+            "enrollment_pk": enrollment.pk,
+            "outcome": outcome,
+            "old_value": old_value,
+            "new_value": new_value,
+            "development_remaining": enrollment.development_remaining,
+            "ap_spent": course.session_ap_cost,
+        },
+    )
+
+
+OFFER_EFFECT_HANDLERS[OfferKind.SKILL_COURSE.value] = run_skill_course_offer
 
 
 def run_styling_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
