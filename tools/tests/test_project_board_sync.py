@@ -143,6 +143,12 @@ class PullRequestTests(unittest.TestCase):
         statuses, _ = self.run_pr("reopened", [], [], board_status=sync.STATUS_IN_REVIEW)
         self.assertEqual(statuses, [])
 
+    def test_stale_in_review_with_active_label_is_recomputed_when_pr_closes(self) -> None:
+        statuses, _ = self.run_pr(
+            "closed", ["status:implementing"], [], board_status=sync.STATUS_IN_REVIEW
+        )
+        self.assertEqual(statuses, [sync.STATUS_IN_PROGRESS])
+
     def test_closed_unmerged_with_no_active_label_goes_back_to_backlog(self) -> None:
         statuses, labels = self.run_pr("closed", ["status:spec-review"], [])
         self.assertEqual(statuses, [sync.STATUS_BACKLOG])

@@ -248,9 +248,17 @@ def set_single_select(board: Board, item_id: str, field_name: str, option_name: 
     print(f"  -> {field_name} = {option_name}")
 
 
-def apply_status(board: Board, item_id: str, status: str) -> None:
-    """Set Status, but never downgrade a card the board already shows In review."""
-    if status == STATUS_IN_PROGRESS and current_value(item_id, "Status") == STATUS_IN_REVIEW:
+def apply_status(board: Board, item_id: str, status: str, open_pr: bool) -> None:
+    """Set Status, but never downgrade In review while a PR is still open.
+
+    With no open PR, a card that still reads In review is stale (the PR closed
+    unmerged) and is recomputed like any other.
+    """
+    if (
+        open_pr
+        and status == STATUS_IN_PROGRESS
+        and current_value(item_id, "Status") == STATUS_IN_REVIEW
+    ):
         return
     set_single_select(board, item_id, "Status", status)
 
@@ -364,7 +372,7 @@ def handle_issue(board: Board, repo: str, event: dict) -> None:
 
     open_pr = issue.get("state") != "closed" and has_open_linked_pr(issue["node_id"])
     status = compute_status(issue, open_pr)
-    apply_status(board, item_id, status)
+    apply_status(board, item_id, status, open_pr)
 
     # Stage is label-driven, but "In review" is owned by the PR handler - never
     # let an issue event downgrade it (only the PR closing does).
@@ -416,7 +424,7 @@ def handle_pull_request(board: Board, repo: str, event: dict) -> None:
         labels = {n["name"] for n in ref["labels"]["nodes"]}
         if action in ("opened", "reopened"):
             # A linked open PR makes the issue active.
-            apply_status(board, item_id, STATUS_IN_PROGRESS)
+            apply_status(board, item_id, STATUS_IN_PROGRESS, open_pr=True)
             set_single_select(board, item_id, "Stage", STAGE_IN_REVIEW)
             sync_claimed_label(repo, ref["number"], True)
         elif action == "closed" and not merged:
@@ -427,7 +435,7 @@ def handle_pull_request(board: Board, repo: str, event: dict) -> None:
                 for n in ref["closedByPullRequestsReferences"]["nodes"]
             )
             status = STATUS_IN_PROGRESS if is_active(labels, other_open) else STATUS_BACKLOG
-            apply_status(board, item_id, status)
+            apply_status(board, item_id, status, other_open)
             sync_claimed_label(repo, ref["number"], status == STATUS_IN_PROGRESS)
             stage = STAGE_IN_REVIEW if other_open else compute_stage(labels)
             if stage:
@@ -483,7 +491,7 @@ def backfill(board: Board, repo: str, dry_run: bool = False) -> None:
             item_id = ensure_item(board, issue["node_id"], create=not dry_run)
             board_status = current_value(item_id, "Status") if item_id else None
             label_wrong = (CLAIMED_LABEL in labels) != active
-            in_review = active and board_status == STATUS_IN_REVIEW
+            in_review = open_pr and board_status == STATUS_IN_REVIEW
             if dry_run:
                 if label_wrong or (board_status != status and not in_review):
                     mismatched += 1
@@ -494,7 +502,7 @@ def backfill(board: Board, repo: str, dry_run: bool = False) -> None:
                     )
                 continue
             print(f"backfill #{issue['number']}")
-            apply_status(board, item_id, status)
+            apply_status(board, item_id, status, open_pr)
             sync_claimed_label(repo, issue["number"], active)
             if current_value(item_id, "Stage") != STAGE_IN_REVIEW:
                 stage = compute_stage(labels)
