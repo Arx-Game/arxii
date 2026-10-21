@@ -199,7 +199,7 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
         purse = get_or_create_purse(self.sheet)
         purse.balance = 1000
         purse.save()
-        mint_favor_token(self.academy, self.sheet, provenance_note="Cleared the trial")
+        self.token = mint_favor_token(self.academy, self.sheet, provenance_note="Cleared the trial")
 
     def test_non_member_is_blocked(self) -> None:
         result = run_train_offer(self.offer, self.persona)
@@ -234,6 +234,23 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
 
         self.assertIsNone(result.object_pk)
         self.assertIn("isn't yours to learn", result.message)
+        self.assertNothingCharged()
+
+    def assertNothingCharged(self) -> None:  # noqa: N802 - unittest style
+        """AP, purse, the Academy treasury and the Golden Hare are as setUp left them."""
+        from world.action_points.models import ActionPointPool
+        from world.currency.models import CharacterPurse, OrganizationTreasury
+        from world.magic.models import TechniqueProgress
+
+        ActionPointPool.flush_instance_cache()
+        self.assertEqual(ActionPointPool.get_or_create_for_character(self.character).current, 200)
+        CharacterPurse.flush_instance_cache()
+        OrganizationTreasury.flush_instance_cache()
+        self.assertEqual(get_or_create_purse(self.sheet).balance, 1000)
+        self.assertEqual(get_or_create_treasury(self.academy).balance, 0)
+        FavorTokenDetails.flush_instance_cache()
+        self.assertIsNone(FavorTokenDetails.objects.get(pk=self.token.pk).redeemed_at)
+        self.assertFalse(TechniqueProgress.objects.filter(character_sheet=self.sheet).exists())
 
     def test_left_member_is_blocked(self) -> None:
         """A membership row with left_at set is not active — TRAIN treats it as if the
