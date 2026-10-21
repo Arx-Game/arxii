@@ -56,12 +56,12 @@ _POSITIONAL_SUBVERBS = frozenset({"release", "fight", "deploy", "mount"})
 _ORDER_SUBVERB = "order"
 _EMOTE_SUBVERB = "emote"
 _MIN_EMOTE_TOKENS = 2  # <name> <text...>
-_MIN_ORDER_TOKENS = 2  # <name> <verb>
-_MIN_ATTACK_TOKENS = 3  # <name> attack <target>
-_MIN_ATTACK_WITH_ABILITY_TOKENS = 5  # <name> attack <target> with <ability>
+_MIN_ATTACK_TOKENS = 2  # attack <target>, after the name
+_MIN_ATTACK_WITH_ABILITY_TOKENS = 4  # attack <target> with <ability>, after the name
 _ORDER_ATTACK = "attack"
 _ORDER_HOLD = "hold"
 _ORDER_DEFEND = "defend"
+_ORDER_VERBS = frozenset({_ORDER_ATTACK, _ORDER_HOLD, _ORDER_DEFEND})
 _ORDER_WITH = "with"
 
 
@@ -73,19 +73,19 @@ class CmdCompanion(DispatchCommand):
         companion                             - list active companions + capacity
         companion status                      - (same)
         companion list                        - (same)
-        companion bind archetype=<name|id> gift=<name|id> name=<text>
+        companion bind archetype=<name or id> gift=<name or id> name=<text>
                                               - bind a new companion
-        companion release <name|id>           - release a bonded companion
-        companion fight <name|id>             - commit a companion into combat
-        companion deploy <name|id>            - deploy a companion into a battle
+        companion release <name or id>           - release a bonded companion
+        companion fight <name or id>             - commit a companion into combat
+        companion deploy <name or id>            - deploy a companion into a battle
         companion order <name> attack <target> [with <ability>]
                                               - direct a deployed companion
         companion order <name> hold           - tell a companion to hold
         companion order <name> defend <ally>  - tell a companion to defend an ally
-        companion mount <name|id>             - mount a ridable companion
+        companion mount <name or id>             - mount a ridable companion
         companion dismount                    - dismount your current mount
-        companion emote <name|id> <text>      - pose as a bonded, present companion
-        companion promote <npc> archetype=<name|id> gift=<name|id> name=<text>
+        companion emote <name or id> <text>      - pose as a bonded, present companion
+        companion promote <npc> archetype=<name or id> gift=<name or id> name=<text>
                                               - bind an in-fight summon or a charmed
                                                 nameless enemy into a Companion
 
@@ -165,7 +165,7 @@ class CmdCompanion(DispatchCommand):
         from world.companions.models import CompanionArchetype  # noqa: PLC0415
 
         if not value:
-            msg = "Specify an archetype: archetype=<name|id>."
+            msg = "Specify an archetype: archetype=<name or id>."
             raise CommandError(msg)
         archetype = self._resolve_by_name_or_pk(
             CompanionArchetype.objects,
@@ -187,7 +187,7 @@ class CmdCompanion(DispatchCommand):
         from world.magic.models.gifts import CharacterGift  # noqa: PLC0415
 
         if not value:
-            msg = "Specify a gift: gift=<name|id>."
+            msg = "Specify a gift: gift=<name or id>."
             raise CommandError(msg)
         sheet = self._sheet()
         char_gift = self._resolve_by_name_or_pk(
@@ -202,20 +202,17 @@ class CmdCompanion(DispatchCommand):
         return char_gift.gift
 
     def _resolve_companion_id(self, value: str) -> int:
-        """Resolve *value* (companion name iexact or pk) to a pk of an active owned companion."""
-        from world.companions.models import Companion  # noqa: PLC0415
+        """Resolve *value* (companion name or pk) to a pk of an active owned companion.
 
+        Reads the caller's cached companion handler, so a lookup costs no query once
+        the list is loaded.
+        """
         value = value.strip()
         if not value:
-            msg = f"Specify a companion: companion {self._subverb} <name|id>."
+            msg = f"Specify a companion: companion {self._subverb} <name or id>."
             raise CommandError(msg)
-        sheet = self._sheet()
-        companion = self._resolve_by_name_or_pk(
-            Companion.objects.filter(owner=sheet, released_at__isnull=True),
-            value,
-            pk_field="pk",
-            name_field="name__iexact",
-        )
+        self._sheet()
+        companion = self.caller.companions.find(value)
         if companion is None:
             msg = f"No active companion found for '{value}'."
             raise CommandError(msg)
@@ -274,7 +271,10 @@ class CmdCompanion(DispatchCommand):
             msg = "Companion names must be 100 characters or fewer."
             raise CommandError(msg)
         if not npc_name:
-            msg = "Usage: companion promote <npc> archetype=<name|id> gift=<name|id> name=<text>"
+            msg = (
+                "Usage: companion promote <npc> archetype=<name or id> gift=<name or id> "
+                "name=<text>"
+            )
             raise CommandError(msg)
 
         target = self.caller.search(npc_name, location=self.caller.location, quiet=True)
@@ -301,18 +301,40 @@ class CmdCompanion(DispatchCommand):
             "name": name,
         }
 
+    def _split_order_name(self, parts: list[str]) -> tuple[int, list[str]]:
+        """Split an order line into the named companion's pk and the tokens after its name.
+
+        The name is the longest leading run of tokens naming one of the caller's active
+        companions, by name or pk (#3657 tranche 17: ``order Old Grey hold`` had looked
+        for a companion called "Old"). When none fits, the refusal names what was typed
+        before the first order verb. Every candidate is matched against the caller's
+        cached companion handler, so the whole split costs no query.
+        """
+        self._sheet()
+        handler = self.caller.companions
+        for count in range(len(parts), 0, -1):
+            companion = handler.find(" ".join(parts[:count]))
+            if companion is not None:
+                return companion.pk, parts[count:]
+        first_verb = next((i for i, token in enumerate(parts) if token.lower() in _ORDER_VERBS), 1)
+        typed = " ".join(parts[: max(first_verb, 1)])
+        msg = f"No active companion found for '{typed}'."
+        raise CommandError(msg)
+
     def _args_order(self, rest: str) -> dict[str, Any]:
         """Parse ``order <name> <verb> [target] [with <ability>]`` into kwargs.
 
         Verbs: attack <target> [with <ability>], hold, defend <ally>.
         """
+        usage = "Usage: companion order <name> <attack | hold | defend> [target]"
         parts = rest.split()
-        if len(parts) < _MIN_ORDER_TOKENS:
-            msg = "Usage: companion order <name> <attack|hold|defend> [target]"
-            raise CommandError(msg)
+        if not parts:
+            raise CommandError(usage)
 
-        companion_id = self._resolve_companion_id(parts[0])
-        verb = parts[1].lower()
+        companion_id, parts = self._split_order_name(parts)
+        if not parts:
+            raise CommandError(usage)
+        verb = parts[0].lower()
 
         if verb == _ORDER_HOLD:
             return {"companion_id": companion_id, "order_kind": CompanionOrderKind.HOLD}
@@ -321,7 +343,7 @@ class CmdCompanion(DispatchCommand):
             if len(parts) < _MIN_ATTACK_TOKENS:
                 msg = "Usage: companion order <name> attack <target> [with <ability>]"
                 raise CommandError(msg)
-            target_name = parts[2]
+            target_name = parts[1]
             target_id = self._resolve_order_target(target_name)
             kwargs: dict[str, Any] = {
                 "companion_id": companion_id,
@@ -329,8 +351,8 @@ class CmdCompanion(DispatchCommand):
                 "target_id": target_id,
             }
             # Optional: with <ability>
-            if len(parts) >= _MIN_ATTACK_WITH_ABILITY_TOKENS and parts[3].lower() == _ORDER_WITH:
-                ability_id = self._resolve_order_ability(parts[4], companion_id)
+            if len(parts) >= _MIN_ATTACK_WITH_ABILITY_TOKENS and parts[2].lower() == _ORDER_WITH:
+                ability_id = self._resolve_order_ability(parts[3], companion_id)
                 kwargs["ability_id"] = ability_id
             return kwargs
 
@@ -338,7 +360,7 @@ class CmdCompanion(DispatchCommand):
             if len(parts) < _MIN_ATTACK_TOKENS:
                 msg = "Usage: companion order <name> defend <ally>"
                 raise CommandError(msg)
-            ally_name = parts[2]
+            ally_name = parts[1]
             ally_id = self._resolve_order_ally(ally_name)
             return {
                 "companion_id": companion_id,
@@ -350,11 +372,11 @@ class CmdCompanion(DispatchCommand):
         raise CommandError(msg)
 
     def _args_emote(self, rest: str) -> dict[str, Any]:
-        """Parse ``emote <name|id> <text...>`` (#3294): first token names the
+        """Parse ``emote <name or id> <text...>`` (#3294): first token names the
         companion; everything after is the pose text verbatim."""
         parts = rest.split(maxsplit=1)
         if len(parts) < _MIN_EMOTE_TOKENS:
-            msg = "Usage: companion emote <name|id> <text>"
+            msg = "Usage: companion emote <name or id> <text>"
             raise CommandError(msg)
         companion_id = self._resolve_companion_id(parts[0])
         return {"companion_id": companion_id, "text": parts[1]}

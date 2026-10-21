@@ -1,7 +1,7 @@
 """Form (alternate self) telnet namespace command (#1111 slice 4).
 
 A single ``form`` command lists the caller's alternate selves (bare ``form`` or
-``form list``), shifts into one (``form shift <name|id>``), or reverts to the
+``form list``), shifts into one (``form shift <name or id>``), or reverts to the
 true self (``form revert``). The shift/revert paths dispatch through
 ``dispatch_player_action`` — the same seam the web form dispatcher uses —
 routing to the REGISTRY ``shift_form`` / ``revert_form`` actions.
@@ -25,7 +25,7 @@ class CmdForm(DispatchCommand):
     Usage:
         form                       - list your alternate selves; marks the active one
         form list                  - same as bare ``form``
-        form shift <name|id>       - assume the named alternate self
+        form shift <name or id>       - assume the named alternate self
         form revert                - revert to your true self
     """
 
@@ -37,7 +37,21 @@ class CmdForm(DispatchCommand):
     _registry_key: str = ""
 
     def func(self) -> None:
-        """Route: bare/list → hub; shift/revert → DispatchCommand dispatch."""
+        """Route: bare/list → hub; shift/revert → DispatchCommand dispatch.
+
+        The usage errors are sent, not raised: a ``CommandError`` raised here is
+        outside ``DispatchCommand.func``'s own handling, and the command handler
+        answered ``form dance`` with "there was an error" and a logged traceback
+        (#3657 tranche 17).
+        """
+        try:
+            self._route()
+        except CommandError as err:
+            self.msg(str(err))
+            self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
+
+    def _route(self) -> None:
+        """Pick the subverb; raise ``CommandError`` for a usage mistake."""
         raw = (self.args or "").strip()
         if not raw or raw.lower() == "list":  # noqa: STRING_LITERAL
             self._show_hub()
@@ -49,7 +63,7 @@ class CmdForm(DispatchCommand):
 
         if subverb == "shift":  # noqa: STRING_LITERAL
             if not rest:
-                msg = "Shift into which alternate self? Usage: form shift <name|id>."
+                msg = "Shift into which alternate self? Usage: form shift <name or id>."
                 raise CommandError(msg)
             self._name = " ".join(rest)
             self._registry_key = "shift_form"
@@ -61,7 +75,7 @@ class CmdForm(DispatchCommand):
             super().func()
             return
 
-        msg = "Usage: form [list|shift <name|id>|revert]."
+        msg = "Usage: form [list | shift <name or id> | revert]."
         raise CommandError(msg)
 
     def resolve_action_ref(self) -> ActionRef:
@@ -93,12 +107,16 @@ class CmdForm(DispatchCommand):
                 matches = [instance]
 
         if not matches:
-            available = ", ".join(
+            names = [
                 a.display_name
                 for a in AlternateSelf.objects.filter(character_id=sheet.pk)
                 if a.display_name
-            )
-            msg = f"No alternate self named '{self._name}'. Available: {available}."
+            ]
+            if not names:
+                # Tranche 17: it had read "Available: ." for a character with none.
+                msg = "You have no alternate selves."
+                raise CommandError(msg)
+            msg = f"No alternate self named '{self._name}'. Available: {', '.join(names)}."
             raise CommandError(msg)
         if len(matches) > 1:
             names = ", ".join(a.display_name for a in matches)

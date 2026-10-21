@@ -50,7 +50,9 @@ export function StaffFamilyPage({ familyId }: { familyId: number }) {
     <div className="almanach">
       <div className="bar">
         <span className="crumb">
-          <span>Almanach</span>
+          <span>
+            <Link to="/staff/almanach">Almanach</Link>
+          </span>
           {family.realm && <span>{family.realm}</span>}
           <span>{family.name}</span>
         </span>

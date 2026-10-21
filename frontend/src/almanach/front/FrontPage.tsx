@@ -121,7 +121,9 @@ export function FrontPage() {
     <div className="almanach">
       <div className="bar">
         <span className="crumb">
-          <span>Staff</span>
+          <span>
+            <Link to="/staff">Staff</Link>
+          </span>
           <span>Almanach de Catenys</span>
         </span>
         <span className="right">

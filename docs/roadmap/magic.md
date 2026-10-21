@@ -387,7 +387,8 @@ never overwrite a staff-adjusted row.
   learner's own (Path × Gift) pool ∪ their active Tradition's signature list
   (`magic.services.cg_catalog.get_technique_options`). Delegates acquisition to the same
   `charge_and_learn` core player-to-player `TechniqueTeachingOffer` accepts use — one
-  seam, two front doors. **Great Archive self-study** is the same TRAIN shape, gated on a
+  seam, two front doors. A learner short of the offer's coin is refused with the price and
+  her balance before anything is charged (`TrainingFundsInsufficient`, #4523). **Great Archive self-study** is the same TRAIN shape, gated on a
   quest-completion `Achievement`. It teaches the learner's own (Path × Gift) shared
   starter pool only — it does **not** restore an orphaned tradition's signature
   technique list; recovering a lost tradition's own curriculum is story content, not

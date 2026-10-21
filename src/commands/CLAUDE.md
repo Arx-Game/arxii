@@ -910,12 +910,20 @@ actions, backends, and service functions.
   next key. Pose/sdesc reflection of the presented persona is #1109's scope, not this command.
 - **`form.py`**: `CmdForm` (`form`, #1111 slice 4) — list, shift into, or revert
   your alternate selves. Bare `form`/`form list` renders the active alt-self
-  (`true self` if none) and the available list. `form shift <name|id>` resolves the
+  (`true self` if none) and the available list. `form shift <name or id>` resolves the
   owned `AlternateSelf` and dispatches `ShiftFormAction` (key `"shift_form"`, REGISTRY
   backend). `form revert` dispatches `RevertFormAction` (key `"revert_form"`). Both
   route through `dispatch_player_action` — the same seam the web form dispatcher uses.
   Namespaced subverbs (`shift`/`revert`) avoid top-level key collisions with exits/channels/
-  aliases. No business logic in the command.
+  aliases. No business logic in the command. Its usage errors are sent, not raised
+  (#3657 tranche 17: raised from `func`, outside `DispatchCommand.func`'s handling, they
+  reached the player as "there was an error" with a logged traceback); a character with
+  no alternate selves is told so (it had read "Available: ."); and the usage spells
+  `<name or id>` with spaced separators, since `<name|id>` and `[list|shift|revert]`
+  lost letters to colour codes on telnet. The hub, both shifts, the revert and the
+  block while not in control are typed in
+  `integration_tests/test_keeping_what_is_yours_journeys.py` (`TakingAnotherShape`;
+  the hand-built `tests/test_form_command.py` is gone).
 - **`where.py`**: `CmdWhere` (`where`, #1463) — the public presence/navigation surface.
   Thin read over `world.areas.services.where_listing`: characters in **public** rooms,
   each with their coloured area-hierarchy path (`colored_area_path` walks `AreaClosure`,
@@ -1009,14 +1017,18 @@ actions, backends, and service functions.
   `dispatch_player_action` — the same seam the web `CompanionViewSet` uses — reaching the Actions in
   `actions/definitions/companions.py`. Bare `companion`/`companion status`/`companion list` = status hub
   (active companions + remaining capacity). Grammar:
-  `companion bind archetype=<name|id> gift=<name|id> name=<text>`,
-  `companion release <name|id>`, `companion fight <name|id>`, `companion deploy <name|id>`,
-  `companion promote <npc> archetype=<name|id> gift=<name|id> name=<text>` (#4091,
+  `companion bind archetype=<name or id> gift=<name or id> name=<text>`,
+  `companion release <name or id>`, `companion fight <name or id>`,
+  `companion deploy <name or id>`, `companion order <name> <attack | hold | defend> [target]`
+  (the name may hold spaces: it is the longest leading run of tokens naming one of the
+  caller's active companions, each candidate matched against the cached
+  `caller.companions` handler's `find()` so the split costs no query; #3657 tranche 17, when
+  `order Old Grey hold` looked for "Old" and then ran one query per typed token), `companion promote <npc> archetype=<name or id> gift=<name or id> name=<text>` (#4091,
   `PromoteSummonAction`, key `promote_summon`): `name=` is the final token on both `bind` and
   `promote` (it greedily consumes the rest of the line so names with spaces work); `<npc>` may
   be an active summon or a charmed enemy the caster holds sway over, including a WON_OVER
   nameless enemy whose bind window is still open (`world.combat.won_over.bind_window_open`),
-  `companion emote <name|id> <text>` (#3294 — pose *as* a bonded, present companion;
+  `companion emote <name or id> <text>` (#3294 — pose *as* a bonded, present companion;
   `CompanionEmoteAction`, key `companion_emote`, gated by `CompanionPresentPrerequisite`
   — owned, active, AND co-located with the actor. Authorship for block/mute/consent stays
   on the owner's own persona via `record_interaction`'s normal persona resolution; the new
@@ -1024,7 +1036,15 @@ actions, backends, and service functions.
   a substitute writer. Web parity: `POST /api/companions/companions/{id}/emote/` and the
   composer's "as `<companion>`" toggle, shown only when a bound companion is present).
   Namespaced subverbs avoid exit/channel/alias collisions (mirrors `CmdSanctum`/`CmdCombat`).
-  No business logic in the command.
+  No business logic in the command. The usage lines spell `<name or id>`: `<name|id>`
+  reached telnet as `<named>`, a bare `|i` being a colour code (#3657 tranche 17). The
+  hub, a real Bind Attempt forced each way, emote, mount/dismount, release, the
+  fighting verbs' refusals outside any fight and the promotion of a summon of the
+  caller's own (a live `CombatOpponent` standing in the room, bound on a real roll) are
+  typed in `integration_tests/test_keeping_what_is_yours_journeys.py`
+  (`KeepingACompanion`; the hand-built `tests/test_companion_command.py` is gone); the
+  fight, deploy and order inside a fight and the promotion of a charmed enemy stay with
+  `world/companions/tests` and `world/combat/tests`.
 - **`crafting_station.py`**: `CmdLabStation` (`station`, #1234) — the Lab
   crafting-station namespace. One `DispatchCommand` routes a leading subverb
   (`station install [level=<n>]` / `station upgrade level=<n>` / `station repair
@@ -1033,7 +1053,26 @@ actions, backends, and service functions.
   reaching `StartRoomFeatureProjectAction` / `RepairLabStationAction` in
   `actions/definitions/room_features.py`. Bare `station` shows a status hub (level,
   durability, broken flag) for the Lab station in the caller's current room, if any.
-  Mirrors `CmdSanctum`'s subverb-routing shape. No business logic in the command.
+  Mirrors `CmdSanctum`'s subverb-routing shape. No business logic in the command. The
+  install, the upgrade, the repair out of a real purse and every refusal are typed as
+  the room's tenant in `integration_tests/test_keeping_what_is_yours_journeys.py`
+  (`KeepingALabStation`, #3657 tranche 17; the hand-built `tests/test_crafting_station.py`
+  is gone). "This room has no room profile." is unreachable through the handler, since
+  every room has one.
+- **`ships.py`**: `CmdShip` (`ship`, #1832) — the ship namespace, a `DispatchCommand`
+  routing `commission` / `upgrade` / `repair` / `status` to the Actions in
+  `actions/definitions/ships.py`; bare `ship` is the hub for the ship whose deck the
+  caller stands on. `ship commission ship_type=<name> [covenant=<name>] name=<ship name>`
+  resolves the type and covenant here (the action takes instances); the three values go
+  through the shared `parse_kv_and_flags` tokenizer and each runs to the next `key=`
+  (#3657 tranche 17: only `name=` had, so `covenant=The Tide` was the covenant "The").
+  `ship upgrade stat=<handling | armament | hull> level=<n> [ship_id=<n>]` (the hull is
+  the building's fortification and keeps its ceiling), `ship repair [ship_id=<n>]`,
+  `ship status [ship_id=<n>]`. A ship reads as its area name, `Sloop 'Wavecutter'`
+  (`ShipDetails.__str__`; it had read "Sloop (building 12)" on the status line and in
+  the project descriptions). The quay, the deck, both upgrades, the repair gate and the
+  refusals are typed in `integration_tests/test_keeping_what_is_yours_journeys.py`
+  (`CommissioningAShip`; the hand-built `tests/test_ship_command.py` is gone).
 - **`domains.py`**: `CmdDomain` (`domain`, #2239) — the in-play domain-management
   namespace. One `ArxCommand` routes a leading subverb to the four Actions in
   `actions/definitions/domains.py` via `action.run()` (mirrors `CmdCovenant`):

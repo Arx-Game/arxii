@@ -645,6 +645,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `TechniqueRequirementsNotMet` (#4097; `charge_and_learn` raises this when an active
   requirement targeting the technique is unmet; `.failed` carries the per-requirement
   messages),
+  `TrainingFundsInsufficient` (#4523; `charge_and_learn` raises this via
+  `enforce_can_afford_training` when the learner's purse is short of `gold_cost`, before
+  anything is charged; `.cost` / `.balance`, `user_message` names both in coin),
   all with `user_message` properties for safe API responses.
 - **Technique prerequisites + thread carry (#4097):** a `Technique` can carry its own
   authored requirements (`AbstractUnlockRequirement.technique` target, in
@@ -4831,7 +4834,10 @@ register as additional kinds.
   issued by the Academy and held by the learner (`NoAvailableFavorTokenError` if none) →
   charge AP + coin + the Hare → acquire via `magic.services.gift_acquisition
   .charge_and_learn` — the extracted shared charge+acquire core `accept_technique_offer`
-  (#1587, player-to-player teaching) also delegates to; one seam, two front doors. The Hare
+  (#1587, player-to-player teaching) also delegates to; one seam, two front doors. A purse
+  short of `gold_cost` is refused first with `TrainingFundsInsufficient` (price and balance in
+  the message, nothing charged, #4523); the "Someone else called in that Hare" refusal is only
+  for a Hare redemption that really lost the race. The Hare
   is always redeemed to the ACADEMY (not the trainer's own taught tradition) — Hares are
   Academy-specific venue tokens (ruling on #2428). The generic `hire` command/
   `InteractionSession` loop lists and resolves TRAIN offers with no command-layer changes —
@@ -6064,7 +6070,9 @@ the hull stat IS `Building.fortification_level`, reused not duplicated. Full det
   Project clears it. `battles` imports nothing from `ships` (ADR-0010).
 - **Telnet:** `CmdShip` (`ship`, `src/commands/ships.py`) — `ship [status]`,
   `ship commission ship_type=<name> [covenant=<name>] name=<ship name>`,
-  `ship upgrade stat=handling|armament|hull level=<n>`, `ship repair`.
+  `ship upgrade stat=<handling | armament | hull> level=<n>`, `ship repair`; the three
+  commission values each run to the next `key=`, and a ship reads as its area name
+  (`Sloop 'Wavecutter'`; #3657 tranche 17).
 - **Actions** (`actions/definitions/ships.py`, REGISTRY, `category="ships"`):
   `CommissionShipAction` (`commission_ship`), `UpgradeShipAction` (`upgrade_ship`)
   / `RepairShipAction` (`repair_ship`, both gated `IsShipOwnerPrerequisite`),
@@ -8144,7 +8152,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   attack made with an equipped LANCE while not Mounted, regardless of maneuver.
   `GearArchetype.LANCE` (`world.items.constants`) joins `WEAPON_ARCHETYPES`; a starter
   "Lance" `ItemTemplate` seeds via `world.seeds.game_content.items.seed_lance_item`. Telnet:
-  `companion mount <name|id>` / `companion dismount` (`CmdCompanion`), `combat charge <opp>
+  `companion mount <name or id>` / `companion dismount` (`CmdCompanion`), `combat charge <opp>
   with <technique>` / `combat joust [with] <technique>` (`CmdCombat`) — no web/frontend
   surface (matches the several existing maneuvers that ship telnet-only since the web
   "available actions" endpoint excludes REGISTRY maneuvers without `ActionTemplate`

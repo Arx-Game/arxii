@@ -137,7 +137,9 @@ export function PersonPage({ personId }: { personId: number }) {
     <div className="almanach">
       <div className="bar">
         <span className="crumb">
-          <span>Almanach</span>
+          <span>
+            <Link to="/staff/almanach">Almanach</Link>
+          </span>
           {family && <span>{family.name}</span>}
           <span>{person.display_name}</span>
         </span>

@@ -77,6 +77,27 @@ class TechniqueRequirementsNotMet(MagicError):
         )
 
 
+class TrainingFundsInsufficient(MagicError):
+    """The learner's purse cannot cover a technique's coin price (#4523).
+
+    Raised by ``charge_and_learn`` before anything is charged, so a short purse is
+    told apart from a lost Golden Hare race by its cause (the Academy TRAIN handler
+    maps ``ValidationError`` to the Hare race and this to the purse).
+    """
+
+    user_message = "You cannot afford this training."
+
+    def __init__(self, cost: int, balance: int) -> None:
+        from world.currency.constants import format_coppers  # noqa: PLC0415
+
+        super().__init__(f"cost={cost} balance={balance}")
+        self.cost = cost
+        self.balance = balance
+        self.user_message = (
+            f"This training costs {format_coppers(cost)} and you have {format_coppers(balance)}."
+        )
+
+
 class UltimateNotLearnable(MagicError):
     """An ultimate is only reachable at Audere, never learned (#4098)."""
 
