@@ -47,3 +47,13 @@ the main form, since "Mark reviewed" is its own POST and nested forms are invali
   <p class="bs-context"><b>Worn ease preview.</b> {{ supplier_rail.note }}</p>
 </div>
 {% endif %}
+
+{% if request_supply %}
+<div class="module" id="request-suppliers">
+  <h2>Where the requested items come from</h2>
+  {% for row in request_supply %}
+  <p class="bs-supply"><b>{{ row.asked_for }}</b>:
+    {% if row.unsupplied %}<span class="bs-warn">{{ row.supply }}</span>{% else %}{{ row.supply }}{% endif %}</p>
+  {% endfor %}
+</div>
+{% endif %}

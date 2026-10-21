@@ -28,7 +28,7 @@ from world.magic.models import CharacterTechnique
 from world.npc_services.constants import OfferKind
 from world.npc_services.effects import (
     OFFER_EFFECT_HANDLERS,
-    TrainOfferMisconfiguredError,
+    AcademyOfferApCostError,
     run_train_offer,
 )
 from world.npc_services.factories import (
@@ -418,7 +418,7 @@ class TrainOfferApCostGuardTests(TestCase):
         offer = NPCServiceOfferFactory(role=self.role, kind=OfferKind.TRAIN, ap_cost=3)
         TrainOfferDetailsFactory(offer=offer, technique=self.technique)
 
-        with self.assertRaises(TrainOfferMisconfiguredError):
+        with self.assertRaises(AcademyOfferApCostError):
             run_train_offer(offer, self.persona)
 
     def test_zero_ap_cost_does_not_trip_the_guard(self) -> None:

@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import type { FamilyTemplate } from '../../types';
+import { urls } from '@/utils/urls';
 
 interface Props {
   template: Pick<FamilyTemplate, 'charter_questions' | 'features'>;
@@ -69,7 +70,10 @@ export function FamilyTemplateForm({
                   {/* What the option IS (#4205): a god or totem opens its own page, a lore
                       answer its entry. */}
                   {option.target_entry_id != null && (
-                    <Link to={`/codex/${option.target_entry_id}`} className="text-xs underline">
+                    <Link
+                      to={urls.codexEntry(option.target_entry_id)}
+                      className="text-xs underline"
+                    >
                       {option.being_name !== '' ? option.being_name : 'codex'}
                     </Link>
                   )}

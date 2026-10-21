@@ -12,7 +12,7 @@ award is paid by ``world.ceremonies.services.finish_ceremony`` through
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -37,13 +37,18 @@ from world.worship.exceptions import (
 from world.worship.models import WorshipRite, WorshipRitePerformance, WorshipRiteTierAward
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia_extensions.models import RoomProfile
     from world.ceremonies.models import Ceremony
+    from world.ceremonies.services import ItemReading
     from world.character_sheets.models import CharacterSheet
+    from world.checks.types import ModifierContribution
     from world.game_clock.models import GameWeek
+    from world.items.models import ItemInstance
     from world.scenes.models import Scene
     from world.traits.models import CheckOutcome
-    from world.worship.models import WorshippedBeing
+    from world.worship.models import PledgeDetails, WorshippedBeing
 
 
 @dataclass(frozen=True)
@@ -57,6 +62,12 @@ class RiteOutcome:
     favor_capped: bool
     multiplier_percent: int
     consecration_bonus_percent: int = 0
+    #: Items given up during the rite (#4530) and the ease they gave its roll.
+    items_given: tuple[str, ...] = ()
+    items_ease: int = 0
+    #: How many given items meant something but did not count (past the rite's item limit
+    #: or the week's sacrifice limit).
+    items_uncounted: int = 0
 
 
 def rite_ap_cost(rite: WorshipRite) -> int:
@@ -267,8 +278,155 @@ def _charge_costs(character_sheet: CharacterSheet, rite: WorshipRite) -> None:
     )
 
 
-def perform_worship_rite(
-    character_sheet: CharacterSheet, rite: WorshipRite, *, scene: Scene, pay_award: bool = True
+@dataclass(frozen=True)
+class RiteGift:
+    """One item offered during a rite, read before it is given up (#4530)."""
+
+    item: ItemInstance
+    reading: ItemReading
+    counted: bool
+
+
+@dataclass(frozen=True)
+class RiteGifts:
+    """The items offered during a rite: what each meant, which counted, and the ease they
+    give the rite's roll (``rite_ease_per_point`` per meaning point, at most
+    ``rite_items_counted`` items, within the week's sacrifice limit)."""
+
+    gifts: tuple[RiteGift, ...] = ()
+    ease: int = 0
+    pledge: PledgeDetails | None = None
+
+    @property
+    def eased_by_request(self) -> bool:
+        return any(g.counted and g.reading.request is not None for g in self.gifts)
+
+    def contributions(self) -> list[ModifierContribution]:
+        from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
+        from world.checks.types import ModifierContribution  # noqa: PLC0415
+
+        if self.ease <= 0:
+            return []
+        names = ", ".join(str(g.item) for g in self.gifts if g.counted)
+        return [
+            ModifierContribution(
+                source_kind=ModifierSourceKind.FAVOR,
+                source_label=f"Given up in the rite: {names}",
+                value=self.ease,
+            )
+        ]
+
+
+def read_rite_gifts(
+    sheet: CharacterSheet,
+    rite: WorshipRite,
+    items: Sequence[ItemInstance],
+    *,
+    closing_of: PledgeDetails | None = None,
+) -> RiteGifts:
+    """Read the items offered during ``rite`` (#4530, #4462 section 6.4).
+
+    An item given up during a rite does not roll its own sacrifice check: its meaning points
+    (doubled for a favored facet, as at a shrine) ease the rite's roll instead. At most
+    ``DevotionConfig.rite_items_counted`` items count, and each counted item uses one of the
+    week's sacrifice slots. A matching request fills as at a shrine: the rite's own, and for a
+    pledge's closing rite (``closing_of``) the pledge's too, until its quantity is filled.
+    """
+    from world.ceremonies.services import favored_facets_by_item, read_item  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+    from world.worship.pledge_services import open_pledge_for  # noqa: PLC0415
+    from world.worship.request_services import (  # noqa: PLC0415
+        assign_requests,
+        closing_rite_requests,
+        given_counts,
+    )
+    from world.worship.sacrifice_services import sacrifice_slots_left  # noqa: PLC0415
+
+    if not items:
+        return RiteGifts()
+    config = get_devotion_config()
+    pledge = closing_of
+    if pledge is None:
+        pledge = open_pledge_for(sheet)
+        if pledge is not None and pledge.pledge.being_id != rite.being_id:
+            pledge = None
+    rows = (
+        closing_rite_requests(closing_of)
+        if closing_of is not None
+        else list(rite.requested_items.select_related("item_template", "facet").order_by("pk"))
+    )
+    filled = given_counts(rows, pledge)
+    assigned = assign_requests(rows, items, filled=filled, config=config)
+    facets = favored_facets_by_item(rite.being, list(items))
+    slots = sacrifice_slots_left(sheet, rite.being)
+    room = min(config.rite_items_counted, slots)
+    gifts: list[RiteGift] = []
+    ease = 0
+    for item in items:
+        reading = read_item(
+            item,
+            sheet,
+            facet=facets.get(item.pk),
+            being=rite.being,
+            request=assigned.get(item.pk),
+        )
+        counted = reading.effective_points > 0 and room > 0
+        if counted:
+            room -= 1
+            ease += reading.effective_points * config.rite_ease_per_point
+        gifts.append(RiteGift(item=item, reading=reading, counted=counted))
+    return RiteGifts(gifts=tuple(gifts), ease=ease, pledge=pledge)
+
+
+def give_up_rite_gifts(
+    sheet: CharacterSheet,
+    rite: WorshipRite,
+    gifts: RiteGifts,
+) -> tuple[str, ...]:
+    """Take the offered items out of play and record each as an offering (#4530): the pool
+    grant and the signals are the same as a sacrifice's, and there is no roll of its own."""
+    from world.ceremonies.models import CeremonyOffering  # noqa: PLC0415
+    from world.ceremonies.services import give_up_item, write_offering_signals  # noqa: PLC0415
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    persona = active_persona_for_sheet(sheet)
+    week = get_current_game_week()
+    names: list[str] = []
+    for gift in gifts.gifts:
+        offered = give_up_item(
+            gift.item,
+            rite.being,
+            reading=gift.reading,
+            counted=gift.counted,
+            granted_by=sheet,
+            reason=f"rite:{rite.name}",
+        )
+        offering = CeremonyOffering.objects.create(
+            being=rite.being,
+            pledge_details=gifts.pledge,
+            facet=gift.reading.facet,
+            item_name=offered.name,
+            item_value=offered.value,
+            item_legend_value=offered.legend_value,
+            worship_grant=offered.worship_grant,
+            offered_by=persona,
+            game_week=week,
+            counted=gift.counted,
+        )
+        write_offering_signals(offering, gift.reading)
+        names.append(offered.name)
+    return tuple(names)
+
+
+def perform_worship_rite(  # noqa: PLR0913 - the rite's context is keyword-only and distinct
+    character_sheet: CharacterSheet,
+    rite: WorshipRite,
+    *,
+    scene: Scene,
+    pay_award: bool = True,
+    offered_items: Sequence[ItemInstance] = (),
+    closing_of: PledgeDetails | None = None,
 ) -> RiteOutcome:
     """Perform a tier 1 or 2 rite in a live scene: pay, roll, be paid.
 
@@ -280,10 +438,16 @@ def perform_worship_rite(
     ``pay_award=False`` (#4333 slice 2) is a pledge's closing rite: the costs,
     the roll and the ``WorshipRitePerformance`` row are kept, and the rite's own
     award is not paid; the pledge pays its closing award instead.
+
+    ``offered_items`` (#4530) are items the performer gives up during the rite. They ease
+    the rite's roll by their meaning (``read_rite_gifts``) and are taken out of play after
+    it rolls; a roll a requested item eased cannot come out as a Critical Failure.
+    ``closing_of`` is the pledge a closing rite closes, whose requests the items may fill.
     """
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
+    from world.worship.sacrifice_services import lift_botch  # noqa: PLC0415
 
     if not rite.is_active or not rite.being.is_active:
         raise RiteNotAvailable
@@ -292,6 +456,7 @@ def perform_worship_rite(
     if not scene.is_active or not scene_participant(scene, character_sheet):
         raise RiteScenePrerequisiteFailed
     require_complete_award_table(rite)
+    gifts = read_rite_gifts(character_sheet, rite, offered_items, closing_of=closing_of)
 
     with transaction.atomic():
         _charge_costs(character_sheet, rite)
@@ -301,10 +466,20 @@ def perform_worship_rite(
             specialization=rite.being.tradition.rites_specialization,
             scene=scene,
             extra_traits=activity_skill_terms(MagicActivity.WORSHIP_RITE),
+            extra_contributions=gifts.contributions() or None,
         )
+        outcome = lift_botch(result.outcome) if gifts.eased_by_request else result.outcome
+        given = give_up_rite_gifts(character_sheet, rite, gifts)
         if not pay_award:
-            return record_unpaid_performance(character_sheet, rite, result.outcome, scene=scene)
-        return apply_rite_award(character_sheet, rite, result.outcome, scene=scene)
+            rite_outcome = record_unpaid_performance(character_sheet, rite, outcome, scene=scene)
+        else:
+            rite_outcome = apply_rite_award(character_sheet, rite, outcome, scene=scene)
+        if not given:
+            return rite_outcome
+        uncounted = sum(1 for g in gifts.gifts if g.reading.effective_points > 0 and not g.counted)
+        return replace(
+            rite_outcome, items_given=given, items_ease=gifts.ease, items_uncounted=uncounted
+        )
 
 
 def record_unpaid_performance(

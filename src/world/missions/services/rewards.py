@@ -38,6 +38,8 @@ from world.missions.types import ApplyDeedRewardsResult, ProjectSkipRecord, Stub
 logger = logging.getLogger("world.missions.rewards")
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from world.missions.models import (
@@ -49,6 +51,7 @@ if TYPE_CHECKING:
         MissionParticipant,
     )
     from world.scenes.models import Persona
+    from world.societies.models import LegendEntry
 
 
 class MissionRewardRoutingError(Exception):
@@ -373,9 +376,12 @@ def _route_line(  # noqa: PLR0913
         )
 
         recipient_sheet = line.recipient
-        grant_touchstone_item_to_character(
+        item = grant_touchstone_item_to_character(
             character_sheet=recipient_sheet, template=line.item_template
         )
+        line.granted_item = item
+        line.save(update_fields=["granted_item"])
+        link_mission_trophies(deed)
         return
 
     # CRIME_WATCH is live (#1765): mints heat + the society sting at the report
@@ -403,6 +409,32 @@ def _route_line(  # noqa: PLR0913
     # Anything else is an author error — the (kind, sink) pair has no
     # routing target. Raise loudly so authoring tools can surface it.
     raise MissionRewardRoutingError(kind=kind, sink=sink, line_pk=line.pk)
+
+
+def link_mission_trophies(
+    deed: MissionDeedRecord, *, extra_entries: Sequence[LegendEntry] = ()
+) -> None:
+    """Link the items a deed's reward lines granted to the Legend deed it minted (#4530).
+
+    A mission that mints a deed and grants an item in the same run makes the item a trophy of
+    that deed, when the run ended at Success or better; a Partial Success or worse links
+    nothing. The deeds are the ones linked to the mission deed (``deed.legend_entries``, the
+    route's renown awards) and ``extra_entries`` (the cron's Legend-points deed, minted
+    later); a deed credited to someone other than the item's holder never links. Whichever
+    of the item grant and the deed comes second calls this, so the order does not matter.
+    """
+    outcome = deed.outcome
+    if outcome is None or outcome.success_level <= 0:
+        return
+    from world.items.services.trophies import link_trophy  # noqa: PLC0415
+
+    entries = [*deed.legend_entries.select_related("persona"), *extra_entries]
+    if not entries:
+        return
+    for line in deed.reward_lines.filter(
+        sink=DeedRewardSink.ITEM, granted_item__isnull=False
+    ).select_related("granted_item"):
+        link_trophy(line.granted_item, entries)
 
 
 def _route_project_line(
@@ -688,4 +720,5 @@ __all__ = (
     "MissionRewardRoutingError",
     "apply_deed_rewards",
     "emit_terminal_rewards",
+    "link_mission_trophies",
 )

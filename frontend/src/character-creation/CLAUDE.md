@@ -8,6 +8,8 @@ This module provides the staged character creation UI flow.
 character-creation/
 ├── index.ts                 # Public exports
 ├── types.ts                 # TypeScript type definitions
+├── constants.ts             # MAGIC_SKILL_CATEGORY: Magic skills are trained by the Tradition
+│                              #   stance (read-only group in SkillsSection, #4457), never bought
 ├── api.ts                   # API fetch functions using apiFetch
 ├── queries.ts               # React Query hooks
 ├── cg.css                   # Scoped under `.interview`; realm is an ink, paper

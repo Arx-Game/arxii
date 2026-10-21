@@ -57,9 +57,25 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   `worn_item_max_points`, all ease capped at `invocation_meaning_ease_max`), the resonance
   fed signal in `item_meaning`, the Call on favor picker's worn-piece table and telnet
   `invoke <being>` lines, and the `FavorInvocation` snapshot (`InvocationPiece`) behind the
-  staff invocation page. A bought piece with no other history counts for nothing. Still to
-  build (slice 4 of #4462): keepsakes, trophies, requested items and Relic points; the
-  invocation ease cap already leaves room for them.
+  staff invocation page. A bought piece with no other history counts for nothing.
+- **Meaningful items, slice 4 (#4530, the last of #4462, 2026-10-21):** built: `Keepsake`
+  (a tie, one of the keeper's deeds, a being, an organization, a person or a place, in the
+  player's own words, scored by its subject after a wait and never by the words; actions
+  `keepsake_declare` / `keepsake_release`, telnet `keepsake`, the item panel's form, the admin
+  with a computed rail); trophies (an item a Success mission run or a won stake grants is
+  linked to the deed it was won on, `link_trophy`, counted by the deed's legend, "Trophy of
+  <deed>" on examine); requested items (`RequestedItem` on a pledge or a tier 1 or 2 rite,
+  cheap by rule, easing the sacrifice or the rite's roll without a botch, on the pledge
+  card and the Being Service builder with a supplier panel); items given up during a rite
+  and a pledge's closing rite easing its roll (`rite_ease_per_point`); keepsakes of the being
+  she carries and its Relic (`Relic.invocation_points`) easing the call within the meaning
+  cap, in the picker, `invoke` and the staff invocation page; the giver's own line on a
+  sacrifice (`CeremonyOffering.player_line`, telnet `sacrifice ... ; <line>`, the dialog's
+  field), heard in the room verbatim after the system line. **#4462 is complete.** Not built,
+  by design: a replica made from a kept design (a later feature).
+  Keepsakes stay as ruled by the owner (removable later if they turn out redundant); a
+  requested item is a scavenger-hunt errand, and making those GM-assigned and real-time
+  paced is a later direction.
 - **Worship rites & rewards (#3777, 2026-09-16):** tiered rites over the pantheon
   foundations (#3776). `RiteKind` (1 Devotional / 2 Demanding / 3 Perilous) is the shared
   catalog; each being instantiates its own `WorshipRite` (flavor, check type, one of its

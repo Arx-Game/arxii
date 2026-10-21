@@ -466,6 +466,8 @@ export interface CharacterDraft {
   stats_budget: number;
   /** Gift-stage technique pick budget (base 1 + distinction bonus, #2426). */
   starting_technique_picks: number;
+  /** The rank every Magic skill starts at from the draft's Tradition stance; 0 for none (#4457). */
+  starting_magic_skill_floor: number;
   /** The age range CG accepts for this draft; the server composes every cap (#3663). */
   age_min: number;
   age_max: number;
@@ -544,6 +546,8 @@ export interface SchoolingLineRow {
   player_line: string;
   price: number;
   techniques: number;
+  /** The rank each Magic skill starts at under this stance; 0 grants none (#4457). */
+  magic_skill_floor: number;
   grants_distinction_id: number | null;
   offer_id: number | null;
 }

@@ -192,3 +192,12 @@ ANSWER_ONLOOKER_LINE_MAX_LENGTH = 300
 
 #: Longest free-text answer a stewarded being's table GM may send (#4333 slice 4).
 STEWARD_ANSWER_TEXT_MAX_LENGTH = 4000
+
+
+class InvocationPieceSource(models.TextChoices):
+    """Why an item eased an invocation (#4530): a worn piece carrying a favored facet
+    (#4520), a keepsake of the being the character carries, or the being's Relic."""
+
+    WORN = "worn", "Worn"
+    KEEPSAKE = "keepsake", "Keepsake"
+    RELIC = "relic", "Relic"

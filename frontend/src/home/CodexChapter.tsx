@@ -12,6 +12,7 @@
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFeaturedLore } from './queries';
+import { urls } from '@/utils/urls';
 
 export function CodexChapter() {
   const { data: entries, isLoading } = useFeaturedLore();
@@ -31,7 +32,7 @@ export function CodexChapter() {
           {entries.map((entry) => (
             <li key={entry.id}>
               <span className="gatefold-entry-name">
-                <Link to={`/codex?entry=${entry.id}`}>{entry.name}</Link>
+                <Link to={urls.codexEntry(entry.id)}>{entry.name}</Link>
               </span>
               <p>{entry.summary}</p>
             </li>

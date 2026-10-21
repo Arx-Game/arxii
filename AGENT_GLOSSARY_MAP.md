@@ -13,7 +13,8 @@ term is chosen and the rest are listed under `_Avoid_`.
   Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate, Gift
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
-  Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501)
+  Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501); and Magic skill floor (#4457,
+  ADR-4457-A; Tradition Training gains it)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
   Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
@@ -37,7 +38,8 @@ term is chosen and the rest are listed under `_Avoid_`.
   the answer terms (slice 3, ADR-4333-B): Answer, Sacrifice line, Held answer, and the
   amended Vision; and the steward terms (slice 4, ADR-4333-C): Steward, god sign, Catalogue
   clue; and the live route (slice 5): Live route / live answer; and the worn-piece terms
-  (#4520): Worn piece, Resonance fed
+  (#4520): Worn piece, Resonance fed; and the slice 4 terms (#4530): Requested item, Relic
+  ease
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333)
@@ -76,7 +78,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
 - [npc_services](src/world/npc_services/AGENT_GLOSSARY.md), incl. the #2827 tier-ladder terms
-  and a pointer to where the #4091 allegiance terms actually live (combat and conditions, above)
+  and a pointer to where the #4091 allegiance terms actually live (combat and conditions, above); and (#4457, ADR-4457-A)
+  Skill course / Course enrollment (_Avoid_: remedial training, TRAIN offer for a course)
 - [tasking](src/world/tasking/AGENT_GLOSSARY.md)
 - [tavern_games](src/world/tavern_games/AGENT_GLOSSARY.md)
 - [tarot](src/world/tarot/AGENT_GLOSSARY.md)
@@ -84,7 +87,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [beta_reset](src/world/beta_reset/AGENT_GLOSSARY.md)
 - [achievements](src/world/achievements/AGENT_GLOSSARY.md)
 - [goals](src/world/goals/AGENT_GLOSSARY.md)
-- [items](src/world/items/AGENT_GLOSSARY.md)
+- [items](src/world/items/AGENT_GLOSSARY.md) - also holds Keepsake and Trophy (#4530)
 - [traits](src/world/traits/AGENT_GLOSSARY.md)
 - [areas](src/world/areas/AGENT_GLOSSARY.md) - also holds Rung (#3983), the canonical
   feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to,

@@ -228,8 +228,9 @@ class WornPieceSerializer(serializers.Serializer):
     """A worn piece carrying a facet the being favors, as the wearer sees it in the Call on
     favor picker: what it means, whether it counts and the ease it gives (#4520)."""
 
+    source = serializers.CharField()
     item_name = serializers.CharField()
-    facet_name = serializers.CharField()
+    facet_name = serializers.CharField(allow_blank=True)
     signals = WornSignalSerializer(source="meaning.signals", many=True)
     points = serializers.IntegerField()
     ease_per_point = serializers.IntegerField()
@@ -334,6 +335,19 @@ class PledgeCreditLineSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
+class RequestLineSerializer(serializers.Serializer):
+    """One item a pledge or its closing rite asks for, as the pledge card lists it (#4530):
+    what is asked, the staff hint, how many are given and the points each gives."""
+
+    id = serializers.IntegerField(source="request.pk")
+    asked_for = serializers.CharField()
+    hint = serializers.CharField(allow_blank=True)
+    quantity = serializers.IntegerField()
+    given = serializers.IntegerField()
+    points = serializers.IntegerField()
+    where = serializers.CharField()
+
+
 class PledgeCardSerializer(serializers.Serializer):
     """One character's pledge as its card shows it (#4333 slice 2). Read by the
     character's own player and by staff only."""
@@ -350,6 +364,7 @@ class PledgeCardSerializer(serializers.Serializer):
     favor = serializers.IntegerField()
     credits = PledgeCreditLineSerializer(many=True)
     terms = ServiceTermsSerializer()
+    requests = RequestLineSerializer(many=True)
 
 
 class HolySiteSerializer(serializers.Serializer):

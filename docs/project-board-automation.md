@@ -12,8 +12,8 @@ The board has two single-select fields:
 
 | Status | When |
 |---|---|
-| **Backlog** | Open, unassigned — not started. (Native auto-add lands new issues here.) |
-| **In progress** | Someone is assigned. Stays here through spec + implementation until terminal. |
+| **Backlog** | Open and not being actively worked (assigned or not; `status:spec-review` waits here, visible through its Stage). (Native auto-add lands new issues here.) |
+| **In progress** | Active work only: the issue carries `status:spec-draft` or `status:implementing`, or an open PR closes it. Assignment alone does not count (#4539). Stays here through spec + implementation until terminal. |
 | **Done** | Issue closed as *completed*. |
 | **Cancelled** | Issue closed as *not planned*. |
 
@@ -26,7 +26,9 @@ The board has two single-select fields:
 | **Implementation** | `status:implementing` or `spec:approved` |
 | **In review** | a linked PR is open (set by the PR event, not a label) |
 
-`status:in-progress` is the "claimed" marker (added on assignment); it is
+`status:in-progress` is the "active work" marker. It follows Status exactly: added
+when the issue becomes active (spec-draft, implementing, or an open linked PR),
+removed when it stops. Assigning or unassigning never touches it. It is
 distinct from `status:implementing` (the implementation stage). Both are kept.
 
 ## Automation map
@@ -36,13 +38,14 @@ Driven by `.github/workflows/project-sync.yml` → `tools/project_board_sync.py`
 | Trigger | Effect |
 |---|---|
 | issue opened | ensured on board, Status = Backlog (belt-and-suspenders behind native auto-add) |
-| issue **assigned** | Status = In progress; add `status:in-progress` |
-| issue **unassigned** (→ 0 assignees) | Status = Backlog; remove `status:in-progress` |
+| issue **assigned** / **unassigned** | nothing changes (assignment is not activity) |
+| label `status:spec-draft` / `status:implementing` added | Status = In progress; add `status:in-progress` |
+| those labels removed (and no open linked PR) | Status = Backlog; remove `status:in-progress` |
 | label `status:spec-draft` | Stage = Spec design |
 | label `status:spec-review` | Stage = Spec review |
 | label `status:implementing` / `spec:approved` | Stage = Implementation |
-| linked PR **opened** (`Closes #N`) | issue Stage = In review |
-| linked PR **closed** unmerged | issue Stage reverts to its label-derived stage |
+| linked PR **opened** (`Closes #N`) | issue Stage = In review; Status = In progress; add `status:in-progress` |
+| linked PR **closed** unmerged | Stage reverts to its label-derived stage; Status and `status:in-progress` recomputed (another open PR or an active label keeps it In progress) |
 | issue **closed** (completed) | Status = Done |
 | issue **closed** (not planned) | Status = Cancelled |
 
@@ -87,8 +90,10 @@ Backlog), run the idempotent sweep once locally:
 GH_TOKEN=<maintainer-pat> tools/backfill_project_board.sh
 ```
 
-It adds every open issue to the board and sets Status (from assignment) + Stage
-(from labels). Safe to re-run.
+It adds every open issue to the board and sets Status (from the active-work
+rule) + Stage (from labels), and fixes the `status:in-progress` label. Safe to
+re-run. `python3 tools/project_board_sync.py backfill --dry-run` lists the issues
+whose label or Status differs from the rule without writing anything.
 
 ## Testing locally
 
@@ -97,9 +102,10 @@ a small JSON file:
 
 ```bash
 cat > /tmp/evt.json <<'JSON'
-{ "action": "assigned",
+{ "action": "labeled",
   "issue": { "number": 690, "node_id": "<issue node id>", "state": "open",
-             "assignees": [{"login": "you"}], "labels": [] } }
+             "assignees": [{"login": "you"}],
+             "labels": [{"name": "status:spec-draft"}] } }
 JSON
 
 GITHUB_REPOSITORY=Arx-Game/arxii GITHUB_EVENT_NAME=issues \

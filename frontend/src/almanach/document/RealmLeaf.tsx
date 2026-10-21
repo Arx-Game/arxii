@@ -6,10 +6,9 @@
  *
  * Every body field here is backend-derived and read-only (`_realm_payload`,
  * `almanach_reads.py`) — there's no realm-level prose or toggle to draft.
- * The savebar still carries `DRAFT_NOTE` (review fix round 1, Finding I3:
- * every savebar gets it per the global constraint) but no Save button next
- * to it — there is no staged field on this leaf for one to commit; "swear a
- * house" dispatches on its own dialog's Confirm, independent of any Save.
+ * The savebar carries no Save button — there is no staged field on this
+ * leaf for one to commit; "swear a house" dispatches on its own dialog's
+ * Confirm, independent of any Save.
  *
  * One stated gap remains: the vassals table's `.tw` tier word (plate:
  * "county"/"duchy" before the name) has no field on `AlmanachRealmRowSummary`
@@ -41,7 +40,6 @@ import {
 } from '@/components/ui/select';
 
 import { useAllHouses } from '../queries';
-import { DRAFT_NOTE } from '../copy';
 import type { AlmanachDocumentRealm } from '../types';
 
 export interface SwearFields {
@@ -189,7 +187,6 @@ export function RealmLeaf({ houseId, houseName, realm, onSwear, extra }: RealmLe
         </div>
         {extra}
         <div className="savebar">
-          <span className="note">{DRAFT_NOTE}</span>
           <button type="button" className="btn quiet" onClick={openSwear}>
             Swear a house
           </button>

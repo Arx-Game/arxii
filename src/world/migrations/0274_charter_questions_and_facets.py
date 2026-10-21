@@ -6,9 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0269_worn_pieces_count_with_beings"),
-    ]
+    dependencies = [("arxii", "0273_skill_courses_and_schooling_floor")]
 
     operations = [
         migrations.RenameModel(old_name="HouseAspectDefinition", new_name="HouseCharterQuestion"),
@@ -16,7 +14,9 @@ class Migration(migrations.Migration):
         migrations.RenameModel(old_name="HouseClaimAspect", new_name="HouseClaimFacet"),
         migrations.RenameModel(old_name="OrganizationAspect", new_name="OrganizationFacet"),
         migrations.RenameField(
-            model_name="housetemplate", old_name="aspect_definitions", new_name="charter_questions"
+            model_name="housetemplate",
+            old_name="aspect_definitions",
+            new_name="charter_questions",
         ),
         # The reverse accessors follow the rename (``claim.facets``, ``organization.facets``):
         # state only, no table change.

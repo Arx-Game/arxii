@@ -21,6 +21,8 @@ from world.npc_services.models import (
     OfferCooldown,
     PermitOfferDetails,
     ProfileRecordingOfferDetails,
+    SkillCourseEnrollment,
+    SkillCourseOfferDetails,
     StylingOfferDetails,
     TrainOfferDetails,
 )
@@ -122,6 +124,33 @@ class TrainOfferDetailsFactory(DjangoModelFactory):
     technique = factory.SubFactory("world.magic.factories.TechniqueFactory")
     learn_ap_cost = 5
     gold_cost = 0
+
+
+class SkillCourseOfferDetailsFactory(DjangoModelFactory):
+    """Per-offer SKILL_COURSE details (#4457) - one row per teachable skill course."""
+
+    class Meta:
+        model = SkillCourseOfferDetails
+
+    offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.SKILL_COURSE)
+    skill = factory.SubFactory("world.skills.factories.SkillFactory")
+    total_development = 100
+    session_development = 25
+    session_ap_cost = 5
+    coin_cost = 1000
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    check_difficulty = 0
+
+
+class SkillCourseEnrollmentFactory(DjangoModelFactory):
+    """An open enrollment in a skill course (#4457)."""
+
+    class Meta:
+        model = SkillCourseEnrollment
+
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    course = factory.SubFactory(SkillCourseOfferDetailsFactory)
+    development_remaining = factory.SelfAttribute("course.total_development")
 
 
 class NPCRoleCooldownFactory(DjangoModelFactory):

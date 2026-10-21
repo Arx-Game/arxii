@@ -231,6 +231,16 @@ class CeremonyOffering(SharedMemoryModel):
         related_name="+",
         help_text="The game week the item was given up in; the weekly limit counts by it.",
     )
+    player_line = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        db_default="",
+        help_text=(
+            "The giver's own line, written with the sacrifice and heard in the room after "
+            "the system line (#4530). Empty when they wrote none."
+        ),
+    )
     counted = models.BooleanField(
         default=False,
         db_default=False,
@@ -275,6 +285,14 @@ class OfferingSignal(SharedMemoryModel):
         max_length=200,
         blank=True,
         help_text="What made it count, such as the maker's persona name or the days held.",
+    )
+    requested_item = models.ForeignKey(
+        "arxii.RequestedItem",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="filled_by",
+        help_text="For a Requested signal: the request this item filled (#4530).",
     )
 
     class Meta:

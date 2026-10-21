@@ -41,9 +41,10 @@ import { Link } from 'react-router-dom';
 
 import { useDraft } from '@/world-builder/document/useDraft';
 
-import { HOUSE_STATES, DRAFT_NOTE, GENTRY_LUXEN_ONLY } from '../copy';
+import { HOUSE_STATES, GENTRY_LUXEN_ONLY, houseHeading } from '../copy';
 import { ObservanceRows, type ObservanceRow } from '../ObservanceRows';
 import type { AlmanachHouseDocumentHouse } from '../types';
+import { urls } from '@/utils/urls';
 
 export interface EditHouseFields {
   name?: string;
@@ -121,7 +122,7 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
 
   return (
     <main className="chapter">
-      <h3>House {house.name}</h3>
+      <h3>{houseHeading(house.name)}</h3>
       <div className="row3">
         <div className="field">
           <span className="label">state</span>
@@ -166,7 +167,9 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
                   <>
                     {' '}
                     ·{' '}
-                    <Link to={`/codex/${house.default_succession_law.codex_entry_id}`}>codex</Link>
+                    <Link to={urls.codexEntry(house.default_succession_law.codex_entry_id)}>
+                      codex
+                    </Link>
                   </>
                 )}
               </>
@@ -182,7 +185,9 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
           <div className="val">
             {house.patron.nickname}{' '}
             {house.patron.codex_entry_id != null ? (
-              <Link to={`/codex/${house.patron.codex_entry_id}`}>({house.patron.being_name})</Link>
+              <Link to={urls.codexEntry(house.patron.codex_entry_id)}>
+                ({house.patron.being_name})
+              </Link>
             ) : (
               <>({house.patron.being_name})</>
             )}
@@ -213,7 +218,8 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         <label htmlFor={`house-sigil-${house.id}`}>sigil</label>
         <textarea
           id={`house-sigil-${house.id}`}
-          className="prose"
+          className="prose short"
+          rows={2}
           value={sigil.value}
           onChange={(event) => sigil.setValue(event.target.value)}
         />
@@ -223,6 +229,7 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         <textarea
           id={`house-description-${house.id}`}
           className="prose"
+          rows={6}
           value={description.value}
           onChange={(event) => description.setValue(event.target.value)}
         />
@@ -237,7 +244,7 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
                 <span className="mark">◆</span>
                 <span>
                   {aspect.target_entry_id != null ? (
-                    <Link to={`/codex/${aspect.target_entry_id}`} className="nm">
+                    <Link to={urls.codexEntry(aspect.target_entry_id)} className="nm">
                       {aspect.option}
                     </Link>
                   ) : (
@@ -291,7 +298,6 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         </ul>
       </div>
       <div className="savebar">
-        <span className="note">{DRAFT_NOTE}</span>
         <button type="button" className="btn" onClick={save}>
           Save
         </button>

@@ -12326,6 +12326,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/inventory/{id}/keepsake/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The keepsake form's data for an item the requester's character holds (#4530):
+     *     the keepsake it already is, the character's slots, what it could stand for and
+     *     the deeds it is a trophy of. Declaring and releasing go through the keepsake
+     *     actions.
+     */
+    get: operations['items_inventory_keepsake_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/inventory/{id}/meaning/': {
     parameters: {
       query?: never;
@@ -30302,6 +30324,7 @@ export interface components {
       /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
       readonly starting_technique_picks: number;
+      readonly starting_magic_skill_floor: number;
       readonly age_min: number;
       readonly age_max: number;
       readonly ic_month_names: string[];
@@ -36317,6 +36340,7 @@ export interface components {
       is_final: boolean;
       rapport_requirement: number;
       risk_tier?: number | null;
+      price?: components['schemas']['OfferPrice'] | null;
     };
     InteractionReaction: {
       readonly id: number;
@@ -36667,6 +36691,42 @@ export interface components {
       tale: string | null;
       can_tell_tale: boolean;
       readonly last_unseen_count: number;
+    };
+    /**
+     * @description The keepsake an item already is for its holder: what it stands for and, if shown, the
+     *     player's own words (#4530). Nothing here says what it is worth.
+     */
+    Keepsake: {
+      readonly id: number;
+      readonly subject_kind: string;
+      readonly subject_name: string;
+      readonly text: string;
+      readonly shown_on_examine: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description The item panel's keepsake form: the keepsake the item already is (or null), whether it
+     *     counts yet, the character's slots, what it could stand for and its trophy deeds (#4530).
+     */
+    KeepsakeState: {
+      readonly keepsake: components['schemas']['Keepsake'] | null;
+      readonly counts_now: boolean;
+      readonly status: components['schemas']['KeepsakeStatus'];
+      readonly subjects: {
+        [key: string]: components['schemas']['KeepsakeSubjectChoice'][];
+      };
+      readonly trophy_of: string[];
+      readonly carried_days: number;
+    };
+    KeepsakeStatus: {
+      readonly used: number;
+      readonly limit: number;
+      readonly wait_days: number;
+    };
+    KeepsakeSubjectChoice: {
+      readonly id: number;
+      readonly label: string;
     };
     /**
      * @description * `perception` - Perception
@@ -38941,6 +39001,7 @@ export interface components {
        *     * `styling` - Styling
        *     * `profile_recording` - Profile Recording
        *     * `clue_reveal` - Clue Reveal
+       *     * `skill_course` - Skill Course
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -38989,6 +39050,7 @@ export interface components {
      *     * `styling` - Styling
      *     * `profile_recording` - Profile Recording
      *     * `clue_reveal` - Clue Reveal
+     *     * `skill_course` - Skill Course
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -39010,7 +39072,8 @@ export interface components {
       | 'settle_obligation'
       | 'styling'
       | 'profile_recording'
-      | 'clue_reveal';
+      | 'clue_reveal'
+      | 'skill_course';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -39035,6 +39098,7 @@ export interface components {
        *     * `styling` - Styling
        *     * `profile_recording` - Profile Recording
        *     * `clue_reveal` - Clue Reveal
+       *     * `skill_course` - Skill Course
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -39315,6 +39379,17 @@ export interface components {
        * @description Earliest time `persona` can select this offer again.
        */
       available_at: string;
+    };
+    /** @description What accepting an Academy offer costs (#4457); ``display`` is the menu line. */
+    OfferPrice: {
+      ap: number;
+      coppers: number;
+      golden_hares: number;
+      per_session_ap: number | null;
+      development_remaining: number | null;
+      development_total: number | null;
+      training_points: number | null;
+      display: string;
     };
     /** @description Serializer for a directed-offer summons (#2050). */
     OfferSummons: {
@@ -44881,6 +44956,7 @@ export interface components {
        *     * `styling` - Styling
        *     * `profile_recording` - Profile Recording
        *     * `clue_reveal` - Clue Reveal
+       *     * `skill_course` - Skill Course
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -47004,6 +47080,7 @@ export interface components {
       favor: number;
       credits: components['schemas']['PledgeCreditLine'][];
       terms: components['schemas']['ServiceTerms'];
+      requests: components['schemas']['RequestLine'][];
     };
     PledgeCreditLine: {
       id: number;
@@ -48076,6 +48153,19 @@ export interface components {
       covenant: number;
       /** @description All rank PKs for this covenant in desired order (index 0 = top authority / tier 1). */
       ordered_rank_ids: number[];
+    };
+    /**
+     * @description One item a pledge or its closing rite asks for, as the pledge card lists it (#4530):
+     *     what is asked, the staff hint, how many are given and the points each gives.
+     */
+    RequestLine: {
+      id: number;
+      asked_for: string;
+      hint: string;
+      quantity: number;
+      given: number;
+      points: number;
+      where: string;
     };
     /**
      * @description * `unsatisfied` - Unsatisfied
@@ -49182,7 +49272,7 @@ export interface components {
        */
       action: components['schemas']['SceneSummaryRevisionActionEnum'];
     };
-    /** @description One standard schooling stance under a ``living_masters`` tradition (#3675). */
+    /** @description One standard schooling stance under a tradition that opens stances (#3675, #4457). */
     SchoolingLine: {
       schooling_line_id: number;
       rank: number;
@@ -49190,6 +49280,7 @@ export interface components {
       player_line: string;
       price: number;
       techniques: number;
+      magic_skill_floor: number;
       grants_distinction_id: number | null;
       offer_id: number | null;
     };
@@ -54250,6 +54341,7 @@ export interface components {
      *     favor picker: what it means, whether it counts and the ease it gives (#4520).
      */
     WornPiece: {
+      source: string;
       item_name: string;
       facet_name: string;
       signals: components['schemas']['WornSignal'][];
@@ -54379,6 +54471,7 @@ export interface components {
       pieces: components['schemas']['_InvocationPiece'][];
     };
     _InvocationPiece: {
+      source: string;
       item_name: string;
       facet_name: string;
       signals: components['schemas']['_SacrificeSignal'][];
@@ -70721,6 +70814,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ItemInstanceRead'];
+        };
+      };
+    };
+  };
+  items_inventory_keepsake_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['KeepsakeState'];
         };
       };
     };
