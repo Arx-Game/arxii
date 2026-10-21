@@ -1065,7 +1065,7 @@ class AlmanachFoundOrganizationAction(_AlmanachAction):
             return _refusal(exc)
         return ActionResult(
             success=True,
-            message=f"{org.name} stands.",
+            message=f"{org.name} organization created.",
             data={"org_id": org.pk, "family_id": family.pk},
         )
 

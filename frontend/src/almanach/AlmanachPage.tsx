@@ -154,7 +154,9 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
     <div className="almanach">
       <div className="bar">
         <span className="crumb">
-          <span>Almanach de Catenys</span>
+          <span>
+            <Link to="/staff/almanach">Almanach de Catenys</Link>
+          </span>
           <span>{realm?.name ?? `Realm ${realmId}`}</span>
         </span>
         <span className="right">
