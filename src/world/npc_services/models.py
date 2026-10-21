@@ -1032,11 +1032,13 @@ class SkillCourseOfferDetails(SharedMemoryModel):
 
     One offer row per teachable skill course at an Academy teacher. Taking the
     course enrolls the learner (:class:`SkillCourseEnrollment`) for
-    ``total_development`` points of development in ``skill``; each session
-    (the ``run_skill_course_offer`` handler in ``effects.py``) costs
-    ``session_ap_cost`` AP and ``coin_cost`` coppers, rolls ``check_type`` at
-    ``check_difficulty`` and, on success, adds up to ``session_development``
-    points. The session AP is charged by the handler, not by
+    ``total_development`` points of development in ``skill``, and the coin
+    (``coin_cost`` coppers) and one Golden Hare are paid once, when enrolling.
+    Each session (the ``run_skill_course_offer`` handler in ``effects.py``)
+    costs ``session_ap_cost`` AP and rolls ``check_type`` at
+    ``check_difficulty``; the training roll's outcome scales
+    ``session_development`` (through ``TrainingOutcomeAward``) to the points the
+    session adds. The session AP is charged by the handler, not by
     ``NPCServiceOffer.ap_cost`` (the generic pre-dispatch charge), so
     ``clean()`` requires that field to be 0, as ``TrainOfferDetails`` does.
     No field has a default: every course is authored deliberately.
@@ -1058,13 +1060,13 @@ class SkillCourseOfferDetails(SharedMemoryModel):
         help_text="Development points the whole course grants when finished."
     )
     session_development = models.PositiveIntegerField(
-        help_text="Most development points one session can add.",
+        help_text="Development points a session adds, scaled by the training roll's outcome.",
     )
     session_ap_cost = models.PositiveSmallIntegerField(
         help_text="Action points the learner pays for each session.",
     )
     coin_cost = models.PositiveIntegerField(
-        help_text="Coppers the learner pays for each session, credited to the teacher's house.",
+        help_text="Coppers the learner pays once, when enrolling, credited to the teacher's house.",
     )
     check_type = models.ForeignKey(
         "arxii.CheckType",

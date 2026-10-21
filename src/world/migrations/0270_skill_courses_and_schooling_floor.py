@@ -63,7 +63,7 @@ class Migration(migrations.Migration):
                 (
                     "session_development",
                     models.PositiveIntegerField(
-                        help_text="Most development points one session can add."
+                        help_text="Development points a session adds, scaled by the training roll's outcome."
                     ),
                 ),
                 (
@@ -75,7 +75,7 @@ class Migration(migrations.Migration):
                 (
                     "coin_cost",
                     models.PositiveIntegerField(
-                        help_text="Coppers the learner pays for each session, credited to the teacher's house."
+                        help_text="Coppers the learner pays once, when enrolling, credited to the teacher's house."
                     ),
                 ),
                 (
