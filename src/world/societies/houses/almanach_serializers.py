@@ -108,7 +108,7 @@ class AlmanachSuccessionLawSerializer(serializers.Serializer):
 
 
 class AlmanachHouseFacetSerializer(serializers.Serializer):
-    """One picked aspect (mirrors ``almanach_reads.facet_payload``): ``being_name``
+    """One picked facet (mirrors ``almanach_reads.facet_payload``): ``being_name``
     is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
     entry it opens."""
 

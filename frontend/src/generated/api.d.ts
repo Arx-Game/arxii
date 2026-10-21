@@ -27700,7 +27700,7 @@ export interface components {
       observances: components['schemas']['AlmanachHouseObservance'][];
     };
     /**
-     * @description One picked aspect (mirrors ``almanach_reads.aspect_facet``): ``being_name``
+     * @description One picked facet (mirrors ``almanach_reads.facet_payload``): ``being_name``
      *     is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
      *     entry it opens.
      */
@@ -35614,7 +35614,7 @@ export interface components {
     };
     /**
      * @description One picked identity facet on the house block (#2079; mirrors
-     *     ``almanach_reads.aspect_facet``). ``being_name`` is the god or totem the answer
+     *     ``almanach_reads.facet_payload``). ``being_name`` is the god or totem the answer
      *     is (#4205), ``target_entry_id`` the one Codex entry it opens.
      */
     HouseFacet: {
