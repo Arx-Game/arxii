@@ -21,7 +21,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { useInvocationOptions } from '../queries';
 import { bonusLine } from '../invocationText';
-import type { InvocationChoice, InvocationOption, WornMeaning } from '../types';
+import type { InvocationChoice, InvocationOption, WornMeaning, WornPiece } from '../types';
 
 /** The line a player may attach is one line, matching the server's limit. */
 const LINE_MAX_LENGTH = 200;
@@ -83,6 +83,15 @@ function DifficultyBreakdown({ option }: { option: InvocationOption }) {
  * the wearer, whether it counts, and the ease it gives. The wearer sees her own points; a
  * bought piece with no history is listed as adding nothing.
  */
+/** What the Counts cell says: the ease, or why the piece adds none. */
+function countsText(piece: WornPiece, countedMax: number): string {
+  if (piece.counted) {
+    return `${piece.points} points x ${piece.ease_per_point} = eased ${piece.ease}`;
+  }
+  if (piece.points > 0) return `0 (only the ${countedMax} with the most meaning count)`;
+  return '0';
+}
+
 function WornPieces({ worn, beingName }: { worn: WornMeaning; beingName: string }) {
   if (worn.pieces.length === 0) return null;
   return (
@@ -123,9 +132,7 @@ function WornPieces({ worn, beingName }: { worn: WornMeaning; beingName: string 
                   </span>
                 </td>
                 <td className="py-1 tabular-nums" data-testid="invocation-worn-counts">
-                  {piece.counted
-                    ? `${piece.points} points x ${piece.ease_per_point} = eased ${piece.ease}`
-                    : '0'}
+                  {countsText(piece, worn.items_counted_max)}
                 </td>
               </tr>
             ))}
