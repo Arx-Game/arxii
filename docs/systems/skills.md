@@ -109,6 +109,12 @@ cluster), so no skill is a landmine with no purchasable unlock out of the box.
 - Total: 110 points (default)
 - Cost: 10 per tier (flat rate)
 - Specialization unlock: Parent skill must reach 30 (configurable)
+- **Magic skills are not bought with these points (#4457, ADR-4457-A).** A skill in the MAGIC
+  trait category (`magic_category_skills()`), or a specialization of one, is refused by the skills
+  stage (`CharacterDraft.validate_path_skills`, called by `get_skill_allocation_errors`, naming each, message
+  `MAGIC_SKILL_POINTS_REFUSAL`). They start at the level of the Tradition schooling stance the
+  player picked (`SchoolingLine.magic_skill_floor`), or untrained; see `docs/systems/magic.md`,
+  "Tradition training and Academy skill courses".
 
 ---
 
@@ -229,6 +235,8 @@ per `(character, skill)` and `(character, specialization)`.
 | `remove_training_allocation(allocation)` | Deletes an allocation |
 | `calculate_training_development(allocation)` | Computes development points from the training formula |
 | `process_weekly_training()` | Processes all allocations, awards dev points, consumes AP |
+| `train_skill(sheet, skill, dev_points, *, description, stop_at_boundary=False) -> SkillTrainingResult` | The one writer for development from training (#4457): creates the sheet's row at `DP_BASE_LEVEL` (10) when it has none, applies the points through `_apply_development_to_skill`, writes the `DevelopmentTransaction` for the points applied. The skill branch of `process_weekly_training()` and Academy skill courses both call it. With `stop_at_boundary=True` the points are clamped to `points_to_next_boundary`, so nothing dissipates; the caller keeps the excess. `SkillTrainingResult` (`world/skills/types.py`) carries `old_value`, `new_value`, `points_applied`, `plateau_message` |
+| `points_to_next_boundary(skill_value) -> int or None` | Development the skill can take before it parks at the next XP boundary (19, 29, 39, 49): unpaid rust, then each level's cost up to the boundary, less banked points. A skill already at a boundary can take only its rust; `None` above 49 (#4457) |
 | `apply_weekly_rust(trained_skills)` | Adds rust to untrained skills |
 | `set_skill_trait(sheet, skill, value, source)` / `set_skill_sheet_value(sheet, skill, value)` / `reconcile_skill_stores(sheet, skill)` | Keep a skill's two stores equal (#4496) |
 | `run_weekly_skill_cron()` | Orchestrator: training then rust; registered as `skills.weekly_training` in `world/game_clock/tasks.py` |
@@ -291,5 +299,9 @@ applies weekly rust to skills that received no training (or other development) t
   staff choose which skills magical rolls add. A skill in the MAGIC trait category is not offered as
   a character's Anima Check skill (the cast would count it twice). See `docs/systems/magic.md`,
   "Magical skills".
+- **NPC services** (#4457): an Academy skill course (`SKILL_COURSE` offer) develops a skill through
+  `train_skill(..., stop_at_boundary=True)`, so development that would run past an XP boundary stays
+  in the course rather than dissipating as weekly training's does. See `docs/systems/magic.md`,
+  "Tradition training and Academy skill courses".
 - **Action Points**: Training allocations consume weekly AP from `ActionPointPool`
 - **Progression**: `process_weekly_training()` writes `DevelopmentTransaction` records (source `TRAINING`, reason `SYSTEM_AWARD`)

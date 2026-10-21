@@ -1794,6 +1794,7 @@
   - detected_traps <- room_features.Trap
   - prepared_ground <- room_features.PreparedGround
   - recipe_knowledge <- items.CharacterRecipeKnowledge
+  - skill_course_enrollments <- npc_services.SkillCourseEnrollment
   - expulsion_bars <- npc_services.ExpulsionBar
   - material_buckets <- items.MaterialBucket
   - material_grants_received <- items.OrgMaterialLedgerEntry
@@ -7377,6 +7378,7 @@
   - permit_offer_details <- npc_services.PermitOfferDetails
   - loan_offer_details <- npc_services.LoanOfferDetails
   - train_offer_details <- npc_services.TrainOfferDetails
+  - skill_course_offer_details <- npc_services.SkillCourseOfferDetails
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
   - summonses <- npc_services.OfferSummons
   - styling_offer_details <- npc_services.StylingOfferDetails
@@ -7456,6 +7458,20 @@
 
 ### RegardEventConfig
 
+### SkillCourseEnrollment
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - course -> npc_services.SkillCourseOfferDetails [FK]
+  - last_session_week -> game_clock.GameWeek [FK] (nullable)
+
+### SkillCourseOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - skill -> skills.Skill [FK]
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - enrollments <- npc_services.SkillCourseEnrollment
+
 ### StaffingProfile
 **Foreign Keys:**
   - building_kind -> buildings.BuildingKind [OneToOne]
@@ -7485,6 +7501,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' - Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' - Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' - Evaluate a predicate rule tree against an acting-character context.`
+- `format_offer_price(price: 'OfferPrice') -> 'str' - The trainer-menu line for ``price``, the same words on the web and in telnet (#4457).`
 - `incur_npc_debt(standing: 'NPCStanding', amount: 'int', *, current_affection: 'int', current_missions_completed: 'int') -> 'NPCStanding' - Add ``amount`` to ``standing.debt`` and re-stamp the repayment baseline.`
 - `mission_pool_count(*, role: 'NPCRole', persona: 'Persona', npc_persona: 'Persona | None') -> 'int' - POOL offer count to surface for ``persona`` at this NPC (#726, #1020).`
 - `outstanding_debt(standing: 'NPCStanding', *, current_affection: 'int', current_missions_completed: 'int', affection_divisor: 'int', mission_divisor: 'int') -> 'int' - Derive-on-read: net ``standing.debt`` against progress since the baseline.`
@@ -9245,6 +9262,7 @@
   - technique_skill_gifts <- magic.Gift
   - override_techniques <- magic.Technique
   - magic_activity_rows <- magic.MagicActivitySkill
+  - course_offers <- npc_services.SkillCourseOfferDetails
   - specializations <- skills.Specialization
   - character_values <- skills.CharacterSkillValue
   - path_suggestions <- skills.PathSkillSuggestion
@@ -9278,6 +9296,7 @@
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' - Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
 - `is_skill_at_xp_boundary(value: 'int') -> 'bool' - Public wrapper for :func:`_is_at_xp_boundary` (#2115).`
+- `points_to_next_boundary(skill_value: 'CharacterSkillValue') -> 'int | None' - Development the skill can take before it parks at its next XP boundary.`
 - `process_weekly_training() -> 'dict[int, set[int]]' - Process all training allocations for the weekly tick.`
 - `purchase_skill_breakthrough(character: 'ObjectDB', skill: 'Skill') -> 'tuple[bool, str]' - Spend XP to break through a skill's XP-boundary plateau (#2115).`
 - `reconcile_skill_stores(sheet: 'CharacterSheet', skill: 'Skill') -> 'int' - Bring a skill's two stores up to the higher of the two, and return that rating.`
@@ -9288,6 +9307,7 @@
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
 - `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
 - `total_allocated_training_ap(character_id: 'int', exclude_pk: 'int | None' = None) -> 'int' - Get total AP currently allocated across all training for a character.`
+- `train_skill(sheet: 'CharacterSheet', skill: 'Skill', dev_points: 'int', *, description: 'str', stop_at_boundary: 'bool' = False) -> 'SkillTrainingResult' - Develop a skill from training and record the audit transaction.`
 - `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object>) -> 'TrainingAllocation' - Update an existing training allocation.`
 
 
