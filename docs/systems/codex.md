@@ -49,6 +49,7 @@ from world.codex.constants import CodexKnowledgeStatus
 | `PathCodexGrant` | Codex entries granted by a Path choice | `path`, `entry` |
 | `DistinctionCodexGrant` | Codex entries granted by a Distinction | `distinction`, `entry` |
 | `TraditionCodexGrant` | Codex entries granted by a Tradition | `tradition`, `entry`, `is_perspective` |
+| `RealmCodexGrant` | Codex entries public within a realm (#4531): every character who began there knows them, present and future beginnings alike; granted at finalize from the starting area's realm (`grant_realm_codex`) and to current holders through `Profile.origin_realm` | `realm`, `entry` |
 | `OrganizationCodexGrant` | Codex entries an Organization's membership knows (#3780, the "Obscure" tier; granted on join by `apply_organization_codex_grants`, every membership-creating admin path included per #3788, and to current members when created by `grant_organization_entry_to_members`) | `organization`, `entry` |
 
 Species are the exception: there is no `SpeciesCodexGrant` table. `Species.codex_entry`
@@ -58,8 +59,8 @@ its own entry *and* every ancestor's — see `docs/systems/species.md`.
 
 Every grant model carries `holder_roster_entries()`, returning the roster entries of
 everyone already in its group (a Beginnings' holders read `Profile.beginnings` on the
-true profile, a Tradition's read active membership, an Organization's read active
-membership, and so on); `world.codex.services.grant_to_current_holders(grant)` hands the
+true profile, a Realm's read `Profile.origin_realm` on it, a Tradition's read active
+membership, an Organization's read active membership, and so on); `world.codex.services.grant_to_current_holders(grant)` hands the
 grant's entry to each of them and returns how many first learned it (#3775). Species,
 which has no grant table, gets the parallel pair `species_holder_roster_entries(entry)`
 and `grant_entry_to_species_holders(entry)` in the same module.

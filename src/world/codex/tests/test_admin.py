@@ -7,7 +7,7 @@ from evennia_extensions.factories import AccountFactory
 from world.character_creation.factories import BeginningsFactory
 from world.character_sheets.factories import ProfileBeginningsFactory
 from world.clues.factories import ClueFactory, RoomClueFactory
-from world.codex.factories import CodexEntryFactory
+from world.codex.factories import CodexEntryFactory, RealmCodexGrantFactory
 from world.codex.models import BeginningsCodexGrant, CharacterCodexKnowledge
 from world.roster.factories import RosterEntryFactory
 
@@ -24,6 +24,10 @@ class CodexEntryAdminTests(TestCase):
         cls.grant = BeginningsCodexGrant.objects.create(
             beginnings=cls.beginnings, entry=cls.granted, is_perspective=True
         )
+        # Reached by a realm grant alone (#4531): the Reach filter and the Known via
+        # column must agree that this one is granted, not an orphan.
+        cls.realm_granted = CodexEntryFactory(name="The Umbral Succession")
+        cls.realm_grant = RealmCodexGrantFactory(entry=cls.realm_granted)
         cls.clued = CodexEntryFactory(name="Under the Catacombs")
         cls.clue = ClueFactory(target_codex_entry=cls.clued, slug="catacomb-ledger")
         cls.unreachable = CodexEntryFactory(name="The Citadel of Absolution")
@@ -39,6 +43,13 @@ class CodexEntryAdminTests(TestCase):
         self.assertIn("1 beginnings", body)
         self.assertIn("(perspective: The Blessed)", body)
 
+    def test_known_via_counts_a_realm_grant(self):
+        response = self.client.get(CHANGELIST)
+        by_name = {entry.name: entry for entry in response.context["cl"].result_list}
+        known_via = response.context["cl"].model_admin.known_via
+        self.assertEqual(known_via(by_name[self.realm_granted.name]), "1 realm")
+        self.assertEqual(known_via(by_name[self.unreachable.name]), "unreachable")
+
     def test_reach_filter_unreachable(self):
         response = self.client.get(CHANGELIST, {"reach": "unreachable"})
         names = [entry.name for entry in response.context["cl"].result_list]
@@ -47,7 +58,7 @@ class CodexEntryAdminTests(TestCase):
     def test_reach_filter_buckets(self):
         for value, expected in (
             ("public", {self.public.name}),
-            ("granted", {self.granted.name}),
+            ("granted", {self.granted.name, self.realm_granted.name}),
             ("clue", {self.clued.name}),
         ):
             response = self.client.get(CHANGELIST, {"reach": value})
@@ -111,6 +122,7 @@ class CodexEntryAdminTests(TestCase):
         self.assertIn("beginnings_grants", body)
         self.assertIn("tradition_grants", body)
         self.assertIn("organization_grants", body)
+        self.assertIn("realm_grants", body)
 
     def test_change_form_clue_inline_shows_placements(self):
         RoomClueFactory(clue=self.clue)
