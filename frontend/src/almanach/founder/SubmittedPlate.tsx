@@ -10,6 +10,7 @@
  * exists).
  */
 import type { HouseClaimStatus } from '@/character-creation/api';
+import { houseHeading } from '../copy';
 
 /** `HouseClaimStatus.status` is optional on the wire (a pre-review row
  * might not carry one) — this component always has a real status to show
@@ -34,7 +35,7 @@ export function SubmittedPlate({ houseName, status, reviewNote }: SubmittedPlate
     <div className="night">
       <h3>Submitted</h3>
       <p>
-        House {houseName} · {STATUS_TEXT[status]}
+        {houseHeading(houseName)} · {STATUS_TEXT[status]}
       </p>
       {reviewNote != null && reviewNote !== '' && <p>{reviewNote}</p>}
     </div>

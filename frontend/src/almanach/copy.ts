@@ -20,6 +20,14 @@ export const FOUNDER_CRUMB = ['Character creation', 'Lineage', 'Define a house']
 
 export const CLAIM = 'Claim';
 
+/** "House <name>" for a heading, without doubling the word when the name
+ * already carries it: the seed families are named "House Veyrane PLACEHOLDER"
+ * and a staff member typed "House Katta" into Create Family (#4549). */
+export function houseHeading(name: string): string {
+  const trimmed = name.trim();
+  return /^house\b/i.test(trimmed) ? trimmed : `House ${trimmed}`;
+}
+
 /** House Document (#3983 Task 9) chrome copy — plates S-III to S-VIII. */
 
 /** `house.house_state`, as `HouseChapter`'s state toggle labels it. */

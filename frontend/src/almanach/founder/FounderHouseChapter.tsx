@@ -25,6 +25,7 @@ import { useId } from 'react';
 
 import type { HouseTemplateOption } from '@/character-creation/api';
 
+import { houseHeading } from '../copy';
 import { tierNoun } from '../ladder/tree';
 import { ObservanceRows } from '../ObservanceRows';
 import { useCharter } from '../queries';
@@ -144,7 +145,7 @@ export function FounderHouseChapter({
   return (
     <main className="chapter">
       <h3>
-        House {draft.house_name}{' '}
+        {houseHeading(draft.house_name)}{' '}
         <span className="tier">
           {tierNoun(seatTier, 1)} of {seatName}
         </span>

@@ -41,7 +41,7 @@ import { Link } from 'react-router-dom';
 
 import { useDraft } from '@/world-builder/document/useDraft';
 
-import { HOUSE_STATES, GENTRY_LUXEN_ONLY } from '../copy';
+import { HOUSE_STATES, GENTRY_LUXEN_ONLY, houseHeading } from '../copy';
 import { ObservanceRows, type ObservanceRow } from '../ObservanceRows';
 import type { AlmanachHouseDocumentHouse } from '../types';
 
@@ -121,7 +121,7 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
 
   return (
     <main className="chapter">
-      <h3>House {house.name}</h3>
+      <h3>{houseHeading(house.name)}</h3>
       <div className="row3">
         <div className="field">
           <span className="label">state</span>

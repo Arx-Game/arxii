@@ -237,3 +237,11 @@ test('sigil is two rows without a handle, description is six, and the savebar ca
   const save = screen.getByRole('button', { name: 'Save' });
   expect(save.parentElement?.children).toHaveLength(1);
 });
+
+test('a house whose name already says House is not headed House House (#4549)', () => {
+  const named: HouseDocumentPayload = { ...doc, house: { ...doc.house, name: 'House Katta' } };
+  vi.mocked(queries.useHouseDocument).mockReturnValue({ data: named, isLoading: false } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.getByRole('heading', { name: 'House Katta' })).toBeInTheDocument();
+  expect(screen.queryByText(/House House/)).not.toBeInTheDocument();
+});
