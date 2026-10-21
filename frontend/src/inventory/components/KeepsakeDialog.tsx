@@ -49,6 +49,12 @@ const SUBJECT_LABEL: Record<KeepsakeSubjectKind, string> = {
   place: 'The place',
 };
 
+/** How long the item has been held, as the form's chip says it. */
+function carriedText(days: number): string {
+  if (days >= 60) return `${Math.round(days / 30)} months`;
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
 /** The pk picked from a listed kind's select, or undefined while nothing is chosen. */
 function listedId(value: string): number | undefined {
   return value === '' ? undefined : Number(value);
@@ -226,15 +232,14 @@ export function KeepsakeDialog({
             <DialogTitle>{item.display_name}</DialogTitle>
             <DialogDescription>Keep this as a keepsake.</DialogDescription>
           </DialogHeader>
-          {state.trophy_of.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {state.trophy_of.map((title) => (
-                <Badge key={title} variant="secondary">
-                  Trophy of {title}
-                </Badge>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-wrap gap-1.5" data-testid="keepsake-chips">
+            {state.trophy_of.map((title) => (
+              <Badge key={title} variant="secondary">
+                Trophy of {title}
+              </Badge>
+            ))}
+            <Badge variant="outline">carried {carriedText(state.carried_days)}</Badge>
+          </div>
 
           <div className="space-y-2">
             <p className="text-sm font-medium">It stands for</p>

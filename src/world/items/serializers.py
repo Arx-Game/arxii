@@ -376,6 +376,7 @@ class KeepsakeStateSerializer(serializers.Serializer):
         child=KeepsakeSubjectChoiceSerializer(many=True), read_only=True
     )
     trophy_of = serializers.ListField(child=serializers.CharField(), read_only=True)
+    carried_days = serializers.IntegerField(read_only=True)
 
 
 class CraftableTemplateSerializer(serializers.ModelSerializer):

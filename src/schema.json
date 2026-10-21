@@ -64317,7 +64317,11 @@ components:
           items:
             type: string
           readOnly: true
+        carried_days:
+          type: integer
+          readOnly: true
       required:
+      - carried_days
       - counts_now
       - keepsake
       - status

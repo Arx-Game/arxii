@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 
 from world.items.constants import KeepsakeSubject
 from world.items.exceptions import KeepsakeRefused
@@ -294,12 +295,11 @@ class KeepsakeState:
     status: KeepsakeStatus
     subjects: dict[str, list[tuple[int, str]]]
     trophy_of: list[str]
+    carried_days: int
 
 
 def keepsake_state(sheet: CharacterSheet, item: ItemInstance) -> KeepsakeState:
     """The keepsake form's data for ``item`` held by ``sheet``."""
-    from django.utils import timezone  # noqa: PLC0415
-
     status = keepsake_status(sheet)
     keepsake = Keepsake.objects.filter(item_instance=item, character_sheet=sheet).first()
     counts_now = (
@@ -311,4 +311,5 @@ def keepsake_state(sheet: CharacterSheet, item: ItemInstance) -> KeepsakeState:
         status=status,
         subjects=subject_choices(sheet),
         trophy_of=[deed.title for deed in item.cached_trophy_deeds],
+        carried_days=(timezone.now() - item.held_since).days,
     )

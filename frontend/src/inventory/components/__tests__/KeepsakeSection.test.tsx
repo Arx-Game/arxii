@@ -40,6 +40,7 @@ function baseState(overrides: Partial<KeepsakeState> = {}): KeepsakeState {
       organization: [],
     },
     trophy_of: [],
+    carried_days: 70,
     ...overrides,
   };
 }
@@ -74,6 +75,7 @@ describe('KeepsakeSection', () => {
 
     const form = screen.getByTestId('keepsake-form');
     expect(within(form).getByText('It stands for')).toBeInTheDocument();
+    expect(within(form).getByTestId('keepsake-chips')).toHaveTextContent('carried 2 months');
     expect(form).toHaveTextContent(
       'Keepsakes: 2 of 5 used. A keepsake counts 14 days after you declare it. Its points come from the subject you choose. Nobody scores the words.'
     );

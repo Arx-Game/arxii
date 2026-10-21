@@ -391,7 +391,6 @@ class KeepsakeAdmin(admin.ModelAdmin):
         "subject_kind",
         "subject_name",
         "shown_on_examine",
-        "created_at",
     )
     list_filter = ("subject_kind", "shown_on_examine")
     search_fields = ("item_instance__custom_name", "item_instance__template__name")
@@ -405,7 +404,6 @@ class KeepsakeAdmin(admin.ModelAdmin):
         "subject_persona",
     )
     list_select_related = ("item_instance", "item_instance__template", "character_sheet")
-    readonly_fields = ("created_at",)
     fieldsets = (
         (
             "Keepsake",
@@ -415,7 +413,6 @@ class KeepsakeAdmin(admin.ModelAdmin):
                     "character_sheet",
                     "text",
                     "shown_on_examine",
-                    "created_at",
                 )
             },
         ),

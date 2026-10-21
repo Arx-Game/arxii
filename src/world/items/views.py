@@ -660,6 +660,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
                 for kind, rows in state.subjects.items()
             },
             "trophy_of": state.trophy_of,
+            "carried_days": state.carried_days,
         }
         return Response(KeepsakeStateSerializer(payload).data)
 

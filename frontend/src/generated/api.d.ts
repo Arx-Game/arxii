@@ -36715,6 +36715,7 @@ export interface components {
         [key: string]: components['schemas']['KeepsakeSubjectChoice'][];
       };
       readonly trophy_of: string[];
+      readonly carried_days: number;
     };
     KeepsakeStatus: {
       readonly used: number;
