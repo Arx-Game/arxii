@@ -178,8 +178,8 @@ test('an option opens the one entry it targets, named for the god when it is one
   // A lore answer links its own entry as "codex" (the succession line has one too, so
   // match by target); a god answer links the god's page by name.
   const codexLinks = screen.getAllByRole('link', { name: 'codex' });
-  expect(codexLinks.map((link) => link.getAttribute('href'))).toContain('/codex/4');
-  expect(screen.getByRole('link', { name: 'Calyx' })).toHaveAttribute('href', '/codex/5');
+  expect(codexLinks.map((link) => link.getAttribute('href'))).toContain('/codex?entry=4');
+  expect(screen.getByRole('link', { name: 'Calyx' })).toHaveAttribute('href', '/codex?entry=5');
 });
 
 test('a day of remembrance is added, written and removed on the draft (#4206)', async () => {

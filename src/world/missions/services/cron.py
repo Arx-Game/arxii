@@ -71,6 +71,7 @@ def _grant_legend_points(row: MissionRewardQueue) -> None:
         mission_settlement_context,
         priced_legend_value,
     )
+    from world.missions.services.rewards import link_mission_trophies  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
     from world.societies.models import LegendSourceType  # noqa: PLC0415
     from world.societies.services import create_solo_deed  # noqa: PLC0415
@@ -96,13 +97,15 @@ def _grant_legend_points(row: MissionRewardQueue) -> None:
         name=_MISSION_SOURCE_TYPE_NAME,
         defaults={"description": "Deeds done on contract — missions run and survived."},
     )
-    create_solo_deed(
+    entry = create_solo_deed(
         persona,
         f"Mission deed: {template.name}",
         source_type,
         value,
         earned_at_level=station,
     )
+    # #4530: an item this run granted becomes a trophy of the deed it just minted.
+    link_mission_trophies(line.deed, extra_entries=[entry])
 
 
 def _grant_resonance(row: MissionRewardQueue) -> None:

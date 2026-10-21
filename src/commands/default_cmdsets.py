@@ -129,6 +129,7 @@ from commands.identification import CmdIdentify  # #1107
 from commands.imbue import CmdImbue
 from commands.investigation import CmdSearch  # #1866
 from commands.journals import CmdJournal
+from commands.keepsakes import CmdKeepsake
 from commands.language import CmdSpeak, CmdTrainLanguage  # #2993
 from commands.locations import CmdRoom
 from commands.market import CmdMarket
@@ -538,6 +539,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #4333 slice 2 — pledges to a being, and sacrifices at its shrine or temple.
             CmdPledge,
             CmdSacrifice,
+            CmdKeepsake,
             # #1511 — organization membership lifecycle.
             CmdOrg,
             # #3293 — appeals to organizations.

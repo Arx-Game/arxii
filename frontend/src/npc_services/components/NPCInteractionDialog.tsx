@@ -118,12 +118,17 @@ export function NPCInteractionDialog({
               <Button
                 key={offer.id}
                 variant="outline"
-                className="justify-between"
+                className="h-auto flex-wrap justify-between whitespace-normal py-2"
                 disabled={busy}
                 onClick={() => pick(offer.id)}
               >
                 <span>{offer.label}</span>
                 {offer.is_final && <Badge variant="secondary">concludes</Badge>}
+                {offer.price && (
+                  <span className="basis-full text-left text-sm font-normal text-muted-foreground">
+                    {offer.price.display}
+                  </span>
+                )}
               </Button>
             ))}
           </div>

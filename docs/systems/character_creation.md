@@ -15,6 +15,12 @@ from world.character_creation.constants import (
     StartingAreaAccessLevel,  # ALL, STAFF_ONLY
     ApplicationStatus,        # SUBMITTED, IN_REVIEW, REVISIONS_REQUESTED, APPROVED, DENIED, WITHDRAWN
     CommentType,              # MESSAGE, STATUS_CHANGE
+    SCHOOLING_MAX_RANK_BY_STATE,  # {LIVING_MASTERS: 2, TEACHERS_GONE: 1}: the highest
+                              #   schooling stance each tradition state opens; SELF_TAUGHT
+                              #   is absent, so it opens none (#4457)
+    schooling_max_rank,       # (state) -> int | None: the lookup above
+    MAGIC_SKILL_POINTS_REFUSAL,  # the skills-stage message prefix for CG points in a
+                              #   Magic skill or one of its specializations (#4457)
 )
 ```
 
@@ -59,7 +65,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 |-------|---------|------------|
 | `BeginningTradition` | Maps traditions to beginnings, with which slate line each reads (#3675); `CreditedContent` because `own_wording` is player-facing prose | `beginning`, `tradition`, `state`, `own_wording`, `sort_order`, `written_by`, `written_on`, `reviewed_by`, `reviewed_on` |
 | `TraditionStateLine` | The standard line for one `TraditionState` and the drawback it carries (#3675) | `state`, `entry_line`, `carries` |
-| `SchoolingLine` | One stance under a LIVING_MASTERS tradition and what it grants (#3675) | `rank`, `name`, `player_line`, `grants` |
+| `SchoolingLine` | One stance under a tradition whose state opens stances (LIVING_MASTERS ranks 0-2, TEACHERS_GONE ranks 0-1, #4457) and what it grants (#3675); `magic_skill_floor` is the level it lifts every Magic skill to at finalize (#4457; check constraint: rank 0 carries 0) | `rank`, `name`, `player_line`, `grants`, `magic_skill_floor` |
 | `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`/`feature_rows` (#3739 — Appearance's second opener: offered on every trait row and marking rather than under a section); `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `chapter_opener_fields`, `set_openers` |
 | `EnemyReason` | Why an enemy wants the character to fail, as staff wrote it once for every enemy (#3709); the enemy chapter's opener | `name`, `player_line`, `fits` (`EnemyReasonFits`: person/group/either), `sort_order`, `is_active`, credit |
 | `AppearanceSection` | A heading Appearance groups its offers under (#3709); one of the Appearance chapter's two openers | `name`, `player_line`, `sort_order`, credit |
@@ -92,7 +98,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | 3 | Lineage | The beginning's route exists (assigned with the beginning, #4395; none authored names the staff gap); family path resolved (claim: playable family of an offered kind in the area's realm; name: unique name; none: tarot card; with claim and name both offered and nothing chosen, the path resolves to name, #4024); every required shown prompt on that path answered (`get_lineage_errors`, #3617; a general write-in never shows, #4395). The life grids (#4124, #4395) and the kin rows are never required: a stage with nothing picked is a quiet one |
 | 5 | Path | Path selected (`get_path_errors`) |
 | 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
-| 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
+| 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). No points in a Magic skill or one of its specializations (#4457). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
 | 8 | Appearance | Age (within `age_bounds`, below), height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
 | 10 | Final Touches | Complete when CG points are in balance (`get_purse_errors`); the Actor's Sheet, goals, enemy, the Officially dead door (#4396) and Introductions are all optional (#3621), and the Distinctions stage is retired -- #3675, distinctions are offered per CG chapter now, see `world.character_creation.offers` |
@@ -149,6 +155,11 @@ draft.calculate_cg_points_breakdown()   # itemized [{category, item, cost}, ...]
 draft.calculate_final_stats()           # Dict[str, int] with bonuses applied
 draft.enforce_stat_caps()               # Clamp stats after distinction changes
 draft.get_expected_gift_count()         # Base 1 + bonus from distinctions
+draft.starting_magic_skill_floor        # int (property, #4457): the level every Magic skill
+                                         # starts at, from the schooling stance picked under
+                                         # Tradition Training (offers.schooling_magic_skill_floor);
+                                         # live on every call, never memoised; 0 when self-taught
+                                         # or at rank 0
 ```
 
 ### DraftApplication
@@ -274,6 +285,11 @@ from world.character_creation.offers import (
                                #   "is this the tradition-agnostic default", never a
                                #   name match
     slate_state,               # (beginning, tradition) -> TraditionState | None
+    schooling_magic_skill_floor,  # (draft) -> int: the highest magic_skill_floor among
+                               #   the Tradition Step offers the draft picked, counting a
+                               #   pick only when its schooling line grants the very
+                               #   distinction the pick holds; 0 when the slate state
+                               #   opens no stances (#4457)
     self_taught_drawback,      # () -> Distinction | None: the drawback the SELF_TAUGHT
                                #   TraditionStateLine carries, if any
     entry_price,                # (entry, distinction) -> int: 0 if any source arrived
@@ -297,6 +313,20 @@ on each row. `reconcile_offer_picks` drops a per-feature pick whose feature is g
 (a deleted marking) or whose unlock is gone (the axes bought under it), refunding
 both. Anything that is not per-feature keys as `(id, "", 0)` and is unaffected. See
 [distinctions.md](distinctions.md) "Distinctive features".
+
+**Which stances a state opens, and the Magic skill floor (#4457, ADR-4457-A).** The Tradition Step
+offers are the schooling stances. `_opener_satisfied` opens an offer when its `schooling_line.rank`
+is at most `schooling_max_rank(slate_state)`: a LIVING_MASTERS Tradition opens ranks 0 to 2, a
+TEACHERS_GONE one ranks 0 and 1 (its teachers were lost before anyone could finish), a SELF_TAUGHT
+one none; an offer saved without its schooling line is never open. `TraditionSerializer.get_schooling`
+cuts the stance rows to the same ranks, and `reconcile_offer_picks` drops a pick the state no longer
+opens. Each stance row carries `magic_skill_floor`; the draft's `starting_magic_skill_floor` is the
+floor of the stance it picked, `GET /api/character-creation/drafts/{id}/` returns it read-only, and
+`_create_skill_values` writes it as the value of every `magic_category_skills()` skill at finalize.
+The skills stage refuses points in a Magic skill or one of its specializations
+(`CharacterDraft._check_no_magic_points`, from `validate_path_skills`), so Tradition Training is the
+only creation source of Magic skills. Full account: [magic.md](magic.md), "Tradition training and
+Academy skill courses".
 
 **Reconcile-on-patch:** `CharacterDraftViewSet.perform_update` calls
 `reconcile_offer_picks(draft)` after every draft save, and `select-tradition` calls it
@@ -533,7 +563,7 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 - `GET /api/character-creation/pronouns/` - Pronoun sets
 - `GET /api/character-creation/cg-budgets/` - Active CG point budget
 - `GET /api/character-creation/paths/` - Active Prospect-stage paths
-- `GET /api/character-creation/traditions/?beginning_id=X` - Traditions for a beginning
+- `GET /api/character-creation/traditions/?beginning_id=X` - Traditions for a beginning; each carries `schooling` rows cut to the stances its state opens, each with `magic_skill_floor` (#4457)
 - `GET /api/character-creation/tarot-cards/` - Tarot cards for naming ritual
 - `GET /api/character-creation/form-options/{species_id}/` - Form traits for a species
 - `GET /api/character-creation/can-create/` - Eligibility check

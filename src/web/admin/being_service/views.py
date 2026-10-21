@@ -1,5 +1,6 @@
 """The Being Service builder (#4333 slice 2, design 10): one being's favored
-resonances, favored facets (with their worn rates, #4520) and pledge types, written together.
+resonances, favored facets (with their worn rates, #4520), pledge types and the items its
+pledges and rites ask for (#4530), written together.
 
 Pattern: the Standoff Profile and Distinction Builders. One page writes every
 ``BeingResonance``, the being's ``BeingFacet`` rows and every ``Pledge`` in one
@@ -18,6 +19,7 @@ from dataclasses import dataclass
 
 from django.contrib import admin, messages
 from django.db import transaction
+from django.db.models import Q
 from django.forms import Media
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -31,10 +33,18 @@ from web.admin.being_service.forms import (
     BeingFacetFormSet,
     BeingResonanceFormSet,
     PledgeFormSet,
+    RequestedItemFormSet,
 )
 from web.admin.tuning.views import superuser_required
 from world.worship.favor_services import ensure_being_modifier_targets
-from world.worship.models import BeingFacet, BeingResonance, Pledge, WorshippedBeing
+from world.worship.invocation_services import get_devotion_config
+from world.worship.models import (
+    BeingFacet,
+    BeingResonance,
+    Pledge,
+    RequestedItem,
+    WorshippedBeing,
+)
 
 #: The submit button's name that stays on this page after saving; "Save" returns to
 #: the being's change page, as a stock change form does.
@@ -46,13 +56,21 @@ class _ServiceForms:
     resonances: BeingResonanceFormSet
     facets: BeingFacetFormSet
     pledges: PledgeFormSet
+    requests: RequestedItemFormSet
 
     @property
     def media(self) -> Media:
-        return self.resonances.media + self.facets.media + self.pledges.media
+        return self.resonances.media + self.facets.media + self.pledges.media + self.requests.media
 
     def is_valid(self) -> bool:
-        return all((self.resonances.is_valid(), self.facets.is_valid(), self.pledges.is_valid()))
+        return all(
+            (
+                self.resonances.is_valid(),
+                self.facets.is_valid(),
+                self.pledges.is_valid(),
+                self.requests.is_valid(),
+            )
+        )
 
 
 def _build_forms(request: HttpRequest, being: WorshippedBeing) -> _ServiceForms:
@@ -76,6 +94,14 @@ def _build_forms(request: HttpRequest, being: WorshippedBeing) -> _ServiceForms:
             instance=being,
             prefix="pledges",
             queryset=Pledge.objects.select_related("closing_rite__kind").order_by("pk"),
+        ),
+        requests=RequestedItemFormSet(
+            data,
+            being=being,
+            prefix="requests",
+            queryset=RequestedItem.objects.filter(Q(pledge__being=being) | Q(rite__being=being))
+            .select_related("item_template", "facet")
+            .order_by("pk"),
         ),
     )
 
@@ -120,6 +146,10 @@ def _render_page(
             "supplier_rail": live.facet_suppliers(being),
             "pledges": forms.pledges,
             "pledge_rows": pledge_rows,
+            "requests": forms.requests,
+            "request_supply": live.request_suppliers(being),
+            "request_max_points": get_devotion_config().requested_item_max_points,
+            "request_max_value": get_devotion_config().requested_item_max_value,
             "active_pledges": active_pledges,
             "modifier_rows": live.favor_modifier_rows(being),
             "media": forms.media,
@@ -138,7 +168,12 @@ def _forget_refused_edits(being: WorshippedBeing, forms: _ServiceForms) -> None:
     """Validating a ModelForm writes the posted values onto its instance, and those
     instances are the identity-mapped ones every other reader shares: drop them so
     the next reader loads what the database holds, not this refused edit."""
-    for form in (*forms.resonances.forms, *forms.facets.forms, *forms.pledges.forms):
+    for form in (
+        *forms.resonances.forms,
+        *forms.facets.forms,
+        *forms.pledges.forms,
+        *forms.requests.forms,
+    ):
         if form.instance.pk is not None:
             form.instance.flush_from_cache(force=True)
     being.flush_from_cache(force=True)
@@ -165,6 +200,7 @@ def being_service(request: HttpRequest, being_pk: int) -> HttpResponse:
         saved_pledges = forms.pledges.save()
         for pledge in saved_pledges:
             stamp_written(pledge, contributor)
+        forms.requests.save()
     messages.success(request, "Saved and credited to you.")
     if CONTINUE_BUTTON in request.POST:
         return redirect(reverse("admin_being_service", args=[being.pk]))

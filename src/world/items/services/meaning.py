@@ -7,13 +7,16 @@ the template's value, a fee, a sale price or the materials spent. A bought item 
 history has no meaning however much it cost.
 
 Signals: carried, gift, heirloom, own work, made by a tie, the commission loop's
-designed by you, made for, made from and shown (#4512), and resonance fed (#4520). The
-personal ones count only after the carry gate
-(``DevotionConfig.sacrifice_min_carried_days``); shown is earned in a scene and has no
-gate. Carried itself counts only alongside another signal, so holding a bought item is
-never meaning. When one person is the maker, the dedicator and the
-giver, their tie counts once, in the first of made by a tie, gift and made for that
-applies, and each further act adds a flat 1 (owner ruling, 2026-10-18).
+designed by you, made for, made from and shown (#4512), resonance fed (#4520), and trophy
+and keepsake with its match (#4530). The personal ones count only after the carry gate
+(``DevotionConfig.sacrifice_min_carried_days``); shown and trophy are earned in play and have
+no gate; a keepsake waits ``keepsake_wait_days`` from its declaration instead. Carried itself
+counts only alongside another signal, so holding a bought item is never meaning. A
+requested item's points are request-specific (they depend on the open pledge or the rite),
+so the caller adds that signal; matching a request is the one place an item's value is read,
+and only as a ceiling that keeps the request cheap. When one person is the maker, the
+dedicator and the giver, their tie counts once, in the first of made by a tie, gift and made
+for that applies, and each further act adds a flat 1 (owner ruling, 2026-10-18).
 """
 
 from __future__ import annotations
@@ -24,12 +27,12 @@ from typing import TYPE_CHECKING
 from django.db.models import Q
 from django.utils import timezone
 
-from world.items.constants import MeaningSignalKind, OwnershipEventType
+from world.items.constants import KeepsakeSubject, MeaningSignalKind, OwnershipEventType
 from world.items.types import ItemMeaning, MeaningSignal
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.items.models import ItemInstance
+    from world.items.models import ItemInstance, Keepsake
     from world.scenes.models import Persona
     from world.worship.models import DevotionConfig, WorshippedBeing
 
@@ -37,6 +40,10 @@ if TYPE_CHECKING:
 HEIRLOOM_MAX_POINTS = 3
 #: Points the gift signal gives before the giver's claimed tier is added.
 GIFT_BASE_POINTS = 1
+#: Points a keepsake gives before its subject's scale is added (#4530).
+KEEPSAKE_BASE_POINTS = 1
+#: Points on top of a keepsake whose subject is the being the reading is for (#4530).
+KEEPSAKE_BEING_MATCH_POINTS = 2
 
 
 def _persona_name(sheet: CharacterSheet) -> str:
@@ -303,6 +310,117 @@ def _resonance_fed(
     return MeaningSignal(MeaningSignalKind.RESONANCE_FED, points, "fed " + "; ".join(parts))
 
 
+def _trophy(
+    item: ItemInstance, holder: CharacterSheet, config: DevotionConfig
+) -> tuple[MeaningSignal | None, set[int]]:
+    """Trophy: 1 plus the deed's legend over ``trophy_legend_per_point``, up to
+    ``trophy_max_points``. The deed must be an active one credited to one of the holder's
+    personas, so a trophy of someone else's deed (a piece passed on) scores nothing for the
+    new holder. Earned by risk, so no carry gate. Also returns the deeds that counted."""
+    deeds = list(item.legend_deeds.filter(is_active=True, persona__character_sheet=holder))
+    if not deeds:
+        return None, set()
+    best = max(deeds, key=lambda deed: deed.get_total_value())
+    per_point = max(config.trophy_legend_per_point, 1)
+    points = min(1 + best.get_total_value() // per_point, config.trophy_max_points)
+    if points <= 0:
+        return None, set()
+    return (
+        MeaningSignal(MeaningSignalKind.TROPHY, points, f"won on {best.title}"),
+        {deed.pk for deed in deeds},
+    )
+
+
+def _subject_points(
+    keepsake: Keepsake, holder: CharacterSheet, config: DevotionConfig, trophy_deed_ids: set[int]
+) -> int:
+    """The points a keepsake's subject is worth: a tie's claimed tier, a deed's legend, or a
+    flat point. 0 when the subject no longer belongs to the holder. The words are never
+    read. A keepsake of a deed the item is also a trophy of adds a flat 1 on top of the
+    trophy (the trophy already scored the deed)."""
+    kind = keepsake.subject_kind
+    cap = config.keepsake_max_points
+    if kind == KeepsakeSubject.TIE:
+        side = keepsake.subject_relationship
+        if side is None or side.source_id != holder.pk:
+            return 0
+        return min(KEEPSAKE_BASE_POINTS + side.tier, cap)
+    if kind == KeepsakeSubject.DEED:
+        deed = keepsake.subject_deed
+        if deed is None or not deed.is_active or deed.persona.character_sheet_id != holder.pk:
+            return 0
+        if deed.pk in trophy_deed_ids:
+            return KEEPSAKE_BASE_POINTS
+        scale = deed.get_total_value() // max(config.keepsake_deed_legend_per_point, 1)
+        return min(KEEPSAKE_BASE_POINTS + scale, cap)
+    return min(KEEPSAKE_BASE_POINTS, cap)
+
+
+def _match_points(
+    item: ItemInstance,
+    keepsake: Keepsake,
+    holder: CharacterSheet,
+    being: WorshippedBeing | None,
+) -> tuple[int, str]:
+    """The keepsake match bonus and what matched: +``KEEPSAKE_BEING_MATCH_POINTS`` when the
+    subject is the being the reading is for, or the tie's claimed tier when the subject is
+    the tie with the item's giver or maker. (0, "") for neither."""
+    if keepsake.subject_kind == KeepsakeSubject.BEING:
+        if being is not None and keepsake.subject_being_id == being.pk:
+            return KEEPSAKE_BEING_MATCH_POINTS, f"stands for {being.name}"
+        return 0, ""
+    if keepsake.subject_kind != KeepsakeSubject.TIE:
+        return 0, ""
+    side = keepsake.subject_relationship
+    if side is None or side.target_id is None or side.tier <= 0:
+        return 0, ""
+    event = item.holding_event
+    giver_pk = (
+        event.from_character_sheet_id
+        if event is not None and event.event_type == OwnershipEventType.GIVEN
+        else None
+    )
+    maker_pks = {maker.pk for maker in _makers(item, holder)}
+    if side.target_id == giver_pk:
+        return side.tier, "the tie with the giver"
+    if side.target_id in maker_pks:
+        return side.tier, "the tie with the maker"
+    return 0, ""
+
+
+def keepsake_signals(  # noqa: PLR0913 - the reading context is keyword-only and distinct
+    item: ItemInstance,
+    holder: CharacterSheet,
+    config: DevotionConfig,
+    *,
+    being: WorshippedBeing | None = None,
+    trophy_deed_ids: set[int] | None = None,
+    ignore_wait: bool = False,
+) -> list[MeaningSignal]:
+    """The keepsake and keepsake-match signals of ``item`` for ``holder`` (#4530).
+
+    A keepsake counts once ``keepsake_wait_days`` have passed since it was declared, and
+    only for the character who declared it. It scores its **subject** (see
+    ``_subject_points``), never the words the player wrote. The detail names the subject.
+    ``ignore_wait`` reads what it will be worth once the wait has passed (the admin's rail).
+    """
+    keepsake = item.keepsakes.filter(character_sheet=holder).first()
+    if keepsake is None:
+        return []
+    if not ignore_wait and (timezone.now() - keepsake.created_at).days < config.keepsake_wait_days:
+        return []
+    points = _subject_points(keepsake, holder, config, trophy_deed_ids or set())
+    if points <= 0:
+        return []
+    signals = [
+        MeaningSignal(MeaningSignalKind.KEEPSAKE, points, f"stands for {keepsake.subject_name}")
+    ]
+    match, why = _match_points(item, keepsake, holder, being)
+    if match > 0:
+        signals.append(MeaningSignal(MeaningSignalKind.KEEPSAKE_MATCH, match, why))
+    return signals
+
+
 def item_meaning(
     item: ItemInstance,
     holder: CharacterSheet,
@@ -340,6 +458,12 @@ def item_meaning(
     shown = _shown(item, config)
     if shown is not None:
         signals.append(shown)
+    trophy, trophy_deed_ids = _trophy(item, holder, config)
+    if trophy is not None:
+        signals.append(trophy)
+    signals.extend(
+        keepsake_signals(item, holder, config, being=being, trophy_deed_ids=trophy_deed_ids)
+    )
     if signals and being is not None and days >= config.sacrifice_min_carried_days:
         fed = _resonance_fed(item, holder, being, config)
         if fed is not None:

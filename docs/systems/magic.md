@@ -631,6 +631,7 @@ nothing, the roll runs without the added skill; there is no placeholder data.
 | `cast_check_type(personal_check, technique)` | `services/magic_skills.py` | The ADR-0096 check type precedence (personal check, else the action template's), shared by `resolve_cast_check` and the combat action picker |
 | `resolve_cast_check(character, technique)` / `CastCheck` | `services/magic_skills.py`, `types/magic_skills.py` | Frozen `(check_type, extra_traits)` for a cast |
 | `involved_trait_ids(check_type, extra_traits)` / `cast_involved_trait_ids(cast_check)` | `services/magic_skills.py` | Trait ids a roll or cast involves, for thread pulls |
+| `magic_category_skills()` | `services/magic_skills.py` | The active skills whose trait category is MAGIC (#4457): the set a Tradition's schooling stance lifts at finalize, the points CG refuses, and the Anima Check filter's exclusion. Staff control the set by a skill's category, never by name |
 | `loss_of_self_terms(template)` | `world/conditions/services.py` | The `RESISTING_LOSS_OF_SELF` terms for a condition template whose category is marked, else none |
 
 **Technique skill resolution order.** The technique's own `skill`, if set; otherwise for a Major
@@ -679,21 +680,139 @@ a declared pull. A social action passes its template check plus the technique te
 is what it rolls; its declared pull is charged by `_charge_social_pull` against the same traits.
 
 **Character creation.** The Anima Check skill pick excludes skills whose trait category is MAGIC
-(`compute_magic_errors`, and the `AnimaCheckStep` options), so a magic skill is never counted twice
-on a cast. Existing characters keep the skill they picked.
+(`compute_magic_errors` through `magic_category_skills()`, and the `AnimaCheckStep` options), so a
+magic skill is never counted twice on a cast. Existing characters keep the skill they picked. Since
+#4457 a schooled character also starts with the Magic skills themselves; see "Tradition training
+and Academy skill courses" below.
 
 **Required content dashboard** (TUNING tier, `src/web/admin/tuning/required_content.py`): three
 probes list what staff have not set: activities with no `MagicActivitySkill` row, active Paths with
 no `technique_skill`, and Minor Gifts with no `technique_skill`. A row or field whose skill is
 inactive counts as unset, since the roll skips it. An activity staff leave unmapped on purpose
-stays listed.
+stays listed. Three more rows came with #4457 (below).
 
 **Admin.** `MagicActivitySkill` changelist (activity filter, skill autocomplete, weight editable in
 the list); `technique_skill` on the Path and Gift forms, `skill` on the Technique form,
 `adds_loss_of_self_skills` on the Condition category form.
 
-**Not in this slice:** Tradition skill grants, fixed-value magic that becomes a check, and
-resonance-flavoured thread options. See `docs/roadmap/magic.md`.
+**Not in this slice:** fixed-value magic that becomes a check, and resonance-flavoured thread
+options. (Tradition skill grants came in #4457, next section.) See `docs/roadmap/magic.md`.
+
+### Tradition training and Academy skill courses (#4457, ADR-4457-A) [BUILT & WIRED]
+
+A Tradition's schooling stance sets what level every Magic skill starts at; CG points never buy a
+Magic skill; a character who starts behind catches up in play, fastest through an Academy course.
+Slice 1 above made rolls add skills; this slice gives a schooled character those skills.
+
+**The floor.** `SchoolingLine.magic_skill_floor` (`PositiveSmallIntegerField`, default 0) is the
+level each stance lifts every active Magic skill to (migration `0273_skill_courses_and_schooling_floor`).
+Rank 0 carries none: check constraint `schooling_rank_zero_grants_no_floor`. The set is every skill
+in `magic_category_skills()`, the same for every Tradition; a per-Tradition list is deferred.
+
+| Surface | Location | Purpose |
+|---------|----------|---------|
+| `SCHOOLING_MAX_RANK_BY_STATE` / `schooling_max_rank(state)` | `world/character_creation/constants.py` | Which Tradition states open which stances: LIVING_MASTERS up to rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. A game rule, not tuning; #4536 replaces it when the training level becomes its own fact. Read by the offers module, `TraditionSerializer.get_schooling` and `schooling_magic_skill_floor` |
+| `schooling_magic_skill_floor(draft)` | `world/character_creation/offers.py` | The highest `magic_skill_floor` among the Tradition Step offers the draft picked, counting a pick only when its schooling line grants the very distinction the pick holds; 0 when the slate state opens no stances. Computed on every call, never memoised |
+| `CharacterDraft.starting_magic_skill_floor` | `world/character_creation/models.py` | Property over the function above; exposed read-only on `CharacterDraftSerializer` |
+| `_create_skill_values` | `world/character_creation/services.py` | At finalize, writes every `magic_category_skills()` skill at the floor through `set_skill_values` (source `CHARACTER_CREATION`, caps off), so each gets a `CharacterTraitValue` and one `CharacterTraitChange`. A self-taught draft writes no Magic rows |
+| `CharacterDraft._check_no_magic_points` | `world/character_creation/models.py` | Refuses points in a Magic skill or in a specialization whose parent is one, naming them (`MAGIC_SKILL_POINTS_REFUSAL`), from `validate_path_skills` |
+| `SchoolingLineSerializer.magic_skill_floor` | `world/character_creation/serializers.py` | Each stance row in `GET /api/character-creation/traditions/?beginning_id=...` carries its floor; `schooling` is cut to the ranks the Tradition's state opens |
+| `starting_magic_skill_floor` | `CharacterDraftSerializer` | Read-only integer on `GET /api/character-creation/drafts/<id>/` |
+
+An orphaned Tradition's rank 1 carries Tradition Training's starting technique pick as a living
+one does. A pick the state no longer opens (switching a rank 2 draft to a TEACHERS_GONE Tradition)
+is dropped by the existing `reconcile_offer_picks`. A `DistinctionOffer` saved without its
+schooling stance is never offered (the database does not require one). Joining a Tradition in play
+grants nothing retroactively (#2441).
+
+**Staff.** The tradition slate page gives each schooling stance of rank 1 and 2 a "Magic skill floor"
+input (`SchoolingLineForm`; refused above `SkillPointBudget.max_skill_value`, the creation skill
+cap) and a read-only line naming the Magic skills it trains ("Derived, read-only: trains occult,
+ritualism, theology to 20."; the text after the colon is `live.schooling_floor_preview`, "trains
+none." while the floor is 0). Rank 0 has no input and reads "Rank 0 trains none." Three TUNING rows were added to
+the Required content dashboard (`required_content.py`):
+
+| Key | Lists | Consumer |
+|-----|-------|----------|
+| `schooling-magic-skill-floors` | Schooling ranks 1 and 2 whose `magic_skill_floor` is still 0 | `schooling_magic_skill_floor()` |
+| `magic-skill-courses` | Active Magic skills with no `SKILL_COURSE` offer on an active role that has a `faction_affiliation` (an inactive role's offers are never shown) | `run_skill_course_offer()` |
+| `path-suggestions-name-magic-skills` | `PathSkillSuggestion` rows naming a Magic skill (CG cannot take them) | `PathSkillSuggestionViewSet` |
+
+**Frontend.** `SkillsSection` hides Magic skills from the point groups and shows a read-only group
+(`StatRow readOnly`) at the floor under "From your Tradition training", or a muted line when the
+floor is 0; Path suggestions naming a Magic skill and Magic ids loaded from an older draft are
+dropped. `SchoolingStances` shows each stance's floor; rank 0 reads "No magic skills", and a rank 1
+or 2 stance whose floor is still 0 shows no Magic line until staff set one. The CG copy keys
+(`CGExplanation`, each with the literal fallback shown) are `skills_magic_granted_heading` ("From
+your Tradition training"), `skills_magic_granted_none` (the line shown when the floor is 0),
+`offers_magic_skill_floor` ("Magic skills {floor}") and `offers_magic_skill_floor_none` ("No magic
+skills").
+
+#### Academy skill courses
+
+`OfferKind.SKILL_COURSE` is an Academy teacher's course in one skill (staff choose the skill on each
+offer; the dashboard row above keeps one per Magic skill). It reuses the trainer menu and the Academy
+gates TRAIN uses, and is not a TRAIN offer: TRAIN teaches a technique through the training meter.
+
+| Model / function | Location | Purpose |
+|------------------|----------|---------|
+| `SkillCourseOfferDetails` | `world/npc_services/models.py` | 1:1 with the offer: `skill`, `total_development`, `session_development` (check constraints `course_session_within_total`, `course_total_development_positive`, `course_session_development_positive`), `session_ap_cost`, `coin_cost` (coppers, 0 is a free course), `check_type`, `check_difficulty`. No field has a default. `clean()` requires `NPCServiceOffer.ap_cost == 0` |
+| `SkillCourseEnrollment` | `world/npc_services/models.py` | A sheet's place in one course: `development_remaining`, `last_session_week` (FK `GameWeek`), `enrolled_at`, `completed_at`. At most one open enrollment per sheet and course (`one_open_enrollment_per_course`); a finished course may be taken again |
+| `run_skill_course_offer(offer, persona)` | `world/npc_services/effects.py` | The handler. Registered in `OFFER_EFFECT_HANDLERS` |
+| `_academy_for(offer, sheet, kind)` | `world/npc_services/effects.py` | Shared by TRAIN, the course and settle-obligation: the role's `faction_affiliation` (an authoring error message when none), and the owed-entrance-obligation refusal (skipped for settle-obligation, whose job is paying it) |
+| `AcademyOfferApCostError` | `world/npc_services/effects.py` | Replaces `TrainOfferMisconfiguredError`. Raised when a TRAIN or SKILL_COURSE offer has a nonzero `ap_cost`, which the generic pre-dispatch charge would take on top of the handler's own AP |
+
+*How acceptance works.* The first acceptance enrolls: it pays the coin (skipped when 0) to the
+Academy's treasury and redeems one Golden Hare, once for the course, then runs the first session.
+Each later acceptance of the same offer is a session costing `session_ap_cost` AP, rolled with
+`perform_check_with_modifiers` against the course's `check_type` and `check_difficulty`. The
+development is `floor(session_development x multiplier)`, where the multiplier is the
+`TrainingOutcomeAward` row for the roll's outcome (the table technique training reads; no row or no
+outcome teaches nothing), capped at `development_remaining`. It is applied through
+`train_skill(..., stop_at_boundary=True)`: development that would run past an XP boundary stays in
+the course, because the course was paid for up front, and the session after a breakthrough
+continues it. A skill the character has no row for starts at 10 (`DP_BASE_LEVEL`). The enrollment is
+stamped complete when `development_remaining` reaches 0. The AP is spent on any rolled outcome,
+including a botch that teaches nothing.
+
+*Refusals charge nothing.* Every refusal is checked before anything is charged, in this order:
+debt or no Academy (`_academy_for`), then (under the AP pool lock) already trained in this course
+this game week, the skill parked at an XP boundary (19, 29, 39, 49), short of AP, and when enrolling
+short of coin (the same `enforce_can_afford_training` check TRAIN uses) or of a Hare. One session per
+course per game week, across enrollments (a course finished this week and retaken waits for the next
+week); the week is recorded on the enrollment (`last_session_week`) rather than as an offer
+cooldown, because `resolve_offer` writes a cooldown even when the handler refuses. The Unbound
+drawback's +50% surcharge on magic learning is not read: a character without formal training never
+pays more to train.
+
+*Trainer menu price line.* `InteractionOfferSerializer.price` (`OfferPriceSerializer`: `ap`,
+`coppers`, `golden_hares`, `per_session_ap`, `development_remaining`, `development_total`,
+`training_points`, `display`) is built per offer by `_offer_price` into the frozen `OfferPrice`
+dataclass (`world/npc_services/types.py`), and `format_offer_price` writes the one line the web menu
+(`NPCInteractionDialog`) and telnet `hire` both print. It is null for every kind but SKILL_COURSE and
+TRAIN. A course not yet taken reads "Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one
+now"; once enrolled, "Next session · 6 AP · 1200 of 1500 left", or "Next session next week · 6 AP ·
+1200 of 1500 left" when her open enrollment's `last_session_week` is the current game week (read with
+`GameWeek.get_current()`, never bootstrapped by a menu read; the flag is `OfferPrice
+.next_session_next_week` and only changes `display`). TRAIN reads "2g 5s · 1 Golden Hare ·
+5 points of training or more, paid in AP": TRAIN charges no AP on acceptance, and
+`TrainOfferDetails.learn_ap_cost` is the training meter's base (the gift multipliers in
+`charge_and_learn` can raise it), not AP charged at acceptance.
+
+*Admin.* `SkillCourseOfferDetailsAdmin` draws the fields in the demo's order (Offer, Skill, Sold by,
+Total development, Session development, Session AP cost, Coin cost (coppers), Check type, Check
+difficulty) with two read-only derived rows: the skill's category beside Skill ("Derived,
+read-only: category Magic.") and Sold by, the offer's role and its house ("Academy Trainer, for
+Shroudwatch Academy.", or "(no house)"). Any skill may be picked. `NPCServiceOffer.ap_cost`'s help
+says it must stay 0 on TRAIN and Skill Course offers. A read-only `SkillCourseEnrollmentAdmin` lists
+who is taking which course.
+
+*Verified by.* `src/integration_tests/test_tradition_training_journeys.py` (the Tradition list, the
+stance sync, the draft detail, refused Magic points, finalize to the sheet, a schooled character's
+cast rolling her Path's Magic skill at the floor beside a self-taught one's at 0) and
+`src/integration_tests/test_academy_skill_course_journeys.py` (enrolling, refusals that charge
+nothing, sessions per outcome, boundaries, the trainer menu over telnet and the web); rows in
+`docs/testing/journeys.md`.
 
 ### Covenant-Role Blend Power Term (#2529, ADR-0149) [BUILT & WIRED]
 
@@ -2122,6 +2241,17 @@ Academy's `OrganizationTreasury`) + exactly one unredeemed Golden Hare
 See `docs/systems/INDEX.md`'s "NPC Services" entry (and
 `world/npc_services/AGENT_GLOSSARY.md`) for the full TRAIN-offer flow (obligation gate,
 tradition-signature members-only availability, `NPCRole.teaches_tradition`).
+
+**A short purse is refused by cause, before anything is charged (#4523):** when `gold_cost > 0`,
+`charge_and_learn` first calls `enforce_can_afford_training(sheet, gold_cost)`, which locks the
+learner's `CharacterPurse` row and raises `TrainingFundsInsufficient` (a `MagicError`;
+`user_message` "This training costs 2g 5s and you have 9s.", built with `format_coppers`) when the
+balance is short. `run_train_offer` returns that message through its existing `except MagicError`
+branch with AP, coin, the Hare and `TechniqueProgress` untouched, so its `except ValidationError`
+branch ("Someone else called in that Hare before you finished.") now means only a lost Hare race.
+The purse lock is held until `transfer` takes the same row, so a concurrent debit cannot slip
+between the check and the charge. `accept_technique_offer` passes no coin (`gold_cost=0`), so the
+check returns at once for it. Journey: `integration_tests/test_academy_training_journeys.py`.
 
 **Unbound magic-learning AP surcharge (#2442):** `charge_and_learn` applies one more scale
 after the has-gift/major-gift multiplier: `ap_cost = ceil(ap_cost × (100 + surcharge%) / 100)`,

@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0269_worn_pieces_count_with_beings"),
-    ]
+    dependencies = [("arxii", "0273_skill_courses_and_schooling_floor")]
 
     operations = [
         migrations.AddField(

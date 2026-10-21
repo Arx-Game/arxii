@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from world.worship.constants import PledgeCreditSource
+from world.worship.constants import InvocationPieceSource, PledgeCreditSource
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         WorshipRite,
         WorshipRitePerformance,
     )
+    from world.worship.request_services import RequestLine
 
 
 @dataclass(frozen=True)
@@ -187,7 +188,11 @@ class EarningRateBreakdown:
 
 @dataclass(frozen=True)
 class WornPiece:
-    """One worn piece carrying a facet a being favors, read for an invocation (#4520).
+    """One piece that eases an invocation of a being, read for the invocation (#4520, #4530).
+
+    ``source`` says why: a worn piece carrying a facet the being favors (the default), a
+    keepsake of the being the character carries, or the being's Relic. A keepsake or Relic
+    has no favored facet (``facet_name`` is empty) and no earning bonus.
 
     ``meaning`` is what the piece means to its wearer (``item_meaning``, which never reads
     a price); ``points`` is those points after ``DevotionConfig.worn_item_max_points``.
@@ -203,6 +208,7 @@ class WornPiece:
     ease_per_point: int
     earning_bonus_percent: int
     counted: bool
+    source: str = InvocationPieceSource.WORN
 
     @property
     def ease(self) -> int:
@@ -230,6 +236,11 @@ class WornMeaning:
     @property
     def counted(self) -> tuple[WornPiece, ...]:
         return tuple(piece for piece in self.pieces if piece.counted)
+
+    @property
+    def has_carried(self) -> bool:
+        """Whether a keepsake or the Relic is among the pieces that count (#4530)."""
+        return any(piece.source != InvocationPieceSource.WORN for piece in self.counted)
 
     @property
     def raw_ease(self) -> int:
@@ -290,6 +301,7 @@ class PledgeCard:
     favor: int
     credits: list[PledgeCreditLine]
     terms: ServiceTerms
+    requests: list[RequestLine]
 
 
 @dataclass(frozen=True)
@@ -465,6 +477,7 @@ class InvocationPieceLine:
     points: int
     ease_per_point: int
     ease: int
+    source: str = InvocationPieceSource.WORN
 
 
 @dataclass(frozen=True)

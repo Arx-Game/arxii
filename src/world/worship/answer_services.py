@@ -173,6 +173,7 @@ def invocation_detail(invocation: FavorInvocation) -> InvocationDetail:
             points=piece.points,
             ease_per_point=piece.ease_per_point,
             ease=piece.ease,
+            source=piece.source,
         )
         for piece in invocation.pieces.all()
     ]

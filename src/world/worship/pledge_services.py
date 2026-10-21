@@ -65,6 +65,7 @@ from world.worship.models import (
     PledgeCredit,
     PledgeDetails,
 )
+from world.worship.request_services import request_lines
 from world.worship.types import (
     ClosingOutcome,
     EarningRateBreakdown,
@@ -77,10 +78,13 @@ from world.worship.types import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from world.ceremonies.models import CeremonyOffering
     from world.character_sheets.models import CharacterSheet
+    from world.items.models import ItemInstance
     from world.magic.models import ResonanceGrant
     from world.projects.models import Project
     from world.scenes.models import Persona, Scene
@@ -303,7 +307,9 @@ def credit_pledge_deed(grant: ResonanceGrant) -> PledgeCredit | None:
 # ---------------------------------------------------------------------------
 
 
-def close_pledge(sheet: CharacterSheet, *, scene: Scene) -> ClosingOutcome:
+def close_pledge(
+    sheet: CharacterSheet, *, scene: Scene, offered_items: Sequence[ItemInstance] = ()
+) -> ClosingOutcome:
     """Perform the open pledge's closing rite in ``scene`` (design 3).
 
     Requires the favor target met and the span not yet ended. The rite rolls
@@ -316,6 +322,9 @@ def close_pledge(sheet: CharacterSheet, *, scene: Scene) -> ClosingOutcome:
     a vision, or held while the being's pool is short (slice 3, design 4). A
     stewarded being's close goes to its table GM as a ``BEING_ANSWER`` prompt
     instead (slice 4, design 5).
+
+    ``offered_items`` (#4530) are given up during the closing rite: their meaning, and the
+    pledge's and the rite's requests they fill, ease the rite's roll.
     """
     from world.projects.services import resolve_project  # noqa: PLC0415
     from world.worship.answer_services import deliver_pledge_answer  # noqa: PLC0415
@@ -331,7 +340,9 @@ def close_pledge(sheet: CharacterSheet, *, scene: Scene) -> ClosingOutcome:
     if project.current_progress < (project.threshold_target or 0):
         raise PledgeNotReady
     rite = details.pledge.closing_rite
-    rite_outcome = perform_worship_rite(sheet, rite, scene=scene, pay_award=False)
+    rite_outcome = perform_worship_rite(
+        sheet, rite, scene=scene, pay_award=False, offered_items=offered_items, closing_of=details
+    )
     performance = rite_outcome.performance
     outcome = performance.outcome_tier
     details.close_attempts += 1
@@ -662,6 +673,7 @@ def pledge_card(details: PledgeDetails) -> PledgeCard:
         favor=favor,
         credits=credit_lines(details),
         terms=service_terms(sheet, being),
+        requests=request_lines(details),
     )
 
 

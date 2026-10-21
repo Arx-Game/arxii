@@ -231,11 +231,11 @@ describe('OrgPageInner', () => {
     expect(screen.getByText(/The Debt-Keeper/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '(The Chained Judge)' })).toHaveAttribute(
       'href',
-      '/codex/55'
+      '/codex?entry=55'
     );
     expect(screen.getByRole('link', { name: /Patron Deity: The Chained Judge/ })).toHaveAttribute(
       'href',
-      '/codex/55'
+      '/codex?entry=55'
     );
     // A day of remembrance (#4206) reads name, the server-spelled date, then the prose.
     expect(screen.getByText(/Days of Remembrance/)).toBeInTheDocument();

@@ -214,7 +214,13 @@ class CharacterCarriedItemsHandler:
     def _items(self) -> list[ItemInstance]:
         if self._cached is None:
             from world.items.market.models import MarketSale  # noqa: PLC0415
-            from world.items.models import ItemFacet, ItemInstance, ItemLineage  # noqa: PLC0415
+            from world.items.models import (  # noqa: PLC0415
+                ItemFacet,
+                ItemInstance,
+                ItemLineage,
+                Keepsake,
+            )
+            from world.societies.models import LegendEntry  # noqa: PLC0415
 
             qs = (
                 ItemInstance.objects.filter(game_object__db_location=self._character)
@@ -249,6 +255,17 @@ class CharacterCarriedItemsHandler:
                             "attachment_quality_tier",
                         ),
                         to_attr="cached_item_facets",
+                    ),
+                    # Examine's trophy line and a shown keepsake (#4530).
+                    Prefetch(
+                        "legend_deeds",
+                        queryset=LegendEntry.objects.filter(is_active=True),
+                        to_attr="cached_trophy_deeds",
+                    ),
+                    Prefetch(
+                        "keepsakes",
+                        queryset=Keepsake.objects.filter(shown_on_examine=True),
+                        to_attr="cached_shown_keepsakes",
                     ),
                 )
             )

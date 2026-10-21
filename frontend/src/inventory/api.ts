@@ -9,6 +9,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch';
 import { fetchAllPages } from '@/lib/pagination';
 import type { components } from '@/generated/api';
 import type {
@@ -430,4 +431,55 @@ export async function repairLabStation(
   });
   if (!res.ok) throw new Error(await readError(res, 'Failed to repair Lab station'));
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Keepsakes (#4530)
+// ---------------------------------------------------------------------------
+
+export type KeepsakeState = components['schemas']['KeepsakeState'];
+
+/** What the item panel's keepsake form needs for a held item: the keepsake it already is,
+ * the character's slots, what it could stand for and the deeds it is a trophy of. */
+export async function getKeepsakeState(itemId: number): Promise<KeepsakeState> {
+  const res = await apiFetch(`${BASE_URL}/inventory/${itemId}/keepsake/`);
+  if (!res.ok) throw new Error(await readError(res, 'Failed to load the keepsake'));
+  return res.json();
+}
+
+/** The six things an item can stand for (`world.items.constants.KeepsakeSubject`). */
+export type KeepsakeSubjectKind = 'tie' | 'deed' | 'being' | 'organization' | 'person' | 'place';
+
+export interface DeclareKeepsakePayload {
+  itemId: number;
+  subjectKind: KeepsakeSubjectKind;
+  /** The tie, deed, being, organization or persona it stands for; absent for a place. */
+  subjectId?: number;
+  /** A place's name. */
+  subjectLabel?: string;
+  /** The player's own words. The game never scores them. */
+  text: string;
+  shownOnExamine: boolean;
+  treasured: boolean;
+}
+
+/** Dispatch `keepsake_declare` as `characterId`. */
+export function declareKeepsake(
+  characterId: number,
+  payload: DeclareKeepsakePayload
+): Promise<DispatchResult> {
+  return dispatchCanvasAction(characterId, 'keepsake_declare', {
+    item_id: payload.itemId,
+    subject_kind: payload.subjectKind,
+    ...(payload.subjectId != null ? { subject_id: payload.subjectId } : {}),
+    ...(payload.subjectLabel ? { subject_label: payload.subjectLabel } : {}),
+    text: payload.text,
+    shown_on_examine: payload.shownOnExamine,
+    treasured: payload.treasured,
+  });
+}
+
+/** Dispatch `keepsake_release` as `characterId`. */
+export function releaseKeepsake(characterId: number, itemId: number): Promise<DispatchResult> {
+  return dispatchCanvasAction(characterId, 'keepsake_release', { item_id: itemId });
 }

@@ -165,13 +165,23 @@ export function useTakePledge(characterId: number) {
 }
 
 export function useClosePledge(characterId: number) {
-  return useWorshipMutation((_: void) => closePledge(characterId));
+  return useWorshipMutation(
+    ({ itemIds }: { itemIds: number[] }) => closePledge(characterId, itemIds),
+    [['inventory', characterId]]
+  );
 }
 
 export function useSacrifice(characterId: number) {
   return useWorshipMutation(
-    ({ itemIds, being }: { itemIds: number[]; being?: number | null }) =>
-      sacrifice(characterId, itemIds, being),
+    ({
+      itemIds,
+      being,
+      playerLine,
+    }: {
+      itemIds: number[];
+      being?: number | null;
+      playerLine?: string;
+    }) => sacrifice(characterId, itemIds, being, playerLine),
     [['inventory', characterId]]
   );
 }
