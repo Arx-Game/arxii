@@ -100,6 +100,7 @@ from core.identifier_dashes import contains_dash
 from core_management.prose_fields import prose_fields_for
 from web.admin.authoring.backlog import BacklogRow, build_backlog
 from web.admin.authoring.contributors import current_contributor, link_contributor
+from web.admin.authoring.identity_map import flush_refused_instances
 from web.admin.authoring.links import admin_change_url, workbench_page_url
 from web.admin.authoring.reference import db_search, file_search, reference_roots
 from web.admin.authoring.relations import RelatedEntry, prose_mentions, related_entries
@@ -686,13 +687,21 @@ def _apply_edits(
 
     #3890: when `identity_field_for(model)` names a column and the POST
     carries it, the posted value is stripped and checked for an em or en
-    dash FIRST, before it ever reaches the instance - a dashed name is
-    refused outright (the row's current, true name is what renders; nothing
-    the operator typed survives the refusal) rather than treated as a failed
-    edit attempt. A blank or duplicate name IS a failed edit attempt: it
-    reaches the instance and fails `full_clean()` the ordinary way, so the
-    rejected value renders back for the writer to fix, the same as a
-    rejected prose field already does.
+    dash before it ever reaches the instance - a dashed name is refused
+    outright (the row's current, true name is what renders in the name
+    input) rather than treated as a failed edit attempt. The posted prose is
+    already on the instance by then and renders back for the writer to fix.
+    A blank or duplicate name IS a failed edit attempt: it reaches the
+    instance and fails `full_clean()` the ordinary way, so the rejected
+    value renders back for the writer to fix, the same as a rejected prose
+    field already does.
+
+    The instance is the identity-mapped row every later reader in the
+    process gets, so on any refusal it still carries the posted text: the
+    caller renders it back and then must drop the row with
+    `flush_refused_instances` (`_render_refused_edit`, #4543). Past
+    `full_clean()` (which runs the unique and constraint checks) `save()` can
+    only fail on a concurrent write or a database outage, a server error.
 
     Returns `full_clean()`'s `message_dict` on failure (nothing saved) or
     `None` on success, alongside whether the name actually changed - the
@@ -718,6 +727,22 @@ def _apply_edits(
         return exc.message_dict, False
     instance.save()
     return None, name_changed
+
+
+def _render_refused_edit(
+    request: HttpRequest, target: _EditorTarget, field_errors: dict[str, list[str]]
+) -> HttpResponse:
+    """Render a refused edit's posted text back, then drop the row from the identity map.
+
+    The render reads the posted values off `target.instance`, so it runs first; the
+    flush is in a `finally` so a template error cannot skip it. Without it every later
+    reader in the process (a player's codex page, the queue, the editor's next load)
+    got the refused text until restart (#4543).
+    """
+    try:
+        return _render_editor_fragment(request, target, _EditorFlags(field_errors=field_errors))
+    finally:
+        flush_refused_instances(target.instance)
 
 
 #: A browser navigation announces itself with this fetch-metadata header; an htmx
@@ -752,13 +777,14 @@ def authoring_editor_save(request: HttpRequest) -> HttpResponse:
         return _render_editor_fragment(request, target)
 
     field_errors, name_changed = _apply_edits(target.instance, target.model, request.POST)
-    flags = _EditorFlags(saved=field_errors is None, field_errors=field_errors)
-    response = _render_editor_fragment(request, target, flags)
+    if field_errors is not None:
+        return _render_refused_edit(request, target, field_errors)
+    response = _render_editor_fragment(request, target, _EditorFlags(saved=True))
     # A rename changes what the queue's identity column shows for this row -
     # refresh it the same way a credit or review stamp does (#3890). A save
     # that touched no name, or one whose name ended up unchanged, is not
     # worth a queue re-scan.
-    if field_errors is None and name_changed:
+    if name_changed:
         response["HX-Trigger"] = _BACKLOG_CHANGED_EVENT
     return response
 
@@ -792,7 +818,7 @@ def authoring_editor_credit(request: HttpRequest) -> HttpResponse:
     if prose_posted or name_posted:
         field_errors, _name_changed = _apply_edits(target.instance, target.model, request.POST)
         if field_errors is not None:
-            return _render_editor_fragment(request, target, _EditorFlags(field_errors=field_errors))
+            return _render_refused_edit(request, target, field_errors)
 
     target.instance.written_by = contributor
     target.instance.written_on = timezone.now().date()
