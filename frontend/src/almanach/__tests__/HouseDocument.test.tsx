@@ -124,6 +124,23 @@ test('Gentry toggles like any other state when the realm theme is luxen', async 
   expect(mutate).toHaveBeenCalledWith({ org_id: 9, house_state: 'gentry' });
 });
 
+test('a house with no charter answers shows no Quiddity heading, and answers group under their question (#4533)', () => {
+  vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
+  const { unmount } = renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.getByText('Patron')).toBeInTheDocument();
+  expect(screen.queryByText(/House Quiddity/)).not.toBeInTheDocument();
+  unmount();
+
+  const umbralDoc: HouseDocumentPayload = { ...doc, house: { ...doc.house, aspects: [] } };
+  vi.mocked(queries.useHouseDocument).mockReturnValue({
+    data: umbralDoc,
+    isLoading: false,
+  } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.queryByText(/Quiddity/)).not.toBeInTheDocument();
+  expect(screen.queryByText('Patron')).not.toBeInTheDocument();
+});
+
 test("the patron reads by the house's own name and a pick that is a god opens its page (#4205)", () => {
   vi.mocked(queries.useHouseDocument).mockReturnValue({
     data: doc,

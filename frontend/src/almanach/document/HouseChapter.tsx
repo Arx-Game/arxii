@@ -87,6 +87,16 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
   const colors = useDraft(house.id, 'house-colors', house.colors);
   const sigil = useDraft(house.id, 'house-sigil_description', house.sigil_description);
   const description = useDraft(house.id, 'house-description', house.description);
+  // The house's charter answers, grouped under the question each answers (#4533):
+  // an Umbral house has no Quiddity, so the heading is the question's own name and
+  // a house with no answers shows no block at all.
+  const facetGroups = Array.from(
+    house.aspects.reduce((groups, aspect) => {
+      const list = groups.get(aspect.definition) ?? [];
+      list.push(aspect);
+      return groups.set(aspect.definition, list);
+    }, new Map<string, typeof house.aspects>())
+  );
   // Staged like the state toggle, not a per-field draft: the list is one value
   // and the action replaces it wholesale (#4206).
   const [observances, setObservances] = useState<ObservanceRow[]>(() => editableObservances(house));
@@ -218,33 +228,33 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         />
       </div>
       <ObservanceRows idPrefix={`house-${house.id}`} rows={observances} onChange={setObservances} />
-      <div className="field">
-        <span className="label">
-          House Quiddity <span className="chip">seed copy · PLACEHOLDER</span>
-        </span>
-        <ul className="entries compact">
-          {house.aspects.map((aspect) => (
-            <li key={`${aspect.definition}-${aspect.option}`} className="on">
-              <span className="mark">◆</span>
-              <span>
-                {aspect.target_entry_id != null ? (
-                  <Link to={`/codex/${aspect.target_entry_id}`} className="nm">
-                    {aspect.option}
-                  </Link>
-                ) : (
-                  <span className="nm">{aspect.option}</span>
-                )}
-                <span className="ds">{aspect.description}</span>
-              </span>
-              <span className="rt">
-                <button type="button" disabled aria-disabled>
-                  ⊕ change
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {facetGroups.map(([definition, facets]) => (
+        <div className="field" key={definition}>
+          <span className="label">{definition}</span>
+          <ul className="entries compact">
+            {facets.map((aspect) => (
+              <li key={`${aspect.definition}-${aspect.option}`} className="on">
+                <span className="mark">◆</span>
+                <span>
+                  {aspect.target_entry_id != null ? (
+                    <Link to={`/codex/${aspect.target_entry_id}`} className="nm">
+                      {aspect.option}
+                    </Link>
+                  ) : (
+                    <span className="nm">{aspect.option}</span>
+                  )}
+                  <span className="ds">{aspect.description}</span>
+                </span>
+                <span className="rt">
+                  <button type="button" disabled aria-disabled>
+                    ⊕ change
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
       <div className="field">
         <span className="label">features</span>
         <div className="chips">
