@@ -322,36 +322,42 @@ class RequestSupplyRow:
 
 def request_suppliers(being: WorshippedBeing) -> list[RequestSupplyRow]:
     """For each request on the being's pledges and rites, where a player can find it: the
-    stalls that stock the template, whether it can be crafted, or which templates carry the
-    facet. "Nothing supplies it yet" is a warning for staff, never a block. Read-only."""
+    stalls that stock the template, whether it can be crafted, or how many cheap templates
+    carry the facet. "Nothing supplies it yet" is a warning for staff, never a block.
+    Read-only; the stalls and the facet counts are each read in one query."""
     from world.items.market.models import StockListing  # noqa: PLC0415
     from world.worship.models import RequestedItem  # noqa: PLC0415
 
-    rows: list[RequestSupplyRow] = []
-    requests = (
+    ceiling = _requested_value_ceiling()
+    requests = list(
         RequestedItem.objects.filter(Q(pledge__being=being) | Q(rite__being=being))
         .select_related("item_template", "facet")
+        .annotate(
+            cheap_templates=Count(
+                "facet__inherent_on_templates",
+                filter=Q(facet__inherent_on_templates__value__lte=ceiling),
+                distinct=True,
+            )
+        )
         .order_by("pk")
     )
+    stalls_by_template: dict[int, set[str]] = {}
+    for listing in StockListing.objects.filter(
+        template__in=[r.item_template_id for r in requests if r.item_template_id is not None],
+        is_active=True,
+    ).select_related("stall"):
+        stalls_by_template.setdefault(listing.template_id, set()).add(listing.stall.name)
+    rows: list[RequestSupplyRow] = []
     for request in requests:
         if request.item_template_id is not None:
             template = request.item_template
-            stalls = sorted(
-                {
-                    listing.stall.name
-                    for listing in StockListing.objects.filter(
-                        template=template, is_active=True
-                    ).select_related("stall")
-                }
-            )
+            stalls = sorted(stalls_by_template.get(template.pk, ()))
             parts = [f"sold at {', '.join(stalls)}"] if stalls else []
             if template.is_craftable:
                 parts.append("can be crafted")
             supply = "; ".join(parts)
         else:
-            count = request.facet.inherent_on_templates.filter(
-                value__lte=_requested_value_ceiling()
-            ).count()
+            count = request.cheap_templates
             supply = f"{count} cheap template{'s' if count != 1 else ''} carry it" if count else ""
         rows.append(
             RequestSupplyRow(

@@ -338,7 +338,7 @@ def read_rite_gifts(
     from world.worship.request_services import (  # noqa: PLC0415
         assign_requests,
         closing_rite_requests,
-        given_count,
+        given_counts,
     )
     from world.worship.sacrifice_services import sacrifice_slots_left  # noqa: PLC0415
 
@@ -355,7 +355,7 @@ def read_rite_gifts(
         if closing_of is not None
         else list(rite.requested_items.select_related("item_template", "facet").order_by("pk"))
     )
-    filled = {row.pk: given_count(row, pledge) for row in rows}
+    filled = given_counts(rows, pledge)
     assigned = assign_requests(rows, items, filled=filled, config=config)
     facets = favored_facets_by_item(rite.being, list(items))
     slots = sacrifice_slots_left(sheet, rite.being)

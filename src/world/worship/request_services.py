@@ -63,17 +63,27 @@ def requested_signal(row: RequestedItem, config: DevotionConfig) -> MeaningSigna
     )
 
 
-def given_count(row: RequestedItem, details: PledgeDetails | None) -> int:
-    """How many items have already filled ``row`` for the pledge (0 with no pledge: a
-    rite's request outside a pledge is filled afresh by each performance)."""
+def given_counts(rows: Sequence[RequestedItem], details: PledgeDetails | None) -> dict[int, int]:
+    """How many items have already filled each of ``rows`` for the pledge, in one query
+    (0 with no pledge: a rite's request outside a pledge is filled afresh by each
+    performance). An item given up past the week's limit counted for nothing, so it filled
+    nothing."""
+    from django.db.models import Count  # noqa: PLC0415
+
     from world.ceremonies.models import OfferingSignal  # noqa: PLC0415
 
-    if details is None:
-        return 0
-    # An item given up past the week's limit counted for nothing, so it filled nothing.
-    return OfferingSignal.objects.filter(
-        requested_item=row, offering__pledge_details=details, offering__counted=True
-    ).count()
+    if details is None or not rows:
+        return {row.pk: 0 for row in rows}
+    found = dict(
+        OfferingSignal.objects.filter(
+            requested_item__in=[row.pk for row in rows],
+            offering__pledge_details=details,
+            offering__counted=True,
+        )
+        .values_list("requested_item")
+        .annotate(total=Count("pk"))
+    )
+    return {row.pk: found.get(row.pk, 0) for row in rows}
 
 
 def assign_requests(
@@ -130,15 +140,17 @@ def closing_rite_requests(details: PledgeDetails) -> list[RequestedItem]:
 def request_lines(details: PledgeDetails) -> list[RequestLine]:
     """Every request the pledge card lists, with how many are given: the pledge's own, then
     the closing rite's."""
+    rows = closing_rite_requests(details)
+    counts = given_counts(rows, details)
     return [
         RequestLine(
             request=row,
             asked_for=row.asked_for,
             hint=row.hint,
             quantity=row.quantity,
-            given=min(given_count(row, details), row.quantity),
+            given=min(counts[row.pk], row.quantity),
             points=row.points,
             where="pledge" if row.pledge_id is not None else "closing rite",
         )
-        for row in closing_rite_requests(details)
+        for row in rows
     ]

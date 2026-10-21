@@ -1264,7 +1264,7 @@ def _requests_filled(
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
     from world.worship.request_services import (  # noqa: PLC0415
         assign_requests,
-        given_count,
+        given_counts,
         pledge_requests,
     )
 
@@ -1273,7 +1273,7 @@ def _requests_filled(
     rows = pledge_requests(details)
     if not rows:
         return {}
-    filled = {row.pk: given_count(row, details) for row in rows}
+    filled = given_counts(rows, details)
     return assign_requests(rows, item_instances, filled=filled, config=get_devotion_config())
 
 
