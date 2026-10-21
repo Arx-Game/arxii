@@ -830,10 +830,11 @@ OFFER_EFFECT_HANDLERS[OfferKind.SETTLE_OBLIGATION.value] = run_settle_obligation
 class _CourseRefusedError(Exception):
     """A skill course refusal, raised inside the handler's transaction (#4457).
 
-    Raising rather than returning rolls back anything the acceptance touched, so a
-    refusal found after enrolment charges began (an AP or Hare race) still charges
-    nothing. ``reason`` is the player-facing sentence; the handler adds
-    "Nothing was charged." to it.
+    Every refusal is raised before the first charge (the handler locks the AP pool,
+    purse and Hare rows before it checks them), so the rollback only undoes the
+    skill-store reconciliation; it is never relied on to undo a charge, since
+    identity-mapped rows would keep the charged values in memory. ``reason`` is the
+    player-facing sentence; the handler adds "Nothing was charged." to it.
     """
 
     def __init__(self, reason: str, enrollment: SkillCourseEnrollment | None = None) -> None:
@@ -905,13 +906,29 @@ def _take_course_session(
     )
 
     skill = course.skill
+    # Lock the learner's AP pool first. It serializes her concurrent acceptances, so
+    # the enrollment reads below see any course a racing acceptance already opened, and
+    # the session's spend at the end cannot come up short after coin and a Hare were
+    # charged (a rollback then would leave the identity-mapped purse and treasury
+    # holding balances the database no longer has).
+    pool = ActionPointPool.objects.select_for_update().get(
+        pk=ActionPointPool.get_or_create_for_character(sheet.character).pk
+    )
     enrollment = (
         SkillCourseEnrollment.objects.select_for_update()
         .filter(character_sheet=sheet, course=course, completed_at__isnull=True)
         .first()
     )
     week = get_current_game_week()
-    if enrollment is not None and enrollment.last_session_week_id == week.pk:
+    # One session per course per game week, across enrollments: a course finished this
+    # week and taken again is still refused until the week turns.
+    latest_week_pk = (
+        SkillCourseEnrollment.objects.filter(character_sheet=sheet, course=course)
+        .order_by("-enrolled_at", "-pk")
+        .values_list("last_session_week_id", flat=True)
+        .first()
+    )
+    if latest_week_pk == week.pk:
         msg = "You have already trained in this course this week."
         raise _CourseRefusedError(msg, enrollment)
 
@@ -921,7 +938,6 @@ def _take_course_session(
         msg = f"{skill.name} is at {rating} and needs a breakthrough before {until}."
         raise _CourseRefusedError(msg, enrollment)
 
-    pool = ActionPointPool.get_or_create_for_character(sheet.character)
     if not pool.can_afford(course.session_ap_cost):
         msg = f"A session costs {course.session_ap_cost} AP and you have {pool.current}."
         raise _CourseRefusedError(msg, enrollment)
@@ -930,18 +946,20 @@ def _take_course_session(
         enrollment = _enroll_in_course(course, sheet, academy)
 
     if not pool.spend(course.session_ap_cost):
-        msg = f"A session costs {course.session_ap_cost} AP and you have {pool.current}."
-        raise _CourseRefusedError(msg, enrollment)
+        # Unreachable: the pool row is locked and was checked in this transaction.
+        msg = f"AP pool {pool.pk} came up short under its own row lock."
+        raise RuntimeError(msg)
     return _run_course_session(offer, course, sheet, enrollment, rating=rating, week_pk=week.pk)
 
 
 def _enroll_in_course(
     course: SkillCourseOfferDetails, sheet: CharacterSheet, academy: Organization
 ) -> SkillCourseEnrollment:
-    """Charge the coin and one Hare, and open the enrollment (#4457).
+    """Charge one Hare and the coin (none for a free course), and open the enrollment (#4457).
 
     The coin and Hare checks both come before either charge; a short purse is named
-    with its cost and balance, a missing Hare with the existing Hare refusal.
+    with its cost and balance, a missing Hare with the existing Hare refusal. Nothing
+    after the first charge can refuse.
     """
     from django.core.exceptions import ValidationError  # noqa: PLC0415
 
@@ -969,18 +987,21 @@ def _enroll_in_course(
     except NoAvailableFavorTokenError as exc:
         raise _CourseRefusedError(exc.user_message) from exc
 
-    transfer(
-        amount=course.coin_cost,
-        reason=f"Academy course: {course.skill.name}",
-        from_purse=get_or_create_purse(sheet),
-        to_treasury=get_or_create_treasury(academy),
-    )
+    # The Hare first: redeem_favor_token refuses before it changes anything, and the
+    # coin transfer after it cannot fail (the purse row is locked and was checked above).
     try:
         redeem_favor_token(token, redeemer_org=academy)
     except ValidationError as exc:
         # Another acceptance redeemed this Hare after we resolved it.
         msg = "Someone else called in that Hare before you finished."
         raise _CourseRefusedError(msg) from exc
+    if course.coin_cost > 0:
+        transfer(
+            amount=course.coin_cost,
+            reason=f"Academy course: {course.skill.name}",
+            from_purse=get_or_create_purse(sheet),
+            to_treasury=get_or_create_treasury(academy),
+        )
     return SkillCourseEnrollment.objects.create(
         character_sheet=sheet,
         course=course,

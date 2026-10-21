@@ -248,6 +248,20 @@ class EnrollingInACourse(_AcademyCourseCase):
         self.assertEqual(self.open_enrollment().development_remaining, 1200)
         self.assertEqual(self.occult_stores(), (12, 12))
 
+    def test_free_course_charges_no_coin(self) -> None:
+        self.course.coin_cost = 0
+        self.course.save()
+
+        told = self.take_course("success")
+
+        self.assertIn("Success. Occult rises from 10 to 12.", told)
+        self.assertEqual(self.purse(), STARTING_COIN)
+        self.assertEqual(get_or_create_treasury(self.academy).balance, 0)
+        self.assertEqual(self.hares(), 0)
+        self.assertEqual(self.ap(), STARTING_AP - SESSION_AP)
+        self.assertEqual(self.open_enrollment().development_remaining, 1200)
+        self.assertEqual(self.occult_stores(), (12, 12))
+
 
 class RefusedEnrollments(_AcademyCourseCase):
     """Each refusal says why and takes nothing: AP, purse, Hares and enrollments unchanged."""
@@ -378,6 +392,57 @@ class SessionsOfACourse(_AcademyCourseCase):
         self.assertEqual(self.purse(), STARTING_COIN - 2 * COIN)
         self.assertEqual(self.enrollments(), 2)
         self.assertEqual(self.open_enrollment().development_remaining, 1200)
+
+    def test_partial_applies_half(self) -> None:
+        advance_game_week()
+        told = self.take_course("partial")  # 300 x 0.5 = 150 of the 300 to 13
+        self.assertIn(
+            f"Partial Success. Occult stays at 12, closer to 13. "
+            f"The course has 1050 of {TOTAL} left.",
+            told,
+        )
+        self.assertEqual(self.ap(), STARTING_AP - 2 * SESSION_AP)
+        self.assertEqual(self.open_enrollment().development_remaining, 1050)
+        row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.occult)
+        self.assertEqual(row.development_points, 150)
+
+    def test_botch_spends_ap_and_teaches_nothing(self) -> None:
+        advance_game_week()
+        told = self.take_course("botch")
+        self.assertIn(
+            f"Botch. You learn nothing this session; {SESSION_AP} AP spent. "
+            f"The course has 1200 of {TOTAL} left.",
+            told,
+        )
+        self.assertEqual(
+            self.holdings(),
+            (STARTING_AP - 2 * SESSION_AP, STARTING_COIN - COIN, 0, 1),
+        )
+        self.assertEqual(self.open_enrollment().development_remaining, 1200)
+        self.assertEqual(self.occult_stores(), (12, 12))
+
+    def test_retaking_a_course_finished_this_week_waits_for_the_week(self) -> None:
+        enrollment = self.open_enrollment()
+        enrollment.development_remaining = 100
+        enrollment.save()
+        advance_game_week()
+        told = self.take_course("success")  # the last 100: 12 -> 12 + 100 of 300
+        self.assertIn("The course is complete.", told)
+
+        self.give_hare()
+        before = self.holdings()
+        told = self.take_course("success")
+        self.assertIn(
+            "You have already trained in this course this week. Nothing was charged.", told
+        )
+        self.assertEqual(self.holdings(), before)
+        self.assertEqual(get_or_create_treasury(self.academy).balance, COIN)
+
+        advance_game_week()
+        told = self.take_course("success")
+        self.assertIn(f"The course has 1200 of {TOTAL} left.", told)
+        self.assertEqual(self.enrollments(), 2)
+        self.assertEqual(self.hares(), 0)
 
     def test_refusal_does_not_use_the_week(self) -> None:
         advance_game_week()
