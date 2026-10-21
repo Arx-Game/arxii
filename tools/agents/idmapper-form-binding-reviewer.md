@@ -41,12 +41,16 @@ the one test that posted a refused floor asserted the database column, which was
 onto the row and called `full_clean()`. A failed `full_clean()` returned the errors, and
 so did an earlier refusal: a name carrying an em or en dash returned before
 `full_clean()`, with the prose already assigned. Both the Save and the Save-and-credit
-views rendered the errors and returned, so a codex entry's refused summary showed to
-every player who opened it until restart, and a refused rename left the new name cached,
-so the corrected save saw "no change" and skipped the queue refresh. It sat beside the
-three builder fixes of #4457 for a release because no form was involved and the first
-pass looked only for bound forms. Every test read the row with `values_list`, which is
-correct for "was it saved" and blind to "is the cache clean".
+views rendered the errors and returned. Reproduced on main against a live server: after
+one refused save, the anonymous public codex API returned the refused name, summary and
+lore while the database held the old ones. A refused rename left the new name cached, so
+the corrected save saw "no change" and skipped the queue refresh. The view had shipped
+with #3019 and was only found while #4457 fixed the builder pages, because no form was
+involved. Every test read the row with `values_list`, which is correct for "was it saved"
+and blind to "is the cache clean". The same review found the stamp saves (credit, review)
+assigned `written_by`/`reviewed_by` and then called a `save()` that can raise: several
+credited models call `clean()` inside `save()`, so an already-invalid stored row fails
+there. The page now saves through `_save_or_flush`.
 
 ## The sanctioned shape
 
@@ -103,13 +107,20 @@ text; after `flush_from_cache(force=True)` a fresh `get()` reads the stored text
    whether the page flushes (or flushes and re-raises) on that path too. This is a
    weaker finding than the refused-submit one when the code in the block cannot
    reasonably raise; name what can (a unique constraint, an offer sync, a missing
-   related row) or say why nothing can.
+   related row, a model `save()` override that calls `clean()`) or say why nothing can.
+   The `save()` override matters most for a hand-assigned stamp that skips
+   `full_clean()`: grep the model for `def save` before calling the path safe. Catch
+   `(ValidationError, DatabaseError)`, not a bare `Exception` (the noqa ratchet refuses
+   that, and those two are what a save raises).
 6. **Rows that reach the mutated instance through a cached FK.** A cached row whose FK
    cache already points at the mutated instance (a `DistinctionOffer` holding its
    `distinction`, a pool entry holding its pool) and is read without `select_related` or a
    fresh query still sees the refused values after a flush of the parent alone, because
    the flush removes the instance from the map but not from that row's FK cache. Check
-   that such rows are flushed too, or that the reader re-queries.
+   that such rows are flushed too, or that the reader re-queries. A re-query with
+   `select_related` rebuilds the child's FK cache from the fresh row, so a reader that
+   always re-queries that way is safe; name the reader that reads the cached FK
+   without one.
 7. **The reader.** For each finding name one concrete reader of the mutated row after
    the abandoned submit, with file:line: the page's own next GET (initial values, a
    `has_changed()` comparison on the corrected save), a player-facing endpoint, or a

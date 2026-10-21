@@ -414,7 +414,10 @@ to `_authoring/` (`admin_authoring`).
   `full_clean()`, so a refused Save or credit (a `full_clean()` failure or a
   dashed name) goes through `_render_refused_edit`: it renders the posted
   text back, then drops the row with `flush_refused_instances` so every
-  later reader gets the stored text (#4543; guard:
+  later reader gets the stored text. The edit save and the credit and review
+  stamps save through `_save_or_flush`, which drops the row before
+  re-raising a `ValidationError` (a model `save()` that calls `clean()`) or
+  `DatabaseError` (#4543; guard:
   `TestARefusedEditLeavesTheCachedRowAsStored`; reviewer:
   `tools/agents/idmapper-form-binding-reviewer.md`).
   `authoring_editor_credit` (POST) runs the same `_apply_edits` when prose
