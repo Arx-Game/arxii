@@ -17,6 +17,7 @@ from world.codex.models import (
     DistinctionCodexGrant,
     OrganizationCodexGrant,
     PathCodexGrant,
+    RealmCodexGrant,
     TraditionCodexGrant,
 )
 from world.codex.services import grant_entry_to_species_holders, grant_to_current_holders
@@ -141,6 +142,7 @@ class ReachListFilter(admin.SimpleListFilter):
             | Q(path_grants__isnull=False)
             | Q(distinction_grants__isnull=False)
             | Q(organization_grants__isnull=False)
+            | Q(realm_grants__isnull=False)
             | Q(species__isnull=False)
         )
         if self.value() == _REACH_PUBLIC:
@@ -195,6 +197,16 @@ class OrganizationGrantInline(_GrantInline):
     fields = ["organization", "holders_today"]
     autocomplete_fields = ["organization"]
     verbose_name_plural = "Taught on joining: Organization codex grants"
+
+
+class RealmGrantInline(_GrantInline):
+    """Codex entries every character who began in a realm knows (#4531)."""
+
+    model = RealmCodexGrant
+    formset = OneRowPerFormSet
+    fields = ["realm", "holders_today"]
+    autocomplete_fields = ["realm"]
+    verbose_name_plural = "Public within a realm: Realm codex grants"
 
 
 class PathGrantInline(_GrantInline):
@@ -257,6 +269,7 @@ class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
         BeginningsGrantInline,
         TraditionGrantInline,
         OrganizationGrantInline,
+        RealmGrantInline,
         PathGrantInline,
         DistinctionGrantInline,
         ClueInline,
@@ -285,7 +298,8 @@ class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
                 "description": (
                     "Public: everyone can read it, including visitors who are not logged in. "
                     "Leave it off when a character has to get it by a path: born into it, "
-                    "taught by a tradition, taught on joining an organization, taught by "
+                    "born anywhere in a realm, taught by a tradition, taught on joining an "
+                    "organization, taught by "
                     "another character, or found through a Mystery. The grant tables below "
                     "are those paths. An entry a clue leads to cannot be public."
                 ),
@@ -424,6 +438,7 @@ class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
                 *entry.beginnings_grants.all(),
                 *entry.tradition_grants.all(),
                 *entry.organization_grants.all(),
+                *entry.realm_grants.all(),
                 *entry.path_grants.all(),
                 *entry.distinction_grants.all(),
             ]
@@ -515,3 +530,17 @@ class OrganizationCodexGrantAdmin(admin.ModelAdmin):
         if not change:
             learned = grant_to_current_holders(obj)
             messages.info(request, f"Reached {learned} current member(s).")
+
+
+@admin.register(RealmCodexGrant)
+class RealmCodexGrantAdmin(admin.ModelAdmin):
+    list_display = ("realm", "entry")
+    search_fields = ("realm__name", "entry__name")
+    autocomplete_fields = ("realm", "entry")
+
+    def save_model(self, request: HttpRequest, obj: RealmCodexGrant, form, change: bool) -> None:
+        """A newly created grant reaches everyone who already began in the realm (#4531)."""
+        super().save_model(request, obj, form, change)
+        if not change:
+            learned = grant_to_current_holders(obj)
+            messages.info(request, f"Reached {learned} current character(s).")

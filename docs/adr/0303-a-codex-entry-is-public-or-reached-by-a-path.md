@@ -7,7 +7,9 @@
 ## Decision
 
 A `CodexEntry` has two states: public (`is_public`, everyone including visitors) or
-reached by a path a character takes: born into it (`BeginningsCodexGrant`), taught by a
+reached by a path a character takes: born into it (`BeginningsCodexGrant`), born anywhere
+in a realm (`RealmCodexGrant`, #4531, 2026-10-21: one row per realm instead of one per
+beginning, so a beginning added later is covered), taught by a
 tradition, on joining an organization (`OrganizationCodexGrant`), by another character
 (`CodexTeachingOffer`), or found through a Mystery (`Clue` with `target_kind=CODEX`).
 Nothing is shown to visitors or in character creation and later taken away. Routes stack;

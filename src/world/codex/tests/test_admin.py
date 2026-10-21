@@ -111,6 +111,7 @@ class CodexEntryAdminTests(TestCase):
         self.assertIn("beginnings_grants", body)
         self.assertIn("tradition_grants", body)
         self.assertIn("organization_grants", body)
+        self.assertIn("realm_grants", body)
 
     def test_change_form_clue_inline_shows_placements(self):
         RoomClueFactory(clue=self.clue)

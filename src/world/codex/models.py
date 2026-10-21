@@ -925,3 +925,46 @@ class OrganizationCodexGrant(NaturalKeyMixin, SharedMemoryModel):
         from world.codex.services import active_member_roster_entries  # noqa: PLC0415
 
         return active_member_roster_entries(self.organization)
+
+
+class RealmCodexGrant(NaturalKeyMixin, SharedMemoryModel):
+    """Codex entries every character who began in a realm knows (#4531).
+
+    "Public within a realm": the entry is not ``is_public``, and it is not one
+    ``BeginningsCodexGrant`` row per beginning of the realm, which silently misses
+    every beginning added later. Granted at finalize from the draft's starting
+    area's realm (``sheet_writers.grant_realm_codex``) and to the characters already
+    standing through ``Profile.origin_realm`` on the true profile.
+    """
+
+    realm = models.ForeignKey(
+        "arxii.Realm",
+        on_delete=models.CASCADE,
+        related_name="codex_grants",
+    )
+    entry = models.ForeignKey(
+        CodexEntry,
+        on_delete=models.CASCADE,
+        related_name="realm_grants",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["realm", "entry"]
+        dependencies = ["arxii.Realm", CODEX_ENTRY_MODEL]
+
+    class Meta:
+        unique_together = ["realm", "entry"]
+        verbose_name = "Realm Codex Grant"
+        verbose_name_plural = "Realm Codex Grants"
+
+    def __str__(self) -> str:
+        return f"{self.realm} grants {self.entry}"
+
+    def holder_roster_entries(self) -> list[RosterEntry]:
+        """Roster entries of every character whose true profile began in this realm."""
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        sheets = CharacterSheet.objects.filter(true_profile__origin_realm=self.realm)
+        return _roster_entries_of(sheets)

@@ -2119,7 +2119,7 @@ Lore storage and character knowledge tracking.
   file_entry_under`/`unfile_entry` are the only sanctioned way to add/remove a filing.
   Reach tooling (#3775, ADR-0303): every grant model (`BeginningsCodexGrant`,
   `PathCodexGrant`, `DistinctionCodexGrant`, `TraditionCodexGrant`,
-  `OrganizationCodexGrant`) has `holder_roster_entries()`, and
+  `OrganizationCodexGrant`, `RealmCodexGrant`) has `holder_roster_entries()`, and
   `services.grant_to_current_holders(grant)` hands its entry to everyone already
   holding the group; `species_holder_roster_entries(entry)`/
   `grant_entry_to_species_holders(entry)` are the species-side equivalent.
