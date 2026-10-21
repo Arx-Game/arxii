@@ -668,7 +668,7 @@ Gift technique the `technique_skill` of the Path it is cast from (#4555, ADR-455
 technique's own Paths are those whose `PathGiftGrant.starter_techniques` lists it
 (`technique_paths`, one query for many techniques); `skill_path` takes the caster's current Path
 (`current_path_for_character`) when it is one of them, otherwise the technique's first own Path in
-Path order (stage, sort order, name), so a technique learned on the Path of Embers and cast after a
+Path order (stage, sort order, name, then pk), so a technique learned on the Path of Embers and cast after a
 Crossing into the Path of Ash still adds the Embers skill. A Path never inherits its parent's
 skill. A technique on no Path's list falls back to the caster's current Path, and a caster with no
 Path then gets no Path skill. Otherwise for a Minor Gift technique the Gift's `technique_skill`. An
