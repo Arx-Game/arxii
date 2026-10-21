@@ -20,11 +20,9 @@ import {
   useStatDefinitions,
   useUpdateDraft,
 } from '../../queries';
+import { MAGIC_SKILL_CATEGORY } from '../../constants';
 import type { CharacterDraft } from '../../types';
 import type { GiftFormValues } from '../GiftStage';
-
-/** `TraitCategory.MAGIC` on the server: the skills magical rolls add as terms. */
-const MAGIC_SKILL_CATEGORY = 'magic';
 
 interface AnimaCheckStepProps {
   draft: CharacterDraft;

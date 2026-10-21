@@ -33,6 +33,7 @@ from world.character_creation.constants import (
     AGE_MIN,
     CG_MODIFIER_CATEGORY,
     ENEMY_MARKING_DEGREES,
+    MAGIC_SKILL_POINTS_REFUSAL,
     REPUTATION_SEED_MAX,
     REPUTATION_SEED_MIN,
     REQUIRED_STATS,
@@ -1905,6 +1906,18 @@ class CharacterDraft(SharedMemoryModel):
             STARTING_TECHNIQUE_PICKS_TARGET, CG_MODIFIER_CATEGORY
         )
 
+    @property
+    def starting_magic_skill_floor(self) -> int:
+        """The level every Magic skill starts at, from the schooling stance picked (#4457).
+
+        Read live from the draft's Tradition Training pick on every call, never memoised;
+        finalize writes it as the floor of every Magic skill. 0 for a self-taught
+        character, rank 0, or a tradition whose state opens no stances.
+        """
+        from world.character_creation.offers import schooling_magic_skill_floor  # noqa: PLC0415
+
+        return schooling_magic_skill_floor(self)
+
     def calculate_stat_budget(self) -> int:
         """Total stat points = default * stat_count + net bonuses."""
         bonuses = self.get_all_stat_bonuses()
@@ -2215,6 +2228,7 @@ class CharacterDraft(SharedMemoryModel):
         - Total points spent <= budget
         - Specializations only where parent >= threshold
         - No values exceed CG max
+        - No points in a Magic skill or one of its specializations (#4457)
         """
         from world.skills.models import SkillPointBudget  # noqa: PLC0415
 
@@ -2232,6 +2246,31 @@ class CharacterDraft(SharedMemoryModel):
             specializations.values(), budget.max_specialization_value, "Specialization"
         )
         self._check_specialization_parents(skills, specializations, budget)
+        self._check_no_magic_points(skills, specializations)
+
+    def _check_no_magic_points(self, skills: dict, specializations: dict) -> None:
+        """CG skill points never buy a Magic skill or one of its specializations (#4457).
+
+        Magic skills come only from the schooling stance's floor, so points in one (or
+        in a specialization whose parent is one) are refused by name, in name order.
+        """
+        from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+        from world.skills.models import Specialization  # noqa: PLC0415
+
+        spent_skill_ids = {int(pk) for pk, value in skills.items() if value > 0}
+        spent_spec_ids = {int(pk) for pk, value in specializations.items() if value > 0}
+        if not spent_skill_ids and not spent_spec_ids:
+            return
+        magic_skills = magic_category_skills()
+        names = {
+            *magic_skills.filter(pk__in=spent_skill_ids).values_list("trait__name", flat=True),
+            *Specialization.objects.filter(
+                pk__in=spent_spec_ids, parent_skill__in=magic_skills
+            ).values_list("name", flat=True),
+        }
+        if names:
+            msg = f"{MAGIC_SKILL_POINTS_REFUSAL}{', '.join(sorted(names))}."
+            raise serializers.ValidationError(msg)
 
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""
@@ -2484,6 +2523,11 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     ``grants.cost_per_rank * rank``. Staff author the three rows on the tradition
     slate page; read by the tradition serializer to draw the stances under a
     living tradition and by the offers module to open a Tradition Training offer.
+
+    ``magic_skill_floor`` (#4457) is the level every Magic-category skill starts at
+    for a character who picks this stance at character creation. It is a skill level,
+    not development points, and it is the same for every Tradition (the stances are
+    shared by every Beginning). Rank 0 grants no floor, since it grants nothing.
     """
 
     rank = models.PositiveSmallIntegerField(unique=True)
@@ -2497,6 +2541,14 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="granted_by_schooling_lines",
         help_text="The distinction this line grants, at this line's rank.",
     )
+    magic_skill_floor = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "The level every Magic-category skill starts at for a character who picks "
+            "this stance, the same for every Tradition. A skill level, not development. "
+            "0 = no Magic skills."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -2504,6 +2556,12 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         verbose_name = "Schooling line"
         verbose_name_plural = "Schooling lines"
         ordering = ["rank"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(rank__gt=0) | models.Q(magic_skill_floor=0),
+                name="schooling_rank_zero_grants_no_floor",
+            ),
+        ]
 
     class NaturalKeyConfig:
         fields = ["rank"]

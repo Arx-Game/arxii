@@ -31,6 +31,7 @@ from django.views.decorators.http import require_POST
 
 from web.admin.authoring.contributors import current_contributor
 from web.admin.authoring.credit import stamp_reviewed, stamp_written
+from web.admin.authoring.identity_map import flush_refused_instances
 from web.admin.tradition_slate import live
 from web.admin.tradition_slate.forms import (
     SlateFormSet,
@@ -46,6 +47,7 @@ from world.character_creation.models import (
     TraditionStateLine,
 )
 from world.contributors.models import ContentContributor
+from world.skills.models import SkillPointBudget
 
 #: Standard-line row order the demo approved: how a player is meant to read
 #: them, not the alphabetical order the model's own ``state`` field sorts to.
@@ -116,6 +118,7 @@ def _render_page(
     *,
     needs_setup: bool = False,
 ) -> HttpResponse:
+    magic_skill_names = live.magic_skill_names()
     return render(
         request,
         "admin/tradition_slate/page.html",
@@ -133,9 +136,15 @@ def _render_page(
             ],
             "schooling_formset": forms.schooling,
             "schooling_rows": [
-                (f, f.initial.get("rank"), live.schooling_line_display(f.instance))
+                (
+                    f,
+                    f.initial.get("rank"),
+                    live.schooling_line_display(f.instance),
+                    live.schooling_floor_preview(f.instance, magic_skill_names),
+                )
                 for f in forms.schooling.forms
             ],
+            "floor_cap": SkillPointBudget.get_active_budget().max_skill_value,
             "slate_formset": forms.slate,
             "needs_setup": needs_setup,
             "media": forms.media,
@@ -228,7 +237,13 @@ def _save_slate(
     if contributor is None:
         return _render_page(request, beginning, forms, needs_setup=True)
     if not (forms.state.is_valid() and forms.schooling.is_valid() and forms.slate.is_valid()):
-        return _render_page(request, beginning, forms)
+        # The errors render from the posted values; only then drop the refused lines
+        # from the identity map, or the next load and the corrected save read them.
+        # finally: a template error must not leave them there either.
+        try:
+            return _render_page(request, beginning, forms)
+        finally:
+            flush_refused_instances(forms.state, forms.schooling, forms.slate)
 
     with transaction.atomic():
         saved_state = forms.state.save()

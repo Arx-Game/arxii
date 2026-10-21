@@ -192,6 +192,19 @@ class InteractionStartRequestSerializer(serializers.Serializer):
     )
 
 
+class OfferPriceSerializer(serializers.Serializer):
+    """What accepting an Academy offer costs (#4457); ``display`` is the menu line."""
+
+    ap = serializers.IntegerField()
+    coppers = serializers.IntegerField()
+    golden_hares = serializers.IntegerField()
+    per_session_ap = serializers.IntegerField(allow_null=True)
+    development_remaining = serializers.IntegerField(allow_null=True)
+    development_total = serializers.IntegerField(allow_null=True)
+    training_points = serializers.IntegerField(allow_null=True)
+    display = serializers.CharField()
+
+
 class InteractionOfferSerializer(serializers.Serializer):
     """One eligible offer in the interaction state response."""
 
@@ -204,6 +217,8 @@ class InteractionOfferSerializer(serializers.Serializer):
     # offers (null otherwise) — surfaced pre-accept so the ack gate
     # (MISSION_RISK_ACK_TIER) is never a surprise.
     risk_tier = serializers.IntegerField(allow_null=True, default=None)
+    # #4457: an Academy offer's price line (skill course, TRAIN); null for every other kind.
+    price = OfferPriceSerializer(allow_null=True, default=None)
 
 
 class InteractionStateSerializer(serializers.Serializer):

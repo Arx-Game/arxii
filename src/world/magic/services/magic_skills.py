@@ -17,16 +17,29 @@ from world.magic.constants import GiftKind, MagicActivity
 from world.magic.models.magic_activity import MagicActivitySkill
 from world.magic.services.anima import get_character_cast_check
 from world.magic.types.magic_skills import CastCheck
+from world.skills.models import Skill
+from world.traits.models import TraitCategory
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
     from world.classes.models import Path
     from world.magic.models import Technique
-    from world.skills.models import Skill
 
 TECHNIQUE_SKILL_WEIGHT = Decimal("1.00")
+
+
+def magic_category_skills() -> QuerySet[Skill]:
+    """The active skills whose trait is in the Magic category.
+
+    Staff control the set by a skill's category, never by name. Called by character
+    creation (the skills a Tradition's schooling stance lifts at finalize, the points a
+    draft may not spend on them) and the Anima Check filter, which excludes them so a
+    skill is never counted twice in a magical roll (#4450, #4457).
+    """
+    return Skill.objects.filter(is_active=True, trait__category=TraitCategory.MAGIC)
 
 
 def activity_skill_terms(activity: MagicActivity) -> tuple[ExtraTraitTerm, ...]:

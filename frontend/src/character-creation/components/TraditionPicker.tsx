@@ -91,7 +91,9 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
                 <PerspectivesPanel perspectives={perspectives} />
               </div>
             )}
-            {isChosen && tradition.state === 'living_masters' && (
+            {/* The server decides which states open stances (living masters: ranks 0-2,
+                teachers gone: 0-1, self-taught: none), so the field follows the rows. */}
+            {isChosen && tradition.schooling.length > 0 && (
               <div className="field">
                 <label>
                   {(copy?.gift_schooling_label ?? 'How you came to {tradition}').replace(

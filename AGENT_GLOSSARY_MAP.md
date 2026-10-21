@@ -13,7 +13,8 @@ term is chosen and the rest are listed under `_Avoid_`.
   Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate, Gift
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
-  Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501)
+  Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501); and Magic skill floor (#4457,
+  ADR-4457-A; Tradition Training gains it)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
   Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
@@ -77,7 +78,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
 - [npc_services](src/world/npc_services/AGENT_GLOSSARY.md), incl. the #2827 tier-ladder terms
-  and a pointer to where the #4091 allegiance terms actually live (combat and conditions, above)
+  and a pointer to where the #4091 allegiance terms actually live (combat and conditions, above); and (#4457, ADR-4457-A)
+  Skill course / Course enrollment (_Avoid_: remedial training, TRAIN offer for a course)
 - [tasking](src/world/tasking/AGENT_GLOSSARY.md)
 - [tavern_games](src/world/tavern_games/AGENT_GLOSSARY.md)
 - [tarot](src/world/tarot/AGENT_GLOSSARY.md)

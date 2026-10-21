@@ -247,7 +247,10 @@ class CmdHire(ArxCommand):
         lines = ["|wAvailable offers:|n"]
         for offer in state["available_offers"]:
             marker = " (final)" if offer["is_final"] else ""
-            lines.append(f"  [#{offer['id']}] {offer['label']}{marker} [{offer['kind']}]")
+            line = f"  [#{offer['id']}] {offer['label']}{marker} [{offer['kind']}]"
+            if offer["price"] is not None:
+                line += f" - {offer['price']['display']}"
+            lines.append(line)
         self.msg("\n".join(lines))
 
     def _role_model(self) -> type[NPCRole]:

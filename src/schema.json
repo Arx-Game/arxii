@@ -50653,6 +50653,9 @@ components:
         starting_technique_picks:
           type: integer
           readOnly: true
+        starting_magic_skill_floor:
+          type: integer
+          readOnly: true
         age_min:
           type: integer
           readOnly: true
@@ -50739,6 +50742,7 @@ components:
       - served_house
       - stage_completion
       - stage_errors
+      - starting_magic_skill_floor
       - starting_technique_picks
       - stat_bonuses
       - stats_budget
@@ -63384,6 +63388,10 @@ components:
         risk_tier:
           type: integer
           nullable: true
+        price:
+          allOf:
+          - $ref: '#/components/schemas/OfferPrice'
+          nullable: true
       required:
       - id
       - is_final
@@ -68894,6 +68902,7 @@ components:
             * `styling` - Styling
             * `profile_recording` - Profile Recording
             * `clue_reveal` - Clue Reveal
+            * `skill_course` - Skill Course
         label:
           type: string
           description: UI display text for the menu option.
@@ -68975,6 +68984,7 @@ components:
       - styling
       - profile_recording
       - clue_reveal
+      - skill_course
       type: string
       description: |-
         * `permit` - Permit
@@ -68996,6 +69006,7 @@ components:
         * `styling` - Styling
         * `profile_recording` - Profile Recording
         * `clue_reveal` - Clue Reveal
+        * `skill_course` - Skill Course
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -69026,6 +69037,7 @@ components:
             * `styling` - Styling
             * `profile_recording` - Profile Recording
             * `clue_reveal` - Clue Reveal
+            * `skill_course` - Skill Course
         label:
           type: string
           minLength: 1
@@ -69532,6 +69544,40 @@ components:
       - available_at
       - offer
       - persona
+    OfferPrice:
+      type: object
+      description: What accepting an Academy offer costs (#4457); ``display`` is the
+        menu line.
+      properties:
+        ap:
+          type: integer
+        coppers:
+          type: integer
+        golden_hares:
+          type: integer
+        per_session_ap:
+          type: integer
+          nullable: true
+        development_remaining:
+          type: integer
+          nullable: true
+        development_total:
+          type: integer
+          nullable: true
+        training_points:
+          type: integer
+          nullable: true
+        display:
+          type: string
+      required:
+      - ap
+      - coppers
+      - development_remaining
+      - development_total
+      - display
+      - golden_hares
+      - per_session_ap
+      - training_points
     OfferSummons:
       type: object
       description: Serializer for a directed-offer summons (#2050).
@@ -78868,6 +78914,7 @@ components:
             * `styling` - Styling
             * `profile_recording` - Profile Recording
             * `clue_reveal` - Clue Reveal
+            * `skill_course` - Skill Course
         label:
           type: string
           minLength: 1
@@ -87520,8 +87567,8 @@ components:
       - scene
     SchoolingLine:
       type: object
-      description: One standard schooling stance under a ``living_masters`` tradition
-        (#3675).
+      description: 'One standard schooling stance under a tradition that opens stances
+        (#3675, #4457).'
       properties:
         schooling_line_id:
           type: integer
@@ -87535,6 +87582,8 @@ components:
           type: integer
         techniques:
           type: integer
+        magic_skill_floor:
+          type: integer
         grants_distinction_id:
           type: integer
           nullable: true
@@ -87543,6 +87592,7 @@ components:
           nullable: true
       required:
       - grants_distinction_id
+      - magic_skill_floor
       - name
       - offer_id
       - player_line

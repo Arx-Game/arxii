@@ -222,6 +222,7 @@ class SchoolingLineFactory(factory_django.DjangoModelFactory):
     rank = 0
     name = factory.LazyAttribute(lambda o: f"Schooling {o.rank}")
     player_line = "A line."
+    magic_skill_floor = 0
 
 
 class EnemyReasonFactory(factory_django.DjangoModelFactory):
