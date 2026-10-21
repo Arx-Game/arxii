@@ -2524,10 +2524,10 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     slate page; read by the tradition serializer to draw the stances under a
     living tradition and by the offers module to open a Tradition Training offer.
 
-    ``magic_skill_floor`` (#4457) is the Magic-skill development a character at
-    this stance is lifted to when she takes the tradition: every Magic skill
-    the tradition teaches is raised to at least that value (never lowered). Rank
-    0 grants no floor, since it grants nothing.
+    ``magic_skill_floor`` (#4457) is the level every Magic-category skill starts at
+    for a character who picks this stance at character creation. It is a skill level,
+    not development points, and it is the same for every Tradition (the stances are
+    shared by every Beginning). Rank 0 grants no floor, since it grants nothing.
     """
 
     rank = models.PositiveSmallIntegerField(unique=True)
@@ -2544,8 +2544,9 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     magic_skill_floor = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
-            "Development each Magic skill the tradition teaches is raised to, at "
-            "least, when a character takes this stance. 0 = no floor."
+            "The level every Magic-category skill starts at for a character who picks "
+            "this stance, the same for every Tradition. A skill level, not development. "
+            "0 = no Magic skills."
         ),
     )
 

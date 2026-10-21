@@ -31,6 +31,17 @@ class SkillCourseOfferDetailsTests(TestCase):
         with transaction.atomic(), self.assertRaises(IntegrityError):
             SkillCourseOfferDetailsFactory(total_development=100, session_development=200)
 
+    def test_zero_total_development_refused(self):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            SkillCourseOfferDetailsFactory(total_development=0, session_development=0)
+
+    def test_zero_session_development_refused(self):
+        with (
+            transaction.atomic(),
+            self.assertRaisesMessage(IntegrityError, "course_session_development_positive"),
+        ):
+            SkillCourseOfferDetailsFactory(total_development=100, session_development=0)
+
     def test_clean_refuses_offer_ap_cost(self):
         offer = NPCServiceOfferFactory(kind=OfferKind.SKILL_COURSE, ap_cost=3)
         details = SkillCourseOfferDetailsFactory.build(offer=offer)

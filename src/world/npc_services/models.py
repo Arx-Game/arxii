@@ -594,7 +594,8 @@ class NPCServiceOffer(NaturalKeyMixin, SharedMemoryModel):
         help_text=(
             "Action points charged to the resolving character before the effect "
             "dispatches (#930 — collection/improvement dispatches cost AP; the "
-            "generic knob is available to every kind). 0 = free."
+            "generic knob is available to every kind). 0 = free. Must stay 0 on "
+            "TRAIN and Skill Course offers; they charge their own AP."
         ),
     )
     check_type = models.ForeignKey(
@@ -974,7 +975,11 @@ class TrainOfferDetails(SharedMemoryModel):
 
     ``learn_ap_cost``/``gold_cost`` mirror ``TechniqueTeachingOffer``'s
     fields — the same shared ``charge_and_learn`` seam
-    (``world.magic.services.gift_acquisition``) consumes both. Unlike the
+    (``world.magic.services.gift_acquisition``) consumes both.
+    ``learn_ap_cost`` is the base of the ``TechniqueProgress`` meter that seam
+    opens, multiplied by the first-technique, major-gift and cross-path
+    multipliers: no AP is charged at acceptance, and the learner pays it per
+    session afterwards (``contribute_to_technique_progress``). Unlike the
     teaching-offer path, TRAIN also always charges exactly one unredeemed
     Golden Hare (``currency.FavorTokenDetails``) issued by the Academy —
     the venue, per the #2428 ruling that Hares are Academy-specific
@@ -1004,8 +1009,10 @@ class TrainOfferDetails(SharedMemoryModel):
     learn_ap_cost = models.PositiveIntegerField(
         default=5,
         help_text=(
-            "Base AP the learner pays to accept, before the has-gift/"
-            "major-gift multiplier (mirrors TechniqueTeachingOffer.learn_ap_cost)."
+            "Base of the training meter's AP total, multiplied by the first-technique, "
+            "major-gift and cross-path multipliers. No AP is charged when the offer is "
+            "accepted; the learner pays it session by session afterwards (mirrors "
+            "TechniqueTeachingOffer.learn_ap_cost)."
         ),
     )
     gold_cost = models.PositiveIntegerField(
@@ -1057,7 +1064,7 @@ class SkillCourseOfferDetails(SharedMemoryModel):
         help_text="The skill this course develops.",
     )
     total_development = models.PositiveIntegerField(
-        help_text="Development points the whole course grants when finished."
+        help_text="Development points the whole course grants when finished.",
     )
     session_development = models.PositiveIntegerField(
         help_text="Development points a session adds, scaled by the training roll's outcome.",
@@ -1066,6 +1073,7 @@ class SkillCourseOfferDetails(SharedMemoryModel):
         help_text="Action points the learner pays for each session.",
     )
     coin_cost = models.PositiveIntegerField(
+        verbose_name="Coin cost (coppers)",
         help_text="Coppers the learner pays once, when enrolling, credited to the teacher's house.",
     )
     check_type = models.ForeignKey(
@@ -1085,6 +1093,14 @@ class SkillCourseOfferDetails(SharedMemoryModel):
             models.CheckConstraint(
                 condition=models.Q(session_development__lte=models.F("total_development")),
                 name="course_session_within_total",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(total_development__gt=0),
+                name="course_total_development_positive",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(session_development__gt=0),
+                name="course_session_development_positive",
             ),
         ]
 
