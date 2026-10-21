@@ -496,12 +496,15 @@ class CharacterDistinction(SharedMemoryModel):
     # Secret — it drops off the public distinctions list and is learned through the clue loop.
     # The FK's presence IS the secret-state (see ``is_secret``); there is no separate flag to
     # drift. SET_NULL so deleting the Secret simply makes the distinction public again.
-    secret = models.OneToOneField(
+    # A plain FK since #4528: one secret holds any number of the subject's distinctions
+    # (staff tick them from the secret's side, ``set_secret_distinctions``); a distinction
+    # sits in at most one.
+    secret = models.ForeignKey(
         "arxii.Secret",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="distinction",
+        related_name="distinctions",
         help_text="The Secret this distinction was relocated into; null = publicly visible.",
     )
     # Glimpse provenance (#2427): when set, this distinction was born in the

@@ -1,7 +1,9 @@
-from django.contrib import admin
-from django.core.exceptions import ObjectDoesNotExist
+from django import forms
+from django.contrib import admin, messages
 
 from world.admin_utils import OneRowPerFormSet
+from world.distinctions.models import CharacterDistinction
+from world.distinctions.services import set_secret_distinctions
 from world.secrets.constants import DEFAULT_VICTIM_SEVERITY_BY_LEVEL
 from world.secrets.models import Secret, SecretCategory, SecretKnowledge, SecretVictim
 
@@ -45,20 +47,77 @@ class SecretVictimInline(admin.TabularInline):
     extra = 0
 
 
+#: The picker field's name on ``SecretAdminForm`` (#4528).
+_PICKER = "distinctions"
+
+
+class SecretAdminForm(forms.ModelForm):
+    """The secret's form plus the picker (#4528): the subject's held distinctions as
+    checkboxes, the ticked ones held in this secret and so private. Absent on the add
+    view, where the subject is not yet known."""
+
+    distinctions = forms.ModelMultipleChoiceField(
+        queryset=CharacterDistinction.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Distinctions held in this secret",
+        help_text="Ticked: relocated into this secret, off the public sheet. "
+        "Unticked: public again.",
+    )
+
+    class Meta:
+        model = Secret
+        # The admin decides the field set, as it does for its default form; this form
+        # only adds the picker on top of every model field.
+        fields = "__all__"  # noqa: DJ007
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        instance = self.instance
+        if instance.pk is None:
+            # The add view: no subject yet, so nothing to pick; the admin leaves the
+            # field off the page (``SecretAdmin.get_fields``).
+            return
+        held = CharacterDistinction.objects.filter(
+            character_id=instance.subject_sheet_id
+        ).select_related("distinction")
+        self.fields[_PICKER].queryset = held
+        self.fields[_PICKER].initial = held.filter(secret_id=instance.pk)
+
+
 @admin.register(Secret)
 class SecretAdmin(admin.ModelAdmin):
+    form = SecretAdminForm
     autocomplete_fields = ["scene", "subject_item_instance"]
     list_display = ["__str__", "level", "category", "provenance", "created_date"]
     list_filter = ["level", "provenance", "category"]
     search_fields = ["content", "consequences"]
-    raw_id_fields = ["subject_sheet", "author_persona", "hook"]
+    raw_id_fields = ["subject_sheet", "author_persona", "hook", "about_persona", "story"]
     readonly_fields = [
         "created_date",
         "updated_date",
-        "get_relocated_distinction",
         "get_default_victim_severity",
     ]
     inlines = [SecretVictimInline, SecretKnowledgeInline]
+
+    def get_fields(self, request, obj=None):
+        """The picker shows only once the secret, and so its subject, exists (#4528)."""
+        fields = list(super().get_fields(request, obj))
+        if obj is None:
+            fields.remove(_PICKER)
+        return fields
+
+    def save_related(self, request, form, formsets, change: bool) -> None:
+        """Apply the picker after the secret itself is saved (#4528)."""
+        super().save_related(request, form, formsets, change)
+        if not change or _PICKER not in form.cleaned_data:
+            return
+        linked, unlinked = set_secret_distinctions(form.instance, form.cleaned_data[_PICKER])
+        if linked or unlinked:
+            messages.info(
+                request,
+                f"{linked} distinction(s) now private in this secret; {unlinked} public again.",
+            )
 
     @admin.display(description="Default victim severity")
     def get_default_victim_severity(self, obj: Secret) -> str:
@@ -70,13 +129,6 @@ class SecretAdmin(admin.ModelAdmin):
             f"{DEFAULT_VICTIM_SEVERITY_BY_LEVEL.get(obj.level, 0)} at level {obj.level}. "
             f"{'Already exposed.' if exposed else 'Not yet exposed.'}"
         )
-
-    @admin.display(description="Relocated from distinction")
-    def get_relocated_distinction(self, obj: Secret) -> str:
-        try:
-            return str(obj.distinction)
-        except ObjectDoesNotExist:
-            return "-"
 
 
 @admin.register(SecretKnowledge)

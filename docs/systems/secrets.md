@@ -258,11 +258,22 @@ A sensitive distinction is **relocated** into a Secret rather than carrying a pu
 
 - `Distinction` (kind): `secret_by_default` + `default_secret_level` — taking such a kind
   (criminal / scandalous) auto-mints a Secret at finalize (`character_creation/services.py`).
-- `CharacterDistinction.secret` → `OneToOneField(Secret, SET_NULL)`. **Its presence *is* the
-  secret-state** (`CharacterDistinction.is_secret`); there is no separate boolean to drift. The
-  old `DistinctionVisibility` enum, `default_visibility`, and `visibility_override` are gone.
+- `CharacterDistinction.secret` → `ForeignKey(Secret, SET_NULL)` (a one-to-one until #4528).
+  **Its presence *is* the secret-state** (`CharacterDistinction.is_secret`); there is no
+  separate boolean to drift. One secret holds any number of the subject's distinctions
+  (`secret.distinctions`); a distinction sits in at most one. The old `DistinctionVisibility`
+  enum, `default_visibility`, and `visibility_override` are gone.
 - Services: `world.distinctions.services.mint_distinction_secret` / `clear_distinction_secret`
-  (the single minting authority; a player self-gate passes `PLAYER_FLAVOR` + level 1).
+  (the single minting authority; a player self-gate passes `PLAYER_FLAVOR` + level 1; clearing
+  deletes the Secret only when it holds no other distinction and no truth) and
+  `set_secret_distinctions(secret, chosen)` (#4528): the staff picker, driven from the
+  secret's side on the Secret admin (`SecretAdminForm.distinctions`, the subject's held
+  distinctions as checkboxes), links the ticked rows (private) and frees the rest (public);
+  it never deletes the secret.
+- Links a secret carries beyond its subject (#4528, staff-set, on `AuthoredSecretSerializer`
+  only, never on the knowledge-scoped shape): `Secret.about_persona` (who the secret is about
+  when not the subject: the demon behind a voice, the familiar, the person) and
+  `Secret.story` (the fourth act anchor, the story the truth belongs to; `Story.anchored_secrets`).
 - Display: the profile distinctions section shows only **non-secret** distinctions to
   non-privileged viewers (`_build_distinctions`); a relocated one drops off that public list and
   surfaces on the **secret tab** once learned, through the ordinary `SecretKnowledge` loop. The

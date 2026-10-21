@@ -168,6 +168,27 @@ class Secret(SharedMemoryModel):
     # The diffuse channel — a vector of moral framings dot-producted against each aware society's
     # principles, so the same fact reads positive to one society and negative to another. Empty =
     # no diffuse reputational impact. Authored, or generated (e.g. a mission seeds them by act).
+    # --- Who and which story (#4528): staff-set, never a player's to write or read. ---
+    # ``about_persona`` is who this secret is about when it is not the subject: the demon
+    # behind a voice, the familiar, the spirit, the person. ``story`` is the fourth act
+    # anchor beside the deed, the legend entry and the scene: the story the truth belongs to,
+    # whose GM notes it shows beside. Both specific->general (ADR-0010).
+    about_persona = models.ForeignKey(
+        "arxii.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="secrets_about",
+        help_text="The persona this secret is about when not the subject (#4528); staff-set.",
+    )
+    story = models.ForeignKey(
+        "arxii.Story",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="anchored_secrets",
+        help_text="The story this secret belongs to, if any (#4528); staff-set.",
+    )
     archetypes = models.ManyToManyField(
         "arxii.PhilosophicalArchetype",
         blank=True,

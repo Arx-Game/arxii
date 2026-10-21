@@ -5,7 +5,7 @@ The catalog definition of a character advantage or disadvantage (`Distinction`) 
 _Avoid_: perk, feat, trait (too generic — see `traits` app for the separate stat system)
 
 **CharacterDistinction**:
-The per-character record of an acquired Distinction — its rank, origin, and optional secret relocation. The unit every acquisition source (CG or in-play) ultimately creates or updates.
+The per-character record of an acquired Distinction — its rank, origin, and optional secret relocation (`secret`, a plain FK since #4528: a secret holds many, a distinction sits in one; staff tick them from the secret's side). The unit every acquisition source (CG or in-play) ultimately creates or updates.
 _Avoid_: distinction grant (that names the act, not the record), character trait
 
 **Origin**:
