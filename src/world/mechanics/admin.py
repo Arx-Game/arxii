@@ -75,7 +75,7 @@ class ModifierTargetAdmin(admin.ModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Correct the trait help text for language traits (model text says stat only)."""
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
-        if db_field.name == "target_trait" and formfield:  # noqa: STRING_LITERAL - admin field name
+        if db_field.name == "target_trait" and formfield:  # noqa: STRING_LITERAL
             formfield.help_text = (
                 "The trait this target modifies. For the stat category pick the stat; "
                 "for the language category pick the language trait. Leave blank for "
