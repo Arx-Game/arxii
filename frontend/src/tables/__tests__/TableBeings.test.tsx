@@ -115,6 +115,7 @@ const prompt: StewardPrompt = {
       worn_ease: 10,
       pieces: [
         {
+          source: 'worn',
           item_name: '[gown]',
           facet_name: '[facet]',
           signals: [

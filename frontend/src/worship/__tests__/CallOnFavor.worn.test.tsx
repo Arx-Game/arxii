@@ -31,6 +31,7 @@ const OPTIONS: InvocationOptions = {
       worn: {
         pieces: [
           {
+            source: 'worn',
             item_name: 'riding coat',
             facet_name: 'Kestrel',
             signals: [
@@ -44,6 +45,7 @@ const OPTIONS: InvocationOptions = {
             counted: true,
           },
           {
+            source: 'worn',
             item_name: 'kestrel brooch',
             facet_name: 'Kestrel',
             signals: [],

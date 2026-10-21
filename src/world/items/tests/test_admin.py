@@ -89,3 +89,80 @@ class ItemInstanceAdminMeaningTests(TestCase):
         ).content.decode()
 
         assert "Nobody holds this item" in body
+
+
+class KeepsakeAdminTests(TestCase):
+    """The Keepsake change form shows the subject and a computed rail, never a score for
+    the player's words (#4530), and refuses a subject that does not match its kind."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from django.urls import reverse
+
+        from evennia_extensions.factories import AccountFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.constants import KeepsakeSubject
+        from world.items.factories import ItemInstanceFactory, KeepsakeFactory
+        from world.societies.factories import LegendEntryFactory
+
+        cls.staff = AccountFactory(is_staff=True, is_superuser=True)
+        cls.keeper = CharacterSheetFactory()
+        cls.item = ItemInstanceFactory(holder_character_sheet=cls.keeper)
+        cls.deed = LegendEntryFactory(persona=cls.keeper.primary_persona, base_value=20)
+        cls.keepsake = KeepsakeFactory(
+            item_instance=cls.item,
+            subject_kind=KeepsakeSubject.DEED,
+            subject_label="",
+            subject_deed=cls.deed,
+            text="[player words]",
+        )
+        cls.url = reverse("admin:arxii_keepsake_change", args=(cls.keepsake.pk,))
+
+    def test_the_rail_computes_the_subjects_points_and_the_page_carries_its_rules(self) -> None:
+        self.client.force_login(self.staff)
+
+        body = self.client.get(self.url).content.decode()
+
+        assert "Computed (read-only)" in body
+        assert "Keepsake: stands for the deed" in body
+        assert ": 3</p>" in body  # the deed's legend 20 over ten, plus one
+        assert "Counts from:" in body
+        assert "keepsake-rail" in body
+        assert "admin/css/forms.css" in body
+        # The player's words are shown to staff in the form and nowhere scored.
+        assert "[player words]" in body
+
+    def test_a_subject_that_does_not_match_its_kind_is_a_form_error_not_a_crash(self) -> None:
+        from world.items.models import Keepsake
+
+        wrong = Keepsake(
+            item_instance=self.item,
+            character_sheet=self.keeper,
+            subject_kind="being",
+            subject_deed=self.deed,
+        )
+
+        from django.core.exceptions import ValidationError
+
+        with self.assertRaises(ValidationError) as refused:
+            wrong.clean()
+        assert "subject_being" in refused.exception.message_dict
+        assert "subject_deed" in refused.exception.message_dict
+
+    def test_the_relic_form_carries_invocation_points(self) -> None:
+        from django.urls import reverse
+
+        from world.worship.factories import WorshippedBeingFactory
+        from world.worship.models import Relic
+
+        relic = Relic.objects.create(
+            being=WorshippedBeingFactory(), item_instance=self.item, invocation_points=2
+        )
+        self.client.force_login(self.staff)
+
+        body = self.client.get(
+            reverse("admin:arxii_relic_change", args=(relic.pk,))
+        ).content.decode()
+
+        assert "Invocation points" in body
+        assert "Treated as meaning points of a keepsake of this being while carried" in body

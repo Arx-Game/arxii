@@ -92,16 +92,28 @@ function countsText(piece: WornPiece, countedMax: number): string {
   return '0';
 }
 
+/** The badge that says why a piece counts: its favored facet, or a keepsake or Relic of the being. */
+function sourceBadge(piece: WornPiece, beingName: string): string {
+  if (piece.source === 'keepsake') return `keepsake of ${beingName}`;
+  if (piece.source === 'relic') return `relic of ${beingName}`;
+  return `${piece.facet_name}, favored`;
+}
+
 function WornPieces({ worn, beingName }: { worn: WornMeaning; beingName: string }) {
   if (worn.pieces.length === 0) return null;
+  const carried = worn.pieces.some((piece) => piece.source !== 'worn');
   return (
     <div className="space-y-1" data-testid="invocation-worn">
-      <Label>What you wear that {beingName} favors</Label>
+      <Label>
+        {carried
+          ? `What you wear or carry for ${beingName}`
+          : `What you wear that ${beingName} favors`}
+      </Label>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="text-xs text-muted-foreground">
-              <th className="py-0.5 pr-2 font-normal">Worn piece</th>
+              <th className="py-0.5 pr-2 font-normal">{carried ? 'Piece' : 'Worn piece'}</th>
               <th className="py-0.5 pr-2 font-normal">What it means</th>
               <th className="py-0.5 font-normal">Counts</th>
             </tr>
@@ -109,7 +121,7 @@ function WornPieces({ worn, beingName }: { worn: WornMeaning; beingName: string 
           <tbody>
             {worn.pieces.map((piece) => (
               <tr
-                key={`${piece.item_name}-${piece.facet_name}`}
+                key={`${piece.source}-${piece.item_name}-${piece.facet_name}`}
                 className="border-t border-dotted align-top"
                 data-testid="invocation-worn-piece"
               >
@@ -128,7 +140,7 @@ function WornPieces({ worn, beingName }: { worn: WornMeaning; beingName: string 
                         </Badge>
                       ))
                     )}
-                    <Badge variant="outline">{piece.facet_name}, favored</Badge>
+                    <Badge variant="outline">{sourceBadge(piece, beingName)}</Badge>
                   </span>
                 </td>
                 <td className="py-1 tabular-nums" data-testid="invocation-worn-counts">
@@ -140,8 +152,8 @@ function WornPieces({ worn, beingName }: { worn: WornMeaning; beingName: string 
         </table>
       </div>
       <p className="text-xs text-muted-foreground" data-testid="invocation-worn-note">
-        Up to {worn.items_counted_max} worn pieces count, and the ease from what you wear is capped
-        at {worn.ease_cap}
+        Up to {worn.items_counted_max} worn pieces count, and the ease from what you wear or carry
+        is capped at {worn.ease_cap}
         {worn.raw_ease > worn.ease ? ` (these would ease ${worn.raw_ease})` : ''}.
         {worn.earning_percent
           ? ` Earning rate with ${beingName} while you wear these: 100% + ${worn.earning_percent}%.`

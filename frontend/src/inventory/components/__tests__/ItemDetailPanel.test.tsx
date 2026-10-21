@@ -22,6 +22,13 @@ vi.mock('../../hooks/useItemFacets', () => ({
 
 vi.mock('../../hooks/useUseItem', () => ({ useUseItem: vi.fn() }));
 
+// The keepsake row has its own tests (KeepsakeSection.test.tsx); here it reads nothing.
+vi.mock('../../hooks/useKeepsake', () => ({
+  useKeepsakeState: () => ({ data: undefined }),
+  useDeclareKeepsake: () => ({ mutate: vi.fn(), isPending: false }),
+  useReleaseKeepsake: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock('../../hooks/useItemLifecycle', () => ({
   useRemoveAccent: () => ({ mutate: vi.fn(), isPending: false }),
   useRecycleItem: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),

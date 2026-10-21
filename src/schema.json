@@ -19309,6 +19309,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/ItemInstanceRead'
           description: ''
+  /api/items/inventory/{id}/keepsake/:
+    get:
+      operationId: items_inventory_keepsake_retrieve
+      description: |-
+        The keepsake form's data for an item the requester's character holds (#4530):
+        the keepsake it already is, the character's slots, what it could stand for and
+        the deeds it is a trophy of. Declaring and releasing go through the keepsake
+        actions.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeepsakeState'
+          description: ''
   /api/items/inventory/{id}/meaning/:
     get:
       operationId: items_inventory_meaning_retrieve
@@ -64230,6 +64255,102 @@ components:
       - summary
       - tale
       - template_name
+    Keepsake:
+      type: object
+      description: |-
+        The keepsake an item already is for its holder: what it stands for and, if shown, the
+        player's own words (#4530). Nothing here says what it is worth.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        subject_kind:
+          type: string
+          readOnly: true
+        subject_name:
+          type: string
+          readOnly: true
+        text:
+          type: string
+          readOnly: true
+        shown_on_examine:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - shown_on_examine
+      - subject_kind
+      - subject_name
+      - text
+    KeepsakeState:
+      type: object
+      description: |-
+        The item panel's keepsake form: the keepsake the item already is (or null), whether it
+        counts yet, the character's slots, what it could stand for and its trophy deeds (#4530).
+      properties:
+        keepsake:
+          allOf:
+          - $ref: '#/components/schemas/Keepsake'
+          readOnly: true
+          nullable: true
+        counts_now:
+          type: boolean
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/KeepsakeStatus'
+          readOnly: true
+        subjects:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/KeepsakeSubjectChoice'
+          readOnly: true
+        trophy_of:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - counts_now
+      - keepsake
+      - status
+      - subjects
+      - trophy_of
+    KeepsakeStatus:
+      type: object
+      properties:
+        used:
+          type: integer
+          readOnly: true
+        limit:
+          type: integer
+          readOnly: true
+        wait_days:
+          type: integer
+          readOnly: true
+      required:
+      - limit
+      - used
+      - wait_days
+    KeepsakeSubjectChoice:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - label
     KeyB77Enum:
       enum:
       - perception
@@ -82702,6 +82823,10 @@ components:
             $ref: '#/components/schemas/PledgeCreditLine'
         terms:
           $ref: '#/components/schemas/ServiceTerms'
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequestLine'
       required:
       - character_sheet
       - close_attempts
@@ -82710,6 +82835,7 @@ components:
       - id
       - pledge
       - progress
+      - requests
       - retry_available
       - state
       - target
@@ -85064,6 +85190,34 @@ components:
       required:
       - covenant
       - ordered_rank_ids
+    RequestLine:
+      type: object
+      description: |-
+        One item a pledge or its closing rite asks for, as the pledge card lists it (#4530):
+        what is asked, the staff hint, how many are given and the points each gives.
+      properties:
+        id:
+          type: integer
+        asked_for:
+          type: string
+        hint:
+          type: string
+        quantity:
+          type: integer
+        given:
+          type: integer
+        points:
+          type: integer
+        where:
+          type: string
+      required:
+      - asked_for
+      - given
+      - hint
+      - id
+      - points
+      - quantity
+      - where
     RequiredOutcomeEnum:
       enum:
       - unsatisfied
@@ -98152,6 +98306,8 @@ components:
         A worn piece carrying a facet the being favors, as the wearer sees it in the Call on
         favor picker: what it means, whether it counts and the ease it gives (#4520).
       properties:
+        source:
+          type: string
         item_name:
           type: string
         facet_name:
@@ -98179,6 +98335,7 @@ components:
       - item_name
       - points
       - signals
+      - source
     WornSignal:
       type: object
       description: One reason a worn piece means something to its wearer (#4520).
@@ -98460,6 +98617,8 @@ components:
     _InvocationPiece:
       type: object
       properties:
+        source:
+          type: string
         item_name:
           type: string
         facet_name:
@@ -98481,6 +98640,7 @@ components:
       - item_name
       - points
       - signals
+      - source
     _JournalSummary:
       type: object
       description: The public journal an honor is mirrored onto — safe to inline in

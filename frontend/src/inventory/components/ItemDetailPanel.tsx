@@ -45,6 +45,7 @@ import { useUseItem } from '../hooks/useUseItem';
 import { TargetMenu } from '@/game/target-menu/TargetMenu';
 import { AttachFacetDialog } from './AttachFacetDialog';
 import { ItemLifecycleControls } from './ItemLifecycleControls';
+import { KeepsakeSection } from './KeepsakeSection';
 
 const ACCESS_POLICY_LABELS: Record<ContainerAccessPolicy, string> = {
   open: 'Open',
@@ -383,6 +384,8 @@ function ItemContent({
             </div>
           </div>
         )}
+
+        {characterId !== undefined && <KeepsakeSection item={item} characterId={characterId} />}
       </div>
 
       {useResult && (

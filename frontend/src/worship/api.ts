@@ -119,9 +119,14 @@ export function takePledge(
   return dispatchCanvasAction(characterId, 'pledge_take', { pledge, prayer });
 }
 
-/** Dispatch `pledge_close` as `characterId`: perform the open pledge's closing rite. */
-export function closePledge(characterId: number): Promise<DispatchResult> {
-  return dispatchCanvasAction(characterId, 'pledge_close', {});
+/** Dispatch `pledge_close` as `characterId`: perform the open pledge's closing rite, giving
+ * up `itemIds` (#4530) during it: their meaning eases the rite's roll. */
+export function closePledge(characterId: number, itemIds: number[] = []): Promise<DispatchResult> {
+  return dispatchCanvasAction(
+    characterId,
+    'pledge_close',
+    itemIds.length > 0 ? { item_ids: itemIds } : {}
+  );
 }
 
 /** Dispatch `sacrifice` as `characterId`: `{ item_ids, being? }`. */
