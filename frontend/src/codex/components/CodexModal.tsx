@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useCodexEntry } from '../queries';
 import { LoreSection, OOCSection } from './ContentSections';
 import '../codex.css';
+import { urls } from '@/utils/urls';
 
 interface CodexModalProps {
   entryId: number;
@@ -125,7 +126,7 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
               />
             )}
             <Button asChild variant="outline" size="sm">
-              <Link to={`/codex?entry=${entry.id}`} onClick={() => onOpenChange(false)}>
+              <Link to={urls.codexEntry(entry.id)} onClick={() => onOpenChange(false)}>
                 <ExternalLink className="mr-2 h-4 w-4" />
                 View in Codex
               </Link>

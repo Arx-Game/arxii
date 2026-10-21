@@ -150,8 +150,8 @@ test("the patron reads by the house's own name and a pick that is a god opens it
   renderWithProviders(<HouseDocument houseId={9} />);
   expect(screen.getByText('patron')).toBeInTheDocument();
   expect(screen.getByText(/The One True Knight/)).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: '(Calyx)' })).toHaveAttribute('href', '/codex/77');
-  expect(screen.getByRole('link', { name: 'Calyx' })).toHaveAttribute('href', '/codex/77');
+  expect(screen.getByRole('link', { name: '(Calyx)' })).toHaveAttribute('href', '/codex?entry=77');
+  expect(screen.getByRole('link', { name: 'Calyx' })).toHaveAttribute('href', '/codex?entry=77');
 });
 
 test('editing a day of remembrance saves the whole list, without the spelled date (#4206)', async () => {

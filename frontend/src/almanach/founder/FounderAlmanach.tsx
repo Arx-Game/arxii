@@ -52,6 +52,7 @@ import {
   permittedRank,
   type FounderStep,
 } from './steps';
+import { urls } from '@/utils/urls';
 
 /** No name field reaches these founder components yet (`CharacterDraft`
  * carries none) — every chapter that needs the founder's own display name
@@ -199,7 +200,7 @@ function LiegeRealmAside({
               {charter.succession_law.codex_entry_id != null && (
                 <>
                   {' · '}
-                  <a href={`/codex/${charter.succession_law.codex_entry_id}`}>codex</a>
+                  <a href={urls.codexEntry(charter.succession_law.codex_entry_id)}>codex</a>
                 </>
               )}
             </>

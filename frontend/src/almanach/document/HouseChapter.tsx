@@ -44,6 +44,7 @@ import { useDraft } from '@/world-builder/document/useDraft';
 import { HOUSE_STATES, GENTRY_LUXEN_ONLY, houseHeading } from '../copy';
 import { ObservanceRows, type ObservanceRow } from '../ObservanceRows';
 import type { AlmanachHouseDocumentHouse } from '../types';
+import { urls } from '@/utils/urls';
 
 export interface EditHouseFields {
   name?: string;
@@ -166,7 +167,9 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
                   <>
                     {' '}
                     ·{' '}
-                    <Link to={`/codex/${house.default_succession_law.codex_entry_id}`}>codex</Link>
+                    <Link to={urls.codexEntry(house.default_succession_law.codex_entry_id)}>
+                      codex
+                    </Link>
                   </>
                 )}
               </>
@@ -182,7 +185,9 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
           <div className="val">
             {house.patron.nickname}{' '}
             {house.patron.codex_entry_id != null ? (
-              <Link to={`/codex/${house.patron.codex_entry_id}`}>({house.patron.being_name})</Link>
+              <Link to={urls.codexEntry(house.patron.codex_entry_id)}>
+                ({house.patron.being_name})
+              </Link>
             ) : (
               <>({house.patron.being_name})</>
             )}
@@ -239,7 +244,7 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
                 <span className="mark">◆</span>
                 <span>
                   {aspect.target_entry_id != null ? (
-                    <Link to={`/codex/${aspect.target_entry_id}`} className="nm">
+                    <Link to={urls.codexEntry(aspect.target_entry_id)} className="nm">
                       {aspect.option}
                     </Link>
                   ) : (

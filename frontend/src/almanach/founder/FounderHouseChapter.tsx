@@ -31,6 +31,7 @@ import { ObservanceRows } from '../ObservanceRows';
 import { useCharter } from '../queries';
 
 import type { FounderDraft, UseFounderDraftResult } from './founderDraft';
+import { urls } from '@/utils/urls';
 
 export interface FounderHouseChapterProps {
   draft: FounderDraft;
@@ -188,7 +189,10 @@ export function FounderHouseChapter({
                 {template.default_succession_law.codex_entry_id != null && (
                   <>
                     {' '}
-                    · <a href={`/codex/${template.default_succession_law.codex_entry_id}`}>codex</a>
+                    ·{' '}
+                    <a href={urls.codexEntry(template.default_succession_law.codex_entry_id)}>
+                      codex
+                    </a>
                   </>
                 )}
               </>
@@ -265,7 +269,7 @@ export function FounderHouseChapter({
                   </span>
                   <span className="rt">
                     {option.target_entry_id != null && (
-                      <a href={`/codex/${option.target_entry_id}`}>
+                      <a href={urls.codexEntry(option.target_entry_id)}>
                         {option.being_name !== '' ? option.being_name : 'codex'}
                       </a>
                     )}
