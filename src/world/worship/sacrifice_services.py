@@ -9,7 +9,8 @@ come from ``world.items.services.meaning.item_meaning``.
 The difficulty starts where an invocation's does (``invocation_difficulty``: the base,
 the Chosen ease, the favor ease and the favor invocation modifiers, so those keep
 applying) and is then eased by ``points x DevotionConfig.sacrifice_ease_per_point``,
-never below Trivial.
+never below Trivial. What the character wears is not read here: the item given up is its
+own ease, and a worn piece would otherwise ease the roll twice (#4520).
 """
 
 from __future__ import annotations
@@ -72,7 +73,7 @@ def sacrifice_slots_left(
 
 def sacrifice_difficulty(sheet: CharacterSheet, being: WorshippedBeing, points: int) -> int:
     """The sacrifice check's difficulty in points for an item worth ``points``."""
-    eased = invocation_difficulty(sheet, being).points
+    eased = invocation_difficulty(sheet, being, include_worn=False).points
     eased -= points * get_devotion_config().sacrifice_ease_per_point
     return max(eased, MIN_DIFFICULTY_POINTS)
 

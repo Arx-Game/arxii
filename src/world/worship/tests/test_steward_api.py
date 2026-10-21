@@ -12,7 +12,15 @@ from rest_framework.test import APIClient
 from world.gm.constants import GMLevel, GMPromptStatus
 from world.gm.factories import GMProfileFactory
 from world.gm.models import GMPrompt
-from world.worship.models import Answer, Pledge, Vision
+from world.items.constants import MeaningSignalKind
+from world.worship.factories import FavorInvocationFactory
+from world.worship.models import (
+    Answer,
+    InvocationPiece,
+    InvocationPieceSignal,
+    Pledge,
+    Vision,
+)
 from world.worship.tests.test_stewards import StewardTestBase
 
 _BASE = "/api/worship/"
@@ -116,6 +124,44 @@ class StewardApiTests(StewardTestBase):
         self.assertEqual(sent.status_code, 200, sent.content)
         self.assertEqual(Vision.objects.get(recipient=self.sheet).answer, answer)
         self.assertEqual(GMPrompt.objects.get(pk=prompt.pk).status, GMPromptStatus.CONFIRMED)
+
+    def test_the_panel_shows_the_worn_pieces_that_eased_an_invocation_during_the_pledge(
+        self,
+    ) -> None:
+        self._full_answer("Success")
+        self._ready()
+        invocation = FavorInvocationFactory(
+            character_sheet=self.sheet,
+            being=self.being,
+            worn_ease=10,
+            outcome_tier=self.outcomes["Success"],
+        )
+        piece = InvocationPiece.objects.create(
+            invocation=invocation,
+            item_name="[gown]",
+            facet_name="[facet]",
+            points=5,
+            ease_per_point=2,
+        )
+        InvocationPieceSignal.objects.create(
+            piece=piece, kind=MeaningSignalKind.MADE_BY_TIE, points=2, detail="[cousin], tier 2"
+        )
+        self._close("Success")
+
+        response = self.client.get(f"{_BASE}steward-prompts/", {"table": self.table.pk})
+
+        (row,) = response.json()["results"]
+        (call,) = row["invoked"]
+        self.assertEqual(call["worn_ease"], 10)
+        (shown,) = call["pieces"]
+        self.assertEqual(
+            (shown["item_name"], shown["facet_name"], shown["points"], shown["ease"]),
+            ("[gown]", "[facet]", 5, 10),
+        )
+        self.assertEqual(
+            shown["signals"],
+            [{"kind_name": "Made by a tie", "points": 2, "detail": "[cousin], tier 2"}],
+        )
 
     def test_the_panel_dismisses_to_the_draw(self) -> None:
         answer = self._full_answer("Success")

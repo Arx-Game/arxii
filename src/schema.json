@@ -56019,6 +56019,8 @@ components:
           type: integer
         modifiers:
           type: integer
+        worn_bonus:
+          type: integer
         total:
           type: integer
       required:
@@ -56026,6 +56028,7 @@ components:
       - chosen_bonus
       - modifiers
       - total
+      - worn_bonus
     EffectRow:
       type: object
       properties:
@@ -63596,6 +63599,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/InvocationDifficulty'
           nullable: true
+        worn:
+          allOf:
+          - $ref: '#/components/schemas/WornMeaning'
+          nullable: true
       required:
       - being_id
       - being_name
@@ -63605,6 +63612,7 @@ components:
       - refusal
       - uses_left
       - uses_per_week
+      - worn
     InvocationOptions:
       type: object
       description: 'The Call on favor picker''s data: the beings and the bonus by
@@ -91362,6 +91370,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/_SacrificeDetail'
+        invoked:
+          type: array
+          items:
+            $ref: '#/components/schemas/_InvocationDetail'
         prayer_text:
           type: string
         options:
@@ -91382,6 +91394,7 @@ components:
       - being_name
       - catalogue_clues
       - id
+      - invoked
       - may_write_free_text
       - options
       - outcome_tier_name
@@ -98106,6 +98119,84 @@ components:
       - is_transit_stop
       - name
       - travel_modes
+    WornMeaning:
+      type: object
+      description: |-
+        What the worn pieces do for one being: the pieces, the capped ease and the earning
+        bonus (#4520).
+      properties:
+        pieces:
+          type: array
+          items:
+            $ref: '#/components/schemas/WornPiece'
+        ease:
+          type: integer
+        raw_ease:
+          type: integer
+        ease_cap:
+          type: integer
+        items_counted_max:
+          type: integer
+        earning_percent:
+          type: integer
+      required:
+      - earning_percent
+      - ease
+      - ease_cap
+      - items_counted_max
+      - pieces
+      - raw_ease
+    WornPiece:
+      type: object
+      description: |-
+        A worn piece carrying a facet the being favors, as the wearer sees it in the Call on
+        favor picker: what it means, whether it counts and the ease it gives (#4520).
+      properties:
+        item_name:
+          type: string
+        facet_name:
+          type: string
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/WornSignal'
+        points:
+          type: integer
+        ease_per_point:
+          type: integer
+        ease:
+          type: integer
+        earning_percent:
+          type: integer
+        counted:
+          type: boolean
+      required:
+      - counted
+      - earning_percent
+      - ease
+      - ease_per_point
+      - facet_name
+      - item_name
+      - points
+      - signals
+    WornSignal:
+      type: object
+      description: One reason a worn piece means something to its wearer (#4520).
+      properties:
+        kind:
+          type: string
+        kind_name:
+          type: string
+          readOnly: true
+        points:
+          type: integer
+        detail:
+          type: string
+      required:
+      - detail
+      - kind
+      - kind_name
+      - points
     WorshipConversionOffer:
       type: object
       description: |-
@@ -98345,6 +98436,51 @@ components:
       - tier
       - tier_label
       - tier_multiplier
+    _InvocationDetail:
+      type: object
+      description: |-
+        One invocation of the being as the steward's answer panel reads it (#4520): the
+        roll and the worn pieces that eased it, never a price.
+      properties:
+        invoked_by_name:
+          type: string
+        outcome_name:
+          type: string
+        worn_ease:
+          type: integer
+        pieces:
+          type: array
+          items:
+            $ref: '#/components/schemas/_InvocationPiece'
+      required:
+      - invoked_by_name
+      - outcome_name
+      - pieces
+      - worn_ease
+    _InvocationPiece:
+      type: object
+      properties:
+        item_name:
+          type: string
+        facet_name:
+          type: string
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/_SacrificeSignal'
+        points:
+          type: integer
+        ease_per_point:
+          type: integer
+        ease:
+          type: integer
+      required:
+      - ease
+      - ease_per_point
+      - facet_name
+      - item_name
+      - points
+      - signals
     _JournalSummary:
       type: object
       description: The public journal an honor is mirrored onto — safe to inline in

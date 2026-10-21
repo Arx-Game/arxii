@@ -227,9 +227,10 @@ The helper also unequips the item (`unequip_item`) before it leaves play.
 
 ### Item meaning (#4500, #4512, ADR-4462) [BUILT & WIRED]
 
-`item_meaning(item, holder_sheet, *, config)` in `world/items/services/meaning.py` answers
-"what does this item mean to the character holding it" for every use (today a sacrifice at
-a shrine and a ceremony offering; the worn-piece and GM-detail uses are slice 6b). It returns
+`item_meaning(item, holder_sheet, *, config, being=None)` in `world/items/services/meaning.py` answers
+"what does this item mean to the character holding it" for every use (a sacrifice at
+a shrine, a ceremony offering, and since #4520 a worn piece at an invocation with the GM's
+invocation detail; see `docs/systems/worship.md`). It returns
 an `ItemMeaning` (signals and their sum, `world/items/types.py`) from records only; **it
 never reads a price, a fee or a material cost**, so a bought item with no history is worth
 0. The signals (`MeaningSignalKind`), numbers on `DevotionConfig`:
@@ -244,6 +245,7 @@ never reads a price, a fee or a material cost**, so a bought item with no histor
 | Designed by you (#4512) | 1 | holder is `designer_character_sheet`, which is stamped only when that character wrote the name or description |
 | Made for (#4512) | 1 + the holder's claimed tier toward the dedicator, at most `made_for_max_points`; nothing when the holder bought it from the dedicator | the dedication; the holder must be the dedicatee |
 | Made from (#4512) | the source's recorded points, at most `made_from_max_points` | `ItemLineage`; counts for the crafter and the dedicatee |
+| Resonance fed (#4520) | the resonance the item's attached facets fed the holder (`OUTFIT_TRICKLE` grants to the holder's sheet on or after `held_since`) in resonances the given being lists: 1 per `resonance_fed_per_point`, doubled for a favored resonance, at most `resonance_fed_max_points`; counts only alongside another signal besides carried, and only when `item_meaning` is given a `being` | `ResonanceGrant.outfit_item_facet`; `BeingResonance` |
 | Shown (#4512) | per settled, successful `FashionShowing` of the item (statement item, or in the statement outfit) in the last `shown_window_weeks` game weeks: 1 per `shown_engagements_per_point` engagements, at most `shown_max_points` in all | `FashionShowing`; no carry gate (earned in a scene) |
 
 Every signal except shown is gated by the carry clock: nothing personal counts before the

@@ -6,11 +6,12 @@ meaning points from records the game already keeps and **never reads a price**: 
 the template's value, a fee, a sale price or the materials spent. A bought item with no
 history has no meaning however much it cost.
 
-Signals: carried, gift, heirloom, own work, made by a tie, and the commission loop's
-designed by you, made for, made from and shown (#4512). The personal ones count only
-after the carry gate (``DevotionConfig.sacrifice_min_carried_days``); shown is earned in
-a scene and has no gate. Carried itself counts only alongside another signal, so holding
-a bought item is never meaning. When one person is the maker, the dedicator and the
+Signals: carried, gift, heirloom, own work, made by a tie, the commission loop's
+designed by you, made for, made from and shown (#4512), and resonance fed (#4520). The
+personal ones count only after the carry gate
+(``DevotionConfig.sacrifice_min_carried_days``); shown is earned in a scene and has no
+gate. Carried itself counts only alongside another signal, so holding a bought item is
+never meaning. When one person is the maker, the dedicator and the
 giver, their tie counts once, in the first of made by a tie, gift and made for that
 applies, and each further act adds a flat 1 (owner ruling, 2026-10-18).
 """
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
-    from world.worship.models import DevotionConfig
+    from world.worship.models import DevotionConfig, WorshippedBeing
 
 #: Most INHERITED holding events that count toward the heirloom signal.
 HEIRLOOM_MAX_POINTS = 3
@@ -255,14 +256,68 @@ def _shown(item: ItemInstance, config: DevotionConfig) -> MeaningSignal | None:
     )
 
 
+def _resonance_fed(
+    item: ItemInstance, holder: CharacterSheet, being: WorshippedBeing, config: DevotionConfig
+) -> MeaningSignal | None:
+    """Resonance fed: what the item's attached facets have fed ``holder`` since they took
+    it up, in resonances ``being`` lists. One point per ``resonance_fed_per_point`` fed in
+    each resonance, doubled where the being favors it, up to ``resonance_fed_max_points``.
+
+    Only grants to this holder's sheet on or after ``held_since`` count (a previous
+    holder's stay on the item and score nothing), and only through facets still on the
+    item: a removed facet (``removed_at``) is history, not meaning (#4461).
+    """
+    from django.db.models import Sum  # noqa: PLC0415
+
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.models import ResonanceGrant  # noqa: PLC0415
+    from world.worship.constants import BeingResonanceTier  # noqa: PLC0415
+
+    tiers = dict(being.resonances.values_list("resonance_id", "tier"))
+    if not tiers:
+        return None
+    fed = (
+        ResonanceGrant.objects.filter(
+            source=GainSource.OUTFIT_TRICKLE,
+            character_sheet=holder,
+            resonance_id__in=tiers,
+            outfit_item_facet__item_instance=item,
+            outfit_item_facet__removed_at__isnull=True,
+            granted_at__gte=item.held_since,
+        )
+        .values("resonance_id", "resonance__name")
+        .annotate(total=Sum("amount"))
+    )
+    per_point = max(config.resonance_fed_per_point, 1)
+    points = 0
+    parts: list[str] = []
+    for row in fed:
+        favored = tiers[row["resonance_id"]] == BeingResonanceTier.FAVORED
+        earned = (row["total"] // per_point) * (2 if favored else 1)
+        if earned > 0:
+            points += earned
+            parts.append(f"{row['total']} {row['resonance__name']}{', favored' if favored else ''}")
+    points = min(points, config.resonance_fed_max_points)
+    if points <= 0:
+        return None
+    return MeaningSignal(MeaningSignalKind.RESONANCE_FED, points, "fed " + "; ".join(parts))
+
+
 def item_meaning(
-    item: ItemInstance, holder: CharacterSheet, *, config: DevotionConfig
+    item: ItemInstance,
+    holder: CharacterSheet,
+    *,
+    config: DevotionConfig,
+    being: WorshippedBeing | None = None,
 ) -> ItemMeaning:
     """The signals that make ``item`` matter to ``holder``, and so its meaning points.
 
     Pure of side effects. An item with no signal has no meaning, however it was paid for.
     ``config`` is the devotion config (the numbers are staff-tuned there); it is passed in
-    so the items app does not import worship.
+    so the items app does not import worship. ``being`` is the being the reading is for:
+    the resonance fed signal reads the resonances that being lists, so without one it is
+    left out. It counts only alongside another signal besides carried, and after the carry
+    gate, so a bought piece worn for months still reads 0.
     """
     days = _carried_days(item)
     signals: list[MeaningSignal] = []
@@ -285,6 +340,10 @@ def item_meaning(
     shown = _shown(item, config)
     if shown is not None:
         signals.append(shown)
+    if signals and being is not None and days >= config.sacrifice_min_carried_days:
+        fed = _resonance_fed(item, holder, being, config)
+        if fed is not None:
+            signals.append(fed)
     if not signals:
         return ItemMeaning()
     carried = _carried(days, config)

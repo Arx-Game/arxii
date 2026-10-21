@@ -337,14 +337,21 @@ class OfferedItem:
 
 
 def read_item(
-    instance: "ItemInstance", sheet: "CharacterSheet", *, facet: "Facet | None"
+    instance: "ItemInstance",
+    sheet: "CharacterSheet",
+    *,
+    facet: "Facet | None",
+    being: "WorshippedBeing | None" = None,
 ) -> ItemReading:
-    """The item's meaning points for ``sheet``, with the favored-facet multiplier."""
+    """The item's meaning points for ``sheet``, with the favored-facet multiplier.
+
+    ``being`` is the being it is given up to: the resonance fed signal reads the
+    resonances that being lists (#4520)."""
     from world.items.services.meaning import item_meaning  # noqa: PLC0415
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
 
     percent = get_ceremony_config().offering_favored_facet_multiplier_percent if facet else 100
-    meaning = item_meaning(instance, sheet, config=get_devotion_config())
+    meaning = item_meaning(instance, sheet, config=get_devotion_config(), being=being)
     return ItemReading(meaning=meaning, percent=percent, facet=facet)
 
 
@@ -433,7 +440,9 @@ def record_offering(
     for instance in item_instances:
         # #3777: an item carrying a facet the TRUE being favors pleases it more;
         # the multiplier scales its meaning points.
-        reading = read_item(instance, officiant_sheet, facet=facets.get(instance.pk))
+        reading = read_item(
+            instance, officiant_sheet, facet=facets.get(instance.pk), being=ceremony.being
+        )
         counted = reading.effective_points > 0 and slots_left > 0
         if counted:
             slots_left -= 1
@@ -1307,7 +1316,7 @@ def sacrifice_items(
     facets = favored_facets_by_item(target, item_instances)
     # Read every item first: the holder is cleared when one is destroyed, and a being
     # with no check type configured must refuse before anything is given up.
-    readings = [read_item(i, sheet, facet=facets.get(i.pk)) for i in item_instances]
+    readings = [read_item(i, sheet, facet=facets.get(i.pk), being=target) for i in item_instances]
     if any(r.effective_points > 0 for r in readings) and not sacrifice_configured(target):
         raise SacrificeRefused(MSG_NOT_CONFIGURED)
     week = get_current_game_week()

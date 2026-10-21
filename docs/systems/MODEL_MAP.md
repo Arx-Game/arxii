@@ -1342,7 +1342,7 @@
 - `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held,`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `pending_wedding_consent_offers_for_account(account: object) -> 'QuerySet[WeddingConsentOffer]' - PENDING wedding consent offers addressed to any character this account holds (#2358).`
-- `read_item(instance: 'ItemInstance', sheet: 'CharacterSheet', *, facet: 'Facet | None') -> world.ceremonies.services.ItemReading - The item's meaning points for ``sheet``, with the favored-facet multiplier.`
+- `read_item(instance: 'ItemInstance', sheet: 'CharacterSheet', *, facet: 'Facet | None', being: 'WorshippedBeing | None' = None) -> world.ceremonies.services.ItemReading - The item's meaning points for ``sheet``, with the favored-facet multiplier.`
 - `record_offering(*, ceremony: world.ceremonies.models.Ceremony, item_instances: 'list[ItemInstance]') -> list[world.ceremonies.models.CeremonyOffering] - Sacrifice items: destroy them, feed the being's pool, log offerings.`
 - `record_speech(*, ceremony: world.ceremonies.models.Ceremony, speaker_persona: 'Persona', target_honoree: world.ceremonies.models.CeremonyHonoree | None = None) -> world.ceremonies.models.CeremonySpeech - Recognize a speaker; their Performance/Oratory roll shapes the tally.`
 - `respond_to_conversion_offer(offer: 'WorshipConversionOffer', *, account: object, accept: bool, sincere: bool = True) -> 'WorshipConversionOffer' - Accept or decline a pending public-conversion offer (#2361, Ratified amendment #1a).`
@@ -11166,11 +11166,23 @@
   - scene -> scenes.Scene [FK] (nullable)
   - mission_instance -> missions.MissionInstance [FK] (nullable)
   - scene_action_request -> scenes.SceneActionRequest [OneToOne] (nullable)
+**Pointed to by:**
+  - pieces <- worship.InvocationPiece
 
 ### FavorOutcomeAward
 **Foreign Keys:**
   - config -> worship.DevotionConfig [FK]
   - outcome_tier -> traits.CheckOutcome [FK]
+
+### InvocationPiece
+**Foreign Keys:**
+  - invocation -> worship.FavorInvocation [FK]
+**Pointed to by:**
+  - signals <- worship.InvocationPieceSignal
+
+### InvocationPieceSignal
+**Foreign Keys:**
+  - piece -> worship.InvocationPiece [FK]
 
 ### Miracle
 **Foreign Keys:**

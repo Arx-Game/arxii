@@ -26,9 +26,18 @@
   counts). Recorded as a `FavorInvocation`, whose `player_line` is the player's one line of
   how it shows. _Avoid_: "boon" (the scenes social ask), "blessing" (reads as a condition),
   "prayer" (a message, not a mechanic).
+- **Worn piece** — a piece a character has on that carries a facet a being favors
+  (`BeingFacet`) and has meaning points (#4520): it eases that being's invocation check and
+  raises the earning rate with it by its points times the facet's two rates, at most
+  `worn_items_counted` of them, all ease within `invocation_meaning_ease_max`. A piece with no
+  meaning counts for nothing, however it was paid for. _Avoid_: "equipment bonus" (the
+  modifier walk is a separate mechanism).
+- **Resonance fed** — a meaning signal: the resonance an item's facets fed its current holder,
+  in a resonance the being lists, counted only alongside another signal (#4520).
 - **Earning rate** — the percentage applied to all favor a character earns with one being
   (#4333): 100 + `ChosenFavorConfig.earn_bonus_percent` for an active patronage of it + the
-  character's favor earning modifiers. `bump_devotion` applies it to every positive amount.
+  character's favor earning modifiers + what the worn pieces carrying a favored facet add
+  (#4520). `bump_devotion` applies it to every positive amount.
 - **Favor modifier** — a modifier against a target in the `favor_invocation` (difficulty
   points eased) or `favor_earning` (earning-rate points) category, scoped to one being by
   `ModifierTarget.target_being` or to every being (null). Any modifier source can grant one

@@ -580,6 +580,8 @@ class TakePledgeAction(Action):
             rate_parts += f" + {rate.chosen_bonus}% Chosen"
         if rate.modifiers:
             rate_parts += f" + {rate.modifiers}% favor earning modifiers"
+        if rate.worn_bonus:
+            rate_parts += f" + {rate.worn_bonus}% what you wear"
         message = (
             f"You pledge yourself to {pledge.being.name}: {pledge.name}. "
             f"Favor target {pledge.favor_target} within {pledge.span_weeks} {weeks}. "

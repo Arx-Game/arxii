@@ -5,11 +5,12 @@
 
 import type { ServiceTerms } from './types';
 
-/** "100% + 100% Chosen + 0% favor-earning modifiers". */
+/** "100% + 100% Chosen + 0% favor-earning modifiers + 4% worn". */
 export function earningRateParts(terms: ServiceTerms): string {
   const parts = [`${terms.rate.base}%`];
   if (terms.rate.chosen_bonus) parts.push(`${terms.rate.chosen_bonus}% Chosen`);
   parts.push(`${terms.rate.modifiers}% favor-earning modifiers`);
+  if (terms.rate.worn_bonus) parts.push(`${terms.rate.worn_bonus}% what you wear`);
   return parts.join(' + ');
 }
 
