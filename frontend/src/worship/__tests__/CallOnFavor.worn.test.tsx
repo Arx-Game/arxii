@@ -87,8 +87,8 @@ describe('CallOnFavor worn pieces', () => {
     const pieces = screen.getAllByTestId('invocation-worn-piece');
     expect(pieces).toHaveLength(2);
     expect(within(pieces[0]).getByText('riding coat')).toBeInTheDocument();
-    expect(within(pieces[0]).getByText('carried')).toBeInTheDocument();
-    expect(within(pieces[0]).getByText('made by a tie')).toBeInTheDocument();
+    expect(within(pieces[0]).getByText('carried, held 150 days')).toBeInTheDocument();
+    expect(within(pieces[0]).getByText('made by a tie, Corwen')).toBeInTheDocument();
     expect(within(pieces[0]).getByText('Kestrel, favored')).toBeInTheDocument();
     expect(within(pieces[0]).getByTestId('invocation-worn-counts')).toHaveTextContent(
       '5 points x 2 = eased 10'

@@ -115,6 +115,7 @@ function WornPieces({ worn, beingName }: { worn: WornMeaning; beingName: string 
                       piece.signals.map((signal) => (
                         <Badge key={signal.kind} variant="secondary">
                           {signal.kind_name.toLowerCase()}
+                          {signal.detail ? `, ${signal.detail}` : ''}
                         </Badge>
                       ))
                     )}
