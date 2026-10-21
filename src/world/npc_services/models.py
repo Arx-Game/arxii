@@ -1070,6 +1070,7 @@ class SkillCourseOfferDetails(SharedMemoryModel):
         help_text="Development points a session adds, scaled by the training roll's outcome.",
     )
     session_ap_cost = models.PositiveSmallIntegerField(
+        verbose_name="Session AP cost",
         help_text="Action points the learner pays for each session.",
     )
     coin_cost = models.PositiveIntegerField(

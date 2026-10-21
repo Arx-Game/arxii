@@ -125,7 +125,39 @@ class SkillCourseOfferDetailsAdmin(admin.ModelAdmin):
     ]
     search_fields = ["offer__label", "skill__trait__name"]
     list_select_related = ["offer", "skill__trait", "check_type"]
+    # Any skill may be taught on a course (spec Decision 7); the category line only says
+    # which one it is, it never narrows the picker.
     autocomplete_fields = ["offer", "skill", "check_type"]
+    readonly_fields = ["skill_category", "sold_by"]
+    fields = [
+        "offer",
+        ("skill", "skill_category"),
+        "sold_by",
+        "total_development",
+        "session_development",
+        "session_ap_cost",
+        "coin_cost",
+        "check_type",
+        "check_difficulty",
+    ]
+
+    @admin.display(description="Category")
+    def skill_category(self, obj: SkillCourseOfferDetails) -> str:
+        """The course skill's trait category, read from the skill rather than typed."""
+        if obj.skill_id is None:
+            return "Derived, read-only: shown once the course is saved with a skill."
+        return f"Derived, read-only: category {obj.skill.trait.get_category_display()}."
+
+    @admin.display(description="Sold by")
+    def sold_by(self, obj: SkillCourseOfferDetails) -> str:
+        """The offer's role and the house its coin is credited to."""
+        if obj.offer_id is None:
+            return "Derived, read-only: shown once the course is saved with an offer."
+        role = obj.offer.role
+        house = role.faction_affiliation
+        if house is None:
+            return f"Derived, read-only: {role.name} (no house)."
+        return f"Derived, read-only: {role.name}, for {house.name}."
 
 
 @admin.register(SkillCourseEnrollment)

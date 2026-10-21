@@ -3,16 +3,22 @@
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
+from evennia_extensions.factories import AccountFactory
 from world.character_creation.factories import SchoolingLineFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.npc_services.constants import OfferKind
 from world.npc_services.factories import (
+    NPCRoleFactory,
     NPCServiceOfferFactory,
     SkillCourseEnrollmentFactory,
     SkillCourseOfferDetailsFactory,
 )
+from world.skills.factories import SkillFactory
+from world.societies.factories import OrganizationFactory
+from world.traits.models import TraitCategory
 
 
 class SchoolingFloorConstraintTests(TestCase):
@@ -67,3 +73,64 @@ class SkillCourseEnrollmentTests(TestCase):
         first.completed_at = timezone.now()
         first.save()
         SkillCourseEnrollmentFactory(character_sheet=self.sheet, course=self.course)
+
+
+class SkillCourseOfferDetailsAdminTests(TestCase):
+    """The add and change pages draw the demo's form, with its two derived rows."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True, is_superuser=True)
+        role = NPCRoleFactory(
+            name="Academy Trainer",
+            faction_affiliation=OrganizationFactory(name="Shroudwatch Academy"),
+        )
+        cls.course = SkillCourseOfferDetailsFactory(
+            offer=NPCServiceOfferFactory(role=role, kind=OfferKind.SKILL_COURSE),
+            skill=SkillFactory(trait__name="occult", trait__category=TraitCategory.MAGIC),
+        )
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def test_add_page_renders_the_fields_in_the_demo_order(self):
+        response = self.client.get(reverse("admin:arxii_skillcourseofferdetails_add"))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        labels = [
+            "Offer",
+            "Skill",
+            "Sold by",
+            "Total development",
+            "Session development",
+            "Session AP cost",
+            "Coin cost (coppers)",
+            "Check type",
+            "Check difficulty",
+        ]
+        positions = [body.index(f"{label}:</label>") for label in labels]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_change_page_names_who_sells_it_and_the_skill_category(self):
+        url = reverse("admin:arxii_skillcourseofferdetails_change", args=[self.course.pk])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sold by")
+        self.assertContains(
+            response, "Derived, read-only: Academy Trainer, for Shroudwatch Academy."
+        )
+        self.assertContains(response, "Derived, read-only: category Magic.")
+
+    def test_a_role_with_no_house_says_so(self):
+        course = SkillCourseOfferDetailsFactory(
+            offer=NPCServiceOfferFactory(
+                role=NPCRoleFactory(name="Hedge Tutor", faction_affiliation=None),
+                kind=OfferKind.SKILL_COURSE,
+            )
+        )
+        url = reverse("admin:arxii_skillcourseofferdetails_change", args=[course.pk])
+
+        self.assertContains(self.client.get(url), "Derived, read-only: Hedge Tutor (no house).")
