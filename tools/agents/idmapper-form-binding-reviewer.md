@@ -64,8 +64,10 @@ it must still run after the render and cover every bound form.
    failure, so `b` is never validated and its instances are not mutated, but `a`'s are.
    The flush must still cover everything bound, not only what ran; flushing an
    unmutated row is harmless.
-4. **Order.** The flush must come after the render that shows the errors and posted
-   values, never before it. The reverse breaks the redisplay of what the author typed.
+4. **Order.** Flushing after the render is the safe order. A flush before it is fine
+   only when the render reads the form's own `instance` (the object stays alive in the
+   form); flag it when the render, or a rail or preview built from the row, re-queries
+   the row and so shows the stored values beside the author's typed ones.
 5. **Exceptions after `is_valid()`.** The save path (`formset.save()`, a sync step,
    `stamp_written`) runs inside `transaction.atomic()`: if it raises, the transaction
    rolls the database back but the instances already carry the posted values. Check
