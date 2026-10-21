@@ -43,6 +43,12 @@ class SkillFactory(factory.django.DjangoModelFactory):
     is_active = True
 
 
+class MagicSkillFactory(SkillFactory):
+    """A Magic-category skill: the only kind a magic skill picker accepts (#4547)."""
+
+    trait = factory.SubFactory(SkillTraitFactory, category=TraitCategory.MAGIC)
+
+
 class SpecializationFactory(factory.django.DjangoModelFactory):
     """Factory for creating Specialization records."""
 

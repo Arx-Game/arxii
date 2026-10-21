@@ -617,13 +617,26 @@ its own check type as the base and passes the skills as `extra_traits` terms (se
 roll passes an effort level, and count as involved traits for thread pulls. Where staff have set
 nothing, the roll runs without the added skill; there is no placeholder data.
 
+**Magic skills only (#4547).** These skills are bespoke Magic skills (trait category MAGIC) that
+staff make and point each roll at. They are never skills a character picks anywhere else, so a
+cast never counts one skill twice. The four pickers below share `limit_choices_to=MAGIC_SKILL_CHOICES`
+(`world/magic/skill_choices.py`): the admin form and its autocomplete offer only Magic skills, and
+`full_clean()` refuses any other with `MAGIC_SKILL_ERROR_MESSAGES` (`ForeignKey.validate` applies
+the filter, so no separate `clean()` check). The filter follows the category, never a name, and
+keeps an inactive Magic skill valid (it adds no term). `magic_category_skills()` reads the same
+filter plus the active flag. A cross-table rule like this cannot be a database constraint, so
+existing rows that point at another skill stay as they are until staff repoint them. No seeder
+names, creates or weights a skill for magic: the magic check types (`seeds_checks.py`) and the
+"Technique Cast" fallback (`seeds_cast.py`) weight their stat only, and the sanctum ritual
+configs take their skill from the `RITUAL_WORKING` mapping, writing none while it is unmapped.
+
 | Surface | Location | Purpose |
 |---------|----------|---------|
 | `MagicActivity` | `constants.py` | 20 `TextChoices` kinds of magical roll (see Enums) |
-| `MagicActivitySkill` | `models/magic_activity.py` | `activity`, `skill` (FK Skill, PROTECT), `weight` (default 1.00); unique on (activity, skill). One row adds one skill to every roll of that activity; an activity may map several |
-| `Path.technique_skill` | `world/classes/models.py` | Nullable FK Skill (SET_NULL): the skill every Major Gift technique cast by someone currently on this Path adds |
-| `Gift.technique_skill` | `models/gifts.py` | Nullable FK Skill (SET_NULL), Minor Gifts only: DB constraint `gift_technique_skill_minor_only` and a matching `clean()` message |
-| `Technique.skill` | `models/techniques.py` | Nullable FK Skill (SET_NULL): overrides the Path and Gift skill for this one technique |
+| `MagicActivitySkill` | `models/magic_activity.py` | `activity`, `skill` (FK Skill, PROTECT, Magic skills only), `weight` (default 1.00); unique on (activity, skill). One row adds one skill to every roll of that activity; an activity may map several |
+| `Path.technique_skill` | `world/classes/models.py` | Nullable FK Skill (SET_NULL, Magic skills only): the skill every Major Gift technique cast by someone currently on this Path adds |
+| `Gift.technique_skill` | `models/gifts.py` | Nullable FK Skill (SET_NULL, Magic skills only), Minor Gifts only: DB constraint `gift_technique_skill_minor_only` and a matching `clean()` message |
+| `Technique.skill` | `models/techniques.py` | Nullable FK Skill (SET_NULL, Magic skills only): overrides the Path and Gift skill for this one technique |
 | `ConditionCategory.adds_loss_of_self_skills` | `world/conditions/models.py` | Boolean (default False): resist and break-free rolls on conditions in the category add the `RESISTING_LOSS_OF_SELF` skills (staff tick it for corruption, atavism, possession) |
 | `activity_skill_terms(activity)` | `services/magic_skills.py` | One `ExtraTraitTerm` per mapped row whose skill is active; empty when nothing is mapped |
 | `technique_skill_term(character, technique)` | `services/magic_skills.py` | The technique skill as a term at weight 1.00, or None |
@@ -689,7 +702,12 @@ and Academy skill courses" below.
 probes list what staff have not set: activities with no `MagicActivitySkill` row, active Paths with
 no `technique_skill`, and Minor Gifts with no `technique_skill`. A row or field whose skill is
 inactive counts as unset, since the roll skips it. An activity staff leave unmapped on purpose
-stays listed. Three more rows came with #4457 (below).
+stays listed. Three more rows came with #4457 (below). A seventh, `check-types-weight-no-magic-skill`
+(#4547), lists each check type with a trait row on a Magic-category SKILL trait, as
+`check type: skills`, and links to the CheckType changelist filtered to exactly those
+(`?id__in=`): a check type that weights a Magic skill itself counts it twice when the magic skill
+settings add it too, so staff move it into those settings. It matches on the trait, so a Magic
+skill trait with no `Skill` row or an inactive one is listed too.
 
 **Admin.** `MagicActivitySkill` changelist (activity filter, skill autocomplete, weight editable in
 the list); `technique_skill` on the Path and Gift forms, `skill` on the Technique form,

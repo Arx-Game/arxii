@@ -18,6 +18,7 @@ from world.magic.exceptions import ResonanceInsufficient
 from world.magic.factories import (
     CharacterResonanceFactory,
     ResonanceFactory,
+    map_ritual_working_skill,
 )
 from world.magic.models import (
     CharacterResonance,
@@ -188,6 +189,7 @@ class HomecomingRitualTests(TestCase):
         from world.magic.seeds_checks import ensure_magic_check_content
 
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
         self._check_patcher = patch("world.checks.services.perform_check")
         mock_check = self._check_patcher.start()
@@ -259,6 +261,7 @@ class PurgingRitualTests(TestCase):
         from world.magic.seeds_checks import ensure_magic_check_content
 
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
         self._check_patcher = patch("world.checks.services.perform_check")
         mock_check = self._check_patcher.start()
@@ -519,6 +522,7 @@ def _setup_graded_homecoming(*, balance: int = 1000):
     from world.magic.seeds_checks import ensure_magic_check_content
 
     ensure_sanctum_rituals()
+    map_ritual_working_skill()
     ensure_magic_check_content()
     resonance = ResonanceFactory()
     sanctum, owner = _personal_sanctum(resonance=resonance)
@@ -535,6 +539,7 @@ def _setup_graded_purging(*, balance: int = 1000):
     from world.magic.seeds_checks import ensure_magic_check_content
 
     ensure_sanctum_rituals()
+    map_ritual_working_skill()
     ensure_magic_check_content()
     old_resonance = ResonanceFactory()
     new_resonance = ResonanceFactory()

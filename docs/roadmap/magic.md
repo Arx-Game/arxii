@@ -981,6 +981,27 @@ differently by Path rather than by stance); separating training level from Acade
 retiring the "Unbound" name (#4536). Authoring the floors, the courses and their check types is staff
 work on the Required content rows above; there is no placeholder data.
 
+
+## Magical skills: Magic skills only (#4547, BUILT 2026-10-21)
+
+The skill pickers took any skill, and two seeders invented placeholder skills (ritualism, occult,
+theology) and weighted them into magic check types, so a cast could count one skill twice: once
+from the check type, once as the technique skill.
+
+**Built:**
+- The four pickers (`MagicActivitySkill.skill`, `Path.technique_skill`, `Gift.technique_skill`,
+  `Technique.skill`) offer and accept Magic-category skills only, in admin and in `full_clean()`
+  (`world/magic/skill_choices.py`). Schema-only migration `0274_magic_skill_pickers_magic_only`.
+- `seeds_checks.py` and `seeds_cast.py` name, create and weight no skill; the magic check types and
+  the "Technique Cast" fallback weight their stat only. Sanctum ritual configs take their skill from
+  the `RITUAL_WORKING` mapping.
+- Required content row `check-types-weight-no-magic-skill`, linking to the offending check types.
+- Journey: `integration_tests/test_magic_skill_pickers_journeys.py`.
+
+**Not done here, on purpose:** no data migration. Production keeps its placeholder skills and the
+check-type rows that weight them; staff rename, repoint or remove them in admin as part of the skill
+revamp, working from the new dashboard row.
+
 ---
 
 ## Deeper design & history

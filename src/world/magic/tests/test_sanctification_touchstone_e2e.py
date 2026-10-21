@@ -14,7 +14,11 @@ from world.items.factories import ItemInstanceFactory
 from world.items.models import ItemInstance
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.factories import LocationOwnershipFactory
-from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+from world.magic.factories import (
+    CharacterResonanceFactory,
+    ResonanceFactory,
+    map_ritual_working_skill,
+)
 from world.magic.models import Ritual, SanctumDetails, SanctumOwnerMode
 from world.magic.seeds_checks import ensure_magic_check_content
 from world.magic.seeds_sanctum import (
@@ -56,6 +60,7 @@ class SanctificationTouchstoneJourneyTests(TestCase):
 
         ensure_sanctum_kind()
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
 
         self._check_patcher = patch("world.checks.services.perform_check")
@@ -154,6 +159,7 @@ class SanctumInstallTelnetComponentsE2ETests(TestCase):
 
         ensure_sanctum_kind()
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
 
         self._check_patcher = patch("world.checks.services.perform_check")

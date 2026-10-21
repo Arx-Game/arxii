@@ -23,7 +23,10 @@
   `loss_of_self_terms` in `world/conditions/services.py`. The skills ride the check engine's
   `extra_traits`; cast thread pulls now include the cast's stat and skills. The Anima Check
   pick excludes MAGIC-category skills, and three Required content probes list unmapped
-  activities, Paths and Minor Gifts. Details: [magic.md](magic.md) "Magical skills".
+  activities, Paths and Minor Gifts. Since #4547 the four pickers offer and accept Magic skills
+  only (`MAGIC_SKILL_CHOICES` in `world/magic/skill_choices.py`), no seeder names a skill for
+  magic, and the `check-types-weight-no-magic-skill` probe lists check types that weight a
+  Magic skill directly. Details: [magic.md](magic.md) "Magical skills".
 - **Tradition training and Academy skill courses (#4457, ADR-4457-A):** a Tradition's schooling
   stance sets the level every Magic skill starts at. `SchoolingLine.magic_skill_floor` (0 on rank 0,
   check constraint) is read by `offers.schooling_magic_skill_floor(draft)`, exposed as

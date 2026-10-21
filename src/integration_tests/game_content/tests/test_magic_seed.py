@@ -2055,7 +2055,15 @@ class SeedMagicDevMagicChecksTests(TestCase):
     def test_seed_magic_dev_includes_magic_check_content(self):
         result = seed_magic_dev()
         self.assertEqual(len(result.magic_checks.check_types), 6)
-        self.assertEqual(len(result.magic_checks.skills), 3)
+        # No ritual working skill is mapped, and the seed names none (#4547), so the
+        # sanctum ritual configs wait for staff to map one.
+        self.assertEqual(result.magic_checks.configs, {})
+
+    def test_with_ritual_working_mapped_the_sanctum_configs_are_written(self):
+        from world.magic.factories import map_ritual_working_skill
+
+        map_ritual_working_skill()
+        result = seed_magic_dev()
         self.assertEqual(len(result.magic_checks.configs), 5)
 
 

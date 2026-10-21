@@ -1,1 +1,1 @@
-0273_skill_courses_and_schooling_floor
+0274_magic_skill_pickers_magic_only
