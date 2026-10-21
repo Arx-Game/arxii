@@ -823,9 +823,10 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   skill to at character creation. `clean_magic_skill_floor` refuses a value above
   `SkillPointBudget.max_skill_value` (the creation skill cap); rank 0 has no field at all (the
   form deletes it in `__init__`, so a posted value is never read, and a DB check constraint pins it
-  at 0). Under the input `live.schooling_floor_preview(line, skill_names)` prints a read-only line
-  ("Trains <skills> to <n>." or "Trains none."), derived from `magic_category_skills()` so it follows
-  a skill's category rather than anything typed. `views._render_page` passes it and `floor_cap` to
+  at 0). Under the input the page prints "Derived, read-only: " and then
+  `live.schooling_floor_preview(line, skill_names)` ("trains <skills> to <n>." or "trains none."),
+  derived from `magic_category_skills()` so it follows a skill's category rather than anything
+  typed. `views._render_page` passes it and `floor_cap` to
   `page.html` as a fourth tuple element and a context value. Three TUNING Required content rows
   (`schooling-magic-skill-floors`, `magic-skill-courses`, `path-suggestions-name-magic-skills`) list
   what is unset. Tests: `web/admin/tests/test_tradition_slate.py`, `test_magic_skill_probes.py`.

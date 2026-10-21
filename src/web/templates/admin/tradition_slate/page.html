@@ -105,7 +105,7 @@ review: this page used to carry a verbatim copy of that script inline.
                 <td>{% if rank == 0 %}<span class="help">Rank 0 trains none.</span>
                   {% else %}{{ form.magic_skill_floor }}<br>
                   <span class="help">At most {{ floor_cap }}, the creation skill cap.</span><br>
-                  <span class="help">Derived, read-only. {{ floor_preview }}</span>{% endif %}</td>
+                  <span class="help">Derived, read-only: {{ floor_preview }}</span>{% endif %}</td>
               </tr>
               {% if form.errors %}<tr><td colspan="6">{{ form.errors }}</td></tr>{% endif %}
               {% endfor %}

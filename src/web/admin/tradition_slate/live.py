@@ -68,14 +68,15 @@ def magic_skill_names() -> list[str]:
 def schooling_floor_preview(line: SchoolingLine, skill_names: Sequence[str] | None = None) -> str:
     """The read-only line under a floor input: which Magic skills the stance trains.
 
-    Derived from the skills' category, never typed, so it changes when staff move a
-    skill in or out of Magic. ``skill_names`` lets the caller read the skills once for
-    all three rows instead of once per row.
+    Reads "trains <skills> to <n>." or "trains none."; the page puts "Derived,
+    read-only: " before it. Derived from the skills' category, never typed, so it
+    changes when staff move a skill in or out of Magic. ``skill_names`` lets the
+    caller read the skills once for all three rows instead of once per row.
     """
     names = magic_skill_names() if skill_names is None else skill_names
     if not line.magic_skill_floor or not names:
-        return "Trains none."
-    return f"Trains {', '.join(names)} to {line.magic_skill_floor}."
+        return "trains none."
+    return f"trains {', '.join(names)} to {line.magic_skill_floor}."
 
 
 def rail_counts(beginning: Beginnings) -> dict[str, int]:

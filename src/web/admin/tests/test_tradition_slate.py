@@ -497,7 +497,7 @@ class SchoolingFloorTest(SlatePostDataMixin, SlateTestCase):
         assert SchoolingLine.objects.get(rank=1).magic_skill_floor == 20
 
         body = self.client.get(self.url).content.decode()
-        assert "Trains occult, ritualism, theology to 20." in body
+        assert "Derived, read-only: trains occult, ritualism, theology to 20." in body
         assert "lapsed lore" not in body
         assert "swordplay" not in body
         cap = SkillPointBudget.get_active_budget().max_skill_value
@@ -507,7 +507,7 @@ class SchoolingFloorTest(SlatePostDataMixin, SlateTestCase):
         self.client.force_login(self.author)
         _persist_all_standard_lines()
         body = self.client.get(self.url).content.decode()
-        assert body.count("Trains none.") == 2
+        assert body.count("Derived, read-only: trains none.") == 2
 
     def test_floor_above_cap_refused(self):
         self.client.force_login(self.author)
