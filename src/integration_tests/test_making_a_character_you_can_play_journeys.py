@@ -28,27 +28,8 @@ from world.roster.models import RosterApplication, RosterEntry, RosterTenure
 NO_PERMISSION = "You don't have permission to puppet"
 
 
-class PlayingTheCharacterYouMade(FinalizationTestMixin, JourneyCase):
-    """Wren makes a character; Ysolde (staff) approves it; Wren plays it."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls._setup_finalization_base(cls, prefix="Playable", height_min=700, height_max=800)
-        cls.staff = AccountFactory(is_staff=True)
-        cls.staff_data = PlayerDataFactory(account=cls.staff)
-        cls.player = AccountFactory()
-        cls.player_data = PlayerDataFactory(account=cls.player)
-        EmailAddressFactory(user=cls.player, email=cls.player.email, verified=True, primary=True)
-
-    # -- helpers --------------------------------------------------------------
-
-    def _draft(self, owner, first_name: str):
-        self.account = owner
-        return self._create_base_draft(first_name=first_name)
-
-    def _character_of_entry(self, entry_id: int) -> ObjectDB:
-        entry = RosterEntry.objects.get(pk=entry_id)
-        return ObjectDB.objects.get(pk=entry.character_sheet_id)
+class _SessionsMixin:
+    """The two ways a player takes a character up: the browser's request and ``@ic``."""
 
     def _session(self, account, sessid: int, protocol: str) -> ServerSession:
         """A session signed in as ``account`` and puppeting nothing yet."""
@@ -101,6 +82,29 @@ class PlayingTheCharacterYouMade(FinalizationTestMixin, JourneyCase):
         self.assertNotIn(NO_PERMISSION, told)
         self.assertIs(telnet.puppet, character)
 
+
+class PlayingTheCharacterYouMade(_SessionsMixin, FinalizationTestMixin, JourneyCase):
+    """Wren makes a character; Ysolde (staff) approves it; Wren plays it."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls._setup_finalization_base(cls, prefix="Playable", height_min=700, height_max=800)
+        cls.staff = AccountFactory(is_staff=True)
+        cls.staff_data = PlayerDataFactory(account=cls.staff)
+        cls.player = AccountFactory()
+        cls.player_data = PlayerDataFactory(account=cls.player)
+        EmailAddressFactory(user=cls.player, email=cls.player.email, verified=True, primary=True)
+
+    # -- helpers --------------------------------------------------------------
+
+    def _draft(self, owner, first_name: str):
+        self.account = owner
+        return self._create_base_draft(first_name=first_name)
+
+    def _character_of_entry(self, entry_id: int) -> ObjectDB:
+        entry = RosterEntry.objects.get(pk=entry_id)
+        return ObjectDB.objects.get(pk=entry.character_sheet_id)
+
     # -- journeys -------------------------------------------------------------
 
     def test_a_player_made_character_is_playable_once_approved(self) -> None:
@@ -144,7 +148,7 @@ class PlayingTheCharacterYouMade(FinalizationTestMixin, JourneyCase):
         self._assert_plays_on_web_and_telnet(self.player, character, base=4546)
 
 
-class PlayingAGmMadeCharacter(FinalizationTestMixin, JourneyCase):
+class PlayingAGmMadeCharacter(_SessionsMixin, FinalizationTestMixin, JourneyCase):
     """A GM finalizes a character for their table; the GM plays the Story NPC it binds."""
 
     @classmethod
@@ -170,22 +174,4 @@ class PlayingAGmMadeCharacter(FinalizationTestMixin, JourneyCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         character = ObjectDB.objects.get(pk=response.json()["character_id"])
 
-        handler = evennia.SESSION_HANDLER
-        for name in ("data_out", "disconnect"):
-            patcher = patch.object(handler, name, Mock())
-            patcher.start()
-            self.addCleanup(patcher.stop)
-        dummy = ServerSession()
-        dummy.init_session("telnet", ("localhost", "testmode"), handler)
-        dummy.sessid = 4548
-        handler.portal_connect(dummy.get_sync_data())
-        session = handler.session_from_sessid(4548)
-        self.addCleanup(handler.pop, 4548, None)
-        handler.login(session, self.gm.account, testmode=True)
-
-        box = self.mailbox(self.gm.account)
-        start = len(box.lines)
-        self.gm.account.execute_cmd(f"@ic {character.key}", session=session)
-        told = "\n".join(box.lines[start:])
-        self.assertNotIn(NO_PERMISSION, told)
-        self.assertIs(session.puppet, character)
+        self._assert_plays_on_web_and_telnet(self.gm.account, character, base=4548)
