@@ -36,6 +36,9 @@ class OfferPrice:
     ``development_remaining`` / ``development_total``. A skill course not yet
     enrolled charges its coin and one Hare, and its first session's AP, now;
     ``per_session_ap`` is the AP of every session, that first one included.
+    ``next_session_next_week`` is True when her open enrollment already ran a
+    session this game week, so the next one waits for the week to turn. It only
+    changes the menu line, and is not sent on the wire on its own.
 
     A TRAIN offer charges no AP on acceptance (``ap`` 0): its Hare and coin are paid
     now, and its ``learn_ap_cost`` only sizes the training meter (``training_points``,
@@ -51,3 +54,4 @@ class OfferPrice:
     development_remaining: int | None
     development_total: int | None
     training_points: int | None = None
+    next_session_next_week: bool = False

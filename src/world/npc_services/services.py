@@ -901,11 +901,14 @@ def _offer_price(
     offer: NPCServiceOffer,
     sheet: CharacterSheet,  # noqa: ARG001
     open_enrollments: dict[int, SkillCourseEnrollment],
+    current_week_pk: int | None,
 ) -> OfferPrice | None:
     """What accepting ``offer`` charges ``sheet``, or None for an offer that names no price.
 
     Only the Academy's offers carry a price line: a skill course (its coin and Hare
-    while she is not enrolled, then the next session's AP and what is left) and TRAIN
+    while she is not enrolled, then the next session's AP and what is left, and
+    whether that session waits for next week because her enrollment already ran one
+    in ``current_week_pk``, the handler's own one-a-week rule) and TRAIN
     (its coin and Hare now; its ``learn_ap_cost`` is not an AP charge, see
     :class:`~world.npc_services.types.OfferPrice`). An offer whose details row was
     never authored names no price either. ``sheet`` is part of the signature because
@@ -925,6 +928,10 @@ def _offer_price(
                     per_session_ap=course.session_ap_cost,
                     development_remaining=enrollment.development_remaining,
                     development_total=course.total_development,
+                    next_session_next_week=(
+                        current_week_pk is not None
+                        and enrollment.last_session_week_id == current_week_pk
+                    ),
                 )
             return OfferPrice(
                 ap=course.session_ap_cost,
@@ -955,8 +962,9 @@ def format_offer_price(price: OfferPrice) -> str:
     from world.currency.constants import format_coppers  # noqa: PLC0415
 
     if price.development_remaining is not None:
+        when = "Next session next week" if price.next_session_next_week else "Next session"
         return (
-            f"Next session \u00b7 {price.ap} AP \u00b7 "
+            f"{when} \u00b7 {price.ap} AP \u00b7 "
             f"{price.development_remaining} of {price.development_total} left"
         )
     paid_now = []
@@ -976,9 +984,10 @@ def _offer_price_payload(
     offer: NPCServiceOffer,
     sheet: CharacterSheet,
     open_enrollments: dict[int, SkillCourseEnrollment],
+    current_week_pk: int | None,
 ) -> dict | None:
     """The offer's price as the wire shape, with its menu line; None when it names none."""
-    price = _offer_price(offer, sheet, open_enrollments)
+    price = _offer_price(offer, sheet, open_enrollments, current_week_pk)
     if price is None:
         return None
     return {**asdict(price), "display": format_offer_price(price)}
@@ -1010,6 +1019,11 @@ def serialize_npc_session_state(
     )
     sheet = session.persona.character_sheet
     open_enrollments = _open_enrollments_by_offer(sheet) if offers else {}
+    # Read, never bootstrapped: a menu read must not write a game week into being.
+    from world.game_clock.models import GameWeek  # noqa: PLC0415
+
+    current_week = GameWeek.get_current() if open_enrollments else None
+    current_week_pk = current_week.pk if current_week is not None else None
     serialized_offers = InteractionOfferSerializer(
         [
             {
@@ -1019,7 +1033,7 @@ def serialize_npc_session_state(
                 "is_final": o.is_final,
                 "rapport_requirement": o.rapport_requirement,
                 "risk_tier": _offer_risk_tier(o),
-                "price": _offer_price_payload(o, sheet, open_enrollments),
+                "price": _offer_price_payload(o, sheet, open_enrollments, current_week_pk),
             }
             for o in offers
         ],

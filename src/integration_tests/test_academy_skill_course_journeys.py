@@ -533,6 +533,7 @@ class TheTrainersMenu(_AcademyCourseCase):
 
     ENROLL = "Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now"
     NEXT = f"Next session · {SESSION_AP} AP · 1200 of {TOTAL} left"
+    NEXT_WEEK = f"Next session next week · {SESSION_AP} AP · 1200 of {TOTAL} left"
 
     def menu(self) -> str:
         return strip_ansi(self.telnet(self.ysmay, "hire Magister Cadwen"))
@@ -554,8 +555,15 @@ class TheTrainersMenu(_AcademyCourseCase):
 
         self.take_course("success")
         menu = self.menu()
-        self.assertRegex(menu, rf"Course: Occult.*{self.NEXT}")
+        # This week's session has run, so the next one waits for the week to turn.
+        self.assertRegex(menu, rf"Course: Occult.*{self.NEXT_WEEK}")
         self.assertNotIn("Enroll:", menu)
+
+        self.telnet(self.ysmay, "hire end")
+        advance_game_week()
+        menu = self.menu()
+        self.assertRegex(menu, rf"Course: Occult.*{self.NEXT}")
+        self.assertNotIn("next week", menu)
 
     def test_a_free_course_names_only_the_hare(self) -> None:
         self.course.coin_cost = 0
@@ -585,6 +593,8 @@ class TheTrainersMenu(_AcademyCourseCase):
 
     def test_the_web_menu_shows_the_next_session_once_enrolled(self) -> None:
         self.take_course("success")
+        self.assertEqual(self.web_offers()["Course: Occult"]["price"]["display"], self.NEXT_WEEK)
+        advance_game_week()
 
         price = self.web_offers()["Course: Occult"]["price"]
 
