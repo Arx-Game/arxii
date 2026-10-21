@@ -270,7 +270,6 @@ def facet_suppliers(being: WorshippedBeing) -> FacetSuppliers:
     """
     from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
     from world.items.market.models import CraftingServiceOffer  # noqa: PLC0415
-    from world.items.models import ItemTemplate  # noqa: PLC0415
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
 
     config = get_devotion_config()
@@ -283,8 +282,13 @@ def facet_suppliers(being: WorshippedBeing) -> FacetSuppliers:
     ]
     example = max(config.worn_item_max_points // 2, 1)
     rows: list[FacetSupplierRow] = []
-    for row in being.being_facets.select_related("facet").order_by("facet__name"):
-        templates = ItemTemplate.objects.filter(inherent_facets=row.facet).count()
+    favored = (
+        being.being_facets.select_related("facet")
+        .annotate(templates=Count("facet__inherent_on_templates", distinct=True))
+        .order_by("facet__name")
+    )
+    for row in favored:
+        templates = row.templates
         top = config.worn_item_max_points
         preview = (
             f"A worn {row.facet.name} piece with {example} points eases "

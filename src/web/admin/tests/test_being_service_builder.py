@@ -16,6 +16,7 @@ from web.admin.tests.test_distinction_builder import (
 )
 from world.contributors.factories import ContentContributorFactory
 from world.distinctions.factories import DistinctionEffectFactory
+from world.items.factories import ItemTemplateFactory
 from world.items.market.models import CraftingServiceOffer
 from world.magic.factories import FacetFactory
 from world.mechanics.constants import FAVOR_INVOCATION_CATEGORY_NAME
@@ -139,8 +140,10 @@ class ServiceBuilderPageTests(ServiceBuilderTestCase):
             shop_room=RoomProfileFactory(),
             fee=10,
         )
+        ItemTemplateFactory().inherent_facets.add(self.silk)
         body = self.body()
 
+        self.assertIn("1 template carry it", body)
         self.assertIn("Invocation ease points", body)
         self.assertIn("Earning bonus percent", body)
         self.assertIn("Who supplies these facets", body)
