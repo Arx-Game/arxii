@@ -1,8 +1,9 @@
 /**
- * SchoolingStances (#3675), the standard schooling set under a
- * `living_masters` tradition: three stances (rank 0, 1, 2), authored once
- * and shown under every tradition with living teachers. Wording is staff's;
- * prices are the set's, never the tradition's own.
+ * SchoolingStances (#3675), the standard schooling set under a tradition: up to three
+ * stances (rank 0, 1, 2), authored once. The server sends the rows the tradition's state
+ * opens (living masters: all three; teachers gone: ranks 0 and 1; self-taught: none) and
+ * the picker mounts this only when there are rows. Wording is staff's; prices are the
+ * set's, never the tradition's own.
  *
  * Picking a stance syncs a Tradition Training entry at that stance's rank
  * (rank 0 clears the pick); every other CHOICE distinction on the draft is

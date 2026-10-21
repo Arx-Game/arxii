@@ -144,6 +144,30 @@ describe('GiftStage (folio)', () => {
     );
     expect(screen.getByText('Self-taught · slower to learn · Awards 75')).toBeInTheDocument();
     expect(screen.queryByText('Newly taken in')).not.toBeInTheDocument();
+    expect(screen.queryByText(/How you came to/)).not.toBeInTheDocument();
+  });
+
+  it('mounts the label and two stances for a teachers-gone tradition (the server decides)', () => {
+    const orphaned = {
+      ...mockTradition,
+      id: 3,
+      name: 'The Last Lamp',
+      state: 'teachers_gone' as const,
+      schooling: mockTradition.schooling.slice(0, 2),
+    };
+    traditions = [orphaned];
+    const draft = createMockDraft({
+      selected_beginnings: mockBeginnings,
+      selected_path: mockPath,
+      selected_tradition: orphaned,
+    });
+    renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText('How you came to The Last Lamp')).toBeInTheDocument();
+    expect(screen.getByText('Newly taken in')).toBeInTheDocument();
+    expect(screen.getByText('Trained for years')).toBeInTheDocument();
+    expect(screen.queryByText('Raised within it')).not.toBeInTheDocument();
   });
 
   it('rail shows the tradition name plainly with no schooling picked', () => {
