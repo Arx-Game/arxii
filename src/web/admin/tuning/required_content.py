@@ -814,6 +814,76 @@ def _probe_minor_gift_technique_skills() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_schooling_magic_skill_floors() -> ProbeResult:
+    """Schooling ranks 1 and 2 each set a `magic_skill_floor` above 0 (#4457).
+
+    Consumer: `world/character_creation/offers.py:187` `schooling_magic_skill_floor()`.
+    A stance with floor 0 lifts no Magic skill at finalize, so a schooled character
+    starts with none. That is a legal state, not a failure, and it stays listed until
+    staff set the floor. A rank with no `SchoolingLine` row at all is skipped here:
+    `character_creation.tradition_schooling_lines` already reports it as REQUIRED.
+    Rank 0 grants nothing, so it carries no floor.
+    """
+    from world.character_creation.models import SchoolingLine  # noqa: PLC0415
+
+    unset = SchoolingLine.objects.filter(rank__in=(1, 2), magic_skill_floor=0).order_by("rank")
+    missing = tuple(f"Rank {line.rank}" for line in unset)
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} schooling stance(s) set no Magic skill floor."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_magic_skill_courses() -> ProbeResult:
+    """Every active Magic skill has an Academy course offer (#4457).
+
+    Consumer: `world/npc_services/effects.py:846` `run_skill_course_offer()`. A course
+    counts when it is a `SKILL_COURSE` offer with a `SkillCourseOfferDetails` row on an
+    `NPCRole` that has a `faction_affiliation`: the coin is credited to that house, so
+    a role without one cannot take it. The Magic skill set is `magic_category_skills()`.
+    """
+    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+    from world.npc_services.constants import OfferKind  # noqa: PLC0415
+    from world.npc_services.models import SkillCourseOfferDetails  # noqa: PLC0415
+
+    covered = SkillCourseOfferDetails.objects.filter(
+        offer__kind=OfferKind.SKILL_COURSE,
+        offer__role__faction_affiliation__isnull=False,
+    ).values("skill_id")
+    missing = tuple(
+        magic_category_skills()
+        .exclude(pk__in=covered)
+        .order_by("trait__name")
+        .values_list("trait__name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} Magic skill(s) have no Academy course."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_path_suggestions_name_magic_skills() -> ProbeResult:
+    """No `PathSkillSuggestion` names a Magic skill (#4457).
+
+    Consumer: `world/skills/views.py:119` `PathSkillSuggestionViewSet`. Character
+    creation spends no points on a Magic skill (Tradition training sets them), so a
+    suggestion naming one cannot be taken. Each row listed is one to remove or retarget.
+    """
+    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+    from world.skills.models import PathSkillSuggestion  # noqa: PLC0415
+
+    named = (
+        PathSkillSuggestion.objects.filter(skill__in=magic_category_skills())
+        .order_by("character_path__name", "skill__trait__name")
+        .values_list("character_path__name", "skill__trait__name")
+    )
+    missing = tuple(f"{path}: {skill}" for path, skill in named)
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} Path skill suggestion(s) name a Magic skill."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 _ULTIMATE_COPY_FIELDS = (
     "reveal_framing_text",
     "deferred_death_text",
@@ -2459,6 +2529,38 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_minor_gift_technique_skills),
             admin_model="Gift",
+        ),
+        ContentDependency(
+            key="schooling-magic-skill-floors",
+            label="Schooling stances have a Magic skill floor",
+            tier=DependencyTier.TUNING,
+            consumer="world/character_creation/offers.py:187 schooling_magic_skill_floor()",
+            consequence="Schooled characters start with no Magic skills.",
+            probe=CustomProbe(fn=_probe_schooling_magic_skill_floors),
+            admin_model="SchoolingLine",
+        ),
+        ContentDependency(
+            key="magic-skill-courses",
+            label="Every Magic skill has an Academy course",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/effects.py:846 run_skill_course_offer()",
+            consequence=(
+                "Self-taught characters catch up in those skills only by use and weekly training."
+            ),
+            probe=CustomProbe(fn=_probe_magic_skill_courses),
+            admin_model="SkillCourseOfferDetails",
+        ),
+        ContentDependency(
+            key="path-suggestions-name-magic-skills",
+            label="Path skill suggestions name no Magic skill",
+            tier=DependencyTier.TUNING,
+            consumer="world/skills/views.py:119 PathSkillSuggestionViewSet",
+            consequence=(
+                "The suggestion is dropped at creation and the Path's suggested points "
+                "come up short."
+            ),
+            probe=CustomProbe(fn=_probe_path_suggestions_name_magic_skills),
+            admin_model="Path",
         ),
         ContentDependency(
             key="standoff-reaction-lines",
