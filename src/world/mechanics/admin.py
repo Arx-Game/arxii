@@ -55,14 +55,33 @@ class ModifierCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(ModifierTarget)
 class ModifierTargetAdmin(admin.ModelAdmin):
-    list_display = ["name", "category", "target_being", "display_order", "is_active"]
+    list_display = [
+        "name",
+        "category",
+        "target_trait",
+        "target_being",
+        "display_order",
+        "is_active",
+    ]
     list_filter = ["category", "is_active"]
+    autocomplete_fields = ["target_trait"]
     # target_being__name (#4333): a being's favor targets are found by the being's
     # name in every picker that autocompletes against this admin.
     search_fields = ["name", "description", "target_being__name"]
     ordering = ["category__display_order", "display_order", "name"]
     list_editable = ["display_order", "is_active"]
-    list_select_related = ["category", "target_being"]
+    list_select_related = ["category", "target_being", "target_trait"]
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Correct the trait help text for language traits (model text says stat only)."""
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == "target_trait" and formfield:  # noqa: STRING_LITERAL - admin field name
+            formfield.help_text = (
+                "The trait this target modifies. For the stat category pick the stat; "
+                "for the language category pick the language trait. Leave blank for "
+                "categories whose target systems are not built yet."
+            )
+        return formfield
 
 
 @admin.register(ModifierSource)

@@ -20,6 +20,17 @@ class GameClockAdmin(admin.ModelAdmin):
 
     list_display = ["__str__", "anchor_ic_time", "time_ratio", "paused"]
 
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        """Say what the anchor date means for the world's year."""
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == "anchor_ic_time" and formfield:  # noqa: STRING_LITERAL - admin field name
+            formfield.help_text = (
+                "The IC date and time the clock starts at. Its year is the world's "
+                "current year. Do not set it before any heritage's first-appearance "
+                "date."
+            )
+        return formfield
+
     def get_readonly_fields(self, _request: HttpRequest, obj: GameClock | None = None) -> list[str]:
         """Creating asks for the IC anchor; the real half is stamped at save."""
         if obj is None:

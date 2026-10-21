@@ -105,8 +105,8 @@ class PathAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     ]
     fieldsets = (
         (None, {"fields": ("name", "description", "stage", "minimum_level")}),
-        ("Casting", {"fields": ("technique_skill",)}),
-        ("Display", {"fields": ("icon_url", "sort_order", "is_active")}),
+        ("Casting", {"fields": ("technique_skill", "style", "action_category")}),
+        ("Display", {"fields": ("icon_url", "icon_name", "sort_order", "is_active")}),
         ("Evolution", {"fields": ("parent_paths",)}),
         CREDIT_FIELDSET,
     )

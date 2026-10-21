@@ -20,7 +20,7 @@ class ConsequencePoolEntryInline(admin.TabularInline):
     model = ConsequencePoolEntry
     formset = OneRowPerFormSet
     extra = 1
-    raw_id_fields = ("consequence",)
+    autocomplete_fields = ("consequence",)
 
 
 @admin.register(ConsequencePool)
