@@ -13,6 +13,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { CharacterLink } from './character';
 import {
+  BookOpen,
   Bug,
   DoorOpen,
   Map,
@@ -129,6 +130,12 @@ export function AccountMenuContent({ account }: ProfileDropdownProps) {
             <Link to="/staff/world-builder" className="flex items-center gap-2">
               <Map className="h-4 w-4" />
               World Builder
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/staff/almanach" className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4" />
+              Almanach
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
