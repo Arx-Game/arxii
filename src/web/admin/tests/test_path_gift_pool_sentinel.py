@@ -9,6 +9,7 @@ does not branch on it.
 from __future__ import annotations
 
 from django.test import TestCase
+from django.urls import reverse
 
 from web.admin.tuning import required_content as rc
 from world.classes.factories import PathFactory
@@ -79,6 +80,8 @@ class PathGiftStarterPoolProbeTests(TestCase):
 
         self.assertFalse(result.present)
         self.assertIn(f"{self.path.name} / {self.gift.name}", result.missing)
+        # Nothing authored to wire, so the link opens the grants, not the techniques.
+        self.assertEqual(result.admin_url, reverse("admin:arxii_pathgiftgrant_changelist"))
 
     def test_pool_of_unready_starters_is_still_a_gap(self) -> None:
         """A pool a player can take nothing from is not stocked (#4545).

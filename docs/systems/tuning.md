@@ -467,7 +467,8 @@ when the row is absent.
   `CustomProbe` declaration, which names no model itself. A probe that knows the exact
   page its gap is fixed on sets `ProbeResult.admin_url` instead, which wins (the Soulfray
   Stage Builder rows, #4089; the character creation readiness rows link the Technique
-  changelist filtered by `authoring_gap`, #4545).
+  changelist filtered by `authoring_gap`, or the Path Gift Grant list when a starter-pool
+  gap has nothing authored to wire, #4545).
 - **A readiness probe calls the consumer's own filter, never a copy of it (#4545).** The
   character creation rows (`path-gift-starter-pools`, `cg-gift-pools-takeable`, and the
   Tuning row `cg-techniques-cast-effect`) count techniques through

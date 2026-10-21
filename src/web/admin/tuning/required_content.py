@@ -395,6 +395,12 @@ def _probe_path_gift_starter_pools() -> ProbeResult:
         return ProbeResult(present=True, admin_url=link)
     missing = tuple(label for _path_id, _gift_id, label in gaps)
     unready = sum(1 for path_id, gift_id, _label in gaps if (path_id, gift_id) in authored)
+    if not unready:
+        # Every gap is a pool with nothing authored: the fix is the grant's own
+        # page, not the Technique list.
+        from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
+
+        link = admin_changelist_url("PathGiftGrant")
     detail = (
         f"{len(missing)} (path, gift) pair(s) a tradition offers have no path starter "
         "technique a player can take at character creation. "
@@ -418,8 +424,8 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
     pairing with no gift offered at all leaves a new character nothing to pick
     at the Gift stage.
 
-    Six queries whatever the catalog size: the gated-technique ids (one per
-    requirement type), the two takeable sets, and the two grant tables.
+    A fixed query count whatever the catalog size: one per requirement type for
+    the gated-technique ids, then the two takeable sets and the two grant tables.
     """
     from world.classes.models import PathStage  # noqa: PLC0415
     from world.magic.admin import GAP_NOT_CASTABLE  # noqa: PLC0415
