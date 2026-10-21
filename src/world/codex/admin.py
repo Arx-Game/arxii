@@ -356,6 +356,7 @@ class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
                 organization_count=Count("organization_grants", distinct=True),
                 path_count=Count("path_grants", distinct=True),
                 distinction_count=Count("distinction_grants", distinct=True),
+                realm_count=Count("realm_grants", distinct=True),
                 species_count=Count("species", distinct=True),
                 clue_count=Count("clues", distinct=True),
                 beginnings_perspective=Subquery(beginnings_perspective),
@@ -372,6 +373,7 @@ class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
             (obj.organization_count, "organization", None),
             (obj.path_count, "path", None),
             (obj.distinction_count, "distinction", None),
+            (obj.realm_count, "realm", None),
             (obj.species_count, "species", None),
             (obj.clue_count, "clue", None),
         ):
