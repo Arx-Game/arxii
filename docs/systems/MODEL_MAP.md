@@ -2266,7 +2266,7 @@
   - tradition_grants <- codex.TraditionCodexGrant
   - organization_grants <- codex.OrganizationCodexGrant
   - succession_laws <- societies.SuccessionLaw
-  - house_aspect_options <- societies.HouseAspectOption
+  - house_charter_options <- societies.HouseCharterOption
   - resonances <- magic.Resonance
   - gifts <- magic.Gift
   - techniques <- magic.Technique
@@ -9479,22 +9479,22 @@
   - holding -> societies.DomainHolding [FK]
   - material_category -> items.MaterialCategory [FK]
 
-### HouseAspectDefinition
+### HouseCharterOption
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - definition -> societies.HouseCharterQuestion [FK]
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - being -> worship.WorshippedBeing [FK] (nullable)
+  - being_nickname -> worship.BeingNickname [FK] (nullable)
+
+### HouseCharterQuestion
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - templates <- societies.HouseTemplate
-  - options <- societies.HouseAspectOption
-
-### HouseAspectOption
-**Foreign Keys:**
-  - written_by -> contributors.ContentContributor [FK] (nullable)
-  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - definition -> societies.HouseAspectDefinition [FK]
-  - codex_entry -> codex.CodexEntry [FK] (nullable)
-  - being -> worship.WorshippedBeing [FK] (nullable)
-  - being_nickname -> worship.BeingNickname [FK] (nullable)
+  - options <- societies.HouseCharterOption
 
 ### HouseClaim
 **Foreign Keys:**
@@ -9504,16 +9504,16 @@
   - estate_district -> areas.Area [FK] (nullable)
   - reviewed_by -> evennia.AccountDB [FK] (nullable)
 **Pointed to by:**
-  - aspects <- societies.HouseClaimAspect
+  - facets <- societies.HouseClaimFacet
   - kin <- societies.HouseClaimKin
   - lands <- societies.HouseClaimLand
   - observances <- societies.HouseClaimObservance
 
-### HouseClaimAspect
+### HouseClaimFacet
 **Foreign Keys:**
   - claim -> societies.HouseClaim [FK]
-  - definition -> societies.HouseAspectDefinition [FK]
-  - option -> societies.HouseAspectOption [FK]
+  - definition -> societies.HouseCharterQuestion [FK]
+  - option -> societies.HouseCharterOption [FK]
 
 ### HouseClaimKin
 **Foreign Keys:**
@@ -9561,7 +9561,7 @@
   - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
   - served_house_choices -> societies.Organization [M2M]
   - holdings -> societies.HoldingKind [M2M]
-  - aspect_definitions -> societies.HouseAspectDefinition [M2M]
+  - charter_questions -> societies.HouseCharterQuestion [M2M]
   - features -> societies.HouseFeature [M2M]
 **Pointed to by:**
   - upbringings <- character_creation.OriginTemplate
@@ -9775,7 +9775,7 @@
   - pacts_as_senior <- societies.MarriagePact
   - pacts_as_junior <- societies.MarriagePact
   - house_templates <- societies.HouseTemplate
-  - aspects <- societies.OrganizationAspect
+  - facets <- societies.OrganizationFacet
   - features <- societies.OrganizationFeature
   - observances <- societies.OrganizationObservance
   - stature <- societies.HouseStature
@@ -9824,17 +9824,17 @@
   - org_tasks_targeting <- tasking.OrgTask
   - capability_projects <- societies.OrganizationCapabilityProjectDetails
 
-### OrganizationAspect
-**Foreign Keys:**
-  - organization -> societies.Organization [FK]
-  - definition -> societies.HouseAspectDefinition [FK]
-  - option -> societies.HouseAspectOption [FK]
-
 ### OrganizationCapabilityProjectDetails
 **Foreign Keys:**
   - project -> projects.Project [OneToOne]
   - gift -> magic.Gift [FK]
   - organization -> societies.Organization [FK]
+
+### OrganizationFacet
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - definition -> societies.HouseCharterQuestion [FK]
+  - option -> societies.HouseCharterOption [FK]
 
 ### OrganizationFeature
 **Foreign Keys:**
@@ -11116,7 +11116,7 @@
   - being -> worship.WorshippedBeing [FK]
 **Pointed to by:**
   - patron_organizations <- societies.Organization
-  - house_aspect_options <- societies.HouseAspectOption
+  - house_charter_options <- societies.HouseCharterOption
 
 ### BeingRelationship
 **Foreign Keys:**
@@ -11353,7 +11353,7 @@
   - modifier_targets <- mechanics.ModifierTarget
   - ceremonies <- ceremonies.Ceremony
   - sacrifices <- ceremonies.CeremonyOffering
-  - house_aspect_options <- societies.HouseAspectOption
+  - house_charter_options <- societies.HouseCharterOption
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - manifest_options <- magic.TechniqueManifestOption
   - feast_days <- worship.WorshipFeastDay

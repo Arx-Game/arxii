@@ -13,8 +13,8 @@ from world.scenes.models import Persona
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 from world.societies.houses.almanach_reads import (
-    aspect_facet,
     demesne_count,
+    facet_payload,
     observance_rows,
     patron_payload,
 )
@@ -79,9 +79,9 @@ class HouseDomainSerializer(serializers.ModelSerializer):
         return [holding.name for holding in obj.holdings.all()]
 
 
-class HouseAspectFacetSerializer(serializers.Serializer):
+class HouseFacetSerializer(serializers.Serializer):
     """One picked identity facet on the house block (#2079; mirrors
-    ``almanach_reads.aspect_facet``). ``being_name`` is the god or totem the answer
+    ``almanach_reads.facet_payload``). ``being_name`` is the god or totem the answer
     is (#4205), ``target_entry_id`` the one Codex entry it opens."""
 
     definition = serializers.CharField()
@@ -193,7 +193,7 @@ class HouseDetailSerializer(serializers.Serializer):
     titles = HouseTitleSerializer(many=True)
     domains = HouseDomainSerializer(many=True)
     patron = HousePatronSerializer(allow_null=True)
-    aspects = HouseAspectFacetSerializer(many=True)
+    facets = HouseFacetSerializer(many=True)
     features = HouseFeatureFacetSerializer(many=True)
     open_crises = HouseCrisisSerializer(many=True)
     stature = HouseStatureSerializer(allow_null=True)
@@ -278,9 +278,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "titles": titles,
             "domains": obj.domains.all(),
             # Both read the prefetched ``patron_nickname__being`` and
-            # ``aspects__option__being`` relations (#4205).
+            # ``facets__option__being`` relations (#4205).
             "patron": patron_payload(obj),
-            "aspects": [aspect_facet(facet) for facet in obj.aspects.all()],
+            "facets": [facet_payload(facet) for facet in obj.facets.all()],
             "features": [
                 {
                     "name": stamped.feature.name,
@@ -293,7 +293,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "stature": _house_stature_payload(obj),
             # Reads the prefetched ``vacancies`` relation (OrganizationViewSet
             # queryset, #3648) - filtered in Python, not a per-org ``.filter()``
-            # query, mirroring the aspects/features pattern above.
+            # query, mirroring the facets/features pattern above.
             "vacancies": [
                 {
                     "id": vacancy.id,

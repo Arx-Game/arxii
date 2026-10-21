@@ -150,7 +150,7 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
 - **Choice (Upbringing)** (#3617): `OriginTemplateSlotChoice`, one authored
   pick-list answer on a Prompt, priced `cg_point_cost + cost_per_influence x
   influence` (`cost_for()`); influence is 0 on the name and none Family
-  Paths. _Avoid:_ option (reserved for `HouseAspectOption`/`FormTraitOption`
+  Paths. _Avoid:_ option (reserved for `HouseCharterOption`/`FormTraitOption`
   elsewhere in this codebase).
 - **Family Template** (#3648): `HouseTemplate`, the type a named family is
   built from: kind, org type, society, aspect questions, served house

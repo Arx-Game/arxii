@@ -8,7 +8,7 @@ describe('FamilyTemplateForm', () => {
   it('renders features read-only and one card per aspect option', () => {
     render(<FamilyTemplateForm template={mockFamilyTemplate} picks={{}} onToggle={vi.fn()} />);
     expect(screen.getByText(mockFamilyTemplate.features[0].name)).toBeInTheDocument();
-    const charge = mockFamilyTemplate.aspect_definitions[0];
+    const charge = mockFamilyTemplate.charter_questions[0];
     expect(screen.getByText(charge.prompt)).toBeInTheDocument();
     for (const option of charge.options) {
       expect(screen.getByRole('button', { name: new RegExp(option.name) })).toBeInTheDocument();
@@ -18,13 +18,13 @@ describe('FamilyTemplateForm', () => {
   it('reports a toggle with the definition, option and max picks', async () => {
     const onToggle = vi.fn();
     render(<FamilyTemplateForm template={mockFamilyTemplate} picks={{}} onToggle={onToggle} />);
-    const charge = mockFamilyTemplate.aspect_definitions[0];
+    const charge = mockFamilyTemplate.charter_questions[0];
     await userEvent.click(screen.getByRole('button', { name: new RegExp(charge.options[0].name) }));
     expect(onToggle).toHaveBeenCalledWith(charge.id, charge.options[0].id, charge.max_picks);
   });
 
   it('marks a picked option pressed', () => {
-    const charge = mockFamilyTemplate.aspect_definitions[0];
+    const charge = mockFamilyTemplate.charter_questions[0];
     render(
       <FamilyTemplateForm
         template={mockFamilyTemplate}

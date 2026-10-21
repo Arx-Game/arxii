@@ -620,10 +620,10 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
 
 
 def _get_aspect_pick_errors(draft: CharacterDraft, family_template: HouseTemplate) -> list[str]:
-    from world.societies.houses.creator import _validate_aspect_picks  # noqa: PLC0415
+    from world.societies.houses.creator import _validate_facet_picks  # noqa: PLC0415
     from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
 
-    raw = draft.draft_data.get("family_aspect_picks") or {}
+    raw = draft.draft_data.get("family_facet_picks") or {}
     if not isinstance(raw, dict) or any(not isinstance(values, list) for values in raw.values()):
         return ["Your family's choices could not be read"]
     try:
@@ -631,7 +631,7 @@ def _get_aspect_pick_errors(draft: CharacterDraft, family_template: HouseTemplat
     except (TypeError, ValueError):
         return ["Your family's choices could not be read"]
     try:
-        _validate_aspect_picks(template=family_template, aspect_picks=picks)
+        _validate_facet_picks(template=family_template, facet_picks=picks)
     except HousesServiceError as exc:
         return [exc.user_message]
     return []

@@ -124,8 +124,8 @@ export function FounderHouseChapter({
     ? `${youName} ${particle ?? ''} ${draft.house_name}`.replace(/\s+/g, ' ').trim()
     : '';
 
-  const quiddity = template.aspect_definitions[0];
-  const quiddityPicks = quiddity ? (draft.aspect_picks[quiddity.id] ?? []) : [];
+  const quiddity = template.charter_questions[0];
+  const quiddityPicks = quiddity ? (draft.facet_picks[quiddity.id] ?? []) : [];
 
   const toggleQuiddityOption = (optionId: number, maxPicks: number) => {
     if (!quiddity) return;
@@ -139,7 +139,7 @@ export function FounderHouseChapter({
     } else {
       next = [...quiddityPicks, optionId];
     }
-    set('aspect_picks', { ...draft.aspect_picks, [quiddity.id]: next });
+    set('facet_picks', { ...draft.facet_picks, [quiddity.id]: next });
   };
 
   return (

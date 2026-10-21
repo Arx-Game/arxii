@@ -160,7 +160,7 @@ export const mockNobleFamily: Family = {
   description: 'An honorable noble house known for martial prowess.',
   born_particle: 'du',
   taken_in_particle: 'dau',
-  inherited: { aspects: [], features: [], liege_name: '' },
+  inherited: { facets: [], features: [], liege_name: '' },
 };
 
 export const mockNobleFamily2: Family = {
@@ -172,7 +172,7 @@ export const mockNobleFamily2: Family = {
   description: 'A cunning noble house with southern roots.',
   born_particle: 'za',
   taken_in_particle: 'zas',
-  inherited: { aspects: [], features: [], liege_name: '' },
+  inherited: { facets: [], features: [], liege_name: '' },
 };
 
 export const mockCommonerFamily: Family = {
@@ -184,7 +184,7 @@ export const mockCommonerFamily: Family = {
   description: 'A common family of craftspeople.',
   born_particle: '',
   taken_in_particle: '',
-  inherited: { aspects: [], features: [], liege_name: '' },
+  inherited: { facets: [], features: [], liege_name: '' },
 };
 
 export const mockFamilies: Family[] = [mockNobleFamily, mockNobleFamily2, mockCommonerFamily];
@@ -559,7 +559,7 @@ export const mockFamilyTemplate: FamilyTemplate = {
   holdings: [],
   default_succession_law: null,
   starting_kin_slots: 3,
-  aspect_definitions: [
+  charter_questions: [
     {
       id: 601,
       name: 'Charge',

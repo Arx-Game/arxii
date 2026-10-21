@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import type { FamilyTemplate } from '../../types';
 
 interface Props {
-  template: Pick<FamilyTemplate, 'aspect_definitions' | 'features'>;
+  template: Pick<FamilyTemplate, 'charter_questions' | 'features'>;
   picks: Record<number, number[]>;
   onToggle: (definitionId: number, optionId: number, maxPicks: number) => void;
   featuresHeading?: string;
@@ -33,7 +33,7 @@ export function FamilyTemplateForm({
           ))}
         </div>
       )}
-      {template.aspect_definitions.map((definition) => {
+      {template.charter_questions.map((definition) => {
         const picked = picks[definition.id] ?? [];
         const maxPicks = definition.max_picks ?? 1;
         return (
