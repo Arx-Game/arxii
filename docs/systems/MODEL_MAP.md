@@ -2268,6 +2268,7 @@
   - distinction_grants <- codex.DistinctionCodexGrant
   - tradition_grants <- codex.TraditionCodexGrant
   - organization_grants <- codex.OrganizationCodexGrant
+  - realm_grants <- codex.RealmCodexGrant
   - succession_laws <- societies.SuccessionLaw
   - house_aspect_options <- societies.HouseAspectOption
   - resonances <- magic.Resonance
@@ -2326,6 +2327,11 @@
 ### PathCodexGrant
 **Foreign Keys:**
   - path -> classes.Path [FK]
+  - entry -> codex.CodexEntry [FK]
+
+### RealmCodexGrant
+**Foreign Keys:**
+  - realm -> realms.Realm [FK]
   - entry -> codex.CodexEntry [FK]
 
 ### TraditionCodexGrant
@@ -8035,6 +8041,7 @@
   - areas <- areas.Area
   - starting_areas <- character_creation.StartingArea
   - profiles <- character_sheets.Profile
+  - codex_grants <- codex.RealmCodexGrant
   - societies <- societies.Society
   - nobiliary_particles <- societies.NobiliaryParticle
   - recognition_rules <- societies.HouseRecognitionRule

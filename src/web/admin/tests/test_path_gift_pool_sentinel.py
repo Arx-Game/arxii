@@ -9,6 +9,7 @@ does not branch on it.
 from __future__ import annotations
 
 from django.test import TestCase
+from django.urls import reverse
 
 from web.admin.tuning import required_content as rc
 from world.classes.factories import PathFactory
@@ -18,6 +19,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TraditionGiftGrantFactory,
 )
+from world.magic.seeds_cast import get_standalone_cast_template
 
 
 def _probe_for(key: str) -> rc.ContentProbe:
@@ -33,7 +35,10 @@ class PathGiftStarterPoolProbeTests(TestCase):
         cls.gift = GiftFactory()
         cls.path = PathFactory()
         cls.special = TechniqueFactory(gift=cls.gift)
-        cls.starter = TechniqueFactory(gift=cls.gift)
+        cls.starter = TechniqueFactory(
+            gift=cls.gift, action_template=get_standalone_cast_template()
+        )
+        cls.unready = TechniqueFactory(gift=cls.gift)
 
     def _resolve(self) -> rc.ProbeResult:
         return _probe_for("path-gift-starter-pools").resolve(None)
@@ -75,6 +80,27 @@ class PathGiftStarterPoolProbeTests(TestCase):
 
         self.assertFalse(result.present)
         self.assertIn(f"{self.path.name} / {self.gift.name}", result.missing)
+        # Nothing authored to wire, so the link opens the grants, not the techniques.
+        self.assertEqual(result.admin_url, reverse("admin:arxii_pathgiftgrant_changelist"))
+
+    def test_pool_of_unready_starters_is_still_a_gap(self) -> None:
+        """A pool a player can take nothing from is not stocked (#4545).
+
+        Production had starter techniques on every pool and a cast template on
+        none, so character creation showed no gift while this row read complete.
+        The pool now counts only what `cg_takeable_techniques()` lets through.
+        """
+        grant = TraditionGiftGrantFactory(gift=self.gift)
+        grant.special_techniques.add(self.special)
+        PathGiftGrantFactory(path=self.path, gift=self.gift).starter_techniques.add(self.unready)
+
+        result = self._resolve()
+
+        self.assertFalse(result.present)
+        self.assertIn(f"{self.path.name} / {self.gift.name}", result.missing)
+        self.assertIn(
+            "1 of them have starter techniques authored that are not ready", result.detail
+        )
 
     def test_tradition_grant_with_no_specials_is_never_reported(self) -> None:
         """A tradition that teaches a gift and adds no extras is legitimate.

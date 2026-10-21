@@ -3,7 +3,7 @@
 from django.test import TestCase
 from django.utils import timezone
 
-from world.character_creation.factories import BeginningsFactory
+from world.character_creation.factories import BeginningsFactory, RealmFactory
 from world.character_sheets.factories import CharacterSheetFactory, ProfileBeginningsFactory
 from world.classes.factories import PathFactory
 from world.codex.constants import CodexKnowledgeStatus
@@ -13,6 +13,7 @@ from world.codex.models import (
     CharacterCodexKnowledge,
     DistinctionCodexGrant,
     PathCodexGrant,
+    RealmCodexGrant,
     TraditionCodexGrant,
 )
 from world.codex.services import grant_entry_to_species_holders, grant_to_current_holders
@@ -67,6 +68,43 @@ class BeginningsHoldersTests(TestCase):
 
         self.assertTrue(_known(self.holder, self.entry))
         self.assertTrue(_known(self.holder, other_entry))
+
+
+class RealmHoldersTests(TestCase):
+    """Public within a realm (#4531): whoever began there holds it, by their true profile."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.entry = CodexEntryFactory(name="Umbral Succession")
+        cls.realm = RealmFactory(name="Umbros")
+        cls.holder = RosterEntryFactory()
+        profile = cls.holder.character_sheet.true_profile
+        profile.origin_realm = cls.realm
+        profile.save(update_fields=["origin_realm"])
+        cls.stranger = RosterEntryFactory()
+        cls.grant = RealmCodexGrant.objects.create(realm=cls.realm, entry=cls.entry)
+
+    def test_holder_learns_and_stranger_does_not(self):
+        learned = grant_to_current_holders(self.grant)
+
+        self.assertEqual(learned, 1)
+        self.assertTrue(_known(self.holder, self.entry))
+        self.assertFalse(_known(self.stranger, self.entry))
+
+    def test_repeat_is_a_noop(self):
+        grant_to_current_holders(self.grant)
+        self.assertEqual(grant_to_current_holders(self.grant), 0)
+
+    def test_a_character_from_another_realm_does_not_hold_it(self):
+        elsewhere = RealmFactory(name="Luxen")
+        other = RosterEntryFactory()
+        profile = other.character_sheet.true_profile
+        profile.origin_realm = elsewhere
+        profile.save(update_fields=["origin_realm"])
+
+        grant_to_current_holders(self.grant)
+
+        self.assertFalse(_known(other, self.entry))
 
 
 class TraditionHoldersTests(TestCase):

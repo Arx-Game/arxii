@@ -2386,6 +2386,17 @@ def _finalize_beginnings_codex_grants(draft: CharacterDraft, sheet: CharacterShe
     grant_beginnings_codex(sheet, draft.selected_beginnings)
 
 
+def _finalize_realm_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Apply the realm's codex grants (``grant_realm_codex``, #4531): the realm is the
+    draft's starting area's, else the chosen Beginnings' starting area's. No-op without one."""
+    from world.character_creation.sheet_writers import grant_realm_codex  # noqa: PLC0415
+
+    area = draft.selected_area
+    if area is None and draft.selected_beginnings is not None:
+        area = draft.selected_beginnings.starting_area
+    grant_realm_codex(sheet, area.realm if area is not None else None)
+
+
 def _finalize_distinction_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Apply Distinction codex grants for all selected distinctions.
 
@@ -2498,6 +2509,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     def other_codex() -> None:
         _finalize_path_codex_grants(draft, sheet)
         _finalize_beginnings_codex_grants(draft, sheet)
+        _finalize_realm_codex_grants(draft, sheet)
         _finalize_distinction_codex_grants(draft, sheet)
         _finalize_species_codex(sheet)
 

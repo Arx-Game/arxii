@@ -38,6 +38,11 @@ creates no availability of its own and so cannot produce this gap, and 39 of 69 
 rows are in it. Folding those in would make the sentinel report 39 false gaps beside the 8
 real ones.
 
+**Amended (#4545).** "Empty" means holding no technique a new character can take
+(`cg_catalog.cg_takeable_techniques()`: a cast template, not an ultimate, no active
+requirement). The probe first counted any starter technique, so a pool of unready ones read
+as stocked while character creation, which applies that rule, offered nothing.
+
 **Rejected alternative.** Triple-qualify the pool so a tradition special only appears when
 the path also offers the gift. Rejected because it encodes a content gap as a rule: the
 menu would silently narrow wherever authoring is incomplete, and the incompleteness that
