@@ -87,7 +87,14 @@ class ClaimedLabelTests(unittest.TestCase):
 
 
 class PullRequestTests(unittest.TestCase):
-    def run_pr(self, action: str, labels: list[str], other_prs: list[dict], merged=False):
+    def run_pr(
+        self,
+        action: str,
+        labels: list[str],
+        other_prs: list[dict],
+        merged: bool = False,
+        board_status: str | None = None,
+    ):
         ref = {
             "number": 7,
             "node_id": "I_7",
@@ -108,6 +115,11 @@ class PullRequestTests(unittest.TestCase):
             mock.patch.object(sync, "clear_field"),
             mock.patch.object(
                 sync,
+                "current_value",
+                side_effect=lambda _i, f: board_status if f == "Status" else None,
+            ),
+            mock.patch.object(
+                sync,
                 "set_single_select",
                 side_effect=lambda _b, _i, f, o: statuses.append(o) if f == "Status" else None,
             ),
@@ -126,6 +138,10 @@ class PullRequestTests(unittest.TestCase):
         statuses, labels = self.run_pr("opened", [], [])
         self.assertEqual(statuses, [sync.STATUS_IN_PROGRESS])
         self.assertEqual(labels, [([sync.CLAIMED_LABEL], [])])
+
+    def test_active_issue_is_never_downgraded_from_in_review(self) -> None:
+        statuses, _ = self.run_pr("reopened", [], [], board_status=sync.STATUS_IN_REVIEW)
+        self.assertEqual(statuses, [])
 
     def test_closed_unmerged_with_no_active_label_goes_back_to_backlog(self) -> None:
         statuses, labels = self.run_pr("closed", ["status:spec-review"], [])
