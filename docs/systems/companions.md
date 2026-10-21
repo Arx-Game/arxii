@@ -27,7 +27,11 @@ tier 0) — see `world.companions.services.companion_capacity`/
 `typeclasses.companions.CompanionObject` extends `Character` (see
 ADR-0088). A new `Character.companions` cached-property handler
 (`world.companions.handlers.CharacterCompanionHandler`) exposes a PC's active
-companions; `Character.at_post_move` moves each active companion's
+companions: `active()` loads the list once per Character instance, `find(value)`
+resolves a pk or case-insensitive name against that list with no query, and
+`bind_companion`/`release_companion` call `invalidate()` after they write (the
+`companion` command's name lookups all read the handler; #3657 tranche 17).
+`Character.at_post_move` moves each active companion's
 `objectdb` to the owner's new location (`quiet=True`) so companions follow
 their owner between rooms. `CompanionObject.at_post_move` itself overrides
 `Character.at_post_move` to skip the narrative-agent side effects (mission
@@ -78,7 +82,7 @@ defeat (`resolve_companion_defeat`'s die outcome routes through
 `release_companion`, which force-dismounts the rider before releasing the
 companion).
 
-Telnet: `companion mount <name|id>` / `companion dismount` (`CmdCompanion`,
+Telnet: `companion mount <name or id>` / `companion dismount` (`CmdCompanion`,
 `commands/companion.py`) dispatch `MountCompanionAction`/
 `DismountCompanionAction` (`actions/definitions/companions.py`) on the same
 REGISTRY seam every other companion verb uses.
@@ -103,7 +107,7 @@ a ghost-pose if a companion was ever left behind. Delivery is POSE-level,
 same convention as `PoseAction`: the player writes the companion's own name
 into the pose text (no auto name-prepend).
 
-Telnet: `companion emote <name|id> <text>` (`CmdCompanion`). Web: `POST
+Telnet: `companion emote <name or id> <text>` (`CmdCompanion`). Web: `POST
 /api/companions/companions/{id}/emote/` (see the Write endpoints table
 below) plus a composer "as `<companion>`" toggle (`CompanionSelector.tsx`,
 pattern-mirrors `LanguageSelector.tsx`) shown only when `CompanionSerializer
@@ -220,11 +224,11 @@ web uses). Mirrors `CmdSanctum`.
 companion                             — status hub (active companions + capacity)
 companion status                      — (same)
 companion list                        — (same)
-companion bind archetype=<name|id> gift=<name|id> name=<text>
-companion release <name|id>
-companion fight <name|id>             — requires active encounter
-companion deploy <name|id>            — requires active battle
-companion emote <name|id> <text>      — pose as a bonded, present companion (#3294)
+companion bind archetype=<name or id> gift=<name or id> name=<text>
+companion release <name or id>
+companion fight <name or id>             — requires active encounter
+companion deploy <name or id>            — requires active battle
+companion emote <name or id> <text>      — pose as a bonded, present companion (#3294)
 ```
 
 `name=` must be the final token on `bind` (it greedily consumes the rest of
@@ -253,7 +257,7 @@ behavior. On the `WON_OVER` path a successful bind deletes the nameless won-over
 (`world.combat.won_over.delete_won_over_npc`, the same identity-map-safe guard the lapse sweep and
 send away use); there is no later cleanup pass to rely on for that body.
 
-Telnet: `companion promote <npc> archetype=<name|id> gift=<name|id> name=<text>`
+Telnet: `companion promote <npc> archetype=<name or id> gift=<name or id> name=<text>`
 (`CmdCompanion`, `commands/companion.py`), dispatching the same `PromoteSummonAction`
 (`promote_summon` key) the web bind action uses.
 

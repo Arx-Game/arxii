@@ -6064,7 +6064,9 @@ the hull stat IS `Building.fortification_level`, reused not duplicated. Full det
   Project clears it. `battles` imports nothing from `ships` (ADR-0010).
 - **Telnet:** `CmdShip` (`ship`, `src/commands/ships.py`) — `ship [status]`,
   `ship commission ship_type=<name> [covenant=<name>] name=<ship name>`,
-  `ship upgrade stat=handling|armament|hull level=<n>`, `ship repair`.
+  `ship upgrade stat=<handling | armament | hull> level=<n>`, `ship repair`; the three
+  commission values each run to the next `key=`, and a ship reads as its area name
+  (`Sloop 'Wavecutter'`; #3657 tranche 17).
 - **Actions** (`actions/definitions/ships.py`, REGISTRY, `category="ships"`):
   `CommissionShipAction` (`commission_ship`), `UpgradeShipAction` (`upgrade_ship`)
   / `RepairShipAction` (`repair_ship`, both gated `IsShipOwnerPrerequisite`),
@@ -8144,7 +8146,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   attack made with an equipped LANCE while not Mounted, regardless of maneuver.
   `GearArchetype.LANCE` (`world.items.constants`) joins `WEAPON_ARCHETYPES`; a starter
   "Lance" `ItemTemplate` seeds via `world.seeds.game_content.items.seed_lance_item`. Telnet:
-  `companion mount <name|id>` / `companion dismount` (`CmdCompanion`), `combat charge <opp>
+  `companion mount <name or id>` / `companion dismount` (`CmdCompanion`), `combat charge <opp>
   with <technique>` / `combat joust [with] <technique>` (`CmdCombat`) — no web/frontend
   surface (matches the several existing maneuvers that ship telnet-only since the web
   "available actions" endpoint excludes REGISTRY maneuvers without `ActionTemplate`

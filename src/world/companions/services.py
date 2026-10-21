@@ -140,15 +140,19 @@ def bind_companion(
     from typeclasses.companions import CompanionObject  # noqa: PLC0415 — avoid circular import
     from world.companions.models import Companion  # noqa: PLC0415 — avoid circular import
 
-    room = owner.character.location
-    companion_object = create_object(CompanionObject, key=name, location=room, nohome=True)
-    return Companion.objects.create(
+    character = owner.character
+    companion_object = create_object(
+        CompanionObject, key=name, location=character.location, nohome=True
+    )
+    companion = Companion.objects.create(
         owner=owner,
         archetype=archetype,
         granting_gift=granting_gift,
         name=name,
         objectdb=companion_object,
     )
+    character.companions.invalidate()
+    return companion
 
 
 def rename_companion(companion: Companion, name: str) -> None:
@@ -185,6 +189,7 @@ def release_companion(companion: Companion) -> None:
     # level, outside any single instance's .save() path — any other process-cached
     # Companion for this pk would otherwise keep reporting a stale non-null objectdb.
     Companion.flush_instance_cache()
+    companion.owner.character.companions.invalidate()
 
 
 class MountError(Exception):

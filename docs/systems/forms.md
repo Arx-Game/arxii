@@ -266,7 +266,8 @@ holds the React Query hooks (`useAlternateSelvesQuery`, `useShiftFormMutation`,
 
 - `form` / `form list` — status hub: shows current alternate self (or true self),
   available alternate selves, and whether revert is blocked while not in control.
-- `form shift <name|id>` — assume a named alternate self.
+- `form shift <name or id>` — assume a named alternate self (the usage spells
+  "name or id": `<name|id>` reached telnet as `<named>`, #3657 tranche 17).
 - `form revert` — revert to the true self.
 
 Implemented in `commands/form.py` as `CmdForm`; routes through
