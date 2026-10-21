@@ -9,6 +9,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -39,6 +41,7 @@ export function SacrificeDialog({
 }: SacrificeDialogProps) {
   const [open, setOpen] = useState(false);
   const [chosen, setChosen] = useState<number[]>([]);
+  const [line, setLine] = useState('');
   const { data: items } = useInventory(open ? characterId : undefined);
   const mutation = useSacrifice(characterId);
 
@@ -55,7 +58,7 @@ export function SacrificeDialog({
       return;
     }
     mutation.mutate(
-      { itemIds: chosen, being: beingId ?? null },
+      { itemIds: chosen, being: beingId ?? null, playerLine: line.trim() },
       {
         onSuccess: (result) => {
           if (result.success === false) {
@@ -64,6 +67,7 @@ export function SacrificeDialog({
           }
           toast.success(result.message);
           setChosen([]);
+          setLine('');
           setOpen(false);
         },
         onError: (error: Error) => toast.error(error.message),
@@ -101,6 +105,18 @@ export function SacrificeDialog({
               ))}
             </ul>
           )}
+          <div className="space-y-1">
+            <Label htmlFor="sacrifice-line">Your own line (optional)</Label>
+            <Input
+              id="sacrifice-line"
+              value={line}
+              maxLength={200}
+              onChange={(e) => setLine(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              The room hears it after the system line.
+            </p>
+          </div>
           <p className="text-xs text-muted-foreground">
             <b>Rule:</b> items given up leave play; their design is kept. Each item with points
             rolls and may earn no favor.

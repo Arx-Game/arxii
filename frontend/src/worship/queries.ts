@@ -173,8 +173,15 @@ export function useClosePledge(characterId: number) {
 
 export function useSacrifice(characterId: number) {
   return useWorshipMutation(
-    ({ itemIds, being }: { itemIds: number[]; being?: number | null }) =>
-      sacrifice(characterId, itemIds, being),
+    ({
+      itemIds,
+      being,
+      playerLine,
+    }: {
+      itemIds: number[];
+      being?: number | null;
+      playerLine?: string;
+    }) => sacrifice(characterId, itemIds, being, playerLine),
     [['inventory', characterId]]
   );
 }

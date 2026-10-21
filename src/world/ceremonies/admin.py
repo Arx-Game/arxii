@@ -46,7 +46,14 @@ class CeremonyOfferingAdmin(admin.ModelAdmin):
     list_display = ("item_name", "offered_by", "being", "ceremony", "outcome_tier", "counted")
     list_filter = ("counted",)
     raw_id_fields = ("ceremony", "being", "pledge_details", "offered_by", "worship_grant")
-    readonly_fields = ("outcome_tier", "game_week", "counted", "item_value", "item_legend_value")
+    readonly_fields = (
+        "outcome_tier",
+        "game_week",
+        "counted",
+        "item_value",
+        "item_legend_value",
+        "player_line",
+    )
     inlines = [OfferingSignalInline]
 
 

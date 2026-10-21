@@ -231,6 +231,16 @@ class CeremonyOffering(SharedMemoryModel):
         related_name="+",
         help_text="The game week the item was given up in; the weekly limit counts by it.",
     )
+    player_line = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        db_default="",
+        help_text=(
+            "The giver's own line, written with the sacrifice and heard in the room after "
+            "the system line (#4530). Empty when they wrote none."
+        ),
+    )
     counted = models.BooleanField(
         default=False,
         db_default=False,

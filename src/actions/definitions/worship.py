@@ -701,6 +701,7 @@ class SacrificeAction(Action):
     kwargs:
         item_ids: ItemInstance pks (web), or item_names to search your inventory (telnet).
         being / being_name: optional, when the place is holy to two beings.
+        player_line: optional, your own line, heard in the room after the system line (#4530).
     """
 
     key: str = "sacrifice"
@@ -727,7 +728,9 @@ class SacrificeAction(Action):
         if error is not None:
             return error
         try:
-            outcome = sacrifice_items(sheet, items, being=being)
+            outcome = sacrifice_items(
+                sheet, items, being=being, player_line=str(kwargs.get("player_line") or "")
+            )
         except PledgeError as exc:
             return ActionResult(success=False, message=exc.user_message)
         where = (

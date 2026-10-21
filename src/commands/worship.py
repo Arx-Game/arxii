@@ -357,14 +357,15 @@ class CmdSacrifice(ArxCommand):
     """Sacrifice items you carry at a being's shrine or temple.
 
     Usage:
-        sacrifice <item>[,<item>...][=<being>]
+        sacrifice <item>[,<item>...][=<being>][ ; <your own line>]
 
     The items are given up and feed the being's worship pool. Each one that means
     something to you rolls a check eased by what it means, and the roll sets the favor you
     earn: more for an item carrying a facet the being favors. An item the being asked for
     on your pledge eases its own roll and cannot make it a critical failure. Name the
     being when the place is holy to two. A being your GM table stewards takes a sacrifice
-    anywhere: name it.
+    anywhere: name it. After a semicolon you may add one line of your own, heard in the
+    room after the system line.
     """
 
     key = "sacrifice"
@@ -375,14 +376,17 @@ class CmdSacrifice(ArxCommand):
     def func(self) -> None:
         from actions.definitions.worship import SacrificeAction  # noqa: PLC0415
 
-        raw = (self.args or "").strip()
+        raw, _, player_line = (self.args or "").strip().partition(";")
         items, _, being_name = raw.partition("=")
         names = [name.strip() for name in items.split(",") if name.strip()]
         if not names:
-            self.msg("Usage: sacrifice <item>[,<item>...][=<being>]")
+            self.msg("Usage: sacrifice <item>[,<item>...][=<being>][ ; <your own line>]")
             return
         result = SacrificeAction().run(
-            actor=self.caller, item_names=names, being_name=being_name.strip()
+            actor=self.caller,
+            item_names=names,
+            being_name=being_name.strip(),
+            player_line=player_line.strip(),
         )
         if result.message:
             self.msg(result.message)

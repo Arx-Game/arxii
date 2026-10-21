@@ -6947,7 +6947,12 @@ then choose lawful seizure vs steal-back; linked from the inventory sidebar). Th
 holder is never notified a claim exists.
 
 - **Models:**
-  - `DistinctionItemGrant` (#4398, a keepsake a distinction mints at finalize; sibling of
+  - `Keepsake` (#4530, an item a player declared stands for a tie, deed, being, organization,
+    person or place; scored by its subject after `keepsake_wait_days`, never by its words;
+    `services/keepsakes.py`, actions `keepsake_declare` / `keepsake_release`, telnet
+    `keepsake`, `GET /api/items/inventory/{id}/keepsake/`; trophies: `services/trophies.link_trophy`,
+    `MissionDeedRewardLine.granted_item`; see `items.md`)
+  - `DistinctionItemGrant` (#4398, a starting item a distinction mints at finalize; sibling of
     `currency.DistinctionStartingGrant`, see `distinctions.md`)
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `WeaponClass` (#2879 — weighted
     strength/agility blend for `ItemTemplate.weapon_class`, replaces the small/medium/heavy
@@ -7380,7 +7385,9 @@ holder is never notified a claim exists.
   ritual material consumption via shared `gather_consumable_pks`; touchstone
   `tied_resonance`/`resonance_tier` FKs into `magic.Resonance`/`ResonanceTier`, #707),
   covenants (gear archetype compatibility), checks (`perform_check` + consequence pool),
-  missions (`DeedRewardSink.ITEM` reward line grants via `grant_touchstone_item_to_character`)
+  missions (`DeedRewardSink.ITEM` reward line grants via `grant_touchstone_item_to_character`;
+  a Success run links the item to its deed as a trophy, #4530), stories (a won stake's ITEM
+  line does the same after settlement)
 - **Source:** `src/world/items/`
 - **Details:** [items.md](items.md)
 
@@ -9313,6 +9320,15 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   invocation detail), `MeaningSignalKind.RESONANCE_FED`; `worship/worn_services.worn_meaning`
   (worn pieces ease `invocation_difficulty` and raise `earning_rate`), the staff Favor
   invocation page, the Being Service builder's favored-facet rates and supplier panel.
+  **Keepsakes, trophies and requests** (#4530, slice 4 of #4462): `RequestedItem` (a pledge's
+  or tier 1 or 2 rite's cheap item, template or facet, quantity, points, hint),
+  `OfferingSignal.requested_item`, `CeremonyOffering.player_line`, `Relic.invocation_points`, `InvocationPiece.source`,
+  `DevotionConfig` `invocation_ease_per_keepsake_point` / `keepsake_*` / `trophy_*` /
+  `rite_*` / `requested_item_*`; `worship/request_services.py` (`assign_requests`,
+  `request_lines`), `sacrifice_services.lift_botch`, `rite_services.read_rite_gifts` and
+  `perform_worship_rite(..., offered_items=, closing_of=)`, `worn_services._carried_pieces`
+  (keepsakes of the being and its Relic ease the call), `PledgeCard.requests`; the Being
+  Service builder's requested-items table and supplier panel.
   `perform_worship_rite(..., pay_award=False)`. Actions `pledge_take`, `pledge_close`,
   `sacrifice`; API `pledges/`, `pledge-cards/`, `beings/{id}/service-terms/`,
   `beings/holy-site/`; telnet `pledge`, `pledge/close`, `sacrifice`; admin Being Service

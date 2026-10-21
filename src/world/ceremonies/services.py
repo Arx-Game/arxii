@@ -32,6 +32,7 @@ from world.items.constants import MeaningSignalKind
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
+    from evennia.objects.models import ObjectDB
 
     from world.ceremonies.models import (
         SeanceManifestationOffer,
@@ -56,6 +57,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: The longest line a giver may add to a sacrifice (#4530).
+PLAYER_LINE_MAX_LENGTH = 200
 CEREMONY_CHECK_TYPE_NAME = "Ceremony Rites"
 SPEECH_CHECK_TYPE_NAME = "Performance"
 SPEECH_SPECIALIZATION_NAME = "Oratory"
@@ -1274,6 +1277,18 @@ def _requests_filled(
     return assign_requests(rows, item_instances, filled=filled, config=get_devotion_config())
 
 
+def _hear_player_line(
+    persona: "Persona",
+    line: str,
+    location: "ObjectDB | None",  # noqa: OBJECTDB_PARAM - the room the line is heard in
+) -> None:
+    """The giver's own line, verbatim, heard in the room after the system lines (#4530)."""
+    from world.worship.pledge_services import broadcast_room_line  # noqa: PLC0415
+
+    if line:
+        broadcast_room_line(persona, line, location=location)
+
+
 def _roll_item(
     sheet: "CharacterSheet", target: "WorshippedBeing", reading: ItemReading
 ) -> "tuple[CheckOutcome | None, int]":
@@ -1333,6 +1348,7 @@ def sacrifice_items(
     item_instances: "list[ItemInstance]",
     *,
     being: "WorshippedBeing | None" = None,
+    player_line: str = "",
 ) -> "SacrificeOutcome":
     """Give items up to a being at its shrine or temple, outside a ceremony (#4500).
 
@@ -1348,7 +1364,8 @@ def sacrifice_items(
     being. A counted item also feeds the pool (``give_up_item``), whatever the roll. Each
     item writes a ``CeremonyOffering`` with ``being`` set, the open pledge (if it is to
     this being), the recorded facet, the roll and the item's signals, and one room line:
-    "<name> sacrifices <item> at <being>'s shrine."
+    "<name> sacrifices <item> at <being>'s shrine." ``player_line`` (#4530) is the giver's
+    own line: kept on each offering and heard in the room, verbatim, after the system lines.
     """
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
@@ -1390,6 +1407,7 @@ def sacrifice_items(
     week = get_current_game_week()
     slots_left = sacrifice_slots_left(sheet, target, game_week=week)
     sacrificed: list[SacrificedItem] = []
+    line = player_line.strip()[:PLAYER_LINE_MAX_LENGTH]
     with transaction.atomic():
         for instance, reading in zip(item_instances, readings, strict=True):
             counted = reading.effective_points > 0 and slots_left > 0
@@ -1422,6 +1440,7 @@ def sacrifice_items(
                 difficulty_points=difficulty,
                 game_week=week,
                 counted=counted,
+                player_line=line,
             )
             write_offering_signals(offering, reading)
             sacrificed.append(
@@ -1432,4 +1451,5 @@ def sacrifice_items(
                 f"{persona.name} sacrifices {offered.name} {where}.",
                 location=character.location,
             )
+        _hear_player_line(persona, line, character.location)
     return SacrificeOutcome(being=target, site=site, items=sacrificed)

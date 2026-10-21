@@ -220,3 +220,12 @@ _Avoid_: ownership age
 **Pair tier**:
 The highest `RelationshipTier` whose depth threshold two characters' added depth meets (`pair_tier` in `world/relationships/helpers.py`), 0 with no tie. Read for "made by a tie".
 _Avoid_: mutual tier (that is `get_relationship_tier`, the Mentor/Student read)
+- **Keepsake** — an item a player declared stands for something in their character's life
+  (`Keepsake`, #4530): a tie, one of their own deeds, a being, an organization, a person or a
+  place, with the player's own words. It counts by its subject after a wait and **never by the
+  words**. _Avoid_: calling `DistinctionItemGrant`'s starting item a keepsake in new code or
+  copy (that one is a **starting item** a distinction mints at finalize, #4398).
+- **Trophy** — an item linked to one of its holder's deeds (`ItemInstance.legend_deeds`,
+  #4530), written when a Success mission run or a won stake grants it in the same resolution
+  that mints the deed. It counts by the deed's legend and reads "Trophy of <deed>" on examine.
+  Crafting writes none (an ordinary masterwork risks nothing).

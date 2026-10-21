@@ -29,6 +29,8 @@ from world.items.services.meaning import item_meaning
 from world.missions.constants import DeedRewardKind, DeedRewardSink
 from world.missions.factories import MissionDeedRecordFactory, MissionDeedRewardLineFactory
 from world.missions.services.rewards import apply_deed_rewards
+from world.scenes.constants import InteractionMode
+from world.scenes.models import Interaction
 from world.societies.factories import LegendEntryFactory
 from world.traits.factories import CheckOutcomeFactory
 from world.worship.answer_services import sacrifice_detail
@@ -207,6 +209,33 @@ class KeepingWhatMatters(JourneyCase):
         detail = sacrifice_detail(offering)
         self.assertNotIn(WORDS, repr(detail))
         self.assertIsNotNone(ItemInstance.objects.get(pk=self.rope.pk).destroyed_at)
+
+    def test_her_own_line_follows_the_system_line_in_the_room_and_is_kept(self) -> None:
+        self.telnet(self.wenna, f"keepsake frayed climbing rope = being Highwind ; {WORDS}")
+        _wait_passed(self._keepsake())
+
+        with force_check_outcome(self.success):
+            self.telnet(
+                self.wenna,
+                "sacrifice frayed climbing rope ; The wind keeps what it is given. [player line]",
+            )
+
+        heard = list(
+            Interaction.objects.filter(mode=InteractionMode.OUTCOME)
+            .order_by("pk")
+            .values_list("content", flat=True)
+        )
+        self.assertEqual(
+            heard,
+            [
+                "Wenna sacrifices frayed climbing rope at Highwind's shrine.",
+                "The wind keeps what it is given. [player line]",
+            ],
+        )
+        self.assertEqual(
+            CeremonyOffering.objects.get().player_line,
+            "The wind keeps what it is given. [player line]",
+        )
 
     def test_the_item_panel_reads_its_keepsake_and_the_deeds_it_is_a_trophy_of(self) -> None:
         self.rope.legend_deeds.add(self.deed)

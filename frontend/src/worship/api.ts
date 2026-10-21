@@ -129,14 +129,17 @@ export function closePledge(characterId: number, itemIds: number[] = []): Promis
   );
 }
 
-/** Dispatch `sacrifice` as `characterId`: `{ item_ids, being? }`. */
+/** Dispatch `sacrifice` as `characterId`: `{ item_ids, being?, player_line? }`. The optional
+ * line is the giver's own, heard in the room after the system line (#4530). */
 export function sacrifice(
   characterId: number,
   itemIds: number[],
-  being?: number | null
+  being?: number | null,
+  playerLine?: string
 ): Promise<DispatchResult> {
   return dispatchCanvasAction(characterId, 'sacrifice', {
     item_ids: itemIds,
     ...(being != null ? { being } : {}),
+    ...(playerLine ? { player_line: playerLine } : {}),
   });
 }
