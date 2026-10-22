@@ -208,8 +208,10 @@ from world.conditions.services import (
     get_all_capability_values,     # dict[str, int] for all capabilities
     get_check_modifier,            # CheckModifierResult (total + breakdown)
     get_resistance_modifier,       # ResistanceModifierResult (total + breakdown)
-    get_turn_order_modifier,       # Int modifier to initiative
-    get_aggro_priority,            # Int priority for targeting
+    get_turn_order_modifier,       # Int modifier to initiative (one sheet)
+    get_aggro_priority,            # Int priority for targeting (one sheet)
+    turn_order_modifier_by_target, # {ObjectDB pk: total} for many targets in one query (#4572)
+    aggro_priority_by_target,      # {ObjectDB pk: total} for many targets in one query (#4572)
     get_condition_modifier_vow_contributions, # Per-instance (source_vow_id, name, value) rows for a ModifierTarget (#2643)
     priced_percent_severity,       # Apply-time percent severity priced vs the landing target's level (#2643)
     scaled_condition_effect_value, # One ConditionModifierEffect's contribution on one active instance (#4090)
@@ -466,6 +468,26 @@ tier-0 `INTENSITY_BUMP` only contributes when a supplied `action_ctx` names the 
 **A thread may move a capability's value only if it GRANTS that specific capability** —
 the curved contribution is keyed to `ThreadPullEffect.capability_grant_id`, so a
 fire-gift thread can never inflate an unrelated capability's number.
+
+### Condition effects combat reads (#4572) [BUILT & WIRED]
+
+Every condition effect a technique can apply is read by combat for both sides of a fight,
+by its field and never by the condition's name:
+
+| Field(s) on `ConditionTemplate` | Read by | Effect |
+|---|---|---|
+| `draws_aggro`, `aggro_priority` | `select_npc_actions` (`_apply_aggro_conditions`), through `aggro_priority_by_target` | A PC carrying the condition has its summed priority added to its threat with every opponent when an NPC picks a target, and joins the `SPECIFIC_ROLE` preferred set beside shield-role PCs. Read at selection time only: no `ThreatRecord` is written, and an active `EngagementLock` still narrows the pool afterwards. `RANDOM`, `LOWEST_HEALTH` and `ALL` stay as authored. |
+| `affects_turn_order`, `turn_order_modifier` | `effective_speed_ranks` (`world/combat/services/combos/resolution_order.py`), through `turn_order_modifier_by_target` | Round order sorts on the combatant's base speed rank (covenant role `speed_rank`, `NO_ROLE_SPEED_RANK`, or `NPC_SPEED_RANK`) minus its summed modifier, so a positive modifier acts earlier. PCs and NPC opponents both shift. `get_resolution_order` and the encounter payload's `resolution_order` (the initiative chips) sort on the same ranks. |
+| `ConditionDamageOverTime` | `tick_round_for_targets` -> `_apply_round_tick_damage` (`world/vitals/services.py`) | An NPC opponent has no sheet or vitals, so its tick damage goes through `apply_damage_to_opponent` with damage-type resistance netted once, no armor soak and no `DAMAGE_PRE_APPLY` (the same as PC DoT); defeat follows as from a hit. |
+| `absorb_remaining`, a reactive trigger calling `reflect_damage` | `absorb_pool`, `reflect_damage` (`world/magic/services/effect_handlers.py`) | The barrier handlers designate their condition by field: `absorb_pool` takes the bearer's oldest active instance holding a buffer, `reflect_damage` takes an instance whose template carries a reactive trigger calling the handler. A barrier staff name anything else works. The "Aegis Field" / "Mirror Ward" name constants remain for seed content only. |
+
+The two batched helpers share `_active_template_sum_by_target`: one query for all targets,
+keyed by ObjectDB pk, suppressed and expired rows skipped, zero totals omitted. The
+single-sheet `get_turn_order_modifier` / `get_aggro_priority` are thin wrappers over them.
+A new condition field or handler that combat reads must be read for both sides and by field;
+the `condition-effect-reach-reviewer` agent (`tools/agents/`) checks a diff for that. The
+journeys in `src/integration_tests/test_conditions_that_reach_the_fight_journeys.py` operate
+all of it through a combat round.
 
 ### Querying Modifiers
 

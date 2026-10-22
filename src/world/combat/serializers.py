@@ -18,7 +18,7 @@ from world.areas.positioning.serializers import (
 )
 from world.checks.serializers import ConsequenceOutcomeSerializer
 from world.combat.constants import (
-    NO_ROLE_SPEED_RANK,
+    ENTITY_TYPE_PC,
     REACTIONS_PER_ROUND,
     SIGNIFICANT_NPC_TIERS,
     ActionCategory,
@@ -1504,24 +1504,24 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     def get_resolution_order(self, obj: CombatEncounter) -> list[int]:
         """ACTIVE PC participant PKs in initiative (speed-rank) order.
 
-        Computed in-memory from ``participants_cached`` (which already
-        ``select_related("covenant_role")``) so serialization issues **no extra
-        query** — mirrors the speed-rank ordering of ``services.get_resolution_order``
-        for ACTIVE PCs (speed_rank asc, then pk). The frontend RoundFlow orders its
-        initiative chips by this and marks the first not-yet-acted participant as the
-        on-deck actor.
+        Computed from ``participants_cached`` (which already select_relateds
+        ``covenant_role`` and the character) through the same ``effective_speed_ranks``
+        that ``services.get_resolution_order`` sorts on, so the chips and the real
+        order agree for ACTIVE PCs (effective rank asc, then pk). Costs one query for
+        the turn order conditions. The frontend RoundFlow orders its initiative chips
+        by this and marks the first not-yet-acted participant as the on-deck actor.
 
         The resolution path additionally applies a ``can_act`` filter (excluding a
-        downed-but-not-removed PC); that is omitted here to stay query-free, so such
-        a PC may still appear in the display order. Acceptable for a display field.
+        downed-but-not-removed PC); that is omitted here to keep the query count down,
+        so such a PC may still appear in the display order. Acceptable for a display field.
         """
-        active = [p for p in obj.participants_cached if p.status == ParticipantStatus.ACTIVE]
-        active.sort(
-            key=lambda p: (
-                p.covenant_role.speed_rank if p.covenant_role_id else NO_ROLE_SPEED_RANK,
-                p.pk,
-            )
+        from world.combat.services.combos.resolution_order import (  # noqa: PLC0415
+            effective_speed_ranks,
         )
+
+        active = [p for p in obj.participants_cached if p.status == ParticipantStatus.ACTIVE]
+        ranks = effective_speed_ranks(active)
+        active.sort(key=lambda p: (ranks[(ENTITY_TYPE_PC, p.pk)], p.pk))
         return [p.pk for p in active]
 
     def _get_viewer_character_ids(self, request: object) -> set[int] | frozenset[int]:
