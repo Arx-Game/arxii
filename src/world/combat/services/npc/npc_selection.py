@@ -62,7 +62,7 @@ def select_npc_actions(
         )
         .exclude(threat_pool__isnull=True)
         .exclude(mirrors_participant_id__isnull=False)
-        .select_related("threat_pool")
+        .select_related("threat_pool", "objectdb")
     )
 
     if not opponents:
@@ -142,6 +142,7 @@ def select_npc_actions(
             shield_participant_ids.add(p.pk)
 
     _apply_aggro_conditions(opponents, active_participants, threat_maps, shield_participant_ids)
+    provokers = _provoking_participant_ids(opponents, active_participants)
 
     actions: list[CombatOpponentAction] = []
 
@@ -158,6 +159,7 @@ def select_npc_actions(
                 threat_map=threat_maps.get(opponent.pk),
                 shield_participant_ids=shield_participant_ids,
                 locked_participant_id=active_locks_by_opponent.get(opponent.pk),
+                provoker_participant_id=provokers.get(opponent.pk),
                 allegiances=allegiances,
                 active_opponents=all_active,
             )
@@ -205,6 +207,49 @@ def _apply_aggro_conditions(
     )
 
 
+def _provoking_participant_ids(
+    opponents: list[CombatOpponent],
+    active_participants: list[CombatParticipant],
+) -> dict[int, int]:
+    """Map each provoked opponent to the participant that provoked it (#4584).
+
+    One query for every opponent. The condition's source is mapped through
+    ``active_participants``, so a source that is down, untargetable, out of the fight or
+    not a player character is simply absent, and the opponent chooses as it normally would.
+    """
+    from world.conditions.services import provoking_source_by_target  # noqa: PLC0415
+
+    bearers = [o.objectdb for o in opponents if o.objectdb_id is not None]
+    source_by_bearer = provoking_source_by_target(bearers)
+    if not source_by_bearer:
+        return {}
+    participant_by_character = {p.character_sheet.character.pk: p.pk for p in active_participants}
+    return {
+        o.pk: participant_by_character[source_by_bearer[o.objectdb_id]]
+        for o in opponents
+        if o.objectdb_id in source_by_bearer
+        and source_by_bearer[o.objectdb_id] in participant_by_character
+    }
+
+
+def _narrow_to_locked_or_provoker(
+    target_pool: list[CombatParticipant],
+    locked_participant_id: int | None,
+    provoker_participant_id: int | None,
+) -> list[CombatParticipant]:
+    """Narrow a participant pool to the engagement-locked PC (#2020), else the provoker (#4584).
+
+    An active lock wins over a provoke. Either id outside the pool leaves the pool as it was.
+    """
+    for participant_id in (locked_participant_id, provoker_participant_id):
+        if participant_id is None:
+            continue
+        narrowed = [p for p in target_pool if p.pk == participant_id]
+        if narrowed:
+            return narrowed
+    return target_pool
+
+
 def _build_opponent_round_actions(  # noqa: PLR0913
     opponent: CombatOpponent,
     pool_entries: list[ThreatPoolEntry],
@@ -215,6 +260,7 @@ def _build_opponent_round_actions(  # noqa: PLR0913
     threat_map: dict[int, int] | None = None,
     shield_participant_ids: set[int] | None = None,
     locked_participant_id: int | None = None,
+    provoker_participant_id: int | None = None,
     allegiances: dict[int, Allegiance],
     active_opponents: list[CombatOpponent],
 ) -> list[CombatOpponentAction]:
@@ -224,6 +270,13 @@ def _build_opponent_round_actions(  # noqa: PLR0913
     round — no eligible (off-cooldown) threat entry, or the empty-pool guard:
     no valid target (a #1584 ALLY summon or #4091 charmed/turned NPC with no
     live hostile, or a #1590 calmed/neutral opponent).
+
+    ``provoker_participant_id`` is the participant whose forces_attack_on_source condition
+    sits on this opponent (#4584). It narrows the pool to that participant after the lock
+    check: an engagement lock that narrowed the pool wins, and a provoker outside the pool
+    leaves it as it was. Player characters ignore the flag because PCs choose their own
+    targets; charmed, turned and summoned opponents ignore it because they do not target the
+    PC side (``targeting_participants`` is false).
     """
     from world.combat.morale import (  # noqa: PLC0415
         OpponentMoraleState,
@@ -251,10 +304,10 @@ def _build_opponent_round_actions(  # noqa: PLR0913
         return []
 
     # Lock narrowing: if an active EngagementLock exists, narrow to the locked PC (#2020).
-    if locked_participant_id is not None and targeting_participants:
-        locked_pool = [p for p in target_pool if p.pk == locked_participant_id]
-        if locked_pool:
-            target_pool = locked_pool
+    if targeting_participants:
+        target_pool = _narrow_to_locked_or_provoker(
+            target_pool, locked_participant_id, provoker_participant_id
+        )
 
     # --- Companion order integration (#1921) ---
     # An ALLY summon with a CompanionOrder may override its target or skip.

@@ -3134,6 +3134,25 @@ def draws_aggro_target_ids(
     )
 
 
+def provoking_source_by_target(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> dict[int, int]:
+    """ObjectDB pk of each target's provoker from active forces_attack_on_source conditions.
+
+    Keyed by the bearer's ObjectDB pk; the value is the ``source_character_id`` of the
+    bearer's newest (highest pk) active, unsuppressed flagged instance that has a source.
+    An instance with no source has nobody to attack and is skipped. One query for all
+    ``targets`` (#4584). Enemy target selection narrows an NPC to its provoker.
+    """
+    rows = (
+        _active_flagged_instances(targets, flag_field="forces_attack_on_source")
+        .filter(source_character__isnull=False)
+        .order_by("pk")
+        .values_list("target_id", "source_character_id")
+    )
+    return dict(rows)
+
+
 def get_turn_order_modifier(character_sheet: "CharacterSheet") -> int:
     """
     Get the total turn order modifier from all conditions.
