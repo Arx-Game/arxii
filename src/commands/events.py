@@ -171,17 +171,17 @@ class CmdEvent(ArxCommand):
         event                               - list events visible to you
         event list                          - same as bare ``event``
         event show <id>                     - detail one event (hosts, invitations, RSVPs)
-        event create name=<text> room=<name|id> when=<datetime>
-            [desc=<text>] [public=<yes|no>] [phase=day|dusk|night|dawn]
+        event create name=<text> room=<name or id> when=<datetime>
+            [desc=<text>] [public=<yes or no>] [phase=<day, dusk, night or dawn>]
         event schedule <id>                 - DRAFT → SCHEDULED
         event start <id>                    - SCHEDULED → ACTIVE (spawns the scene)
         event complete <id>                 - ACTIVE → COMPLETED (host / scene GM / staff)
         event cancel <id>                   - DRAFT/SCHEDULED → CANCELLED (host / staff)
-        event invite <id> persona=<name|id> [by=<persona>]
-        event invite <id> org=<name|id>      - or organization= / society=
-        event rsvp <id> accept|decline      - respond to your own persona invitation
-        event grandeur <id> category=<venue|entertainment|favors|decor> amount=<n>
-            [org=<name|id>]                 - spend on the event's grandeur budget
+        event invite <id> persona=<name or id> [by=<persona>]
+        event invite <id> org=<name or id>      - or organization= / society=
+        event rsvp <id> accept or decline      - respond to your own persona invitation
+        event grandeur <id> category=<venue, entertainment, favors or decor> amount=<n>
+            [org=<name or id>]                 - spend on the event's grandeur budget
 
     ``when=`` accepts ISO 8601 or ``YYYY-MM-DD HH:MM``. Room resolves by name
     (caller.search) or numeric id; persona/org/society targets resolve by name
@@ -246,7 +246,7 @@ class CmdEvent(ArxCommand):
         kwargs = _parse_kwargs(rest)
         name = kwargs.get(_KEY_NAME)
         if not name:
-            msg = "Usage: event create name=<text> room=<name|id> when=<datetime> [...]"
+            msg = "Usage: event create name=<text> room=<name or id> when=<datetime> [...]"
             raise CommandError(msg)
         location_id = self._resolve_location_id(kwargs.get(_KEY_ROOM))
         scheduled_real_time = _parse_when(kwargs.get(_KEY_WHEN))
