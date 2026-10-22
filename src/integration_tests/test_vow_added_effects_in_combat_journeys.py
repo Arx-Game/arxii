@@ -195,6 +195,11 @@ class VowAddedEffectsInAFight(JourneyCase):
         with every_check_succeeds():
             resolve_round(self.encounter)
 
+    def resolve_partial(self) -> None:
+        """Every check this round is a partial success (success level 0)."""
+        with every_check_at("Partial Success"):
+            resolve_round(self.encounter)
+
     def resolve_failing(self) -> None:
         """Every check this round fails (success level -1)."""
         with every_check_at("Failure"):
@@ -320,6 +325,34 @@ class VowAddedEffectsInAFight(JourneyCase):
 
         self.assertEqual(self.firings(effect, round_number=2), 1)
         self.assertLess(self.health(boss), boss.max_health)
+
+    def test_a_partial_success_neither_uses_nor_spends_a_limited_row(self) -> None:
+        # The row's payload is authored to land at success level 0, but a cast that
+        # cannot spend a once-per-round row cannot use it either.
+        effect = self.ysmays_vow(
+            thread_level=2,
+            function=TechniqueFunction.HOLD,
+            beneficiary=PerkBeneficiary.SELF,
+            cast_context=VowEffectContext.IN_COMBAT,
+            frequency=VowEffectFrequency.ONCE_PER_ROUND,
+        )
+        VowAddedEffectAppliedConditionFactory(
+            effect=effect,
+            condition=self.slowed,
+            target_kind=ConditionTargetKind.ENEMY,
+            base_severity=1,
+            minimum_success_level=0,
+        )
+
+        self.declare(self.ysmay, self.hold, self.opponent)
+        self.resolve_partial()
+
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.opponent.objectdb, condition=self.slowed
+            ).exists()
+        )
+        self.assertEqual(self.firings(effect), 0)
 
     def test_a_cast_that_bounces_off_a_ward_spends_nothing(self) -> None:
         effect = self.boss_damage_vow()

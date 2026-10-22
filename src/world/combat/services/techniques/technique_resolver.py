@@ -757,14 +757,18 @@ class CombatTechniqueResolver:
             )
         return builder.multiply(PowerStage.PENETRATION, "ward", pct).build(), False
 
-    def _fired_vow_effects(self) -> list[FiredVowEffect]:
+    def _fired_vow_effects(self, check_result: CheckResult) -> list[FiredVowEffect]:
         """The covenant vow added effects riding this cast (#4581).
 
         Read after the ward check, so a bounced cast never computes them.
-        ``[]`` when the action carries no technique.
+        ``[]`` when the action carries no technique, and ``[]`` below success
+        level 1: the same gate that spends a once-per-round or once-per-fight
+        row, so a cast that could not spend a row cannot use it either (a
+        payload row authored with ``minimum_success_level=0`` would otherwise
+        land on every partial success without ever being spent).
         """
         technique = self.action.focused_action
-        if technique is None:
+        if technique is None or (check_result.success_level or 0) < 1:
             return []
         from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
         from world.covenants.added_effects import vow_added_effects_for_cast  # noqa: PLC0415
@@ -831,7 +835,7 @@ class CombatTechniqueResolver:
                 power_ledger=combat_ledger,
             )
 
-        fired = self._fired_vow_effects()
+        fired = self._fired_vow_effects(check_result)
         from world.covenants.added_effects import (  # noqa: PLC0415
             record_vow_effect_firings,
             vow_damage_profiles,
@@ -848,7 +852,8 @@ class CombatTechniqueResolver:
         if (check_result.success_level or 0) >= 1:
             # A once-per-round or once-per-fight vow effect is spent only by a cast
             # that landed (#4581): a failed roll, like a bounce (returned above),
-            # leaves it for the holder's next cast.
+            # leaves it for the holder's next cast. ``fired`` is empty below this
+            # same gate, so the effects used and the effects spent always agree.
             record_vow_effect_firings(fired, encounter=self.participant.encounter)
             from world.magic.services.effect_handlers import (  # noqa: PLC0415
                 manifest_bound_entity,
