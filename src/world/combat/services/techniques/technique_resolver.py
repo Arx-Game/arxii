@@ -42,13 +42,14 @@ from world.fatigue.services import get_fatigue_penalty
 from world.magic.constants import EffectKind
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from world.checks.models import CheckType
     from world.checks.types import CheckResult, ExtraTraitTerm
     from world.combat.types import WeaponContribution
     from world.conditions.models import DamageType
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
+    from world.covenants.types import FiredVowEffect
     from world.magic.models import Technique
     from world.magic.models.techniques import AbstractDamageProfile
     from world.magic.types.power_ledger import PowerLedger
@@ -354,7 +355,7 @@ class CombatTechniqueResolver:
     def _apply_profiles_to_target(  # noqa: PLR0913
         self,
         target: CombatOpponent,
-        profiles: list[AbstractDamageProfile],
+        profiles: list[tuple[AbstractDamageProfile, int]],
         weapon: WeaponContribution | None,
         *,
         sl: int,
@@ -363,14 +364,24 @@ class CombatTechniqueResolver:
     ) -> tuple[list[OpponentDamageResult], bool]:
         """Apply each damage profile to a single target, returning results and weapon-hit flag.
 
+        Each entry pairs a profile with the flat budget bonus it carries: 0 for the
+        technique's own and its signature's profiles, the fired row's
+        ``damage_bonus`` for a vow added effect's (#4581).
+
         Skips profiles that deal zero damage and aborts early if the target is
         defeated mid-loop (can happen when a preceding profile triggers a kill).
         """
         results: list[OpponentDamageResult] = []
         weapon_landed = False
-        for profile in profiles:
+        for profile, budget_bonus in profiles:
             scaled, profile_damage_type = self._profile_damage(
-                profile, weapon, target, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
+                profile,
+                weapon,
+                target,
+                sl=sl,
+                multiplier=multiplier,
+                eff_intensity=eff_intensity,
+                budget_bonus=budget_bonus,
             )
             if scaled <= 0:
                 continue
@@ -393,7 +404,11 @@ class CombatTechniqueResolver:
         return results, weapon_landed
 
     def _apply_damage(
-        self, check_result: CheckResult, *, eff_intensity: int
+        self,
+        check_result: CheckResult,
+        *,
+        eff_intensity: int,
+        vow_damage: Sequence[tuple[AbstractDamageProfile, int]] = (),
     ) -> list[OpponentDamageResult]:
         """Iterate technique.damage_profiles against all resolved opponent targets.
 
@@ -406,6 +421,12 @@ class CombatTechniqueResolver:
         SignatureMotifBonus's profiles, if any (#1728) — both are
         ``AbstractDamageProfile`` subclasses, so weapon-augment, SL-multiplier,
         property-bonus, and multi-target all apply uniformly to both.
+
+        ``vow_damage`` is the fired vow added effects' damage profiles, each with
+        its row's ``damage_bonus`` (``vow_damage_profiles``, #4581). They follow
+        the technique's and signature's profiles (which carry no bonus) through
+        the same per-target loop, so a technique with no damage of its own still
+        deals a vow's.
 
         Per opponent:
         - skip if DEFEATED (checked fresh after each preceding write)
@@ -426,8 +447,12 @@ class CombatTechniqueResolver:
 
         technique = self.action.focused_action
         attacker = self.participant.character_sheet.character
-        profiles = list(technique.damage_profiles.select_related("damage_type").all())
-        profiles += signature_damage_profiles(attacker, technique)
+        own_profiles = list(technique.damage_profiles.select_related("damage_type").all())
+        own_profiles += signature_damage_profiles(attacker, technique)
+        profiles: list[tuple[AbstractDamageProfile, int]] = [
+            (profile, 0) for profile in own_profiles
+        ]
+        profiles += vow_damage
         if not profiles:
             return []
 
@@ -463,6 +488,7 @@ class CombatTechniqueResolver:
         sl: int,
         multiplier: Decimal,
         eff_intensity: int,
+        budget_bonus: int = 0,
     ) -> tuple[int, DamageType | None]:
         """Scaled damage + effective damage_type for one profile (0 if it skips).
 
@@ -472,6 +498,10 @@ class CombatTechniqueResolver:
         the target's Property-driven damage bonus (#1793) into the formula
         budget, then applies the success-level multiplier. Budget is floored
         at 0 after the (possibly negative) property bonus is applied.
+
+        ``budget_bonus`` is a flat amount added to the budget right after the
+        weapon augment, before the CHARGE and property bonuses and the floor: a
+        vow added effect's thread-level ``damage_bonus`` (#4581). Default 0.
         """
         from world.mechanics.services import property_damage_bonus  # noqa: PLC0415
 
@@ -484,6 +514,7 @@ class CombatTechniqueResolver:
         budget, profile_damage_type = _weapon_augmented_budget(
             profile, budget, weapon, self.participant.character_sheet
         )
+        budget += budget_bonus
         if self.action.maneuver == CombatManeuver.CHARGE:
             from world.items.constants import GearArchetype  # noqa: PLC0415
 
@@ -500,6 +531,7 @@ class CombatTechniqueResolver:
         check_result: CheckResult,
         *,
         eff_intensity: int,
+        fired_vow_effects: Sequence[FiredVowEffect] = (),
     ) -> tuple[list[AppliedConditionResult], list[RemovedConditionResult]]:
         """Apply technique-authored conditions to appropriate targets.
 
@@ -515,6 +547,12 @@ class CombatTechniqueResolver:
 
         ``eff_intensity`` is the combined effective intensity (injected power + pull bumps)
         computed by ``__call__`` and forwarded here.
+
+        ``fired_vow_effects`` are the vow added effects riding this cast (#4581).
+        Their conditions, treatments and removals run through
+        ``apply_vow_effect_payloads`` over the same ``targets_by_kind``, right
+        after the signature bonus; their applied and removed results join the
+        returned lists.
 
         Returns:
             ``(applied, removed)`` — the apply results and the dispel results, both
@@ -578,6 +616,26 @@ class CombatTechniqueResolver:
                 soulfray_consented=self.action.confirm_soulfray_risk,
             )
         )
+        # Vow added effects (#4581): the payloads of the covenant vow rows riding this
+        # cast, over the same resolved targets (SELF is the caster). An NPC enemy is
+        # an ObjectDB in targets_by_kind, so a vow's enemy condition lands on it.
+        vow_removed: list[RemovedConditionResult] = []
+        if fired_vow_effects:
+            from world.covenants.added_effects import (  # noqa: PLC0415
+                apply_vow_effect_payloads,
+            )
+
+            vow_applied, vow_removed = apply_vow_effect_payloads(
+                fired_vow_effects,
+                technique=technique,
+                success_level=check_result.success_level,
+                eff_intensity=eff_intensity,
+                targets_by_kind=targets_by_kind,
+                source_character=caster_od,
+                scene=self.participant.encounter.scene,
+                soulfray_consented=self.action.confirm_soulfray_risk,
+            )
+            applied.extend(vow_applied)
         # Technique treatment (#2668): perform bounded-mend treatments on resolved
         # targets. Fires BEFORE remove_technique_conditions. No-op when the
         # technique has no treatment rows.
@@ -603,6 +661,7 @@ class CombatTechniqueResolver:
             targets_by_kind=targets_by_kind,
             source_character=caster_od,
         )
+        removed.extend(vow_removed)
         return applied, removed
 
     def _apply_penetration(self, combat_ledger: PowerLedger) -> tuple[PowerLedger, bool]:
@@ -698,6 +757,25 @@ class CombatTechniqueResolver:
             )
         return builder.multiply(PowerStage.PENETRATION, "ward", pct).build(), False
 
+    def _fired_vow_effects(self) -> list[FiredVowEffect]:
+        """The covenant vow added effects riding this cast (#4581).
+
+        Read after the ward check, so a bounced cast never computes them.
+        ``[]`` when the action carries no technique.
+        """
+        technique = self.action.focused_action
+        if technique is None:
+            return []
+        from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+        from world.covenants.added_effects import vow_added_effects_for_cast  # noqa: PLC0415
+
+        return vow_added_effects_for_cast(
+            self.participant.character_sheet,
+            technique,
+            resolution=CombatRoundContext(self.participant),
+            target=_resolve_primary_target_sheet(self.action),
+        )
+
     def __call__(
         self,
         *,
@@ -753,13 +831,25 @@ class CombatTechniqueResolver:
                 power_ledger=combat_ledger,
             )
 
-        damage_results = self._apply_damage(check_result, eff_intensity=eff_intensity)
+        fired = self._fired_vow_effects()
+        from world.covenants.added_effects import (  # noqa: PLC0415
+            record_vow_effect_firings,
+            vow_damage_profiles,
+        )
+
+        damage_results = self._apply_damage(
+            check_result, eff_intensity=eff_intensity, vow_damage=vow_damage_profiles(fired)
+        )
         applied_conditions, removed_conditions = self._apply_conditions(
-            check_result, eff_intensity=eff_intensity
+            check_result, eff_intensity=eff_intensity, fired_vow_effects=fired
         )
         # A manifesting technique brings the caster's bound entity into the fight (#4118),
         # but only on a successful, unbounced cast: a failed roll manifests nothing.
         if (check_result.success_level or 0) >= 1:
+            # A once-per-round or once-per-fight vow effect is spent only by a cast
+            # that landed (#4581): a failed roll, like a bounce (returned above),
+            # leaves it for the holder's next cast.
+            record_vow_effect_firings(fired, encounter=self.participant.encounter)
             from world.magic.services.effect_handlers import (  # noqa: PLC0415
                 manifest_bound_entity,
             )
