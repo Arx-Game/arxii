@@ -22,6 +22,15 @@ from world.checks.services import (
     preview_check_difficulty,
 )
 from world.checks.test_helpers import force_check_outcome
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+    ThreatPoolEntryFactory,
+    ThreatPoolFactory,
+)
+from world.combat.models import CombatOpponentAction
+from world.combat.services import resolve_npc_attack
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -37,6 +46,7 @@ from world.conditions.factories import (
 from world.conditions.models import ConditionInstance
 from world.conditions.services import bulk_apply_conditions
 from world.conditions.types import BulkConditionApplication
+from world.scenes.constants import RoundStatus
 from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
 from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.services import (
@@ -113,6 +123,26 @@ class SpendContributingConditionsTests(TestCase):
 
         self.assertTrue(ConditionInstance.objects.filter(pk=lasting_pk).exists())
         self.assertFalse(self._blessing_exists())
+
+    def test_an_npc_attack_defense_spends_a_defense_blessing_once(self) -> None:
+        encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        CharacterVitalsFactory(character_sheet=self.sheet, health=200, max_health=200)
+        opponent = CombatOpponentFactory(encounter=encounter, threat_pool=ThreatPoolFactory())
+        entry = ThreatPoolEntryFactory(
+            pool=opponent.threat_pool, base_damage=10, defense_check_type=self.ct
+        )
+        swing = CombatOpponentAction.objects.create(
+            opponent=opponent, round_number=1, threat_entry=entry
+        )
+        roll = MagicMock(return_value=MagicMock(success_level=2))
+
+        resolve_npc_attack(swing, participant, self.ct, perform_check_fn=roll)
+        resolve_npc_attack(swing, participant, self.ct, perform_check_fn=roll)
+
+        self.assertFalse(self._blessing_exists())
+        first, second = (call.kwargs["extra_modifiers"] for call in roll.call_args_list)
+        self.assertEqual((first, second), (3, 0))
 
     def test_a_spent_resist_ward_does_not_break_the_rest_of_a_batch(self) -> None:
         # Review Focus 5: the first item's resist roll spends the once-only ward;

@@ -1,5 +1,7 @@
 """forces_attack_on_source conditions narrow an NPC's target to the source (#4584)."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
@@ -22,9 +24,12 @@ from world.combat.factories import (
     ThreatRecordFactory,
 )
 from world.combat.services import select_npc_actions
+from world.combat.services.npc.npc_selection import _narrow_to_locked_or_provoker
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.services import provoking_source_by_target
 from world.scenes.constants import RoundStatus
+
+NARROW_PATH = "world.combat.services.npc.npc_selection._narrow_to_locked_or_provoker"
 
 
 class ProvokingSourceByTargetTests(TestCase):
@@ -195,6 +200,23 @@ class ProvokeTargetingTests(TestCase):
         for action in actions:
             self.assertEqual(list(action.targets.all()), [])
             self.assertEqual(list(action.opponent_targets.all()), [enemy])
+
+    def test_an_ally_summon_never_narrows_its_enemy_pool_by_a_provoke(self):
+        """Pins the ``targeting_participants`` guard: the summon's pool is enemies."""
+        enc, _enemy = self._encounter(TargetSelection.HIGHEST_THREAT)
+        pc = CombatParticipantFactory(encounter=enc)
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool, targeting_mode=TargetingMode.SINGLE, weight=10)
+        summon = CombatOpponentFactory(
+            encounter=enc, threat_pool=pool, allegiance=CombatAllegiance.ALLY
+        )
+        self._provoke(summon, pc)
+
+        with patch(NARROW_PATH, wraps=_narrow_to_locked_or_provoker) as narrow:
+            select_npc_actions(enc)
+
+        provokers = [call.args[2] for call in narrow.call_args_list]
+        self.assertNotIn(pc.pk, provokers)
 
     def test_the_newest_provoke_wins(self):
         enc, opp, hated, warden = self._setup_hated_and_warden()
