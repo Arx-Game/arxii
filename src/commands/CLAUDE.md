@@ -846,7 +846,28 @@ actions, backends, and service functions.
   BUILDING_PREPARATION cleanup project, then `project/donate` / `project/check` carry it)
   and `room/ultraupkeep` → `ToggleUltraUpkeepAction`. Permissions by relationship
   (owner structural / tenant redescribe+home), gated in actions + services. No business
-  logic in the command.
+  logic in the command. The four grant verbs resolve their character through
+  `search_or_raise` (#3657 tranche 19: the loud search had said "Could not find" and the
+  command then said it again), the usage spells `<yes or no>` and `<kind name or id>`
+  (`|n` and `|i` are colour codes), and the grant and eviction lines name the persona by
+  `.name` ("Hobb (Primary)" before). Every verb but `room/aura` is typed as the owner, a
+  tenant and a stranger in `integration_tests/test_shaping_the_house_journeys.py`
+  (`ShapingTheHouse`, `KeepingTheHousehold`, `KeepingTheHouseUp`); `tests/
+  test_manageroom_command.py` keeps only the `room/aura` resonance parse checks (magic
+  ground). A new `room` switch gets its lines in that journey module.
+- **`gm_props.py`**: `CmdStage` (`stage`, #2503) — the GM's mid-scene improv, a
+  `DispatchCommand` over `StagePropAction`/`StagePropertyAction`
+  (`actions/definitions/gm_props.py`): `stage prop <item template name>` materializes a
+  curated template as a holder-less prop in the room (it carries the template's default
+  properties, so the affordance scan sees it at once), `stage property <property name>
+  [=<target>]` tags a named object here or, with no target, the room itself; both are
+  gated to the room's active scene's GM or owner, or staff, inside the actions. The
+  target resolves through `search_or_raise`. Typed in
+  `integration_tests/test_shaping_the_house_journeys.py` (`StagingAProp`, #3657 tranche
+  19), together with the web's dispatch of both and the Ignite affordance a staged torch
+  offers the one character who learned the technique, graded on the real result charts;
+  the hand-built `tests/test_gm_props_command.py`, which mocked the dispatch and the
+  difficulty preview, is gone.
 - **`projects.py`**: `CmdProject` (`project`, alias `+project`, #1574) — project status +
   contribution surface. `+project <id>` shows a project's status (progress/target, remaining
   coin to fund); `project/donate <id>=<amount>` dispatches `DonateToProjectAction` (key

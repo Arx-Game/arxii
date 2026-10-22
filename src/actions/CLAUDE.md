@@ -158,7 +158,11 @@ They do not use the command system, dispatchers, or handlers.
   `integration_tests/test_granting_and_staging_journeys.py`. Tranche 16's line here:
   `ceremonies.py`'s `CeremonySpeechAction` names the speaker by `speech.speaker.name`
   (`str(persona)` read "Marrow (Primary)"); the ceremony, conversion, prayer and vision
-  actions are typed in `integration_tests/test_keeping_the_faith_journeys.py`;
+  actions are typed in `integration_tests/test_keeping_the_faith_journeys.py`. Tranche
+  19's line here: `locations.py`'s `AssignRoomTenantAction` names the grantee by
+  `tenant.name` ("Hobb (Primary) now holds a key here." before); the room family and
+  `gm_props.py`'s two staging actions are typed in
+  `integration_tests/test_shaping_the_house_journeys.py`;
   `relationships.py` (#3957, was #1485) — the tie verbs, all REGISTRY backend, wrapping
   `world.relationships.services`: `DeclareLabelAction` (key `"declare_label"`, defaults
   Private awareness), `ShiftLabelAction` (`"shift_label"`), `EndLabelAction` (`"end_label"`),

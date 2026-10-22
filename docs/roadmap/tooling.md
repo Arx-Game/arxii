@@ -310,6 +310,23 @@ from a sheetless character each answered "there was an error" with a logged trac
 (the usage or refusal was raised past the dispatcher's handling); and the accusation
 actions named their target "Hobb (Primary)".
 
+Tranche 19 moved the builders onto the harness: the GM's `stage prop`/`stage property`
+and the whole `room` family. `test_gm_props_command` (14 tests) is removed and
+`test_manageroom_command` keeps only its four `room/aura` parse checks (magic ground);
+the new `integration_tests/test_shaping_the_house_journeys.py` types each verb through
+the handler against real rows: a torch conjured into a scene by its GM, the room and a
+named object tagged, and the Ignite affordance the torch then offers only to the
+character who learned the technique, graded on the real result charts (the old test
+had mocked the difficulty preview); an owner digging, sizing, naming, mapping, linking
+and dropping rooms, the cut-off guards, the key/tenant/trustee ladder handed out and
+evicted down, home, fixtures, an extension, decorations, a style, a renovation, arrears
+settled and a refurbishment paid out of a real purse, a grand preparation, ultra upkeep,
+and a stranger refused throughout. Three fixes in place: `remove_room` moved the dropped
+room's contents into the entry room before deleting the exits located in it, so the
+room's own exits (contents too) outlived it there; the grant and eviction lines named
+"Hobb (Primary)" and the four grant verbs searched loudly, so an absent name was said
+twice; and two usage lines carried `|n`/`|i` colour codes.
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,
