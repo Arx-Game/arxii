@@ -1431,6 +1431,42 @@ class CombatParticipant(SharedMemoryModel):
         return f"{self.character_sheet}"
 
 
+class VowAddedEffectFiring(SharedMemoryModel):
+    """One combat firing of a limited-frequency ``VowAddedEffect`` (#4581).
+
+    Play state: the ledger behind ``VowEffectFrequency.ONCE_PER_ROUND`` and
+    ``ONCE_PER_FIGHT``. ``participant`` is the HOLDER whose vow fired (not
+    necessarily the caster, for an ally-beneficiary row), ``round_number`` the
+    encounter round it fired in. Written only when the cast succeeds, so a
+    failed cast never spends the effect. Each participant row is per
+    encounter, so a new fight starts with an empty ledger.
+    """
+
+    participant = models.ForeignKey(
+        CombatParticipant,
+        on_delete=models.CASCADE,
+        related_name="vow_effect_firings",
+    )
+    effect = models.ForeignKey(
+        "arxii.VowAddedEffect",
+        on_delete=models.CASCADE,
+        related_name="firings",
+    )
+    round_number = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["participant", "effect", "round_number"],
+                name="vow_added_effect_firing_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.participant} fired effect {self.effect_id} in round {self.round_number}"
+
+
 class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, SharedMemoryModel):
     """A PC's declared actions for a round.
 

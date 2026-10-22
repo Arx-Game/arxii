@@ -51,6 +51,8 @@ class TechniqueFunction(models.TextChoices):
     PERCEPTION = "perception", "Perception"
     CONCEALMENT = "concealment", "Concealment"
     HOLD = "hold", "Hold / Lock"
+    STRIKE = "strike", "Strike"
+    MEND = "mend", "Mend"
 
 
 DETECT_CAST_CHECK_NAME = "Perception"

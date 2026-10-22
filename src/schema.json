@@ -58846,6 +58846,8 @@ components:
       - perception
       - concealment
       - hold
+      - strike
+      - mend
       type: string
       description: |-
         * `damage_buff_self` - Self Damage Buff
@@ -58861,6 +58863,8 @@ components:
         * `perception` - Perception
         * `concealment` - Concealment
         * `hold` - Hold / Lock
+        * `strike` - Strike
+        * `mend` - Mend
     FundWardResult:
       type: object
       properties:

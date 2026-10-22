@@ -891,6 +891,38 @@ effective trait values and stat checks, not only the technique multiplier.
 - See `docs/systems/covenants.md`'s "Minor covenant membership" and "Covenant
   Treasury" sections for the full mechanical writeup, and ADR-0213.
 
+### Vow added effects (#4581, slice 1 of #4573) - SHIPPED
+
+A covenant vow can add staff-authored effects to technique casts: conditions, strips,
+treatments and damage riding the cast, authored in plain Django admin. What was built:
+
+- **Models**: `VowAddedEffect` (role, technique function, optional gift or technique,
+  in or out of combat, one situation, whose casts it rides, a frequency limit, the holder's
+  vow thread level it needs, three per-thread-level scalers, an `upgrades` link) and four
+  payload children (applied conditions, removed conditions, treatments, damage). The combat
+  ledger `VowAddedEffectFiring` backs once-per-round and once-per-fight. Migration
+  `0281_vow_added_effects`. Content export covers the header and three children; the
+  treatment child cannot (`TreatmentTemplate` has no natural key).
+- **Authoring rules** in `clean()`: limits need the In Combat context, a narrowing technique
+  must carry the function, an upgrade names a same-function row on this role at a lower unlock
+  or on the parent role, damage needs a fight, and a behavior-altering condition is refused
+  (consent is decided before resolution, ADR-4581-A).
+- **Read seams** (`world.covenants.added_effects`): the rows that fire for a cast, applied in
+  and out of combat on casts at success level 1 or higher; the upgrade rule runs before the
+  frequency ledger; thread-level scaling and secondary-vow potency.
+- **Supporting changes**: `Situation.TARGET_IS_BOSS`; `TechniqueFunction.STRIKE` / `MEND`;
+  bonus and row-override kwargs on the shared condition, removal and treatment seams (the
+  treatment seam now skips a sheetless target); the perk machinery's `VowHolderCandidate`,
+  `vow_holder_candidates`, `vow_holder_thread_levels` and `SituationCheck` made reusable.
+- **Admin**: `VowAddedEffectAdmin` with a plain-words summary built only from the row's
+  fields, and a read-only inline on `CovenantRole`.
+- **Journeys**: combat, scene and admin journeys (`docs/testing/journeys.md`).
+- **Known gaps**: on AREA / FILTERED_GROUP casts vow damage reaches every resolved opponent
+  while the situation reads the primary target only; out of combat the payload is applied but
+  not narrated in the pose. The static view `vow_added_effects_on_technique` is built and not
+  wired, pending #4565 (the workbench, vow board, vow page and spellbook vow section).
+- See `docs/systems/covenants.md` "Vow added effects" and ADR-4581-A.
+
 ### Cross-cutting (post-Covenants)
 
 - **Thread situational gating for non-COVENANT_ROLE kinds** — bringing
