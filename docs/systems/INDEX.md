@@ -222,6 +222,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     opt-out via `GMPromptFilter` (`GMPromptGroup`). Full detail + the release/
     frozen-persona rules: `docs/systems/scenes.md` "GM narration of mechanical events",
     `docs/systems/magic.md` "GM Prompt Queue", ADR-4101.
+  - **Vow added effects: payload seams (#4581, ADR-4581-A) [BUILT & WIRED]:** the shared
+    condition seams in `world/magic/services/condition_application.py` take a vow row's
+    payload without a parallel path: `apply_technique_conditions(severity_bonus=,
+    duration_bonus=)`, `remove_technique_conditions(removed_condition_rows=)`,
+    `apply_technique_treatments(treatment_rows=)` (which now skips a target with no
+    `CharacterSheet` instead of raising). `TechniqueFunction` gained `STRIKE` and `MEND` (15
+    values). `render_payload_clauses(...)` (`services/technique_effects.py`) renders the
+    "Deals / Applies / Strips / Treats" clauses for both a technique sentence and a vow row's
+    summary; `validate_inert_removal_knobs` (`models/techniques.py`) is the shared removal-row
+    knob check. Detail: `docs/systems/magic.md` "Vow added effects: the payload seams".
   - **Technique effect summary (#2898):** the one block every technique surface
     shows. `summarize_technique_effects(technique) -> TechniqueEffectPayload`
     (`services/technique_effects.py`, types in `types/technique_effects.py`)
@@ -7775,6 +7785,27 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `compute_party_profile` calls `effective_combat_level` per ACTIVE participant before
   averaging — outlier distortion is absorbed in the bond math; graduated bonds dissolve
   at `begin_declaration_phase`.
+- **Vow added effects (#4581, ADR-4581-A) [BUILT & WIRED]:** staff-authored payload a
+  covenant vow adds to a technique cast. Models: `VowAddedEffect` (header: `covenant_role`,
+  `function`, optional `gift` / `technique`, `cast_context`, `situation`, `beneficiary`,
+  `frequency`, `unlock_thread_level`, the three `*_per_thread_level` scalers, `upgrades`
+  self-FK `RESTRICT`) and its four children `VowAddedEffectAppliedCondition`,
+  `VowAddedEffectRemovedCondition`, `VowAddedEffectTreatment`,
+  `VowAddedEffectDamageProfile`; the play-state ledger `VowAddedEffectFiring` lives in
+  combat (below). Enums `VowEffectContext`, `VowEffectFrequency`; `Situation.TARGET_IS_BOSS`.
+  Read seams in `world.covenants.added_effects`: `vow_added_effects_for_cast(subject,
+  technique, *, resolution, target) -> list[FiredVowEffect]` (upgrade rule, then the
+  frequency ledger, then dedupe and thread-level scaling), `apply_vow_effect_payloads`,
+  `vow_damage_profiles`, `record_vow_effect_firings`, and `vow_added_effects_on_technique`
+  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary). Runs
+  in combat (`CombatTechniqueResolver`) and out of it (`cast_services`) on casts at success
+  level 1 or higher only. The perk machinery exposed `VowHolderCandidate`,
+  `vow_holder_candidates`, `vow_holder_thread_levels` and `SituationCheck`
+  (`world.covenants.perks.services`). Known limits: on AREA casts vow damage reaches every
+  resolved opponent while the situation reads the primary target only; out of combat the
+  payload is applied but not narrated in the pose. Admin: `VowAddedEffectAdmin` plus a
+  read-only inline on `CovenantRole`; summary via `summarize_vow_added_effect`. Detail:
+  `docs/systems/covenants.md` "Vow added effects".
 - **Covenant Treasury (#2992):** `world.covenants.treasury` —
   `covenant_treasury(covenant) -> OrganizationTreasury` (lazy-created on the
   covenant's backing `Organization`); `deposit_covenant_funds(*, membership, amount,
@@ -8005,6 +8036,15 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `ComboSignature` (covenant+combo narrative flourish, #2017), `Clash`,
   `ClashRound`, `ClashContribution`, `BreakBarContribution` (#2642, see "Boss-fight structure"
   below), `CombatOpponent.reinforces` (self-FK, lieutenant->boss edge, #2642)
+- **Vow added effect firings (#4581):** `VowAddedEffectFiring` (`world/combat/models.py`,
+  play state) - `participant` FK (the HOLDER's `CombatParticipant`), `effect` FK →
+  `VowAddedEffect`, `round_number`; unique on the three. The ledger behind
+  `ONCE_PER_ROUND` / `ONCE_PER_FIGHT` vow rows, written by `record_vow_effect_firings` only
+  when a cast lands (success level 1 or higher, not ward-bounced), read by
+  `vow_added_effects_for_cast`. `CombatTechniqueResolver` feeds a fired row's damage profiles
+  through `_apply_damage(vow_damage=)` (each with its row's `damage_bonus` as a budget
+  bonus) and its conditions, treatments and removals through `_apply_conditions(
+  fired_vow_effects=)`. See `docs/systems/covenants.md` "Vow added effects".
 - **Technique-entrance combat integration (#2183):** `CombatRoundAction.from_entrance`
   (bool, default False) — stamped when a hostile Technique Entrance (see magic.md
   "Technique Entrance") seeds/feeds an encounter (`world.combat.cast_seed
@@ -8071,7 +8111,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     ONLY defense-check site threading `attacker` in v1. Makes CHECK_BONUS/TIER_FLOOR/
     BOTCH_IMMUNITY situational perks — including `ATTACKER_AFFINITY`-gated ones — live on
     defense rolls for the first time. `world.covenants.perks.services.applicable_perks` and its
-    `_PerkResolver` gained the matching `attacker` parameter/field to propagate it into each
+    `_PerkResolver` (whose situation cache is now `SituationCheck`, #4581) gained the matching `attacker` parameter/field to propagate it into each
     candidate holder's `SituationContext`. See ADR-0153/ADR-0154 and `docs/systems/covenants.md`'s
     "Court/Battle scoping + defense-side seam" for the full design.
 - **The Damage Identity — bounded percent lanes, vow-keyed stacking, execute (#2643,
