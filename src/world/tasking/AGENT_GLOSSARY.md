@@ -48,9 +48,9 @@ root `AGENT_GLOSSARY_MAP.md`.
 - **Suppress / Flip / Plant** — counterplay verbs: freeze a listener's meter;
   turn one into a double agent; queue a false catch (ACCUSATION-provenance
   secret) on a flipped post.
-- **Covert org** — an org whose `OrganizationType.is_covert` is true: hidden
-  from public search, membership mints a Secret. Lives in `societies`; the
-  board here is where its work shows.
+- **Covert org** — an org whose `Organization.is_covert` is true (#4570: on the
+  organization, not its type): hidden from public search, membership mints a
+  Secret. Lives in `societies`; the board here is where its work shows.
 - **Spymaster** — the parent-org oversight office (`SPYMASTER_OFFICE`): READ
   access over covert children's boards. Not command — that is always the
   child org's rank 1.
