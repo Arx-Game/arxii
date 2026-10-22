@@ -178,7 +178,7 @@ class SpreadingATale(JourneyCase):
         fill_action_points(self.hobb)
         self.watch(self.hobb)
 
-    def test_a_tale_told_and_written_down(self) -> None:
+    def test_a_tale_told_and_written_down(self) -> None:  # noqa: PLR0915 - one tale, read top to bottom
         usage = "Usage: deed spread <deed> [...] | deed story <deed>=<text>"
         self.assertIn(usage, self.telnet(self.ysmay, "deed"))
         self.assertIn(usage, self.telnet(self.ysmay, "deed dance"))
@@ -260,11 +260,17 @@ class SpreadingATale(JourneyCase):
                 deed=self.deed, persona=persona_of(self.hobb)
             ).exists()
         )
-        # A second telling straight after the first waits out the scene's cooldown.
+        # A second telling straight after the first waits out the scene's cooldown; once it
+        # has passed, the tale is told again by id, in no particular form.
         self.assertIn(
             "You must wait before acting again.",
             self.telnet(self.ysmay, f"deed spread {self.deed.pk}"),
         )
+        pending_actions._LAST_ACTED.pop(self.ysmay.sheet_data.pk, None)
+        with force_check_outcome(CheckOutcomeFactory(name="Told plainly", success_level=1)):
+            told = self.telnet(self.ysmay, f"deed spread {self.deed.pk} effort=low")
+        self.assertIn("You spread the tale of The Sinking of the Argent.", told)
+        self.assertEqual(LegendSpread.objects.filter(legend_entry=self.deed).count(), 2)
 
         self.assertIn(
             "Record a story how? (deed story <deed name or id>=<written account>)",
@@ -295,6 +301,30 @@ class SpreadingATale(JourneyCase):
         self.assertTrue(result.detail.success, result.detail.message)
         story.refresh_from_db()
         self.assertEqual(story.text, "Rewritten.")
+        # The story's own refusals, each thing the web may leave out or get wrong.
+        save = ActionRef(backend=ActionBackend.SCENE_ADAPTIVE, registry_key="save_deed_story")
+
+        def saved(**kwargs):
+            pending_actions._LAST_ACTED.pop(self.hobb.sheet_data.pk, None)
+            return dispatch_player_action(self.hobb, save, kwargs).detail.message
+
+        hobbs = persona_of(self.hobb).pk
+        self.assertEqual(saved(deed_id=self.deed.pk, text="Mine."), "You must choose a persona.")
+        self.assertEqual(
+            saved(persona_id=persona_of(self.ysmay).pk, deed_id=self.deed.pk, text="Mine."),
+            "You do not control that persona.",
+        )
+        self.assertEqual(saved(persona_id=hobbs, text="Mine."), "You must choose a deed.")
+        untold = LegendEntryFactory(persona=persona_of(self.ysmay), title="The Fall of Nowhere")
+        self.assertEqual(
+            saved(persona_id=hobbs, deed_id=untold.pk, text="Mine."),
+            "This persona is not aware of that deed.",
+        )
+        self.assertEqual(
+            saved(persona_id=hobbs, deed_id=self.deed.pk, text="   "), "You must write something."
+        )
+        self.assertEqual(LegendDeedStory.objects.get(pk=story.pk).text, "Rewritten.")
+        self.assertEqual(LegendDeedStory.objects.count(), 1)
 
     def test_a_tale_needs_a_scene_she_is_part_of(self) -> None:
         yard = self.make_room("The Yard")

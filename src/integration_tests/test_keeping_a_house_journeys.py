@@ -25,6 +25,7 @@ from world.buildings.factories import BuildingFactory
 from world.buildings.upkeep_services import set_condition_tier
 from world.character_sheets.models import ProfileTextVersion
 from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import force_check_outcome
 from world.companions.factories import CompanionFactory
 from world.currency.services import get_or_create_purse
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
@@ -39,6 +40,7 @@ from world.npc_services.functionaries import functionaries_in_room
 from world.npc_services.models import Functionary
 from world.room_features.models import ExitBarsDetails
 from world.societies.models import LegendEntry
+from world.traits.factories import CheckOutcomeFactory
 
 
 def staff(case: JourneyCase, character) -> None:
@@ -160,8 +162,23 @@ class LockingTheDoor(JourneyCase):
             self.assertTold(self.hobb, "Ysmay fumbles with the lock on gate.")
         self.assertTrue(LegendEntry.objects.filter(title="Lockpicking at gate").exists())
 
+        # The same roll forced each way: a fumble leaves the gate locked, a pick opens it.
         if picked:
             self.telnet(self.hobb, "lock gate")
+        with force_check_outcome(CheckOutcomeFactory(name="Fumbled", success_level=-1)) as roll:
+            told = self.telnet(self.ysmay, "pick gate")
+        self.assertEqual(roll.check_type.name, "Lockpicking")
+        self.assertIn("You fail to pick the lock on gate.", told)
+        self.assertTrue(self.gate.db.locked)
+        self.assertTold(self.hobb, "Ysmay fumbles with the lock on gate.")
+        with force_check_outcome(CheckOutcomeFactory(name="Picked", success_level=1)):
+            told = self.telnet(self.ysmay, "pick gate")
+        self.assertIn("You pick the lock on gate.", told)
+        self.assertFalse(self.gate.db.locked)
+        self.assertTold(self.hobb, "Ysmay picks the lock on gate.")
+        self.assertEqual(LegendEntry.objects.filter(title="Lockpicking at gate").count(), 3)
+
+        self.telnet(self.hobb, "lock gate")
         self.assertIn("You break through gate!", self.telnet(self.ysmay, "break gate"))
         self.assertFalse(self.gate.db.locked)
         self.assertTold(
