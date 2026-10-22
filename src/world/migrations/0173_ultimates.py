@@ -113,10 +113,11 @@ class Migration(migrations.Migration):
             name="starter_techniques",
             field=models.ManyToManyField(
                 blank=True,
-                help_text="Curated subset of this gift's techniques minted on crossing into this path.",
+                help_text="The techniques for this Path and Gift. A technique is offered only on the Paths that list it: at character creation, in Academy training, and on crossing into this Path. A Tradition grant that also lists a technique keeps it for that Tradition's members.",
                 limit_choices_to={"is_ultimate": False},
                 related_name="granted_by_path_gifts",
                 to="arxii.technique",
+                verbose_name="techniques for this Path and Gift",
             ),
         ),
         migrations.AlterField(
@@ -124,7 +125,7 @@ class Migration(migrations.Migration):
             name="special_techniques",
             field=models.ManyToManyField(
                 blank=True,
-                help_text="Techniques special to this tradition for this gift — additive extras on top of the path's starter pool. Empty = no tradition-specific extras. For partial-depth access, list only the restricted subset the tradition offers.",
+                help_text="Techniques this Tradition keeps for its own members. A technique listed by no Tradition grant is open to every Tradition; one listed here is offered only to the Traditions that list it, and only on the Paths whose list holds it. Empty = this Tradition keeps none of its own.",
                 limit_choices_to={"is_ultimate": False},
                 related_name="granted_by_tradition_gifts",
                 to="arxii.technique",
