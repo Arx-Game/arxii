@@ -60,6 +60,13 @@ done
 [[ "${SOURCE}" == "linode" || "${SOURCE}" == "r2" ]] \
   || fail "--source must be 'linode' or 'r2' (got: ${SOURCE})"
 
+# This standalone script is also copied onto an Ubuntu 24.04 rehearsal host
+# without lib.sh. Do not confuse a readable CA file with a patched package.
+ca_version="$(dpkg-query -W -f='${Version}' ca-certificates 2>/dev/null)" \
+  || fail "ca-certificates package unavailable; run on the updated Ubuntu host"
+dpkg --compare-versions "${ca_version}" ge 20260816ubuntu0.24.04.1 \
+  || fail "ca-certificates ${ca_version} is below the Ubuntu 24.04 incident fix; update first"
+
 : "${RESTORE_DB:?set RESTORE_DB}"
 : "${RESTORE_DB_USER:?set RESTORE_DB_USER}"
 RESTORE_TARGET_HOST="${RESTORE_TARGET_HOST:-127.0.0.1}"
@@ -104,13 +111,13 @@ fi
 
 # Latest dump under db/ (lexicographic = chronological: arxii-<UTC ts>.sql.gz)
 latest="$(AWS_ACCESS_KEY_ID="${ak}" AWS_SECRET_ACCESS_KEY="${sk}" \
-  aws --endpoint-url "${ep}" --region "${region}" \
+  aws --ca-bundle /etc/ssl/certs/ca-certificates.crt --endpoint-url "${ep}" --region "${region}" \
   s3 ls "s3://${bucket}/db/" | awk '{print $4}' | sort | tail -1)"
 [[ -n "${latest}" ]] || fail "no backup object found in s3://${bucket}/db/"
 log "restoring object: ${latest}"
 
 AWS_ACCESS_KEY_ID="${ak}" AWS_SECRET_ACCESS_KEY="${sk}" \
-  aws --endpoint-url "${ep}" --region "${region}" \
+  aws --ca-bundle /etc/ssl/certs/ca-certificates.crt --endpoint-url "${ep}" --region "${region}" \
   s3 cp "s3://${bucket}/db/${latest}" "${tmp}/dump.sql.gz"
 
 # The dump is plain-SQL (pg_dump default format — kept, NOT switched to

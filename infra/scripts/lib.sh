@@ -6,6 +6,27 @@
 # rather than moved here so each script's log/fail lines keep their own
 # `[standup]` / `[rehearsal]` prefix instead of a shared generic one.
 
+# AWS's private bundle is independent; explicit --ca-bundle callers also need
+# to establish that their chosen system bundle contains the vendor fix.
+require_patched_system_ca() {
+  local distro minimum installed
+  distro="$(. /etc/os-release 2>/dev/null && printf '%s:%s' "${ID}" "${VERSION_ID}")" \
+    || fail "cannot identify system CA package; use the updated Ubuntu devcontainer"
+  case "${distro}" in
+    ubuntu:22.04) minimum=20260816ubuntu0.22.04.1 ;;
+    ubuntu:24.04) minimum=20260816ubuntu0.24.04.1 ;;
+    ubuntu:26.04) minimum=20260816ubuntu0.26.04.1 ;;
+    ubuntu:26.10) minimum=20260816ubuntu0.26.10.1 ;;
+    *) fail "unsupported CA package check (${distro}); run inside the updated Ubuntu devcontainer" ;;
+  esac
+  installed="$(dpkg-query -W -f='${Version}' ca-certificates 2>/dev/null)" \
+    || fail "ca-certificates package unavailable; update the Ubuntu environment first"
+  dpkg --compare-versions "${installed}" ge "${minimum}" \
+    || fail "ca-certificates ${installed} is below incident security floor ${minimum}; update first"
+  [[ -r /etc/ssl/certs/ca-certificates.crt ]] \
+    || fail "system CA bundle is unavailable; repair ca-certificates before continuing"
+}
+
 # wait_for_tcp <host> <port> <timeout_s> <interval_s>
 #
 # Bounded poll for a TCP port. Used for "wait until SSH answers" on a

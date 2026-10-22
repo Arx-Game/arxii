@@ -4,8 +4,11 @@ idiomatic_version_file_enable_tools = ["python"]
 
 [tools]
 python = "3.13.0"
-node = "24.4.1"
-pnpm = "latest"
+# Includes the native eMudhra compromised-key block (#4506).
+node = "24.22.1"
+# pnpm 12 is native Rust, including its npm wrapper. Keep allowBuilds behavior
+# and require the release with patched TLS verifier and fallback CA bundle.
+pnpm = "12.15.0"
 uv = "0.13.4"
 just = "latest"
 

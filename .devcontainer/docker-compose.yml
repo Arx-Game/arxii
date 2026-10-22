@@ -38,9 +38,9 @@ services:
       # every dc-build forces re-auth, and its OAuth login is a real chore in
       # this devcontainer (localhost callback server, no browser reachable
       # inside the container without a port-forward workaround). Does NOT
-      # persist the `prime-agent` binary itself (that's a global npm install
-      # under mise's node dir, not under ~/.prime) — reinstalling that after a
-      # rebuild is a cheap one-line `curl | sh`, unlike redoing auth.
+      # persist the `prime-agent` binary itself. Do not reinstall stable 0.10.0:
+      # its bundled TLS roots are vulnerable. Use the verified opt-in launcher
+      # and artifact described in docs/operations/tls-trust.md (#4506).
       - arxii-prime-agent-home:/home/vscode/.prime
       # Shell history, same rationale as the volumes above: /home/vscode is
       # image state, so without these every rebuild starts from an empty
@@ -71,6 +71,11 @@ services:
     env_file:
       - ./dev.env
     environment:
+      # Explicit service values beat a retained dev.env, as well as enforcing
+      # the image defaults when entering old persisted worktrees (#4506).
+      MISE_AUTO_INSTALL: "false"
+      MISE_NOT_FOUND_AUTO_INSTALL: "false"
+      MISE_NOT_FOUND_SYSTEM_FALLBACK: "false"
       # django-environ env.db() reads DATABASE_URL; points at the db service.
       DATABASE_URL: postgres://arxii:arxii@db:5432/arxiidev
       # Pin the superpowers brainstorm-server port (server.cjs reads

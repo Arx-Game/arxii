@@ -22,8 +22,8 @@ obj="$(basename "{{ arx1_archive_object }}")"
 work="$(mktemp -d /var/tmp/arx1-archive-sync.XXXXXX)"
 trap 'rm -rf "${work}"' EXIT
 
-aws --endpoint-url "${endpoint}" --region "${region}" s3 cp "${src}" "${work}/${obj}"
-aws --endpoint-url "${endpoint}" --region "${region}" s3 cp "${src}.sha256" "${work}/${obj}.sha256"
+aws --ca-bundle /etc/ssl/certs/ca-certificates.crt --endpoint-url "${endpoint}" --region "${region}" s3 cp "${src}" "${work}/${obj}"
+aws --ca-bundle /etc/ssl/certs/ca-certificates.crt --endpoint-url "${endpoint}" --region "${region}" s3 cp "${src}.sha256" "${work}/${obj}.sha256"
 (cd "${work}" && sha256sum -c "${obj}.sha256")
 
 mkdir "${work}/site"

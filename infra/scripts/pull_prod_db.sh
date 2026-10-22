@@ -155,6 +155,11 @@ else
     "or 'pip install awscli' / 'pipx install awscli', or install uv (https://docs.astral.sh/uv/)"
 fi
 
+# Both clients have independent bundled roots. Use the patched Linux system
+# store explicitly, including when uvx supplies the CLI (#4506).
+require_patched_system_ca
+AWS_CMD+=(--ca-bundle /etc/ssl/certs/ca-certificates.crt)
+
 # LOCALITY GATE — the drop/recreate below is the destructive act, and until
 # now the ONLY thing aiming it at a local database was the DATABASE_URL a
 # human happened to have in src/.env. That variable is routinely re-pointed

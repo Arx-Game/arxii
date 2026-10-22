@@ -2,6 +2,10 @@
 # Python wheels; NOT the evennia runtime image: it fights our mise toolchain).
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
+# USN-8944-1. Changing this invalidates the apt layer even on cached rebuilds.
+# Fail before fetching bootstrap keys/installers if a mirror is still stale.
+ARG CA_CERTIFICATES_MIN_VERSION=20260816ubuntu0.24.04.1
+
 # Firewall + build prerequisites. iptables/ipset/dnsutils are required by
 # init-firewall.sh; build-essential for any source wheels.
 #
@@ -15,6 +19,8 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
  && apt-get install -y --no-install-recommends \
       iptables ipset dnsutils jq git curl ca-certificates build-essential sudo gnupg \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" \
+      ge "${CA_CERTIFICATES_MIN_VERSION}" \
  && install -d /usr/share/postgresql-common/pgdg \
  && curl -fsS https://www.postgresql.org/media/keys/ACCC4CF8.asc \
       -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
@@ -69,10 +75,15 @@ RUN mkdir -p /home/vscode/.claude
 # ~/.config/polytoken; session history under ~/.local/share/polytoken (XDG).
 RUN mkdir -p /home/vscode/.config/polytoken /home/vscode/.local/share/polytoken
 
-# Install mise, then bake the project toolchain at build time. Network is
+# Install patched mise before it downloads the project toolchain. Its default
+# minimum-release-age policy can otherwise select an older vulnerable release
+# even after the CA fix has shipped. The official installer verifies the asset.
+ARG MISE_VERSION=2026.10.17
+# Bake the project toolchain at build time. Network is
 # unrestricted during build, so the runtime firewall never needs mise's
 # download hosts. Only mise.toml is copied so the layer caches well.
-RUN curl -fsSL https://mise.run | sh \
+RUN curl -fsSL https://mise.run | MISE_VERSION="${MISE_VERSION}" sh \
+ && test "$(~/.local/bin/mise version | cut -d' ' -f1)" = "${MISE_VERSION}" \
  && echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc \
  && echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bash_profile
 COPY --chown=vscode:vscode mise.toml /tmp/mise/mise.toml
@@ -111,7 +122,7 @@ RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g "playwright@${PLAYWRIG
 # every container creation and wiped ~/.claude/.claude.json (forcing
 # re-login). Installing here means: latest at build time, no churn on
 # container recreate, explicit upgrades via `just dc-build`. Uses mise's
-# node so the binary lands at .../node/24.4.1/bin/claude — already on
+# node so the binary lands under the project-pinned Node's bin dir — already on
 # PATH for any shell that activates mise (via ~/.bashrc).
 RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g @anthropic-ai/claude-code
 
@@ -240,3 +251,10 @@ RUN gh completion -s zsh > /usr/local/share/arxii/zsh-completions/_gh \
       > /usr/local/share/arxii/zsh-completions/_uv
 
 COPY --chown=vscode:vscode .devcontainer/zshrc /home/vscode/.zshrc
+
+# Persisted worktrees can request old tool pins after a rebuild. Disable every
+# implicit installer (exec/run as well as command-not-found); explicit install
+# still works after the operator has reviewed the requested versions.
+ENV MISE_AUTO_INSTALL=false \
+    MISE_NOT_FOUND_AUTO_INSTALL=false \
+    MISE_NOT_FOUND_SYSTEM_FALLBACK=false
