@@ -104,8 +104,8 @@ class AbsorbPoolDesignatesByBufferTests(TestCase):
         absorb_pool(payload=payload)
 
         self.assertEqual(payload.amount, 3)
-        instance.refresh_from_db()
-        self.assertEqual(instance.absorb_remaining, 0)
+        # The 12-point buffer is spent, so the barrier ends.
+        self.assertFalse(ConditionInstance.objects.filter(pk=instance.pk).exists())
 
     def test_shipped_aegis_field_still_absorbs(self) -> None:
         bearer, _anima = _bearer()
