@@ -5,11 +5,13 @@ Collecting modifiers and previewing a check never spend; only a real roll does.
 
 import ast
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+from evennia_extensions.factories import ObjectDBFactory
+from flows.constants import EventName
 import world
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType, ModifierSourceKind
@@ -45,6 +47,7 @@ from world.vitals.services import (
 
 # The resist rolls below must fail so both conditions land; pin the d100.
 _ROLL = "world.checks.services.random.randint"
+_EMIT = "world.conditions.services.emit_event"
 
 
 class SpendContributingConditionsTests(TestCase):
@@ -199,6 +202,44 @@ class KnockoutRollSpendsTests(TestCase):
 
 # Functions that call ``collect_check_modifiers`` without a roll of their own to spend on,
 # as "file::function" (a method is "file::Class.method").
+class BatchForgetsAMarkerItsFlowSpentTests(TestCase):
+    """A marker its own CONDITION_APPLIED flow spends is gone for the rest of the batch."""
+
+    def setUp(self) -> None:
+        self.char = CharacterSheetFactory().character
+        self.char.location = ObjectDBFactory(
+            db_key="Marker Batch Room 4584", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        self.marker = ConditionTemplateFactory(
+            name="Lingering Spark 4584",
+            default_duration_type=DurationType.UNTIL_USED,
+            is_stackable=True,
+            max_stacks=3,
+        )
+
+    def test_a_later_item_lands_fresh_instead_of_stacking_onto_the_spent_marker(self) -> None:
+        spent: list[int] = []
+
+        def _flow_spends_the_first_marker(event_name, payload, **_kwargs):
+            if event_name == EventName.CONDITION_APPLIED and not spent:
+                spent.append(payload.instance.pk)
+                payload.instance.delete()
+            return MagicMock(was_cancelled=MagicMock(return_value=False))
+
+        with patch(_EMIT, side_effect=_flow_spends_the_first_marker):
+            _first, second = bulk_apply_conditions(
+                [
+                    BulkConditionApplication(target=self.char, template=self.marker),
+                    BulkConditionApplication(target=self.char, template=self.marker),
+                ]
+            )
+
+        self.assertTrue(second.success)
+        (standing,) = ConditionInstance.objects.filter(target=self.char, condition=self.marker)
+        self.assertNotEqual(standing.pk, spent[0])
+        self.assertEqual(standing.stacks, 1)
+
+
 _NOT_A_ROLL = {
     # preview grading: previews never spend
     "world/standoffs/services/view.py::_Grader.grade",

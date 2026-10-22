@@ -1184,6 +1184,11 @@ def _bulk_apply_one(  # noqa: PLR0913
             ),
             location=target_location,
         )
+        # A marker's own CONDITION_APPLIED flow may spend it at once. The next item's
+        # post-resist forget would also drop it; forgetting here keeps the context
+        # true at the end of every item, so nothing read between items stacks onto,
+        # or re-inserts, a spent marker.
+        ctx.forget_spent_instances(app.target.pk)
 
     return result
 
