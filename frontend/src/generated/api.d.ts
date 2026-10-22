@@ -28158,6 +28158,12 @@ export interface components {
       readonly provenance: components['schemas']['ProvenanceEnum'];
       readonly provenance_display: string;
       readonly is_act_anchored: boolean;
+      /** @description The persona this secret is about when not the subject (#4528); staff-set. */
+      about_persona?: number | null;
+      readonly about_persona_name: string;
+      /** @description The story this secret belongs to, if any (#4528); staff-set. */
+      story?: number | null;
+      readonly story_title: string;
       /** Format: date-time */
       readonly created_date: string;
       /** Format: date-time */
@@ -28184,6 +28190,10 @@ export interface components {
       consequences?: string;
       /** @description Whether the subject starts knowing this secret about themselves. False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten hasn't discovered): excluded from the subject's own-secrets shelf until a SecretKnowledge row grants it. */
       subject_aware?: boolean;
+      /** @description The persona this secret is about when not the subject (#4528); staff-set. */
+      about_persona?: number | null;
+      /** @description The story this secret belongs to, if any (#4528); staff-set. */
+      story?: number | null;
     };
     /** @description Read-only serializer for AvailableEnhancement (technique enhancement option). */
     AvailableEnhancement: {
@@ -44063,6 +44073,10 @@ export interface components {
       consequences?: string;
       /** @description Whether the subject starts knowing this secret about themselves. False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten hasn't discovered): excluded from the subject's own-secrets shelf until a SecretKnowledge row grants it. */
       subject_aware?: boolean;
+      /** @description The persona this secret is about when not the subject (#4528); staff-set. */
+      about_persona?: number | null;
+      /** @description The story this secret belongs to, if any (#4528); staff-set. */
+      story?: number | null;
     };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     PatchedBeatRequest: {
