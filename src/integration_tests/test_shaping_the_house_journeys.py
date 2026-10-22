@@ -807,6 +807,8 @@ class KeepingTheHouseUp(HouseCase):
                 "This room isn't part of a building.", self.telnet(self.ysmay, line), line
             )
         self.assertFalse(ObjectDB.objects.filter(db_key="Shed").exists())
+        told = self.web(self.ysmay, "start_building_activation")
+        self.assertEqual(told.detail.message, "This room isn't part of a building.")
         self.assertFalse(Project.objects.exists())
 
     def test_bringing_a_granted_house_to_life(self) -> None:

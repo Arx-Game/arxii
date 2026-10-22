@@ -327,6 +327,21 @@ room's own exits (contents too) outlived it there; the grant and eviction lines 
 "Hobb (Primary)" and the four grant verbs searched loudly, so an absent name was said
 twice; and two usage lines carried `|n`/`|i` colour codes.
 
+Tranche 20 was the first of the `actions.tests` tranches that follow the commands: the
+eight house and staging action modules the tranche 19 journeys already duplicated
+(`test_gm_props_actions`, `test_assign_room_tenant_action`, `test_room_edit_action`,
+`test_room_builder_web_kwargs`, `test_room_tenant_prerequisite_room_id`,
+`test_renovation_action`, `test_property_grant_action`, `test_purchase_building_action`,
+51 tests, every one a `.run()` down the happy path) are removed, and
+`test_shaping_the_house_journeys.py` gains what they alone had reached: the web canvas's
+`room_id`, `to_room_id` and `exit_id` legs (`ShapingTheHouseFromTheCanvas`), the grant
+ladder's refusals by rung and the revocation chain, staff staging with no scene, a
+priced fixture, every building verb from an owned plot that is no building, the
+renovation listing's kind flags, and the activation and purchase dispatches. Those last
+two have no verb and no button (recorded as a gap in `docs/testing/journeys.md`), so the
+journey sends their dispatch seam directly. No production code changed; the actions ledger
+marks the eight rows R (45 of 172 ruled).
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,
