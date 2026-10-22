@@ -37,11 +37,13 @@ from world.conditions.factories import ConditionInstanceFactory, ConditionTempla
 from world.conditions.services import guardians_by_target
 from world.fatigue.constants import EFFORT_COST_MULTIPLIER, MIN_FATIGUE_COST, EffortLevel
 from world.fatigue.services import get_or_create_fatigue_pool
+from world.magic.factories import TechniqueFactory
 from world.mechanics.factories import ChallengeTemplateFactory
 from world.mechanics.models import ChallengeInstance
 from world.scenes.constants import RoundStatus
 
 RESCUE_PATH = "world.combat.services.damage.interception._record_story_envoy_rescue"
+TECHNIQUE_PATH = "world.combat.services.damage.interception._try_technique_interpose"
 
 
 def _payload(amount: int = 10, *, answers_consumed: int = 0) -> DamagePreApplyPayload:
@@ -150,6 +152,59 @@ class StandingGuardTests(TestCase):
         _try_interpose(self.ward, _payload(10))
 
         self.assertEqual(dispatch.call_count, 1)
+
+    @patch("world.combat.services.dispatch_interpose")
+    def test_a_guard_anyone_technique_declarer_uses_her_technique(self, dispatch) -> None:
+        """Her declaration takes precedence over her standing guard on the ward."""
+        action = CombatRoundActionFactory(
+            participant=self.guard_c,
+            round_number=1,
+            maneuver=CombatManeuver.INTERPOSE,
+            focused_ally_target=None,
+            focused_action=TechniqueFactory(),
+            is_ready=True,
+        )
+        self._guard(self.ward, self.guard_c)
+
+        with patch(TECHNIQUE_PATH, return_value=True) as technique:
+            _try_interpose(self.ward, _payload(10))
+
+        technique.assert_called_once()
+        self.assertEqual(technique.call_args.args[0], action)
+        dispatch.assert_not_called()
+
+    @patch("world.combat.services.dispatch_interpose")
+    def test_a_guard_anyone_declarer_pays_her_declared_effort(self, dispatch) -> None:
+        CombatRoundActionFactory(
+            participant=self.guard_c,
+            round_number=1,
+            maneuver=CombatManeuver.INTERPOSE,
+            focused_ally_target=None,
+            effort_level=EffortLevel.HIGH,
+            is_ready=True,
+        )
+        self._guard(self.ward, self.guard_c)
+
+        _try_interpose(self.ward, _payload(10))
+
+        self.assertEqual(dispatch.call_count, 1)
+        pool = get_or_create_fatigue_pool(self.guard_c.character_sheet)
+        expected = max(
+            MIN_FATIGUE_COST,
+            int(INTERPOSE_BASE_FATIGUE_COST * EFFORT_COST_MULTIPLIER[EffortLevel.HIGH]),
+        )
+        self.assertEqual(pool.get_current(ActionCategory.PHYSICAL), expected)
+
+    @patch("world.combat.services.dispatch_interpose")
+    def test_a_guardian_who_named_another_ward_does_not_guard_this_one(self, dispatch) -> None:
+        self._declare(self.guard_b, target=self.guard_c)
+        self._guard(self.ward, self.guard_b)
+
+        _try_interpose(self.ward, _payload(10))
+
+        dispatch.assert_not_called()
+        self.guard_b.refresh_from_db()
+        self.assertEqual(self.guard_b.reactions_used, 0)
 
     @patch("world.combat.services.dispatch_interpose")
     def test_a_self_cast_guard_never_interposes_for_its_bearer(self, dispatch) -> None:

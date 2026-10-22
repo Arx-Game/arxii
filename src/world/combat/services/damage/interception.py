@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 
 from flows.constants import EventName
 from flows.events.payloads import DamagePreApplyPayload
@@ -333,15 +333,18 @@ def _try_interpose(
     declarations. Within the declaration tiers, ties use the guardian participant
     id and then declaration id. An unavailable guardian is skipped, but an
     attempted challenge (including a failed roll) ends the search so reaction and
-    per-hit budgets retain their existing semantics. A guardian participant is
-    tried at most once per hit, so one holding both a declaration and a standing
-    guard on this ward is not tried twice.
+    per-hit budgets retain their existing semantics. A declaration takes
+    precedence over a standing guard: a guardian who declared any INTERPOSE this
+    round (naming this ward, naming another ward, or guarding anyone) is tried only
+    through that declaration, never as a standing guard, so she is tried at most
+    once per hit and her declared technique and effort are the ones used.
 
     **Standing guards (#4584, ADR-4584-A):** a ward bearing an active
     ``ConditionTemplate.source_guards_bearer`` condition is guarded by its
     ``source_character`` when she is an ACTIVE participant of this encounter,
-    without her declaring INTERPOSE (:func:`~world.conditions.services.guardians_by_target`,
-    oldest instance first). A guard cast on oneself never interposes for its own
+    when she declared no INTERPOSE this round
+    (:func:`~world.conditions.services.guardians_by_target`, oldest instance
+    first). A guard cast on oneself never interposes for its own
     bearer. A standing guard counts against both budgets exactly as a declaration
     does (``REACTIONS_PER_ROUND`` and ``ABSORPTION_CAP_PER_MOMENT``); ADR-4584-A
     revisits ADR-0161 for this. It covers player-character wards in combat only:
@@ -402,24 +405,19 @@ def _try_interpose(
     anyone_actions = [a for a in actions if a.focused_ally_target_id is None]
 
     protected = participant.character_sheet.character
-    tried: set[int] = set()
+    # CombatRoundAction is unique per (participant, round), so the named and
+    # guard-anyone tiers never share a guardian, and _standing_guardians leaves out
+    # anyone who declared INTERPOSE at all: no guardian is tried twice for one hit.
     for action in named_actions:
-        tried.add(action.participant_id)
         # A false result means this guardian could not attempt (for example, its
         # reaction or technique is unavailable). Only an actual attempt, including
         # a failed roll, ends protector selection.
         if _dispatch_interpose_action(action, protected, pre_payload):
             return
     for guardian in _standing_guardians(participant, protected):
-        if guardian.pk in tried:
-            continue
-        tried.add(guardian.pk)
         if _attempt_guardian_interpose(guardian, protected, pre_payload, action=None):
             return
     for action in anyone_actions:
-        if action.participant_id in tried:
-            continue
-        tried.add(action.participant_id)
         if _dispatch_interpose_action(action, protected, pre_payload):
             return
 
@@ -431,7 +429,9 @@ def _standing_guardians(
     """ACTIVE participants of the ward's encounter standing guard over her, in guard order.
 
     Guard order is :func:`~world.conditions.services.guardians_by_target`'s (oldest
-    instance first). The ward herself is never her own guardian.
+    instance first). The ward herself is never her own guardian. A guardian who
+    declared any INTERPOSE this round is left out: her declaration takes precedence
+    and is tried in its own tier (or, naming another ward, not for this hit at all).
     """
     from world.conditions.services import guardians_by_target  # noqa: PLC0415
 
@@ -439,6 +439,11 @@ def _standing_guardians(
     if not guardian_ids:
         return []
     # CharacterSheet shares its character's pk, so character ids match sheet ids.
+    declared_interpose = CombatRoundAction.objects.filter(
+        participant_id=OuterRef("pk"),
+        round_number=participant.encounter.round_number,
+        maneuver=CombatManeuver.INTERPOSE,
+    )
     by_character = {
         p.character_sheet_id: p
         for p in CombatParticipant.objects.filter(
@@ -447,6 +452,7 @@ def _standing_guardians(
             character_sheet_id__in=guardian_ids,
         )
         .exclude(pk=participant.pk)
+        .exclude(Exists(declared_interpose))
         .select_related("character_sheet__character")
     }
     return [by_character[pk] for pk in guardian_ids if pk in by_character]
