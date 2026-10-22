@@ -1032,6 +1032,18 @@ damage. The clamp bounds only the live damage APPLICATION; an individual authore
 may itself exceed the band, and the unclamped sum still reports on the raw
 `DamageInteractionResult`.
 
+**Defense piercing (#4575).** `AbstractDamageProfile` shares three authored
+controls across technique, draft, variant, signature and miracle damage rows:
+`ignores_soak` (false), `resistance_shift` (nonnegative points, 0) and
+`bypasses_wards` (false). The builder API and draft publication preserve them.
+Soak piercing skips armor-like protection without granting an unarmored damage
+bonus. A typed hit subtracts its shift from signed resistance, crossing zero and
+deepening vulnerability without mutating the target. Any effective profile's ward
+flag bypasses the cast-wide barrier contest, so damage and associated conditions
+pass together. Other success checks still apply. Effect summaries show the authored
+per-hit properties and whole-technique ward scope. See
+[Combat Defense Composition](COMBAT_DEFENSES.md#authored-defense-piercing-4575).
+
 **Smooth execute.** `AbstractDamageProfile.execute_missing_health_multiplier`
 (Decimal, default 0 — a no-op on every technique unless authored otherwise) scales a
 landing hit's damage by `1 + multiplier * missing_health_fraction`, computed off the

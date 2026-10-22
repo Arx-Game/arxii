@@ -1,5 +1,11 @@
 # Combat — Status
 
+**Defense piercing (#4575):** shared authored profiles can skip armor-like soak
+without bonus against zero soak, shift signed resistance toward vulnerability per
+hit, and bypass a ward for the whole technique including its conditions. NPC and
+PC damage seams accept the hit controls; existing targeting and combo probing
+rules remain in force. See [defense composition](../systems/COMBAT_DEFENSES.md#authored-defense-piercing-4575).
+
 **Status:** core party and duel combat ship end-to-end, on both telnet and web — the GM lifecycle
 (start an encounter, spawn an NPC opponent, add/remove a PC, manual round control) got its web
 surface in #3067, closing the last "server-only" gap in the party-combat REST API; **removing/
