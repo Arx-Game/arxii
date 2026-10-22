@@ -35,7 +35,7 @@ const doc: HouseDocumentPayload = {
     particle_example: 'Océane aza Piropa · Raffaele azas Piropa',
     default_succession_law: { name: 'Infernal Enatic - Durance', codex_entry_id: null },
     patron: { nickname: 'The One True Knight', being_name: 'Calyx', codex_entry_id: 77 },
-    aspects: [
+    facets: [
       {
         definition: 'Patron',
         option: 'Calyx',
@@ -131,7 +131,7 @@ test('a house with no charter answers shows no Quiddity heading, and answers gro
   expect(screen.queryByText(/House Quiddity/)).not.toBeInTheDocument();
   unmount();
 
-  const umbralDoc: HouseDocumentPayload = { ...doc, house: { ...doc.house, aspects: [] } };
+  const umbralDoc: HouseDocumentPayload = { ...doc, house: { ...doc.house, facets: [] } };
   vi.mocked(queries.useHouseDocument).mockReturnValue({
     data: umbralDoc,
     isLoading: false,

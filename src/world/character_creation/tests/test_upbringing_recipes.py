@@ -6,7 +6,7 @@ use in admin. Recipes 1, 2, 3, 9, 10, 11 and 12 build an Upbringing and assert o
 ``get_lineage_errors``/``calculate_upbringing_cost``, the CG-facing surface;
 recipes 4 through 7 have no CG surface of their own and instead assert
 directly on the houses/societies rows the recipe names (``FealtyEdge``,
-``OrgPact``, ``OrganizationAspect``/``OrganizationFeature``). Recipe 8 (a
+``OrgPact``, ``OrganizationFacet``/``OrganizationFeature``). Recipe 8 (a
 claim-path role pick-list priced by influence) is folded into 11 and 12, which
 cover the same ground through a Vacancy instead. Recipes 13 through 15 cover
 the questionnaire kinds added in #3660 (a group tie plus a person inside it, a
@@ -45,10 +45,10 @@ from world.roster.factories import FamilyFactory, FamilyKindFactory
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.models import (
     FealtyEdge,
-    HouseAspectDefinition,
-    HouseAspectOption,
+    HouseCharterOption,
+    HouseCharterQuestion,
     HouseFeature,
-    OrganizationAspect,
+    OrganizationFacet,
     OrganizationFeature,
     OrgPact,
     PactKind,
@@ -157,18 +157,18 @@ class UpbringingRecipesTest(TestCase):
         org = OrganizationFactory(
             family=FamilyFactory(kind=FamilyKindFactory(name=NOBLE_KIND_NAME), influence=3)
         )
-        quiddity = HouseAspectDefinition.objects.create(
+        quiddity = HouseCharterQuestion.objects.create(
             name="House Quiddity", prompt="Which quiddity marks your house?"
         )
-        pride = HouseAspectOption.objects.create(definition=quiddity, name="Pride")
-        OrganizationAspect.objects.create(organization=org, definition=quiddity, option=pride)
+        pride = HouseCharterOption.objects.create(definition=quiddity, name="Pride")
+        OrganizationFacet.objects.create(organization=org, definition=quiddity, option=pride)
         marque = HouseFeature.objects.create(
             name="Letter of Marque and Reprisal",
             slug="letter-of-marque",
             description="Licensed to raid.",
         )
         OrganizationFeature.objects.create(organization=org, feature=marque)
-        assert list(org.aspects.values_list("option__name", flat=True)) == ["Pride"]
+        assert list(org.facets.values_list("option__name", flat=True)) == ["Pride"]
         assert org.features.filter(feature__slug="letter-of-marque").exists()
 
     def test_recipe_9_new_family_kind(self):
@@ -198,9 +198,9 @@ class UpbringingRecipesTest(TestCase):
         template = HouseTemplateFactory(
             name="Caretaker Household", realm=caretaker.starting_area.realm
         )
-        charge = HouseAspectDefinition.objects.create(name="Charge", prompt="What did you keep?")
-        granaries = HouseAspectOption.objects.create(definition=charge, name="Granaries")
-        template.aspect_definitions.add(charge)
+        charge = HouseCharterQuestion.objects.create(name="Charge", prompt="What did you keep?")
+        granaries = HouseCharterOption.objects.create(definition=charge, name="Granaries")
+        template.charter_questions.add(charge)
         template.served_house_choices.add(OrganizationFactory(name="House Regency"))
         upbringing = OriginTemplateFactory(
             beginning=caretaker, name="Raised to a Charge", family_templates=[template]
@@ -209,7 +209,7 @@ class UpbringingRecipesTest(TestCase):
             upbringing,
             draft_data={
                 "new_family_name": "Cisternwright",
-                "family_aspect_picks": {str(charge.id): [granaries.id]},
+                "family_facet_picks": {str(charge.id): [granaries.id]},
             },
         )
         assert get_lineage_errors(draft) == []

@@ -316,8 +316,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "societies.holdingkind",
         "societies.housefeature",
         "societies.housetemplate",
-        "societies.houseaspectdefinition",
-        "societies.houseaspectoption",
+        "societies.housecharterquestion",
+        "societies.housecharteroption",
         "societies.landshape",
         # species
         "species.language",
@@ -427,8 +427,8 @@ EXPORT_FIELD_EXCLUSIONS: dict[str, frozenset[str]] = {
     # question's patron flag travels with the bindings, not the catalog: exported
     # alone it would mark a question whose options name no god, and every founding
     # on it would refuse until the rebind.
-    "societies.houseaspectoption": frozenset({"being", "being_nickname"}),
-    "societies.houseaspectdefinition": frozenset({"sets_patron"}),
+    "societies.housecharteroption": frozenset({"being", "being_nickname"}),
+    "societies.housecharterquestion": frozenset({"sets_patron"}),
 }
 
 

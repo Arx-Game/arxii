@@ -31,7 +31,7 @@ export type PaginatedLandShapeList = components['schemas']['PaginatedLandShapeLi
 
 export type AlmanachHouseDocumentHouse = components['schemas']['AlmanachHouseDocumentHouse'];
 export type AlmanachSuccessionLaw = components['schemas']['AlmanachSuccessionLaw'];
-export type AlmanachHouseAspect = components['schemas']['AlmanachHouseAspect'];
+export type AlmanachHouseFacet = components['schemas']['AlmanachHouseFacet'];
 export type AlmanachHouseFeature = components['schemas']['AlmanachHouseFeature'];
 export type AlmanachHouseOffice = components['schemas']['AlmanachHouseOffice'];
 

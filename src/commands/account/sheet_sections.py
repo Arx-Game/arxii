@@ -684,7 +684,7 @@ def _render_house_section(command: object) -> list[str]:
         lines.append(f"  Colors: {house.colors}")
     lines.extend(
         f"  {facet.definition.name}: {facet.option.name}"
-        for facet in house.aspects.select_related("definition", "option")
+        for facet in house.facets.select_related("definition", "option")
     )
     lines.extend(
         f"  [{stamped.feature.name}] {stamped.feature.description}"

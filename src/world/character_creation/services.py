@@ -1312,7 +1312,7 @@ def _materialize_named_family(draft: CharacterDraft) -> None:
     name = str(draft.draft_data.get("new_family_name", "")).strip()
     picks = {
         int(definition_id): [int(option_id) for option_id in option_ids]
-        for definition_id, option_ids in (draft.draft_data.get("family_aspect_picks") or {}).items()
+        for definition_id, option_ids in (draft.draft_data.get("family_facet_picks") or {}).items()
     }
     from world.character_creation.questionnaire import picked_family_standing  # noqa: PLC0415
     from world.character_creation.validators import _draft_crew_slot  # noqa: PLC0415
@@ -1320,7 +1320,7 @@ def _materialize_named_family(draft: CharacterDraft) -> None:
     family, _org = build_family_org(
         template,
         name,
-        aspect_picks=picks,
+        facet_picks=picks,
         served_house=draft.served_house,
         created_by=draft.account,
         origin_realm=draft.selected_area.realm if draft.selected_area else None,
@@ -3307,7 +3307,7 @@ _UPBRINGING_DRAFT_KEYS = (
     "origin_choices",
     "new_family_name",
     "family_template_id",
-    "family_aspect_picks",
+    "family_facet_picks",
 )
 
 

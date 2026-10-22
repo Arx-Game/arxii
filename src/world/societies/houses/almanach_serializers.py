@@ -107,8 +107,8 @@ class AlmanachSuccessionLawSerializer(serializers.Serializer):
     codex_entry_id = serializers.IntegerField(allow_null=True)
 
 
-class AlmanachHouseAspectSerializer(serializers.Serializer):
-    """One picked aspect (mirrors ``almanach_reads.aspect_facet``): ``being_name``
+class AlmanachHouseFacetSerializer(serializers.Serializer):
+    """One picked facet (mirrors ``almanach_reads.facet_payload``): ``being_name``
     is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
     entry it opens."""
 
@@ -168,7 +168,7 @@ class AlmanachHouseDocumentHouseSerializer(serializers.Serializer):
     particle_example = serializers.CharField(allow_blank=True)
     default_succession_law = AlmanachSuccessionLawSerializer(allow_null=True)
     patron = AlmanachHousePatronSerializer(allow_null=True)
-    aspects = AlmanachHouseAspectSerializer(many=True)
+    facets = AlmanachHouseFacetSerializer(many=True)
     features = AlmanachHouseFeatureSerializer(many=True)
     offices = AlmanachHouseOfficeSerializer(many=True)
     observances = AlmanachHouseObservanceSerializer(many=True)

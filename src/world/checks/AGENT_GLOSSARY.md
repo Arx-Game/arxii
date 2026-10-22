@@ -18,7 +18,7 @@ _Avoid_: result, degree of success, outcome tier
 
 **Aspect**:
 A broad character archetype (Warfare, Subterfuge, Diplomacy, Scholarship) that grants bonuses to matching checks. Players see aspect names as flavor; the weights linking a CheckType to an aspect are staff-only mechanical values, scaled by the character's most recent path and level.
-_Avoid_: archetype tag, talent, domain
+_Avoid_: archetype tag, talent, domain, house aspect (a house's authored choice is a *charter question* and its answer a *facet*, #4532; "aspect" is this check-side archetype only)
 
 **Composure**:
 A seeded social CheckType — resisting social pressure through force of will (willpower-weighted) — resolved when a defender actively resists a social action. Distinct from the Composure Stat (the Social-category trait it draws on).

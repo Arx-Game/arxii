@@ -534,8 +534,8 @@ def _particle_example(house: Organization) -> str:
     return f"{pair_born} · {pair_taken_in}"
 
 
-def aspect_facet(facet) -> dict:
-    """One picked aspect as every house surface shows it (#2079, #4205): the question,
+def facet_payload(facet) -> dict:
+    """One picked facet as every house surface shows it (#2079, #4205, #4532): the question,
     the answer, its blurb, the being it is (if a god or totem) and the one Codex entry
     the answer opens. Shared by the org payload, the document and the family read, so
     a pick reads the same everywhere."""
@@ -580,9 +580,9 @@ def _house_payload(house: Organization) -> dict:
         "particle_example": _particle_example(house),
         "default_succession_law": law_payload,
         "patron": patron_payload(house),
-        "aspects": [
-            aspect_facet(facet)
-            for facet in house.aspects.select_related("definition", "option", "option__being").all()
+        "facets": [
+            facet_payload(facet)
+            for facet in house.facets.select_related("definition", "option", "option__being").all()
         ],
         "features": [
             {
@@ -856,7 +856,7 @@ def charter_for_realm(realm: Realm) -> RealmCharter:
     Task 3), read before any claim exists so nothing here touches
     ``HouseClaim``: the default template's succession law, the blank-floor
     Noble particle (``resolve_particle``'s own band rule), the default
-    template's first aspect prompt, and the realm's capital name."""
+    template's first charter question's prompt, and the realm's capital name."""
     template = _realm_default_template(realm.pk)
     law = template.default_succession_law if template is not None else None
     law_payload = (
@@ -873,7 +873,7 @@ def charter_for_realm(realm: Realm) -> RealmCharter:
             else ""
         ),
     }
-    definition = template.aspect_definitions.all().first() if template is not None else None
+    definition = template.charter_questions.all().first() if template is not None else None
     capital = Area.objects.filter(realm=realm, is_capital=True).first()
     return RealmCharter(
         succession_law=law_payload,

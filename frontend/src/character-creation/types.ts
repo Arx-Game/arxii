@@ -12,7 +12,7 @@ import type { TechniqueEffectSummary, TechniquePriceComponent } from '@/magic/ty
 export type { TechniqueEffectSummary } from '@/magic/types';
 
 // Reused for FamilyTemplate below: the house-claim template shape
-// (aspect_definitions/features) already generated from the backend schema,
+// (charter_questions/features) already generated from the backend schema,
 // extended rather than duplicated (#3648).
 import type { components } from '@/generated/api';
 
@@ -110,7 +110,7 @@ export interface CGPointsBreakdown {
 
 /** Facts a character inherits from their family's Family Template (#3648). */
 export interface InheritedFacts {
-  aspects: { definition: string; option: string; description: string }[];
+  facets: { definition: string; option: string; description: string }[];
   features: { name: string; slug: string; description: string }[];
   liege_name: string;
 }
@@ -135,7 +135,7 @@ export interface Family {
 
 /**
  * A Family Template the name path builds from (#3648): the same shape a
- * house-claim template uses (aspect_definitions, features), extended with
+ * house-claim template uses (charter_questions, features), extended with
  * the fields the Upbringing name path needs rather than duplicated.
  */
 export type FamilyTemplate = components['schemas']['HouseTemplateOption'] & {
@@ -1006,7 +1006,7 @@ export interface DraftData {
   /** The open CrewSlot a crew template claims at finalize (#4061). */
   crew_slot_id?: number | null;
   // Aspect picks for the chosen Family Template: definition id -> option ids (#3648).
-  family_aspect_picks?: Record<string, number[]>;
+  family_facet_picks?: Record<string, number[]>;
   // "Make it yours" picks (#4099), keyed by the chosen technique's id (as a
   // string). An unselected technique's entry is ignored by costs,
   // validation and finalize; the UI prunes it on deselect.
