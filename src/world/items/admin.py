@@ -1,6 +1,7 @@
 """Django admin configuration for items."""
 
 from django.contrib import admin
+from django.db.models import Count
 from django.forms import ModelForm
 from django.http import HttpRequest, HttpResponse
 
@@ -187,8 +188,22 @@ class InteractionTypeAdmin(admin.ModelAdmin):
 
 @admin.register(WeaponClass)
 class WeaponClassAdmin(admin.ModelAdmin):
-    list_display = ("name", "strength_tenths", "gear_archetype", "default_damage")
+    list_display = (
+        "name",
+        "strength_tenths",
+        "gear_archetype",
+        "default_damage",
+        "template_count",
+    )
     search_fields = ("name",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(template_total=Count("item_templates"))
+
+    @admin.display(description="Item templates", ordering="template_total")
+    def template_count(self, obj: WeaponClass) -> int:
+        """How many item templates use this class."""
+        return obj.template_total
 
 
 class TemplateSlotInline(admin.TabularInline):
@@ -248,6 +263,7 @@ class ItemTemplatePropertyInline(admin.TabularInline):
 class ItemTemplateAdmin(admin.ModelAdmin):
     list_display = [
         "name",
+        "weapon_class",
         "weight",
         "size",
         "value",
@@ -255,6 +271,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
         "is_container",
         "is_stackable",
     ]
+    list_editable = ["weapon_class"]
     list_filter = [
         "is_active",
         "is_container",

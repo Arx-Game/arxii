@@ -22,7 +22,7 @@ class AchievementStatRequirementInline(admin.TabularInline):
     model = AchievementStatRequirement
     formset = OneRowPerFormSet
     extra = 1
-    raw_id_fields = ["stat"]
+    autocomplete_fields = ["stat"]
 
 
 class AchievementRewardInline(admin.TabularInline):
@@ -31,7 +31,7 @@ class AchievementRewardInline(admin.TabularInline):
     model = AchievementReward
     formset = OneRowPerFormSet
     extra = 0
-    raw_id_fields = ["reward"]
+    autocomplete_fields = ["reward"]
 
 
 @admin.register(RewardDefinition)

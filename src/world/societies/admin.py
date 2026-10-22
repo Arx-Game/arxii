@@ -1287,7 +1287,7 @@ class DomainCrisisTypeOptionInline(admin.TabularInline):
     formset = OneRowPerFormSet
     extra = 0
     fields = ("kind", "cost_coppers", "mission_template", "self_resolve_pct", "worsen_pct")
-    raw_id_fields = ("mission_template",)
+    autocomplete_fields = ("mission_template",)
 
 
 @admin.register(DomainCrisisType)

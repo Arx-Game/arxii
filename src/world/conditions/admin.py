@@ -78,6 +78,7 @@ class ConditionStageInline(admin.TabularInline):
     formset = OneRowPerFormSet
     extra = 0
     ordering = ["stage_order"]
+    autocomplete_fields = ["resist_check_type"]
 
 
 class ConditionCapabilityEffectInline(admin.TabularInline):
@@ -165,6 +166,11 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
     ]
     search_fields = ["name", "description"]
     filter_horizontal = ["reactive_triggers"]
+    autocomplete_fields = [
+        "allegiance_break_check_type",
+        "settle_consequence_pool",
+        "cure_check_type",
+    ]
     readonly_fields = ["get_mechanics_diagnostic"]
 
     fieldsets = [
@@ -335,6 +341,33 @@ class ConditionStageAdmin(admin.ModelAdmin):
         if limited is not None:
             queryset = queryset.filter(pk__in=limited.values("pk"))
         return queryset, may_have_duplicates
+
+
+@admin.register(ConditionCheckModifier)
+class ConditionCheckModifierAdmin(admin.ModelAdmin):
+    """List page for check modifiers, so one check type's modifiers are found together (#4499).
+
+    Without it a modifier could only be reached by opening the condition that owns it.
+    """
+
+    list_display = [
+        "__str__",
+        "condition",
+        "stage",
+        "check_type",
+        "check_category",
+        "modifier_value",
+    ]
+    list_filter = ["check_type", "check_category"]
+    search_fields = [
+        "condition__name",
+        "stage__condition__name",
+        "stage__name",
+        "check_type__name",
+        "check_category__name",
+    ]
+    list_select_related = ["condition", "stage", "stage__condition", "check_type", "check_category"]
+    autocomplete_fields = ["condition", "stage", "check_type", "check_category"]
 
 
 # =============================================================================
