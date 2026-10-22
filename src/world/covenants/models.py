@@ -2401,6 +2401,11 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
     def __str__(self) -> str:
         return f"{self.covenant_role.name}: {self.get_function_display()}"
 
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Save, dropping the summary that was built from the old field values."""
+        super().save(*args, **kwargs)
+        self.__dict__.pop("cached_effect_summary", None)
+
     def clean(self) -> None:
         """Enforce the authoring rules a database constraint cannot express (#4581).
 
@@ -2475,6 +2480,19 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
                 "This effect has damage rows, which need the In Combat context. "
                 "Delete them before changing the context."
             )
+
+    @cached_property
+    def cached_effect_summary(self) -> str:
+        """The plain-words line staff read for this row (built only from its fields).
+
+        A payload child's save or delete clears it (``RelatedCacheClearingMixin``) and
+        so does a save of the header itself.
+        """
+        from world.covenants.added_effect_summary import (  # noqa: PLC0415
+            summarize_vow_added_effect,
+        )
+
+        return summarize_vow_added_effect(self)
 
     @PrunedCachedProperty
     def cached_applied_conditions(self) -> list[VowAddedEffectAppliedCondition]:
