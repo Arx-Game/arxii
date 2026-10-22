@@ -86,7 +86,12 @@ class TurnOrderConditionTests(TestCase):
             character_sheet=pc.character_sheet, health=100, max_health=100
         )
         npc = CombatOpponentFactory(encounter=self.encounter)
-        self._condition(npc.objectdb, self.slow)
+        # NPCs rank 15 and a no-role PC 20; -6 puts this NPC at 21, strictly after (a -5
+        # slow would tie at 20 and fall back to comparing pks across two tables).
+        heavy_slow = ConditionTemplateFactory(
+            name="Heavy Slow 4572 order", affects_turn_order=True, turn_order_modifier=-6
+        )
+        self._condition(npc.objectdb, heavy_slow)
 
         order = get_resolution_order(self.encounter)
 
