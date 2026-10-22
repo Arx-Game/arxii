@@ -3,6 +3,8 @@
 Collecting modifiers and previewing a check never spend; only a real roll does.
 """
 
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
@@ -37,6 +39,9 @@ from world.vitals.services import (
     get_vitals_consequence_config,
     process_damage_consequences,
 )
+
+# The resist rolls below must fail so both conditions land; pin the d100.
+_ROLL = "world.checks.services.random.randint"
 
 
 class SpendContributingConditionsTests(TestCase):
@@ -113,12 +118,13 @@ class SpendContributingConditionsTests(TestCase):
             name="Choking Smoke 4584", resist_check_type=self.ct, resist_difficulty=100
         )
 
-        results = bulk_apply_conditions(
-            [
-                BulkConditionApplication(target=self.char, template=first),
-                BulkConditionApplication(target=self.char, template=second),
-            ]
-        )
+        with patch(_ROLL, return_value=1):  # the lowest roll fails on every chart
+            results = bulk_apply_conditions(
+                [
+                    BulkConditionApplication(target=self.char, template=first),
+                    BulkConditionApplication(target=self.char, template=second),
+                ]
+            )
 
         self.assertTrue(all(r.success for r in results))
         self.assertTrue(
@@ -142,9 +148,10 @@ class SpendContributingConditionsTests(TestCase):
             outcome=ConditionInteractionOutcome.PREVENT_OTHER,
         )
 
-        (result,) = bulk_apply_conditions(
-            [BulkConditionApplication(target=self.char, template=incoming)]
-        )
+        with patch(_ROLL, return_value=1):  # the lowest roll fails on every chart
+            (result,) = bulk_apply_conditions(
+                [BulkConditionApplication(target=self.char, template=incoming)]
+            )
 
         self.assertTrue(result.success)
         self.assertFalse(self._blessing_exists())
