@@ -38,6 +38,7 @@ from world.magic.models import (
 from world.magic.services.technique_builder import (
     PlayerPolicy,
     StaffPolicy,
+    build_technique,
     get_technique_tier_budget,
     validate_design_for_character,
 )
@@ -199,6 +200,9 @@ class DraftDamageProfileTests(TestCase):
         row = add_draft_damage_profile(
             draft, damage_type=None, base_damage=5, damage_intensity_multiplier=0.0
         )
+        assert row.ignores_soak is False
+        assert row.resistance_shift == 0
+        assert row.bypasses_wards is False
         assert isinstance(row, TechniqueDraftDamageProfile)
         assert row.base_damage == 5
 
@@ -364,7 +368,13 @@ class DraftToDesignPayloadTests(TestCase):
             draft, capability=self.cap, base_value=3, intensity_multiplier=0.5
         )
         damage_row = add_draft_damage_profile(
-            draft, damage_type=self.damage_type, base_damage=4, damage_intensity_multiplier=1.0
+            draft,
+            damage_type=self.damage_type,
+            base_damage=4,
+            damage_intensity_multiplier=1.0,
+            ignores_soak=True,
+            resistance_shift=5,
+            bypasses_wards=True,
         )
         condition_row = add_draft_applied_condition(
             draft, condition=self.condition, base_severity=2, base_duration_rounds=3
@@ -379,6 +389,14 @@ class DraftToDesignPayloadTests(TestCase):
         assert len(design.damage_profiles) == 1
         assert design.damage_profiles[0].damage_type_id == damage_row.damage_type_id
         assert design.damage_profiles[0].base_damage == 4
+        assert design.damage_profiles[0].ignores_soak is True
+        assert design.damage_profiles[0].resistance_shift == 5
+        assert design.damage_profiles[0].bypasses_wards is True
+        published = build_technique(design, creator=self.sheet)
+        profile = published.damage_profiles.get()
+        assert profile.ignores_soak is True
+        assert profile.resistance_shift == 5
+        assert profile.bypasses_wards is True
         assert len(design.applied_conditions) == 1
         assert design.applied_conditions[0].condition_id == condition_row.condition_id
         assert design.applied_conditions[0].base_severity == 2
