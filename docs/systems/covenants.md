@@ -1005,6 +1005,7 @@ child lives on the child and reads `self.effect`.
 | gift and technique both set | header (friendly twin of the DB check) | `technique` |
 | a narrowing `technique` must carry the row's `function` tag | header | `technique` |
 | `upgrades` names itself, a different `function`, or a row that is neither on this role at a lower `unlock_thread_level` nor on this role's `parent_role` | header | `upgrades` |
+| an `upgrades` row more limited than its base (`EVERY_CAST` < `ONCE_PER_ROUND` < `ONCE_PER_FIGHT`), which would leave a holder worse off for qualifying | header | `frequency` |
 | context set away from `IN_COMBAT` while saved damage children exist | header | `cast_context` |
 | a damage child on an effect whose `cast_context` is not `IN_COMBAT` | damage child | non-field |
 | an applied condition whose category `alters_behavior` (consent, ADR-4581-A) | applied child | `condition` |
@@ -1041,8 +1042,10 @@ list[FiredVowEffect]` runs these steps in order:
    once-per-fight upgrade still suppresses its base: the base never comes back because its
    upgrade is used up.
 7. Dedupe on `(holder, row)`: one holder fires one row at most once per cast (anchor plus
-   resolved sub-role, primary plus secondary, a `WHOLE_GROUP` row seen from both sides). Two
-   different holders of the same vow each fire it once.
+   resolved sub-role, primary plus secondary, a `WHOLE_GROUP` row seen from both sides). When
+   one holder reaches a row through both a primary and a secondary candidate, the primary
+   fires (no potency scaling), whatever order the candidates came in. Two different holders
+   of the same vow each fire it once.
 8. **Scaling**: each level above `unlock_thread_level` adds the row's
    `severity_per_thread_level`, `duration_per_thread_level` and `damage_per_thread_level`.
    A row from a SECONDARY vow has each bonus multiplied by
@@ -1059,13 +1062,19 @@ The other seams in the module:
   targets_by_kind, source_character, scene, soulfray_consented=False)` hands each fired row's
   applied conditions, treatments and removed conditions to the technique payload seams in
   `world.magic.services.condition_application` (the row-override and bonus kwargs, see
-  `docs/systems/magic.md`). SELF is always mapped to the caster. `technique` stays the
-  provenance on everything applied. A team-lane condition row ignores the severity and
-  duration bonuses.
+  `docs/systems/magic.md`). It runs in two passes: every row's conditions and treatments,
+  then every row's removals. Both cast paths call it after the technique's own treatments and
+  before the technique's own removals, so every treatment in the cast runs before any
+  removal. SELF is always mapped to the caster. `technique` stays the provenance on
+  everything applied. A team-lane condition row ignores the severity and duration bonuses.
+  An applied condition whose category `alters_behavior` is skipped here (and logged), as well
+  as refused in authoring: a category can gain the flag, or a condition can move category,
+  after the row was saved, and consent folding never sees a vow row (ADR-4581-A).
 - `vow_damage_profiles(fired)` pairs each fired row's damage profiles with its
   `damage_bonus`; combat's `_apply_damage` runs them through the same per-target loop as the
   technique's and signature's profiles, the bonus added to the budget right after the weapon
-  augment.
+  augment. A vow damage profile receives the caster's weapon augment and a CHARGE
+  maneuver's damage bonus exactly as a technique's or signature's profile does.
 - `record_vow_effect_firings(fired, *, encounter)` spends the limited rows: one
   `CombatParticipant` query for the holders, one `bulk_create`; no query when no fired row is
   limited.

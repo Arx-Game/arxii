@@ -3489,8 +3489,12 @@ apply path.
 
 Callers: `CombatTechniqueResolver._apply_conditions` and `_resolve_and_pose_cast` hand a vow
 row's children through `world.covenants.added_effects.apply_vow_effect_payloads`, which calls
-these three seams once per fired row with that row's bonuses and children. The cast pipeline
-order is unchanged: conditions (technique, signature, vow), treatments, removals.
+these three seams per fired row with that row's bonuses and children: every row's conditions
+and treatments first, then every row's removals. Both callers call it after the technique's
+own treatments and before the technique's own removals, so the cast order is: technique
+conditions, signature conditions, technique treatments, vow conditions and treatments, vow
+removals, technique removals. Every treatment still runs before any removal, so a removal
+never strips the wound a treatment in the same cast was going to mend.
 
 ### Effect Palette (#1584) [BUILT & PROVEN]
 
