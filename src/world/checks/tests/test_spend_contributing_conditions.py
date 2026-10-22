@@ -202,7 +202,7 @@ class KnockoutRollSpendsTests(TestCase):
 _NOT_A_ROLL = {
     # preview grading: previews never spend
     "world/standoffs/services/view.py::_Grader.grade",
-    # records provenance; the roll at :109 carries no condition terms
+    # records provenance; the roll it records carries no condition terms
     "world/mechanics/challenge_resolution.py::_record_challenge_outcome",
 }
 # Calls that settle a breakdown's once-only terms (the second defers to the resume).
@@ -250,8 +250,15 @@ class EverySiteSpendsTests(TestCase):
         src = Path(world.__file__).resolve().parent.parent
         offenders = []
         for path in sorted(src.rglob("*.py")):
-            rel = path.relative_to(src).as_posix()
-            if "/tests/" in rel:
+            relative = path.relative_to(src)
+            rel = relative.as_posix()
+            # Test code calls collect_check_modifiers on purpose (a journey checks a
+            # breakdown), so skip test modules, test packages and integration_tests.
+            if (
+                path.name.startswith("test_")
+                or relative.parts[0] == "integration_tests"
+                or "tests" in relative.parts[:-1]
+            ):
                 continue
             for name, node in _outer_functions(ast.parse(path.read_text())):
                 collects, spends = _call_counts(node)
