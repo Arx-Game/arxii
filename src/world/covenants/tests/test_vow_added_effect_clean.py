@@ -6,7 +6,7 @@ the admin validates a header form before its inline rows exist.
 
 from __future__ import annotations
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.test import TestCase
 
 from world.conditions.factories import ConditionCategoryFactory, ConditionTemplateFactory
@@ -153,6 +153,17 @@ class VowAddedEffectChildCleanTests(TestCase):
         effect = VowAddedEffectFactory(cast_context=VowEffectContext.ANY)
         with self.assertRaises(ValidationError):
             VowAddedEffectDamageProfileFactory.build(effect=effect).full_clean()
+
+    def test_damage_on_an_unsaved_header_that_is_not_in_combat_is_refused(self) -> None:
+        # The admin add path: the header is not saved yet, but the form's context is set.
+        header = VowAddedEffectFactory.build(cast_context=VowEffectContext.ANY)
+        row = VowAddedEffectDamageProfileFactory.build(effect=header)
+        with self.assertRaises(ValidationError) as caught:
+            row.full_clean(exclude=["effect"])
+        self.assertIn(NON_FIELD_ERRORS, caught.exception.message_dict)
+
+    def test_damage_with_no_header_attached_is_skipped_by_clean(self) -> None:
+        VowAddedEffectDamageProfileFactory.build(effect=None).clean()
 
     def test_damage_in_a_fight_is_clean(self) -> None:
         VowAddedEffectDamageProfileFactory.build(effect=self.effect).full_clean()

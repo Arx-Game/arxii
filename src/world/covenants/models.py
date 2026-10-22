@@ -11,7 +11,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
@@ -2691,7 +2691,13 @@ class VowAddedEffectDamageProfile(
     def clean(self) -> None:
         """Damage rides a fight: refuse it on an effect that can fire outside combat."""
         super().clean()
-        if self.effect_id is not None and self.effect.cast_context != VowEffectContext.IN_COMBAT:
+        # An admin "add" submit hands this row the unsaved header (effect_id is still
+        # None), so read the relation itself and skip only when no header is attached.
+        try:
+            effect = self.effect
+        except ObjectDoesNotExist:
+            return
+        if effect.cast_context != VowEffectContext.IN_COMBAT:
             msg = (
                 "A damage row needs its effect's context set to In Combat: damage is "
                 "dealt to a fight's opponents."
