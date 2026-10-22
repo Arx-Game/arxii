@@ -171,17 +171,17 @@ class CmdEvent(ArxCommand):
         event                               - list events visible to you
         event list                          - same as bare ``event``
         event show <id>                     - detail one event (hosts, invitations, RSVPs)
-        event create name=<text> room=<name|id> when=<datetime>
-            [desc=<text>] [public=<yes|no>] [phase=day|dusk|night|dawn]
+        event create name=<text> room=<name or id> when=<datetime>
+            [desc=<text>] [public=<yes or no>] [phase=<day, dusk, night or dawn>]
         event schedule <id>                 - DRAFT → SCHEDULED
         event start <id>                    - SCHEDULED → ACTIVE (spawns the scene)
         event complete <id>                 - ACTIVE → COMPLETED (host / scene GM / staff)
         event cancel <id>                   - DRAFT/SCHEDULED → CANCELLED (host / staff)
-        event invite <id> persona=<name|id> [by=<persona>]
-        event invite <id> org=<name|id>      - or organization= / society=
-        event rsvp <id> accept|decline      - respond to your own persona invitation
-        event grandeur <id> category=<venue|entertainment|favors|decor> amount=<n>
-            [org=<name|id>]                 - spend on the event's grandeur budget
+        event invite <id> persona=<name or id> [by=<persona>]
+        event invite <id> org=<name or id>      - or organization= / society=
+        event rsvp <id> accept or decline      - respond to your own persona invitation
+        event grandeur <id> category=<venue, entertainment, favors or decor> amount=<n>
+            [org=<name or id>]                 - spend on the event's grandeur budget
 
     ``when=`` accepts ISO 8601 or ``YYYY-MM-DD HH:MM``. Room resolves by name
     (caller.search) or numeric id; persona/org/society targets resolve by name
@@ -246,7 +246,7 @@ class CmdEvent(ArxCommand):
         kwargs = _parse_kwargs(rest)
         name = kwargs.get(_KEY_NAME)
         if not name:
-            msg = "Usage: event create name=<text> room=<name|id> when=<datetime> [...]"
+            msg = "Usage: event create name=<text> room=<name or id> when=<datetime> [...]"
             raise CommandError(msg)
         location_id = self._resolve_location_id(kwargs.get(_KEY_ROOM))
         scheduled_real_time = _parse_when(kwargs.get(_KEY_WHEN))
@@ -293,7 +293,7 @@ class CmdEvent(ArxCommand):
 
         parts = rest.split(None, 1)
         if len(parts) < 2 or "=" not in parts[1]:  # noqa: PLR2004
-            msg = "Usage: event invite <id> persona=<name|id> [by=<persona>]  (or org= / society=)"
+            msg = "Usage: event invite <id> persona=<name or id> [by=<persona>] (or org=, society=)"
             raise CommandError(msg)
         event_id = self._parse_id(parts[0], _LABEL_EVENT_ID)
         kwargs = _parse_kwargs(parts[1])
@@ -335,7 +335,7 @@ class CmdEvent(ArxCommand):
         from world.societies.models import Organization  # noqa: PLC0415
 
         usage = (
-            "Usage: event grandeur <id> category=<venue|entertainment|favors|decor> "
+            "Usage: event grandeur <id> category=<venue, entertainment, favors or decor> "
             "amount=<n> [org=<name>]"
         )
         parts = rest.split(None, 1)
@@ -368,7 +368,7 @@ class CmdEvent(ArxCommand):
 
         parts = rest.split()
         if len(parts) != 2:  # noqa: PLR2004
-            msg = "Usage: event rsvp <id> accept|decline"
+            msg = "Usage: event rsvp <id> accept or decline"
             raise CommandError(msg)
         invitation_id = self._parse_id(parts[0], "invitation id")
         choice = parts[1].lower()
@@ -615,8 +615,8 @@ class CmdEvent(ArxCommand):
 
     def _usage(self) -> str:
         return (
-            "Usage: event [list|show <id>|create name=… room=… when=…|"
-            "schedule <id>|start <id>|complete <id>|cancel <id>|"
-            "invite <id> persona=…|rsvp <id> accept|decline|cater <container>|"
+            "Usage: event [list, show <id>, create name=… room=… when=…, "
+            "schedule <id>, start <id>, complete <id>, cancel <id>, "
+            "invite <id> persona=…, rsvp <id> accept or decline, cater <container>, "
             "grandeur <id> category=… amount=…]"
         )

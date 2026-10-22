@@ -5925,7 +5925,9 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
     cosmetic grid coords (never block creation), `like=` exemplar copy
   - `resize_room(persona, room, size)` / `remove_room(persona, room)` (guards:
     entry room, installed feature, active design project, graph connectivity;
-    evicts tenants + contents to `entry_room`)
+    deletes the room's exits both ways, then evicts tenants + contents to
+    `entry_room`; #3657 tranche 19: the exits had moved with the contents, an
+    exit being one, and outlived the room in the entry hall)
   - `link_rooms` / `unlink_rooms` (connectivity-guarded) / `rename_exit`
   - `place_room(persona, room, grid_x, grid_y, floor=None)` (#670 PR2) —
     cosmetic map re-placement (web canvas drag); only guard is cell collision
