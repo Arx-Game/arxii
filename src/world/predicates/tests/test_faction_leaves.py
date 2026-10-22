@@ -23,7 +23,6 @@ from world.societies.factories import (
     OrganizationFactory,
     OrganizationMembershipFactory,
     OrganizationReputationFactory,
-    OrganizationTypeFactory,
     SocietyFactory,
     SocietyReputationFactory,
 )
@@ -118,7 +117,7 @@ class AssociationTests(_Base):
         self.assertTrue(self._associated())
 
     def test_a_covert_organization_never_counts(self) -> None:
-        covert = OrganizationFactory(org_type=OrganizationTypeFactory(is_covert=True))
+        covert = OrganizationFactory(is_covert=True)
         OrganizationMembershipFactory(persona=self.persona, organization=covert)
         self.assertFalse(self._true(_leaf("associated_with_org", org=covert.name)))
 

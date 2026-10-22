@@ -168,7 +168,8 @@ in the command.
 
 ## Covert-org layer (phase 2)
 
-- `OrganizationType.is_covert`; `Organization.parent_org` self-FK (structural
+- `Organization.is_covert` (#4570: a checkbox on the organization; it was on the type);
+  `Organization.parent_org` self-FK (structural
   wings — distinct from `FealtyEdge`). Covert orgs excluded from the public
   org-name search (`events.OrganizationSearchViewSet`); org detail/rosters
   were already members-only.

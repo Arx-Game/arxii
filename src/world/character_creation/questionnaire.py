@@ -90,7 +90,7 @@ def _resolve_pool_groups(slot: OriginTemplateSlot) -> list[Organization]:
     if slot.anchor_society_id:
         qs = qs.filter(society_id=slot.anchor_society_id)
     if slot.exclude_covert:
-        qs = qs.exclude(org_type__is_covert=True)
+        qs = qs.exclude(is_covert=True)
     return list(qs.select_related("family").order_by("name"))
 
 

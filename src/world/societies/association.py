@@ -66,11 +66,7 @@ def _ic_now() -> datetime:
 def _visible_orgs(org_ids: set[int]) -> dict[int, Organization]:
     from world.societies.models import Organization  # noqa: PLC0415
 
-    return {
-        org.pk: org
-        for org in Organization.objects.filter(pk__in=org_ids).select_related("org_type")
-        if not org.org_type.is_covert
-    }
+    return {org.pk: org for org in Organization.objects.filter(pk__in=org_ids, is_covert=False)}
 
 
 def _membership_reason(

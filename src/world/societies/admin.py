@@ -287,7 +287,7 @@ class OrganizationTypeAdmin(admin.ModelAdmin):
     ordering = ["name"]
 
     fieldsets = (
-        (None, {"fields": ("name",)}),
+        (None, {"fields": ("name", "reach")}),
         (
             "Default Rank Titles",
             {
@@ -416,12 +416,15 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
         "society",
         "tradition",
         "org_type",
+        "is_covert",
+        "family",
         "member_count",
     ]
-    list_filter = ["society__realm", "society", "org_type"]
-    search_fields = ["name", "description", "society__name"]
+    list_filter = ["society__realm", "society", "org_type", "is_covert", "house_state"]
+    search_fields = ["name", "description", "society__name", "family__name"]
     ordering = ["society", "name"]
     raw_id_fields = ["tradition"]
+    autocomplete_fields = ["family", "parent_org", "default_succession_law", "patron_nickname"]
     inlines = [
         OrganizationRankInline,
         OrganizationMembershipInline,
@@ -433,7 +436,40 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
     ]
 
     fieldsets = (
-        (None, {"fields": ("name", "society", "org_type", "tradition", "description")}),
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "society",
+                    "org_type",
+                    "is_covert",
+                    "tradition",
+                    "description",
+                )
+            },
+        ),
+        (
+            "House",
+            {
+                "fields": (
+                    "family",
+                    "parent_org",
+                    "house_state",
+                    "published_at",
+                    "default_succession_law",
+                    "patron_nickname",
+                    "words",
+                    "colors",
+                    "sigil_description",
+                ),
+                "description": (
+                    "The kinship family this organization is rooted in and what the "
+                    "Almanach shows for it (#4570). A guild, gang or lodge leaves the "
+                    "family blank."
+                ),
+            },
+        ),
         (
             "Principle Overrides",
             {

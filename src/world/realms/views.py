@@ -76,7 +76,7 @@ class RealmViewSet(viewsets.ReadOnlyModelViewSet):
         """
         realm = self.get_object()
         queryset = Organization.objects.filter(society__realm=realm, covenant__isnull=True)
-        visible = Q(org_type__is_covert=False) | Q(org_type__isnull=True)
+        visible = Q(is_covert=False)
         if request.user.is_authenticated:
             visible |= Q(
                 active_persona_q(request.user, path="memberships__persona"),

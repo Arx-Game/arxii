@@ -542,7 +542,7 @@ class OrganizationSearchViewSet(ListModelMixin, GenericViewSet):
     def get_queryset(self) -> QuerySet[Organization]:
         # Covert orgs (#2820) never surface in public name search — their
         # existence is discoverable only through play (the secrets pipeline).
-        return Organization.objects.exclude(org_type__is_covert=True).all().order_by("name")
+        return Organization.objects.exclude(is_covert=True).all().order_by("name")
 
 
 class SocietySearchViewSet(ListModelMixin, GenericViewSet):

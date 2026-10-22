@@ -92,11 +92,10 @@ class VisibilityTest(TestCase):
 class ResolveGroupsTest(TestCase):
     def test_pool_filters_type_society_and_covert(self):
         gang = OrganizationTypeFactory(name="gang")
-        covert = OrganizationTypeFactory(name="cabal", is_covert=True)
         luxen = SocietyFactory(name="Luxen")
         a = OrganizationFactory(name="A", org_type=gang, society=luxen)
         OrganizationFactory(name="B", org_type=gang, society=SocietyFactory(name="Umbros"))
-        OrganizationFactory(name="C", org_type=covert, society=luxen)
+        OrganizationFactory(name="C", org_type=gang, society=luxen, is_covert=True)
         slot = GroupPromptFactory(
             anchor_source=AnchorSource.POOL, anchor_org_type=gang, anchor_society=luxen
         )

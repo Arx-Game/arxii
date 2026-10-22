@@ -201,21 +201,15 @@ class OrganizationType(NaturalKeyMixin, SharedMemoryModel):
     Typical kind names used elsewhere:
     - noble_family, commoner_family, business, guild, secret_society, gang
     - covenant (used by `Covenant.save()` auto-create)
-    - spy_network, enforcement_wing (covert types, #2820)
+    - spy_network, enforcement_wing (#2820)
+
+    Covertness is ``Organization.is_covert``, not a property of the type (#4570).
     """
 
     name = models.CharField(
         max_length=50,
         unique=True,
         help_text="Unique identifier for this organization type (e.g., 'noble', 'covenant')",
-    )
-    is_covert = models.BooleanField(
-        default=False,
-        help_text=(
-            "Orgs of this type are clandestine (#2820): membership is hidden from "
-            "public surfaces, joining mints a subject-anchored Secret, and the org "
-            "is excluded from non-member listings."
-        ),
     )
     reach = models.CharField(
         max_length=12,
@@ -372,6 +366,16 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="organizations",
         help_text="The type of organization, which determines default rank titles",
+    )
+    is_covert = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "Clandestine (#2820, #4570): membership is hidden from public surfaces, "
+            "joining mints a subject-anchored Secret, and the organization is left out "
+            "of non-member listings. A fact about this organization, not its type: a "
+            "'tradition' type holds an open academy and a secret lodge alike."
+        ),
     )
     patron_nickname = models.ForeignKey(
         "arxii.BeingNickname",

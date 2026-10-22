@@ -112,13 +112,15 @@ class RealmOrganizationsTests(TestCase):
         society = SocietyFactory(name="The Peerage", realm=cls.realm)
         other_society = SocietyFactory(name="Elsewhere", realm=RealmFactory(name="Luxen"))
         noble = OrganizationTypeFactory(name="noble")
-        cls.covert_type = OrganizationTypeFactory(name="cabal", is_covert=True)
         cls.house = OrganizationFactory(
             name="House Veyle", society=society, org_type=noble, words="Dare.", colors="black"
         )
         OrganizationFactory(name="House Elsewhere", society=other_society, org_type=noble)
         cls.cabal = OrganizationFactory(
-            name="The Masquers", society=society, org_type=cls.covert_type
+            name="The Masquers",
+            society=society,
+            org_type=OrganizationTypeFactory(name="cabal"),
+            is_covert=True,
         )
 
     def test_visitor_sees_shop_window_fields_and_no_covert_row(self):

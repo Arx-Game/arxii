@@ -12,11 +12,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.societies.constants import SPYMASTER_OFFICE
-from world.societies.factories import (
-    OrganizationFactory,
-    OrganizationMembershipFactory,
-    OrganizationTypeFactory,
-)
+from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 from world.societies.models import OrganizationRank
 from world.societies.office_services import appoint_office
 from world.tasking.constants import TaskStatus
@@ -81,8 +77,7 @@ class OversightBoardTests(EvenniaTestCase):
         self.account = self.tenure.player_data.account
         self.persona = self.sheet.primary_persona
         self.parent = OrganizationFactory()
-        covert_type = OrganizationTypeFactory(name="wing-type", is_covert=True)
-        self.child = OrganizationFactory(org_type=covert_type, parent_org=self.parent)
+        self.child = OrganizationFactory(is_covert=True, parent_org=self.parent)
         self.child_task = OrgTaskFactory(org=self.child)
         self.client = APIClient()
         self.client.force_authenticate(user=self.account)
@@ -133,8 +128,7 @@ class CovertSearchExclusionTests(EvenniaTestCase):
 
     def test_public_org_search_excludes_covert(self):
         overt = OrganizationFactory(name="Gilded Compass Traders")
-        covert_type = OrganizationTypeFactory(name="covert-search-type", is_covert=True)
-        OrganizationFactory(name="The Unseen Compass", org_type=covert_type)
+        OrganizationFactory(name="The Unseen Compass", is_covert=True)
         response = self.client.get("/api/events/organizations/?name=Compass")
         self.assertEqual(response.status_code, 200)
         names = [r["name"] for r in response.data["results"]]

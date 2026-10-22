@@ -209,7 +209,7 @@ def _org_audiences(org) -> list[str]:
     """Which type audiences an org-target draw includes (#2837)."""
     from world.currency.constants import IncomeStreamKind  # noqa: PLC0415
 
-    criminal = bool(org.org_type_id is not None and org.org_type.is_covert) or (
+    criminal = org.is_covert or (
         org.income_streams.filter(active=True, kind=IncomeStreamKind.CRIME_KICKUP).exists()
     )
     if criminal:
@@ -417,7 +417,7 @@ def crisis_generation_tick(*, rng: random.Random | None = None) -> int:
         OrgIncomeStream.objects.filter(active=True).values_list("organization_id", flat=True)
     )
     orgs = Organization.objects.filter(
-        models.Q(pk__in=stream_org_ids) | models.Q(org_type__is_covert=True)
+        models.Q(pk__in=stream_org_ids) | models.Q(is_covert=True)
     ).distinct()
     for org in orgs:
         if rng.random() * 100 < AMBIENT_ORG_THREAT_PCT * _threat_multiplier(org):
