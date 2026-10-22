@@ -13,6 +13,7 @@ from django.test import TestCase
 from evennia import create_object
 
 from actions.factories import ConsequencePoolFactory
+from actions.models import ConsequencePool
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.models import PositionEdge, Rampart
 from world.areas.positioning.services import place_in_position, position_of
@@ -186,6 +187,25 @@ class BattlefieldMarkersSpentTests(_PlacedCharacterFixture):
 
         self.assertTrue(Trap.objects.filter(position=self.dest).exists())
         self.assertTrue(_gone(marker))
+
+    def test_an_adapter_that_raises_keeps_its_error_and_its_marker(self) -> None:
+        template = ConditionTemplateFactory(
+            name="Broken Scatter 4584", default_duration_type=DurationType.UNTIL_USED
+        )
+        marker = ConditionInstance.objects.create(
+            target=self.room, condition=template, cast_destination=self.dest
+        )
+
+        with self.assertRaises(ConsequencePool.DoesNotExist):
+            create_zone_hazard_on_condition(
+                payload=SimpleNamespace(target=self.room, instance=marker),
+                position_id=0,
+                duration_rounds=3,
+                consequence_pool_id=0,
+                detect_check_type_id=CheckTypeFactory().pk,
+            )
+
+        self.assertFalse(_gone(marker))
 
 
 class SummoningMarkerSpentTests(TestCase):

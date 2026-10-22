@@ -7,6 +7,8 @@ unlike any seed (the handler path or the field designates them), and the blink w
 sits on an NPC opponent's body, which has no sheet.
 """
 
+from unittest.mock import patch
+
 from django.db import transaction
 from django.test import TestCase
 
@@ -14,6 +16,7 @@ from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from world.combat.damage_source import classify_source
 from world.combat.factories import CombatOpponentFactory
 from world.combat.services import apply_damage_to_participant
+from world.conditions import services as condition_services
 from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance, ConditionTemplate
@@ -88,6 +91,43 @@ class ReactiveWardsSpendOnceTests(TestCase):
 
         self.assertEqual(payload.amount, 0)
         self.assertFalse(ConditionInstance.objects.filter(pk=inst.pk).exists())
+
+    def test_a_once_only_barrier_drained_dry_ends_through_the_full_teardown(self) -> None:
+        bearer, _anima = _bearer()
+        template = ConditionTemplateFactory(
+            name="Eggshell Bulwark 4584",
+            reactive_anima_cost=0,
+            default_duration_type=DurationType.UNTIL_USED,
+        )
+        inst = ConditionInstanceFactory(condition=template, target=bearer, absorb_remaining=10)
+        payload = _blow(bearer, 15, DamageSource(type="environment", ref=None))
+
+        with patch.object(
+            condition_services,
+            "_teardown_removed_condition_instance",
+            wraps=condition_services._teardown_removed_condition_instance,
+        ) as teardown:
+            absorb_pool(payload=payload)
+
+        self.assertEqual(payload.amount, 5)
+        teardown.assert_called_once_with(bearer, inst)
+        self.assertFalse(ConditionInstance.objects.filter(pk=inst.pk).exists())
+
+    def test_a_lasting_barrier_with_buffer_left_survives_a_hit(self) -> None:
+        bearer, _anima = _bearer()
+        template = ConditionTemplateFactory(
+            name="Granite Bulwark 4584",
+            reactive_anima_cost=0,
+            default_duration_type=DurationType.UNTIL_END_OF_COMBAT,
+        )
+        inst = ConditionInstanceFactory(condition=template, target=bearer, absorb_remaining=20)
+        payload = _blow(bearer, 5, DamageSource(type="environment", ref=None))
+
+        absorb_pool(payload=payload)
+
+        self.assertEqual(payload.amount, 0)
+        inst.refresh_from_db()
+        self.assertEqual(inst.absorb_remaining, 15)
 
     def test_a_fizzled_ward_is_not_used(self) -> None:
         bearer, anima = _bearer()
