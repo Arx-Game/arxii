@@ -10,7 +10,11 @@
 # to establish that their chosen system bundle contains the vendor fix.
 require_patched_system_ca() {
   local distro minimum installed
-  distro="$(. /etc/os-release 2>/dev/null && printf '%s:%s' "${ID}" "${VERSION_ID}")" \
+  distro="$(
+    # Host-provided OS metadata, not a repository source file.
+    # shellcheck source=/dev/null
+    . /etc/os-release 2>/dev/null && printf '%s:%s' "${ID}" "${VERSION_ID}"
+  )" \
     || fail "cannot identify system CA package; use the updated Ubuntu devcontainer"
   case "${distro}" in
     ubuntu:22.04) minimum=20260816ubuntu0.22.04.1 ;;
