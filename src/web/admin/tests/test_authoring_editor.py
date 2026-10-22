@@ -4,6 +4,7 @@ import re
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +17,9 @@ from world.codex.models import CodexEntry
 from world.contributors.factories import ContentContributorFactory
 from world.skills.factories import SkillFactory
 from world.traits.models import Trait, TraitCategory, TraitType
+
+EN_DASH = "\u2013"
+EM_DASH = "\u2014"
 
 
 def _make_account(username: str, *, superuser: bool = True) -> AccountDB:
@@ -911,3 +915,147 @@ class TestAuthoringEditorReview(AuthoringEditorTestCase):
         self.assertEqual(resp.status_code, 200)
         reviewed_by_id, written_by_id = _db_values(entry.pk, "reviewed_by_id", "written_by_id")
         self.assertEqual(reviewed_by_id, written_by_id)
+
+
+class TestARefusedEditLeavesTheCachedRowAsStored(AuthoringEditorTestCase):
+    """A refused edit must not leave its unsaved text on the identity-mapped row (#4543).
+
+    `_apply_edits` writes the posted prose and name onto the shared `SharedMemoryModel`
+    instance before `full_clean()`. The refusal renders that text back for the writer to
+    fix, and then the row has to read as the database holds it for everyone else: a later
+    `CodexEntry.objects.get()` (a player's codex page, a list of names) and the editor's
+    own next load both go through the identity map, unlike `_db_values`.
+    """
+
+    STORED_SUMMARY = "The stored summary."
+    STORED_LORE = "The stored lore."
+    STORED_NAME = "The Stored Name"
+
+    def setUp(self) -> None:
+        self.entry = self._entry(
+            name=self.STORED_NAME, summary=self.STORED_SUMMARY, lore_content=self.STORED_LORE
+        )
+        self.client.force_login(self.super)
+
+    def _post(self, view: str, **fields: str):
+        return self.client.post(
+            reverse(view), {"model": "codex.CodexEntry", "pk": str(self.entry.pk), **fields}
+        )
+
+    def _assert_every_reader_sees_the_stored_row(self, *refused_text: str) -> None:
+        fresh = CodexEntry.objects.get(pk=self.entry.pk)
+        self.assertEqual(
+            (fresh.name, fresh.summary, fresh.lore_content),
+            (self.STORED_NAME, self.STORED_SUMMARY, self.STORED_LORE),
+        )
+        reopened = self.client.get(
+            reverse("admin_authoring_editor"), {"model": "codex.CodexEntry", "pk": self.entry.pk}
+        ).content.decode()
+        self.assertIn(self.STORED_SUMMARY, reopened)
+        self.assertIn(self.STORED_LORE, reopened)
+        self.assertIn(f'value="{self.STORED_NAME}"', reopened)
+        for text in refused_text:
+            self.assertNotIn(text, reopened)
+
+    def test_a_save_refused_by_full_clean_renders_the_text_back_and_caches_nothing(self) -> None:
+        overlong_summary = "y" * 301
+        resp = self._post(
+            "admin_authoring_editor_save",
+            summary=overlong_summary,
+            lore_content="Lore that was never saved.",
+            name="A Name Never Saved",
+        )
+
+        body = resp.content.decode()
+        self.assertNotIn("Saved.", body)
+        self.assertIn(overlong_summary, body)
+        self.assertIn("Lore that was never saved.", body)
+        self.assertIn('value="A Name Never Saved"', body)
+        self._assert_every_reader_sees_the_stored_row(
+            overlong_summary, "Lore that was never saved.", "A Name Never Saved"
+        )
+
+    def test_a_save_refused_for_a_dashed_name_caches_none_of_its_prose(self) -> None:
+        resp = self._post(
+            "admin_authoring_editor_save",
+            lore_content="Lore typed beside a dashed name.",
+            name=f"New{EM_DASH}Name",
+        )
+
+        body = resp.content.decode()
+        self.assertIn("A name cannot contain an em or en dash; use a hyphen.", body)
+        self.assertIn("Lore typed beside a dashed name.", body)
+        self._assert_every_reader_sees_the_stored_row("Lore typed beside a dashed name.")
+
+    def test_a_credit_refused_by_full_clean_caches_nothing(self) -> None:
+        overlong_summary = "z" * 301
+        resp = self._post(
+            "admin_authoring_editor_credit",
+            summary=overlong_summary,
+            lore_content="Credited lore that was never saved.",
+        )
+
+        self.assertIn(overlong_summary, resp.content.decode())
+        self._assert_every_reader_sees_the_stored_row(
+            overlong_summary, "Credited lore that was never saved."
+        )
+
+    def test_a_credit_refused_for_a_dashed_name_caches_none_of_its_prose(self) -> None:
+        resp = self._post(
+            "admin_authoring_editor_credit",
+            lore_content="Credited lore beside a dashed name.",
+            name=f"New{EN_DASH}Name",
+        )
+
+        self.assertIn(
+            "A name cannot contain an em or en dash; use a hyphen.", resp.content.decode()
+        )
+        self._assert_every_reader_sees_the_stored_row("Credited lore beside a dashed name.")
+
+    def test_the_corrected_save_after_a_refused_rename_still_refreshes_the_queue(self) -> None:
+        """The incident shape from #4457: the corrected save compares against the cached row.
+
+        A refused save that carried a rename left the new name on the cached row, so the
+        corrected save saw no name change and sent no backlog refresh, leaving the queue's
+        name column showing the old name.
+        """
+        self._post("admin_authoring_editor_save", summary="w" * 301, name="The Renamed Entry")
+
+        corrected = self._post(
+            "admin_authoring_editor_save", summary="A fixed summary.", name="The Renamed Entry"
+        )
+
+        self.assertIn("Saved.", corrected.content.decode())
+        self.assertEqual(corrected["HX-Trigger"], "authoring-backlog-changed")
+        self.assertEqual(
+            _db_values(self.entry.pk, "name", "summary"),
+            ("The Renamed Entry", "A fixed summary."),
+        )
+
+    def test_a_save_that_raises_after_full_clean_caches_nothing(self) -> None:
+        """A concurrent write or an outage can still fail the save after `full_clean()`."""
+        with (
+            patch.object(CodexEntry, "save", side_effect=IntegrityError("raced")),
+            self.assertRaises(IntegrityError),
+        ):
+            self._post("admin_authoring_editor_save", lore_content="Lore the database refused.")
+
+        self._assert_every_reader_sees_the_stored_row("Lore the database refused.")
+
+    def test_a_credit_or_review_stamp_whose_save_raises_leaves_no_stamp_cached(self) -> None:
+        """A credited model whose own `save()` calls `clean()` refuses an already-invalid row
+        at the stamp's save; the stamp must not stay on the cached row (#4543 review)."""
+        for view, stamp in (
+            ("admin_authoring_editor_credit", "written_by"),
+            ("admin_authoring_editor_review", "reviewed_by"),
+        ):
+            with self.subTest(view=view):
+                with (
+                    patch.object(
+                        CodexEntry, "save", side_effect=ValidationError("stored row invalid")
+                    ),
+                    self.assertRaises(ValidationError),
+                ):
+                    self._post(view)
+
+                self.assertIsNone(getattr(CodexEntry.objects.get(pk=self.entry.pk), stamp))

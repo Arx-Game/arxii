@@ -544,6 +544,11 @@ ModelForm or formset writes the posted values onto the cached instance, so after
 the errors, per-row `flush_from_cache(force=True)` of each instance the refused form
 mutated is correct (it is not the "flush after save" anti-pattern); use
 `web.admin.authoring.identity_map.flush_refused_instances`, in a `try/finally` around the render.
+A view that assigns posted values onto a saved row by hand (`setattr` then `full_clean()`, no
+form) has the same hazard on every exit after the first assignment, an early refusal included;
+pass the row itself to the same helper (the Authoring Workbench row editor, #4543).
+`refresh_from_db()` does not undo it: its query goes through the identity map, gets the same
+polluted instance back and copies the refused values onto themselves.
 
 **Test-side convention:** a test that intentionally triggers a rollback inside an
 atomic service call and then re-reads the row **must** call
