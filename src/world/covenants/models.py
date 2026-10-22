@@ -19,6 +19,7 @@ from django.utils.functional import cached_property
 from core.managers import ArxSharedMemoryManager, ArxSharedMemoryQuerySet
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.battles.constants import BattleActionKind
 from world.contributors.models import CreditedContent
@@ -35,6 +36,8 @@ from world.covenants.constants import (
     MembershipStanding,
     MentorBondAdjusted,
     RoleArchetype,
+    VowEffectContext,
+    VowEffectFrequency,
 )
 from world.covenants.perks.constants import (
     SITUATION_PARAM_SPECS,
@@ -46,6 +49,11 @@ from world.covenants.perks.constants import (
 from world.covenants.perks.context import SituationParams
 from world.items.constants import GearArchetype
 from world.magic.constants import TechniqueFunction
+from world.magic.models.techniques import (
+    AbstractAppliedCondition,
+    AbstractDamageProfile,
+    ConditionTargetKind,
+)
 from world.magic.specialization.models import AbstractSpecializedVariant
 from world.magic.types.aura import AffinityType
 
@@ -65,6 +73,7 @@ CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 CONDITION_TEMPLATE_MODEL = "arxii.ConditionTemplate"
 GIFT_MODEL = "arxii.Gift"
 VOW_SITUATIONAL_PERK_MODEL = "arxii.VowSituationalPerk"
+VOW_ADDED_EFFECT_MODEL = "arxii.VowAddedEffect"
 MODIFIER_TARGET_MODEL = "arxii.ModifierTarget"
 
 
@@ -2232,6 +2241,355 @@ class VowSituationalPerkRung(SituationRequirementMixin, NaturalKeyMixin, SharedM
 
     def __str__(self) -> str:
         return f"{self.perk.name} rung {self.rung_number}: {self.get_extra_situation_display()}"
+
+
+class VowAddedEffectManager(NaturalKeyManager):
+    """Manager for VowAddedEffect with natural key support."""
+
+
+class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryModel):
+    """Staff-authored payload a covenant vow adds to a technique cast (#4581).
+
+    When a holder of ``covenant_role`` (or a co-present covenant ally, per
+    ``beneficiary``) casts a technique tagged with ``function``, this row's
+    payload children ride the cast: applied conditions, removed conditions,
+    treatments and damage profiles, the same payload shapes a technique
+    carries itself. ``gift`` or ``technique`` narrows the row to one gift's
+    techniques or one technique (never both, the database refuses it).
+    ``cast_context`` limits it to casts in or out of combat; ``situation``
+    (with the ``SituationRequirementMixin`` parameter columns) adds one
+    ``Situation`` that must hold at resolution; ``frequency`` limits how often
+    one holder fires it, through the ``VowAddedEffectFiring`` ledger.
+
+    ``unlock_thread_level`` is the holder's COVENANT_ROLE thread level the row
+    needs; each level above it adds ``severity_per_thread_level`` to applied
+    condition severity, ``duration_per_thread_level`` to their duration and
+    ``damage_per_thread_level`` to each damage profile.
+
+    ``upgrades`` names the row this one replaces for a holder who qualifies
+    for both (a sub-role's row naming its parent role's row, or a later-unlock
+    row on the same role); every row without it adds. One role upgrades a
+    given base at most once, and an upgraded base cannot be deleted out from
+    under another role's upgrade (RESTRICT: deleting the role
+    that owns both a base and its own upgrade still cascades).
+    """
+
+    covenant_role = models.ForeignKey(
+        COVENANT_ROLE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="added_effects",
+    )
+    function = models.CharField(
+        max_length=32,
+        choices=TechniqueFunction.choices,
+        help_text="The technique function tag a cast must carry for this effect to ride it.",
+    )
+    gift = models.ForeignKey(
+        GIFT_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="vow_added_effects",
+        help_text="Narrow to techniques of this gift. Blank = any gift.",
+    )
+    technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="vow_added_effects",
+        help_text="Narrow to this one technique. Blank = any technique. Never set with gift.",
+    )
+    cast_context = models.CharField(
+        max_length=16,
+        choices=VowEffectContext.choices,
+        default=VowEffectContext.ANY,
+        help_text="Whether the cast must be in combat, out of combat, or either.",
+    )
+    situation = models.CharField(
+        max_length=32,
+        choices=Situation.choices,
+        blank=True,
+        default="",
+        help_text="A situation that must also hold when the cast resolves. Blank = none.",
+    )
+    beneficiary = models.CharField(
+        max_length=20,
+        choices=PerkBeneficiary.choices,
+        help_text="Whose casts this rides: the holder's, co-present allies', or both.",
+    )
+    frequency = models.CharField(
+        max_length=16,
+        choices=VowEffectFrequency.choices,
+        default=VowEffectFrequency.EVERY_CAST,
+        help_text="How often one holder's effect may fire.",
+    )
+    unlock_thread_level = models.PositiveIntegerField(
+        default=0,
+        help_text="The holder's vow thread level this effect needs.",
+    )
+    severity_per_thread_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Added to applied condition severity per thread level above the unlock.",
+    )
+    duration_per_thread_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Added to applied condition duration (rounds) per level above the unlock.",
+    )
+    damage_per_thread_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Added to each damage profile per thread level above the unlock.",
+    )
+    upgrades = models.ForeignKey(
+        "self",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="upgraded_by",
+        help_text="The anchor role's effect this sub-role effect replaces when it qualifies.",
+    )
+
+    objects = VowAddedEffectManager()
+
+    class Meta:
+        ordering = ["covenant_role__slug", "function", "unlock_thread_level", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "covenant_role",
+                    "function",
+                    "gift",
+                    "technique",
+                    "cast_context",
+                    "situation",
+                    "beneficiary",
+                    "frequency",
+                    "unlock_thread_level",
+                ],
+                name="vow_added_effect_scope_unique",
+                nulls_distinct=False,
+            ),
+            models.UniqueConstraint(
+                fields=["covenant_role", "upgrades"],
+                condition=models.Q(upgrades__isnull=False),
+                name="vow_added_effect_one_upgrade_per_role",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(gift__isnull=True) | models.Q(technique__isnull=True),
+                name="vow_added_effect_gift_or_technique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = [
+            "covenant_role",
+            "function",
+            "gift",
+            "technique",
+            "cast_context",
+            "situation",
+            "beneficiary",
+            "frequency",
+            "unlock_thread_level",
+        ]
+        dependencies = [COVENANT_ROLE_MODEL, GIFT_MODEL, "arxii.Technique"]
+
+    def __str__(self) -> str:
+        return f"{self.covenant_role.name}: {self.get_function_display()}"
+
+    @PrunedCachedProperty
+    def cached_applied_conditions(self) -> list[VowAddedEffectAppliedCondition]:
+        """Applied condition children; a child's save or delete clears it."""
+        return list(self.applied_conditions.select_related("condition__category"))
+
+    @PrunedCachedProperty
+    def cached_removed_conditions(self) -> list[VowAddedEffectRemovedCondition]:
+        """Removed condition children; a child's save or delete clears it."""
+        return list(
+            self.removed_conditions.select_related("condition", "condition__cure_check_type")
+        )
+
+    @PrunedCachedProperty
+    def cached_treatments(self) -> list[VowAddedEffectTreatment]:
+        """Treatment children; a child's save or delete clears it."""
+        return list(self.treatments.select_related("treatment_template__target_condition"))
+
+    @PrunedCachedProperty
+    def cached_damage_profiles(self) -> list[VowAddedEffectDamageProfile]:
+        """Damage profile children; a child's save or delete clears it."""
+        return list(self.damage_profiles.select_related("damage_type"))
+
+
+class VowAddedEffectAppliedCondition(
+    RelatedCacheClearingMixin, NaturalKeyMixin, AbstractAppliedCondition
+):
+    """A condition a ``VowAddedEffect`` applies when it fires (#4581).
+
+    Same columns and severity/duration formulas as ``TechniqueAppliedCondition``;
+    the header's per-thread-level bonuses are added on top at apply time.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["effect"]
+
+    effect = models.ForeignKey(
+        VOW_ADDED_EFFECT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="applied_conditions",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["effect", "condition", "target_kind"],
+                name="vow_added_effect_applied_condition_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["effect", "condition", "target_kind"]
+        dependencies = [VOW_ADDED_EFFECT_MODEL, CONDITION_TEMPLATE_MODEL]
+
+    def __str__(self) -> str:
+        return f"{self.effect}: applies {self.condition.name} ({self.target_kind})"
+
+
+class VowAddedEffectRemovedCondition(
+    RelatedCacheClearingMixin, NaturalKeyMixin, AbstractAppliedCondition
+):
+    """A condition a ``VowAddedEffect`` strips when it fires (#4581).
+
+    Mirrors ``TechniqueRemovedCondition``: ``remove_all_stacks`` and
+    ``cure_power_multiplier`` are read by the shared removal seam.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["effect"]
+
+    effect = models.ForeignKey(
+        VOW_ADDED_EFFECT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="removed_conditions",
+    )
+    remove_all_stacks = models.BooleanField(
+        default=True,
+        help_text="If True, every stack is removed; if False, one stack is decremented.",
+    )
+    cure_power_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+        help_text="Multiplied by the cast's intensity and added to the opposed cure check.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["effect", "condition", "target_kind"],
+                name="vow_added_effect_removed_condition_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["effect", "condition", "target_kind"]
+        dependencies = [VOW_ADDED_EFFECT_MODEL, CONDITION_TEMPLATE_MODEL]
+
+    def __str__(self) -> str:
+        return f"{self.effect}: removes {self.condition.name} ({self.target_kind})"
+
+
+class VowAddedEffectTreatment(RelatedCacheClearingMixin, NaturalKeyMixin, SharedMemoryModel):
+    """A treatment a ``VowAddedEffect`` performs when it fires (#4581).
+
+    Mirrors ``TechniqueTreatment``.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["effect"]
+
+    effect = models.ForeignKey(
+        VOW_ADDED_EFFECT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="treatments",
+    )
+    treatment_template = models.ForeignKey(
+        "arxii.TreatmentTemplate",
+        on_delete=models.PROTECT,
+        related_name="vow_added_effect_payloads",
+    )
+    target_kind = models.CharField(
+        max_length=16,
+        choices=ConditionTargetKind.choices,
+        default=ConditionTargetKind.ALLY,
+    )
+    minimum_success_level = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum success level required to perform this treatment.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["effect", "treatment_template"],
+                name="vow_added_effect_treatment_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["effect", "treatment_template"]
+        dependencies = [VOW_ADDED_EFFECT_MODEL, "arxii.TreatmentTemplate"]
+
+    def __str__(self) -> str:
+        return f"{self.effect}: treats {self.treatment_template.name} ({self.target_kind})"
+
+
+class VowAddedEffectDamageProfile(
+    RelatedCacheClearingMixin, NaturalKeyMixin, AbstractDamageProfile
+):
+    """A damage component a ``VowAddedEffect`` deals when it fires (#4581).
+
+    Mirrors ``SignatureMotifBonusDamageProfile``: one row per damage type, plus
+    at most one untyped row.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["effect"]
+
+    effect = models.ForeignKey(
+        VOW_ADDED_EFFECT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="damage_profiles",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["effect", "damage_type"],
+                condition=models.Q(damage_type__isnull=False),
+                name="vow_added_effect_damage_profile_per_type",
+            ),
+            models.UniqueConstraint(
+                fields=["effect"],
+                condition=models.Q(damage_type__isnull=True),
+                name="vow_added_effect_untyped_damage_profile",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["effect", "damage_type"]
+        dependencies = [VOW_ADDED_EFFECT_MODEL, "arxii.DamageType"]
+
+    def __str__(self) -> str:
+        type_str = self.damage_type.name if self.damage_type else "untyped"
+        return f"{self.effect}: {self.base_damage} {type_str}"
 
 
 class InsightTableEntryManager(NaturalKeyManager):

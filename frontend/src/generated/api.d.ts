@@ -34175,6 +34175,8 @@ export interface components {
      *     * `perception` - Perception
      *     * `concealment` - Concealment
      *     * `hold` - Hold / Lock
+     *     * `strike` - Strike
+     *     * `mend` - Mend
      * @enum {string}
      */
     FunctionEnum:
@@ -34190,7 +34192,9 @@ export interface components {
       | 'weaken'
       | 'perception'
       | 'concealment'
-      | 'hold';
+      | 'hold'
+      | 'strike'
+      | 'mend';
     FundWardResult: {
       resonance_reserve: number;
     };

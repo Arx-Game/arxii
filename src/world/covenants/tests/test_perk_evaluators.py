@@ -25,7 +25,7 @@ from evennia import create_object
 
 from world.areas.positioning.services import connect_positions, create_position, place_in_position
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import CombatManeuver, ParticipantStatus
+from world.combat.constants import CombatManeuver, OpponentTier, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -1126,3 +1126,47 @@ class AllySentFlyingEvaluatorTests(TestCase):
     def test_false_outside_combat(self) -> None:
         self._mark_sent_flying(self.mate_sheet)
         self.assertFalse(evaluators.ally_sent_flying(self._ctx(None), NO_PARAMS))
+
+
+class TargetIsBossEvaluatorTests(TestCase):
+    """TARGET_IS_BOSS reads the tier of the subject's declared opponent target (#4581)."""
+
+    def setUp(self) -> None:
+        self.room = create_object("typeclasses.rooms.Room", key="TargetIsBossRoom", nohome=True)
+        self.scene = SceneFactory(room=self.room)
+        self.sheet = CharacterSheetFactory()
+        self.encounter = CombatEncounterFactory(scene=self.scene, room=self.room, round_number=1)
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.sheet
+        )
+
+    def _ctx(self, resolution: object | None) -> SituationContext:
+        return SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=resolution
+        )
+
+    def _declare_against(self, tier: str) -> None:
+        CombatRoundActionFactory(
+            participant=self.participant,
+            round_number=1,
+            focused_opponent_target=CombatOpponentFactory(encounter=self.encounter, tier=tier),
+        )
+
+    def test_true_when_the_declared_opponent_is_a_boss(self) -> None:
+        self._declare_against(OpponentTier.BOSS)
+        ctx = self._ctx(CombatRoundContext(self.participant))
+        self.assertTrue(SITUATION_EVALUATORS[Situation.TARGET_IS_BOSS](ctx, NO_PARAMS))
+
+    def test_false_for_an_elite_target(self) -> None:
+        self._declare_against(OpponentTier.ELITE)
+        ctx = self._ctx(CombatRoundContext(self.participant))
+        self.assertFalse(SITUATION_EVALUATORS[Situation.TARGET_IS_BOSS](ctx, NO_PARAMS))
+
+    def test_false_when_no_opponent_was_declared(self) -> None:
+        CombatRoundActionFactory(participant=self.participant, round_number=1)
+        ctx = self._ctx(CombatRoundContext(self.participant))
+        self.assertFalse(SITUATION_EVALUATORS[Situation.TARGET_IS_BOSS](ctx, NO_PARAMS))
+
+    def test_false_outside_combat(self) -> None:
+        self._declare_against(OpponentTier.BOSS)
+        self.assertFalse(SITUATION_EVALUATORS[Situation.TARGET_IS_BOSS](self._ctx(None), NO_PARAMS))
