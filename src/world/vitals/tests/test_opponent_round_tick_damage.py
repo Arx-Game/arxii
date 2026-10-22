@@ -41,7 +41,7 @@ class OpponentRoundTickDamageTests(TestCase):
         ConditionDamageInteractionFactory(
             condition=cls.brittle,
             damage_type=cls.fire,
-            damage_modifier_percent=100,
+            damage_modifier_percent=50,
             removes_condition=True,
         )
         cls.ward = ConditionTemplateFactory(name="Opponent Tick Fire Ward")
@@ -131,13 +131,13 @@ class OpponentRoundTickDamageTests(TestCase):
         self.assertEqual(vitals.health, 100)
 
     def test_a_blow_runs_condition_damage_interactions_on_the_opponent(self) -> None:
-        """Control: the same condition doubles an ordinary hit and is consumed by it."""
+        """Control: the same condition raises an ordinary hit by half and is consumed by it."""
         apply_condition(self.body, self.brittle)
         apply_damage_to_opponent(
             self.opponent, 6, bypass_soak=True, bypass_pre_apply=True, damage_type=self.fire
         )
         self.opponent.refresh_from_db()
-        self.assertEqual(self.opponent.health, 38)
+        self.assertEqual(self.opponent.health, 41)
         self.assertFalse(ConditionInstance.objects.filter(target=self.body).exists())
 
     def test_tick_does_not_run_condition_damage_interactions(self) -> None:
