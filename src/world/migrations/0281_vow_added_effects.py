@@ -370,7 +370,7 @@ class Migration(migrations.Migration):
                     "upgrades",
                     models.ForeignKey(
                         blank=True,
-                        help_text="The anchor role's effect this sub-role effect replaces when it qualifies.",
+                        help_text="The effect this one replaces when its holder qualifies for both: the anchor role's effect (for a sub-role), or an earlier-unlock effect on the same role.",
                         null=True,
                         on_delete=django.db.models.deletion.RESTRICT,
                         related_name="upgraded_by",
