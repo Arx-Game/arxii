@@ -10283,8 +10283,12 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   column (`identity_field_for`); Save and Save and credit apply a rename
   through the model's own `full_clean()`, refusing an em or en dash outright
   before validation runs, and a successful rename refreshes the queue the
-  same way a credit or review stamp does. See the "Authoring Workbench"
-  section in `src/web/admin/CLAUDE.md`.
+  same way a credit or review stamp does. #4557: the Placeholder and All
+  statuses also list rows of uncredited first-party tables whose prose still
+  holds the PLACEHOLDER mark (`backlog.uncredited_placeholder_rows`, one
+  database-filtered query per table), after the credited rows, linked to
+  their admin forms; no marker field, the text is the signal. See the
+  "Authoring Workbench" section in `src/web/admin/CLAUDE.md`.
 - **Stock-admin credit complement (#3020):** every registered credited-model admin
   gets a `credit_status` changelist filter and linked column
   (`world/contributors/admin.py`'s `CreditStatusListFilter`/`credit_status`),
