@@ -597,7 +597,7 @@ class AssignRoomTenantAction(_RoomBuilderAction):
             )
         except RoomEditError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, message=_GRANT_MESSAGES[kind].format(tenant=tenant))
+        return ActionResult(success=True, message=_GRANT_MESSAGES[kind].format(tenant=tenant.name))
 
 
 @dataclass

@@ -433,9 +433,9 @@ def remove_room(*, persona: Persona, room: DefaultObject) -> None:
             reason="issue #3817: intentional atomic write",
             ends_at=now,
         )
-        if entry_obj is not None:
-            for obj in list(room.contents):
-                obj.move_to(entry_obj, quiet=True)
+        # The exits go before the contents move: an exit is one of the room's
+        # contents, so moving first carried the dropped room's own exits into the
+        # entry room, where they outlived it (#3657 tranche 19).
         ObjectDB.objects.filter(
             db_typeclass_path=EXIT_TYPECLASS_PATH,
             db_location=room,
@@ -444,6 +444,9 @@ def remove_room(*, persona: Persona, room: DefaultObject) -> None:
             db_typeclass_path=EXIT_TYPECLASS_PATH,
             db_destination=room,
         ).delete()
+        if entry_obj is not None:
+            for obj in list(room.contents):
+                obj.move_to(entry_obj, quiet=True)
         room.delete()
 
 

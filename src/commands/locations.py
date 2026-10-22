@@ -11,7 +11,7 @@ rhythm, no monster one-liner):
 
   room/dig <direction>=<name> [like=<room>] [size=<tier>]
   room/name <new name>            room/desc <description>
-  room/size <tier>                room/public <yes|no>
+  room/size <tier>                room/public <yes or no>
   room/addexit <room>=<there>,<back>
   room/removeexit <exit>          room/renameexit <exit>=<new name>
   room/drop confirm               room/map [floor]
@@ -19,7 +19,7 @@ rhythm, no monster one-liner):
   room/key <character>            room/trustee <character>
   room/evict <character>          room/extend <units>
   room/decorate <template> [here]         room/style <style name>
-  room/renovate <kind name|id>
+  room/renovate <kind name or id>
   room/settle [confirm]           room/refurbish [confirm]
   room/prepare [confirm]          room/ultraupkeep
   room/aura <resonance>           room/aura clear <resonance>
@@ -35,7 +35,7 @@ from commands.exceptions import CommandError
 _USAGE = (
     "Usage:\n"
     "  room/dig <direction>=<name> [like=<room>] [size=<tier>]\n"
-    "  room/name <new name>  ·  room/desc <text>  ·  room/public <yes|no>\n"
+    "  room/name <new name>  ·  room/desc <text>  ·  room/public <yes or no>\n"
     "  room/size <tier>  ·  room/drop confirm  ·  room/map [floor]\n"
     "  room/addexit <room>=<there>,<back>  ·  room/removeexit <exit>\n"
     "  room/renameexit <exit>=<new name>\n"
@@ -43,7 +43,7 @@ _USAGE = (
     "  room/trustee <character>  ·  room/evict <character>\n"
     "  room/extend <units>  ·  room/decorate <template> [here]\n"
     "  room/style <style name>  ·  room/fixture <kind>  ·  room/removefixture <kind>\n"
-    "  room/renovate <kind name|id>\n"
+    "  room/renovate <kind name or id>\n"
     "  room/settle [confirm]  ·  room/refurbish [confirm]  ·  room/prepare [confirm]\n"
     "  room/ultraupkeep\n"
     "  room/aura <resonance>  ·  room/aura clear <resonance>"
@@ -140,7 +140,7 @@ class CmdRoom(ArxCommand):
 
     def _public(self, args: str) -> None:
         if not args:
-            msg = "Use 'room/public <yes|no>'."
+            msg = "Use 'room/public <yes or no>'."
             raise CommandError(msg)
         self._edit(is_public=args.lower() in _AFFIRMATIVE, error="")
 
@@ -234,10 +234,7 @@ class CmdRoom(ArxCommand):
     def _active_persona_of(self, char_name: str) -> Any:
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        target = self.caller.search(char_name)
-        if not target:
-            msg = f"Could not find '{char_name}'."
-            raise CommandError(msg)
+        target = self.search_or_raise(char_name)
         sheet = target.character_sheet
         if sheet is None:
             msg = f"'{char_name}' has no character sheet."
@@ -280,7 +277,7 @@ class CmdRoom(ArxCommand):
             )
         )
         if not grants:
-            msg = f"{persona} holds no grant here."
+            msg = f"{persona.name} holds no grant here."
             raise CommandError(msg)
         # Concurrent grants are legal by design, and since #3902 they can differ in
         # rung -- somebody may hold a tenancy AND a guest key to the same place. The
