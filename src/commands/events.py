@@ -293,7 +293,7 @@ class CmdEvent(ArxCommand):
 
         parts = rest.split(None, 1)
         if len(parts) < 2 or "=" not in parts[1]:  # noqa: PLR2004
-            msg = "Usage: event invite <id> persona=<name|id> [by=<persona>]  (or org= / society=)"
+            msg = "Usage: event invite <id> persona=<name or id> [by=<persona>] (or org=, society=)"
             raise CommandError(msg)
         event_id = self._parse_id(parts[0], _LABEL_EVENT_ID)
         kwargs = _parse_kwargs(parts[1])
@@ -335,7 +335,7 @@ class CmdEvent(ArxCommand):
         from world.societies.models import Organization  # noqa: PLC0415
 
         usage = (
-            "Usage: event grandeur <id> category=<venue|entertainment|favors|decor> "
+            "Usage: event grandeur <id> category=<venue, entertainment, favors or decor> "
             "amount=<n> [org=<name>]"
         )
         parts = rest.split(None, 1)
@@ -368,7 +368,7 @@ class CmdEvent(ArxCommand):
 
         parts = rest.split()
         if len(parts) != 2:  # noqa: PLR2004
-            msg = "Usage: event rsvp <id> accept|decline"
+            msg = "Usage: event rsvp <id> accept or decline"
             raise CommandError(msg)
         invitation_id = self._parse_id(parts[0], "invitation id")
         choice = parts[1].lower()
@@ -615,8 +615,8 @@ class CmdEvent(ArxCommand):
 
     def _usage(self) -> str:
         return (
-            "Usage: event [list|show <id>|create name=… room=… when=…|"
-            "schedule <id>|start <id>|complete <id>|cancel <id>|"
-            "invite <id> persona=…|rsvp <id> accept|decline|cater <container>|"
+            "Usage: event [list, show <id>, create name=… room=… when=…, "
+            "schedule <id>, start <id>, complete <id>, cancel <id>, "
+            "invite <id> persona=…, rsvp <id> accept or decline, cater <container>, "
             "grandeur <id> category=… amount=…]"
         )
