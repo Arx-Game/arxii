@@ -230,8 +230,6 @@ class KnockoutRollSpendsTests(TestCase):
         self.assertFalse(ConditionInstance.objects.filter(pk=blessing_pk).exists())
 
 
-# Functions that call ``collect_check_modifiers`` without a roll of their own to spend on,
-# as "file::function" (a method is "file::Class.method").
 class BatchForgetsAMarkerItsFlowSpentTests(TestCase):
     """A marker its own CONDITION_APPLIED flow spends is gone for the rest of the batch."""
 
@@ -270,6 +268,8 @@ class BatchForgetsAMarkerItsFlowSpentTests(TestCase):
         self.assertEqual(standing.stacks, 1)
 
 
+# Functions that call ``collect_check_modifiers`` without a roll of their own to spend on,
+# as "file::function" (a method is "file::Class.method").
 _NOT_A_ROLL = {
     # preview grading: previews never spend
     "world/standoffs/services/view.py::_Grader.grade",
