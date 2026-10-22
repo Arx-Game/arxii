@@ -100,7 +100,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.app_domains import credited_content_models, domain_of, resolve_model_by_name
 from core.identifier_dashes import contains_dash
 from core_management.prose_fields import prose_fields_for
-from web.admin.authoring.backlog import BacklogRow, build_backlog
+from web.admin.authoring.backlog import BacklogRow, build_backlog, uncredited_placeholder_rows
 from web.admin.authoring.contributors import current_contributor, link_contributor
 from web.admin.authoring.identity_map import flush_refused_instances
 from web.admin.authoring.links import admin_change_url, workbench_page_url
@@ -284,6 +284,24 @@ def _filtered_rows(rows: list[BacklogRow], filters: QueueFilters) -> list[Backlo
     return [row for row in rows if filters.matches(row)]
 
 
+# The statuses that list placeholder text, and so reach tables with no credit columns.
+_STATUSES_WITH_UNCREDITED = frozenset({BacklogStatusFilter.PLACEHOLDER, BacklogStatusFilter.ALL})
+
+
+def _queue_rows(filters: QueueFilters) -> list[BacklogRow]:
+    """Every row the queue can list under `filters`' status, before the other filters.
+
+    The credited backlog, then (for the placeholder and all statuses) the rows of tables
+    with no credit columns that still hold PLACEHOLDER (#4557). Those go last so a
+    credited row keeps the same index in the list whichever status opened it, and the
+    queue and the editor's Next control both read this one list.
+    """
+    rows, _ = build_backlog()
+    if filters.status in _STATUSES_WITH_UNCREDITED:
+        rows.extend(uncredited_placeholder_rows())
+    return rows
+
+
 def _model_options(rows: list[BacklogRow], domain: str) -> list[dict]:
     """The `<option>` set for the model filter, narrowed to `domain` when one is picked.
 
@@ -325,7 +343,8 @@ def _queue_row(row: BacklogRow, pos: int, filters: QueueFilters) -> dict:
     """
     return {
         "row": row,
-        "editor_url": _editor_url(row.model_label, row.pk, filters, pos),
+        # A table with no credit columns has no Workbench editor; its admin form is the link.
+        "editor_url": _editor_url(row.model_label, row.pk, filters, pos) if row.credited else None,
         "admin_url": admin_change_url(row.model_label, row.pk),
     }
 
@@ -379,9 +398,9 @@ def authoring_queue_fragment(request: HttpRequest) -> HttpResponse:
     `hx-get` (see `_queue_panel.html`), so the filter form lives inside the
     fragment template the same way the tuning panels' forms do.
     """
-    rows, _ = build_backlog()
-    domains = sorted({row.domain for row in rows})
     filters = QueueFilters.from_params(request.GET)
+    rows = _queue_rows(filters)
+    domains = sorted({row.domain for row in rows})
 
     filtered = _filtered_rows(rows, filters)
     total = len(filtered)
@@ -531,6 +550,7 @@ class _QueueNav:
     scope_label: str
     position: int | None = None
     next_url: str | None = None
+    next_admin_url: str | None = None
     next_identity: str = ""
     next_position: int | None = None
     exhausted_text: str = ""
@@ -563,11 +583,10 @@ def _queue_nav(target: _EditorTarget, filters: QueueFilters, pos: int | None) ->
     - neither: a deep link with no queue context, and the head of the list is
       the most useful place to send the writer.
 
-    One `build_backlog()` scan per editor request, the same cost the queue panel
+    One `_queue_rows()` scan per editor request, the same cost the queue panel
     already pays; the module docstring of `backlog.py` owns the scale ceiling.
     """
-    rows, _ = build_backlog()
-    filtered = _filtered_rows(rows, filters)
+    filtered = _filtered_rows(_queue_rows(filters), filters)
     label = f"{domain_of(target.model)}.{target.model.__name__}"
     current_pk = target.instance.pk
     index = next(
@@ -589,10 +608,16 @@ def _queue_nav(target: _EditorTarget, filters: QueueFilters, pos: int | None) ->
     )
     if next_pos < len(filtered):
         successor = filtered[next_pos]
-        nav.next_url = _editor_url(successor.model_label, successor.pk, filters, next_pos)
-        nav.next_identity = successor.identity
-        nav.next_position = next_pos + 1
-        return nav
+        if successor.credited:
+            nav.next_url = _editor_url(successor.model_label, successor.pk, filters, next_pos)
+        else:
+            # The editor cannot open a table with no credit columns, so Next leaves the
+            # Workbench for that row's own admin form (#4557).
+            nav.next_admin_url = admin_change_url(successor.model_label, successor.pk)
+        if nav.next_url or nav.next_admin_url:
+            nav.next_identity = successor.identity
+            nav.next_position = next_pos + 1
+            return nav
 
     text = _EXHAUSTED_TEXT.get(filters.status, "Nothing left")
     nav.exhausted_text = f"{text} in {filters.domain}." if filters.domain else f"{text}."

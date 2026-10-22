@@ -25,6 +25,15 @@ tier; the queue panel's model filter (`web.admin.authoring.views`) is what
 collapses that to a single model's rows, worst-first, with nothing else
 interleaved.
 
+Tables outside credit (#4557). Many authored tables carry no credit columns
+(spy task templates, crisis types, proclamation stances, edicts and the like), so
+the scan above never reaches them. ``uncredited_placeholder_rows`` covers them for
+the one question that needs no credit: which rows still hold the literal
+PLACEHOLDER mark. It is deliberately not a "rewritten" flag. A row is listed while
+its text carries the mark and drops out the moment a save removes it, so staff
+have nothing to tick (ruling on #4557). Each model is one query filtered in the
+database, so a table of play rows returns nothing to Python rather than every row.
+
 Scale ceiling: today's corpus is on the order of 2k rows and 70k prose words
 across credited models, and this whole module does one full Python-side scan
 and sort per call with no caching - fine at that size. If the corpus grows an
@@ -36,7 +45,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import reduce
+import operator
 from typing import TYPE_CHECKING
+
+from django.apps import apps as dj_apps
+from django.db.models import Q
 
 from core.app_domains import credited_content_models, domain_of
 from core_management.content_export import _natural_key_fields
@@ -60,6 +74,9 @@ class BacklogRow:
     has_placeholder: bool
     written: bool
     reviewed: bool
+    # False for a row of a table with no credit columns (#4557): it is listed only for
+    # its placeholder text, is edited on its own admin form, and has no credit to stamp.
+    credited: bool = True
 
 
 @dataclass
@@ -113,6 +130,24 @@ def _row_identity(pk: int, key_fields: list[str] | None, key_values: tuple) -> s
     if not key_fields:
         return str(pk)
     return ", ".join(str(v) for v in key_values)
+
+
+# The column most tables outside credit name their rows by.
+_NAME_FIELD = "name"
+
+
+def _identity_fields(model: type) -> list[str] | None:
+    """The natural key, else a plain ``name`` column, else None (the pk shows instead).
+
+    Most tables outside credit carry no natural key but do carry a ``name``, and
+    "Watch the Docks" tells a writer more than a bare pk.
+    """
+    key_fields = _natural_key_fields(model)
+    if key_fields:
+        return key_fields
+    if any(f.name == _NAME_FIELD for f in model._meta.concrete_fields):  # noqa: SLF001
+        return [_NAME_FIELD]
+    return None
 
 
 def _rows_for_model(model: type, scope: Callable[[QuerySet], QuerySet] | None) -> list[BacklogRow]:
@@ -204,3 +239,73 @@ def build_backlog(
         )
     )
     return rows, _aggregate(rows)
+
+
+def _uncredited_prose_models() -> list[type]:
+    """Concrete first-party models with prose fields that carry no credit columns."""
+    from world.contributors.models import CreditedContent  # noqa: PLC0415
+
+    credited = set(credited_content_models())
+    # The app that owns credit is the single first-party app (ADR-0195).
+    first_party = dj_apps.get_app_config(CreditedContent._meta.app_label)  # noqa: SLF001
+    found = [
+        model
+        for model in first_party.get_models()
+        if model not in credited
+        and not model._meta.proxy  # noqa: SLF001
+        and model._meta.managed  # noqa: SLF001
+        and prose_fields_for(model)
+    ]
+    return sorted(found, key=lambda m: (domain_of(m), m.__name__.lower()))
+
+
+def _uncredited_rows_for_model(
+    model: type, scope: Callable[[QuerySet], QuerySet] | None
+) -> list[BacklogRow]:
+    prose_names = prose_fields_for(model)
+    key_fields = _identity_fields(model)
+    key_count = len(key_fields) if key_fields else 0
+    key_columns = [_display_column(model, name) for name in (key_fields or [])]
+
+    marked = reduce(
+        operator.or_, (Q(**{f"{name}__contains": PLACEHOLDER_MARK}) for name in prose_names)
+    )
+    queryset = model.objects.filter(marked).order_by("pk")
+    if scope is not None:
+        queryset = scope(queryset)
+
+    domain = domain_of(model)
+    model_name = model.__name__
+    rows: list[BacklogRow] = []
+    for values in queryset.values_list("pk", *key_columns, *prose_names):
+        prose_values = values[1 + key_count :]
+        rows.append(
+            BacklogRow(
+                model_label=f"{domain}.{model_name}",
+                model_name=model_name,
+                domain=domain,
+                pk=values[0],
+                identity=_row_identity(values[0], key_fields, values[1 : 1 + key_count]),
+                words=sum(len(str(v).split()) for v in prose_values if v),
+                has_placeholder=True,
+                written=False,
+                reviewed=False,
+                credited=False,
+            )
+        )
+    return rows
+
+
+def uncredited_placeholder_rows(
+    scope: Callable[[QuerySet], QuerySet] | None = None,
+) -> list[BacklogRow]:
+    """Rows of tables with no credit columns whose prose still holds PLACEHOLDER (#4557).
+
+    One database-filtered query per model, sorted by domain, model, then pk - the
+    same grouping as ``build_backlog``'s tiers. Kept out of ``build_backlog`` so the
+    per-domain stats (a credit rollup) never count rows nobody can be credited for.
+    """
+    rows: list[BacklogRow] = []
+    for model in _uncredited_prose_models():
+        rows.extend(_uncredited_rows_for_model(model, scope))
+    return rows

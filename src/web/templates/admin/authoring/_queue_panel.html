@@ -74,6 +74,9 @@ to zero, and finished work never inflates what is left.
 </h2>
 <p>
   {% translate "Worst-first: placeholder-marked rows first, then unwritten, then written but unreviewed." %}
+  {% if selected_status == "placeholder" or selected_status == "all" %}
+  {% translate "Placeholder text in tables with no credit (task templates, crisis types and the like) is listed last and opens on the row's own admin form. A row leaves the list when its text no longer says PLACEHOLDER." %}
+  {% endif %}
 </p>
 
 {% comment %}
@@ -146,11 +149,17 @@ writer lost their domain on every credited row.
     {% for entry in rows %}
     <tr data-row="{{ entry.row.model_label }}:{{ entry.row.pk }}">
       <td>
+        {% if entry.editor_url %}
         <a href="#authoring-editor"
            hx-get="{{ entry.editor_url }}"
            hx-target="#authoring-editor" hx-swap="innerHTML show:top">
           {{ entry.row.identity }}
         </a>
+        {% elif entry.admin_url %}
+        <a href="{{ entry.admin_url }}">{{ entry.row.identity }}</a>
+        {% else %}
+        {{ entry.row.identity }}
+        {% endif %}
       </td>
       <td>{{ entry.row.model_name }}</td>
       <td>{{ entry.row.domain }}</td>
@@ -159,10 +168,12 @@ writer lost their domain on every credited row.
         {% if entry.row.has_placeholder %}
         <span class="badge badge-placeholder">{% translate "Placeholder" %}</span>
         {% endif %}
+        {% if entry.row.credited %}
         {% if not entry.row.written %}
         <span class="badge">{% translate "Unwritten" %}</span>
         {% elif not entry.row.reviewed %}
         <span class="badge">{% translate "Unreviewed" %}</span>
+        {% endif %}
         {% endif %}
       </td>
       <td>
