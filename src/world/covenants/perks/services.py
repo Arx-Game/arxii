@@ -114,8 +114,26 @@ _SELF_BENEFICIARIES = frozenset({PerkBeneficiary.SELF, PerkBeneficiary.WHOLE_GRO
 #: holder's own — the mate query structurally excludes the subject).
 _ALLY_BENEFICIARIES = frozenset({PerkBeneficiary.COVENANT_ALLIES, PerkBeneficiary.WHOLE_GROUP})
 
-# (covenant_role_id, holder, beneficiaries-that-count-for-this-candidate, is_secondary)
-_Candidate = tuple[int, "CharacterSheet", frozenset[str], bool]
+
+@dataclass(frozen=True)
+class VowHolderCandidate:
+    """One (role, holder) pair whose vow can answer for a subject's resolution (#4581).
+
+    ``role_id`` is the role whose authored rows apply (an anchor role or a
+    resolved sub-role). ``anchor_role_id`` is that role's anchor: the parent's
+    pk for a sub-role, the role's own pk otherwise. COVENANT_ROLE threads key
+    on the anchor, so ``(holder.pk, anchor_role_id)`` is the key into
+    ``vow_holder_thread_levels``. ``beneficiaries`` is the set of
+    ``PerkBeneficiary`` values that count for this candidate (the holder's own
+    action, or a mate's). ``is_secondary`` is True when the candidate came from
+    a SECONDARY membership (#2641).
+    """
+
+    role_id: int
+    anchor_role_id: int
+    holder: CharacterSheet
+    beneficiaries: frozenset[str]
+    is_secondary: bool
 
 
 @dataclass(frozen=True)
@@ -174,25 +192,73 @@ def applicable_perks(
     holder's ``SituationContext`` so the ``ATTACKER_AFFINITY`` evaluator can
     read it.
     """
-    candidates = _self_candidates(subject) + _ally_candidates(subject, resolution)
+    candidates = vow_holder_candidates(subject, resolution)
     if not candidates:
         return []
 
     kinds = (effect_kind,) if isinstance(effect_kind, str) else tuple(effect_kind)
-    role_ids = {role_id for role_id, _holder, _beneficiaries, _is_secondary in candidates}
-    perks_by_role = _fetch_candidate_perks(role_ids, kinds)
+    perks_by_role = _fetch_candidate_perks({c.role_id for c in candidates}, kinds)
     if not perks_by_role:
         return []
 
     resolver = _PerkResolver(
         subject=subject, target=target, resolution=resolution, attacker=attacker
     )
+    return _resolve_candidate_perks(candidates, perks_by_role, resolver)
+
+
+def vow_holder_candidates(
+    subject: CharacterSheet, resolution: object | None
+) -> list[VowHolderCandidate]:
+    """Every (role, holder) pair whose vow can answer for ``subject``'s resolution (#4581).
+
+    The subject's own engaged roles (anchor and resolved sub-role, see
+    ``_self_candidates``) followed by every co-present covenant-mate's roles
+    (``_ally_candidates``); the same set ``applicable_perks`` walks, with the
+    same queries (the module docstring's query-discipline section). Thread
+    levels are NOT read here; call ``vow_holder_thread_levels`` for those, so
+    the perk pipeline's query ceilings stay as they are.
+    """
+    return _self_candidates(subject) + _ally_candidates(subject, resolution)
+
+
+def vow_holder_thread_levels(candidates: list[VowHolderCandidate]) -> dict[tuple[int, int], int]:
+    """Each candidate holder's live COVENANT_ROLE thread level on its anchor role (#4581).
+
+    Keyed ``(holder.pk, anchor_role_id)``; a pair with no active thread is
+    omitted, so callers read ``.get(key, 0)``. ONE ``Thread`` query across every
+    candidate (none when ``candidates`` is empty). The DB's one-active-thread
+    per (owner, role) constraint means each key has at most one level.
+    """
+    if not candidates:
+        return {}
+
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    rows = Thread.objects.filter(
+        owner_id__in={c.holder.pk for c in candidates},
+        target_kind=TargetKind.COVENANT_ROLE,
+        target_covenant_role_id__in={c.anchor_role_id for c in candidates},
+        retired_at__isnull=True,
+    ).values_list("owner_id", "target_covenant_role_id", "level")
+    return {(owner_id, role_id): level for owner_id, role_id, level in rows}
+
+
+def _resolve_candidate_perks(
+    candidates: list[VowHolderCandidate],
+    perks_by_role: dict[int, list[VowSituationalPerk]],
+    resolver: _PerkResolver,
+) -> list[FiredPerk]:
+    """Resolve every fetched perk against each candidate whose beneficiaries allow it."""
     fired: list[FiredPerk] = []
-    for role_id, holder, allowed_beneficiaries, is_secondary in candidates:
-        for perk in perks_by_role.get(role_id, ()):
-            if perk.beneficiary not in allowed_beneficiaries:
+    for candidate in candidates:
+        for perk in perks_by_role.get(candidate.role_id, ()):
+            if perk.beneficiary not in candidate.beneficiaries:
                 continue
-            result = resolver.resolve(perk, holder=holder, is_secondary=is_secondary)
+            result = resolver.resolve(
+                perk, holder=candidate.holder, is_secondary=candidate.is_secondary
+            )
             if result is not None:
                 fired.append(result)
     return fired
@@ -294,22 +360,14 @@ def dormant_perk_firings(  # noqa: PLR0913 - applicable_perks' resolution/target
         return []
 
     kinds = (effect_kind,) if isinstance(effect_kind, str) else tuple(effect_kind)
-    role_ids = {role_id for role_id, _holder, _beneficiaries, _is_secondary in candidates}
-    perks_by_role = _fetch_candidate_perks(role_ids, kinds)
+    perks_by_role = _fetch_candidate_perks({c.role_id for c in candidates}, kinds)
     if not perks_by_role:
         return []
 
     resolver = _PerkResolver(
         subject=subject, target=target, resolution=resolution, attacker=attacker
     )
-    fired: list[FiredPerk] = []
-    for role_id, holder, allowed_beneficiaries, is_secondary in candidates:
-        for perk in perks_by_role.get(role_id, ()):
-            if perk.beneficiary not in allowed_beneficiaries:
-                continue
-            result = resolver.resolve(perk, holder=holder, is_secondary=is_secondary)
-            if result is not None:
-                fired.append(result)
+    fired = _resolve_candidate_perks(candidates, perks_by_role, resolver)
     if not fired:
         return []
 
@@ -358,7 +416,7 @@ def announce_dormant_perks(dormant: list[FiredPerk], *, subject: CharacterSheet)
         )
 
 
-def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:
+def _self_candidates(subject: CharacterSheet) -> list[VowHolderCandidate]:
     """Subject's own engaged roles — anchor AND resolved sub-role both apply.
 
     One query (the covenant-roles handler's cached ``active_memberships``) +
@@ -370,32 +428,66 @@ def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:
     graduation never apply to a secondary vow). Tagged ``is_secondary=True``
     so the resolver can potency-scale the firing.
     """
+    return _own_candidates(subject, engaged=True)
+
+
+def _own_candidates(subject: CharacterSheet, *, engaged: bool) -> list[VowHolderCandidate]:
+    """The subject's own active memberships whose ``engaged`` flag equals ``engaged``.
+
+    Shared body of ``_self_candidates`` (engaged) and ``_dormant_self_candidates``
+    (disengaged). A primary membership yields its stored role and its resolved
+    sub-role (one candidate when they are the same row); a secondary yields its
+    stored role only. Each candidate's anchor is the stored role's parent when
+    the stored role is itself a sub-role, else the stored role.
+    """
     character = subject.character
     if character is None:
         return []
 
     from world.covenants.services import resolve_effective_role  # noqa: PLC0415
 
-    primary_role_ids: set[int] = set()
-    secondary_role_ids: set[int] = set()
+    # role_id -> anchor_role_id; dicts keep the set semantics (one candidate per
+    # role per lane) the earlier set-based gatherer had.
+    primary_roles: dict[int, int] = {}
+    secondary_roles: dict[int, int] = {}
     for membership in character.covenant_roles.active_memberships:
-        if not membership.engaged:
+        if membership.engaged != engaged:
             continue
+        stored_role = membership.covenant_role
+        anchor_role_id = (
+            stored_role.parent_role_id if stored_role.parent_role_id is not None else stored_role.pk
+        )
         if membership.is_secondary:
-            secondary_role_ids.add(membership.covenant_role_id)
+            secondary_roles[membership.covenant_role_id] = anchor_role_id
             continue
-        primary_role_ids.add(membership.covenant_role_id)
-        resolved_role = resolve_effective_role(character=character, role=membership.covenant_role)
-        primary_role_ids.add(resolved_role.pk)
+        primary_roles[membership.covenant_role_id] = anchor_role_id
+        resolved_role = resolve_effective_role(character=character, role=stored_role)
+        primary_roles[resolved_role.pk] = anchor_role_id
 
-    candidates = [(role_id, subject, _SELF_BENEFICIARIES, False) for role_id in primary_role_ids]
+    candidates = [
+        VowHolderCandidate(
+            role_id=role_id,
+            anchor_role_id=anchor_role_id,
+            holder=subject,
+            beneficiaries=_SELF_BENEFICIARIES,
+            is_secondary=False,
+        )
+        for role_id, anchor_role_id in primary_roles.items()
+    ]
     candidates.extend(
-        (role_id, subject, _SELF_BENEFICIARIES, True) for role_id in secondary_role_ids
+        VowHolderCandidate(
+            role_id=role_id,
+            anchor_role_id=anchor_role_id,
+            holder=subject,
+            beneficiaries=_SELF_BENEFICIARIES,
+            is_secondary=True,
+        )
+        for role_id, anchor_role_id in secondary_roles.items()
     )
     return candidates
 
 
-def _dormant_self_candidates(subject: CharacterSheet) -> list[_Candidate]:
+def _dormant_self_candidates(subject: CharacterSheet) -> list[VowHolderCandidate]:
     """Subject's own DISENGAGED (but still active) roles — the dormant-vow
     mirror of ``_self_candidates`` (#2536 slice 3, Task 7, ruling 2's "loud
     OFF state"). Same anchor + resolved sub-role ADD semantics, same
@@ -412,32 +504,12 @@ def _dormant_self_candidates(subject: CharacterSheet) -> list[_Candidate]:
     this never issues a query of its own (the every-check fast path the
     module docstring's query-discipline section documents for the live path).
     """
-    character = subject.character
-    if character is None:
-        return []
-
-    from world.covenants.services import resolve_effective_role  # noqa: PLC0415
-
-    primary_role_ids: set[int] = set()
-    secondary_role_ids: set[int] = set()
-    for membership in character.covenant_roles.active_memberships:
-        if membership.engaged:
-            continue
-        if membership.is_secondary:
-            secondary_role_ids.add(membership.covenant_role_id)
-            continue
-        primary_role_ids.add(membership.covenant_role_id)
-        resolved_role = resolve_effective_role(character=character, role=membership.covenant_role)
-        primary_role_ids.add(resolved_role.pk)
-
-    candidates = [(role_id, subject, _SELF_BENEFICIARIES, False) for role_id in primary_role_ids]
-    candidates.extend(
-        (role_id, subject, _SELF_BENEFICIARIES, True) for role_id in secondary_role_ids
-    )
-    return candidates
+    return _own_candidates(subject, engaged=False)
 
 
-def _ally_candidates(subject: CharacterSheet, resolution: object | None) -> list[_Candidate]:
+def _ally_candidates(
+    subject: CharacterSheet, resolution: object | None
+) -> list[VowHolderCandidate]:
     """Covenant-mates grouped with ``subject`` for this resolution.
 
     See the module docstring's "What counts as a covenant-mate" — a
@@ -479,14 +551,26 @@ def _ally_candidates(subject: CharacterSheet, resolution: object | None) -> list
         return []
 
     candidates = [
-        (row.covenant_role_id, row.character_sheet, _ALLY_BENEFICIARIES, row.is_secondary)
+        VowHolderCandidate(
+            role_id=row.covenant_role_id,
+            anchor_role_id=(
+                row.covenant_role.parent_role_id
+                if row.covenant_role.parent_role_id is not None
+                else row.covenant_role_id
+            ),
+            holder=row.character_sheet,
+            beneficiaries=_ALLY_BENEFICIARIES,
+            is_secondary=row.is_secondary,
+        )
         for row in mate_rows
     ]
     candidates.extend(_ally_sub_role_candidates(mate_rows))
     return candidates
 
 
-def _ally_sub_role_candidates(mate_rows: list[CharacterCovenantRole]) -> list[_Candidate]:
+def _ally_sub_role_candidates(
+    mate_rows: list[CharacterCovenantRole],
+) -> list[VowHolderCandidate]:
     """Resolved sub-role candidates for ``mate_rows`` — the ally-side mirror
     of ``_self_candidates``' anchor+sub-role ADD semantics (#2536 review: a
     perk authored on a mate's sub-role — e.g. a level-3 resonance vow — must
@@ -541,7 +625,7 @@ def _ally_sub_role_candidates(mate_rows: list[CharacterCovenantRole]) -> list[_C
     if not threads_by_owner_role:
         return []
 
-    candidates: list[_Candidate] = []
+    candidates: list[VowHolderCandidate] = []
     for row in anchor_rows:
         thread = threads_by_owner_role.get((row.character_sheet_id, row.covenant_role_id))
         if thread is None:
@@ -550,7 +634,15 @@ def _ally_sub_role_candidates(mate_rows: list[CharacterCovenantRole]) -> list[_C
             row.covenant_role, resonance=thread.resonance, thread_level=thread.level
         )
         if variant is not None:
-            candidates.append((variant.pk, row.character_sheet, _ALLY_BENEFICIARIES, False))
+            candidates.append(
+                VowHolderCandidate(
+                    role_id=variant.pk,
+                    anchor_role_id=row.covenant_role_id,
+                    holder=row.character_sheet,
+                    beneficiaries=_ALLY_BENEFICIARIES,
+                    is_secondary=False,
+                )
+            )
     return candidates
 
 
@@ -630,18 +722,17 @@ def _fetch_candidate_perks(
     return by_role
 
 
-class _PerkResolver:
-    """Evaluates candidate perks against the ONE (subject, target, resolution,
-    attacker) tuple shared by every candidate holder in a single
-    ``applicable_perks`` call. Holds a per-call situation-evaluation cache
-    (keyed on ``(situation, params, holder_pk)`` — #2623 spec §2: two rows
-    authoring the SAME situation with DIFFERENT params are distinct cache
-    entries, since ``SituationParams`` is a hashable frozen dataclass) so a
-    (situation, params) pair shared by multiple candidate perks/holders is
-    evaluated at most once. Zero new queries — params ride the prefetched
-    ``situations``/``rungs`` rows (each row's ``.params`` property reads its
-    own already-fetched columns) alongside the situation string that was
-    already there.
+class SituationCheck:
+    """Evaluates situations against the ONE (subject, target, resolution,
+    attacker) tuple shared by every candidate holder in a single resolution
+    (#4581, lifted out of ``_PerkResolver`` so vow added effects reuse it).
+
+    Holds a per-instance evaluation cache keyed on ``(situation, params,
+    holder_pk)`` (#2623 spec §2: two rows authoring the SAME situation with
+    DIFFERENT params are distinct cache entries, since ``SituationParams`` is a
+    hashable frozen dataclass), so a (situation, params) pair shared by several
+    rows or holders is evaluated at most once. A blank ``situation`` means "no
+    situation authored" and holds without evaluating anything.
     """
 
     def __init__(
@@ -658,7 +749,10 @@ class _PerkResolver:
         self.attacker = attacker
         self._eval_cache: dict[tuple[str, SituationParams, int], bool] = {}
 
-    def _holds(self, situation: str, params: SituationParams, holder: CharacterSheet) -> bool:
+    def holds(self, situation: str, params: SituationParams, holder: CharacterSheet) -> bool:
+        """True when ``situation`` (with ``params``) holds for ``holder`` right now."""
+        if not situation:
+            return True
         key = (situation, params, holder.pk)
         if key not in self._eval_cache:
             ctx = SituationContext(
@@ -670,6 +764,37 @@ class _PerkResolver:
             )
             self._eval_cache[key] = SITUATION_EVALUATORS[situation](ctx, params)
         return self._eval_cache[key]
+
+
+class _PerkResolver:
+    """Evaluates candidate perks against the ONE (subject, target, resolution,
+    attacker) tuple shared by every candidate holder in a single
+    ``applicable_perks`` call. Situation evaluation (and its per-call cache)
+    is one ``SituationCheck``, so a (situation, params) pair shared by multiple
+    candidate perks/holders is evaluated at most once. Zero new queries —
+    params ride the prefetched ``situations``/``rungs`` rows (each row's
+    ``.params`` property reads its own already-fetched columns) alongside the
+    situation string that was already there.
+    """
+
+    def __init__(
+        self,
+        *,
+        subject: CharacterSheet,
+        target: CharacterSheet | None,
+        resolution: object | None,
+        attacker: object | None = None,
+    ) -> None:
+        self.subject = subject
+        self.target = target
+        self.resolution = resolution
+        self.attacker = attacker
+        self._situations = SituationCheck(
+            subject=subject, target=target, resolution=resolution, attacker=attacker
+        )
+
+    def _holds(self, situation: str, params: SituationParams, holder: CharacterSheet) -> bool:
+        return self._situations.holds(situation, params, holder)
 
     def resolve(
         self, perk: VowSituationalPerk, *, holder: CharacterSheet, is_secondary: bool = False
