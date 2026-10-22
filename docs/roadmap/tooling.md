@@ -342,6 +342,22 @@ two have no verb and no button (recorded as a gap in `docs/testing/journeys.md`)
 journey sends their dispatch seam directly. No production code changed; the actions ledger
 marks the eight rows R (45 of 172 ruled).
 
+Tranche 21 removed the five `actions.tests` modules the door, window, tale, station and
+affairs journeys of tranches 13, 17 and 18 already duplicated (`test_door_actions`,
+`test_window_actions`, `test_deed_actions`, `test_evidence_actions`, `test_room_features`,
+50 tests), after the journeys took what those alone had reached: the lock journey's
+Lantern is a building whose condition every break wears a tier, its Lockpicking roll is
+forced each way as well as rolled for real, and a barred gate holds a guest, cannot be
+picked and is broken down bar by bar; the tale's web spread and story are refused for
+each thing the client may leave out or get wrong; a new `GatheringTheLeavings` types
+`evidence` and its gather, dispose, examine and produce over a real theft's traces on the
+Gather Evidence roll forced each way, and sends the same by plain-int id; the station
+journey adds an upgrade past the kind's maximum, a kind raised by rite, and the
+lab-stations view's own sends. The journeys and the five modules ran under coverage on
+Postgres and no line of the twelve source files behind them is reached by the old modules
+alone. Nothing in the browser sends the door, window, deed or evidence actions (recorded
+as a gap). No production code changed; the ledger marks the five rows R (50 of 172 ruled).
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,

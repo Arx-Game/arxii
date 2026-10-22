@@ -52,8 +52,8 @@ class PromptNarrationTest(TestCase):
         SceneGMParticipationFactory(scene=cls.scene, account=cls.gm_account)
 
     def setUp(self):
-        # actions read actor.account (the puppeting account); bind it per test
-        # (the same idiom as actions/tests/test_deed_actions.py).
+        # actions read actor.account (the puppeting account); bind it per test, since a
+        # factory character puppets nobody.
         self.gm_char.account = self.gm_account
         # Factory characters have location=None and get_active_scene(None) is None,
         # so pin "the scene the GM stands in" at the seam narration_prompt_for reads.

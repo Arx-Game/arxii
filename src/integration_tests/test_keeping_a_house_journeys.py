@@ -65,8 +65,9 @@ def description_of(obj) -> str:
 
 
 class LockingTheDoor(JourneyCase):
-    """Hobb, a tenant of the Lantern, locks its gate; Ysmay finds her own way through.
-    The Lantern is a building in excellent condition, and every break wears it."""
+    """Hobb, a tenant of the Lantern, locks its gate; Ysmay finds her own way through:
+    the "lock_exit", "unlock_exit", "pick_lock" and "break_exit" actions, typed. The
+    Lantern is a building in excellent condition, and every break wears it."""
 
     def setUp(self) -> None:
         super().setUp()
