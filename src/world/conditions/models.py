@@ -400,8 +400,7 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "While active, the condition's source tries to intercept each hit on the bearer "
             "with her own interpose roll, paying interpose fatigue and spending her reaction "
             "for the round. She still takes her own turn. Guards are bound before the round "
-            "resolves, so a guard laid in round N holds from round N+1, and a 1-round "
-            "duration ends before it is read."
+            "resolves, so a guard holds from the round after it lands."
         ),
     )
     prevents_knockout = models.BooleanField(
