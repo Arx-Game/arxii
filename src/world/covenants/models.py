@@ -2248,6 +2248,14 @@ class VowAddedEffectManager(NaturalKeyManager):
     """Manager for VowAddedEffect with natural key support."""
 
 
+#: How limited each frequency is, least first: an upgrade may not rank above its base.
+_VOW_EFFECT_FREQUENCY_RANK: dict[str, int] = {
+    VowEffectFrequency.EVERY_CAST: 0,
+    VowEffectFrequency.ONCE_PER_ROUND: 1,
+    VowEffectFrequency.ONCE_PER_FIGHT: 2,
+}
+
+
 class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryModel):
     """Staff-authored payload a covenant vow adds to a technique cast (#4581).
 
@@ -2415,6 +2423,9 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
         """
         super().clean()
         errors: dict[str, str] = {}
+        # The upgrade's limit check runs first, so the context rule's message wins
+        # when both refuse the frequency.
+        self._check_upgrade_frequency(errors)
         self._check_frequency(errors)
         self._check_narrowing(errors)
         self._check_upgrade(errors)
@@ -2467,6 +2478,22 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
             errors["upgrades"] = (
                 "An upgrade must replace an effect on this role (at a lower unlock) "
                 "or on this role's parent role."
+            )
+
+    def _check_upgrade_frequency(self, errors: dict[str, str]) -> None:
+        """An upgrade is never more limited than the row it replaces.
+
+        The limits order Every Cast, then Once Per Round, then Once Per Fight. A
+        holder who qualifies for the upgrade loses the base, so a more limited
+        upgrade would leave them worse off than before they qualified.
+        """
+        if self.upgrades_id is None:
+            return
+        rank = _VOW_EFFECT_FREQUENCY_RANK
+        if rank.get(self.frequency, 0) > rank.get(self.upgrades.frequency, 0):
+            errors["frequency"] = (
+                "An upgrade cannot be more limited than the effect it replaces "
+                f"({self.upgrades.get_frequency_display()})."
             )
 
     def _check_saved_damage(self, errors: dict[str, str]) -> None:

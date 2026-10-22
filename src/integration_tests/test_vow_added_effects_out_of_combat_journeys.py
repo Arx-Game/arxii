@@ -34,6 +34,7 @@ from world.covenants.factories import (
     CovenantRoleFactory,
     VowAddedEffectAppliedConditionFactory,
     VowAddedEffectFactory,
+    VowAddedEffectRemovedConditionFactory,
     VowAddedEffectTreatmentFactory,
     engage_vow_with_thread,
 )
@@ -48,7 +49,7 @@ from world.magic.factories import (
     TechniqueFunctionTagFactory,
     TechniqueRemovedConditionFactory,
 )
-from world.magic.models import Technique
+from world.magic.models import Technique, TechniqueTreatment
 from world.magic.models.techniques import ConditionTargetKind
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
@@ -263,3 +264,39 @@ class VowAddedEffectsInAScene(JourneyCase):
 
         self.assertFalse(self.carries(self.ysmay, bolstered))
         self.assertFalse(TreatmentAttempt.objects.filter(treatment=self.vow_treatment).exists())
+
+    def test_a_vow_removal_strips_the_condition_after_the_techniques_own_treatment(
+        self,
+    ) -> None:
+        # The technique itself mends the fever; the vow then strips it. The mend must
+        # land first, or the strip leaves it nothing to mend.
+        own_mend = TreatmentTemplateFactory(
+            target_kind=TreatmentTargetKind.PRIMARY,
+            target_condition=self.fever,
+            check_type=CheckTypeFactory(),
+            target_difficulty=0,
+            requires_bond=False,
+            scene_required=False,
+            once_per_scene_per_helper=False,
+        )
+        TechniqueTreatment.objects.create(
+            technique=self.cleanse,
+            treatment_template=own_mend,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        VowAddedEffectRemovedConditionFactory(
+            effect=self.ysmays_row(),
+            condition=self.fever,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+
+        self.cast(self.hobb, self.ysmay)
+
+        self.assertTrue(
+            TreatmentAttempt.objects.filter(
+                helper=self.hobb.sheet_data, target=self.ysmay.sheet_data, treatment=own_mend
+            ).exists()
+        )
+        self.assertFalse(self.carries(self.ysmay, self.fever))
+        self.assertTrue(self.carries(self.hobb, self.fever))
+        self.assertTrue(self.carries(self.wren, self.fever))

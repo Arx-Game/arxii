@@ -117,6 +117,21 @@ class VowAddedEffectSummaryTests(TestCase):
             "On your own Hold / Lock casts, in a fight: Applies Slowed.",
         )
 
+    def test_editing_a_header_field_changes_the_summary(self) -> None:
+        effect = VowAddedEffectFactory(cast_context=VowEffectContext.IN_COMBAT)
+        self.assertEqual(
+            effect.cached_effect_summary,
+            "On your own Hold / Lock casts, in a fight: Adds nothing yet.",
+        )
+
+        effect.frequency = VowEffectFrequency.ONCE_PER_FIGHT
+        effect.save()
+
+        self.assertEqual(
+            effect.cached_effect_summary,
+            "On your own Hold / Lock casts, in a fight, once a fight: Adds nothing yet.",
+        )
+
 
 def _filled(bound_fields) -> dict[str, str]:
     """What a browser posts for these bound fields untouched; unchecked boxes are left out."""

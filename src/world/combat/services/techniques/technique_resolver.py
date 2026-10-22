@@ -550,9 +550,9 @@ class CombatTechniqueResolver:
 
         ``fired_vow_effects`` are the vow added effects riding this cast (#4581).
         Their conditions, treatments and removals run through
-        ``apply_vow_effect_payloads`` over the same ``targets_by_kind``, right
-        after the signature bonus; their applied and removed results join the
-        returned lists.
+        ``apply_vow_effect_payloads`` over the same ``targets_by_kind``, after
+        the technique's own treatments and before its own removals; their
+        applied and removed results join the returned lists.
 
         Returns:
             ``(applied, removed)`` — the apply results and the dispel results, both
@@ -616,9 +616,26 @@ class CombatTechniqueResolver:
                 soulfray_consented=self.action.confirm_soulfray_risk,
             )
         )
+        # Technique treatment (#2668): perform bounded-mend treatments on resolved
+        # targets. Fires BEFORE remove_technique_conditions. No-op when the
+        # technique has no treatment rows.
+        from world.magic.services.condition_application import (  # noqa: PLC0415
+            apply_technique_treatments,
+        )
+
+        apply_technique_treatments(
+            technique=technique,
+            success_level=check_result.success_level,
+            eff_intensity=eff_intensity,
+            targets_by_kind=targets_by_kind,
+            source_character=caster_od,
+            scene=self.participant.encounter.scene,
+        )
         # Vow added effects (#4581): the payloads of the covenant vow rows riding this
         # cast, over the same resolved targets (SELF is the caster). An NPC enemy is
-        # an ObjectDB in targets_by_kind, so a vow's enemy condition lands on it.
+        # an ObjectDB in targets_by_kind, so a vow's enemy condition lands on it. After
+        # the technique's treatments and before its removals: the seam runs every vow
+        # treatment before any vow removal, so all treatments precede all removals.
         vow_removed: list[RemovedConditionResult] = []
         if fired_vow_effects:
             from world.covenants.added_effects import (  # noqa: PLC0415
@@ -636,21 +653,6 @@ class CombatTechniqueResolver:
                 soulfray_consented=self.action.confirm_soulfray_risk,
             )
             applied.extend(vow_applied)
-        # Technique treatment (#2668): perform bounded-mend treatments on resolved
-        # targets. Fires BEFORE remove_technique_conditions. No-op when the
-        # technique has no treatment rows.
-        from world.magic.services.condition_application import (  # noqa: PLC0415
-            apply_technique_treatments,
-        )
-
-        apply_technique_treatments(
-            technique=technique,
-            success_level=check_result.success_level,
-            eff_intensity=eff_intensity,
-            targets_by_kind=targets_by_kind,
-            source_character=caster_od,
-            scene=self.participant.encounter.scene,
-        )
         # Dispel/cleanse sibling (#1585): strip technique-authored conditions from
         # the same resolved targets. No-op when the technique has no
         # removed_conditions rows.

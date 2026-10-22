@@ -110,6 +110,32 @@ class VowAddedEffectCleanTests(TestCase):
         )
         later.full_clean()
 
+    def test_an_upgrade_may_not_be_more_limited_than_its_base(self) -> None:
+        fight = VowEffectContext.IN_COMBAT
+        base = VowAddedEffectFactory(
+            covenant_role=self.role,
+            cast_context=fight,
+            frequency=VowEffectFrequency.ONCE_PER_ROUND,
+            unlock_thread_level=1,
+        )
+        for frequency, refused in (
+            (VowEffectFrequency.ONCE_PER_FIGHT, True),
+            (VowEffectFrequency.ONCE_PER_ROUND, False),
+            (VowEffectFrequency.EVERY_CAST, False),
+        ):
+            row = VowAddedEffectFactory.build(
+                covenant_role=self.role,
+                cast_context=fight,
+                frequency=frequency,
+                unlock_thread_level=3,
+                upgrades=base,
+            )
+            with self.subTest(frequency=frequency):
+                if refused:
+                    self.assertEqual(self._keys(row), {"frequency"})
+                else:
+                    row.full_clean()
+
     def test_an_upgrade_on_a_sub_role_may_name_the_parents_row(self) -> None:
         parent = CovenantRoleFactory()
         sub = SubroleCovenantRoleFactory(parent_role=parent)

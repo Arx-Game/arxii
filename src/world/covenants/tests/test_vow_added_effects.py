@@ -31,12 +31,15 @@ from world.combat.models import CombatEncounter, CombatParticipant, VowAddedEffe
 from world.combat.round_context import CombatRoundContext
 from world.conditions.constants import TreatmentTargetKind
 from world.conditions.factories import (
+    ConditionCategoryFactory,
     ConditionInstanceFactory,
     ConditionTemplateFactory,
     TreatmentTemplateFactory,
 )
 from world.conditions.models import ConditionInstance, TreatmentAttempt
 from world.covenants.added_effects import (
+    _LiveRow,
+    _scaled_firings,
     apply_vow_effect_payloads,
     record_vow_effect_firings,
     vow_added_effects_for_cast,
@@ -58,6 +61,7 @@ from world.covenants.factories import (
 )
 from world.covenants.models import VowAddedEffect
 from world.covenants.perks.constants import PerkBeneficiary, Situation
+from world.covenants.perks.services import VowHolderCandidate
 from world.covenants.types import FiredVowEffect
 from world.magic.constants import TechniqueFunction
 from world.magic.factories import (
@@ -472,6 +476,39 @@ class PayloadTests(VowAddedEffectsTestBase):
             ConditionInstance.objects.filter(target=self.hobb.character, condition=condition)
         )
 
+    def test_a_condition_whose_category_came_to_alter_behavior_is_skipped(self) -> None:
+        # Authored while the category was ordinary; the category gains the flag later.
+        category = ConditionCategoryFactory(alters_behavior=False)
+        compelled = ConditionTemplateFactory(category=category)
+        steady = ConditionTemplateFactory()
+        effect = VowAddedEffectFactory(covenant_role=self.role)
+        for condition in (compelled, steady):
+            VowAddedEffectAppliedConditionFactory(
+                effect=effect, condition=condition, target_kind=ConditionTargetKind.ALLY
+            ).full_clean()
+        category.alters_behavior = True
+        category.save()
+
+        fired = self._cast(self.ysmay)
+        with self.assertLogs("world.covenants.added_effects", level="WARNING"):
+            applied, _ = apply_vow_effect_payloads(
+                fired,
+                technique=self.hold,
+                success_level=1,
+                eff_intensity=0,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.hobb.character]},
+                source_character=self.ysmay.character,
+                scene=SceneFactory(),
+            )
+
+        self.assertEqual(len(applied), 1)
+        self.assertFalse(
+            ConditionInstance.objects.filter(target=self.hobb.character, condition=compelled)
+        )
+        self.assertTrue(
+            ConditionInstance.objects.filter(target=self.hobb.character, condition=steady)
+        )
+
     def test_payloads_land_a_treatment_with_the_caster_as_helper(self) -> None:
         wound = ConditionTemplateFactory()
         template = TreatmentTemplateFactory(
@@ -551,6 +588,33 @@ class PayloadTests(VowAddedEffectsTestBase):
         _, participants = self._fight(self.ysmay)
         fired = self._cast(self.ysmay, resolution=CombatRoundContext(participants[self.ysmay.pk]))
         self.assertEqual(vow_damage_profiles(fired), [(profile, 3)])
+
+
+class DedupeTests(VowAddedEffectsTestBase):
+    """One holder reaching one row as primary and as secondary fires the primary."""
+
+    def _candidate(self, *, is_secondary: bool) -> VowHolderCandidate:
+        return VowHolderCandidate(
+            role_id=self.role.pk,
+            anchor_role_id=self.role.pk,
+            holder=self.ysmay,
+            beneficiaries=frozenset({PerkBeneficiary.SELF}),
+            is_secondary=is_secondary,
+        )
+
+    def test_the_primary_candidate_wins_in_either_order(self) -> None:
+        effect = VowAddedEffectFactory(
+            covenant_role=self.role, unlock_thread_level=0, severity_per_thread_level=10
+        )
+        primary, secondary = (
+            _LiveRow(candidate=self._candidate(is_secondary=flag), effect=effect, thread_level=5)
+            for flag in (False, True)
+        )
+        for live in ([secondary, primary], [primary, secondary]):
+            with self.subTest(first_secondary=live[0] is secondary):
+                [fired] = _scaled_firings(live)
+                self.assertFalse(fired.is_secondary)
+                self.assertEqual(fired.severity_bonus, 50)
 
 
 class StaticViewTests(VowAddedEffectsTestBase):

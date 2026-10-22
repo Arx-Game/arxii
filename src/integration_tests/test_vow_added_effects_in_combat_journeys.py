@@ -378,11 +378,13 @@ class VowAddedEffectsInAFight(JourneyCase):
         self.assertEqual(self.firings(effect, round_number=2), 1)
 
     def test_a_disengaged_caster_gets_nothing(self) -> None:
+        # Once a round, so a firing would leave a ledger row to count.
         effect = self.ysmays_vow(
             thread_level=4,
             function=TechniqueFunction.HOLD,
             beneficiary=PerkBeneficiary.COVENANT_ALLIES,
             cast_context=VowEffectContext.IN_COMBAT,
+            frequency=VowEffectFrequency.ONCE_PER_ROUND,
         )
         self.slows_the_enemy(effect)
         self.swear(self.hobb, engaged=False)
@@ -395,3 +397,4 @@ class VowAddedEffectsInAFight(JourneyCase):
                 target=self.opponent.objectdb, condition=self.slowed
             ).exists()
         )
+        self.assertEqual(self.firings(effect), 0)

@@ -8,7 +8,9 @@ out-of-combat cast) call into this module:
   scales their bonuses, returning ``FiredVowEffect`` values.
 - ``apply_vow_effect_payloads`` hands each fired row's applied conditions,
   treatments and removed conditions to the technique payload seams in
-  ``world.magic.services.condition_application``.
+  ``world.magic.services.condition_application``: every row's conditions and
+  treatments first, then every row's removals. Both cast paths call it after
+  the technique's own treatments and before its own removals.
 - ``vow_damage_profiles`` pairs each fired row's damage profiles with its
   damage bonus, for the combat damage step.
 - ``record_vow_effect_firings`` spends once-per-round and once-per-fight rows
@@ -53,7 +55,7 @@ base never fires again just because its upgrade is used up.
 5. The per-holder gates, the situation last.
 6. The upgrade rule, per holder.
 7. In combat, the frequency ledger (one query, only when a live row is limited).
-8. Dedupe on ``(holder, row)``.
+8. Dedupe on ``(holder, row)``; a primary candidate wins over a secondary one.
 9. The thread-level bonuses, potency-scaled for a secondary vow.
 
 ## Query discipline
@@ -71,6 +73,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+import logging
 from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch, Q
@@ -103,6 +106,8 @@ if TYPE_CHECKING:
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
     from world.magic.models import Technique
     from world.scenes.models import Scene
+
+logger = logging.getLogger(__name__)
 
 #: Frequencies spent through the ``VowAddedEffectFiring`` ledger.
 _LIMITED_FREQUENCIES = frozenset(
@@ -216,13 +221,24 @@ def apply_vow_effect_payloads(  # noqa: PLR0913 - the payload seams' own paramet
 
     ``targets_by_kind`` is the cast's own resolved target map; SELF is always
     mapped to the caster (``source_character``) over a copy of it, since the
-    out-of-combat map holds only the technique's own target relationship. Each
-    fired row's applied conditions go to ``apply_technique_conditions`` with the
-    row's severity and duration bonus, then its treatments to
-    ``apply_technique_treatments``, then its removed conditions to
-    ``remove_technique_conditions``; a payload list that is empty is skipped.
-    ``technique`` stays the provenance on everything applied. Returns the
-    applied and removed condition results, in firing order.
+    out-of-combat map holds only the technique's own target relationship.
+
+    Two passes over the fired rows. First, each row's applied conditions go to
+    ``apply_technique_conditions`` with the row's severity and duration bonus,
+    then its treatments to ``apply_technique_treatments``. Second, every row's
+    removed conditions go to ``remove_technique_conditions``. So every vow
+    treatment runs before any vow removal, the cast pipeline's own "treatments
+    before removals" rule (a removal must not strip the wound a treatment
+    mends). Both cast paths call this after the technique's own treatments and
+    before its own removals, which keeps that rule across the whole cast. A
+    payload list that is empty is skipped. ``technique`` stays the provenance on
+    everything applied.
+
+    An applied condition whose category ``alters_behavior`` is skipped here as
+    well as refused in authoring (``VowAddedEffectAppliedCondition.clean``): a
+    category can gain the flag, or a condition can move category, after the row
+    was saved, and consent folding never sees a vow row (ADR-4581-A). Returns
+    the applied and removed condition results, in firing order.
     """
     from world.magic.services.condition_application import (  # noqa: PLC0415
         apply_technique_conditions,
@@ -232,10 +248,10 @@ def apply_vow_effect_payloads(  # noqa: PLR0913 - the payload seams' own paramet
 
     targets = {**targets_by_kind, ConditionTargetKind.SELF: [source_character]}
     applied: list[AppliedConditionResult] = []
-    removed: list[RemovedConditionResult] = []
     for firing in fired:
         effect = firing.effect
-        if effect.cached_applied_conditions:
+        condition_rows = _consent_free_condition_rows(effect)
+        if condition_rows:
             applied.extend(
                 apply_technique_conditions(
                     technique=technique,
@@ -243,7 +259,7 @@ def apply_vow_effect_payloads(  # noqa: PLR0913 - the payload seams' own paramet
                     eff_intensity=eff_intensity,
                     targets_by_kind=targets,
                     source_character=source_character,
-                    applied_condition_rows=effect.cached_applied_conditions,
+                    applied_condition_rows=condition_rows,
                     soulfray_consented=soulfray_consented,
                     severity_bonus=firing.severity_bonus,
                     duration_bonus=firing.duration_bonus,
@@ -259,7 +275,10 @@ def apply_vow_effect_payloads(  # noqa: PLR0913 - the payload seams' own paramet
                 scene=scene,
                 treatment_rows=effect.cached_treatments,
             )
-        if effect.cached_removed_conditions:
+
+    removed: list[RemovedConditionResult] = []
+    for firing in fired:
+        if firing.effect.cached_removed_conditions:
             removed.extend(
                 remove_technique_conditions(
                     technique=technique,
@@ -267,10 +286,30 @@ def apply_vow_effect_payloads(  # noqa: PLR0913 - the payload seams' own paramet
                     eff_intensity=eff_intensity,
                     targets_by_kind=targets,
                     source_character=source_character,
-                    removed_condition_rows=effect.cached_removed_conditions,
+                    removed_condition_rows=firing.effect.cached_removed_conditions,
                 )
             )
     return applied, removed
+
+
+def _consent_free_condition_rows(effect: VowAddedEffect) -> list[VowAddedEffectAppliedCondition]:
+    """The row's applied conditions minus any whose category now alters behavior.
+
+    The category is select_related on the cached list, so this issues no query.
+    A skipped row is logged for staff: the row needs editing in admin.
+    """
+    rows: list[VowAddedEffectAppliedCondition] = []
+    for row in effect.cached_applied_conditions:
+        if row.condition.category.alters_behavior:
+            logger.warning(
+                "Vow added effect %s skips applied condition %s: its category alters "
+                "behavior, which a vow row may never apply (ADR-4581-A).",
+                effect.pk,
+                row.condition_id,
+            )
+            continue
+        rows.append(row)
+    return rows
 
 
 def vow_damage_profiles(
@@ -442,19 +481,23 @@ def _drop_upgraded(live: list[_LiveRow]) -> list[_LiveRow]:
 def _scaled_firings(live: list[_LiveRow]) -> list[FiredVowEffect]:
     """One ``FiredVowEffect`` per (holder, row), with its thread-level bonuses.
 
-    The secondary potency config is read at most once, and only when a
-    secondary-sourced row fires.
+    When one holder reaches the same row through a primary and a secondary
+    candidate, the primary one fires (unscaled by the secondary potency), so
+    the result never depends on the order the candidates came back in. Firing
+    order is the order each (holder, row) was first seen. The secondary potency
+    config is read at most once, and only when a secondary-sourced row fires.
     """
+    chosen: dict[tuple[int, int], _LiveRow] = {}
+    for row in live:
+        key = (row.candidate.holder.pk, row.effect.pk)
+        kept = chosen.get(key)
+        if kept is None or (kept.candidate.is_secondary and not row.candidate.is_secondary):
+            chosen[key] = row
+
     potency_tenths: int | None = None
     fired: list[FiredVowEffect] = []
-    seen: set[tuple[int, int]] = set()
-    for row in live:
+    for row in chosen.values():
         effect = row.effect
-        key = (row.candidate.holder.pk, effect.pk)
-        if key in seen:
-            continue
-        seen.add(key)
-
         above = max(0, row.thread_level - effect.unlock_thread_level)
         severity = above * effect.severity_per_thread_level
         duration = above * effect.duration_per_thread_level
