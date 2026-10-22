@@ -195,6 +195,10 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     """Apply damage to an NPC opponent, accounting for soak, probing,
     and damage-type resistance.
 
+    ignores_soak skips soak without suppressing probing. resistance_shift moves
+    signed typed resistance toward vulnerability once for this hit, after any
+    break-bar override. Neither control mutates the target's defenses.
+
     All raw damage (even fully soaked) contributes to probing. Only damage
     that exceeds soak and resistance actually reduces health.
 

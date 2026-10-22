@@ -21,7 +21,7 @@ def _effective_soak_for_opponent(opponent: CombatOpponent, bypass_soak: bool) ->
 def _effective_resistance_for_opponent(
     opponent: CombatOpponent, damage_type: DamageType | None, resistance_shift: int = 0
 ) -> int:
-    """Return damage-type resistance, bypassed during vulnerability window."""
+    """Return signed typed resistance after break-bar override and per-hit shift."""
     if damage_type is None:
         return 0
     resistance = 0

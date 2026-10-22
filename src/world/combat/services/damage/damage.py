@@ -148,6 +148,10 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
 ) -> ParticipantDamageResult:
     """Apply damage to a PC via their CharacterVitals.
 
+    ignores_soak skips thread damage reduction and the complete equipped/resonant
+    armor stage, including armor wear. resistance_shift subtracts points from
+    signed typed resistance for this hit only; untyped hits ignore the shift.
+
     Does NOT roll for knockout/death/wounds — only reports eligibility.
     The caller is responsible for acting on the result.
 

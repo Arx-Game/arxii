@@ -399,11 +399,18 @@ class CombatTechniqueResolver:
         from world.magic.services.signature_effects import (  # noqa: PLC0415
             signature_damage_profiles,
         )
+        from world.magic.specialization.services import (  # noqa: PLC0415
+            resolve_specialized_variant,
+        )
 
-        technique = self.action.focused_action
         attacker = self.participant.character_sheet.character
+        technique = resolve_specialized_variant(
+            entity=self.action.focused_action,
+            character=attacker,
+            _sheet=self.participant.character_sheet,
+        )
         return [
-            *technique.damage_profiles.select_related("damage_type").all(),
+            *technique.cached_damage_profiles,
             *signature_damage_profiles(attacker, technique),
         ]
 
