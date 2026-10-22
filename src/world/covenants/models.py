@@ -11,7 +11,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
@@ -19,6 +19,7 @@ from django.utils.functional import cached_property
 from core.managers import ArxSharedMemoryManager, ArxSharedMemoryQuerySet
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.battles.constants import BattleActionKind
 from world.contributors.models import CreditedContent
@@ -35,6 +36,8 @@ from world.covenants.constants import (
     MembershipStanding,
     MentorBondAdjusted,
     RoleArchetype,
+    VowEffectContext,
+    VowEffectFrequency,
 )
 from world.covenants.perks.constants import (
     SITUATION_PARAM_SPECS,
@@ -46,6 +49,12 @@ from world.covenants.perks.constants import (
 from world.covenants.perks.context import SituationParams
 from world.items.constants import GearArchetype
 from world.magic.constants import TechniqueFunction
+from world.magic.models.techniques import (
+    AbstractAppliedCondition,
+    AbstractDamageProfile,
+    ConditionTargetKind,
+    validate_inert_removal_knobs,
+)
 from world.magic.specialization.models import AbstractSpecializedVariant
 from world.magic.types.aura import AffinityType
 
@@ -65,6 +74,7 @@ CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 CONDITION_TEMPLATE_MODEL = "arxii.ConditionTemplate"
 GIFT_MODEL = "arxii.Gift"
 VOW_SITUATIONAL_PERK_MODEL = "arxii.VowSituationalPerk"
+VOW_ADDED_EFFECT_MODEL = "arxii.VowAddedEffect"
 MODIFIER_TARGET_MODEL = "arxii.ModifierTarget"
 
 
@@ -2232,6 +2242,512 @@ class VowSituationalPerkRung(SituationRequirementMixin, NaturalKeyMixin, SharedM
 
     def __str__(self) -> str:
         return f"{self.perk.name} rung {self.rung_number}: {self.get_extra_situation_display()}"
+
+
+class VowAddedEffectManager(NaturalKeyManager):
+    """Manager for VowAddedEffect with natural key support."""
+
+
+#: How limited each frequency is, least first: an upgrade may not rank above its base.
+_VOW_EFFECT_FREQUENCY_RANK: dict[str, int] = {
+    VowEffectFrequency.EVERY_CAST: 0,
+    VowEffectFrequency.ONCE_PER_ROUND: 1,
+    VowEffectFrequency.ONCE_PER_FIGHT: 2,
+}
+
+
+class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryModel):
+    """Staff-authored payload a covenant vow adds to a technique cast (#4581).
+
+    When a holder of ``covenant_role`` (or a co-present covenant ally, per
+    ``beneficiary``) casts a technique tagged with ``function``, this row's
+    payload children ride the cast: applied conditions, removed conditions,
+    treatments and damage profiles, the same payload shapes a technique
+    carries itself. ``gift`` or ``technique`` narrows the row to one gift's
+    techniques or one technique (never both, the database refuses it).
+    ``cast_context`` limits it to casts in or out of combat; ``situation``
+    (with the ``SituationRequirementMixin`` parameter columns) adds one
+    ``Situation`` that must hold at resolution; ``frequency`` limits how often
+    one holder fires it, through the ``VowAddedEffectFiring`` ledger.
+
+    ``unlock_thread_level`` is the holder's COVENANT_ROLE thread level the row
+    needs; each level above it adds ``severity_per_thread_level`` to applied
+    condition severity, ``duration_per_thread_level`` to their duration and
+    ``damage_per_thread_level`` to each damage profile.
+
+    ``upgrades`` names the row this one replaces for a holder who qualifies
+    for both (a sub-role's row naming its parent role's row, or a later-unlock
+    row on the same role); every row without it adds. One role upgrades a
+    given base at most once, and an upgraded base cannot be deleted out from
+    under another role's upgrade (RESTRICT: deleting the role
+    that owns both a base and its own upgrade still cascades).
+    """
+
+    covenant_role = models.ForeignKey(
+        COVENANT_ROLE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="added_effects",
+    )
+    function = models.CharField(
+        max_length=32,
+        choices=TechniqueFunction.choices,
+        help_text="The technique function tag a cast must carry for this effect to ride it.",
+    )
+    gift = models.ForeignKey(
+        GIFT_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="vow_added_effects",
+        help_text="Narrow to techniques of this gift. Blank = any gift.",
+    )
+    technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="vow_added_effects",
+        help_text="Narrow to this one technique. Blank = any technique. Never set with gift.",
+    )
+    cast_context = models.CharField(
+        max_length=16,
+        choices=VowEffectContext.choices,
+        default=VowEffectContext.ANY,
+        help_text="Whether the cast must be in combat, out of combat, or either.",
+    )
+    situation = models.CharField(
+        max_length=32,
+        choices=Situation.choices,
+        blank=True,
+        default="",
+        help_text="A situation that must also hold when the cast resolves. Blank = none.",
+    )
+    beneficiary = models.CharField(
+        max_length=20,
+        choices=PerkBeneficiary.choices,
+        help_text="Whose casts this rides: the holder's, co-present allies', or both.",
+    )
+    frequency = models.CharField(
+        max_length=16,
+        choices=VowEffectFrequency.choices,
+        default=VowEffectFrequency.EVERY_CAST,
+        help_text="How often one holder's effect may fire.",
+    )
+    unlock_thread_level = models.PositiveIntegerField(
+        default=0,
+        help_text="The holder's vow thread level this effect needs.",
+    )
+    severity_per_thread_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Added to applied condition severity per thread level above the unlock.",
+    )
+    duration_per_thread_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Added to applied condition duration (rounds) per level above the unlock.",
+    )
+    damage_per_thread_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Added to each damage profile per thread level above the unlock.",
+    )
+    upgrades = models.ForeignKey(
+        "self",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="upgraded_by",
+        help_text=(
+            "The effect this one replaces when its holder qualifies for both: the anchor "
+            "role's effect (for a sub-role), or an earlier-unlock effect on the same role."
+        ),
+    )
+
+    objects = VowAddedEffectManager()
+
+    class Meta:
+        ordering = ["covenant_role__slug", "function", "unlock_thread_level", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "covenant_role",
+                    "function",
+                    "gift",
+                    "technique",
+                    "cast_context",
+                    "situation",
+                    "beneficiary",
+                    "frequency",
+                    "unlock_thread_level",
+                ],
+                name="vow_added_effect_scope_unique",
+                nulls_distinct=False,
+            ),
+            models.UniqueConstraint(
+                fields=["covenant_role", "upgrades"],
+                condition=models.Q(upgrades__isnull=False),
+                name="vow_added_effect_one_upgrade_per_role",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(gift__isnull=True) | models.Q(technique__isnull=True),
+                name="vow_added_effect_gift_or_technique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = [
+            "covenant_role",
+            "function",
+            "gift",
+            "technique",
+            "cast_context",
+            "situation",
+            "beneficiary",
+            "frequency",
+            "unlock_thread_level",
+        ]
+        dependencies = [COVENANT_ROLE_MODEL, GIFT_MODEL, "arxii.Technique"]
+
+    def __str__(self) -> str:
+        return f"{self.covenant_role.name}: {self.get_function_display()}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Save, dropping the summary that was built from the old field values."""
+        super().save(*args, **kwargs)
+        self.__dict__.pop("cached_effect_summary", None)
+
+    def clean(self) -> None:
+        """Enforce the authoring rules a database constraint cannot express (#4581).
+
+        A rule that reads a payload child lives on the child, because the admin
+        validates this header before its inline rows exist; the one exception is
+        the saved-damage check below, which only matters once a row is saved.
+        """
+        super().clean()
+        errors: dict[str, str] = {}
+        # The upgrade's limit check runs first, so the context rule's message wins
+        # when both refuse the frequency.
+        self._check_upgrade_frequency(errors)
+        self._check_frequency(errors)
+        self._check_narrowing(errors)
+        self._check_upgrade(errors)
+        self._check_saved_damage(errors)
+        if errors:
+            raise ValidationError(errors)
+
+    def _check_frequency(self, errors: dict[str, str]) -> None:
+        """A once-per-round or once-per-fight limit is spent in a fight's ledger."""
+        if (
+            self.frequency != VowEffectFrequency.EVERY_CAST
+            and self.cast_context != VowEffectContext.IN_COMBAT
+        ):
+            errors["frequency"] = (
+                "A once-per-round or once-per-fight effect needs the In Combat context: "
+                "the limit is tracked per fight."
+            )
+
+    def _check_narrowing(self, errors: dict[str, str]) -> None:
+        """Gift and technique never together; a technique must carry the function."""
+        if self.gift_id is not None and self.technique_id is not None:
+            errors["technique"] = "Narrow to a gift or to a technique, not both."
+        elif (
+            self.technique_id is not None
+            and not self.technique.function_tags.filter(function=self.function).exists()
+        ):
+            errors["technique"] = (
+                "This technique does not carry the effect's function tag, so the effect "
+                "could never ride it."
+            )
+
+    def _check_upgrade(self, errors: dict[str, str]) -> None:
+        """An upgrade replaces a same-function row of this role's earlier unlock or parent."""
+        if self.upgrades_id is None:
+            return
+        base = self.upgrades
+        if self.pk is not None and base.pk == self.pk:
+            errors["upgrades"] = "An effect cannot upgrade itself."
+        elif base.function != self.function:
+            errors["upgrades"] = "An upgrade must share the function of the effect it replaces."
+        elif self.covenant_role_id is None:
+            return
+        elif base.covenant_role_id == self.covenant_role_id:
+            if base.unlock_thread_level >= self.unlock_thread_level:
+                errors["upgrades"] = (
+                    "An upgrade on the same role must unlock at a higher thread level "
+                    "than the effect it replaces."
+                )
+        elif base.covenant_role_id != self.covenant_role.parent_role_id:
+            errors["upgrades"] = (
+                "An upgrade must replace an effect on this role (at a lower unlock) "
+                "or on this role's parent role."
+            )
+
+    def _check_upgrade_frequency(self, errors: dict[str, str]) -> None:
+        """An upgrade is never more limited than the row it replaces.
+
+        The limits order Every Cast, then Once Per Round, then Once Per Fight. A
+        holder who qualifies for the upgrade loses the base, so a more limited
+        upgrade would leave them worse off than before they qualified.
+        """
+        if self.upgrades_id is None:
+            return
+        rank = _VOW_EFFECT_FREQUENCY_RANK
+        if rank.get(self.frequency, 0) > rank.get(self.upgrades.frequency, 0):
+            errors["frequency"] = (
+                "An upgrade cannot be more limited than the effect it replaces "
+                f"({self.upgrades.get_frequency_display()})."
+            )
+
+    def _check_saved_damage(self, errors: dict[str, str]) -> None:
+        """Damage rides only a fight, so saved damage rows pin the context to In Combat."""
+        if (
+            self.pk is not None
+            and self.cast_context != VowEffectContext.IN_COMBAT
+            and self.damage_profiles.exists()
+        ):
+            errors["cast_context"] = (
+                "This effect has damage rows, which need the In Combat context. "
+                "Delete them before changing the context."
+            )
+
+    @cached_property
+    def cached_effect_summary(self) -> str:
+        """The plain-words line staff read for this row (built only from its fields).
+
+        A payload child's save or delete clears it (``RelatedCacheClearingMixin``) and
+        so does a save of the header itself.
+        """
+        from world.covenants.added_effect_summary import (  # noqa: PLC0415
+            summarize_vow_added_effect,
+        )
+
+        return summarize_vow_added_effect(self)
+
+    @PrunedCachedProperty
+    def cached_applied_conditions(self) -> list[VowAddedEffectAppliedCondition]:
+        """Applied condition children; a child's save or delete clears it."""
+        return list(self.applied_conditions.select_related("condition__category"))
+
+    @PrunedCachedProperty
+    def cached_removed_conditions(self) -> list[VowAddedEffectRemovedCondition]:
+        """Removed condition children; a child's save or delete clears it."""
+        return list(
+            self.removed_conditions.select_related("condition", "condition__cure_check_type")
+        )
+
+    @PrunedCachedProperty
+    def cached_treatments(self) -> list[VowAddedEffectTreatment]:
+        """Treatment children; a child's save or delete clears it."""
+        return list(self.treatments.select_related("treatment_template__target_condition"))
+
+    @PrunedCachedProperty
+    def cached_damage_profiles(self) -> list[VowAddedEffectDamageProfile]:
+        """Damage profile children; a child's save or delete clears it."""
+        return list(self.damage_profiles.select_related("damage_type"))
+
+
+class VowAddedEffectAppliedCondition(
+    RelatedCacheClearingMixin, NaturalKeyMixin, AbstractAppliedCondition
+):
+    """A condition a ``VowAddedEffect`` applies when it fires (#4581).
+
+    Same columns and severity/duration formulas as ``TechniqueAppliedCondition``;
+    the header's per-thread-level bonuses are added on top at apply time.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["effect"]
+
+    effect = models.ForeignKey(
+        VOW_ADDED_EFFECT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="applied_conditions",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["effect", "condition", "target_kind"],
+                name="vow_added_effect_applied_condition_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["effect", "condition", "target_kind"]
+        dependencies = [VOW_ADDED_EFFECT_MODEL, CONDITION_TEMPLATE_MODEL]
+
+    def __str__(self) -> str:
+        return f"{self.effect}: applies {self.condition.name} ({self.target_kind})"
+
+    def clean(self) -> None:
+        """Refuse a behavior-altering condition: consent is held here, not at cast time."""
+        super().clean()
+        if self.condition_id is not None and self.condition.category.alters_behavior:
+            raise ValidationError(
+                {
+                    "condition": (
+                        "This condition changes how its bearer behaves (compulsion, charm, "
+                        "fear), which needs the bearer's consent. A vow effect cannot apply it."
+                    )
+                }
+            )
+
+
+class VowAddedEffectRemovedCondition(
+    RelatedCacheClearingMixin, NaturalKeyMixin, AbstractAppliedCondition
+):
+    """A condition a ``VowAddedEffect`` strips when it fires (#4581).
+
+    Mirrors ``TechniqueRemovedCondition``: ``remove_all_stacks`` and
+    ``cure_power_multiplier`` are read by the shared removal seam.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["effect"]
+
+    effect = models.ForeignKey(
+        VOW_ADDED_EFFECT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="removed_conditions",
+    )
+    remove_all_stacks = models.BooleanField(
+        default=True,
+        help_text="If True, every stack is removed; if False, one stack is decremented.",
+    )
+    cure_power_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+        help_text="Multiplied by the cast's intensity and added to the opposed cure check.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["effect", "condition", "target_kind"],
+                name="vow_added_effect_removed_condition_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["effect", "condition", "target_kind"]
+        dependencies = [VOW_ADDED_EFFECT_MODEL, CONDITION_TEMPLATE_MODEL]
+
+    def __str__(self) -> str:
+        return f"{self.effect}: removes {self.condition.name} ({self.target_kind})"
+
+    def clean(self) -> None:
+        """Inert apply-only knobs stay at their defaults, as on a technique removal row."""
+        super().clean()
+        validate_inert_removal_knobs(self)
+
+
+class VowAddedEffectTreatment(RelatedCacheClearingMixin, NaturalKeyMixin, SharedMemoryModel):
+    """A treatment a ``VowAddedEffect`` performs when it fires (#4581).
+
+    Mirrors ``TechniqueTreatment``.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["effect"]
+
+    effect = models.ForeignKey(
+        VOW_ADDED_EFFECT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="treatments",
+    )
+    treatment_template = models.ForeignKey(
+        "arxii.TreatmentTemplate",
+        on_delete=models.PROTECT,
+        related_name="vow_added_effect_payloads",
+    )
+    target_kind = models.CharField(
+        max_length=16,
+        choices=ConditionTargetKind.choices,
+        default=ConditionTargetKind.ALLY,
+    )
+    minimum_success_level = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum success level required to perform this treatment.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["effect", "treatment_template"],
+                name="vow_added_effect_treatment_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["effect", "treatment_template"]
+        dependencies = [VOW_ADDED_EFFECT_MODEL, "arxii.TreatmentTemplate"]
+
+    def __str__(self) -> str:
+        return f"{self.effect}: treats {self.treatment_template.name} ({self.target_kind})"
+
+
+class VowAddedEffectDamageProfile(
+    RelatedCacheClearingMixin, NaturalKeyMixin, AbstractDamageProfile
+):
+    """A damage component a ``VowAddedEffect`` deals when it fires (#4581).
+
+    Mirrors ``SignatureMotifBonusDamageProfile``: one row per damage type, plus
+    at most one untyped row.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["effect"]
+
+    effect = models.ForeignKey(
+        VOW_ADDED_EFFECT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="damage_profiles",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["effect", "damage_type"],
+                condition=models.Q(damage_type__isnull=False),
+                name="vow_added_effect_damage_profile_per_type",
+            ),
+            models.UniqueConstraint(
+                fields=["effect"],
+                condition=models.Q(damage_type__isnull=True),
+                name="vow_added_effect_untyped_damage_profile",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["effect", "damage_type"]
+        dependencies = [VOW_ADDED_EFFECT_MODEL, "arxii.DamageType"]
+
+    def __str__(self) -> str:
+        type_str = self.damage_type.name if self.damage_type else "untyped"
+        return f"{self.effect}: {self.base_damage} {type_str}"
+
+    def clean(self) -> None:
+        """Damage rides a fight: refuse it on an effect that can fire outside combat."""
+        super().clean()
+        # An admin "add" submit hands this row the unsaved header (effect_id is still
+        # None), so read the relation itself and skip only when no header is attached.
+        try:
+            effect = self.effect
+        except ObjectDoesNotExist:
+            return
+        if effect.cast_context != VowEffectContext.IN_COMBAT:
+            msg = (
+                "A damage row needs its effect's context set to In Combat: damage is "
+                "dealt to a fight's opponents."
+            )
+            raise ValidationError(msg)
 
 
 class InsightTableEntryManager(NaturalKeyManager):

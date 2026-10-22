@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import TreatmentTargetKind
@@ -244,3 +245,86 @@ class ApplyTechniqueTreatmentsTest(TestCase):
                     )
                 _, kwargs = mock_perform.call_args
                 self.assertEqual(kwargs.get("power_intensity"), eff_intensity)
+
+
+class TreatmentRowOverrideTests(TestCase):
+    """#4581: the treatment_rows override and the missing-sheet skip."""
+
+    def setUp(self) -> None:
+        self.caster_sheet = CharacterSheetFactory()
+        self.ally_sheet = CharacterSheetFactory()
+        self.caster = self.caster_sheet.character
+        self.ally = self.ally_sheet.character
+        self.scene = SceneFactory(is_active=True)
+        self.condition = ConditionTemplateFactory(name="Wound_Override")
+        self.template = TreatmentTemplateFactory(
+            target_kind=TreatmentTargetKind.PRIMARY,
+            target_condition=self.condition,
+            scene_required=False,
+            once_per_scene_per_helper=False,
+            check_type=CheckTypeFactory(),
+            reduction_on_crit=2,
+            reduction_on_success=1,
+            reduction_on_partial=1,
+        )
+        self.technique_a = TechniqueFactory()
+        self.technique_b = TechniqueFactory()
+        self.row_b = TechniqueTreatment.objects.create(
+            technique=self.technique_b,
+            treatment_template=self.template,
+            target_kind=ConditionTargetKind.ALLY,
+            minimum_success_level=1,
+        )
+        CharacterAnimaFactory(character=self.caster_sheet)
+
+    @patch("world.checks.services.perform_check")
+    def test_treatment_rows_override_treats_from_the_given_rows(self, mock_check) -> None:
+        mock_check.return_value = _make_check_result(success_level=2)
+        ConditionInstanceFactory(target=self.ally, condition=self.condition, severity=3)
+        results = apply_technique_treatments(
+            technique=self.technique_a,
+            success_level=3,
+            eff_intensity=0,
+            targets_by_kind={ConditionTargetKind.ALLY: [self.ally]},
+            source_character=self.caster,
+            scene=self.scene,
+            treatment_rows=[self.row_b],
+        )
+        self.assertEqual(len(results), 1)
+        attempt = TreatmentAttempt.objects.get()
+        self.assertEqual(attempt.helper, self.caster_sheet)
+        self.assertEqual(attempt.target, self.ally_sheet)
+
+    def test_the_techniques_own_rows_are_ignored_under_an_override(self) -> None:
+        TechniqueTreatment.objects.create(
+            technique=self.technique_a,
+            treatment_template=self.template,
+            target_kind=ConditionTargetKind.ALLY,
+            minimum_success_level=1,
+        )
+        with patch(
+            "world.magic.services.condition_application._find_treatment_target_effect"
+        ) as find:
+            results = apply_technique_treatments(
+                technique=self.technique_a,
+                success_level=3,
+                eff_intensity=0,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.ally]},
+                source_character=self.caster,
+                scene=self.scene,
+                treatment_rows=[],
+            )
+        self.assertEqual(results, [])
+        find.assert_not_called()
+
+    def test_a_target_without_a_sheet_is_skipped_not_raised(self) -> None:
+        sheetless = ObjectDBFactory(db_key="SheetlessTreatmentTarget")
+        results = apply_technique_treatments(
+            technique=self.technique_b,
+            success_level=3,
+            eff_intensity=0,
+            targets_by_kind={ConditionTargetKind.ALLY: [sheetless]},
+            source_character=self.caster,
+            scene=self.scene,
+        )
+        self.assertEqual(results, [])

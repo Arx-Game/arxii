@@ -46,6 +46,8 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
     dest_id: int | None,
     pos_a_id: int | None,
     pos_b_id: int | None,
+    severity_bonus: int,
+    duration_bonus: int,
 ) -> list[BulkConditionApplication]:
     """Build BulkConditionApplication objects for one applied-condition row.
 
@@ -65,6 +67,10 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
         dest_id: Cast-time destination position FK, or ``None``.
         pos_a_id: Cast-time position-A FK, or ``None``.
         pos_b_id: Cast-time position-B FK, or ``None``.
+        severity_bonus: Flat amount added to a non-team-lane row's severity (#4581).
+        duration_bonus: Flat rounds added to a row's duration when it has one (#4581).
+            A team-lane row ignores both bonuses: its severity is priced against the
+            landing target, and the lane is bounded.
 
     Returns:
         List of ``BulkConditionApplication`` objects, one per target.
@@ -76,14 +82,19 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
         if is_team_lane_row:
             severity = priced_percent_severity(eff_intensity=eff_intensity, target=target)
         else:
-            severity = row.compute_severity(
-                effective_power=eff_intensity,
-                success_level=success_level,
+            severity = (
+                row.compute_severity(
+                    effective_power=eff_intensity,
+                    success_level=success_level,
+                )
+                + severity_bonus
             )
         duration = row.compute_duration_rounds(
             effective_power=eff_intensity,
             success_level=success_level,
         )
+        if duration is not None and not is_team_lane_row:
+            duration += duration_bonus
         applications.append(
             BulkConditionApplication(
                 target=target,
@@ -109,6 +120,8 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
     applied_condition_rows: Iterable | None = None,
     position_params: dict[str, int] | None = None,
     soulfray_consented: bool = False,
+    severity_bonus: int = 0,
+    duration_bonus: int = 0,
 ) -> list[AppliedConditionResult]:
     """Apply authored applied-condition rows to pre-resolved targets.
 
@@ -152,6 +165,10 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
             reactive cost and upkeep firing past zero anima at the price of Soulfray
             (#3573). Forwarded to ``bulk_apply_conditions`` and stamped onto every
             created ``ConditionInstance``.
+        severity_bonus: Flat amount added to every non-team-lane row's computed
+            severity (#4581, a vow's added effect riding the cast). Default 0.
+        duration_bonus: Flat rounds added to every non-team-lane row's duration when
+            it has one (#4581). Default 0. Team-lane rows ignore both bonuses.
 
     Returns:
         List of ``AppliedConditionResult``, one per ``BulkConditionApplication``
@@ -200,6 +217,8 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
                 dest_id=dest_id,
                 pos_a_id=pos_a_id,
                 pos_b_id=pos_b_id,
+                severity_bonus=severity_bonus,
+                duration_bonus=duration_bonus,
             )
         )
 
@@ -227,13 +246,14 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
     return out
 
 
-def remove_technique_conditions(
+def remove_technique_conditions(  # noqa: PLR0913 - cohesive condition-removal params
     *,
     technique: Technique,
     success_level: int,
     eff_intensity: int,
     targets_by_kind: dict[str, list[ObjectDB]],  # noqa: OBJECTDB_PARAM
     source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    removed_condition_rows: Iterable | None = None,
 ) -> list[RemovedConditionResult]:
     """Remove technique-authored conditions from pre-resolved targets (dispel/cleanse).
 
@@ -270,14 +290,25 @@ def remove_technique_conditions(
             ``ObjectDB`` targets. Callers build this before calling.
         source_character: The caster's ``ObjectDB``, used as the opposed-cure-check
             roller.
+        removed_condition_rows: Optional override for the rows to apply (#4581).
+            ``None`` reads ``technique.removed_conditions`` as before; otherwise the
+            given rows (anything exposing ``condition``, ``target_kind``,
+            ``minimum_success_level``, ``remove_all_stacks`` and
+            ``cure_power_multiplier``) are used instead. Provenance is unchanged: the
+            caster rolls the cure check.
 
     Returns:
         List of ``RemovedConditionResult``, one per (row, target) attempted, in order.
         Empty when no rows pass the SL gate or all resolved target lists are empty.
     """
-    rows = list(
-        technique.removed_conditions.select_related("condition", "condition__cure_check_type").all()
-    )
+    if removed_condition_rows is None:
+        rows = list(
+            technique.removed_conditions.select_related(
+                "condition", "condition__cure_check_type"
+            ).all()
+        )
+    else:
+        rows = list(removed_condition_rows)
     if not rows:
         return []
 
@@ -367,6 +398,7 @@ def apply_technique_treatments(  # noqa: PLR0913 - cohesive condition-applicatio
     targets_by_kind: dict[str, list[ObjectDB]],  # noqa: OBJECTDB_PARAM
     source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
     scene: Scene,
+    treatment_rows: Iterable | None = None,
 ) -> list:
     """Perform technique-authored treatments on pre-resolved targets.
 
@@ -397,6 +429,10 @@ def apply_technique_treatments(  # noqa: PLR0913 - cohesive condition-applicatio
             resolved ``ObjectDB`` targets. Callers build this before calling.
         source_character: The caster's ``ObjectDB``, used as the treatment helper.
         scene: The active ``Scene``.
+        treatment_rows: Optional override for the rows to perform (#4581). ``None``
+            reads ``technique.treatments`` as before; otherwise the given rows
+            (anything exposing ``treatment_template``, ``target_kind`` and
+            ``minimum_success_level``) are used. The caster stays the helper.
 
     Returns:
         List of ``TreatmentOutcome`` for successful treatments. Empty when no
@@ -405,7 +441,10 @@ def apply_technique_treatments(  # noqa: PLR0913 - cohesive condition-applicatio
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.magic.models import Thread  # noqa: PLC0415
 
-    rows = list(technique.treatments.select_related("treatment_template").all())
+    if treatment_rows is None:
+        rows = list(technique.treatments.select_related("treatment_template").all())
+    else:
+        rows = list(treatment_rows)
     if not rows:
         return []
 
@@ -422,7 +461,10 @@ def apply_technique_treatments(  # noqa: PLR0913 - cohesive condition-applicatio
         treatment = row.treatment_template
         targets = targets_by_kind.get(row.target_kind, [])
         for target in targets:
-            target_sheet = CharacterSheet.objects.get(character=target)
+            # An NPC opponent has no sheet: skip it rather than raise mid-round.
+            target_sheet = CharacterSheet.objects.filter(character=target).first()
+            if target_sheet is None:
+                continue
 
             target_effect = _find_treatment_target_effect(treatment, target, target_sheet)
             if target_effect is None:

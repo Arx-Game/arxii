@@ -2504,6 +2504,7 @@
   - covenant_role -> covenants.CovenantRole [FK] (nullable)
 **Pointed to by:**
   - mirror_surface <- combat.CombatOpponent
+  - vow_effect_firings <- combat.VowAddedEffectFiring
   - round_actions <- combat.CombatRoundAction
   - incoming_attacks <- combat.CombatOpponentAction
   - sustained_actions <- combat.SustainedAction
@@ -2764,6 +2765,11 @@
   - encounter -> combat.CombatEncounter [FK]
   - opponent -> combat.CombatOpponent [FK]
   - participant -> combat.CombatParticipant [FK]
+
+### VowAddedEffectFiring
+**Foreign Keys:**
+  - participant -> combat.CombatParticipant [FK]
+  - effect -> covenants.VowAddedEffect [FK]
 
 ### Service Functions
 - `accumulate_soulfray(*, character: 'ObjectDB', anima: 'CharacterAnima', deficit: 'int', soulfray_config: 'SoulfrayConfig | None', check_result: 'CheckResult | None', lethal: 'bool' = True, defer_reveal: 'bool' = False) -> 'SoulfrayResult | None' - Accumulate Soulfray severity from the pool state and apply stage consequences.`
@@ -3106,6 +3112,8 @@
   - crossing_options <- magic.CrossingOption
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
+  - vowaddedeffectappliedcondition_applied <- covenants.VowAddedEffectAppliedCondition
+  - vowaddedeffectremovedcondition_applied <- covenants.VowAddedEffectRemovedCondition
   - insight_entries <- covenants.InsightTableEntry
   - weakness_pool_entries <- covenants.WeaknessPoolEntry
   - signaturemotifbonusappliedcondition_applied <- magic.SignatureMotifBonusAppliedCondition
@@ -3143,6 +3151,7 @@
   - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
   - techniquevariantdamageprofile_damage_profiles <- magic.TechniqueVariantDamageProfile
+  - vowaddedeffectdamageprofile_damage_profiles <- covenants.VowAddedEffectDamageProfile
   - signaturemotifbonusdamageprofile_damage_profiles <- magic.SignatureMotifBonusDamageProfile
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - thread_pull_resistances <- magic.ThreadPullEffect
@@ -3182,6 +3191,7 @@
 **Pointed to by:**
   - attempts <- conditions.TreatmentAttempt
   - technique_payloads <- magic.TechniqueTreatment
+  - vow_added_effect_payloads <- covenants.VowAddedEffectTreatment
   - draft_technique_payloads <- magic.TechniqueDraftTreatment
   - action_requests <- scenes.SceneActionRequest
 
@@ -3452,6 +3462,7 @@
   - gift_grants <- covenants.CovenantRoleGiftGrant
   - role_bonuses <- covenants.CovenantRoleBonus
   - situational_perks <- covenants.VowSituationalPerk
+  - added_effects <- covenants.VowAddedEffect
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
   - combat_participations <- combat.CombatParticipant
@@ -3501,6 +3512,40 @@
 ### SecondaryVowConfig
 **Foreign Keys:**
   - updated_by -> evennia.AccountDB [FK] (nullable)
+
+### VowAddedEffect
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [FK]
+  - gift -> magic.Gift [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - upgrades -> covenants.VowAddedEffect [FK] (nullable)
+**Pointed to by:**
+  - upgraded_by <- covenants.VowAddedEffect
+  - applied_conditions <- covenants.VowAddedEffectAppliedCondition
+  - removed_conditions <- covenants.VowAddedEffectRemovedCondition
+  - treatments <- covenants.VowAddedEffectTreatment
+  - damage_profiles <- covenants.VowAddedEffectDamageProfile
+  - firings <- combat.VowAddedEffectFiring
+
+### VowAddedEffectAppliedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - effect -> covenants.VowAddedEffect [FK]
+
+### VowAddedEffectDamageProfile
+**Foreign Keys:**
+  - damage_type -> conditions.DamageType [FK] (nullable)
+  - effect -> covenants.VowAddedEffect [FK]
+
+### VowAddedEffectRemovedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - effect -> covenants.VowAddedEffect [FK]
+
+### VowAddedEffectTreatment
+**Foreign Keys:**
+  - effect -> covenants.VowAddedEffect [FK]
+  - treatment_template -> conditions.TreatmentTemplate [FK]
 
 ### VowSituationalPerk
 **Foreign Keys:**
@@ -5754,6 +5799,7 @@
   - reincarnation <- magic.Reincarnation
   - granted_by_roles <- covenants.CovenantRole
   - role_grants <- covenants.CovenantRoleGiftGrant
+  - vow_added_effects <- covenants.VowAddedEffect
   - technique_drafts <- magic.TechniqueDraft
   - thread_pull_effects <- magic.ThreadPullEffect
   - anchored_threads <- magic.Thread
@@ -6307,6 +6353,7 @@
   - manifest_options <- magic.TechniqueManifestOption
   - character_manifestations <- magic.CharacterManifestation
   - variants <- magic.TechniqueVariant
+  - vow_added_effects <- covenants.VowAddedEffect
   - grants <- magic.TechniqueGrant
   - progress_records <- magic.TechniqueProgress
   - progress_weekly <- magic.TechniqueProgressWeekly

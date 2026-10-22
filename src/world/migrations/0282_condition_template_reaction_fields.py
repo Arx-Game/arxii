@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0280_drop_organizationtype_is_covert"),
-    ]
+    dependencies = [("arxii", "0281_vow_added_effects")]
 
     operations = [
         migrations.AddField(

@@ -15,12 +15,15 @@ term is chosen and the rest are listed under `_Avoid_`.
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
   Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501); and Magic skill floor (#4457,
   ADR-4457-A; Tradition Training gains it)
-- [covenants](src/world/covenants/AGENT_GLOSSARY.md)
+- [covenants](src/world/covenants/AGENT_GLOSSARY.md) - also holds the #4581 vow added effect terms
+  (ADR-4581-A): Vow added effect, Upgrade (of a vow added effect), Added-effect firing
+  (_Avoid_: vow rider, vow switch)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
   Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
 - [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
-  Settled round; and (ADR-4147) Spectacle, Spectacle kind
+  Settled round; (ADR-4147) Spectacle, Spectacle kind; and (#4581, ADR-4581-A) Added-effect firing
+  (the once-per-round / once-per-fight vow effect ledger)
 - [standoffs](src/world/standoffs/AGENT_GLOSSARY.md) (#4145, ADR-4145-A, ADR-4361-A,
   ADR-4373-A, ADR-4415-A, ADR-4441-A): Standoff, Group, Named NPC group, Language gate, Drive, Cause, Cause
   effect, Clock, Broken-hold re-test, Faction, Faction rule, Angle, Association, Affiliation,

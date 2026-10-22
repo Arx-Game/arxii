@@ -226,6 +226,11 @@ its own `<form>` and cannot nest inside this one.
        hx-target="#authoring-editor" hx-swap="innerHTML show:top">
       {% blocktranslate with identity=nav.next_identity %}Next: {{ identity }}{% endblocktranslate %} &rarr;
     </a>
+    {% elif nav.next_admin_url %}
+    {% comment %}The next row is in a table with no credit columns, so it opens on its own admin form (#4557).{% endcomment %}
+    <a class="editor-next" href="{{ nav.next_admin_url }}">
+      {% blocktranslate with identity=nav.next_identity %}Next: {{ identity }}, in admin{% endblocktranslate %} &rarr;
+    </a>
     {% elif nav %}
     <span class="editor-exhausted">
       {{ nav.exhausted_text }}

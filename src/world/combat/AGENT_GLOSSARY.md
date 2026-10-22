@@ -424,3 +424,7 @@ _Avoid_: display type, fear source
 **Standoff** (#4145):
 The pre-round state of a `CombatEncounter` in which the party reads and talks down groups of opponents before the first round. Its terms (Group, Drive, Cause, Regard rule, Spark, Terms, Approach) live in `src/world/standoffs/AGENT_GLOSSARY.md`.
 _Avoid_: parley phase
+
+**Added-effect firing** (`VowAddedEffectFiring`, #4581):
+Play state: one row recording that a combat participant's covenant vow fired a once-per-round or once-per-fight added effect in a given round. The participant is the holder whose vow carried the effect, not necessarily the caster (an ally's cast can fire the holder's effect). Written only by a cast that landed; a new fight starts with an empty ledger because a participant row belongs to one encounter. The effect itself is a covenants term: see the covenants glossary's "Vow added effect".
+_Avoid_: cooldown, charge, spent flag (a boolean on the participant was the rejected shape).
