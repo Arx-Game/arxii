@@ -3044,24 +3044,20 @@ def clear_all_conditions(
     return len(instances)
 
 
-def _active_template_sum_by_target(
+def _active_flagged_instances(
     targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
     *,
     flag_field: str,
-    value_field: str,
-) -> dict[int, int]:
-    """Sum a flagged ConditionTemplate field over each target's active conditions, in one query.
+) -> QuerySet[ConditionInstance]:
+    """Active instances on ``targets`` whose template has ``flag_field`` set, unordered.
 
     Uses ``get_active_conditions``'s notion of active (not suppressed, not past an
     INGAME_TIME ``expires_at``) but, unlike it, does not sweep expired rows: this is
-    a read for many targets at once. Keyed by ObjectDB pk; targets whose total is zero
-    (no flagged condition) are absent.
+    a read for many targets at once.
     """
     target_ids = {t.pk for t in targets if t is not None}
-    if not target_ids:
-        return {}
     now = timezone.now()
-    rows = (
+    return (
         ConditionInstance.objects.filter(
             _not_suppressed_q(),
             target_id__in=target_ids,
@@ -3073,6 +3069,22 @@ def _active_template_sum_by_target(
             condition__default_duration_type=DurationType.INGAME_TIME,
         )
         .order_by()
+    )
+
+
+def _active_template_sum_by_target(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+    *,
+    flag_field: str,
+    value_field: str,
+) -> dict[int, int]:
+    """Sum a flagged ConditionTemplate field over each target's active conditions, in one query.
+
+    Keyed by ObjectDB pk; targets whose total is zero (no flagged condition, or a
+    flagged one whose value is zero) are absent.
+    """
+    rows = (
+        _active_flagged_instances(targets, flag_field=flag_field)
         .values("target_id")
         .annotate(total=Sum(f"condition__{value_field}"))
     )
@@ -3103,6 +3115,22 @@ def aggro_priority_by_target(
     """
     return _active_template_sum_by_target(
         targets, flag_field="draws_aggro", value_field="aggro_priority"
+    )
+
+
+def draws_aggro_target_ids(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> set[int]:
+    """ObjectDB pks among ``targets`` carrying an active draws_aggro condition (#4572).
+
+    Membership, not magnitude: a draws_aggro condition with ``aggro_priority`` 0 still
+    marks its bearer as drawing aggro, though it adds nothing to the summed priority
+    from ``aggro_priority_by_target``. One query for all ``targets``.
+    """
+    return set(
+        _active_flagged_instances(targets, flag_field="draws_aggro")
+        .values_list("target_id", flat=True)
+        .distinct()
     )
 
 

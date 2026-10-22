@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType as CheckTypeHint, Consequence, ConsequenceEffect
     from world.checks.types import ModifierBreakdown, PendingResolution
+    from world.combat.models import CombatOpponent
     from world.conditions.models import (
         ConditionInstance,
         ConditionStage,
@@ -2041,18 +2042,27 @@ def _apply_round_tick_damage(
 
     Mirrors mechanics._deal_damage: decrement health, then run the survivability
     pipeline (acute tier — may wound/knockout/kill, which is correct for in-round
-    poison). A target with no vitals is a no-op unless it is the body of an active
-    CombatOpponent, which takes the damage through the opponent path (#4572).
-    Consults the target's active Succor cover (#1744) before any further damage
-    reduction is applied.
+    poison). The body of an active CombatOpponent is checked first and takes the damage
+    through the opponent path even when it also has a sheet with vitals, because an
+    opponent's hits and defeat read ``CombatOpponent.health`` (#4572). Any other target
+    with no vitals is a no-op. Consults the target's active Succor cover (#1744) before
+    any further damage reduction is applied.
     """
     if not result.damage_dealt:
+        return
+    from world.combat.constants import OpponentStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+    opponent = CombatOpponent.objects.filter(
+        objectdb_id=target.pk, status=OpponentStatus.ACTIVE
+    ).first()
+    if opponent is not None:
+        _apply_round_tick_damage_to_opponent(opponent, result)
         return
     try:
         sheet = target.sheet_data
         vitals = sheet.vitals
     except (AttributeError, ObjectDoesNotExist):
-        _apply_round_tick_damage_to_opponent(target, result)
         return
     from actions.round_context import get_active_round_context  # noqa: PLC0415
     from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
@@ -2098,29 +2108,24 @@ def _apply_round_tick_damage(
 
 
 def _apply_round_tick_damage_to_opponent(
-    target: ObjectDB,  # noqa: OBJECTDB_PARAM - the round tick spans every kind of object
+    opponent: CombatOpponent,
     result: RoundTickResult,
 ) -> None:
-    """Apply a tick's DoT damage to the active CombatOpponent behind ``target`` (#4572).
+    """Apply a tick's DoT damage to an active CombatOpponent (#4572).
 
-    An NPC opponent has no CharacterSheet or vitals, so its health lives on the
-    CombatOpponent row. Each (damage_type, amount) goes through
+    An NPC opponent's health lives on the CombatOpponent row (it may have a sheet, but
+    hits and defeat read the row). Each (damage_type, amount) goes through
     ``apply_damage_to_opponent``, which nets the damage-type resistance exactly once
-    and handles defeat. Like PC DoT, the tick skips armor soak (``bypass_soak``) and
-    the DAMAGE_PRE_APPLY band (``bypass_pre_apply``): it is not a blow to intercept.
-    A target that is not an active opponent is a no-op.
+    and handles defeat. Like PC DoT, the tick skips armor soak (``bypass_soak``), the
+    DAMAGE_PRE_APPLY band (``bypass_pre_apply``) and condition-damage interactions
+    (``skip_condition_interactions``): it is not a blow to intercept, and the PC tick
+    runs none either.
     """
     from world.combat.constants import OpponentStatus  # noqa: PLC0415
-    from world.combat.models import CombatOpponent  # noqa: PLC0415
     from world.combat.services.damage.interception import (  # noqa: PLC0415
         apply_damage_to_opponent,
     )
 
-    opponent = CombatOpponent.objects.filter(
-        objectdb_id=target.pk, status=OpponentStatus.ACTIVE
-    ).first()
-    if opponent is None:
-        return
     for damage_type, amount in result.damage_dealt:
         if amount <= 0:
             continue
@@ -2129,6 +2134,7 @@ def _apply_round_tick_damage_to_opponent(
             amount,
             bypass_soak=True,
             bypass_pre_apply=True,
+            skip_condition_interactions=True,
             damage_type=damage_type,
         )
         if opponent.status != OpponentStatus.ACTIVE:

@@ -5,16 +5,21 @@ from __future__ import annotations
 from django.test import TestCase
 from evennia import create_object
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import OpponentStatus
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
+from world.combat.services.damage.interception import apply_damage_to_opponent
 from world.conditions.factories import (
+    ConditionDamageInteractionFactory,
     ConditionDamageOverTimeFactory,
     ConditionResistanceModifierFactory,
     ConditionTemplateFactory,
     DamageTypeFactory,
 )
+from world.conditions.models import ConditionInstance
 from world.conditions.services import apply_condition
 from world.conditions.types import RoundTickResult
+from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.services import _apply_round_tick_damage, tick_round_for_targets
 
 
@@ -31,6 +36,13 @@ class OpponentRoundTickDamageTests(TestCase):
             base_damage=6,
             scales_with_severity=False,
             scales_with_stacks=False,
+        )
+        cls.brittle = ConditionTemplateFactory(name="Opponent Tick Brittle")
+        ConditionDamageInteractionFactory(
+            condition=cls.brittle,
+            damage_type=cls.fire,
+            damage_modifier_percent=100,
+            removes_condition=True,
         )
         cls.ward = ConditionTemplateFactory(name="Opponent Tick Fire Ward")
         ConditionResistanceModifierFactory(
@@ -103,3 +115,38 @@ class OpponentRoundTickDamageTests(TestCase):
         _apply_round_tick_damage(vase, RoundTickResult(damage_dealt=[(self.fire, 6)]))
         self.opponent.refresh_from_db()
         self.assertEqual(self.opponent.health, 50)
+
+    def test_opponent_body_with_a_sheet_still_loses_opponent_health(self) -> None:
+        """An opponent whose body also has a sheet with vitals is hurt on the opponent row.
+
+        Its hits and defeat read CombatOpponent.health, so the tick must too.
+        """
+        vitals = CharacterVitalsFactory(
+            character_sheet=CharacterSheetFactory(character=self.body), health=100, max_health=100
+        )
+        _apply_round_tick_damage(self.body, RoundTickResult(damage_dealt=[(self.fire, 6)]))
+        self.opponent.refresh_from_db()
+        vitals.refresh_from_db()
+        self.assertEqual(self.opponent.health, 44)
+        self.assertEqual(vitals.health, 100)
+
+    def test_a_blow_runs_condition_damage_interactions_on_the_opponent(self) -> None:
+        """Control: the same condition doubles an ordinary hit and is consumed by it."""
+        apply_condition(self.body, self.brittle)
+        apply_damage_to_opponent(
+            self.opponent, 6, bypass_soak=True, bypass_pre_apply=True, damage_type=self.fire
+        )
+        self.opponent.refresh_from_db()
+        self.assertEqual(self.opponent.health, 38)
+        self.assertFalse(ConditionInstance.objects.filter(target=self.body).exists())
+
+    def test_tick_does_not_run_condition_damage_interactions(self) -> None:
+        """The PC tick runs no interaction, so the opponent tick neither: no multiplier,
+        and the interacting condition is not consumed."""
+        apply_condition(self.body, self.brittle)
+        _apply_round_tick_damage(self.body, RoundTickResult(damage_dealt=[(self.fire, 6)]))
+        self.opponent.refresh_from_db()
+        self.assertEqual(self.opponent.health, 44)
+        self.assertTrue(
+            ConditionInstance.objects.filter(target=self.body, condition=self.brittle).exists()
+        )

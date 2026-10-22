@@ -5,8 +5,11 @@ shipped "Aegis Field" / "Mirror Ward" rows are just the default spelling.
 
 * ``absorb_pool`` designates any active instance of the bearer holding a buffer
   (``absorb_remaining > 0``).
-* ``reflect_damage`` designates an instance whose template carries a reactive
-  trigger whose flow calls the handler, the same data ``protective_flavor`` reads.
+* ``reflect_damage`` and ``blink_dodge`` designate an instance whose template carries a
+  reactive trigger whose flow calls the handler, the same data ``protective_flavor``
+  reads.
+
+The bearer may be an NPC opponent's body (a CombatOpponent objectdb), not only a PC.
 """
 
 from django.test import TestCase
@@ -19,17 +22,24 @@ from flows.factories import (
     FlowStepDefinitionFactory,
     TriggerDefinitionFactory,
 )
+from world.areas.positioning.factories import ObjectPositionFactory, PositionFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.damage_source import classify_source
 from world.combat.factories import CombatOpponentFactory
-from world.conditions.constants import FORCE_FIELD_CONDITION_NAME, REFLECT_CONDITION_NAME
+from world.conditions.constants import (
+    BLINK_CONDITION_NAME,
+    FORCE_FIELD_CONDITION_NAME,
+    REFLECT_CONDITION_NAME,
+)
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.magic.effect_palette_content import ensure_force_field_content, ensure_reflect_content
 from world.magic.factories import CharacterAnimaFactory
 from world.magic.services.effect_handlers import (
+    BLINK_DODGE_HANDLER_PATH,
     REFLECT_DAMAGE_HANDLER_PATH,
     absorb_pool,
+    blink_dodge,
     reflect_damage,
 )
 
@@ -40,19 +50,24 @@ def _bearer():
     return bearer, anima
 
 
-def _reflect_template(name: str):
-    """A reflect ward called *name*: a template whose trigger flow calls reflect_damage."""
-    template = ConditionTemplateFactory(name=name, reactive_anima_cost=2)
+def _ward_template(name: str, handler_path: str, *, cost: int = 2):
+    """A ward called *name*: a template whose trigger flow calls *handler_path*."""
+    template = ConditionTemplateFactory(name=name, reactive_anima_cost=cost)
     flow = FlowDefinitionFactory()
     FlowStepDefinitionFactory(
         flow=flow,
         action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-        variable_name=REFLECT_DAMAGE_HANDLER_PATH,
+        variable_name=handler_path,
     )
     template.reactive_triggers.add(
         TriggerDefinitionFactory(flow_definition=flow, event_name=EventName.DAMAGE_PRE_APPLY)
     )
     return template
+
+
+def _reflect_template(name: str):
+    """A reflect ward called *name*: a template whose trigger flow calls reflect_damage."""
+    return _ward_template(name, REFLECT_DAMAGE_HANDLER_PATH)
 
 
 class AbsorbPoolDesignatesByBufferTests(TestCase):
@@ -74,6 +89,23 @@ class AbsorbPoolDesignatesByBufferTests(TestCase):
         self.assertEqual(instance.absorb_remaining, 5)
         anima.refresh_from_db()
         self.assertEqual(anima.current, 9)
+
+    def test_npc_opponent_bearer_absorbs(self) -> None:
+        npc = CombatOpponentFactory().objectdb
+        template = ConditionTemplateFactory(name="Hide Of Stone", reactive_anima_cost=0)
+        instance = ConditionInstanceFactory(condition=template, target=npc, absorb_remaining=12)
+        payload = DamagePreApplyPayload(
+            target=npc,
+            amount=15,
+            damage_type=None,
+            source=DamageSource(type="environment", ref=None),
+        )
+
+        absorb_pool(payload=payload)
+
+        self.assertEqual(payload.amount, 3)
+        instance.refresh_from_db()
+        self.assertEqual(instance.absorb_remaining, 0)
 
     def test_shipped_aegis_field_still_absorbs(self) -> None:
         bearer, _anima = _bearer()
@@ -156,6 +188,24 @@ class ReflectDamageDesignatesByTriggerTests(TestCase):
         anima.refresh_from_db()
         self.assertEqual(anima.current, 8)
 
+    def test_npc_opponent_bearer_reflects(self) -> None:
+        """A reflect ward on an NPC body (no anima) zeroes the blow when it is free."""
+        npc = CombatOpponentFactory().objectdb
+        ConditionInstanceFactory(
+            condition=_ward_template("Thorned Hide", REFLECT_DAMAGE_HANDLER_PATH, cost=0),
+            target=npc,
+        )
+        payload = DamagePreApplyPayload(
+            target=npc,
+            amount=20,
+            damage_type=None,
+            source=DamageSource(type="environment", ref=None),
+        )
+
+        reflect_damage(payload=payload)
+
+        self.assertEqual(payload.amount, 0)
+
     def test_shipped_mirror_ward_still_reflects(self) -> None:
         bearer, _anima = _bearer()
         ensure_reflect_content()
@@ -193,5 +243,46 @@ class ReflectDamageDesignatesByTriggerTests(TestCase):
         self.assertEqual(payload.amount, 20)
         opponent.refresh_from_db()
         self.assertEqual(opponent.health, 50)
+        anima.refresh_from_db()
+        self.assertEqual(anima.current, 10)
+
+
+class BlinkDodgeDesignatesByTriggerTests(TestCase):
+    def test_blink_ward_with_a_different_name_still_dodges(self) -> None:
+        pos_a = PositionFactory()
+        PositionFactory(room=pos_a.room)
+        bearer = ObjectPositionFactory(position=pos_a).objectdb
+        sheet = CharacterSheetFactory(character=bearer)
+        anima = CharacterAnimaFactory(character=sheet, current=10, maximum=10)
+        ConditionInstanceFactory(
+            condition=_ward_template("Veil Step", BLINK_DODGE_HANDLER_PATH), target=bearer
+        )
+        payload = DamagePreApplyPayload(
+            target=bearer,
+            amount=15,
+            damage_type=None,
+            source=DamageSource(type="environment", ref=None),
+        )
+
+        blink_dodge(payload=payload)
+
+        self.assertEqual(payload.amount, 0)
+        anima.refresh_from_db()
+        self.assertEqual(anima.current, 8)
+
+    def test_template_named_phase_step_without_the_trigger_does_not_dodge(self) -> None:
+        bearer, anima = _bearer()
+        template = ConditionTemplateFactory(name=BLINK_CONDITION_NAME, reactive_anima_cost=2)
+        ConditionInstanceFactory(condition=template, target=bearer)
+        payload = DamagePreApplyPayload(
+            target=bearer,
+            amount=15,
+            damage_type=None,
+            source=DamageSource(type="environment", ref=None),
+        )
+
+        blink_dodge(payload=payload)
+
+        self.assertEqual(payload.amount, 15)
         anima.refresh_from_db()
         self.assertEqual(anima.current, 10)

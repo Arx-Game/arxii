@@ -25,7 +25,11 @@ from world.combat.models import ThreatRecord
 from world.combat.services import select_npc_actions
 from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
-from world.conditions.services import aggro_priority_by_target, turn_order_modifier_by_target
+from world.conditions.services import (
+    aggro_priority_by_target,
+    draws_aggro_target_ids,
+    turn_order_modifier_by_target,
+)
 from world.scenes.constants import RoundStatus
 
 
@@ -106,8 +110,20 @@ class ConditionTotalsByTargetTests(TestCase):
 
         self.assertEqual(turn_order_modifier_by_target([self.alpha]), {})
 
+    def test_draws_aggro_membership_ignores_a_zero_priority(self):
+        zero = ConditionTemplateFactory(name="Zero Taunt 4572", draws_aggro=True, aggro_priority=0)
+        ConditionInstanceFactory(target=self.alpha, condition=zero)
+        ConditionInstanceFactory(target=self.beta, condition=self.unflagged_priority)
+
+        with self.assertNumQueries(1):
+            members = draws_aggro_target_ids([self.alpha, self.beta, self.bystander])
+
+        self.assertEqual(members, {self.alpha.pk})
+        self.assertEqual(aggro_priority_by_target([self.alpha]), {})
+
     def test_no_targets_runs_no_query(self):
         with self.assertNumQueries(0):
+            self.assertEqual(draws_aggro_target_ids([]), set())
             self.assertEqual(aggro_priority_by_target([]), {})
             self.assertEqual(turn_order_modifier_by_target([]), {})
 
@@ -182,6 +198,20 @@ class AggroTargetingTests(TestCase):
         CombatParticipantFactory(encounter=enc)
         bearer = CombatParticipantFactory(encounter=enc)
         self._give_aggro(bearer)
+
+        actions = select_npc_actions(enc)
+
+        self.assertEqual(list(actions[0].targets.all()), [bearer])
+
+    def test_specific_role_prefers_a_zero_priority_aggro_bearer(self):
+        """draws_aggro alone marks the bearer; a priority of 0 adds no threat but still draws."""
+        zero = ConditionTemplateFactory(
+            name="Zero Priority Taunt 4572", draws_aggro=True, aggro_priority=0
+        )
+        enc, _opp = self._encounter(TargetSelection.SPECIFIC_ROLE)
+        CombatParticipantFactory(encounter=enc)
+        bearer = CombatParticipantFactory(encounter=enc)
+        self._give_aggro(bearer, zero)
 
         actions = select_npc_actions(enc)
 

@@ -71,6 +71,10 @@ from world.magic.models.techniques import (
     TechniqueAppliedCondition,
 )
 from world.magic.seeds_cast import get_standalone_cast_template
+from world.magic.services.effect_handlers import (
+    BLINK_DODGE_HANDLER_PATH,
+    REFLECT_DAMAGE_HANDLER_PATH,
+)
 
 # ---------------------------------------------------------------------------
 # Identity keys (module-level constants for stable naming)
@@ -140,8 +144,6 @@ BLINK_PARTY_TECHNIQUE_NAME: str = "Phase Communion"
 
 # --- Dotted handler paths ---
 _ABSORB_POOL_PATH: str = "world.magic.services.effect_handlers.absorb_pool"
-_REFLECT_DAMAGE_PATH: str = "world.magic.services.effect_handlers.reflect_damage"
-_BLINK_DODGE_PATH: str = "world.magic.services.effect_handlers.blink_dodge"
 _INIT_ABSORB_BUFFER_PATH: str = "world.magic.services.effect_handlers.init_absorb_buffer"
 
 # --- Flow names ---
@@ -680,7 +682,7 @@ def ensure_reflect_content() -> None:
     # CANCEL_EVENT child would fire UNCONDITIONALLY — even on the anima-cost fizzle
     # path where reflect_damage returns early — wrongly cancelling an unaffordable
     # reflect so the attack never lands (#1584 Task 16 caught this).
-    root_step = _seed_call_service_flow(_REFLECT_FLOW_NAME, _REFLECT_DAMAGE_PATH)
+    root_step = _seed_call_service_flow(_REFLECT_FLOW_NAME, REFLECT_DAMAGE_HANDLER_PATH)
     reflect_flow = root_step.flow
 
     # 2. Trigger: DAMAGE_PRE_APPLY, priority 20.
@@ -777,7 +779,7 @@ def ensure_blink_content() -> None:
     # the emitter's `amount <= 0` check then zeroes damage. A CANCEL_EVENT child would
     # fire UNCONDITIONALLY — even when blink_dodge returns early on the fizzle path —
     # so an unaffordable blink would still cancel the attack (#1584 Task 16 caught this).
-    root_step = _seed_call_service_flow(_BLINK_FLOW_NAME, _BLINK_DODGE_PATH)
+    root_step = _seed_call_service_flow(_BLINK_FLOW_NAME, BLINK_DODGE_HANDLER_PATH)
     blink_flow = root_step.flow
 
     # 2. Trigger: DAMAGE_PRE_APPLY, priority 30.

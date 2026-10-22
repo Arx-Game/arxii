@@ -177,14 +177,20 @@ def _apply_aggro_conditions(
     A PC carrying a draws_aggro condition counts its summed aggro_priority as extra
     threat with every opponent (an entry is created where no ThreatRecord exists, so
     HIGHEST_THREAT does not fall back to rotation) and joins the SPECIFIC_ROLE preferred
-    set beside shield-role PCs. Selection-time only: no ThreatRecord is written, and an
-    engagement lock still narrows the pool afterwards.
+    set beside shield-role PCs. Preferred-set membership is "carries an active draws_aggro
+    condition" (even at aggro_priority 0); the priority sum only feeds threat. Aggro is read
+    for player characters only because NPC targeting picks among PC participants.
+    Selection-time only: no ThreatRecord is written, and an engagement lock still narrows the
+    pool afterwards.
     """
-    from world.conditions.services import aggro_priority_by_target  # noqa: PLC0415
-
-    aggro_by_character = aggro_priority_by_target(
-        p.character_sheet.character for p in active_participants
+    from world.conditions.services import (  # noqa: PLC0415
+        aggro_priority_by_target,
+        draws_aggro_target_ids,
     )
+
+    characters = [p.character_sheet.character for p in active_participants]
+    aggro_by_character = aggro_priority_by_target(characters)
+    drawing_aggro = draws_aggro_target_ids(characters)
     aggro_by_participant = {
         p.pk: aggro_by_character[p.character_sheet.character.pk]
         for p in active_participants
@@ -194,7 +200,9 @@ def _apply_aggro_conditions(
         opponent_threat = threat_maps[opponent.pk]
         for participant_id, aggro in aggro_by_participant.items():
             opponent_threat[participant_id] = opponent_threat.get(participant_id, 0) + aggro
-    shield_participant_ids.update(aggro_by_participant)
+    shield_participant_ids.update(
+        p.pk for p in active_participants if p.character_sheet.character.pk in drawing_aggro
+    )
 
 
 def _build_opponent_round_actions(  # noqa: PLR0913

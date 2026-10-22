@@ -25,8 +25,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import Prefetch, Q
-from django.utils import timezone
+from django.db.models import Prefetch
 from django.utils.functional import cached_property
 
 from world.conditions.models import (
@@ -71,10 +70,10 @@ class ConditionHandler:
         keeping the filter predicate in exactly one place (parity with
         ``get_active_conditions``).  Suppression-aware; no resolved_at gate.
         """
-        # Keep in sync with get_active_conditions in services.py
+        from world.conditions.services import _not_suppressed_q  # noqa: PLC0415
+
         return ConditionInstance.objects.filter(
-            Q(is_suppressed=False)
-            | Q(suppressed_until__isnull=False, suppressed_until__lt=timezone.now()),
+            _not_suppressed_q(),
             target=owner,
         ).select_related(
             "condition",
