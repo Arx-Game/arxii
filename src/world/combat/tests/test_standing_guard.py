@@ -33,8 +33,15 @@ from world.combat.factories import (
     CombatRoundActionFactory,
 )
 from world.combat.services import _ensure_interpose_challenges, _try_interpose
-from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
-from world.conditions.services import guardians_by_target
+from world.conditions.constants import FoundationalCapability
+from world.conditions.factories import (
+    CapabilityTypeFactory,
+    ConditionCapabilityEffectFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+    UnconsciousConditionFactory,
+)
+from world.conditions.services import apply_condition, guardians_by_target
 from world.fatigue.constants import EFFORT_COST_MULTIPLIER, MIN_FATIGUE_COST, EffortLevel
 from world.fatigue.services import get_or_create_fatigue_pool
 from world.magic.factories import TechniqueFactory
@@ -223,6 +230,58 @@ class StandingGuardTests(TestCase):
         _try_interpose(self.ward, _payload(10))
 
         dispatch.assert_not_called()
+
+    def _knock_out(self, participant) -> None:
+        """Zero the participant's awareness: she stays ACTIVE but cannot act."""
+        awareness = CapabilityTypeFactory(name=FoundationalCapability.AWARENESS, innate_baseline=1)
+        unconscious = UnconsciousConditionFactory()
+        ConditionCapabilityEffectFactory(condition=unconscious, capability=awareness, value=-100)
+        apply_condition(target=participant.character_sheet.character, condition=unconscious)
+
+    @patch("world.combat.services.dispatch_interpose")
+    def test_a_knocked_out_guardian_does_not_step_in(self, dispatch) -> None:
+        self._guard(self.ward, self.guard_a)
+        self._knock_out(self.guard_a)
+        payload = _payload(10)
+
+        with patch("world.scenes.interaction_services.narrate_privately") as private:
+            _try_interpose(self.ward, payload)
+
+        dispatch.assert_not_called()
+        private.assert_not_called()
+        self.assertEqual(payload.answers_consumed, 0)
+        self.guard_a.refresh_from_db()
+        self.assertEqual(self.guard_a.status, ParticipantStatus.ACTIVE)
+        self.assertEqual(self.guard_a.reactions_used, 0)
+        pool = get_or_create_fatigue_pool(self.guard_a.character_sheet)
+        self.assertEqual(pool.get_current(ActionCategory.PHYSICAL), 0)
+
+    @patch("world.combat.services.dispatch_interpose")
+    def test_a_conscious_guardian_steps_in_past_a_knocked_out_one(self, dispatch) -> None:
+        self._guard(self.ward, self.guard_a)
+        ConditionInstanceFactory(
+            target=self.ward.character_sheet.character,
+            condition=ConditionTemplateFactory(name="Escorting 4584", source_guards_bearer=True),
+            source_character=self.guard_b.character_sheet.character,
+        )
+        self._knock_out(self.guard_a)
+
+        _try_interpose(self.ward, _payload(10))
+
+        self.assertEqual(dispatch.call_args.args[0], self.guard_b.character_sheet.character)
+
+    def test_a_ward_guarded_only_by_a_knocked_out_guardian_gets_no_challenge(self) -> None:
+        template = ChallengeTemplateFactory(name="Interpose")
+        self._guard(self.ward, self.guard_a)
+        self._knock_out(self.guard_a)
+
+        _ensure_interpose_challenges(self.encounter, {})
+
+        self.assertFalse(
+            ChallengeInstance.objects.filter(
+                template=template, target_object=self.ward.character_sheet.character
+            ).exists()
+        )
 
     def test_a_standing_rescue_credits_the_guardians_own_action(self) -> None:
         """A rescue records with the guardian's own declaration this round, if any."""

@@ -432,8 +432,11 @@ def _standing_guardians(
     instance first). The ward herself is never her own guardian. A guardian who
     declared any INTERPOSE this round is left out: her declaration takes precedence
     and is tried in its own tier (or, naming another ward, not for this hit at all).
+    A guardian who cannot act (knocked unconscious, so still ACTIVE) is left out
+    too: ``can_act`` is the same agency gate NPC target selection uses.
     """
     from world.conditions.services import guardians_by_target  # noqa: PLC0415
+    from world.vitals.services import can_act  # noqa: PLC0415
 
     guardian_ids = guardians_by_target([protected]).get(protected.pk, [])
     if not guardian_ids:
@@ -455,7 +458,11 @@ def _standing_guardians(
         .exclude(Exists(declared_interpose))
         .select_related("character_sheet__character")
     }
-    return [by_character[pk] for pk in guardian_ids if pk in by_character]
+    return [
+        by_character[pk]
+        for pk in guardian_ids
+        if pk in by_character and can_act(by_character[pk].character_sheet)
+    ]
 
 
 def _try_interpose_for_opponent(

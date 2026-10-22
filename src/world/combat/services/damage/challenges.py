@@ -83,8 +83,9 @@ def _ensure_interpose_challenges(
       ``CombatParticipant`` and so cannot name a specific opponent.
     - Standing-guard path (#4584, ADR-4584-A): binds to each ACTIVE participant
       whose active ``source_guards_bearer`` condition has a source among this
-      encounter's ACTIVE participants (:func:`~world.conditions.services.guardians_by_target`;
-      a self-cast guard is no guard). A standing guard covers player-character
+      encounter's ACTIVE participants who can act
+      (:func:`~world.conditions.services.guardians_by_target`; a self-cast guard is
+      no guard). A standing guard covers player-character
       wards in combat only (no ALLY summon ward, no out-of-combat Sudden Harm) and
       counts against both reaction budgets at fire time.
 
@@ -96,6 +97,7 @@ def _ensure_interpose_challenges(
     """
     from world.conditions.services import guardians_by_target  # noqa: PLC0415
     from world.mechanics.models import ChallengeInstance, ChallengeTemplate  # noqa: PLC0415
+    from world.vitals.services import can_act  # noqa: PLC0415
 
     # Collect armed interpose actions for this round.
     interpose_actions = [
@@ -113,14 +115,22 @@ def _ensure_interpose_challenges(
             status=ParticipantStatus.ACTIVE,
         ).select_related("character_sheet__character")
     }
-    # CharacterSheet shares its character's pk, so character ids match sheet ids.
-    active_character_ids = {p.character_sheet_id for p in active_participants_by_id.values()}
     wards = [p.character_sheet.character for p in active_participants_by_id.values()]
     guardians = guardians_by_target(wards)
+    # A guardian counts only while ACTIVE and able to act: a knocked-out PC stays
+    # ACTIVE, so can_act (the gate NPC target selection uses) is checked once per
+    # participant who guards anyone, never per ward. CharacterSheet shares its
+    # character's pk, so character ids match sheet ids.
+    guardian_ids = {gid for ids in guardians.values() for gid in ids}
+    able_guardian_ids = {
+        p.character_sheet_id
+        for p in active_participants_by_id.values()
+        if p.character_sheet_id in guardian_ids and can_act(p.character_sheet)
+    }
     guarded_wards = [
         ward
         for ward in wards
-        if any(guardian_id in active_character_ids for guardian_id in guardians.get(ward.pk, []))
+        if any(guardian_id in able_guardian_ids for guardian_id in guardians.get(ward.pk, []))
     ]
 
     if not interpose_actions and not guarded_wards:
