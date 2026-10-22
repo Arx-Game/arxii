@@ -901,7 +901,7 @@ export type ClaimableTitle = components['schemas']['ClaimableTitle'];
 export type HouseTemplateOption = components['schemas']['HouseTemplateOption'];
 export type HouseClaimStatus = components['schemas']['HouseClaimStatus'];
 
-export interface HouseAspectPick {
+export interface HouseCharterPick {
   definition: number;
   options: number[];
 }
@@ -949,7 +949,7 @@ export interface HouseClaimPayload {
   colors: string;
   sigil_description: string;
   observances: ClaimObservanceDraft[];
-  aspects: HouseAspectPick[];
+  facets: HouseCharterPick[];
   mercy: number;
   method: number;
   status: number;

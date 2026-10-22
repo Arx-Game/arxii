@@ -62,7 +62,7 @@ class WorshipModelTests(TestCase):
 
     def test_bound_codex_entry_is_protected(self) -> None:
         """PROTECT: deleting a linked entry must not silently orphan the being's
-        Codex link, matching Gift/Technique/HouseAspectOption's own codex_entry."""
+        Codex link, matching Gift/Technique/HouseCharterOption's own codex_entry."""
         entry = CodexEntryFactory()
         WorshippedBeingFactory(codex_entry=entry)
         with transaction.atomic(), self.assertRaises(ProtectedError):

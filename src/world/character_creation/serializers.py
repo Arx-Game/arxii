@@ -69,8 +69,8 @@ from world.roster.serializers import FamilySerializer, KinSlotPoolSerializer, Ki
 from world.societies.houses.constants import ClaimKinRelation
 from world.societies.houses.models import (
     HoldingKind,
-    HouseAspectDefinition,
-    HouseAspectOption,
+    HouseCharterOption,
+    HouseCharterQuestion,
     HouseClaim,
     HouseClaimKin,
     HouseClaimLand,
@@ -1756,7 +1756,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_origin_anchors(value)
         self._validate_origin_figures(value)
         self._validate_new_family_name(value)
-        self._validate_family_aspect_picks(value)
+        self._validate_family_facet_picks(value)
         self._validate_technique_personalizations(value)
 
         goals = value.get("goals")
@@ -2070,26 +2070,26 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             msg = f"new_family_name must be at most {max_length} characters"
             raise serializers.ValidationError({"new_family_name": msg})
 
-    def _validate_family_aspect_picks(self, data: dict) -> None:
-        """``family_aspect_picks`` maps an int-castable definition id to a list of
+    def _validate_family_facet_picks(self, data: dict) -> None:
+        """``family_facet_picks`` maps an int-castable definition id to a list of
         int-castable option ids (#3648 review): a shape ``validators.py``'s
         ``_get_aspect_pick_errors`` can read without raising on a malformed PATCH.
         """
-        picks = data.get("family_aspect_picks")
+        picks = data.get("family_facet_picks")
         if picks is None:
             return
-        msg = "family_aspect_picks must map a definition id to a list of option ids"
+        msg = "family_facet_picks must map a definition id to a list of option ids"
         if not isinstance(picks, dict):
-            raise serializers.ValidationError({"family_aspect_picks": msg})
+            raise serializers.ValidationError({"family_facet_picks": msg})
         for key, values in picks.items():
             if not isinstance(values, list):
-                raise serializers.ValidationError({"family_aspect_picks": msg})
+                raise serializers.ValidationError({"family_facet_picks": msg})
             try:
                 int(key)
                 for value in values:
                     int(value)
             except (TypeError, ValueError) as exc:
-                raise serializers.ValidationError({"family_aspect_picks": msg}) from exc
+                raise serializers.ValidationError({"family_facet_picks": msg}) from exc
 
     def _validate_tarot_card_name(self, data: dict) -> None:
         """Validate that tarot_card_name refers to an existing TarotCard."""
@@ -2352,7 +2352,7 @@ class CGExplanationsSerializer:
 # ---------------------------------------------------------------------------
 
 
-class HouseAspectOptionSerializer(serializers.ModelSerializer):
+class HouseCharterOptionSerializer(serializers.ModelSerializer):
     """One authored answer in an aspect catalog (#2079).
 
     ``codex_entry_id`` (#2868) lets the CG option card link the option's lore
@@ -2368,7 +2368,7 @@ class HouseAspectOptionSerializer(serializers.ModelSerializer):
     target_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
-        model = HouseAspectOption
+        model = HouseCharterOption
         fields = [
             "id",
             "name",
@@ -2380,19 +2380,19 @@ class HouseAspectOptionSerializer(serializers.ModelSerializer):
         ]
 
 
-class HouseAspectDefinitionSerializer(serializers.ModelSerializer):
+class HouseCharterQuestionSerializer(serializers.ModelSerializer):
     """A required catalog choice on a template, with its active options (#2079)."""
 
     options = serializers.SerializerMethodField()
 
     class Meta:
-        model = HouseAspectDefinition
+        model = HouseCharterQuestion
         fields = ["id", "name", "prompt", "min_picks", "max_picks", "options"]
 
-    @extend_schema_field(HouseAspectOptionSerializer(many=True))
+    @extend_schema_field(HouseCharterOptionSerializer(many=True))
     def get_options(self, obj):
         active = [option for option in obj.options.all() if option.is_active]
-        return HouseAspectOptionSerializer(active, many=True).data
+        return HouseCharterOptionSerializer(active, many=True).data
 
 
 class HouseFeatureSerializer(serializers.ModelSerializer):
@@ -2423,7 +2423,7 @@ class SuccessionLawOptionSerializer(serializers.Serializer):
 class HouseTemplateOptionSerializer(serializers.ModelSerializer):
     """A realm template a CG house claim may build from."""
 
-    aspect_definitions = HouseAspectDefinitionSerializer(many=True, read_only=True)
+    charter_questions = HouseCharterQuestionSerializer(many=True, read_only=True)
     features = HouseFeatureSerializer(many=True, read_only=True)
     holdings = HoldingKindOptionSerializer(many=True, read_only=True)
     default_succession_law = serializers.SerializerMethodField()
@@ -2449,7 +2449,7 @@ class HouseTemplateOptionSerializer(serializers.ModelSerializer):
             "allegiance_max",
             "power_min",
             "power_max",
-            "aspect_definitions",
+            "charter_questions",
             "features",
             "holdings",
             "default_succession_law",
@@ -2557,9 +2557,9 @@ _CLAIM_PRINCIPLE_AXES = ("mercy", "method", "status", "change", "allegiance", "p
 class ClaimAspectPickSerializer(serializers.Serializer):
     """One aspect definition's picked option(s), as the claim body sends them."""
 
-    definition = serializers.PrimaryKeyRelatedField(queryset=HouseAspectDefinition.objects.all())
+    definition = serializers.PrimaryKeyRelatedField(queryset=HouseCharterQuestion.objects.all())
     options = serializers.ListField(
-        child=serializers.PrimaryKeyRelatedField(queryset=HouseAspectOption.objects.all()),
+        child=serializers.PrimaryKeyRelatedField(queryset=HouseCharterOption.objects.all()),
         required=False,
         default=list,
     )
@@ -2628,7 +2628,7 @@ class HouseClaimSubmitSerializer(serializers.Serializer):
     words = serializers.CharField(required=False, allow_blank=True, default="")
     colors = serializers.CharField(required=False, allow_blank=True, default="")
     sigil_description = serializers.CharField(required=False, allow_blank=True, default="")
-    aspects = ClaimAspectPickSerializer(many=True, required=False, default=list)
+    facets = ClaimAspectPickSerializer(many=True, required=False, default=list)
     mercy = serializers.IntegerField(required=False, default=0)
     method = serializers.IntegerField(required=False, default=0)
     status = serializers.IntegerField(required=False, default=0)
@@ -2686,9 +2686,9 @@ class HouseClaimSubmitSerializer(serializers.Serializer):
         """The kwargs ``submit_house_claim`` takes, built from validated data."""
         data = self.validated_data
         principles = {axis: data[axis] for axis in _CLAIM_PRINCIPLE_AXES}
-        aspect_picks: dict[int, list[int]] = {}
-        for pick in data.get("aspects", []):
-            aspect_picks[pick["definition"].pk] = [option.pk for option in pick.get("options", [])]
+        facet_picks: dict[int, list[int]] = {}
+        for pick in data.get("facets", []):
+            facet_picks[pick["definition"].pk] = [option.pk for option in pick.get("options", [])]
         estate = data.get("estate") or {}
         return {
             "title": data["title"],
@@ -2699,7 +2699,7 @@ class HouseClaimSubmitSerializer(serializers.Serializer):
             "words": data.get("words", ""),
             "colors": data.get("colors", ""),
             "sigil_description": data.get("sigil_description", ""),
-            "aspect_picks": aspect_picks,
+            "facet_picks": facet_picks,
             "kin": data.get("kin", []),
             "lands": data.get("lands", []),
             "estate_name": estate.get("name", ""),
@@ -2776,7 +2776,7 @@ class HouseClaimStatusSerializer(serializers.ModelSerializer):
     """The draft's house claim, as CG shows it (#1884 Phase D, #2079, #3983 Plan B)."""
 
     title_name = serializers.CharField(source="title.name", read_only=True)
-    aspects = serializers.SerializerMethodField()
+    facets = serializers.SerializerMethodField()
     kin = HouseClaimKinSerializer(many=True, read_only=True)
     lands = HouseClaimLandSerializer(many=True, read_only=True)
     observances = HouseClaimObservanceSerializer(many=True, read_only=True)
@@ -2793,7 +2793,7 @@ class HouseClaimStatusSerializer(serializers.ModelSerializer):
             "words",
             "colors",
             "sigil_description",
-            "aspects",
+            "facets",
             "kin",
             "lands",
             "observances",
@@ -2805,8 +2805,8 @@ class HouseClaimStatusSerializer(serializers.ModelSerializer):
         ]
 
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))
-    def get_aspects(self, obj):
+    def get_facets(self, obj):
         return [
             {"definition": picked.definition.name, "option": picked.option.name}
-            for picked in obj.aspects.select_related("definition", "option")
+            for picked in obj.facets.select_related("definition", "option")
         ]

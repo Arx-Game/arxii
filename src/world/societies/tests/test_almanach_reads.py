@@ -26,7 +26,7 @@ from world.societies.houses.almanach_reads import (
 )
 from world.societies.houses.constants import SuccessionDerivation, TitleTier
 from world.societies.houses.models import (
-    HouseAspectDefinition,
+    HouseCharterQuestion,
     HouseTemplate,
     NobiliaryParticle,
     SuccessionLaw,
@@ -303,10 +303,10 @@ class CharterReadTests(TestCase):
             liege=crown,
             default_succession_law=tierless_law,
         )
-        quiddity = HouseAspectDefinition.objects.create(
+        quiddity = HouseCharterQuestion.objects.create(
             name="Charter Quiddity", prompt="Which virtue rules the house?"
         )
-        tierless_template.aspect_definitions.add(quiddity)
+        tierless_template.charter_questions.add(quiddity)
         # A banded particle that must NOT win over the blank-floor default.
         NobiliaryParticle.objects.create(
             realm=realm, kind=kind, tier_floor=TitleTier.DUCHY, particle="du"

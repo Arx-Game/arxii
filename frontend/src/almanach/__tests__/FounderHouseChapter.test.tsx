@@ -40,7 +40,7 @@ function baseDraft(): FounderDraft {
     colors: '',
     sigil_description: '',
     backstory: '',
-    aspect_picks: {},
+    facet_picks: {},
     principles: {},
     founder_relation: 'child',
     founder_is_heir: true,
@@ -62,7 +62,7 @@ function template(overrides: Partial<HouseTemplateOption> = {}): HouseTemplateOp
     // to the full -5..5 span (asserted below).
     mercy_min: -2,
     mercy_max: 3,
-    aspect_definitions: [
+    charter_questions: [
       {
         id: 1,
         name: 'House Quiddity',

@@ -286,7 +286,7 @@ class FamilyListInheritedQueryCountTests(APITestCase):
     """The families list batches the ``inherited`` lookup (#3648).
 
     ``FamilySerializer.get_inherited`` used to call ``house_for_family`` (a
-    fresh query per row) plus three more (``fealty``, ``aspects``,
+    fresh query per row) plus three more (``fealty``, ``facets``,
     ``features``) whenever a house existed - up to 4N queries for N housed
     families. ``FamilyViewSet.list()`` now passes a batched grouping through
     serializer context instead, computed by
@@ -307,20 +307,20 @@ class FamilyListInheritedQueryCountTests(APITestCase):
         from world.societies.factories import OrganizationFactory
         from world.societies.houses.models import (
             FealtyEdge,
-            HouseAspectDefinition,
-            HouseAspectOption,
+            HouseCharterOption,
+            HouseCharterQuestion,
             HouseFeature,
-            OrganizationAspect,
+            OrganizationFacet,
             OrganizationFeature,
         )
 
         family = FamilyFactory(name=name, kind=kind)
         org = OrganizationFactory(name=f"House {name}", family=family)
-        definition = HouseAspectDefinition.objects.create(
+        definition = HouseCharterQuestion.objects.create(
             name=f"Virtue {name}", prompt="Which virtue did your house cling to?"
         )
-        option = HouseAspectOption.objects.create(definition=definition, name=f"Option {name}")
-        OrganizationAspect.objects.create(organization=org, definition=definition, option=option)
+        option = HouseCharterOption.objects.create(definition=definition, name=f"Option {name}")
+        OrganizationFacet.objects.create(organization=org, definition=definition, option=option)
         feature = HouseFeature.objects.create(
             name=f"Feature {name}",
             slug=f"feature-{name.lower()}",
@@ -352,7 +352,7 @@ class FamilyListInheritedQueryCountTests(APITestCase):
 
         self.assertEqual(len(ctx_one.captured_queries), len(ctx_three.captured_queries))
         # Sanity: the batched grouping actually carries content, not empty stubs.
-        self.assertEqual(len(grouping_one[one_family.pk]["aspects"]), 1)
+        self.assertEqual(len(grouping_one[one_family.pk]["facets"]), 1)
         self.assertEqual(grouping_three[three_families[0].pk]["liege_name"], "Liege of Threehouse0")
         self.assertEqual(grouping_three[three_families[2].pk]["liege_name"], "Liege of Threehouse2")
 
@@ -367,7 +367,7 @@ class FamilyListInheritedQueryCountTests(APITestCase):
         res = client.get(f"/api/roster/families/?kind={kind.id}")
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         row = res.json()[0]
-        self.assertEqual(row["inherited"]["aspects"][0]["definition"], "Virtue Contenthouse")
+        self.assertEqual(row["inherited"]["facets"][0]["definition"], "Virtue Contenthouse")
         self.assertEqual(row["inherited"]["features"][0]["name"], "Feature Contenthouse")
         self.assertEqual(row["inherited"]["liege_name"], "Liege of Contenthouse")
 

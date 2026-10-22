@@ -249,7 +249,7 @@ def _resolve_house_collections(kwargs):
     did not send."""
     resolved = []
     for resolver, key in (
-        (_resolve_house_aspects, "aspect_option_ids"),
+        (_resolve_house_facets, "facet_option_ids"),
         (_resolve_house_features, "feature_ids"),
         (_resolve_house_observances, "observances"),
     ):
@@ -289,16 +289,16 @@ def _resolve_house_observances(rows):
     return drafts
 
 
-def _resolve_house_aspects(aspect_option_ids):
+def _resolve_house_facets(facet_option_ids):
     """Resolve requested aspect IDs or return their validation refusal."""
-    from world.societies.houses.models import HouseAspectOption  # noqa: PLC0415
+    from world.societies.houses.models import HouseCharterOption  # noqa: PLC0415
 
-    if aspect_option_ids is None:
+    if facet_option_ids is None:
         return None
-    aspect_options = list(HouseAspectOption.objects.filter(pk__in=aspect_option_ids))
-    if len(aspect_options) != len(set(aspect_option_ids)):
+    facet_options = list(HouseCharterOption.objects.filter(pk__in=facet_option_ids))
+    if len(facet_options) != len(set(facet_option_ids)):
         return ActionResult(success=False, message="One of those house aspects doesn't exist.")
-    return aspect_options
+    return facet_options
 
 
 def _resolve_house_features(feature_ids):
@@ -320,9 +320,9 @@ class AlmanachEditHouseAction(_AlmanachAction):
     Kwargs: ``org_id``, optional ``name``/``words``/``colors``/
     ``sigil_description``/``description`` (absent leaves untouched),
     optional ``house_state``, optional ``default_succession_law_id`` (falsy
-    clears it), and optional ``aspect_option_ids``/``feature_ids``/
+    clears it), and optional ``facet_option_ids``/``feature_ids``/
     ``observances`` lists — each, when present (even ``[]``), REPLACES the
-    house's ``OrganizationAspect``/``OrganizationFeature``/
+    house's ``OrganizationFacet``/``OrganizationFeature``/
     ``OrganizationObservance`` rows wholesale (#3983 Decision 4; #4206). An
     observance row is ``{ic_month, ic_day, name, lore}``.
     """
@@ -340,7 +340,7 @@ class AlmanachEditHouseAction(_AlmanachAction):
         from django.db import transaction  # noqa: PLC0415
 
         from world.societies.houses.models import (  # noqa: PLC0415
-            OrganizationAspect,
+            OrganizationFacet,
             OrganizationFeature,
             OrganizationObservance,
         )
@@ -357,18 +357,16 @@ class AlmanachEditHouseAction(_AlmanachAction):
         prepared = _prepare_house_edit(org=org, kwargs=kwargs)
         if isinstance(prepared, ActionResult):
             return prepared
-        update_fields, aspect_options, features, observances = prepared
+        update_fields, facet_options, features, observances = prepared
 
         with transaction.atomic():
             if update_fields:
                 org.save(update_fields=update_fields)
-            if aspect_options is not None:
-                OrganizationAspect.objects.filter(organization=org).delete()
-                OrganizationAspect.objects.bulk_create(
-                    OrganizationAspect(
-                        organization=org, definition_id=opt.definition_id, option=opt
-                    )
-                    for opt in aspect_options
+            if facet_options is not None:
+                OrganizationFacet.objects.filter(organization=org).delete()
+                OrganizationFacet.objects.bulk_create(
+                    OrganizationFacet(organization=org, definition_id=opt.definition_id, option=opt)
+                    for opt in facet_options
                 )
             if features is not None:
                 OrganizationFeature.objects.filter(organization=org).delete()

@@ -10,12 +10,12 @@ interface Props {
 export function InheritedFactsPanel({ family }: Props) {
   const inherited = family?.inherited;
   if (!inherited) return null;
-  const { aspects, features, liege_name } = inherited;
-  if (aspects.length === 0 && features.length === 0 && !liege_name) return null;
+  const { facets, features, liege_name } = inherited;
+  if (facets.length === 0 && features.length === 0 && !liege_name) return null;
   return (
     <div className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
       {liege_name && <p className="text-xs text-muted-foreground">Sworn to {liege_name}</p>}
-      {aspects.map((aspect) => (
+      {facets.map((aspect) => (
         <div key={`${aspect.definition}:${aspect.option}`}>
           <p>
             <b>{aspect.definition}</b>: {aspect.option}

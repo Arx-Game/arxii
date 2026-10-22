@@ -1294,8 +1294,8 @@ class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=3,
         help_text="KinSlotPool capacity minted for the new family. PLACEHOLDER.",
     )
-    aspect_definitions = models.ManyToManyField(
-        "arxii.HouseAspectDefinition",
+    charter_questions = models.ManyToManyField(
+        "arxii.HouseCharterQuestion",
         blank=True,
         related_name="templates",
         help_text="Required catalog choices for claims on this template (#2079).",
@@ -1343,9 +1343,9 @@ class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             raise ValidationError({"name_pattern": f"Not a valid regex: {exc}"}) from exc
         # One question may name the patron (#4205); two would fight over one column.
         # Read only once the row exists, since an unsaved template has no M2M rows.
-        if self.pk is not None and self.aspect_definitions.filter(sets_patron=True).count() > 1:
+        if self.pk is not None and self.charter_questions.filter(sets_patron=True).count() > 1:
             raise ValidationError(
-                {"aspect_definitions": "Only one question on a charter may set the patron."}
+                {"charter_questions": "Only one question on a charter may set the patron."}
             )
 
     def __str__(self) -> str:
@@ -1435,12 +1435,12 @@ class HouseClaim(SharedMemoryModel):
         return f"House {self.house_name} claim ({self.get_status_display()})"
 
 
-class HouseAspectDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class HouseCharterQuestion(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """An authored, required catalog choice for houses of a template (#2079).
 
     Catalog-only by design: there is no free-text answer path. The normalized
     option list IS the thematic fence (see ADR-0101). Attach to templates via
-    ``HouseTemplate.aspect_definitions``; a definition shared by two templates
+    ``HouseTemplate.charter_questions``; a definition shared by two templates
     shares one catalog — a diverged catalog means a second definition.
 
     Authored content (#2868): the definition and its options are the lore
@@ -1484,7 +1484,7 @@ class HouseAspectDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel)
             raise ValidationError({"max_picks": "A patron question takes exactly one pick."})
 
 
-class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class HouseCharterOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One authored answer in a definition's catalog (#2079).
 
     Inferna's seven House Quiddities are options on one definition. Each is a
@@ -1496,7 +1496,7 @@ class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
 
     definition = models.ForeignKey(
-        HouseAspectDefinition, on_delete=models.CASCADE, related_name="options"
+        HouseCharterQuestion, on_delete=models.CASCADE, related_name="options"
     )
     name = models.CharField(max_length=120)
     description = models.TextField(
@@ -1507,7 +1507,7 @@ class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name="house_aspect_options",
+        related_name="house_charter_options",
         help_text="Lore entry this option is bound to, if any.",
     )
     # What the option IS, when it is a god or a totem (#4205): a typed target
@@ -1520,7 +1520,7 @@ class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name="house_aspect_options",
+        related_name="house_charter_options",
         help_text="The god or totem this option is (#4205).",
     )
     being_nickname = models.ForeignKey(
@@ -1528,7 +1528,7 @@ class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name="house_aspect_options",
+        related_name="house_charter_options",
         help_text=(
             "The name a house on this option calls the being by; one of the being's "
             "own nicknames. Becomes the house's patron_nickname on a patron question."
@@ -1541,7 +1541,7 @@ class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["definition", "name"]
-        dependencies = ["arxii.HouseAspectDefinition"]
+        dependencies = ["arxii.HouseCharterQuestion"]
 
     class Meta:
         ordering = ["definition", "display_order", "name"]
@@ -1622,14 +1622,12 @@ class HouseFeature(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return self.name
 
 
-class HouseClaimAspect(SharedMemoryModel):
+class HouseClaimFacet(SharedMemoryModel):
     """One picked option on a CG house claim (#2079)."""
 
-    claim = models.ForeignKey(HouseClaim, on_delete=models.CASCADE, related_name="aspects")
-    definition = models.ForeignKey(
-        HouseAspectDefinition, on_delete=models.PROTECT, related_name="+"
-    )
-    option = models.ForeignKey(HouseAspectOption, on_delete=models.PROTECT, related_name="+")
+    claim = models.ForeignKey(HouseClaim, on_delete=models.CASCADE, related_name="facets")
+    definition = models.ForeignKey(HouseCharterQuestion, on_delete=models.PROTECT, related_name="+")
+    option = models.ForeignKey(HouseCharterOption, on_delete=models.PROTECT, related_name="+")
 
     class Meta:
         ordering = ["claim", "definition", "option"]
@@ -1721,18 +1719,16 @@ class HouseClaimObservance(SharedMemoryModel):
         return f"claim {self.claim_id}: {self.name} ({self.ic_month}/{self.ic_day})"
 
 
-class OrganizationAspect(SharedMemoryModel):
+class OrganizationFacet(SharedMemoryModel):
     """A house's permanent identity facet (#2079).
 
     Written at claim materialization; also directly authorable so staff-seeded
     houses carry facets without a claim.
     """
 
-    organization = models.ForeignKey(_ORG_FK, on_delete=models.CASCADE, related_name="aspects")
-    definition = models.ForeignKey(
-        HouseAspectDefinition, on_delete=models.PROTECT, related_name="+"
-    )
-    option = models.ForeignKey(HouseAspectOption, on_delete=models.PROTECT, related_name="+")
+    organization = models.ForeignKey(_ORG_FK, on_delete=models.CASCADE, related_name="facets")
+    definition = models.ForeignKey(HouseCharterQuestion, on_delete=models.PROTECT, related_name="+")
+    option = models.ForeignKey(HouseCharterOption, on_delete=models.PROTECT, related_name="+")
 
     class Meta:
         ordering = ["organization", "definition", "option"]
@@ -1767,7 +1763,7 @@ class OrganizationObservance(SharedMemoryModel):
     round every year, a name, and the house's prose for it.
 
     The same shape as ``WorshipFeastDay``, a house's rather than a god's. One
-    of the stylings (ADR-0101 keeps free text out of aspects): written by the
+    of the stylings (ADR-0101 keeps free text out of facets): written by the
     founder beside the words and sigil, edited later with them on the Almanach
     document, and directly authorable in admin for staff-built houses. No
     mechanic rides on the day; the calendar and tidings may read it later the

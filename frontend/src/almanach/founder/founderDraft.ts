@@ -47,7 +47,7 @@ export interface FounderDraft {
   colors: string;
   sigil_description: string;
   backstory: string;
-  aspect_picks: Record<number, number[]>;
+  facet_picks: Record<number, number[]>;
   principles: Record<string, number>;
   founder_relation: ClaimKinRelation;
   founder_is_heir: boolean;
@@ -69,7 +69,7 @@ function emptyDraft(): FounderDraft {
     colors: '',
     sigil_description: '',
     backstory: '',
-    aspect_picks: {},
+    facet_picks: {},
     principles: {},
     founder_relation: 'head',
     founder_is_heir: true,
@@ -213,7 +213,7 @@ export function toClaimPayload(d: FounderDraft, template: HouseTemplateOption): 
     words: d.words,
     colors: d.colors,
     sigil_description: d.sigil_description,
-    aspects: Object.entries(d.aspect_picks).map(([definitionId, options]) => ({
+    facets: Object.entries(d.facet_picks).map(([definitionId, options]) => ({
       definition: Number(definitionId),
       options,
     })),

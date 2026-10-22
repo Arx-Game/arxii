@@ -1161,12 +1161,12 @@ class LoadEntriesCaseInsensitiveUpsertTest(TestCase):
         assert ConditionTemplate.objects.filter(name__iexact="fire ward").count() == 1
 
 
-class HouseAspectContentLoadTest(TestCase):
+class HouseCharterContentLoadTest(TestCase):
     """#2868 — the Inferna Quiddity catalog loads from the content repo's shape.
 
     Proves the whole chain the lore repo depends on: a markdown codex entry
     under a two-level ``Realms > Inferna > House Quiddities`` subject path, and
-    a ``societies.houseaspectoption`` fixture whose ``codex_entry`` is that
+    a ``societies.housecharteroption`` fixture whose ``codex_entry`` is that
     entry's four-arg natural key. Nothing here may need a pk.
     """
 
@@ -1224,11 +1224,11 @@ A Princess of the Leviathan is given a healthy amount of distance by her peers.
         )
         _write(
             self.root,
-            "fixtures/societies/house_aspects.json",
+            "fixtures/societies/house_charter.json",
             json.dumps(
                 [
                     {
-                        "model": "societies.houseaspectdefinition",
+                        "model": "societies.housecharterquestion",
                         "fields": {
                             "name": "House Quiddity",
                             "prompt": "What drives your house?",
@@ -1238,7 +1238,7 @@ A Princess of the Leviathan is given a healthy amount of distance by her peers.
                         },
                     },
                     {
-                        "model": "societies.houseaspectoption",
+                        "model": "societies.housecharteroption",
                         "fields": {
                             "definition": ["House Quiddity"],
                             "name": "The Leviathan",
@@ -1262,11 +1262,11 @@ A Princess of the Leviathan is given a healthy amount of distance by her peers.
         ``fixtures/``, so both the entry (needs its subjects) and the option
         (needs the entry) resolve only on the deferred-retry pass.
         """
-        from world.societies.houses.models import HouseAspectOption
+        from world.societies.houses.models import HouseCharterOption
 
         outcome = load_world_content(self.root)
         assert not outcome.skipped, outcome.skipped
-        option = HouseAspectOption.objects.get(name="The Leviathan")
+        option = HouseCharterOption.objects.get(name="The Leviathan")
         assert option.definition.name == "House Quiddity"
         assert option.codex_entry is not None
         assert option.codex_entry.name == "The Leviathan"
@@ -1274,12 +1274,12 @@ A Princess of the Leviathan is given a healthy amount of distance by her peers.
         assert option.codex_entry.subject.parent.name == "Inferna"
 
     def test_reload_upserts_rather_than_duplicating(self) -> None:
-        from world.societies.houses.models import HouseAspectOption
+        from world.societies.houses.models import HouseCharterOption
 
         load_world_content(self.root)
         outcome = load_world_content(self.root)
         assert outcome.created == 0, (outcome.created, outcome.updated)
-        assert HouseAspectOption.objects.filter(name="The Leviathan").count() == 1
+        assert HouseCharterOption.objects.filter(name="The Leviathan").count() == 1
 
 
 class MarkdownCreditRoundTripTests(TestCase):

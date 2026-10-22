@@ -107,9 +107,9 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             "ranks",  # noqa: PREFETCH_STRING
             "titles__holder",  # noqa: PREFETCH_STRING
             "domains__holdings",  # noqa: PREFETCH_STRING
-            "aspects__definition",  # noqa: PREFETCH_STRING
-            "aspects__option",  # noqa: PREFETCH_STRING
-            "aspects__option__being",  # noqa: PREFETCH_STRING - what a pick IS (#4205)
+            "facets__definition",  # noqa: PREFETCH_STRING
+            "facets__option",  # noqa: PREFETCH_STRING
+            "facets__option__being",  # noqa: PREFETCH_STRING - what a pick IS (#4205)
             "features__feature",  # noqa: PREFETCH_STRING
             "domains__crises__crisis_type__options",  # noqa: PREFETCH_STRING — crisis cards (#2238)
             "domains__crises__chosen_option",  # noqa: PREFETCH_STRING

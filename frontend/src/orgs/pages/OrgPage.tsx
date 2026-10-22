@@ -234,9 +234,9 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
               )}
             </p>
           )}
-          {house.aspects.length > 0 && (
+          {house.facets.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {house.aspects.map((aspect) => {
+              {house.facets.map((aspect) => {
                 const badge = (
                   <Badge variant="secondary" title={aspect.description}>
                     {aspect.definition}: {aspect.option}

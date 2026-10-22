@@ -74,7 +74,7 @@ function family(overrides: Partial<NonNullable<FamilyTree['family']>> = {}) {
     born_particle: '',
     taken_in_particle: '',
     standing: null,
-    inherited: { aspects: [], features: [], liege_name: '' },
+    inherited: { facets: [], features: [], liege_name: '' },
     ...overrides,
   } as NonNullable<FamilyTree['family']>;
 }

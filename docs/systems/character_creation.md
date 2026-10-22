@@ -751,8 +751,8 @@ life through `Species.cg_point_cost` on the purse's species line.
 offered template, else `draft_data.family_template_id`), name the family (checked
 against `HouseTemplate.name_pattern`, a full-match regex; a malformed pattern is a
 staff authoring bug and surfaces as a soft "tell staff" error, never an uncaught
-`re.error`), answer the template's aspect picks (`draft_data.family_aspect_picks`,
-fenced by `houses.creator._validate_aspect_picks`), and optionally declare a served
+`re.error`), answer the template's charter questions (`draft_data.family_facet_picks`,
+fenced by `houses.creator._validate_facet_picks`), and optionally declare a served
 house from `family_template.served_house_choices`.
 
 **Claim path:** claiming a staff family with an open kin Vacancy requires taking one
