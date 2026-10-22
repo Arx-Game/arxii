@@ -1033,13 +1033,15 @@ class PathGiftGrantAdminForm(forms.ModelForm):
 
 @admin.register(PathGiftGrant)
 class PathGiftGrantAdmin(admin.ModelAdmin):
-    """The path half of the CG technique menu (#3712).
+    """The techniques for each Path and Gift (#3712, #4555).
 
-    ``get_technique_options`` unions this grant's ``starter_techniques`` with the
-    tradition's specials, and only the tradition half had an authoring surface:
-    the 76 authored path pools were fixture-loaded and could not be edited at
-    all. Mirrors ``TraditionGiftGrantAdmin`` above deliberately, so the two
-    halves of one menu are authored the same way.
+    A technique is offered only on the Paths whose ``starter_techniques`` list
+    holds it: at character creation, in Academy training and on a crossing. A
+    ``TraditionGiftGrant`` listing restricts it to the listing Traditions; it adds
+    nothing to a Path's list (ADR-4555-A). Before #3712 only the tradition lists
+    had an authoring surface, and the path lists were fixture-loaded and could
+    not be edited. Mirrors ``TraditionGiftGrantAdmin`` above deliberately, so both
+    lists are authored the same way.
 
     ``PathGiftGrant.clean()`` already rejects a starter technique that does not
     belong to the grant's gift, and the admin runs it on save. ``form`` (#4098)
