@@ -8400,9 +8400,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     read by `_try_technique_interpose`. Telnet: a trailing `soulfray` keyword on
     `combat interpose ...` (`commands/combat_maneuvers.py`) sets it. See ADR-0255
     (amends ADR-0118).
-  - `_try_interpose(participant, pre_payload)` — fires at `DAMAGE_PRE_APPLY` seam; finds
-    an armed interpose challenge naming *participant* (or "any ally") and dispatches it
-    via `_dispatch_interpose_action`
+  - `_try_interpose(participant, pre_payload)`: fires at `DAMAGE_PRE_APPLY` seam; tries
+    guardians in three tiers, each through `_attempt_guardian_interpose`: armed INTERPOSE
+    declarations naming *participant*, then standing guards (`_standing_guardians`: the
+    ward's `source_guards_bearer` sources who are ACTIVE, can act and declared no INTERPOSE
+    this round, #4584), then "any ally" declarations
   - `_try_interpose_for_opponent(opponent, pre_payload)` (#2207) — the summon-guarding
     sibling of `_try_interpose`: extends interpose to ALLY-allegiance `CombatOpponent`
     wards (player summons/companion NPCs). **ANY-ALLY only** — `CombatRoundAction.
@@ -8410,10 +8412,15 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     directly; only an armed `focused_ally_target IS NULL` declaration can pick up a
     summon. Named-ally guarding of a summon is a follow-up once `focused_ally_target`
     (or a sibling field) can point at an opponent. Called from `apply_damage_to_opponent`.
-  - `_dispatch_interpose_action(action, protected, pre_payload)` (#2207) — shared tail for
-    both ward types; computes the bond-bonus modifier (`bond_bonus`, #2021) then forks on
-    `action.focused_action_id`: set → `_try_technique_interpose` (anima cost, no fatigue);
-    unset → `dispatch_interpose(..., select_best_check_rating=True)` + fatigue charge on fire.
+  - `_dispatch_interpose_action(action, protected, pre_payload)` (#2207): the declared
+    guardian's entry; a thin wrapper over the shared tail below.
+  - `_attempt_guardian_interpose(guardian, protected, pre_payload, *, action)` (#4584):
+    shared tail for both ward types and for standing guards (`action=None`); gates both
+    reaction budgets, computes the bond-bonus modifier (`bond_bonus`, #2021) then forks on
+    the declaration's `focused_action_id`: set → `_try_technique_interpose` (anima cost, no
+    fatigue); unset or a standing guard → `dispatch_interpose(...,
+    select_best_check_rating=True)` + fatigue charge on fire (a standing guard pays at very
+    low effort).
   - `dispatch_interpose(interposer, protected, pre_payload, approach, *, select_best_check_rating=False)`
     — thin wrapper over `dispatch_capability_reaction`; calls `apply_interpose_outcome` to
     mutate the payload. **Best-of check selection (#2207):** the mundane guardian path calls
@@ -8607,13 +8614,15 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     reactions_used` (reset to 0 for every participant in `begin_declaration_phase` via
     identity-map-safe `bulk_update`, never a raw queryset `.update()` — that would leave any
     already-cached instance reading a stale value) vs `REACTIONS_PER_ROUND` (1) — gated +
-    incremented in `_dispatch_interpose_action`, the shared tail both `_try_interpose` and
-    `_try_interpose_for_opponent` call. `DamagePreApplyPayload.answers_consumed` (int,
-    default 0) vs `ABSORPTION_CAP_PER_MOMENT` (2) — per-LANDING-HIT cap on how many
-    interceptors may answer, incremented at the same seam. Both budgets decline with the
-    same "did not fire" no-op shape as an unaffordable/failed reaction. Standing defenses
-    (absorb/reflect/blink conditions, flow-triggered) stay OUTSIDE both budgets — they carry
-    their own reactive costs (flagged judgment call).
+    incremented in `_attempt_guardian_interpose`, the shared tail both `_try_interpose`
+    (declarations and standing guards, #4584) and `_try_interpose_for_opponent` call.
+    `DamagePreApplyPayload.answers_consumed` (int, default 0) vs `ABSORPTION_CAP_PER_MOMENT`
+    (2): per-LANDING-HIT cap on how many interceptors may answer, incremented at the same
+    seam. Both budgets decline with the same "did not fire" no-op shape as an
+    unaffordable/failed reaction. Standing defenses (absorb/reflect/blink conditions,
+    flow-triggered) stay OUTSIDE both budgets; they carry their own reactive costs (flagged
+    judgment call). A standing guard (`source_guards_bearer`) is the exception: it spends
+    both budgets like a declaration (ADR-4584-A).
   - **`select_npc_actions` wiring gap (#2637 design 8):** investigated — it had ZERO
     production callers outside the simulation harness (`world/combat/simulation.py`); no
     Action/command/task called it before `resolve_round` in live play. `resolve_round` now
@@ -8851,7 +8860,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - **The catch seam:** `_try_catch_sent_flying` reuses `_try_interpose`'s query shape (an
     armed INTERPOSE this round, named or guard-anyone) but never calls `dispatch_interpose`
     — a mid-air catch is a binary rescue, not gradeable damage mitigation, so it never rolls;
-    "fires" means clearing `REACTIONS_PER_ROUND` (mirrors `_dispatch_interpose_action`'s own
+    "fires" means clearing `REACTIONS_PER_ROUND` (mirrors `_attempt_guardian_interpose`'s own
     "fire = attempt, not success" vocabulary). `ABSORPTION_CAP_PER_MOMENT` is not consulted
     — only the first eligible guardian is ever queried (documented v1 scope).
   - **Explicit resolution:** `_resolve_sent_flying_markers`, called at the end of

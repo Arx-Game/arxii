@@ -82,8 +82,9 @@ A hit on a PC ward is answered by at most one guardian. `_try_interpose`
 All three reach the same tail, `_attempt_guardian_interpose`, so a standing guard counts
 against `REACTIONS_PER_ROUND` and `ABSORPTION_CAP_PER_MOMENT`, and pays interpose fatigue
 (physical, very low effort: she declared nothing to read an effort from). She still takes
-her own turn. An unavailable guardian falls through to the next; an attempt, even a failed
-roll, ends the search. Standing guards cover PC wards in combat only: not an ALLY summon
+her own turn. A guardian who cannot act (`can_act`: knocked unconscious, though still
+ACTIVE) is never tried. An unavailable guardian falls through to the next; an attempt, even
+a failed roll, ends the search. Standing guards cover PC wards in combat only: not an ALLY summon
 ward, and not Sudden Harm outside combat. Absorb, reflect, blink and strike-back stay
 outside both budgets (ADR-0161). A guard laid in round N holds from round N+1.
 
