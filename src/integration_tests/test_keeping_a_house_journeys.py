@@ -211,8 +211,19 @@ class LockingTheDoor(JourneyCase):
         self.telnet(self.hobb, "back")
         self.assertIn("That exit isn't locked.", self.telnet(self.ysmay, "pick gate"))
 
-        # Locked and barred: one break clears the lock and wears the bars by one; each
-        # break wears the house by a tier.
+        # Locked and barred: a pick clears the lock alone, and the bars still hold her.
+        self.telnet(self.hobb, "lock gate")
+        CheckTypeFactory(name="Lockpicking")
+        with force_check_outcome(CheckOutcomeFactory(name="Picked", success_level=1)):
+            self.assertIn("You pick the lock on gate.", self.telnet(self.ysmay, "pick gate"))
+        self.assertFalse(self.gate.db.locked)
+        self.assertIn("You cannot go that way.", self.telnet(self.ysmay, "gate"))
+        self.assertEqual(self.ysmay.location, self.lantern)
+        bars.refresh_from_db()
+        self.assertEqual((bars.level, bars.dissolved_at), (3, None))
+
+        # One break clears the lock and wears the bars by one; each break wears the house
+        # by a tier.
         self.telnet(self.hobb, "lock gate")
         self.assertIn("You break through gate!", self.telnet(self.ysmay, "break gate"))
         self.assertFalse(self.gate.db.locked)

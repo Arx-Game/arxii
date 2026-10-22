@@ -727,10 +727,12 @@ class GatheringTheLeavings(JourneyCase):
 
     def test_the_web_sends_the_evidence_by_id(self) -> None:
         evidence = self.crime("The Tanner's Strongbox")
+        # The trace's own id, quoted, is no evidence: the action takes a number alone.
         self.assertEqual(
-            self.web(self.ysmay, "gather_evidence", evidence_id="7").detail.message,
+            self.web(self.ysmay, "gather_evidence", evidence_id=str(evidence.pk)).detail.message,
             "There's no such evidence.",
         )
+        self.assertEqual(CrimeEvidence.objects.get(pk=evidence.pk).state, EvidenceState.AT_SCENE)
         self.assertEqual(
             self.web(self.ysmay, "gather_evidence", evidence_id=999999).detail.message,
             "There's no such evidence.",
