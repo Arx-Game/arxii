@@ -3213,6 +3213,24 @@ def retaliating_instances(
     )
 
 
+def knockout_preventing_instance(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> ConditionInstance | None:
+    """The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).
+
+    Read by the vitals knockout tier (``_process_knockout_tier``), which skips the
+    knockout roll when one is found and spends it through ``spend_condition_use`` (an
+    ``UNTIL_USED`` grace ends; a lasting one keeps holding). Designated by the
+    template's ``prevents_knockout`` field, never by its name.
+    """
+    return (
+        _active_flagged_instances([target], flag_field="prevents_knockout")
+        .select_related("condition")
+        .order_by("pk")
+        .first()
+    )
+
+
 def _active_template_sum_by_target(
     targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
     *,

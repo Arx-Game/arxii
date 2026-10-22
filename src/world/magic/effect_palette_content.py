@@ -31,6 +31,11 @@ Task 14c — Five simple effect techniques + the unified entry point:
 All ``ensure_*()`` functions are idempotent (get_or_create throughout) and double
 as integration-test setup and staff seed data.  Safe to call repeatedly.
 
+The one-shot markers (Summoning, Phase Jump, Barricade, Force Grip, the Ramparts)
+are ``UNTIL_USED`` and are spent by their adapter once their CONDITION_APPLIED flow
+fires (#4584); seed rows are suggestions, and a marker staff give a lasting duration
+stays on its bearer.
+
 Note — destination/position placeholder params: teleport, obstacle, and telekinesis
 flow steps carry ``destination_position_id=0`` / ``position_a_id=0`` / ``position_b_id=0``
 as guarded fallbacks only (``test_effect_placeholder_guard.py`` proves the 0-id path
@@ -873,7 +878,10 @@ def _seed_active_condition(
 
     The returned template is meant to be applied on cast (SELF or ENEMY) and
     immediately trigger a reactive flow via ``reactive_triggers``.  Duration is
-    ``UNTIL_USED`` so the marker expires after the trigger fires.
+    ``UNTIL_USED`` so the marker expires after the trigger fires: every
+    ``*_on_condition`` adapter spends it through ``spend_condition_use`` once its flow
+    has run (#4584).  The Summoning marker (``ensure_summon_content``) is spent the
+    same way.
     """
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory  # noqa: PLC0415

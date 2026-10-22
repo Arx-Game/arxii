@@ -2,6 +2,12 @@
 
 Each handler is keyword-only ``def h(*, payload) -> None`` and is referenced by
 its dotted path from a seeded FlowDefinition's CALL_SERVICE_FUNCTION step.
+
+Once-only (``UNTIL_USED``) conditions end when used (#4584): the reactive wards
+(``absorb_pool``, ``reflect_damage``, ``blink_dodge``, ``strike_back``) spend theirs
+after a successful fire, and the one-shot marker adapters (``*_on_condition``) spend
+the marker once its flow has fired. Spending goes through ``spend_condition_use``,
+which leaves a lasting condition alone.
 """
 
 from typing import TYPE_CHECKING, Any, cast
@@ -15,6 +21,7 @@ from world.areas.positioning.services import (
 )
 from world.character_sheets.models import CharacterSheet
 from world.conditions.models import ConditionInstance
+from world.conditions.services import spend_condition_use
 from world.magic.models.anima import CharacterAnima
 from world.magic.services.soulfray import accumulate_soulfray
 
@@ -90,6 +97,28 @@ def _duration_from_instance(instance: ConditionInstance | None) -> int | None:
     if instance is None:
         return None
     return instance.rounds_remaining
+
+
+def _marker_instance(payload: Any) -> ConditionInstance | None:
+    """The marker instance a CONDITION_APPLIED payload carries, or None when it has none."""
+    try:
+        return payload.instance
+    except AttributeError:
+        return None
+
+
+def _spend_marker(payload: Any) -> None:
+    """Spend the one-shot marker whose CONDITION_APPLIED flow just fired (#4584).
+
+    Called on every return path of the ``*_on_condition`` adapters, after they have read
+    what they need from the instance: the marker's flow fired and cannot fire again for
+    that instance, whether or not it found a destination. Tolerates a payload with no
+    ``instance`` (or ``instance=None``); ``spend_condition_use`` leaves a non-``UNTIL_USED``
+    marker in place and ignores one already spent.
+    """
+    instance = _marker_instance(payload)
+    if instance is not None:
+        spend_condition_use(instance)
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +233,8 @@ def absorb_pool(*, payload: Any) -> None:
       ``_try_spend_reactive``, unless the instance is consented (#3573)).
     - Reduces payload.amount by min(buffer, amount); decrements absorb_remaining.
     - Deletes the instance when absorb_remaining reaches 0 (buffer spent).
+    - Otherwise saves the remaining buffer, then spends a once-only (``UNTIL_USED``)
+      barrier through ``spend_condition_use`` (#4584): it soaks one blow and ends.
     """
     if payload.amount <= 0:
         return
@@ -225,6 +256,7 @@ def absorb_pool(*, payload: Any) -> None:
         instance.delete()  # buffer fully consumed; condition expires
     else:
         instance.save(update_fields=["absorb_remaining"])
+        spend_condition_use(instance)
 
 
 #: Dotted path a reflect ward's flow step carries.  ``reflect_damage`` designates the
@@ -257,6 +289,9 @@ def reflect_damage(*, payload: Any) -> None:
       ``apply_damage_to_participant``
     - None / Technique / unresolvable / no active participant → payload zeroed,
       no bounce (no attacker to hit; no crash).
+
+    A once-only (``UNTIL_USED``) ward is spent through ``spend_condition_use`` after
+    the bounce (#4584); a fizzle spends nothing.
     """
     if payload.amount <= 0:
         return
@@ -280,7 +315,12 @@ def reflect_damage(*, payload: Any) -> None:
 
     amount = payload.amount
     payload.amount = 0
+    _bounce_to_attacker(payload, amount)
+    spend_condition_use(instance)
 
+
+def _bounce_to_attacker(payload: Any, amount: int) -> None:
+    """Apply a reflected ``amount`` to the attacker ``payload.source.ref`` names, if any."""
     ref = payload.source.ref
 
     # Lazy imports to avoid circular dependency: combat.services already
@@ -339,7 +379,9 @@ def strike_back(*, payload: Any, instance: ConditionInstance) -> None:
     condition is laid with the payer as its source (pair it with a provoke and the
     struck NPC turns on the caster). No condition is laid on an NPC the strike-back
     defeated. ``bypass_pre_apply=True``, and the opponent damage path never emitting
-    DAMAGE_APPLIED, end any retaliation loop.
+    DAMAGE_APPLIED, end any retaliation loop. A once-only (``UNTIL_USED``) ward is spent
+    through ``spend_condition_use`` once it has struck, so a second hit in the same round
+    finds it gone (``retaliating_instances`` queries afresh per hit).
     """
     if payload.amount_dealt <= 0 or instance.pk is None:
         return  # nothing landed, or the ward was spent earlier this round
@@ -372,6 +414,7 @@ def strike_back(*, payload: Any, instance: ConditionInstance) -> None:
         defeated = result.defeated
     if template.retaliation_condition is not None and opponent.objectdb_id and not defeated:
         apply_condition(opponent.objectdb, template.retaliation_condition, source_character=payer)
+    spend_condition_use(instance)
 
 
 def _sheet_of(
@@ -676,26 +719,26 @@ def move_position_on_condition(*, payload: Any, destination_position_id: int) ->
     effect bundles. For SELF conditions payload.target is the caster; for ENEMY
     conditions it is the enemy objectdb.
     """
-    from types import SimpleNamespace  # noqa: PLC0415
-
-    # #2019: Prefer the cast-time destination on the instance.
     try:
-        instance = payload.instance
-    except AttributeError:
-        instance = None
-    if instance is not None and instance.cast_destination_id is not None:
-        destination_pk = instance.cast_destination_id
-    elif destination_position_id > 0:
-        destination_pk = destination_position_id
-    else:
-        return  # no destination resolved — no-op
+        from types import SimpleNamespace  # noqa: PLC0415
 
-    move_position(
-        payload=SimpleNamespace(
-            target=payload.target,
-            destination_position_id=destination_pk,
+        # #2019: Prefer the cast-time destination on the instance.
+        instance = _marker_instance(payload)
+        if instance is not None and instance.cast_destination_id is not None:
+            destination_pk = instance.cast_destination_id
+        elif destination_position_id > 0:
+            destination_pk = destination_position_id
+        else:
+            return  # no destination resolved — no-op
+
+        move_position(
+            payload=SimpleNamespace(
+                target=payload.target,
+                destination_position_id=destination_pk,
+            )
         )
-    )
+    finally:
+        _spend_marker(payload)
 
 
 def force_move_target_on_condition(*, payload: Any, destination_position_id: int) -> None:
@@ -708,29 +751,29 @@ def force_move_target_on_condition(*, payload: Any, destination_position_id: int
     If the target becomes unplaced between declaration and resolution (KO, etc.),
     the force-move is a no-op with a clean return (not a crash).
     """
-    from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
-    from world.room_features.trap_services import check_traps_at_position  # noqa: PLC0415
-
-    # #2019: Prefer the cast-time destination on the instance.
     try:
-        instance = payload.instance
-    except AttributeError:
-        instance = None
-    if instance is not None and instance.cast_destination_id is not None:
-        destination_pk = instance.cast_destination_id
-    elif destination_position_id > 0:
-        destination_pk = destination_position_id
-    else:
-        return  # no destination resolved — no-op
+        from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
+        from world.room_features.trap_services import check_traps_at_position  # noqa: PLC0415
 
-    try:
-        destination = Position.objects.get(pk=destination_pk)
-        force_move_to_position(payload.target, destination)
-    except PositionError:
-        return  # target may have become invalid (unplaced, left room, etc.)
+        # #2019: Prefer the cast-time destination on the instance.
+        instance = _marker_instance(payload)
+        if instance is not None and instance.cast_destination_id is not None:
+            destination_pk = instance.cast_destination_id
+        elif destination_position_id > 0:
+            destination_pk = destination_position_id
+        else:
+            return  # no destination resolved — no-op
 
-    # Fire landing checks — traps, chasm plummet.
-    check_traps_at_position(payload.target, destination)
+        try:
+            destination = Position.objects.get(pk=destination_pk)
+            force_move_to_position(payload.target, destination)
+        except PositionError:
+            return  # target may have become invalid (unplaced, left room, etc.)
+
+        # Fire landing checks — traps, chasm plummet.
+        check_traps_at_position(payload.target, destination)
+    finally:
+        _spend_marker(payload)
 
 
 def create_obstacle_on_condition(
@@ -747,30 +790,30 @@ def create_obstacle_on_condition(
 
     Used by the obstacle (Barricade, SELF) effect bundle.
     """
-    from types import SimpleNamespace  # noqa: PLC0415
-
-    # #2019: Prefer the cast-time positions on the instance.
     try:
-        instance = payload.instance
-    except AttributeError:
-        instance = None
-    if instance is not None and instance.cast_position_a_id is not None:
-        pos_a_pk = instance.cast_position_a_id
-        pos_b_pk = instance.cast_position_b_id
-    elif position_a_id > 0 and position_b_id > 0:
-        pos_a_pk = position_a_id
-        pos_b_pk = position_b_id
-    else:
-        return  # no positions resolved — no-op
+        from types import SimpleNamespace  # noqa: PLC0415
 
-    create_obstacle(
-        payload=SimpleNamespace(
-            position_a_id=pos_a_pk,
-            position_b_id=pos_b_pk,
-            caster_sheet=_caster_sheet_from_instance(instance),
-            duration_rounds=_duration_from_instance(instance),
+        # #2019: Prefer the cast-time positions on the instance.
+        instance = _marker_instance(payload)
+        if instance is not None and instance.cast_position_a_id is not None:
+            pos_a_pk = instance.cast_position_a_id
+            pos_b_pk = instance.cast_position_b_id
+        elif position_a_id > 0 and position_b_id > 0:
+            pos_a_pk = position_a_id
+            pos_b_pk = position_b_id
+        else:
+            return  # no positions resolved — no-op
+
+        create_obstacle(
+            payload=SimpleNamespace(
+                position_a_id=pos_a_pk,
+                position_b_id=pos_b_pk,
+                caster_sheet=_caster_sheet_from_instance(instance),
+                duration_rounds=_duration_from_instance(instance),
+            )
         )
-    )
+    finally:
+        _spend_marker(payload)
 
 
 def create_zone_hazard_on_condition(  # noqa: PLR0913
@@ -792,47 +835,47 @@ def create_zone_hazard_on_condition(  # noqa: PLR0913
     Reads the destination from payload.instance.cast_destination (set by the
     cast pipeline via position_params).
     """
-    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-
-    # #2019: Prefer the cast-time destination on the instance.
     try:
-        instance = payload.instance
-    except AttributeError:
-        instance = None
-    if instance is not None and instance.cast_destination_id is not None:
-        position = instance.cast_destination
-    elif position_id > 0:
-        position = Position.objects.get(pk=position_id)
-    else:
-        return  # no position resolved — no-op
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
 
-    room_profile, _created = RoomProfile.objects.get_or_create(objectdb=position.room)
-    caster_sheet = _caster_sheet_from_instance(instance)
+        # #2019: Prefer the cast-time destination on the instance.
+        instance = _marker_instance(payload)
+        if instance is not None and instance.cast_destination_id is not None:
+            position = instance.cast_destination
+        elif position_id > 0:
+            position = Position.objects.get(pk=position_id)
+        else:
+            return  # no position resolved — no-op
 
-    from actions.models import ConsequencePool  # noqa: PLC0415
-    from world.checks.models import CheckType  # noqa: PLC0415
-    from world.room_features.models import Trap  # noqa: PLC0415
+        room_profile, _created = RoomProfile.objects.get_or_create(objectdb=position.room)
+        caster_sheet = _caster_sheet_from_instance(instance)
 
-    pool = ConsequencePool.objects.get(pk=consequence_pool_id)
-    detect_check = CheckType.objects.get(pk=detect_check_type_id)
-    disarm_check = (
-        CheckType.objects.get(pk=disarm_check_type_id) if disarm_check_type_id else detect_check
-    )
+        from actions.models import ConsequencePool  # noqa: PLC0415
+        from world.checks.models import CheckType  # noqa: PLC0415
+        from world.room_features.models import Trap  # noqa: PLC0415
 
-    Trap.objects.create(
-        room_profile=room_profile,
-        position=position,
-        name=hazard_name,
-        consequence_pool=pool,
-        detect_check_type=detect_check,
-        disarm_check_type=disarm_check,
-        detect_difficulty=0,
-        disarm_difficulty=0,
-        is_armed=True,
-        is_hidden=False,
-        duration_rounds=duration_rounds,
-        created_by_sheet=caster_sheet,
-    )
+        pool = ConsequencePool.objects.get(pk=consequence_pool_id)
+        detect_check = CheckType.objects.get(pk=detect_check_type_id)
+        disarm_check = (
+            CheckType.objects.get(pk=disarm_check_type_id) if disarm_check_type_id else detect_check
+        )
+
+        Trap.objects.create(
+            room_profile=room_profile,
+            position=position,
+            name=hazard_name,
+            consequence_pool=pool,
+            detect_check_type=detect_check,
+            disarm_check_type=disarm_check,
+            detect_difficulty=0,
+            disarm_difficulty=0,
+            is_armed=True,
+            is_hidden=False,
+            duration_rounds=duration_rounds,
+            created_by_sheet=caster_sheet,
+        )
+    finally:
+        _spend_marker(payload)
 
 
 def raise_rampart_on_condition(
@@ -852,35 +895,35 @@ def raise_rampart_on_condition(
     any existing rampart on the position (re-cast semantics) and — for a
     SEAL_EDGES profile — also seals every PositionEdge touching the position.
     """
-    from world.areas.positioning.models import RampartElementProfile  # noqa: PLC0415
-    from world.areas.positioning.services import raise_rampart  # noqa: PLC0415
-
     try:
-        instance = payload.instance
-    except AttributeError:
-        instance = None
-    if instance is not None and instance.cast_destination_id is not None:
-        position = instance.cast_destination
-    elif position_id > 0:
-        position = Position.objects.get(pk=position_id)
-    else:
-        return  # no position resolved — no-op
+        from world.areas.positioning.models import RampartElementProfile  # noqa: PLC0415
+        from world.areas.positioning.services import raise_rampart  # noqa: PLC0415
 
-    # get_by_natural_key routes through the natural-key index (#2687, closes #2679)
-    # and matches case-insensitively (__iexact on text components).
-    element_profile = cast(
-        "RampartElementProfile",
-        RampartElementProfile.objects.get_by_natural_key(element_profile_name),
-    )
-    caster_sheet = _caster_sheet_from_instance(instance)
+        instance = _marker_instance(payload)
+        if instance is not None and instance.cast_destination_id is not None:
+            position = instance.cast_destination
+        elif position_id > 0:
+            position = Position.objects.get(pk=position_id)
+        else:
+            return  # no position resolved — no-op
 
-    raise_rampart(
-        position,
-        caster_sheet=caster_sheet,
-        element_profile=element_profile,
-        integrity=integrity,
-        duration_rounds=duration_rounds,
-    )
+        # get_by_natural_key routes through the natural-key index (#2687, closes #2679)
+        # and matches case-insensitively (__iexact on text components).
+        element_profile = cast(
+            "RampartElementProfile",
+            RampartElementProfile.objects.get_by_natural_key(element_profile_name),
+        )
+        caster_sheet = _caster_sheet_from_instance(instance)
+
+        raise_rampart(
+            position,
+            caster_sheet=caster_sheet,
+            element_profile=element_profile,
+            integrity=integrity,
+            duration_rounds=duration_rounds,
+        )
+    finally:
+        _spend_marker(payload)
 
 
 def summon_ally_on_condition(
@@ -896,16 +939,19 @@ def summon_ally_on_condition(
     ``payload.target`` is the bearer of the condition, which — for a SELF condition —
     is the caster. We repackage it into the bespoke namespace ``summon_ally`` reads.
     """
-    from types import SimpleNamespace  # noqa: PLC0415
+    try:
+        from types import SimpleNamespace  # noqa: PLC0415
 
-    summon_ally(
-        payload=SimpleNamespace(
-            caster=payload.target,
-            threat_pool_name=threat_pool_name,
-            bond_rounds=bond_rounds,
-            max_health=max_health,
+        summon_ally(
+            payload=SimpleNamespace(
+                caster=payload.target,
+                threat_pool_name=threat_pool_name,
+                bond_rounds=bond_rounds,
+                max_health=max_health,
+            )
         )
-    )
+    finally:
+        _spend_marker(payload)
 
 
 def init_absorb_buffer(*, payload: Any, buffer: int) -> None:
@@ -939,6 +985,8 @@ def blink_dodge(*, payload: Any) -> None:
     Mutation-only: setting ``payload.amount = 0`` is what stops lower-priority
     interceptors (they guard on ``payload.amount <= 0``) and zeroes the damage; there
     is no CANCEL_EVENT step (an unconditional cancel would fire on the fizzle path too).
+    A once-only (``UNTIL_USED``) ward is spent through ``spend_condition_use`` after the
+    dodge (#4584).
     """
     if payload.amount <= 0:
         return
@@ -971,3 +1019,4 @@ def blink_dodge(*, payload: Any) -> None:
         force_move_to_position(payload.target, dest)
 
     payload.amount = 0
+    spend_condition_use(instance)
