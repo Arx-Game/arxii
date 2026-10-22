@@ -1683,7 +1683,7 @@ def expire_end_of_combat_conditions(
     instances = ConditionInstance.objects.filter(
         target_id__in=[t.pk for t in target_list],
         condition__default_duration_type=DurationType.UNTIL_END_OF_COMBAT,
-    ).select_related("condition")
+    ).select_related("condition", "target")
 
     removed: list[ConditionTemplate] = []
     for instance in instances:
@@ -1782,7 +1782,7 @@ def expire_scene_scoped_conditions(
     instances = ConditionInstance.objects.filter(
         target_id__in=[t.pk for t in target_list],
         condition__default_duration_type=DurationType.SCENE,
-    ).select_related("condition")
+    ).select_related("condition", "target")
 
     removed: list[ConditionTemplate] = []
     for instance in instances:
@@ -2796,7 +2796,7 @@ def spend_contributing_conditions(breakdown: ModifierBreakdown) -> None:
     instances = ConditionInstance.objects.filter(
         pk__in=instance_ids,
         condition__default_duration_type=DurationType.UNTIL_USED,
-    ).select_related("condition")
+    ).select_related("condition", "target")
     for instance in instances:
         spend_condition_use(instance)
 
