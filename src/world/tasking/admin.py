@@ -10,7 +10,7 @@ class TaskOutcomeRouteInline(admin.TabularInline):
     model = TaskOutcomeRoute
     formset = OneRowPerFormSet
     extra = 0
-    raw_id_fields = ("outcome_tier", "clue_pool")
+    autocomplete_fields = ("outcome_tier", "clue_pool")
 
 
 @admin.register(TaskTemplate)
@@ -18,7 +18,7 @@ class TaskTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "category", "check_type", "check_difficulty", "duration", "is_active")
     list_filter = ("category", "is_active")
     search_fields = ("name",)
-    raw_id_fields = ("check_type", "mission_template", "consequence_pool")
+    autocomplete_fields = ("check_type", "mission_template", "consequence_pool")
     inlines = [TaskOutcomeRouteInline]
 
 

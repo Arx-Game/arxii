@@ -176,8 +176,10 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
         self.tradition = TraditionFactory()
         sig_grant = TraditionGiftGrantFactory(tradition=self.tradition, gift=self.gift)
         sig_grant.special_techniques.add(self.special_technique)
-        # Deliberately no PathGiftGrant row for this technique — it is ONLY
-        # reachable via the tradition's signature list.
+        # On the learner's Path's list, and kept by the tradition: members only (#4555).
+        PathGiftGrantFactory(path=self.path, gift=self.gift).starter_techniques.add(
+            self.special_technique
+        )
 
         CharacterGiftUnlockFactory(character=self.sheet, unlock=GiftUnlockFactory(gift=self.gift))
 
@@ -197,7 +199,7 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
         purse = get_or_create_purse(self.sheet)
         purse.balance = 1000
         purse.save()
-        mint_favor_token(self.academy, self.sheet, provenance_note="Cleared the trial")
+        self.token = mint_favor_token(self.academy, self.sheet, provenance_note="Cleared the trial")
 
     def test_non_member_is_blocked(self) -> None:
         result = run_train_offer(self.offer, self.persona)
@@ -222,6 +224,33 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
             character_sheet=self.sheet, technique=self.special_technique
         )
         self.assertTrue(progress.exists())
+
+    def test_member_on_another_path_is_blocked(self) -> None:
+        """#4555: a tradition's technique is offered only on the Paths that list it."""
+        CharacterTraditionFactory(character=self.sheet, tradition=self.tradition)
+        CharacterPathHistoryFactory(character=self.sheet, path=PathFactory())
+
+        result = run_train_offer(self.offer, self.persona)
+
+        self.assertIsNone(result.object_pk)
+        self.assertIn("isn't yours to learn", result.message)
+        self.assertNothingCharged()
+
+    def assertNothingCharged(self) -> None:  # noqa: N802 - unittest style
+        """AP, purse, the Academy treasury and the Golden Hare are as setUp left them."""
+        from world.action_points.models import ActionPointPool
+        from world.currency.models import CharacterPurse, OrganizationTreasury
+        from world.magic.models import TechniqueProgress
+
+        ActionPointPool.flush_instance_cache()
+        self.assertEqual(ActionPointPool.get_or_create_for_character(self.character).current, 200)
+        CharacterPurse.flush_instance_cache()
+        OrganizationTreasury.flush_instance_cache()
+        self.assertEqual(get_or_create_purse(self.sheet).balance, 1000)
+        self.assertEqual(get_or_create_treasury(self.academy).balance, 0)
+        FavorTokenDetails.flush_instance_cache()
+        self.assertIsNone(FavorTokenDetails.objects.get(pk=self.token.pk).redeemed_at)
+        self.assertFalse(TechniqueProgress.objects.filter(character_sheet=self.sheet).exists())
 
     def test_left_member_is_blocked(self) -> None:
         """A membership row with left_at set is not active — TRAIN treats it as if the

@@ -174,6 +174,8 @@ class ConsequenceAdmin(admin.ModelAdmin):
     list_display = ["label", "outcome_tier", "weight", "character_loss", "deliberately_free"]
     list_filter = ["character_loss", "deliberately_free"]
     search_fields = ["label"]
+    # Sorted so the consequence picker on a pool lists labels alphabetically (#4556).
+    ordering = ["label"]
     list_select_related = ["outcome_tier"]
     inlines = [ConsequenceEffectInline]
 

@@ -55,6 +55,8 @@ class MissionTemplateAdmin(admin.ModelAdmin):
     ]
     list_filter = ["arc_scope", "visibility", "is_active", "risk_tier"]
     search_fields = ["name", "summary"]
+    # Sorted so mission pickers (task templates, crisis options) list names alphabetically.
+    ordering = ["name"]
     list_select_related = ["created_in_era", "report_to_role"]
     autocomplete_fields = ["created_in_era", "report_to_role"]
     filter_horizontal = ["categories"]

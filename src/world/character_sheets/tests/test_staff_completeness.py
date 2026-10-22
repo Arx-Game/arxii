@@ -73,7 +73,7 @@ class StaffBuildsACompleteSheetTests(TestCase):
         TraditionGiftGrantFactory(tradition=self.tradition, gift=self.gift).special_techniques.add(
             self.technique
         )
-        PathGiftGrantFactory(path=self.path, gift=self.gift)
+        PathGiftGrantFactory(path=self.path, gift=self.gift).starter_techniques.add(self.technique)
 
     def test_a_bare_staff_character_gets_every_family_cg_writes(self) -> None:
         staff = AccountFactory(is_staff=True)

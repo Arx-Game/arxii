@@ -6,6 +6,7 @@ from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import PathCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
 from world.magic.models import PathGiftGrant
+from world.magic.services.magic_skills import invalidate_technique_own_paths
 from world.progression.models import CodexKnowledgeRequirement, TraitRequirement
 from world.skills.models import PathSkillSuggestion
 
@@ -79,7 +80,11 @@ class PathGiftGrantInline(admin.TabularInline):
 
 @admin.register(Path)
 class PathAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
-    """Admin for character paths."""
+    """Admin for character paths.
+
+    A save can change a technique's own Paths (a grant removed inline, the Path's
+    order), so it clears ``Technique.cached_own_paths`` (#4555).
+    """
 
     list_display = [
         "name",
@@ -105,11 +110,23 @@ class PathAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     ]
     fieldsets = (
         (None, {"fields": ("name", "description", "stage", "minimum_level")}),
-        ("Casting", {"fields": ("technique_skill",)}),
-        ("Display", {"fields": ("icon_url", "sort_order", "is_active")}),
+        ("Casting", {"fields": ("technique_skill", "style", "action_category")}),
+        ("Display", {"fields": ("icon_url", "icon_name", "sort_order", "is_active")}),
         ("Evolution", {"fields": ("parent_paths",)}),
         CREDIT_FIELDSET,
     )
+
+    def save_related(self, request, form, formsets, change) -> None:
+        super().save_related(request, form, formsets, change)
+        invalidate_technique_own_paths()
+
+    def delete_model(self, request, obj) -> None:
+        super().delete_model(request, obj)
+        invalidate_technique_own_paths()
+
+    def delete_queryset(self, request, queryset) -> None:
+        super().delete_queryset(request, queryset)
+        invalidate_technique_own_paths()
 
     @admin.display(description="Parents")
     def parent_count(self, obj):

@@ -66,7 +66,9 @@ class GrantMagicTests(TestCase):
         RosterTenureFactory(player_data=self.player, roster_entry=self.entry, player_number=1)
         self.sheet = self.entry.character_sheet
         self.path_row = CharacterPathHistoryFactory(character=self.sheet)
-        PathGiftGrantFactory(path=self.path_row.path, gift=self.gift)
+        PathGiftGrantFactory(path=self.path_row.path, gift=self.gift).starter_techniques.add(
+            self.finished, self.unfinished, self.second
+        )
         self.base = f"/api/character-sheets/{self.sheet.pk}"
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)

@@ -48,7 +48,9 @@ class NpcPowerOptionsTests(TestCase):
         cls.unready = TechniqueFactory(gift=cls.gift, name="Unready Flame")
         grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
         grant.special_techniques.add(cls.spark, cls.unready)
-        PathGiftGrantFactory(path=cls.path, gift=cls.gift)
+        PathGiftGrantFactory(path=cls.path, gift=cls.gift).starter_techniques.add(
+            cls.spark, cls.unready
+        )
 
     def _get(self, account, **params):
         client = APIClient()

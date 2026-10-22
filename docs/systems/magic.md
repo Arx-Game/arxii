@@ -215,15 +215,28 @@ drift apart.
 **Deliberately NOT lineage-aware** (verified against code, #2891):
 
 - `cg_catalog.get_gift_options` / `get_technique_options` — availability comes from authored
-  `TraditionGiftGrant.special_techniques` / `PathGiftGrant.starter_techniques` rows at
-  *technique* granularity, never from `gift.techniques`, so a child gift whose pool is
+  `PathGiftGrant.starter_techniques` rows (restricted by `TraditionGiftGrant.special_techniques`)
+  at *technique* granularity, never from `gift.techniques`, so a child gift whose pool is
   authored inherited techniques is already included.
 
+**A technique is offered only on its Paths; a Tradition's list restricts** (#4555,
+ADR-4555-A). `PathGiftGrant.starter_techniques` is the list of techniques for that Path and
+Gift. `TraditionGiftGrant.special_techniques` no longer adds to a pool: a technique no
+Tradition grant lists is open to every Tradition, and one listed by one or more is open only
+to those Traditions. The pool for Tradition T on Path P picking Gift G is the techniques on
+P's list for G that no Tradition grant lists, or T's does (`get_technique_options` returns
+the two halves as `pool` and `tradition`). `get_gift_options` offers G when T has a grant
+for it and that pool holds a takeable technique. The restriction half is
+`cg_catalog.tradition_listings` / `offered_to_tradition`, shared with Academy training
+(`_technique_available_to_learner`, through `get_technique_options`) and `grant_path_magic`,
+which skips a technique the character's active Tradition may not take. The
+`tradition-techniques-on-a-path` Required content row lists a technique a Tradition grant
+lists that no Path's list holds, since it is offered nowhere.
+
 **An empty path pool is missing content, not a design case** (ruled on #3682, ADR-0283).
-A gift becomes pickable if *either* the path's `starter_techniques` or the tradition's
-`special_techniques` is non-empty, so a tradition special can carry a gift onto a path
-that offers nothing for it. That union stays; there will never be a gift a path offers
-nothing for, so the empty pool is an authoring gap. The `path-gift-starter-pools`
+Since #4555 a tradition special no longer carries a gift onto a path that offers nothing
+for it; there will never be a gift a path offers nothing for, so the empty pool is an
+authoring gap. The `path-gift-starter-pools`
 required-content sentinel (`web/admin/tuning/required_content.py`, #3712) reports each
 such `(path, gift)` pair and names the traditions it leaks through — 8 pairs across 17
 combinations at the time it was added. A `TraditionGiftGrant` carrying no specials is
@@ -642,7 +655,8 @@ nothing, the roll runs without the added skill; there is no placeholder data.
 | `ConditionCategory.adds_loss_of_self_skills` | `world/conditions/models.py` | Boolean (default False): resist and break-free rolls on conditions in the category add the `RESISTING_LOSS_OF_SELF` skills (staff tick it for corruption, atavism, possession) |
 | `activity_skill_terms(activity)` | `services/magic_skills.py` | One `ExtraTraitTerm` per mapped row whose skill is active; empty when nothing is mapped |
 | `technique_skill_term(character, technique)` | `services/magic_skills.py` | The technique skill as a term at weight 1.00, or None |
-| `technique_skill_term_for_path(technique, path)` | `services/magic_skills.py` | The same rule with the Path already read, for callers resolving many techniques for one caster |
+| `technique_skill_term_for_path(technique, path, own_paths=None)` | `services/magic_skills.py` | The same rule with the Path already read, for callers resolving many techniques for one caster; pass each technique's `own_paths` from one `technique_paths` call |
+| `technique_paths(technique_ids)` / `skill_path(current_path, own_paths)` | `services/magic_skills.py` | A technique's own Paths (the `PathGiftGrant` lists that hold it, in Path order) and which Path's skill a cast adds (#4555) |
 | `cast_check_type(personal_check, technique)` | `services/magic_skills.py` | The ADR-0096 check type precedence (personal check, else the action template's), shared by `resolve_cast_check` and the combat action picker |
 | `resolve_cast_check(character, technique)` / `CastCheck` | `services/magic_skills.py`, `types/magic_skills.py` | Frozen `(check_type, extra_traits)` for a cast |
 | `involved_trait_ids(check_type, extra_traits)` / `cast_involved_trait_ids(cast_check)` | `services/magic_skills.py` | Trait ids a roll or cast involves, for thread pulls |
@@ -650,11 +664,15 @@ nothing, the roll runs without the added skill; there is no placeholder data.
 | `loss_of_self_terms(template)` | `world/conditions/services.py` | The `RESISTING_LOSS_OF_SELF` terms for a condition template whose category is marked, else none |
 
 **Technique skill resolution order.** The technique's own `skill`, if set; otherwise for a Major
-Gift technique the caster's current Path `technique_skill` (`current_path_for_character`, so after a
-Crossing it is the new Path's skill, never the parent's); otherwise for a Minor Gift technique the
-Gift's `technique_skill`. A technique has no Path of its own, because one technique can sit in
-several Paths' pools. A caster with no Path or no character sheet (an NPC, a combat opponent) gets
-no Path skill. An inactive skill gives no term.
+Gift technique the `technique_skill` of the Path it is cast from (#4555, ADR-4555-A): the
+technique's own Paths are those whose `PathGiftGrant.starter_techniques` lists it
+(`technique_paths`, one query for many techniques; a single cast reads `Technique.cached_own_paths`, which the Path Gift Grant and Path admins clear on save through `invalidate_technique_own_paths`, so casting adds no query); `skill_path` takes the caster's current Path
+(`current_path_for_character`) when it is one of them, otherwise the technique's first own Path in
+Path order (stage, sort order, name, then pk), so a technique learned on the Path of Embers and cast after a
+Crossing into the Path of Ash still adds the Embers skill. A Path never inherits its parent's
+skill. A technique on no Path's list falls back to the caster's current Path, and a caster with no
+Path then gets no Path skill. Otherwise for a Minor Gift technique the Gift's `technique_skill`. An
+inactive skill gives no term.
 
 **Which rolls add what.**
 - Personal-check casts roll `CastCheck.check_type` and add the technique term: scene cast, combat

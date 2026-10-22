@@ -140,6 +140,7 @@ from world.magic.models.dramatic_moment import (
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.services.facets import merge_facets
 from world.magic.services.glimpse import refresh_glimpse_state
+from world.magic.services.magic_skills import invalidate_technique_own_paths
 from world.magic.services.technique_effects import (
     invalidate_technique_payload_caches,
     technique_effect_authoring_gaps,
@@ -1061,6 +1062,19 @@ class PathGiftGrantAdmin(admin.ModelAdmin):
     def get_technique_count(self, obj: PathGiftGrant) -> int:
         """An empty pool is the gap the required-content sentinel reports (#3682)."""
         return obj.technique_count
+
+    def save_related(self, request, form, formsets, change) -> None:
+        """The list says which Paths a technique belongs to for its cast skill (#4555)."""
+        super().save_related(request, form, formsets, change)
+        invalidate_technique_own_paths()
+
+    def delete_model(self, request, obj) -> None:
+        super().delete_model(request, obj)
+        invalidate_technique_own_paths()
+
+    def delete_queryset(self, request, queryset) -> None:
+        super().delete_queryset(request, queryset)
+        invalidate_technique_own_paths()
 
 
 @admin.register(CharacterTradition)

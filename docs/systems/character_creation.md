@@ -595,7 +595,7 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 ### Magic (Gift/Technique Selection, #2426)
 - `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's chosen tradition + path
-- `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options (pool ∪ signature) for the chosen gift
+- `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options for the chosen gift: the draft's Path's list for it, less the techniques other traditions keep (`is_tradition_technique` marks the ones the draft's tradition keeps, #4555)
 - `GET /api/character-creation/drafts/{id}/personalization-options/` - For each chosen
   technique, the flourishes/forms/prices offered in creation at the draft's gift resonance
   (#4099, `creation_personalization_options`; see `docs/systems/magic.md`'s "Technique
