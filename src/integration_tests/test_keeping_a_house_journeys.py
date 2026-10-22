@@ -13,11 +13,16 @@ from evennia.utils.ansi import strip_ansi
 from evennia.utils.create import create_object
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
-from evennia_extensions.models import ObjectDisplayData
+from evennia_extensions.models import ExitProfile, ObjectDisplayData
 from flows.factories import SceneDataManagerFactory
 from integration_tests.harness import JourneyCase
 from typeclasses.companions import CompanionObject
+from world.areas.constants import AreaLevel
+from world.areas.factories import AreaFactory
 from world.areas.services import _room_display_name
+from world.buildings.constants import ConditionTier
+from world.buildings.factories import BuildingFactory
+from world.buildings.upkeep_services import set_condition_tier
 from world.character_sheets.models import ProfileTextVersion
 from world.checks.factories import CheckTypeFactory
 from world.companions.factories import CompanionFactory
@@ -32,6 +37,7 @@ from world.magic.models import PortalAnchor
 from world.npc_services.factories import NPCRoleFactory
 from world.npc_services.functionaries import functionaries_in_room
 from world.npc_services.models import Functionary
+from world.room_features.models import ExitBarsDetails
 from world.societies.models import LegendEntry
 
 
@@ -57,13 +63,18 @@ def description_of(obj) -> str:
 
 
 class LockingTheDoor(JourneyCase):
-    """Hobb, a tenant of the Lantern, locks its gate; Ysmay finds her own way through."""
+    """Hobb, a tenant of the Lantern, locks its gate; Ysmay finds her own way through.
+    The Lantern is a building in excellent condition, and every break wears it."""
 
     def setUp(self) -> None:
         super().setUp()
         self.lantern = self.make_room("The Lantern")
         self.yard = self.make_room("The Yard")
+        area = AreaFactory(level=AreaLevel.BUILDING)
         self.profile = RoomProfileFactory(objectdb=self.lantern)
+        self.profile.area = area
+        self.profile.save(update_fields=["area"])
+        self.building = BuildingFactory(area=area, condition_tier=ConditionTier.EXCELLENT)
         self.gate = exit_between("gate", self.lantern, self.yard)
         exit_between("back", self.yard, self.lantern)
         self.ysmay = self.make_player("Ysmay", room=self.lantern)
@@ -159,6 +170,60 @@ class LockingTheDoor(JourneyCase):
         self.assertTrue(LegendEntry.objects.filter(title="Break-in at gate").exists())
         self.telnet(self.ysmay, "gate")
         self.assertEqual(self.ysmay.location, self.yard)
+        # The break wore the house: one tier, from excellent to good.
+        self.building.refresh_from_db()
+        self.assertEqual(self.building.condition_tier, ConditionTier.GOOD)
+
+    def test_bars_hold_a_guest_until_they_are_broken_down(self) -> None:
+        bars = ExitBarsDetails.objects.create(
+            exit_profile=ExitProfile.get_or_create_for_exit(self.gate), level=3
+        )
+        exit_between("side door", self.lantern, self.yard)
+
+        # Unlocked but barred: a guest is held at the gate and not at the side door; the
+        # tenant passes; a lock pick finds nothing to pick.
+        self.assertFalse(self.gate.db.locked)
+        self.assertIn("You cannot go that way.", self.telnet(self.ysmay, "gate"))
+        self.assertEqual(self.ysmay.location, self.lantern)
+        self.telnet(self.ysmay, "side door")
+        self.assertEqual(self.ysmay.location, self.yard)
+        self.telnet(self.ysmay, "back")
+        self.telnet(self.hobb, "gate")
+        self.assertEqual(self.hobb.location, self.yard)
+        self.telnet(self.hobb, "back")
+        self.assertIn("That exit isn't locked.", self.telnet(self.ysmay, "pick gate"))
+
+        # Locked and barred: one break clears the lock and wears the bars by one; each
+        # break wears the house by a tier.
+        self.telnet(self.hobb, "lock gate")
+        self.assertIn("You break through gate!", self.telnet(self.ysmay, "break gate"))
+        self.assertFalse(self.gate.db.locked)
+        bars.refresh_from_db()
+        self.assertEqual((bars.level, bars.dissolved_at), (2, None))
+        self.building.refresh_from_db()
+        self.assertEqual(self.building.condition_tier, ConditionTier.GOOD)
+        self.assertIn("You cannot go that way.", self.telnet(self.ysmay, "gate"))
+        self.assertIn("You break through gate!", self.telnet(self.ysmay, "break gate"))
+        bars.refresh_from_db()
+        self.assertEqual((bars.level, bars.dissolved_at), (1, None))
+        self.assertIn("You cannot go that way.", self.telnet(self.ysmay, "gate"))
+        self.assertIn("You break through gate!", self.telnet(self.ysmay, "break gate"))
+        bars.refresh_from_db()
+        self.assertIsNotNone(bars.dissolved_at)
+        self.building.refresh_from_db()
+        self.assertEqual(self.building.condition_tier, ConditionTier.WORN)
+        self.telnet(self.ysmay, "gate")
+        self.assertEqual(self.ysmay.location, self.yard)
+        self.telnet(self.ysmay, "back")
+        self.assertIn("That exit isn't locked.", self.telnet(self.ysmay, "break gate"))
+        self.assertEqual(LegendEntry.objects.filter(title="Break-in at gate").count(), 3)
+
+        # A decayed house can fall no further.
+        set_condition_tier(self.building, ConditionTier.DECAYED)
+        self.telnet(self.hobb, "lock gate")
+        self.assertIn("You break through gate!", self.telnet(self.ysmay, "break gate"))
+        self.building.refresh_from_db()
+        self.assertEqual(self.building.condition_tier, ConditionTier.DECAYED)
 
 
 class DescribingTheHouse(JourneyCase):
