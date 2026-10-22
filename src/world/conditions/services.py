@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Any
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q, QuerySet, Sum
-from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from flows.constants import EventName
@@ -182,6 +181,13 @@ def get_settle_config() -> SettleConfig:
     return cfg
 
 
+def _not_suppressed_q() -> Q:
+    """Filter for condition instances that are not (or are no longer) suppressed."""
+    return Q(is_suppressed=False) | Q(
+        suppressed_until__isnull=False, suppressed_until__lt=timezone.now()
+    )
+
+
 def get_active_conditions(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     *,
@@ -209,10 +215,7 @@ def get_active_conditions(
 
     if not include_suppressed:
         # Keep in sync with ConditionHandler._canonical_active_qs in handlers.py
-        qs = qs.filter(
-            Q(is_suppressed=False)
-            | Q(suppressed_until__isnull=False, suppressed_until__lt=timezone.now())
-        )
+        qs = qs.filter(_not_suppressed_q())
 
     if category:
         qs = qs.filter(condition__category=category)
@@ -3041,23 +3044,80 @@ def clear_all_conditions(
     return len(instances)
 
 
+def _active_template_sum_by_target(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+    *,
+    flag_field: str,
+    value_field: str,
+) -> dict[int, int]:
+    """Sum a flagged ConditionTemplate field over each target's active conditions, in one query.
+
+    Uses ``get_active_conditions``'s notion of active (not suppressed, not past an
+    INGAME_TIME ``expires_at``) but, unlike it, does not sweep expired rows: this is
+    a read for many targets at once. Keyed by ObjectDB pk; targets whose total is zero
+    (no flagged condition) are absent.
+    """
+    target_ids = {t.pk for t in targets if t is not None}
+    if not target_ids:
+        return {}
+    now = timezone.now()
+    rows = (
+        ConditionInstance.objects.filter(
+            _not_suppressed_q(),
+            target_id__in=target_ids,
+            **{f"condition__{flag_field}": True},
+        )
+        .exclude(
+            expires_at__isnull=False,
+            expires_at__lte=now,
+            condition__default_duration_type=DurationType.INGAME_TIME,
+        )
+        .order_by()
+        .values("target_id")
+        .annotate(total=Sum(f"condition__{value_field}"))
+    )
+    return {row["target_id"]: row["total"] for row in rows if row["total"]}
+
+
+def turn_order_modifier_by_target(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> dict[int, int]:
+    """Total turn order modifier per target from active conditions (positive = acts earlier).
+
+    Batched form of ``get_turn_order_modifier``: one query for all ``targets``, keyed by
+    ObjectDB pk, only targets with a non-zero total appear.
+    """
+    return _active_template_sum_by_target(
+        targets, flag_field="affects_turn_order", value_field="turn_order_modifier"
+    )
+
+
+def aggro_priority_by_target(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> dict[int, int]:
+    """Total aggro priority per target from active draws_aggro conditions (#4572).
+
+    Batched form of ``get_aggro_priority``: one query for all ``targets``, keyed by
+    ObjectDB pk, only targets with a non-zero total appear. Enemy target selection
+    adds this to a character's threat with every opponent.
+    """
+    return _active_template_sum_by_target(
+        targets, flag_field="draws_aggro", value_field="aggro_priority"
+    )
+
+
 def get_turn_order_modifier(character_sheet: "CharacterSheet") -> int:
     """
     Get the total turn order modifier from all conditions.
 
     Args:
-        target: The ObjectDB instance
+        character_sheet: The character's sheet
 
     Returns:
         Integer modifier to turn order (positive = act earlier)
     """
     target = character_sheet.character
-    result = (
-        get_active_conditions(target)
-        .filter(condition__affects_turn_order=True)
-        .aggregate(total=Coalesce(Sum("condition__turn_order_modifier"), 0))
-    )
-    return result["total"]
+    return turn_order_modifier_by_target([target]).get(target.pk, 0)
 
 
 def get_aggro_priority(character_sheet: "CharacterSheet") -> int:
@@ -3065,18 +3125,13 @@ def get_aggro_priority(character_sheet: "CharacterSheet") -> int:
     Get the total aggro priority from all conditions.
 
     Args:
-        target: The ObjectDB instance
+        character_sheet: The character's sheet
 
     Returns:
         Integer priority (higher = more likely to be targeted)
     """
     target = character_sheet.character
-    result = (
-        get_active_conditions(target)
-        .filter(condition__draws_aggro=True)
-        .aggregate(total=Coalesce(Sum("condition__aggro_priority"), 0))
-    )
-    return result["total"]
+    return aggro_priority_by_target([target]).get(target.pk, 0)
 
 
 def has_death_deferred(character: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
