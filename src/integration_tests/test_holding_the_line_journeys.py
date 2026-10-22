@@ -24,7 +24,8 @@ not something read back from the code under test:
   interpose base fatigue 3 at very low effort (x 0.1), floored at 1: 1 physical fatigue. She
   has one reaction a round, so a brute with 2 actions lands its second blow (100 - 12 = 88).
 - "Steadying Word" (once only) and "Steady Hand" (3 rounds) each add 3 to Brenna's technique
-  check.
+  check. A look at the roll (``collect_check_modifiers``, what previews call) counts the +3
+  and spends nothing.
 - "Stay Standing" (once only, stops a knockout) sits on Cassian at 15 of 100 health while the
   brute swings for 2: 13 of 100 is inside the knockout band, the knockout roll is forced to
   fail, and the knockout pool's only result for that failure is Unconscious.
@@ -54,6 +55,7 @@ from world.checks.factories import (
     ConsequenceEffectFactory,
     ConsequenceFactory,
 )
+from world.checks.services import collect_check_modifiers
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult
 from world.combat.constants import (
@@ -344,10 +346,15 @@ class HoldingTheLine(_TheYard):
             modifier_value=BLESSING,
         )
         apply_condition(self.brenna, steadying_word)
+        blessing_pk = ConditionInstance.objects.get(target=self.brenna, condition=steadying_word).pk
 
-        # Looking at the fight (the encounter payload a player's browser reads) spends nothing.
-        response = self.api(self.account_of(self.brenna)).get(f"/api/combat/{self.encounter.pk}/")
-        self.assertEqual(response.status_code, 200)
+        # A look at the roll is what every preview asks (``collect_check_modifiers``): it counts
+        # the blessing's +3 and spends nothing.
+        look = collect_check_modifiers(self.brenna.sheet_data, self.technique_check_type)
+        self.assertIn(
+            (blessing_pk, BLESSING),
+            [(c.condition_instance_id, c.value) for c in look.contributions],
+        )
         self.assertTrue(self._has(self.brenna, steadying_word))
 
         self._brenna_declares(self.plain)
@@ -375,12 +382,18 @@ class HoldingTheLine(_TheYard):
             check_type=self.technique_check_type,
             modifier_value=BLESSING,
         )
-        apply_condition(self.brenna, steady_hand)
-
+        # A round without the blessing is the baseline roll.
         self._brenna_declares(self.plain)
         self._round()
 
-        self.assertEqual(len(self.offense_calls), 1)
+        apply_condition(self.brenna, steady_hand)
+        self._next_round()
+        self._brenna_declares(self.plain)
+        self._round()
+
+        (_, _, baseline_extra), (_, blessed_type, blessed_extra) = self.offense_calls
+        self.assertEqual(blessed_type, self.technique_check_type)
+        self.assertEqual(blessed_extra - baseline_extra, BLESSING)
         self.assertTrue(self._has(self.brenna, steady_hand))
 
     # -- a once-only grace ----------------------------------------------------
