@@ -67,11 +67,13 @@ class MintAccusationAction(Action):
             return _ActionResult(success=False, message="No such target.")
         target_sheet = target_persona.character_sheet
 
+        # The target is named by ``persona.name`` on every line here: ``str(persona)``
+        # reads "Hobb (Primary)" (#3657 tranche 18).
         if not accusation_permitted(framer_sheet=framer_sheet, target_sheet=target_sheet):
             return _ActionResult(
                 success=False,
                 message=(
-                    f"{target_persona} has not opened themselves to being antagonised. "
+                    f"{target_persona.name} has not opened themselves to being antagonised. "
                     "You can't manufacture a scandal against them."
                 ),
             )
@@ -107,7 +109,7 @@ class MintAccusationAction(Action):
 
         return _ActionResult(
             success=True,
-            message=f"You mint a scandal against {target_persona}. Now to make it stick.",
+            message=f"You mint a scandal against {target_persona.name}. Now to make it stick.",
             data={"secret_id": secret.pk},
         )
 
@@ -158,7 +160,7 @@ def _file_accusation_crime(  # noqa: PLR0913
     return _ActionResult(
         success=True,
         message=(
-            f"You accuse {target_persona} of {crime_kind}. Where that's a crime, "
+            f"You accuse {target_persona.name} of {crime_kind}. Where that's a crime, "
             "the law will start to look their way, until someone disproves it."
         ),
         data={"secret_id": secret.pk},

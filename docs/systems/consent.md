@@ -354,6 +354,7 @@ REGISTRY action through `dispatch_player_action()` — the same seam the web use
 | Command | Action | Notes |
 |---------|--------|-------|
 | `consent` | — | Show the caller's social-consent summary. |
+| `consent modes` | — | Explain each mode (the `/api/consent-categories/modes/` guidance on telnet, #2170). |
 | `consent on` | `set_social_consent_preference` | Allow all social actions. |
 | `consent off` | `set_social_consent_preference` | Block all social actions. |
 | `consent category <key>=<mode>` | `set_social_consent_category_rule` | `mode` is `everyone`, `whitelist`, `blacklist` (= ALL_BUT_BLACKLIST), `friends` (= FRIENDS_WHITELIST), `rivals` (= RIVALS, mutual hostile labels only — #3957), or `default` (clear the rule). |

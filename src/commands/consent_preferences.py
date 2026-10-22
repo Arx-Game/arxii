@@ -82,6 +82,20 @@ class CmdConsent(DispatchCommand):
     _registry_key: str = ""
 
     def func(self) -> None:
+        """Route the subverb; the summary and list paths answer their own refusals.
+
+        A ``CommandError`` from the summary (a character with no sheet or no open
+        tenure) is outside ``DispatchCommand.func``'s handling, and the handler had
+        answered a bare ``consent`` with "there was an error" and a logged traceback
+        (#3657 tranche 18).
+        """
+        try:
+            self._route()
+        except CommandError as err:
+            self.msg(str(err))
+            self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
+
+    def _route(self) -> None:
         raw = (self.args or "").strip()
         if not raw:
             self._show_summary()
