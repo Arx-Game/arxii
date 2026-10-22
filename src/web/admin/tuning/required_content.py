@@ -1085,6 +1085,51 @@ def _probe_path_suggestions_name_magic_skills() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_check_types_weight_no_magic_skill() -> ProbeResult:
+    """No `CheckType` weights a Magic-category skill directly (#4547).
+
+    Consumer: `world/checks/services.py` `perform_check()`, which sums a check type's
+    own trait rows and the call-time `extra_traits` from
+    `world/magic/services/magic_skills.py`. A Magic skill reaches a magical roll through
+    the magic skill settings (activity skills, the Path, Gift and technique skill), so a
+    check type that also weights one counts it twice when the two meet, and keeps a
+    magic skill out of those settings otherwise. Each row is `check type: skills`; the
+    link opens the admin list filtered to exactly those check types, to repoint.
+
+    Matches on the trait (a SKILL trait in the Magic category), not a `Skill` row, so a
+    weighting on a Magic skill trait with no `Skill` row or an inactive one is listed
+    too. Production rows are left as they are; staff repoint them.
+    """
+    from urllib.parse import urlencode  # noqa: PLC0415
+
+    from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
+    from world.checks.models import CheckTypeTrait  # noqa: PLC0415
+    from world.traits.models import TraitCategory, TraitType  # noqa: PLC0415
+
+    rows = (
+        CheckTypeTrait.objects.filter(
+            trait__trait_type=TraitType.SKILL, trait__category=TraitCategory.MAGIC
+        )
+        .order_by("check_type__name", "check_type_id", "trait__name")
+        .values_list("check_type_id", "check_type__name", "trait__name")
+    )
+    skills_by_type: dict[int, tuple[str, list[str]]] = {}
+    for type_id, type_name, skill_name in rows:
+        skills_by_type.setdefault(type_id, (type_name, []))[1].append(skill_name)
+    if not skills_by_type:
+        return ProbeResult(present=True)
+    missing = tuple(f"{name}: {', '.join(skills)}" for name, skills in skills_by_type.values())
+    changelist = admin_changelist_url("CheckType")
+    link = None
+    if changelist:
+        link = f"{changelist}?{urlencode({'id__in': ','.join(map(str, skills_by_type))})}"
+    detail = (
+        f"{len(missing)} check type(s) weight a Magic skill directly; set it through the "
+        "magic skill settings instead."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail, admin_url=link)
+
+
 _ULTIMATE_COPY_FIELDS = (
     "reveal_framing_text",
     "deferred_death_text",
@@ -2799,6 +2844,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_path_suggestions_name_magic_skills),
             admin_model="Path",
+        ),
+        ContentDependency(
+            key="check-types-weight-no-magic-skill",
+            label="Check types weight no Magic skill",
+            tier=DependencyTier.TUNING,
+            consumer="world/checks/services.py perform_check() with magic skill extra_traits",
+            consequence=(
+                "A magical roll on that check type counts the Magic skill twice when the "
+                "magic skill settings add it too."
+            ),
+            probe=CustomProbe(fn=_probe_check_types_weight_no_magic_skill),
+            admin_model="CheckType",
         ),
         ContentDependency(
             key="standoff-reaction-lines",

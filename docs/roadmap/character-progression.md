@@ -49,7 +49,7 @@ The central spine connecting every system in the game. Characters develop throug
   (#2711/#2727/#2739):** `TechniqueProgress` per-(character × technique) development
   meters (mounted via a teaching offer or an Academy TRAIN offer, #2711) accrue
   through checked training sessions — `resolve_training_check` (#2727) rolls
-  intellect + Arcane Theory against a tier/level/teacher-scaled difficulty and maps
+  intellect plus the `TECHNIQUE_LEARNING` skills against a tier/level/teacher-scaled difficulty and maps
   the outcome to a dev-point multiplier (botch/failure 0×, partial 0.5×, success
   1.0×, critical 1.5×; AP is always spent regardless of outcome). #2739 built the
   missing production caller: `TrainTechniqueAction` is the shared `action.run()`

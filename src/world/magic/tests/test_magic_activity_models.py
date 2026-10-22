@@ -13,7 +13,7 @@ from django.test import TestCase
 from world.classes.factories import PathFactory
 from world.magic.constants import GiftKind, MagicActivity
 from world.magic.factories import GiftFactory, MagicActivitySkillFactory, TechniqueFactory
-from world.skills.factories import SkillFactory
+from world.skills.factories import MagicSkillFactory
 
 MAJOR_GIFT_MESSAGE = (
     "A Major Gift's techniques take the caster's Path technique skill. Set it on the Path instead."
@@ -23,7 +23,7 @@ MAJOR_GIFT_MESSAGE = (
 class MagicActivitySkillTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.skill = SkillFactory()
+        cls.skill = MagicSkillFactory()
 
     def test_unique_activity_skill(self) -> None:
         MagicActivitySkillFactory(activity=MagicActivity.ANIMA_RITUAL, skill=self.skill)
@@ -44,7 +44,7 @@ class MagicActivitySkillTests(TestCase):
 class GiftTechniqueSkillTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.skill = SkillFactory()
+        cls.skill = MagicSkillFactory()
 
     def test_gift_technique_skill_rejected_on_major(self) -> None:
         gift = GiftFactory(kind=GiftKind.MAJOR)
@@ -64,7 +64,7 @@ class GiftTechniqueSkillTests(TestCase):
 
 class SkillDeleteNullsTechniqueSkillTests(TestCase):
     def test_skill_delete_nulls_path_gift_technique(self) -> None:
-        skill = SkillFactory()
+        skill = MagicSkillFactory()
         path = PathFactory(technique_skill=skill)
         gift = GiftFactory(kind=GiftKind.MINOR, technique_skill=skill)
         technique = TechniqueFactory(skill=skill)

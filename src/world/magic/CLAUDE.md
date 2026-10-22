@@ -349,6 +349,11 @@ Every magical roll adds skills staff chose in admin; no skill is named in code. 
 - **A new cast path** calls `resolve_cast_check(character, technique)` and passes both the
   `check_type` and `extra_traits` to the roll, and the `CastCheck` to its thread pull context.
 - **Anima Check:** the character-creation pick excludes MAGIC-category skills.
+- **Magic skills only (#4547):** the four pickers share `limit_choices_to=MAGIC_SKILL_CHOICES`
+  (`skill_choices.py`), so admin and `full_clean()` take Magic-category skills only. No seeder
+  names, creates or weights a skill for magic; a new magic check type weights its stat and lets
+  the roll add skills. Sanctum ritual configs take their skill from the `RITUAL_WORKING` mapping
+  (tests call `map_ritual_working_skill()` first).
 
 ### Dispel / Cleanse (#1585)
 
@@ -454,8 +459,8 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
 
 `resolve_training_check(learner, progress, *, ap_to_invest, teacher=None)`
 (`services/technique_training.py`, #2727) is the check layer sitting on top of
-`contribute_to_technique_progress` (above): the learner rolls intellect + "Arcane
-Theory" (the "Technique Training" `CheckType`) against `target_difficulty = (technique.tier
+`contribute_to_technique_progress` (above): the learner rolls intellect (the
+"Technique Training" `CheckType`) plus the `TECHNIQUE_LEARNING` skills against `target_difficulty = (technique.tier
 × step) − (learner_level // divisor) − teacher_skill_bonus + (self_study_penalty
 if teacher is None)`, and the outcome maps to a dev-point multiplier via
 `TrainingOutcomeAward(OutcomeTierAward)` (botch/failure 0×, partial 0.5×, success
@@ -464,7 +469,8 @@ dev-point yield varies. Four tuning knobs live on `GiftAcquisitionConfig`. This
 seam shipped with no production caller until #2739.
 
 **Content dependency, loud failure (#3043).** The "Technique Training" `CheckType`
-and its "Arcane Theory" trait are content models (`CONTENT_MODELS`, #2698), not
+and its intellect weighting are content models (`CONTENT_MODELS`, #2698; the seed's
+invented "Arcane Theory" skill is gone since #4547), not
 unconditionally-seeded config — `ensure_technique_training_content()`
 (`world/seeds/game_content/magic.py`) resolves them via `authored_or_sample`
 (content-repo lookup first, sample stand-in only under `SEED_SAMPLE_CONTENT`,

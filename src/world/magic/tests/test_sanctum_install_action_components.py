@@ -32,6 +32,7 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     ResonanceFactory,
     ResonanceTierFactory,
+    map_ritual_working_skill,
 )
 from world.magic.models import SanctumOwnerMode
 from world.magic.seeds_checks import ensure_magic_check_content
@@ -64,6 +65,7 @@ class SanctumInstallActionComponentsTests(TestCase):
         # Seed required content for sanctum rituals and check configs.
         ensure_sanctum_kind()
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
 
         # Patch perform_check for the duration of this test; SUCCESS tier throughout.

@@ -10,7 +10,7 @@ from world.locations.constants import HolderType, LocationParentType
 from world.locations.factories import LocationOwnershipFactory
 from world.magic.constants import GainSource, SanctumSlotKind, TargetKind
 from world.magic.exceptions import RitualCheckConfigMissing
-from world.magic.factories import ResonanceFactory
+from world.magic.factories import ResonanceFactory, map_ritual_working_skill
 from world.magic.models import (
     ResonanceGrant,
     SanctumDetails,
@@ -230,6 +230,7 @@ class PerformSanctificationCovenantLeaderGateTests(TestCase):
         from unittest.mock import patch
 
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
         self._check_patcher = patch("world.checks.services.perform_check")
         mock_check = self._check_patcher.start()
@@ -310,6 +311,7 @@ class PerformSanctificationTests(TestCase):
 
         # Seed the sanctum rituals + check configs so the check can run.
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
         # Patch perform_check to success (level=1) so validation tests exercise
         # the pre-check gates that fire before the roll.
@@ -404,6 +406,7 @@ class AbsorbSanctumPoolTests(TestCase):
         from unittest.mock import patch
 
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
         self._check_patcher = patch("world.checks.services.perform_check")
         mock_check = self._check_patcher.start()
@@ -514,6 +517,7 @@ def _build_dissolution_sanctum(*, leader_is_founder: bool = True):
 
     ensure_sanctum_kind()
     ensure_sanctum_rituals()
+    map_ritual_working_skill()
     ensure_magic_check_content()
 
     resonance = ResonanceFactory()
@@ -622,6 +626,7 @@ def _build_sanctification_room_with_seeds():
 
     ensure_sanctum_kind()
     ensure_sanctum_rituals()
+    map_ritual_working_skill()
     ensure_magic_check_content()
 
     resonance = ResonanceFactory()

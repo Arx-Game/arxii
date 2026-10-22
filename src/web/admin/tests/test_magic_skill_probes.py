@@ -3,15 +3,20 @@
 Unmapped config means "no extra skill term" rather than a failure, so these are
 TUNING rows: staff see which magical activities, Paths and Minor Gifts still add
 no skill to their roll, and (#4457) which schooling stances set no Magic skill floor,
-which Magic skills have no Academy course, and which Path suggestions name a Magic skill.
+which Magic skills have no Academy course, and which Path suggestions name a Magic skill;
+and (#4547) which check types weight a Magic skill directly.
 """
 
 from __future__ import annotations
 
+from urllib.parse import urlencode
+
 from django.test import TestCase
+from django.urls import reverse
 
 from web.admin.tuning import required_content as rc
 from world.character_creation.factories import SchoolingLineFactory
+from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.classes.factories import PathFactory
 from world.magic.constants import GiftKind, MagicActivity
 from world.magic.factories import GiftFactory, MagicActivitySkillFactory
@@ -24,6 +29,7 @@ from world.npc_services.factories import (
 from world.skills.factories import PathSkillSuggestionFactory, SkillFactory, SkillTraitFactory
 from world.skills.models import Skill
 from world.societies.factories import OrganizationFactory
+from world.traits.factories import StatTraitFactory
 from world.traits.models import TraitCategory
 
 
@@ -41,6 +47,7 @@ class MagicSkillProbeDeclarationTests(TestCase):
             "schooling-magic-skill-floors",
             "magic-skill-courses",
             "path-suggestions-name-magic-skills",
+            "check-types-weight-no-magic-skill",
         )
         for key in keys:
             dependency = _dependency(key)
@@ -230,3 +237,52 @@ class PathSuggestionsNameMagicSkillsProbeTests(TestCase):
         suggestion.delete()
 
         self.assertTrue(self._resolve().present)
+
+
+class CheckTypesWeightNoMagicSkillProbeTests(TestCase):
+    """A check type that weights a Magic skill itself counts it twice in a cast (#4547)."""
+
+    def _resolve(self) -> rc.ProbeResult:
+        return _dependency("check-types-weight-no-magic-skill").probe.resolve(None)
+
+    def test_listed_per_check_type_with_a_link_to_exactly_those(self) -> None:
+        occult = _magic_skill()
+        ritualism = _magic_skill()
+        tides = CheckTypeFactory(name="Reading the Tides")
+        CheckTypeTraitFactory(check_type=tides, trait=occult.trait)
+        CheckTypeTraitFactory(check_type=tides, trait=ritualism.trait)
+        CheckTypeTraitFactory(check_type=tides, trait=StatTraitFactory())
+        wards = CheckTypeFactory(name="Raising Wards")
+        CheckTypeTraitFactory(check_type=wards, trait=occult.trait)
+        CheckTypeTraitFactory(check_type=CheckTypeFactory(), trait=SkillFactory().trait)
+
+        result = self._resolve()
+
+        self.assertFalse(result.present)
+        names = sorted([occult.trait.name, ritualism.trait.name])
+        self.assertEqual(
+            result.missing,
+            (f"Raising Wards: {occult.trait.name}", f"Reading the Tides: {', '.join(names)}"),
+        )
+        changelist = reverse("admin:arxii_checktype_changelist")
+        self.assertEqual(
+            result.admin_url, f"{changelist}?{urlencode({'id__in': f'{wards.pk},{tides.pk}'})}"
+        )
+
+    def test_a_magic_skill_trait_with_no_skill_row_is_listed_too(self) -> None:
+        """The weighting is on the trait: an orphaned Magic skill trait still rolls."""
+        trait = SkillTraitFactory(category=TraitCategory.MAGIC)
+        tides = CheckTypeFactory(name="Reading the Tides")
+        CheckTypeTraitFactory(check_type=tides, trait=trait)
+
+        self.assertEqual(self._resolve().missing, (f"Reading the Tides: {trait.name}",))
+
+    def test_present_when_check_types_weight_stats_and_ordinary_skills(self) -> None:
+        check_type = CheckTypeFactory()
+        CheckTypeTraitFactory(check_type=check_type, trait=StatTraitFactory())
+        CheckTypeTraitFactory(check_type=check_type, trait=SkillFactory().trait)
+
+        result = self._resolve()
+
+        self.assertTrue(result.present)
+        self.assertIsNone(result.admin_url)

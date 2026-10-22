@@ -1791,6 +1791,9 @@ seeded Anima Restoration row. Seeds live in `world/magic/seeds_checks.py`,
 consumed by `game_content` + `seed_magic_dev()` (integration-test-first; reusable
 as instance seed data). Weights/difficulties are TUNING PLACEHOLDERS for staff.
 
+Superseded in part by #4547: the seeders no longer create or weight the three skills (ADR-4450 says
+no skill is named in code), and each check type weights its stat only.
+
 ---
 
 ## Distinctions grant/shape Resonance (#1834) — DONE (2026-07-04)

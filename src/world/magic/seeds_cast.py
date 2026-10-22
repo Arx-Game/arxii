@@ -18,13 +18,19 @@ in every environment, not just a bare test DB. It also sits entirely outside
 snapshots row counts *between* the content load and the cluster loop; this
 runs before both), so gating it would not shrink the ratchet either. For that
 reason this module deliberately does NOT import the (correctly) gated
-``ensure_magic_check_category``/``ensure_magic_skills``/``_ensure_arcana_aspect``
-from ``world.magic.seeds_checks`` — it keeps its own small unconditional
-"Magic" category / "occult" skill / "Arcana" aspect helpers, so a later,
-properly-gated call from the cluster loop finds the same by-name rows and
-never re-invents them. Everything downstream that reads authored magic
-content — ``ensure_magic_check_content()`` and friends in
-``world.magic.seeds_checks`` — stays gated as normal.
+``ensure_magic_check_category``/``_ensure_arcana_aspect`` from
+``world.magic.seeds_checks`` — it keeps its own small unconditional "Magic"
+category / "Arcana" aspect helpers, so a later, properly-gated call from the
+cluster loop finds the same by-name rows and never re-invents them. Everything
+downstream that reads authored magic content — ``ensure_magic_check_content()``
+and friends in ``world.magic.seeds_checks`` — stays gated as normal.
+
+The fallback check weights willpower only. It names, creates and weights no
+skill (#4547, ADR-4450): a cast adds its technique skill at roll time, a
+bespoke Magic skill staff set on the Path, Gift or technique, so a skill
+weighted here as well would count twice. It used to create an "occult" Trait
+and weight it; existing databases keep that row until staff repoint it, and the
+Required content dashboard lists every check type that weights a Magic skill.
 """
 
 from __future__ import annotations
@@ -41,8 +47,9 @@ _CAST_CONSEQUENCES = [
     ("Partial Success", "The cast lands, imperfectly.", 1),
     ("Success", "The cast lands cleanly.", 1),
 ]
-# fallback check trait composition (tuning placeholder; staff-tunable)
-_FALLBACK_TRAITS = [("willpower", "1.00"), ("occult", "1.00")]
+# fallback check stat composition (tuning placeholder; staff-tunable). Stats only:
+# the cast adds its technique skill at roll time (#4547).
+_FALLBACK_TRAITS = [("willpower", "1.00")]
 
 # Curated catalog: children of the base "Magic: Technique Cast" pool (#1320).
 # Each flavor's "extra_consequences" adds NEW Consequence rows (exercising the
@@ -91,28 +98,6 @@ def _ensure_prerequisite_magic_category():
     return category
 
 
-def _ensure_prerequisite_occult_trait():
-    """Unconditionally get-or-create the "occult" SKILL Trait (see module docstring).
-
-    Only the Trait, not a backing ``skills.Skill`` row — that row is
-    content-repo-owned (#2698) and this runs before any content exists;
-    nothing in this prerequisite path requires the Skill row itself, only the
-    Trait (a required FK on the fallback CheckType's ``CheckTypeTrait``).
-    """
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
-
-    trait, _ = Trait.objects.get_or_create(
-        name="occult",
-        defaults={
-            "trait_type": TraitType.SKILL,
-            "category": TraitCategory.MAGIC,
-            "description": "Hidden lore and the mechanics of magic — the theory.",
-            "is_public": True,
-        },
-    )
-    return trait
-
-
 def _ensure_prerequisite_arcana_aspect():
     """Unconditionally get-or-create the "Arcana" Aspect (see module docstring)."""
     from world.classes.models import Aspect  # noqa: PLC0415
@@ -130,7 +115,6 @@ def _ensure_fallback_check_type():
     from world.checks.models import CheckType, CheckTypeAspect, CheckTypeTrait  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
-    _ensure_prerequisite_occult_trait()  # ensures occult Trait/Skill exist
     category = _ensure_prerequisite_magic_category()
     arcana = _ensure_prerequisite_arcana_aspect()
     check_type, _ = CheckType.objects.get_or_create(

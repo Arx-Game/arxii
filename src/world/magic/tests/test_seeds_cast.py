@@ -3,6 +3,7 @@
 from django.test import TestCase
 
 from actions.constants import Pipeline
+from world.checks.models import CheckTypeTrait
 from world.magic.seeds_cast import (
     TECHNIQUE_CAST_POOL_NAME,
     ensure_technique_cast_content,
@@ -10,6 +11,8 @@ from world.magic.seeds_cast import (
     get_standalone_cast_pool,
     get_standalone_cast_template,
 )
+from world.skills.models import Skill
+from world.traits.models import Trait, TraitType
 
 
 class TechniqueCastSeedTests(TestCase):
@@ -20,6 +23,18 @@ class TechniqueCastSeedTests(TestCase):
         self.assertIsNotNone(template.check_type)
         self.assertEqual(template.consequence_pool.name, TECHNIQUE_CAST_POOL_NAME)
         self.assertGreaterEqual(template.consequence_pool.entries.count(), 3)
+
+    def test_the_fallback_check_weights_willpower_and_no_skill(self):
+        """A cast adds its technique skill at roll time, so the fallback names none (#4547)."""
+        template = ensure_technique_cast_content()
+
+        weighted = {
+            (row.trait.name, row.trait.trait_type)
+            for row in CheckTypeTrait.objects.filter(check_type=template.check_type)
+        }
+        self.assertEqual(weighted, {("willpower", TraitType.STAT)})
+        self.assertFalse(Trait.objects.filter(trait_type=TraitType.SKILL).exists())
+        self.assertFalse(Skill.objects.exists())
 
     def test_idempotent_and_get_returns_same_row(self):
         a = ensure_technique_cast_content()

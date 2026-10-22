@@ -26,7 +26,7 @@ from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.factories import LocationOwnershipFactory
 from world.magic.constants import SanctumSlotKind, TargetKind
-from world.magic.factories import ResonanceFactory
+from world.magic.factories import ResonanceFactory, map_ritual_working_skill
 from world.magic.models import (
     CharacterResonance,
     ResonanceTier,
@@ -101,6 +101,7 @@ class SanctumTelnetJourneyTests(TestCase):
         # Seed required content for sanctum rituals and check configs.
         ensure_sanctum_kind()
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
 
         # Patch perform_check for the duration of this test; SUCCESS tier throughout.

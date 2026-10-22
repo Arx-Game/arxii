@@ -34,6 +34,11 @@ from world.magic.constants import (
     TechniqueReach,
 )
 from world.magic.models.gifts import Gift
+from world.magic.skill_choices import (
+    MAGIC_SKILL_CHOICES,
+    MAGIC_SKILL_ERROR_MESSAGES,
+    MAGIC_SKILL_HELP,
+)
 
 if TYPE_CHECKING:
     from world.magic.models.power_config import CapabilityPowerConfig
@@ -648,10 +653,12 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         null=True,
         blank=True,
         related_name="override_techniques",
+        limit_choices_to=MAGIC_SKILL_CHOICES,
+        error_messages=MAGIC_SKILL_ERROR_MESSAGES,
         help_text=(
             "Overrides the technique skill for this one technique (#4450). Blank = use "
             "the caster's Path technique skill (Major Gift) or the Gift's technique "
-            "skill (Minor Gift)."
+            f"skill (Minor Gift). {MAGIC_SKILL_HELP}"
         ),
     )
     applied_conditions = models.ManyToManyField(

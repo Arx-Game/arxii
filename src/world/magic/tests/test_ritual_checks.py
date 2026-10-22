@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.test import TestCase, override_settings
 
 from world.magic.exceptions import RitualCheckConfigMissing
+from world.magic.factories import map_ritual_working_skill
 from world.magic.services.ritual_checks import (
     RitualCheckRoll,
     perform_ritual_check,
@@ -56,6 +57,7 @@ class PerformRitualCheckReturnShapeTests(TestCase):
         from world.scenes.factories import PersonaFactory
 
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
         persona = PersonaFactory()
         character = persona.character_sheet.character
@@ -79,6 +81,7 @@ class PerformRitualCheckReturnShapeTests(TestCase):
         from world.scenes.factories import PersonaFactory
 
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
         persona = PersonaFactory()
         character = persona.character_sheet.character

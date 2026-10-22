@@ -23,7 +23,10 @@
   `loss_of_self_terms` in `world/conditions/services.py`. The skills ride the check engine's
   `extra_traits`; cast thread pulls now include the cast's stat and skills. The Anima Check
   pick excludes MAGIC-category skills, and three Required content probes list unmapped
-  activities, Paths and Minor Gifts. Details: [magic.md](magic.md) "Magical skills".
+  activities, Paths and Minor Gifts. Since #4547 the four pickers offer and accept Magic skills
+  only (`MAGIC_SKILL_CHOICES` in `world/magic/skill_choices.py`), no seeder names a skill for
+  magic, and the `check-types-weight-no-magic-skill` probe lists check types that weight a
+  Magic skill directly. Details: [magic.md](magic.md) "Magical skills".
 - **Tradition training and Academy skill courses (#4457, ADR-4457-A):** a Tradition's schooling
   stance sets the level every Magic skill starts at. `SchoolingLine.magic_skill_floor` (0 on rank 0,
   check constraint) is read by `offers.schooling_magic_skill_floor(draft)`, exposed as
@@ -4936,8 +4939,9 @@ register as additional kinds.
 - **Check-based technique training (#2727):** `resolve_training_check()`
   (`world.magic.services.technique_training`) wraps
   `contribute_to_technique_progress` with a learning check. The learner
-  rolls intellect + the new "Arcane Theory" skill ("Technique Training"
-  `CheckType`, seeded by `ensure_technique_training_content()`). The
+  rolls intellect ("Technique Training" `CheckType`, seeded by
+  `ensure_technique_training_content()`) plus the skills staff map to
+  `TECHNIQUE_LEARNING`; the seed names no skill (#4547). The
   check outcome maps to a dev-point multiplier via
   `TrainingOutcomeAward(OutcomeTierAward)` (botch/failure=0×, partial=0.5×,
   success=1.0×, critical=1.5×). AP is always spent; only dev-point yield

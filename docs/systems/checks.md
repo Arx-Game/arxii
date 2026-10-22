@@ -658,7 +658,7 @@ Check compositions are authored as seed data (the design tenet: **stat + skill (
 | `vitals` | `Mortal Resolve` | willpower (single-stat resist — death) |
 | `positioning` | `Reflexes` | wits (single-stat resist — plummet-catch/interpose) |
 | `social` (#1689) | Intimidation/Persuasion/etc. | stat + skill (+ spec) |
-| `magic` | cast/ritual checks | willpower + ritualism/occult/theology |
+| `magic` | cast/ritual checks | a stat only (willpower, presence or stability); the Magic skills are added at roll time from the magic skill settings (#4547) |
 | `investigation` (#1705) | `Search` | perception + Investigation |
 | `governance` (#930) | Tax/Investment checks | stat + Scholarship/Economics |
 | `stealth` (#1464) | `Stealth` | agility + Stealth |

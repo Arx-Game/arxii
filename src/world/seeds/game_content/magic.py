@@ -2474,19 +2474,24 @@ def ensure_technique_training_content():
 
     The ``TrainingOutcomeAward`` rows are config (staff-tunable tuning
     data, not lore-repo content), so they're always seeded. The
-    "Arcane Theory" Skill/Trait, "Technique Training" CheckType, and
-    their CheckTypeTrait composition rows ARE content models
-    (``CONTENT_MODELS`` per #2698) — they're looked up first and only
-    invented under ``SEED_SAMPLE_CONTENT`` (off by default) via
-    ``authored_or_sample``. In a real deploy they come from the lore
-    repo; in a test/dev DB with sampling on, a stand-in is created.
+    "Technique Training" CheckType and its intellect CheckTypeTrait row ARE
+    content models (``CONTENT_MODELS`` per #2698) — they're looked up first
+    and only invented under ``SEED_SAMPLE_CONTENT`` (off by default) via
+    ``authored_or_sample``. In a real deploy they come from the lore repo;
+    in a test/dev DB with sampling on, a stand-in is created.
+
+    The check weights intellect only. It names, creates and weights no skill
+    (#4547, ADR-4450): the roll adds the skills staff map to
+    ``MagicActivity.TECHNIQUE_LEARNING``, a Magic skill weighted here as well
+    would count twice, and a reseed would put back a weighting staff removed.
+    It used to invent an "Arcane Theory" Magic skill and weight it; existing
+    databases keep those rows until staff repoint them.
     """
     from decimal import Decimal  # noqa: PLC0415
 
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
     from world.magic.models import TrainingOutcomeAward  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
-    from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import (  # noqa: PLC0415
         CheckOutcome,
         Trait,
@@ -2494,27 +2499,7 @@ def ensure_technique_training_content():
         TraitType,
     )
 
-    # 1. Arcane Theory skill + backing trait (content models — sample only).
-    arcane_trait = authored_or_sample(
-        Trait,
-        defaults={
-            "trait_type": TraitType.SKILL,
-            "category": TraitCategory.MAGIC,
-            "is_public": True,
-        },
-        name="Arcane Theory",
-    )
-    if arcane_trait is not None:
-        Skill.objects.get_or_create(
-            trait=arcane_trait,
-            defaults={
-                "tooltip": "Understanding the theoretical underpinnings of magical techniques.",
-                "display_order": 0,
-                "is_active": True,
-            },
-        )
-
-    # 2. intellect stat trait (content model — sample only, may already exist
+    # 1. intellect stat trait (content model — sample only, may already exist
     # from CG seed).
     intellect_trait = authored_or_sample(
         Trait,
@@ -2526,7 +2511,7 @@ def ensure_technique_training_content():
         name="intellect",
     )
 
-    # 3. Magic check category (content model — sample only).
+    # 2. Magic check category (content model — sample only).
     category = authored_or_sample(
         CheckCategory,
         defaults={
@@ -2536,7 +2521,7 @@ def ensure_technique_training_content():
         name="Magic",
     )
 
-    # 4. Technique Training CheckType (content model — sample only).
+    # 3. Technique Training CheckType (content model — sample only).
     check_type = None
     if category is not None:
         check_type = authored_or_sample(
@@ -2545,20 +2530,14 @@ def ensure_technique_training_content():
             name="Technique Training",
             category=category,
         )
-    if check_type is not None and intellect_trait is not None and arcane_trait is not None:
-        weight = Decimal("1.0")
+    if check_type is not None and intellect_trait is not None:
         CheckTypeTrait.objects.update_or_create(
             check_type=check_type,
             trait=intellect_trait,
-            defaults={"weight": weight},
-        )
-        CheckTypeTrait.objects.update_or_create(
-            check_type=check_type,
-            trait=arcane_trait,
-            defaults={"weight": weight},
+            defaults={"weight": Decimal("1.0")},
         )
 
-    # 5. TrainingOutcomeAward rows (config, NOT content models — always seeded).
+    # 4. TrainingOutcomeAward rows (config, NOT content models — always seeded).
     award_defaults = {
         "Critical Failure": Decimal("0.00"),
         "Failure": Decimal("0.00"),

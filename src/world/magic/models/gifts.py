@@ -13,6 +13,11 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.magic.constants import AcquisitionOrigin, GiftKind
 from world.magic.models.affinity import Resonance
+from world.magic.skill_choices import (
+    MAGIC_SKILL_CHOICES,
+    MAGIC_SKILL_ERROR_MESSAGES,
+    MAGIC_SKILL_HELP,
+)
 
 # Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
@@ -116,11 +121,13 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         null=True,
         blank=True,
         related_name="technique_skill_gifts",
+        limit_choices_to=MAGIC_SKILL_CHOICES,
+        error_messages=MAGIC_SKILL_ERROR_MESSAGES,
         help_text=(
             "Minor Gifts only (#4450): the skill added to every cast of this Gift's "
             "techniques. A technique's own skill, if set, wins. A Major Gift's "
             "techniques take the caster's Path technique skill instead. Blank = this "
-            "Gift adds no skill."
+            f"Gift adds no skill. {MAGIC_SKILL_HELP}"
         ),
     )
     ultimate_techniques = models.ManyToManyField(

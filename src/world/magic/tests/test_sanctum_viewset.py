@@ -22,7 +22,7 @@ from actions.types import ActionResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import SanctumSlotKind, TargetKind
-from world.magic.factories import ResonanceFactory
+from world.magic.factories import ResonanceFactory, map_ritual_working_skill
 from world.magic.models import SanctumDetails, SanctumOwnerMode, Thread
 from world.magic.views_sanctum import SanctumViewSet
 from world.room_features.constants import RoomFeatureServiceStrategy
@@ -477,6 +477,7 @@ class InstallComponentsOwnershipEndpointTests(SanctumViewSetTestBase):
         )
         ensure_sanctum_kind()
         ensure_sanctum_rituals()
+        map_ritual_working_skill()
         ensure_magic_check_content()
 
         self._check_patcher = patch("world.checks.services.perform_check")

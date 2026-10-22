@@ -4568,5 +4568,16 @@ class MagicActivitySkillFactory(factory.django.DjangoModelFactory):
         model = MagicActivitySkill
 
     activity = MagicActivity.ANIMA_RITUAL
-    skill = factory.SubFactory("world.skills.factories.SkillFactory")
+    skill = factory.SubFactory("world.skills.factories.MagicSkillFactory")
     weight = Decimal("1.00")
+
+
+def map_ritual_working_skill() -> MagicActivitySkill:
+    """Map a Magic skill to ritual working, as staff do before sanctum rituals roll.
+
+    ``ensure_ritual_check_configs`` takes a sanctum ritual config's skill from this
+    mapping and names none itself (#4547), so a test that seeds those configs maps one
+    first. Reuses an existing mapping.
+    """
+    existing = MagicActivitySkill.objects.filter(activity=MagicActivity.RITUAL_WORKING).first()
+    return existing or MagicActivitySkillFactory(activity=MagicActivity.RITUAL_WORKING)
