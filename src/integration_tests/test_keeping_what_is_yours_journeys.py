@@ -39,6 +39,7 @@ from world.mechanics.factories import ModifierCategoryFactory, ModifierSourceFac
 from world.mechanics.models import CharacterModifier, ModifierTarget
 from world.projects.constants import ProjectKind
 from world.projects.models import Project
+from world.room_features.constants import RoomFeatureInstallMechanism
 from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
 from world.room_features.models import RoomFeatureProgressionDetails
 from world.room_features.seeds import ensure_lab_kind
@@ -658,6 +659,10 @@ class KeepingALabStation(JourneyCase):
             "That would not be an upgrade.", self.telnet(self.ysmay, "station upgrade level=1")
         )
         self.assertIn(
+            "Level 9 exceeds this feature kind's maximum of 5.",
+            self.telnet(self.ysmay, "station upgrade level=9"),
+        )
+        self.assertIn(
             "A project to raise the Lab to level 3 begins.",
             self.telnet(self.ysmay, "station upgrade level=3"),
         )
@@ -719,3 +724,60 @@ class KeepingALabStation(JourneyCase):
         self.assertIn(
             "There is no Lab station here.", self.telnet(self.ysmay, "station repair points=1")
         )
+
+    def test_a_kind_raised_by_rite_and_the_web_s_own_sends(self) -> None:
+        # The Lab is raised by a project; were its kind raised by rite, the verb would
+        # refuse it (the kind row is the one the command reads).
+        self.lab.install_mechanism = RoomFeatureInstallMechanism.RITUAL
+        self.lab.save(update_fields=["install_mechanism"])
+        self.assertIn(
+            "This feature kind cannot be installed via a project.",
+            self.telnet(self.ysmay, "station install"),
+        )
+        self.assertFalse(Project.objects.exists())
+        self.lab.install_mechanism = RoomFeatureInstallMechanism.PROJECT
+        self.lab.save(update_fields=["install_mechanism"])
+
+        # The web's install, upgrade and repair are the same two actions, sent with the
+        # room and the Lab kind resolved (the lab-stations REST view's shape).
+        result = self.web(
+            self.hobb,
+            "start_room_feature_project",
+            room_profile=self.profile,
+            feature_kind=self.lab,
+            target_level=1,
+        )
+        self.assertEqual(result.detail.message, "You don't have standing to build here.")
+        result = self.web(
+            self.ysmay,
+            "start_room_feature_project",
+            room_profile=self.profile,
+            feature_kind=self.lab,
+            target_level=2,
+        )
+        self.assertEqual(result.detail.message, "A project to raise the Lab to level 2 begins.")
+        progression = RoomFeatureProgressionDetails.objects.get()
+        self.assertEqual(
+            (progression.target_level, progression.target_feature_kind_id), (2, self.lab.pk)
+        )
+        self.assertEqual(result.detail.data, {"project_id": progression.project_id})
+        result = self.web(
+            self.ysmay, "repair_lab_station", room_profile=self.profile, restore_points=3
+        )
+        self.assertEqual(result.detail.message, "There is no Lab station here.")
+        instance = RoomFeatureInstanceFactory(room_profile=self.profile, feature_kind=self.lab)
+        station = LabStationDetails.objects.create(
+            feature_instance=instance, durability=2, max_durability=10
+        )
+        fund(self.ysmay, 45)
+        result = self.web(
+            self.hobb, "repair_lab_station", room_profile=self.profile, restore_points=3
+        )
+        self.assertEqual(result.detail.message, "You don't have standing to build here.")
+        result = self.web(
+            self.ysmay, "repair_lab_station", room_profile=self.profile, restore_points=3
+        )
+        self.assertEqual(result.detail.message, "You repair the Lab station: 5/10.")
+        self.assertEqual(result.detail.data, {"durability": 5, "max_durability": 10})
+        self.assertEqual(LabStationDetails.objects.get(pk=station.pk).durability, 5)
+        self.assertEqual(purse_of(self.ysmay), 0)

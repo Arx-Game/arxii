@@ -819,7 +819,14 @@ GMs and Guides play Story NPCs; the actions are web tools over services, with no
    `integration_tests/test_shaping_the_house_journeys.py`, whose
    `ShapingTheHouseFromTheCanvas` sends the canvas's `room_id`/`to_room_id`/`exit_id`
    legs through `JourneyCase.web`, the same dispatch the browser uses; a room
-   prerequisite's `room_id` anchoring is proved there, not by calling `is_met` by hand),
+   prerequisite's `room_id` anchoring is proved there, not by calling `is_met` by hand;
+   tranche 21 took `test_door_actions`, `test_window_actions`, `test_deed_actions`,
+   `test_evidence_actions` and `test_room_features` into the lock journey of
+   `test_keeping_a_house_journeys.py` (a break wears the building, bars are broken
+   down bar by bar), the tale, window and new evidence journeys of
+   `test_minding_your_own_affairs_journeys.py` and the station journey of
+   `test_keeping_what_is_yours_journeys.py`; nothing in the browser sends the door,
+   window, deed or evidence keys, recorded in `docs/testing/journeys.md`),
    and a new `tests/test_<verb>.py`
    that only calls `.run()` down the happy path is the shape that gets removed next.
    Never patch the room's `msg_contents` to keep a test quiet: `secure` raised on its

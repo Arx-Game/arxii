@@ -2,9 +2,9 @@
 character manufactures a scandal against someone who let her, and names a crime; tells
 the tale of a deed and another writes down what he heard; sets the terms on which others
 may act on her; searches a room and opens an investigation from the lead it turns up;
-opens and closes a window in the room she keeps. Each types what the person types
-through the real command handler and asserts what they were told and what the rows now
-hold."""
+opens and closes a window in the room she keeps; gathers what her own crime left behind
+and disposes of it (tranche 21). Each types what the person types through the real
+command handler and asserts what they were told and what the rows now hold."""
 
 from __future__ import annotations
 
@@ -31,8 +31,11 @@ from world.consent.models import (
     SocialConsentCategoryRule,
     SocialConsentWhitelist,
 )
+from world.items.models import ItemInstance
+from world.justice.constants import EvidenceState
 from world.justice.factories import CrimeKindFactory
-from world.justice.models import AccusationCrimeClaim
+from world.justice.models import AccusationCrimeClaim, CrimeEvidence
+from world.justice.services import tag_deed_crimes
 from world.locations.constants import LocationRole
 from world.locations.factories import LocationTenancyFactory
 from world.projects.constants import ProjectKind, ProjectStatus
@@ -44,7 +47,9 @@ from world.scenes.models import Interaction
 from world.secrets.constants import SecretProvenance
 from world.secrets.models import Secret
 from world.secrets.services import grant_secret_knowledge
+from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.investigation_checks import seed_investigation_check_content
+from world.seeds.security_checks import seed_security_check_content
 from world.societies.factories import LegendEntryFactory
 from world.societies.models import LegendDeedStory, LegendSpread, PersonaDeedKnowledge
 from world.traits.factories import CheckOutcomeFactory
@@ -173,7 +178,7 @@ class SpreadingATale(JourneyCase):
         fill_action_points(self.hobb)
         self.watch(self.hobb)
 
-    def test_a_tale_told_and_written_down(self) -> None:
+    def test_a_tale_told_and_written_down(self) -> None:  # noqa: PLR0915 - one tale, read top to bottom
         usage = "Usage: deed spread <deed> [...] | deed story <deed>=<text>"
         self.assertIn(usage, self.telnet(self.ysmay, "deed"))
         self.assertIn(usage, self.telnet(self.ysmay, "deed dance"))
@@ -198,6 +203,41 @@ class SpreadingATale(JourneyCase):
             self.telnet(self.hobb, "deed story The Sinking of the Argent=I heard it sung."),
         )
 
+        # The web's spread names the persona, the scene and the deed by id, and the action
+        # answers each thing that is not hers to tell.
+        spread = ActionRef(backend=ActionBackend.SCENE_ADAPTIVE, registry_key="spread_tale")
+        mine = persona_of(self.ysmay).pk
+
+        def sent(**kwargs):
+            return dispatch_player_action(self.ysmay, spread, kwargs).detail.message
+
+        self.assertEqual(
+            sent(scene_id=self.scene.pk, deed_id=self.deed.pk), "You must choose a persona."
+        )
+        self.assertEqual(
+            sent(persona_id=persona_of(self.hobb).pk, scene_id=self.scene.pk, deed_id=self.deed.pk),
+            "You do not control that persona.",
+        )
+        self.assertEqual(sent(persona_id=mine, deed_id=self.deed.pk), "You must be in a scene.")
+        self.assertEqual(
+            sent(persona_id=mine, scene_id=self.scene.pk), "You must choose a deed to spread."
+        )
+        his = LegendEntryFactory(persona=persona_of(self.hobb), title="The Sack of Hob's Mill")
+        self.assertEqual(
+            sent(persona_id=mine, scene_id=self.scene.pk, deed_id=his.pk),
+            "This persona is not aware of that deed.",
+        )
+        self.assertEqual(
+            sent(
+                persona_id=mine,
+                scene_id=self.scene.pk,
+                deed_id=self.deed.pk,
+                specialization_id=999999,
+            ),
+            "That form cannot be used to spread a tale.",
+        )
+        self.assertFalse(LegendSpread.objects.exists())
+
         with force_check_outcome(CheckOutcomeFactory(name="Told well", success_level=2)) as roll:
             told = self.telnet(
                 self.ysmay,
@@ -220,11 +260,17 @@ class SpreadingATale(JourneyCase):
                 deed=self.deed, persona=persona_of(self.hobb)
             ).exists()
         )
-        # A second telling straight after the first waits out the scene's cooldown.
+        # A second telling straight after the first waits out the scene's cooldown; once it
+        # has passed, the tale is told again by id, in no particular form.
         self.assertIn(
             "You must wait before acting again.",
             self.telnet(self.ysmay, f"deed spread {self.deed.pk}"),
         )
+        pending_actions._LAST_ACTED.pop(self.ysmay.sheet_data.pk, None)
+        with force_check_outcome(CheckOutcomeFactory(name="Told plainly", success_level=1)):
+            told = self.telnet(self.ysmay, f"deed spread {self.deed.pk} effort=low")
+        self.assertIn("You spread the tale of The Sinking of the Argent.", told)
+        self.assertEqual(LegendSpread.objects.filter(legend_entry=self.deed).count(), 2)
 
         self.assertIn(
             "Record a story how? (deed story <deed name or id>=<written account>)",
@@ -255,11 +301,35 @@ class SpreadingATale(JourneyCase):
         self.assertTrue(result.detail.success, result.detail.message)
         story.refresh_from_db()
         self.assertEqual(story.text, "Rewritten.")
+        # The story's own refusals, each thing the web may leave out or get wrong.
+        save = ActionRef(backend=ActionBackend.SCENE_ADAPTIVE, registry_key="save_deed_story")
+
+        def saved(**kwargs):
+            pending_actions._LAST_ACTED.pop(self.hobb.sheet_data.pk, None)
+            return dispatch_player_action(self.hobb, save, kwargs).detail.message
+
+        hobbs = persona_of(self.hobb).pk
+        self.assertEqual(saved(deed_id=self.deed.pk, text="Mine."), "You must choose a persona.")
+        self.assertEqual(
+            saved(persona_id=persona_of(self.ysmay).pk, deed_id=self.deed.pk, text="Mine."),
+            "You do not control that persona.",
+        )
+        self.assertEqual(saved(persona_id=hobbs, text="Mine."), "You must choose a deed.")
+        untold = LegendEntryFactory(persona=persona_of(self.ysmay), title="The Fall of Nowhere")
+        self.assertEqual(
+            saved(persona_id=hobbs, deed_id=untold.pk, text="Mine."),
+            "This persona is not aware of that deed.",
+        )
+        self.assertEqual(
+            saved(persona_id=hobbs, deed_id=self.deed.pk, text="   "), "You must write something."
+        )
+        self.assertEqual(LegendDeedStory.objects.get(pk=story.pk).text, "Rewritten.")
+        self.assertEqual(LegendDeedStory.objects.count(), 1)
 
     def test_a_tale_needs_a_scene_she_is_part_of(self) -> None:
         yard = self.make_room("The Yard")
         orla = self.make_player("Orla", room=yard)
-        SceneFactory(room=yard, participants=[self.account_of(orla)])
+        theirs = SceneFactory(room=yard, participants=[self.account_of(orla)])
         quiet = self.make_room("The Back Stair")
         self.ysmay.move_to(quiet, quiet=True)
         self.assertIn(
@@ -271,6 +341,18 @@ class SpreadingATale(JourneyCase):
             "You are not a participant in this scene.",
             self.telnet(self.ysmay, "deed spread The Sinking of the Argent"),
         )
+        # The web names the scene by id, and the action refuses one she is no part of.
+        result = dispatch_player_action(
+            self.ysmay,
+            ActionRef(backend=ActionBackend.SCENE_ADAPTIVE, registry_key="spread_tale"),
+            {
+                "persona_id": persona_of(self.ysmay).pk,
+                "scene_id": theirs.pk,
+                "deed_id": self.deed.pk,
+            },
+        )
+        self.assertEqual(result.detail.message, "You are not a participant in that scene.")
+        self.assertFalse(LegendSpread.objects.exists())
 
 
 class SettingHerTerms(JourneyCase):
@@ -505,3 +587,179 @@ class OpeningAWindow(JourneyCase):
         self.assertFalse(result.detail.success)
         self.assertIn("You don't have standing in that room.", result.detail.message)
         self.assertTrue(self.window_open())
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class GatheringTheLeavings(JourneyCase):
+    """Ysmay cut a purse in the alley, and the theft left traces where it happened. She
+    gathers them before anyone else can and makes them disappear. The Gather Evidence
+    check is sample content; nothing on the web sends these verbs yet, so the dispatch
+    seam is sent directly."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        seed_check_resolution_tables()
+        seed_security_check_content()
+        self.alley = self.make_room("The Back Alley")
+        self.profile = RoomProfileFactory(objectdb=self.alley)
+        self.street = self.make_room("Tanner's Row")
+        self.ysmay = self.make_player("Ysmay", room=self.alley)
+        self.hobb = self.make_player("Hobb", room=self.alley)
+        fill_action_points(self.ysmay)
+        fill_action_points(self.hobb)
+        self.theft = CrimeKindFactory(slug="theft", name="Theft")
+
+    def crime(self, title: str) -> CrimeEvidence:
+        """A theft of Ysmay's done in the alley's scene, its evidence left there."""
+        deed = LegendEntryFactory(
+            persona=persona_of(self.ysmay), title=title, scene=SceneFactory(room=self.alley)
+        )
+        tag_deed_crimes(deed, [self.theft])
+        return CrimeEvidence.objects.get(deed=deed)
+
+    def roll(self, name: str, level: int):
+        return force_check_outcome(CheckOutcomeFactory(name=name, success_level=level))
+
+    def held_objects(self) -> list[str]:
+        return sorted(obj.key for obj in self.ysmay.contents)
+
+    def test_the_leavings_gathered_and_disposed_of(self) -> None:  # noqa: PLR0915 - one crime, read top to bottom
+        usage = "Usage: evidence [gather [<id>] | dispose <id> | produce <#> | examine <id>]"
+        self.assertIn(
+            "No evidence of yours lies here, and you hold none.",
+            self.telnet(self.ysmay, "evidence"),
+        )
+        self.assertIn(usage, self.telnet(self.ysmay, "evidence frob"))
+        self.assertIn(usage, self.telnet(self.ysmay, "evidence gather x"))
+        self.assertIn(usage, self.telnet(self.ysmay, "evidence dispose"))
+        self.assertIn(
+            "There's no such evidence.", self.telnet(self.ysmay, "evidence gather 999999")
+        )
+        self.assertIn(
+            "Name the evidence: |wevidence gather <id>|n (see |wevidence|n).",
+            self.telnet(self.ysmay, "evidence gather"),
+        )
+
+        evidence = self.crime("The Alley Purse")
+        self.assertEqual(evidence.state, EvidenceState.AT_SCENE)
+        told = self.telnet(self.ysmay, "evidence")
+        self.assertIn("Your crime's leavings, here:", told)
+        self.assertIn(f"  {evidence.pk}. traces of: The Alley Purse", told)
+        self.assertNotIn("Evidence you hold:", told)
+        # Hobb's crime it was not: he sees nothing of it and cannot be handed it by name.
+        self.assertIn(
+            "No evidence of yours lies here, and you hold none.", self.telnet(self.hobb, "evidence")
+        )
+        self.assertIn("Name the evidence:", self.telnet(self.hobb, "evidence gather"))
+
+        # Gathering is done where the crime happened, on a Gather Evidence roll.
+        self.ysmay.move_to(self.street, quiet=True)
+        self.assertIn(
+            "You must be standing where the crime happened to do that.",
+            self.telnet(self.ysmay, f"evidence gather {evidence.pk}"),
+        )
+        self.ysmay.move_to(self.alley, quiet=True)
+        with self.roll("Fumbled", -1) as capture:
+            told = self.telnet(self.ysmay, "evidence gather")
+        self.assertEqual(capture.check_type.name, "Gather Evidence")
+        self.assertIn(
+            "PLACEHOLDER You paw through the scene but come away with nothing usable.", told
+        )
+        self.assertEqual(CrimeEvidence.objects.get(pk=evidence.pk).state, EvidenceState.AT_SCENE)
+        self.assertEqual(self.held_objects(), [])
+        with self.roll("Pocketed", 1):
+            told = self.telnet(self.ysmay, "evidence gather")
+        self.assertIn("PLACEHOLDER You quietly pocket what the crime left behind.", told)
+        evidence = CrimeEvidence.objects.get(pk=evidence.pk)
+        self.assertEqual(evidence.state, EvidenceState.GATHERED)
+        self.assertEqual(evidence.item_instance.holder_character_sheet_id, self.ysmay.sheet_data.pk)
+        self.assertEqual(self.held_objects(), ["Incriminating evidence"])
+        told = self.telnet(self.ysmay, "evidence")
+        self.assertIn("Evidence you hold:", told)
+        self.assertIn(f"  {evidence.pk}. The Alley Purse (Gathered)", told)
+        self.assertNotIn("leavings", told)
+        self.assertIn(
+            "There is no evidence left to gather here.",
+            self.telnet(self.ysmay, f"evidence gather {evidence.pk}"),
+        )
+        self.assertIn(
+            "There's nothing produced to examine.",
+            self.telnet(self.ysmay, f"evidence examine {evidence.pk}"),
+        )
+        self.assertIn(
+            "You know of no filed cases with evidence to produce.",
+            self.telnet(self.ysmay, "evidence produce"),
+        )
+        self.assertIn("No case #1.", self.telnet(self.ysmay, "evidence produce 1"))
+
+        # Disposing of it is the holder's, on the same roll.
+        self.assertIn(
+            "You are not holding that evidence.",
+            self.telnet(self.hobb, f"evidence dispose {evidence.pk}"),
+        )
+        self.assertIn(
+            "There's no such evidence.", self.telnet(self.ysmay, "evidence dispose 999999")
+        )
+        with self.roll("Shaken", -1):
+            told = self.telnet(self.ysmay, f"evidence dispose {evidence.pk}")
+        self.assertIn(
+            "PLACEHOLDER You can't quite bring yourself to make it disappear cleanly.", told
+        )
+        self.assertEqual(CrimeEvidence.objects.get(pk=evidence.pk).state, EvidenceState.GATHERED)
+        item_pk = evidence.item_instance_id
+        with self.roll("Burned", 1):
+            told = self.telnet(self.ysmay, f"evidence dispose {evidence.pk}")
+        self.assertIn("PLACEHOLDER The evidence is gone, as far as anyone can prove.", told)
+        evidence = CrimeEvidence.objects.get(pk=evidence.pk)
+        self.assertEqual(
+            (evidence.state, evidence.item_instance_id), (EvidenceState.DISPOSED, None)
+        )
+        self.assertFalse(ItemInstance.objects.filter(pk=item_pk).exists())
+        self.assertEqual(self.held_objects(), [])
+        self.assertIn(
+            "That evidence is beyond disposing of now.",
+            self.telnet(self.ysmay, f"evidence dispose {evidence.pk}"),
+        )
+        self.assertIn(
+            "No evidence of yours lies here, and you hold none.",
+            self.telnet(self.ysmay, "evidence"),
+        )
+
+    def test_the_web_sends_the_evidence_by_id(self) -> None:
+        evidence = self.crime("The Tanner's Strongbox")
+        # The trace's own id, quoted, is no evidence: the action takes a number alone.
+        self.assertEqual(
+            self.web(self.ysmay, "gather_evidence", evidence_id=str(evidence.pk)).detail.message,
+            "There's no such evidence.",
+        )
+        self.assertEqual(CrimeEvidence.objects.get(pk=evidence.pk).state, EvidenceState.AT_SCENE)
+        self.assertEqual(
+            self.web(self.ysmay, "gather_evidence", evidence_id=999999).detail.message,
+            "There's no such evidence.",
+        )
+        self.assertEqual(
+            self.web(self.ysmay, "dispose_evidence", evidence_id=evidence.pk).detail.message,
+            "That evidence is beyond disposing of now.",
+        )
+        with self.roll("Pocketed", 1):
+            result = self.web(self.ysmay, "gather_evidence", evidence_id=evidence.pk)
+        self.assertEqual(
+            result.detail.message, "PLACEHOLDER You quietly pocket what the crime left behind."
+        )
+        self.assertEqual(result.detail.data, {"evidence_id": evidence.pk})
+        self.assertEqual(CrimeEvidence.objects.get(pk=evidence.pk).state, EvidenceState.GATHERED)
+        self.assertEqual(
+            self.web(self.hobb, "dispose_evidence", evidence_id=evidence.pk).detail.message,
+            "You are not holding that evidence.",
+        )
+        self.assertEqual(
+            self.web(self.ysmay, "examine_evidence", evidence_id=evidence.pk).detail.message,
+            "There's nothing produced to examine.",
+        )
+        with self.roll("Burned", 1):
+            result = self.web(self.ysmay, "dispose_evidence", evidence_id=evidence.pk)
+        self.assertEqual(
+            result.detail.message, "PLACEHOLDER The evidence is gone, as far as anyone can prove."
+        )
+        self.assertEqual(CrimeEvidence.objects.get(pk=evidence.pk).state, EvidenceState.DISPOSED)
+        self.assertEqual(self.held_objects(), [])

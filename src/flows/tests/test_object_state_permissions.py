@@ -103,8 +103,9 @@ class ObjectStatePermissionTests(TestCase):
     def test_locked_exit_allows_room_owner(self):
         """A locked exit still allows the source room's owner to traverse (#1866).
 
-        Grants real ownership via ``transfer_ownership`` (matching the pattern
-        in ``actions/tests/test_door_actions.py``); no mocking.
+        Grants real ownership via ``transfer_ownership``; no mocking. The typed
+        lock, the guest held and the tenant let through are the lock journey's
+        (``integration_tests/test_keeping_a_house_journeys.py``).
         """
         self.exit.db.locked = True
         sheet = CharacterSheetFactory(character=self.char)
