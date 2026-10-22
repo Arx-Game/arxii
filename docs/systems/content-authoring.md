@@ -97,6 +97,11 @@ Two doors into the same backlog:
   filters, so it falls as you credit rows and never counts finished work.
   **To review** lists written rows awaiting review; **Placeholder** lists rows
   whose prose still carries the placeholder mark; **All** shows everything.
+  **Placeholder** and **All** also reach tables that carry no credit at all
+  (spy task templates, crisis types, proclamation stances, edicts and the
+  like): their rows still saying PLACEHOLDER come after the credited ones and
+  open on the row's own admin form. There is nothing to tick for them; a row
+  leaves the list the moment you save it without the word (#4557).
   Your filters survive a credit or review stamp and a page reload (they live
   in the page URL), so a session on one domain never re-picks it.
 - **The stock changelists** (#3020) are the browser's door: every

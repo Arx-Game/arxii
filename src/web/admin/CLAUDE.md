@@ -305,6 +305,22 @@ to `_authoring/` (`admin_authoring`).
   `scope`, when given, narrows every model's queryset uniformly - the seam a
   future GM-restricted variant can use without this module knowing who is
   asking.
+- **Placeholder text outside credit (#4557)** - `backlog.uncredited_placeholder_rows`
+  covers every concrete first-party model with `prose_fields_for` fields and no
+  credit columns (spy `TaskTemplate`, `DomainCrisisType`, `StanceArchetype`,
+  `EdictKind` and the rest): one query per model, filtered in the database to
+  rows whose prose `__contains` `PLACEHOLDER_MARK`, each a `BacklogRow` with
+  `credited=False`, identified by natural key, else `name`, else pk. Ruled on the
+  issue: no credit fields and no "rewritten" flag on these tables, so a row is
+  listed while its text carries the mark and leaves when a save removes it.
+  `views._queue_rows` appends them after the credited backlog only for the
+  `placeholder` and `all` statuses, so a credited row keeps its `pos` whichever
+  status opened it, and the queue and `_queue_nav` read the same list. The queue
+  links such a row's identity to its admin change form (no editor link, no
+  Unwritten badge); Next on the row before one hands off to that form
+  (`_QueueNav.next_admin_url`, "Next: <row>, in admin"). The stats panel stays
+  a credit rollup and never counts them. Tests:
+  `tests/test_authoring_uncredited_placeholders.py`.
 - **Dashboard + stats/queue fragments** - `authoring_dashboard` (GET) renders
   the setup panel in place of the stats/queue skeleton for an unlinked
   account (see the setup gate below), else the two HTMX panels:
