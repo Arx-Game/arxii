@@ -34,7 +34,7 @@ from world.achievements.constants import ConditionEventType
 from world.checks.constants import ModifierSourceKind
 from world.checks.models import CheckType
 from world.checks.services import perform_check_with_modifiers
-from world.checks.types import ModifierContribution
+from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.conditions.constants import (
     POISON_CATEGORY_NAME,
     POISON_DAMAGE_TYPE_NAME,
@@ -511,6 +511,27 @@ class _BulkConditionContext:
 
     def get_active_condition_ids(self, target_id: int) -> set[int]:
         return {i.condition_id for i in self.active_instances_by_target.get(target_id, [])}
+
+    def forget_spent_instances(self, target_id: int) -> None:
+        """Drop instances deleted since the batch was fetched (#4584).
+
+        A resist roll inside the batch can spend a once-only ward
+        (``spend_contributing_conditions``). The identity map hands the same object to
+        the spend, whose delete sets ``pk`` to None, so the stale entry is found by that.
+        Without this a later item in the batch would still see the spent ward as active:
+        as a prevention match, an interaction partner, or a row to stack onto.
+        """
+        instances = self.active_instances_by_target.get(target_id)
+        if not instances:
+            return
+        spent = [i for i in instances if i.pk is None]
+        if not spent:
+            return
+        self.active_instances_by_target[target_id] = [i for i in instances if i.pk is not None]
+        for inst in spent:
+            key = (target_id, inst.condition_id)
+            if self.existing_pairs.get(key) is inst:
+                self.existing_pairs.pop(key)
 
 
 def _build_bulk_context(
@@ -1114,7 +1135,10 @@ def _bulk_apply_one(  # noqa: PLR0913
                 applied_conditions=[],
             )
 
-    if _check_application_resist(app.target, app.template):
+    resisted = _check_application_resist(app.target, app.template)
+    # The resist roll may have spent a once-only ward the batch context still holds.
+    ctx.forget_spent_instances(app.target.pk)
+    if resisted:
         return ApplyConditionResult(
             success=False,
             instance=None,
@@ -1471,6 +1495,36 @@ def _teardown_removed_condition_instance(
     return condition
 
 
+def spend_condition_use(instance: ConditionInstance) -> bool:
+    """End a once-only (``UNTIL_USED``) condition because it was just used (#4584).
+
+    The one primitive every "once then spent" effect calls: a blessing whose term helped
+    a real roll (``spend_contributing_conditions``), and the reactive wards and markers
+    that fire once. Spending is a full removal through
+    ``_teardown_removed_condition_instance``, so CONDITION_REMOVED, the stories hook and
+    every other removal side effect run exactly as for any other removal.
+
+    The bearer's trigger cache is then refreshed synchronously. The instance's reactive
+    Trigger rows cascade away with it, but ``TriggerHandler.invalidate`` defers its reset
+    to commit, and ``resolve_round`` is one transaction: without the refresh a ward spent
+    on the first hit of a round would still fire on the second. ``hasattr`` guards a bare
+    ObjectDB target with no handler, as ``_invalidate_condition_handler`` does.
+
+    Returns True when this call ended the instance. Returns False, touching nothing, when
+    the instance is already gone (``pk is None``, so spending twice is harmless) or its
+    template is not ``UNTIL_USED`` (a lasting condition is never spent by use).
+    """
+    if instance.pk is None:
+        return False
+    if instance.condition.default_duration_type != DurationType.UNTIL_USED:
+        return False
+    target = instance.target
+    _teardown_removed_condition_instance(target, instance)
+    if hasattr(target, "trigger_handler"):
+        target.trigger_handler.refresh()
+    return True
+
+
 @transaction.atomic
 def remove_condition(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
@@ -1629,7 +1683,7 @@ def expire_end_of_combat_conditions(
     instances = ConditionInstance.objects.filter(
         target_id__in=[t.pk for t in target_list],
         condition__default_duration_type=DurationType.UNTIL_END_OF_COMBAT,
-    ).select_related("condition", "target")
+    ).select_related("condition")
 
     removed: list[ConditionTemplate] = []
     for instance in instances:
@@ -1728,7 +1782,7 @@ def expire_scene_scoped_conditions(
     instances = ConditionInstance.objects.filter(
         target_id__in=[t.pk for t in target_list],
         condition__default_duration_type=DurationType.SCENE,
-    ).select_related("condition", "target")
+    ).select_related("condition")
 
     removed: list[ConditionTemplate] = []
     for instance in instances:
@@ -2712,9 +2766,39 @@ def condition_contributions(
                 source_kind=ModifierSourceKind.CONDITION,
                 source_label=label,
                 value=modifier_value,
+                condition_instance_id=instance.pk,
             )
         )
     return contributions
+
+
+def spend_contributing_conditions(breakdown: ModifierBreakdown) -> None:
+    """Spend every once-only condition whose nonzero term helped a real roll (#4584).
+
+    Called by a roll site AFTER the roll its ``breakdown`` fed, never by
+    ``collect_check_modifiers`` itself (previews read that breakdown too). Each distinct
+    ``condition_instance_id`` on a contribution with a nonzero value is a use; a zero term
+    moved nothing, so it is not one. The instances load in one query restricted to
+    ``UNTIL_USED`` templates, so a lasting condition is never touched.
+
+    An NPC's own ``UNTIL_USED`` check modifier counted through
+    ``opponent_condition_opposition`` is not spent by a PC's roll: opposition is read by
+    previews too and returns only a number, with no instance provenance. The once-only
+    rule covers the bearer's own rolls.
+    """
+    instance_ids = {
+        c.condition_instance_id
+        for c in breakdown.contributions
+        if c.condition_instance_id is not None and c.value != 0
+    }
+    if not instance_ids:
+        return
+    instances = ConditionInstance.objects.filter(
+        pk__in=instance_ids,
+        condition__default_duration_type=DurationType.UNTIL_USED,
+    ).select_related("condition")
+    for instance in instances:
+        spend_condition_use(instance)
 
 
 def get_resistance_modifier(

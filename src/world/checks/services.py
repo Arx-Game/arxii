@@ -356,7 +356,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
         skip_fashion=skip_fashion,
         extra_traits=extra_traits,
     )
-    return perform_check(
+    result = perform_check(
         character,
         check_type,
         target_difficulty=target_difficulty,
@@ -369,6 +369,11 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
         stat_override=stat_override,
         extra_traits=extra_traits,
     )
+    # Lazy import: world.conditions.services imports this module at load time.
+    from world.conditions.services import spend_contributing_conditions  # noqa: PLC0415
+
+    spend_contributing_conditions(breakdown)
+    return result
 
 
 def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signature for test seam
@@ -1590,6 +1595,11 @@ def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror
         extra_traits: (#4450) call-time skill terms; their trait ids join the
             capability rows' ``involved_traits`` so the CAPABILITY contributions
             match what the roll path scores.
+
+    Never spends a condition: previews call this too (e.g. the standoff view). A once-only
+    (UNTIL_USED) condition is spent by use, so a caller whose breakdown feeds a real roll
+    calls ``world.conditions.services.spend_contributing_conditions(breakdown)`` after
+    that roll (#4584). ``perform_check_with_modifiers`` already does.
 
     Returns:
         ModifierBreakdown whose .total is the sum of all contributions and
