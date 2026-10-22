@@ -13,6 +13,7 @@ from world.combat.models import (
     EncounterAftermathRule,
 )
 from world.combat.services.declarations.social_check import _record_combat_consequence
+from world.conditions.services import spend_contributing_conditions
 
 if TYPE_CHECKING:
     from world.scenes.models import Interaction
@@ -73,6 +74,7 @@ def _apply_aftermath_rules(
             consequences,
             extra_modifiers=breakdown.extra_modifiers_total,
         )
+        spend_contributing_conditions(breakdown)
         try:
             participants_ctx = [sheet.primary_persona]
         except Persona.DoesNotExist:

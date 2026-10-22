@@ -3,11 +3,14 @@
 Collecting modifiers and previewing a check never spend; only a real roll does.
 """
 
+import ast
+from pathlib import Path
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+import world
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType, ModifierSourceKind
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
@@ -192,3 +195,44 @@ class KnockoutRollSpendsTests(TestCase):
 
         self.assertTrue(result.knocked_out)
         self.assertFalse(ConditionInstance.objects.filter(pk=blessing_pk).exists())
+
+
+# Files that call ``collect_check_modifiers`` without a roll of their own to spend on.
+_NOT_A_ROLL = {
+    # preview grading: previews never spend
+    "world/standoffs/services/view.py",
+    # records provenance; the roll at :109 carries no condition terms
+    "world/mechanics/challenge_resolution.py",
+    # defines it, and ``perform_check_with_modifiers`` already spends
+    "world/checks/services.py",
+}
+
+
+def _called_names(tree: ast.AST) -> set[str]:
+    """Every function or method name called anywhere in ``tree`` (docstrings do not count)."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name):
+                names.add(func.id)
+            elif isinstance(func, ast.Attribute):
+                names.add(func.attr)
+    return names
+
+
+class EverySiteSpendsTests(TestCase):
+    def test_every_site_that_folds_conditions_into_a_roll_spends_them(self) -> None:
+        src = Path(world.__file__).resolve().parent.parent
+        offenders = []
+        for path in sorted(src.rglob("*.py")):
+            rel = path.relative_to(src).as_posix()
+            if "/tests/" in rel or rel in _NOT_A_ROLL:
+                continue
+            called = _called_names(ast.parse(path.read_text()))
+            if (
+                "collect_check_modifiers" in called
+                and "spend_contributing_conditions" not in called
+            ):
+                offenders.append(rel)
+        self.assertEqual(offenders, [])

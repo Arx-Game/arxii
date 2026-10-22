@@ -23,6 +23,7 @@ from world.combat.models import (
 from world.combat.services.declarations.social_check import _record_combat_consequence
 from world.combat.services.encounter.config import get_flee_config
 from world.combat.types import ActionOutcome
+from world.conditions.services import spend_contributing_conditions
 from world.fatigue.constants import EffortLevel
 from world.scenes.constants import RoundStatus
 
@@ -166,6 +167,7 @@ def _resolve_flee(
         consequences,
         extra_modifiers=breakdown.extra_modifiers_total,
     )
+    spend_contributing_conditions(breakdown)
 
     success_level = pending.check_result.success_level
     escaped = success_level >= FLEE_PARTIAL_SUCCESS_LEVEL

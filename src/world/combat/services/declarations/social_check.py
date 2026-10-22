@@ -149,6 +149,7 @@ def _resolve_social_check(
     """
     from world.checks.services import collect_check_modifiers, perform_check  # noqa: PLC0415
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.conditions.services import spend_contributing_conditions  # noqa: PLC0415
     from world.covenants.perks.context import SituationContext  # noqa: PLC0415
 
     character = participant.character_sheet.character
@@ -174,4 +175,5 @@ def _resolve_social_check(
         extra_modifiers=breakdown.extra_modifiers_total,
         situation_ctx=situation_ctx,
     )
+    spend_contributing_conditions(breakdown)
     return result.success_level or 0

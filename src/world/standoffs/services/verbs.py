@@ -38,7 +38,7 @@ from world.combat.morale import (
     tier_has_morale,
 )
 from world.combat.spectacle import apply_spectacle, classify_cast
-from world.conditions.services import apply_condition
+from world.conditions.services import apply_condition, spend_contributing_conditions
 from world.fatigue.constants import EffortLevel
 from world.magic.services.capability_requirements import technique_performable
 from world.magic.services.magic_skills import technique_skill_term, technique_skill_term_for_path
@@ -273,14 +273,14 @@ def standoff_read(
     sheet = participant.character_sheet
     first, level = _roll_inputs(members)
     difficulty = level_opposition(config.read_check_type, level=level, character=first.objectdb)
+    breakdown = collect_check_modifiers(sheet, config.read_check_type)
     result = perform_check(
         sheet.character,
         config.read_check_type,
         target_difficulty=difficulty,
-        extra_modifiers=collect_check_modifiers(
-            sheet, config.read_check_type
-        ).extra_modifiers_total,
+        extra_modifiers=breakdown.extra_modifiers_total,
     )
+    spend_contributing_conditions(breakdown)
     tier = result.success_level
     if tier < 0:
         cause_lines: list[str] = []
@@ -564,34 +564,36 @@ def _press_check(
     has not accepted the risk (``use.soulfray_warning``), and nothing was spent.
     """
     if technique is None:
-        return (
-            perform_check(
-                sheet.character,
-                approach.check_type,
-                target_difficulty=graded.difficulty,
-                extra_modifiers=collect_check_modifiers(
-                    sheet, approach.check_type, extra_contributions=graded.contributions
-                ).extra_modifiers_total,
-            ),
-            None,
+        plain_breakdown = collect_check_modifiers(
+            sheet, approach.check_type, extra_contributions=graded.contributions
         )
+        plain_check = perform_check(
+            sheet.character,
+            approach.check_type,
+            target_difficulty=graded.difficulty,
+            extra_modifiers=plain_breakdown.extra_modifiers_total,
+        )
+        spend_contributing_conditions(plain_breakdown)
+        return plain_check, None
     captured: dict[str, CheckResult] = {}
     terms = display_cast_terms(sheet, technique)
 
     def _resolve_fn(*, power: int, ledger: object, extra_modifiers: int = 0) -> DisplayCast:  # noqa: ARG001
+        cast_breakdown = collect_check_modifiers(
+            sheet,
+            approach.check_type,
+            extra_contributions=graded.contributions,
+            extra_traits=terms,
+        )
         check = perform_check(
             sheet.character,
             approach.check_type,
             target_difficulty=graded.difficulty,
-            extra_modifiers=extra_modifiers
-            + collect_check_modifiers(
-                sheet,
-                approach.check_type,
-                extra_contributions=graded.contributions,
-                extra_traits=terms,
-            ).extra_modifiers_total,
+            extra_modifiers=extra_modifiers + cast_breakdown.extra_modifiers_total,
             extra_traits=terms,
         )
+        # In the closure: a Soulfray gate can stop the cast before it runs (#4584).
+        spend_contributing_conditions(cast_breakdown)
         captured["check"] = floor_ultimate_check(check, technique)
         return DisplayCast(check_result=captured["check"])
 
@@ -830,14 +832,16 @@ def standoff_terms(
     if spoken_refusal:
         return _refuse(spoken_refusal)
     graded = terms_difficulty(group, sheet, terms)
+    breakdown = collect_check_modifiers(
+        sheet, config.terms_check_type, extra_contributions=graded.contributions
+    )
     result = perform_check(
         sheet.character,
         config.terms_check_type,
         target_difficulty=graded.difficulty,
-        extra_modifiers=collect_check_modifiers(
-            sheet, config.terms_check_type, extra_contributions=graded.contributions
-        ).extra_modifiers_total,
+        extra_modifiers=breakdown.extra_modifiers_total,
     )
+    spend_contributing_conditions(breakdown)
     if result.outcome is None:
         return _refuse(_MSG_UNCONFIGURED)
     _share_shifting_angles(group, sheet, set())
