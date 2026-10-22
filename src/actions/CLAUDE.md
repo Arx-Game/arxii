@@ -811,8 +811,16 @@ GMs and Guides play Story NPCs; the actions are web tools over services, with no
    module into `integration_tests/test_refereeing_the_table_journeys.py`; tranche 8 took
    `test_items_actions` into `integration_tests/test_handling_your_things_journeys.py` and
    kept the typed-menu wire tests, `test_typed_*`/`test_staged_*`/`test_target_menu_api`/
-   `test_menu_item_resolution`, as the menu's contract layer), and a new
-   `tests/test_<verb>.py`
+   `test_menu_item_resolution`, as the menu's contract layer; tranche 20 took the eight
+   house and staging modules, `test_gm_props_actions`, `test_assign_room_tenant_action`,
+   `test_room_edit_action`, `test_room_builder_web_kwargs`,
+   `test_room_tenant_prerequisite_room_id`, `test_renovation_action`,
+   `test_property_grant_action` and `test_purchase_building_action`, into
+   `integration_tests/test_shaping_the_house_journeys.py`, whose
+   `ShapingTheHouseFromTheCanvas` sends the canvas's `room_id`/`to_room_id`/`exit_id`
+   legs through `JourneyCase.web`, the same dispatch the browser uses; a room
+   prerequisite's `room_id` anchoring is proved there, not by calling `is_met` by hand),
+   and a new `tests/test_<verb>.py`
    that only calls `.run()` down the happy path is the shape that gets removed next.
    Never patch the room's `msg_contents` to keep a test quiet: `secure` raised on its
    room line, after setting the policy, behind exactly that patch.
