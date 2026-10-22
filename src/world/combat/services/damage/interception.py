@@ -184,6 +184,8 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     raw_damage: int,
     *,
     bypass_soak: bool = False,
+    ignores_soak: bool = False,
+    resistance_shift: int = 0,
     bypass_pre_apply: bool = False,
     damage_type: DamageType | None = None,
     source_sheet: CharacterSheet | None = None,
@@ -240,9 +242,12 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         if dropped:
             return _zero_opponent_damage_result(opponent)
 
-    effective_soak = _effective_soak_for_opponent(opponent, bypass_soak)
+    if raw_damage <= 0:
+        return _zero_opponent_damage_result(opponent)
 
-    resistance = _effective_resistance_for_opponent(opponent, damage_type)
+    effective_soak = _effective_soak_for_opponent(opponent, bypass_soak or ignores_soak)
+
+    resistance = _effective_resistance_for_opponent(opponent, damage_type, resistance_shift)
 
     damage_through = max(0, raw_damage - effective_soak - resistance)
 

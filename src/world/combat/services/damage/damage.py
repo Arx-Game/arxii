@@ -130,11 +130,13 @@ def _run_pre_apply_interceptors(
     return None
 
 
-def apply_damage_to_participant(  # noqa: PLR0913
+def apply_damage_to_participant(  # noqa: C901, PLR0913
     participant: CombatParticipant,
     damage: int,
     *,
     force_death: bool = False,
+    ignores_soak: bool = False,
+    resistance_shift: int = 0,
     bypass_pre_apply: bool = False,
     damage_type: DamageType | None = None,
     source: object | None = None,
@@ -244,18 +246,22 @@ def apply_damage_to_participant(  # noqa: PLR0913
     from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
     from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
 
-    effective_damage = apply_damage_reduction_from_threads(character, effective_damage)
+    if not ignores_soak:
+        effective_damage = apply_damage_reduction_from_threads(character, effective_damage)
 
     # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
     # The species drawback's negative ConditionResistanceModifier (vulnerability) and
     # the species-gift thread's positive RESISTANCE pull-effect net here. None
     # damage_type is a no-op. Mirrors the three non-combat damage seams that now call
     # the same function.
-    effective_damage = resolve_damage_type_resistance(character, effective_damage, damage_type)
+    effective_damage = resolve_damage_type_resistance(
+        character, effective_damage, damage_type, resistance_shift=resistance_shift
+    )
 
     # Equipped-armor soak (issue #508). PCs have no authored soak field; worn
     # armor is their only soak source, and absorbing pieces take durability wear.
-    effective_damage = apply_equipped_armor_soak(character, effective_damage)
+    if not ignores_soak:
+        effective_damage = apply_equipped_armor_soak(character, effective_damage)
 
     # Attack-cover from PositionShelter (applies_to_attacks=True rows, #2011).
     effective_damage = apply_position_cover(character, effective_damage, damage_type)

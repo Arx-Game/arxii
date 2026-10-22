@@ -140,6 +140,8 @@ def resolve_damage_type_resistance(
     character: "ObjectDB",  # noqa: OBJECTDB_PARAM
     damage_amount: int,
     damage_type: "DamageType | None",
+    *,
+    resistance_shift: int = 0,
 ) -> int:
     """Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).
 
@@ -157,6 +159,7 @@ def resolve_damage_type_resistance(
             and be passable to ``gift_thread_resistance``).
         damage_amount: the incoming damage before resistance.
         damage_type: a ``DamageType`` instance, or None for untyped damage.
+        resistance_shift: Per-hit points shifting resistance toward vulnerability.
 
     Returns:
         The damage after subtracting total resistance, clamped to >= 0.
@@ -167,7 +170,7 @@ def resolve_damage_type_resistance(
 
     resistance = character.conditions.resistance_modifier(damage_type)
     resistance += gift_thread_resistance(character, damage_type)
-    return max(0, damage_amount - resistance)
+    return max(0, damage_amount - (resistance - resistance_shift))
 
 
 def get_settle_config() -> SettleConfig:
