@@ -272,8 +272,8 @@ never bound stays silent (no announce-on-fire spam).
 disengaged vow says so out loud, at the exact moment it would have answered, instead of silently
 doing nothing. `dormant_perk_firings` enumerates the subject's own active-but-DISENGAGED
 memberships (`_dormant_self_candidates`, the inverted mirror of `_self_candidates` — never a
-co-present mate's disengagement, only the subject's own), runs the same `_PerkResolver`
-(via its `SituationCheck`) situation evaluation as the live path plus the slice-3 scope filter, and returns the set that
+co-present mate's disengagement, only the subject's own), runs the same situation evaluation (`_PerkResolver`, via its
+`SituationCheck`) as the live path plus the slice-3 scope filter, and returns the set that
 WOULD have fired if the vow were engaged. `announce_dormant_perks` delivers the exact line
 `"your vow lies dormant — {perk.name} would have answered here"` to the HOLDER ALONE — a
 narrator-authored WHISPER-mode `Interaction` (receiver-scoped to the subject's primary persona,
@@ -957,7 +957,7 @@ enemy", "a Cleanse cast near me also treats the wound". It is payload, the same 
 technique carries itself, authored in plain Django admin. Slice 1 of #4573; the workbench,
 vow board, vow page and spellbook vow section are #4565 and do not exist yet.
 
-### Models (`world.covenants.models`, all lore-repo content except the treatment child)
+### Models (`world.covenants.models`, authored content registered in `CONTENT_MODELS` for export, except the treatment child)
 
 - **`VowAddedEffect`** (the header; `NaturalKeyMixin`, `SituationRequirementMixin`) -
   `covenant_role` FK (anchor OR sub-role, CASCADE), `function`

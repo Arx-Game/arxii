@@ -771,7 +771,7 @@ class _PerkResolver:
     attacker) tuple shared by every candidate holder in a single
     ``applicable_perks`` call. Situation evaluation (and its per-call cache)
     is one ``SituationCheck``, so a (situation, params) pair shared by multiple
-    candidate perks/holders is evaluated at most once. Zero new queries —
+    candidate perks/holders is evaluated at most once. Zero new queries:
     params ride the prefetched ``situations``/``rungs`` rows (each row's
     ``.params`` property reads its own already-fetched columns) alongside the
     situation string that was already there.
