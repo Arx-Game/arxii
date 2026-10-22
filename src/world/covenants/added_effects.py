@@ -38,6 +38,24 @@ A live row whose ``upgrades`` names another live row of the same holder
 replaces it: a resonance sub-role's version of its anchor's row, or a
 later-unlock row on the same role. Every other row adds.
 
+"Live" here means the row passed the cast's gates (beneficiary, narrowing,
+context, unlock level, situation). An upgrade that fails one of them leaves its
+base in place. The frequency ledger is checked AFTER the upgrade rule, so a
+spent once-per-round or once-per-fight upgrade still replaces its base: the
+base never fires again just because its upgrade is used up.
+
+## Order of the steps
+
+1. The technique's function tags; none returns ``[]``.
+2. The holder candidates; none returns ``[]``.
+3. One ``VowAddedEffect`` query with the four payload prefetches; none returns ``[]``.
+4. Thread levels, the in-combat flag and one ``SituationCheck``.
+5. The per-holder gates, the situation last.
+6. The upgrade rule, per holder.
+7. In combat, the frequency ledger (one query, only when a live row is limited).
+8. Dedupe on ``(holder, row)``.
+9. The thread-level bonuses, potency-scaled for a secondary vow.
+
 ## Query discipline
 
 Every cast in the game calls ``vow_added_effects_for_cast``, so the order is
@@ -120,10 +138,10 @@ def vow_added_effects_for_cast(
     hold: the beneficiary counts for that holder; the gift and technique
     narrowing (when set) match; the cast context matches; the holder's thread
     level on the anchor role reaches ``unlock_thread_level``; the row's
-    situation holds for the holder. In combat a once-per-round row already in
-    the ledger for this round, or a once-per-fight row in the ledger for this
-    fight, is dropped. Then the upgrade rule (see the module docstring) runs,
-    and one holder fires one row at most once.
+    situation holds for the holder. Then the upgrade rule (see the module
+    docstring) runs over those live rows. Then, in combat, a once-per-round row
+    already in the ledger for this round, or a once-per-fight row in the ledger
+    for this fight, is dropped. Last, one holder fires one row at most once.
     """
     functions = {tag.function for tag in technique.cached_function_tags}
     if not functions:
@@ -146,9 +164,10 @@ def vow_added_effects_for_cast(
         in_combat=participant is not None,
         check=SituationCheck(subject=subject, target=target, resolution=resolution),
     )
+    live = _drop_upgraded(live)
     if participant is not None:
         live = _drop_spent(live, encounter=participant.encounter)
-    return _scaled_firings(_drop_upgraded(live))
+    return _scaled_firings(live)
 
 
 def vow_added_effects_on_technique(

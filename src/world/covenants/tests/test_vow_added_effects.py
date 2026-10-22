@@ -14,11 +14,14 @@ reason every neighboring covenants test file gives.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatParticipantFactory,
@@ -26,8 +29,13 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatEncounter, CombatParticipant, VowAddedEffectFiring
 from world.combat.round_context import CombatRoundContext
-from world.conditions.factories import ConditionTemplateFactory
-from world.conditions.models import ConditionInstance
+from world.conditions.constants import TreatmentTargetKind
+from world.conditions.factories import (
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+    TreatmentTemplateFactory,
+)
+from world.conditions.models import ConditionInstance, TreatmentAttempt
 from world.covenants.added_effects import (
     apply_vow_effect_payloads,
     record_vow_effect_firings,
@@ -44,6 +52,8 @@ from world.covenants.factories import (
     VowAddedEffectAppliedConditionFactory,
     VowAddedEffectDamageProfileFactory,
     VowAddedEffectFactory,
+    VowAddedEffectRemovedConditionFactory,
+    VowAddedEffectTreatmentFactory,
     engage_vow_with_thread,
 )
 from world.covenants.models import VowAddedEffect
@@ -51,6 +61,7 @@ from world.covenants.perks.constants import PerkBeneficiary, Situation
 from world.covenants.types import FiredVowEffect
 from world.magic.constants import TechniqueFunction
 from world.magic.factories import (
+    CharacterAnimaFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
@@ -59,6 +70,7 @@ from world.magic.factories import (
 from world.magic.models import Technique
 from world.magic.models.techniques import ConditionTargetKind
 from world.scenes.factories import SceneFactory
+from world.traits.factories import CheckOutcomeFactory
 
 _IN_COMBAT = VowEffectContext.IN_COMBAT
 
@@ -110,6 +122,16 @@ class VowAddedEffectsTestBase(TestCase):
             resolution=resolution,
             target=None,
         )
+
+
+def _check_result(success_level: int) -> object:
+    """A stand-in CheckResult carrying a real CheckOutcome row."""
+    result = type("CheckResultStub", (), {})()
+    result.outcome = CheckOutcomeFactory(
+        name=f"Vow outcome {success_level} {id(result)}", success_level=success_level
+    )
+    result.success_level = success_level
+    return result
 
 
 def _technique_tagged(function: str) -> Technique:
@@ -340,10 +362,29 @@ class UpgradeTests(VowAddedEffectsTestBase):
         self.assertEqual({f.effect for f in self._cast(self.wren)}, {self.base})
 
     def test_one_holder_fires_a_row_once(self) -> None:
+        # Dedupe itself is covered by test_one_holder_seen_through_two_covenants_fires_a_row_once.
         self.base.beneficiary = PerkBeneficiary.WHOLE_GROUP
         self.base.save()
         self._engage_wren(self.resonance)
         self.assertEqual([f.effect for f in self._cast(self.wren)], [self.base])
+
+    def test_a_spent_upgrade_still_suppresses_its_base(self) -> None:
+        upgrade = VowAddedEffectFactory(
+            covenant_role=self.sub_role,
+            upgrades=self.base,
+            cast_context=_IN_COMBAT,
+            frequency=VowEffectFrequency.ONCE_PER_FIGHT,
+        )
+        self._engage_wren(self.resonance)
+        _, participants = self._fight(self.wren)
+        wren_p = participants[self.wren.pk]
+        resolution = CombatRoundContext(wren_p)
+        self.assertEqual(
+            [f.effect for f in self._cast(self.wren, resolution=resolution)], [upgrade]
+        )
+
+        VowAddedEffectFiringFactory(participant=wren_p, effect=upgrade, round_number=1)
+        self.assertEqual(self._cast(self.wren, resolution=resolution), [])
 
 
 class QueryDisciplineTests(VowAddedEffectsTestBase):
@@ -430,6 +471,74 @@ class PayloadTests(VowAddedEffectsTestBase):
         self.assertFalse(
             ConditionInstance.objects.filter(target=self.hobb.character, condition=condition)
         )
+
+    def test_payloads_land_a_treatment_with_the_caster_as_helper(self) -> None:
+        wound = ConditionTemplateFactory()
+        template = TreatmentTemplateFactory(
+            target_kind=TreatmentTargetKind.PRIMARY,
+            target_condition=wound,
+            scene_required=False,
+            once_per_scene_per_helper=False,
+            check_type=CheckTypeFactory(),
+            reduction_on_crit=2,
+            reduction_on_success=1,
+            reduction_on_partial=1,
+        )
+        VowAddedEffectTreatmentFactory(
+            effect=VowAddedEffectFactory(covenant_role=self.role),
+            treatment_template=template,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        CharacterAnimaFactory(character=self.ysmay)
+        ConditionInstanceFactory(target=self.hobb.character, condition=wound, severity=3)
+        fired = self._cast(self.ysmay)
+
+        with patch("world.checks.services.perform_check") as check:
+            check.return_value = _check_result(success_level=2)
+            apply_vow_effect_payloads(
+                fired,
+                technique=self.hold,
+                success_level=3,
+                eff_intensity=0,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.hobb.character]},
+                source_character=self.ysmay.character,
+                scene=SceneFactory(is_active=True),
+            )
+        attempt = TreatmentAttempt.objects.get()
+        self.assertEqual((attempt.helper, attempt.target), (self.ysmay, self.hobb))
+
+    def test_payloads_strip_a_removed_condition(self) -> None:
+        # The real removal reads active conditions with PG-only DISTINCT ON, so the
+        # lookup and the removal are mocked, as the technique removal tests do.
+        stripped = ConditionTemplateFactory()
+        VowAddedEffectRemovedConditionFactory(
+            effect=VowAddedEffectFactory(covenant_role=self.role),
+            condition=stripped,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        fired = self._cast(self.ysmay)
+        with (
+            patch(
+                "world.magic.services.condition_application.get_condition_instance",
+                return_value=object(),
+            ),
+            patch(
+                "world.magic.services.condition_application.remove_condition", return_value=True
+            ) as remove,
+        ):
+            applied, removed = apply_vow_effect_payloads(
+                fired,
+                technique=self.hold,
+                success_level=1,
+                eff_intensity=0,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.hobb.character]},
+                source_character=self.ysmay.character,
+                scene=SceneFactory(),
+            )
+        self.assertEqual(applied, [])
+        self.assertEqual([r.success for r in removed], [True])
+        remove.assert_called_once()
+        self.assertEqual(remove.call_args.args[:2], (self.hobb.character, stripped))
 
     def test_damage_profiles_carry_their_effects_damage_bonus(self) -> None:
         effect = VowAddedEffectFactory(
