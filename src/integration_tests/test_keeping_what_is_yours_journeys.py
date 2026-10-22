@@ -704,6 +704,17 @@ class CommissioningAShip(JourneyCase):
         self.assertEqual(
             ShipConstructionDetails.objects.get(name="Tidesong").owner_covenant_id, self.tide.pk
         )
+        # The dispatch with the type resolved and no name, or a name and no type, is refused
+        # by the action itself (the usage is the command's).
+        self.assertEqual(
+            self.web(self.ysmay, "commission_ship", ship_type=None, name="Nameless").detail.message,
+            "Pick a ship type.",
+        )
+        self.assertEqual(
+            self.web(self.ysmay, "commission_ship", ship_type=self.sloop, name="  ").detail.message,
+            "Name your ship.",
+        )
+        self.assertEqual(ShipConstructionDetails.objects.count(), 2)
 
         # Away from any ship, the owner's verbs find nothing.
         self.assertIn(
@@ -843,6 +854,10 @@ class CommissioningAShip(JourneyCase):
         )
         self.assertEqual(
             self.web(self.ysmay, "ship_status", ship_id=999999).detail.message, "No such ship."
+        )
+        # A caller holding the row may pass it as ``ship``; the command and the web pass the id.
+        self.assertEqual(
+            self.web(self.ysmay, "ship_status", ship=tidesong).detail.data["ship_id"], tidesong.pk
         )
 
 
