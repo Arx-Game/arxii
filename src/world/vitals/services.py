@@ -2041,8 +2041,10 @@ def _apply_round_tick_damage(
 
     Mirrors mechanics._deal_damage: decrement health, then run the survivability
     pipeline (acute tier — may wound/knockout/kill, which is correct for in-round
-    poison). No-op for targets without vitals. Consults the target's active
-    Succor cover (#1744) before any further damage reduction is applied.
+    poison). A target with no vitals is a no-op unless it is the body of an active
+    CombatOpponent, which takes the damage through the opponent path (#4572).
+    Consults the target's active Succor cover (#1744) before any further damage
+    reduction is applied.
     """
     if not result.damage_dealt:
         return
@@ -2050,6 +2052,7 @@ def _apply_round_tick_damage(
         sheet = target.sheet_data
         vitals = sheet.vitals
     except (AttributeError, ObjectDoesNotExist):
+        _apply_round_tick_damage_to_opponent(target, result)
         return
     from actions.round_context import get_active_round_context  # noqa: PLC0415
     from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
@@ -2092,6 +2095,44 @@ def _apply_round_tick_damage(
                 damage_dealt=effective,
                 damage_type=damage_type,
             )
+
+
+def _apply_round_tick_damage_to_opponent(
+    target: ObjectDB,  # noqa: OBJECTDB_PARAM - the round tick spans every kind of object
+    result: RoundTickResult,
+) -> None:
+    """Apply a tick's DoT damage to the active CombatOpponent behind ``target`` (#4572).
+
+    An NPC opponent has no CharacterSheet or vitals, so its health lives on the
+    CombatOpponent row. Each (damage_type, amount) goes through
+    ``apply_damage_to_opponent``, which nets the damage-type resistance exactly once
+    and handles defeat. Like PC DoT, the tick skips armor soak (``bypass_soak``) and
+    the DAMAGE_PRE_APPLY band (``bypass_pre_apply``): it is not a blow to intercept.
+    A target that is not an active opponent is a no-op.
+    """
+    from world.combat.constants import OpponentStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.combat.services.damage.interception import (  # noqa: PLC0415
+        apply_damage_to_opponent,
+    )
+
+    opponent = CombatOpponent.objects.filter(
+        objectdb_id=target.pk, status=OpponentStatus.ACTIVE
+    ).first()
+    if opponent is None:
+        return
+    for damage_type, amount in result.damage_dealt:
+        if amount <= 0:
+            continue
+        apply_damage_to_opponent(
+            opponent,
+            amount,
+            bypass_soak=True,
+            bypass_pre_apply=True,
+            damage_type=damage_type,
+        )
+        if opponent.status != OpponentStatus.ACTIVE:
+            break
 
 
 def tick_round_for_targets(
