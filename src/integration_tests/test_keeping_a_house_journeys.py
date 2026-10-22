@@ -552,6 +552,53 @@ class OpeningAPortal(JourneyCase):
             self.telnet(self.ysmay, "portal/dissolve"),
         )
 
+        # The dispatch names the kind by id or by name and an anchor by id; the owner
+        # installs as the tenant did. Nothing in the browser sends either yet.
+        self.purse.balance = 10_000
+        self.purse.save()
+
+        def install(character, **kwargs):
+            return self.web(character, "portal_anchor_install", **kwargs).detail.message
+
+        def dissolve(character, **kwargs):
+            return self.web(character, "portal_anchor_dissolve", **kwargs).detail.message
+
+        self.assertEqual(install(self.ysmay, kind=None, name=""), "Install what, and of what kind?")
+        self.assertEqual(
+            install(self.ysmay, kind=999999, name="a mirror"), "Install what, and of what kind?"
+        )
+        self.assertEqual(
+            install(self.hobb, kind=self.mirror.pk, name="a mirror"),
+            "You don't have standing to install a portal anchor here.",
+        )
+        self.assertEqual(
+            install(self.ysmay, kind=self.mirror.pk, name="a tall silvered mirror"),
+            "You install a tall silvered mirror here.",
+        )
+        self.assertEqual(
+            install(self.ysmay, kind="well", name="a stone well"), "You install a stone well here."
+        )
+        mirror, well = self.anchors()
+        self.assertEqual((mirror.kind_id, well.kind_id), (self.mirror.pk, self.well.pk))
+        self.assertEqual(
+            dissolve(self.ysmay, anchor=999999), "There is no portal anchor here to dissolve."
+        )
+        self.assertEqual(len(self.anchors()), 2)
+        self.assertEqual(
+            dissolve(self.ysmay, anchor=mirror.pk), "a tall silvered mirror dissolves."
+        )
+        self.assertEqual(self.anchors(), [well])
+        # A stale id does not fall through to the one anchor left.
+        self.assertEqual(
+            dissolve(self.ysmay, anchor=mirror.pk), "There is no portal anchor here to dissolve."
+        )
+        self.assertEqual(self.anchors(), [well])
+        self.assertEqual(
+            dissolve(self.hobb, anchor=well.pk), "You don't have standing to dissolve this anchor."
+        )
+        self.assertEqual(dissolve(self.ysmay), "a stone well dissolves.")
+        self.assertEqual(self.anchors(), [])
+
 
 class KeepingAFunctionary(JourneyCase):
     """Marrow, staff, places a barkeep in the Lantern; everyone sees her there."""

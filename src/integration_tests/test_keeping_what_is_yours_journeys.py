@@ -6,6 +6,10 @@ handler and asserts what they were told and what the rows now hold."""
 
 from __future__ import annotations
 
+import uuid
+
+from evennia.objects.models import ObjectDB
+
 from evennia_extensions.factories import RoomProfileFactory
 from integration_tests.harness import JourneyCase
 from world.checks.test_helpers import force_check_outcome
@@ -27,22 +31,25 @@ from world.forms.factories import (
     AlternateSelfFactory,
     CharacterFormFactory,
     CharacterFormStateFactory,
+    FormCombatProfileEffectFactory,
+    FormCombatProfileFactory,
 )
 from world.forms.models import ActiveAlternateSelf, CharacterFormState, FormType
 from world.items.crafting.models import LabStationDetails
 from world.locations.constants import LocationRole
-from world.locations.factories import LocationTenancyFactory
+from world.locations.factories import LocationOwnershipFactory, LocationTenancyFactory
 from world.magic.factories import CharacterGiftFactory
 from world.magic.models.affinity import Resonance
 from world.magic.specialization.services import provision_latent_gift_thread
 from world.mechanics.factories import ModifierCategoryFactory, ModifierSourceFactory
-from world.mechanics.models import CharacterModifier, ModifierTarget
+from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 from world.projects.constants import ProjectKind
 from world.projects.models import Project
 from world.room_features.constants import RoomFeatureInstallMechanism
 from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
 from world.room_features.models import RoomFeatureProgressionDetails
 from world.room_features.seeds import ensure_lab_kind
+from world.scenes.factories import PersonaFactory
 from world.scenes.models import Interaction
 from world.ships.factories import ShipDetailsFactory, ShipTypeFactory
 from world.ships.models import (
@@ -51,6 +58,7 @@ from world.ships.models import (
     ShipRepairDetails,
     ShipUpgradeDetails,
 )
+from world.societies.factories import OrganizationMembershipFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -331,6 +339,128 @@ class KeepingACompanion(JourneyCase):
         self.assertEqual(result.detail.message, "Old Grey is released from your bond.")
         self.assertFalse(Companion.objects.filter(released_at__isnull=True).exists())
 
+    def test_the_web_s_own_sends_and_a_pose_sent_twice(self) -> None:  # noqa: PLR0915 - one bond, read top to bottom
+        hawk = CompanionArchetype.objects.get(name="Hawk")
+        direwolf = CompanionArchetype.objects.get(name="Direwolf")
+
+        def bind(character, **kwargs):
+            return self.web(character, "bind_companion", **kwargs).detail
+
+        # The bind as the companions view sends it: the capacity gate reads the gift and
+        # the archetype before anything else.
+        self.assertEqual(
+            bind(self.ysmay, name="Skree").message, "Pick a gift and an archetype first."
+        )
+        self.assertEqual(
+            bind(self.ysmay, gift_id=self.gift.pk, archetype_id=999999, name="Skree").message,
+            "No such gift or archetype.",
+        )
+        self.assertEqual(
+            bind(self.hobb, gift_id=self.gift.pk, archetype_id=hawk.pk, name="Skree").message,
+            "You don't have that gift's Companion Capacity available.",
+        )
+        self.assertEqual(
+            bind(self.ysmay, gift_id=self.gift.pk, archetype_id=direwolf.pk, name="Grim").message,
+            "You don't have enough Companion Capacity to bind a Direwolf.",
+        )
+        with force_check_outcome(CheckOutcomeFactory(name="Bind -1", success_level=-1)):
+            detail = bind(self.ysmay, gift_id=self.gift.pk, archetype_id=hawk.pk, name="Skree")
+        self.assertEqual(detail.message, "The Hawk resists your attempt to bind it.")
+        self.assertFalse(Companion.objects.exists())
+        with force_check_outcome(CheckOutcomeFactory(name="Bind 1", success_level=1)):
+            detail = bind(self.ysmay, gift_id=self.gift.pk, archetype_id=hawk.pk, name="Skree")
+        self.assertEqual(detail.message, "Skree the Hawk is now bonded to you.")
+        skree = Companion.objects.get(name="Skree")
+        self.assertEqual(detail.data["companion_id"], skree.pk)
+        self.assertEqual(skree.objectdb.location, self.kennels)
+
+        # The pose as the composer sends it, with a request id: a retry records it once and
+        # tells the room once; the same id with other words, or for another companion,
+        # is a conflict and no pose; without an id each send is its own pose.
+        def emote(character, **kwargs):
+            return self.web(character, "companion_emote", **kwargs).detail
+
+        request_id = uuid.uuid4()
+        line = "Skree ruffles its feathers."
+        self.assertTrue(
+            emote(
+                self.ysmay, companion_id=skree.pk, text=line, client_request_id=request_id
+            ).success
+        )
+        self.assertTold(self.hobb, line)
+        self.assertTrue(
+            emote(
+                self.ysmay, companion_id=skree.pk, text=line, client_request_id=request_id
+            ).success
+        )
+        self.assertEqual(Interaction.objects.filter(attributed_companion=skree).count(), 1)
+        self.assertEqual(self.mailbox(self.hobb).lines.count(line), 1)
+        row = Interaction.objects.get(attributed_companion=skree)
+        self.assertEqual((row.content, row.persona_id), (line, self.sheet.primary_persona.pk))
+        # Telnet prints the room's line; the web client drops it, since the row is its render.
+        self.assertIn(
+            ((line, {"type": "pose", "interaction_echo": True}),),
+            [args for args, _kwargs in self.mailbox(self.hobb).calls],
+        )
+        self.assertEqual(
+            emote(
+                self.ysmay,
+                companion_id=skree.pk,
+                text="Skree screams.",
+                client_request_id=request_id,
+            ).message,
+            "This request id was already used for different text.",
+        )
+        self.thread.level = 20
+        self.thread.save(update_fields=["level"])
+        with force_check_outcome(CheckOutcomeFactory(name="Bind 2", success_level=2)):
+            bind(self.ysmay, gift_id=self.gift.pk, archetype_id=hawk.pk, name="Pell")
+        pell = Companion.objects.get(name="Pell")
+        self.assertEqual(
+            emote(
+                self.ysmay, companion_id=pell.pk, text=line, client_request_id=request_id
+            ).message,
+            "This request id was already used for different text.",
+        )
+        self.assertEqual(Interaction.objects.filter(mode="pose").count(), 1)
+        emote(self.ysmay, companion_id=skree.pk, text="Skree preens.")
+        emote(self.ysmay, companion_id=skree.pk, text="Skree preens.")
+        self.assertEqual(Interaction.objects.filter(content="Skree preens.").count(), 2)
+        self.assertEqual(self.mailbox(self.hobb).lines.count("Skree preens."), 2)
+
+        # What the pose refuses: no companion, no words, a hawk elsewhere, a stranger's bird.
+        self.assertEqual(emote(self.ysmay, text="preens.").message, "Pick a companion to emote as.")
+        self.assertEqual(emote(self.ysmay, companion_id=skree.pk, text="").message, "Emote what?")
+        self.assertEqual(
+            emote(self.ysmay, companion_id=999999, text="x").message, "No such companion."
+        )
+        self.assertEqual(
+            emote(self.hobb, companion_id=skree.pk, text="x").message, "That is not your companion."
+        )
+        skree.objectdb.location = self.yard
+        self.assertEqual(
+            emote(self.ysmay, companion_id=skree.pk, text="x").message, "Skree is not here."
+        )
+        skree.objectdb.location = self.kennels
+
+        # The release as the view sends it, by the companion's id.
+        def release(character, **kwargs):
+            return self.web(character, "release_companion", **kwargs).detail.message
+
+        self.assertEqual(release(self.ysmay), "Pick a companion to release.")
+        self.assertEqual(release(self.ysmay, companion_id=999999), "No such companion.")
+        self.assertEqual(release(self.hobb, companion_id=skree.pk), "That is not your companion.")
+        object_pk = skree.objectdb_id
+        self.assertEqual(
+            release(self.ysmay, companion_id=skree.pk), "Skree is released from your bond."
+        )
+        self.assertFalse(ObjectDB.objects.filter(pk=object_pk).exists())
+        self.assertEqual(release(self.ysmay, companion_id=skree.pk), "Skree is no longer active.")
+        self.assertEqual(
+            emote(self.ysmay, companion_id=skree.pk, text="x").message, "Skree is no longer active."
+        )
+        self.assertEqual(Companion.objects.get(pk=pell.pk).released_at, None)
+
 
 class TakingAnotherShape(JourneyCase):
     """Ysmay can shift at will between her true self and the Beast; Hobb cannot shift."""
@@ -442,6 +572,74 @@ class TakingAnotherShape(JourneyCase):
         self.assertIn("Multiple alternate selves match 'the beast':", told)
         self.assertIn("Be more specific.", told)
         self.assertIsNone(self._active())
+
+    def test_shapes_that_are_not_hers_and_a_shift_while_not_in_control(self) -> None:
+        hobbs = self.hobb.sheet_data
+        # Another's alternate self is no shape of hers, by name or by id (the forms view
+        # sends the id).
+        stranger = AlternateSelfFactory(character=hobbs, display_name="the Stranger")
+        self.assertIn(
+            "No alternate self named 'the Stranger'. Available: the Beast, the Owl.",
+            self.telnet(self.ysmay, "form shift the Stranger"),
+        )
+        self.assertEqual(
+            self.web(self.ysmay, "shift_form", alternate_self_id=stranger.pk).detail.message,
+            "You have no such alternate self.",
+        )
+        self.assertEqual(
+            self.web(self.ysmay, "shift_form", alternate_self_id=999999).detail.message,
+            "You have no such alternate self.",
+        )
+        # A grant of hers whose persona or form is another character's (a bad seed) is
+        # refused in words, and nothing is assumed.
+        stolen_face = AlternateSelfFactory(
+            character=self.sheet,
+            persona=PersonaFactory(character_sheet=hobbs),
+            display_name="a stolen face",
+        )
+        self.assertIn(
+            "That isn't one of this character's identities.",
+            self.telnet(self.ysmay, "form shift a stolen face"),
+        )
+        stolen_shape = AlternateSelfFactory(
+            character=self.sheet,
+            form=CharacterFormFactory(
+                character=hobbs, name="Stranger", form_type=FormType.ALTERNATE
+            ),
+            display_name="a stolen shape",
+        )
+        self.assertIn(
+            "That isn't one of this character's forms.",
+            self.telnet(self.ysmay, "form shift a stolen shape"),
+        )
+        active = self._active()
+        self.assertTrue(active is None or active.alternate_self_id is None)
+        self.assertEqual(self._form_state().active_form.form_type, FormType.TRUE)
+        self.assertNotEqual(stolen_face.pk, stolen_shape.pk)
+
+        # Not in control, she may still be shifted (a forced shape is the point); only the
+        # revert is hers to be refused.
+        rage = ConditionTemplateFactory(
+            name="Rage", category=ConditionCategoryFactory(name="Fury", alters_behavior=True)
+        )
+        apply_condition(self.ysmay, rage)
+        self.assertIn("You assume the Owl.", self.telnet(self.ysmay, "form shift the Owl"))
+        self.assertEqual(self._active().alternate_self_id, self.owl.pk)
+        self.assertIn(
+            "You can't revert while not in control of yourself.",
+            self.telnet(self.ysmay, "form revert"),
+        )
+        # Wearing the Owl, the Beast's war-shape grants nothing until the Owl is put off.
+        profile = FormCombatProfileFactory(form=self.beast_form)
+        FormCombatProfileEffectFactory(profile=profile)
+        self.beast.combat_profile = profile
+        self.beast.save(update_fields=["combat_profile"])
+        self.assertIn(
+            "You are already wearing another alternate self. Revert first.",
+            self.telnet(self.ysmay, f"form shift {self.beast.pk}"),
+        )
+        self.assertEqual(self._active().alternate_self_id, self.owl.pk)
+        self.assertFalse(ModifierSource.objects.filter(form_combat_profile=profile).exists())
 
 
 class CommissioningAShip(JourneyCase):
@@ -593,6 +791,59 @@ class CommissioningAShip(JourneyCase):
         self.assertIn("Repairs begin (project #", told)
         self.assertEqual(ShipRepairDetails.objects.count(), 2)
         self.assertEqual(ShipDetails.objects.get(pk=self.wavecutter.pk).needs_repair, True)
+
+    def test_a_covenant_s_ship_answers_to_its_members(self) -> None:
+        # The Tide holds the Tidesong's deck; Hobb is of the Tide, Ysmay is not.
+        tide_deck = self.make_room("Tidesong Deck")
+        tidesong = ShipDetailsFactory(
+            ship_type=self.sloop,
+            building__area__name="Sloop 'Tidesong'",
+            building__entry_room=RoomProfileFactory(objectdb=tide_deck),
+            building__fortification_level=1,
+            needs_repair=True,
+        )
+        LocationOwnershipFactory(
+            on_room=True,
+            on_org=True,
+            room_profile=tidesong.building.entry_room,
+            holder_organization=self.tide.organization,
+        )
+        OrganizationMembershipFactory(
+            organization=self.tide.organization, persona=self.hobb.sheet_data.primary_persona
+        )
+        self.ysmay.move_to(tide_deck, quiet=True)
+        self.hobb.move_to(tide_deck, quiet=True)
+        self.assertIn(
+            "Sloop 'Tidesong': hull 1, handling 15, armament 5 (needs repair).",
+            self.telnet(self.ysmay, "ship"),
+        )
+        self.assertIn("You don't own this ship.", self.telnet(self.ysmay, "ship repair"))
+        self.assertIn(
+            "You don't own this ship.",
+            self.telnet(self.ysmay, "ship upgrade stat=handling level=2"),
+        )
+        self.assertFalse(Project.objects.exists())
+        told = self.telnet(self.hobb, "ship repair")
+        repair = ShipRepairDetails.objects.get()
+        self.assertIn(f"Repairs begin (project #{repair.project_id}).", told)
+        self.assertEqual(repair.ship_id, tidesong.pk)
+        self.assertEqual(repair.project.owner_persona_id, self.hobb.sheet_data.primary_persona.pk)
+        # The status by id, from the quay, carries the numbers the hub reads.
+        self.ysmay.move_to(self.quay, quiet=True)
+        result = self.web(self.ysmay, "ship_status", ship_id=tidesong.pk)
+        self.assertEqual(
+            result.detail.data,
+            {
+                "ship_id": tidesong.pk,
+                "effective_handling": 15,
+                "effective_armament": 5,
+                "effective_hull": 1,
+                "needs_repair": True,
+            },
+        )
+        self.assertEqual(
+            self.web(self.ysmay, "ship_status", ship_id=999999).detail.message, "No such ship."
+        )
 
 
 class KeepingALabStation(JourneyCase):
