@@ -1312,7 +1312,7 @@ def _materialize_named_family(draft: CharacterDraft) -> None:
     name = str(draft.draft_data.get("new_family_name", "")).strip()
     picks = {
         int(definition_id): [int(option_id) for option_id in option_ids]
-        for definition_id, option_ids in (draft.draft_data.get("family_aspect_picks") or {}).items()
+        for definition_id, option_ids in (draft.draft_data.get("family_facet_picks") or {}).items()
     }
     from world.character_creation.questionnaire import picked_family_standing  # noqa: PLC0415
     from world.character_creation.validators import _draft_crew_slot  # noqa: PLC0415
@@ -1320,7 +1320,7 @@ def _materialize_named_family(draft: CharacterDraft) -> None:
     family, _org = build_family_org(
         template,
         name,
-        aspect_picks=picks,
+        facet_picks=picks,
         served_house=draft.served_house,
         created_by=draft.account,
         origin_realm=draft.selected_area.realm if draft.selected_area else None,
@@ -2386,6 +2386,17 @@ def _finalize_beginnings_codex_grants(draft: CharacterDraft, sheet: CharacterShe
     grant_beginnings_codex(sheet, draft.selected_beginnings)
 
 
+def _finalize_realm_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Apply the realm's codex grants (``grant_realm_codex``, #4531): the realm is the
+    draft's starting area's, else the chosen Beginnings' starting area's. No-op without one."""
+    from world.character_creation.sheet_writers import grant_realm_codex  # noqa: PLC0415
+
+    area = draft.selected_area
+    if area is None and draft.selected_beginnings is not None:
+        area = draft.selected_beginnings.starting_area
+    grant_realm_codex(sheet, area.realm if area is not None else None)
+
+
 def _finalize_distinction_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Apply Distinction codex grants for all selected distinctions.
 
@@ -2498,6 +2509,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     def other_codex() -> None:
         _finalize_path_codex_grants(draft, sheet)
         _finalize_beginnings_codex_grants(draft, sheet)
+        _finalize_realm_codex_grants(draft, sheet)
         _finalize_distinction_codex_grants(draft, sheet)
         _finalize_species_codex(sheet)
 
@@ -3295,7 +3307,7 @@ _UPBRINGING_DRAFT_KEYS = (
     "origin_choices",
     "new_family_name",
     "family_template_id",
-    "family_aspect_picks",
+    "family_facet_picks",
 )
 
 

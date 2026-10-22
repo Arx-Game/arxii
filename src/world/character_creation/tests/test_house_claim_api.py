@@ -14,8 +14,8 @@ from world.societies.houses.almanach import batch_unclaimed, name_rung, plant_ru
 from world.societies.houses.constants import ClaimKinRelation, TitleTier
 from world.societies.houses.models import (
     Domain,
-    HouseAspectDefinition,
-    HouseAspectOption,
+    HouseCharterOption,
+    HouseCharterQuestion,
     HouseFeature,
     HouseTemplate,
     SuccessionLaw,
@@ -40,16 +40,16 @@ class HouseClaimApiTests(TestCase):
             liege=cls.crown,
             default_succession_law=cls.law,
         )
-        cls.virtue = HouseAspectDefinition.objects.create(
+        cls.virtue = HouseCharterQuestion.objects.create(
             name="House Virtue API", prompt="Which virtue rules the house?"
         )
-        cls.fortitude = HouseAspectOption.objects.create(
+        cls.fortitude = HouseCharterOption.objects.create(
             definition=cls.virtue, name="Fortitude API"
         )
-        cls.inactive = HouseAspectOption.objects.create(
+        cls.inactive = HouseCharterOption.objects.create(
             definition=cls.virtue, name="Retired API", is_active=False
         )
-        cls.template.aspect_definitions.add(cls.virtue)
+        cls.template.charter_questions.add(cls.virtue)
         cls.hearth = HouseFeature.objects.create(
             name="Hearth Right API",
             slug="hearth-right-api",
@@ -97,7 +97,7 @@ class HouseClaimApiTests(TestCase):
             "words": "The Marches Hold",
             "colors": "grey and gold",
             "sigil_description": "A tower on a grey field.",
-            "aspects": [{"definition": self.virtue.pk, "options": [self.fortitude.pk]}],
+            "facets": [{"definition": self.virtue.pk, "options": [self.fortitude.pk]}],
             "mercy": 0,
             "method": 0,
             "status": 0,
@@ -114,7 +114,7 @@ class HouseClaimApiTests(TestCase):
         titles = response.data["results"] if isinstance(response.data, dict) else response.data
         title = next(t for t in titles if t["id"] == self.title.pk)
         template = next(t for t in title["templates"] if t["id"] == self.template.pk)
-        definitions = template["aspect_definitions"]
+        definitions = template["charter_questions"]
         self.assertEqual(len(definitions), 1)
         self.assertEqual(definitions[0]["name"], "House Virtue API")
         option_names = [o["name"] for o in definitions[0]["options"]]
@@ -136,20 +136,20 @@ class HouseClaimApiTests(TestCase):
         entry = CodexEntryFactory(name="Calyx API")
         calyx = WorshippedBeingFactory(name="Calyx API", codex_entry=entry)
         knight = BeingNicknameFactory(being=calyx, name="The One True Knight")
-        patron = HouseAspectDefinition.objects.create(
+        patron = HouseCharterQuestion.objects.create(
             name="Patron API", prompt="Whom does the house serve?", sets_patron=True
         )
-        HouseAspectOption.objects.create(
+        HouseCharterOption.objects.create(
             definition=patron, name="Calyx API", being=calyx, being_nickname=knight
         )
-        self.template.aspect_definitions.add(patron)
+        self.template.charter_questions.add(patron)
 
         response = self.client.get("/api/character-creation/house-titles/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         titles = response.data["results"] if isinstance(response.data, dict) else response.data
         title = next(t for t in titles if t["id"] == self.title.pk)
         template = next(t for t in title["templates"] if t["id"] == self.template.pk)
-        definition = next(d for d in template["aspect_definitions"] if d["name"] == "Patron API")
+        definition = next(d for d in template["charter_questions"] if d["name"] == "Patron API")
         option = definition["options"][0]
         self.assertEqual(option["being_id"], calyx.pk)
         self.assertEqual(option["being_name"], "Calyx API")
@@ -164,14 +164,14 @@ class HouseClaimApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(response.data["words"], "The Marches Hold")
         self.assertEqual(
-            response.data["aspects"],
+            response.data["facets"],
             [{"definition": "House Virtue API", "option": "Fortitude API"}],
         )
 
     def test_post_missing_pick_is_refused_with_user_message(self):
         response = self.client.post(
             f"/api/character-creation/drafts/{self.draft.pk}/house-claim/",
-            self._payload(aspects=[]),
+            self._payload(facets=[]),
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -180,7 +180,7 @@ class HouseClaimApiTests(TestCase):
     def test_post_malformed_aspects_is_refused(self):
         response = self.client.post(
             f"/api/character-creation/drafts/{self.draft.pk}/house-claim/",
-            self._payload(aspects=[{"definition": "not-a-number", "options": ["x"]}]),
+            self._payload(facets=[{"definition": "not-a-number", "options": ["x"]}]),
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -231,7 +231,7 @@ class HouseClaimApiTests(TestCase):
         payload = self._payload(
             title=self.duchy.pk,
             house_name="Journeywood",
-            aspects=[{"definition": self.virtue.pk, "options": [self.fortitude.pk]}],
+            facets=[{"definition": self.virtue.pk, "options": [self.fortitude.pk]}],
             founder_relation=ClaimKinRelation.CHILD,
             founder_is_heir=True,
             kin=[

@@ -13,10 +13,10 @@ from world.societies.factories import OrganizationFactory, OrganizationTypeFacto
 from world.societies.houses.factories import HouseTemplateFactory
 from world.societies.houses.models import (
     FealtyEdge,
-    HouseAspectDefinition,
-    HouseAspectOption,
+    HouseCharterOption,
+    HouseCharterQuestion,
     HouseFeature,
-    OrganizationAspect,
+    OrganizationFacet,
     OrganizationFeature,
 )
 from world.societies.houses.services import house_for_family
@@ -37,11 +37,11 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
             starting_kin_slots=2,
         )
         self.template.served_house_choices.add(self.served)
-        self.charge = HouseAspectDefinition.objects.create(
+        self.charge = HouseCharterQuestion.objects.create(
             name="Charge", prompt="What did your family keep?"
         )
-        self.granaries = HouseAspectOption.objects.create(definition=self.charge, name="Granaries")
-        self.template.aspect_definitions.add(self.charge)
+        self.granaries = HouseCharterOption.objects.create(definition=self.charge, name="Granaries")
+        self.template.charter_questions.add(self.charge)
         self.registry = HouseFeature.objects.create(
             name="Registry-bound", slug="registry-bound", description="Named in the Archive."
         )
@@ -53,7 +53,7 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
     def _named_draft(self):
         draft = self._create_base_draft(
             new_family_name="Cisternwrights",
-            family_aspect_picks={str(self.charge.id): [self.granaries.id]},
+            family_facet_picks={str(self.charge.id): [self.granaries.id]},
         )
         draft.selected_origin_template = self.upbringing
         draft.served_house = self.served
@@ -77,7 +77,7 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
         assert org.name == "Cisternwrights"
         assert org.org_type.name == "commoner_family"
         assert org.society == self.template.society
-        assert OrganizationAspect.objects.filter(
+        assert OrganizationFacet.objects.filter(
             organization=org, definition=self.charge, option=self.granaries
         ).exists()
         assert OrganizationFeature.objects.filter(organization=org, feature=self.registry).exists()
@@ -92,16 +92,16 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
 
         calyx = WorshippedBeingFactory(name="Calyx")
         knight = BeingNicknameFactory(being=calyx, name="The One True Knight")
-        patron = HouseAspectDefinition.objects.create(
+        patron = HouseCharterQuestion.objects.create(
             name="Patron", prompt="Whom does the family serve?", sets_patron=True
         )
-        calyx_option = HouseAspectOption.objects.create(
+        calyx_option = HouseCharterOption.objects.create(
             definition=patron, name="Calyx", being=calyx, being_nickname=knight
         )
-        self.template.aspect_definitions.add(patron)
+        self.template.charter_questions.add(patron)
         draft = self._create_base_draft(
             new_family_name="Cisternwrights",
-            family_aspect_picks={
+            family_facet_picks={
                 str(self.charge.id): [self.granaries.id],
                 str(patron.id): [calyx_option.id],
             },

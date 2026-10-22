@@ -425,10 +425,11 @@ class TechniqueManifestOptionInline(admin.TabularInline):
     autocomplete_fields = ["being", "archetype", "threat_pool"]
 
 
-#: Query-string values for TechniqueAuthoringGapFilter's three gap kinds.
-_GAP_UNDERSPECIFIED = "underspecified"
-_GAP_AMBIGUOUS = "ambiguous"
-_GAP_NOT_CASTABLE = "not_castable"
+#: Query-string values for TechniqueAuthoringGapFilter's three gap kinds. Public because
+#: the Required content dashboard links into the filtered changelist (#4545).
+GAP_UNDERSPECIFIED = "underspecified"
+GAP_AMBIGUOUS = "ambiguous"
+GAP_NOT_CASTABLE = "not_castable"
 
 
 class TechniqueAuthoringGapFilter(admin.SimpleListFilter):
@@ -446,17 +447,17 @@ class TechniqueAuthoringGapFilter(admin.SimpleListFilter):
 
     #: Which ``TechniqueAuthoringGap`` flag each Python-computed value selects on.
     _GAP_ATTRS = {
-        _GAP_UNDERSPECIFIED: "is_underspecified",
-        _GAP_AMBIGUOUS: "relationship_is_ambiguous",
+        GAP_UNDERSPECIFIED: "is_underspecified",
+        GAP_AMBIGUOUS: "relationship_is_ambiguous",
     }
 
     #: Django passes both hook arguments positionally, so the leading underscores
     #: mark them unused without needing a suppression.
     def lookups(self, _request, _model_admin):
         return [
-            (_GAP_UNDERSPECIFIED, "No effects authored"),
-            (_GAP_AMBIGUOUS, "Mixed targeting (relationship is a guess)"),
-            (_GAP_NOT_CASTABLE, "No cast template (not castable standalone)"),
+            (GAP_UNDERSPECIFIED, "No effects authored"),
+            (GAP_AMBIGUOUS, "Mixed targeting (relationship is a guess)"),
+            (GAP_NOT_CASTABLE, "No cast template (not castable standalone)"),
         ]
 
     def queryset(self, _request, queryset):
@@ -465,7 +466,7 @@ class TechniqueAuthoringGapFilter(admin.SimpleListFilter):
         # Python sweep (#3682). It is also deliberately not a
         # ``TechniqueAuthoringGap`` member: cast readiness is its own policy
         # gate, while the gap audit covers effect-authoring data.
-        if value == _GAP_NOT_CASTABLE:
+        if value == GAP_NOT_CASTABLE:
             return queryset.filter(action_template__isnull=True)
         attr = self._GAP_ATTRS.get(value)
         if attr is None:

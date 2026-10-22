@@ -420,8 +420,8 @@ def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:
     from world.societies.houses.models import (  # noqa: PLC0415
         Domain,
         HoldingKind,
-        HouseAspectDefinition,
-        HouseAspectOption,
+        HouseCharterOption,
+        HouseCharterQuestion,
         HouseFeature,
         HouseTemplate,
         Title,
@@ -464,7 +464,7 @@ def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:
     # authors real catalogs (Inferna's Quiddities), this placeholder is absent
     # and the template simply carries no aspect definitions from the seeder.
     virtue = authored_or_sample(
-        HouseAspectDefinition,
+        HouseCharterQuestion,
         {"prompt": "PLACEHOLDER: which virtue did your house cling to?"},
         name="House Virtue PLACEHOLDER",
     )
@@ -477,12 +477,12 @@ def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:
             ]
         ):
             authored_or_sample(
-                HouseAspectOption,
+                HouseCharterOption,
                 {"description": blurb, "display_order": order},
                 definition=virtue,
                 name=option_name,
             )
-        template.aspect_definitions.add(virtue)
+        template.charter_questions.add(virtue)
     hearth = authored_or_sample(
         HouseFeature,
         {

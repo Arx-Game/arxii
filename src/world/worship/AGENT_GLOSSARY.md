@@ -158,7 +158,7 @@
 - **GM notes** — `WorshippedBeing.gm_notes` (#3780): staff-only prose, never shown to
   players; prose, never a link, since no Arx 1 object exists here to link to.
 - **Being codex entry** — `WorshippedBeing.codex_entry`, the being's own Codex page,
-  following the `Gift`/`Technique`/`HouseAspectOption` precedent (#3776). Visibility
+  following the `Gift`/`Technique`/`HouseCharterOption` precedent (#3776). Visibility
   (public / known-to-some / researchable) is read ENTIRELY through the linked entry's
   `is_public` tier — `WorshippedBeing` deliberately carries no visibility field of its own.
   PROTECT, so deleting a page that a god points at is refused rather than silent.
@@ -167,7 +167,7 @@
   data. `societies.Organization.patron_nickname` points at one of these, never
   directly at the `WorshippedBeing`, so different organizations can name the same god
   differently in their own records. A house's patron is set once, at founding, from the
-  charter's patron question (#4205: `HouseAspectOption.being_nickname`), and the god's
+  charter's patron question (#4205: `HouseCharterOption.being_nickname`), and the god's
   Codex companion lists its **sworn houses** (the published orgs whose
   `patron_nickname.being` is that god), each linked to its house page.
 - **Worship declaration** — a character's public being + optional secret being

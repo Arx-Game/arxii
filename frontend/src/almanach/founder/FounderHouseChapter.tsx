@@ -3,7 +3,7 @@
  * founder's own house charter: name (live-validated against the picked
  * template's `name_pattern`), the styled-name preview, succession, words/
  * colors/sigil/backstory, the House Quiddity pick (the template's first
- * aspect definition — a founder Charter authors exactly one, unlike a name-
+ * charter question — a founder Charter authors exactly one, unlike a name-
  * path Family Template which can carry several), and the six principle
  * axes windowed to the template's own min/max. Every field writes straight
  * to the founder draft (`set`) — there is no per-field Save here, only the
@@ -125,8 +125,8 @@ export function FounderHouseChapter({
     ? `${youName} ${particle ?? ''} ${draft.house_name}`.replace(/\s+/g, ' ').trim()
     : '';
 
-  const quiddity = template.aspect_definitions[0];
-  const quiddityPicks = quiddity ? (draft.aspect_picks[quiddity.id] ?? []) : [];
+  const quiddity = template.charter_questions[0];
+  const quiddityPicks = quiddity ? (draft.facet_picks[quiddity.id] ?? []) : [];
 
   const toggleQuiddityOption = (optionId: number, maxPicks: number) => {
     if (!quiddity) return;
@@ -140,7 +140,7 @@ export function FounderHouseChapter({
     } else {
       next = [...quiddityPicks, optionId];
     }
-    set('aspect_picks', { ...draft.aspect_picks, [quiddity.id]: next });
+    set('facet_picks', { ...draft.facet_picks, [quiddity.id]: next });
   };
 
   return (

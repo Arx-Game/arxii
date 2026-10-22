@@ -1223,10 +1223,10 @@ from world.societies.houses.models import (  # noqa: E402
     EdictKind,
     FealtyEdge,
     HoldingKind,
-    HouseAspectDefinition,
-    HouseAspectOption,
+    HouseCharterOption,
+    HouseCharterQuestion,
     HouseClaim,
-    HouseClaimAspect,
+    HouseClaimFacet,
     HouseClaimKin,
     HouseClaimLand,
     HouseClaimObservance,
@@ -1384,10 +1384,10 @@ class HouseTemplateAdminForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        definitions = cleaned.get("aspect_definitions")
+        definitions = cleaned.get("charter_questions")
         if definitions is not None and sum(1 for d in definitions if d.sets_patron) > 1:
             raise ValidationError(
-                {"aspect_definitions": "Only one question on a charter may set the patron."}
+                {"charter_questions": "Only one question on a charter may set the patron."}
             )
         return cleaned
 
@@ -1401,18 +1401,18 @@ class HouseTemplateAdmin(admin.ModelAdmin):
     list_select_related = ("realm", "liege", "org_type")
     list_filter = ("realm", "kind")
     search_fields = ("name",)
-    filter_horizontal = ("holdings", "aspect_definitions", "features", "served_house_choices")
+    filter_horizontal = ("holdings", "charter_questions", "features", "served_house_choices")
     autocomplete_fields = ("org_type",)
 
 
-class HouseAspectOptionInline(admin.TabularInline):
+class HouseCharterOptionInline(admin.TabularInline):
     """#2079 — the catalog rows behind a definition.
 
     ``codex_entry`` (#2868) binds an option to its lore write-up; ``raw_id``
     rather than autocomplete, matching ``SpeciesAdmin``'s codex field.
     """
 
-    model = HouseAspectOption
+    model = HouseCharterOption
     formset = OneRowPerFormSet
     extra = 0
     fields = (
@@ -1429,15 +1429,15 @@ class HouseAspectOptionInline(admin.TabularInline):
     autocomplete_fields = ("being", "being_nickname")
 
 
-@admin.register(HouseAspectDefinition)
-class HouseAspectDefinitionAdmin(admin.ModelAdmin):
+@admin.register(HouseCharterQuestion)
+class HouseCharterQuestionAdmin(admin.ModelAdmin):
     """#2079 — authored, catalog-only required choices (ADR-0101). ``sets_patron``
     (#4205) marks the one question whose pick names the house's patron."""
 
     list_display = ("name", "min_picks", "max_picks", "sets_patron", "display_order")
     list_filter = ("sets_patron",)
     search_fields = ("name", "prompt")
-    inlines = (HouseAspectOptionInline,)
+    inlines = (HouseCharterOptionInline,)
 
 
 @admin.register(HouseFeature)
@@ -1449,10 +1449,10 @@ class HouseFeatureAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
 
 
-class HouseClaimAspectInline(admin.TabularInline):
+class HouseClaimFacetInline(admin.TabularInline):
     """#2079 — the founder's picks, read-only for the review queue."""
 
-    model = HouseClaimAspect
+    model = HouseClaimFacet
     formset = OneRowPerFormSet
     extra = 0
     readonly_fields = ("definition", "option")
@@ -1560,7 +1560,7 @@ class HouseClaimAdmin(admin.ModelAdmin):
     )
     actions = ("approve_claims", "reject_claims")
     inlines = (
-        HouseClaimAspectInline,
+        HouseClaimFacetInline,
         HouseClaimKinInline,
         HouseClaimLandInline,
         HouseClaimObservanceInline,

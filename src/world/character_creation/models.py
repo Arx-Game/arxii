@@ -1113,7 +1113,7 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     """One authored answer on a pick-list prompt, with its price (#3617).
 
     Price on the claim path is ``cg_point_cost + cost_per_influence * family.influence``;
-    on the name and none paths influence is 0. Mirrors ``HouseAspectOption``.
+    on the name and none paths influence is 0. Mirrors ``HouseCharterOption``.
     """
 
     slot = models.ForeignKey(OriginTemplateSlot, on_delete=models.CASCADE, related_name="choices")

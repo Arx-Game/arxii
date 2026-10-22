@@ -2268,8 +2268,9 @@
   - distinction_grants <- codex.DistinctionCodexGrant
   - tradition_grants <- codex.TraditionCodexGrant
   - organization_grants <- codex.OrganizationCodexGrant
+  - realm_grants <- codex.RealmCodexGrant
   - succession_laws <- societies.SuccessionLaw
-  - house_aspect_options <- societies.HouseAspectOption
+  - house_charter_options <- societies.HouseCharterOption
   - resonances <- magic.Resonance
   - gifts <- magic.Gift
   - techniques <- magic.Technique
@@ -2326,6 +2327,11 @@
 ### PathCodexGrant
 **Foreign Keys:**
   - path -> classes.Path [FK]
+  - entry -> codex.CodexEntry [FK]
+
+### RealmCodexGrant
+**Foreign Keys:**
+  - realm -> realms.Realm [FK]
   - entry -> codex.CodexEntry [FK]
 
 ### TraditionCodexGrant
@@ -3739,7 +3745,7 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
   - distinction -> distinctions.Distinction [FK]
-  - secret -> secrets.Secret [OneToOne] (nullable)
+  - secret -> secrets.Secret [FK] (nullable)
   - from_glimpse -> magic.CharacterAura [FK] (nullable)
   - feature_trait -> forms.FormTrait [FK] (nullable)
   - feature_marking -> forms.FormMarking [FK] (nullable)
@@ -3823,7 +3829,7 @@
 ### Service Functions
 - `approve_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' - Approve a PENDING SheetUpdateRequest: XP debit + change firing.`
 - `cancel_sheet_update_request(request: 'SheetUpdateRequest', account: 'object') -> 'None' - Player-initiated cancellation of their own pending request.`
-- `clear_distinction_secret(character_distinction: 'CharacterDistinction') -> 'None' - Make a relocated distinction public again by deleting its Secret (#1334).`
+- `clear_distinction_secret(character_distinction: 'CharacterDistinction') -> 'None' - Make a relocated distinction public again (#1334).`
 - `compute_distinction_change_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' - Compute the XP cost for a sheet-update request.`
 - `compute_sheet_update_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' - Compute the XP cost for a sheet-update request.`
 - `create_sheet_update_request(character_sheet: 'CharacterSheet', request_type: 'str', *, justification: 'str', target_distinction: 'Distinction | None' = None, target_character_distinction: 'CharacterDistinction | None' = None, submitted_by: 'object | None' = None, origin: 'str' = DistinctionOrigin.UNLOCK_PURCHASE) -> 'SheetUpdateRequest' - Create a PENDING SheetUpdateRequest.`
@@ -3831,6 +3837,7 @@
 - `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '', feature_trait: 'FormTrait | None' = None, feature_marking: 'FormMarking | None' = None) -> 'CharacterDistinction' - Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
 - `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' - Relocate a distinction into a Secret, returning it (#1334).`
 - `remove_distinction(character_distinction: 'CharacterDistinction', *, sheet_update_request: 'SheetUpdateRequest') -> 'None' - Remove a CharacterDistinction, reconciling all dependent systems.`
+- `set_secret_distinctions(secret: 'Secret', chosen: 'Iterable[CharacterDistinction]') -> 'tuple[int, int]' - Link exactly ``chosen`` of the subject's held distinctions to ``secret`` (#4528).`
 
 
 ## world.downtime
@@ -8035,6 +8042,7 @@
   - areas <- areas.Area
   - starting_areas <- character_creation.StartingArea
   - profiles <- character_sheets.Profile
+  - codex_grants <- codex.RealmCodexGrant
   - societies <- societies.Society
   - nobiliary_particles <- societies.NobiliaryParticle
   - recognition_rules <- societies.HouseRecognitionRule
@@ -8845,6 +8853,7 @@
   - opened_speaker_queues <- scenes.SpeakerQueue
   - speaker_queue_entries <- scenes.SpeakerQueueEntry
   - authored_secrets <- secrets.Secret
+  - secrets_about <- secrets.Secret
   - secret_victimhoods <- secrets.SecretVictim
   - constructed_ships <- ships.ShipConstructionDetails
   - mentored_allocations <- skills.TrainingAllocation
@@ -9125,6 +9134,8 @@
   - legend_deed -> societies.LegendEntry [FK] (nullable)
   - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
+  - about_persona -> scenes.Persona [FK] (nullable)
+  - story -> stories.Story [FK] (nullable)
   - subject_item_template -> items.ItemTemplate [FK] (nullable)
   - subject_item_instance -> items.ItemInstance [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
@@ -9134,7 +9145,7 @@
   - enemy_rows <- character_sheets.CharacterEnemy
   - clues <- clues.Clue
   - organization_reputation_events <- societies.OrganizationReputationEvent
-  - distinction <- distinctions.CharacterDistinction
+  - distinctions <- distinctions.CharacterDistinction
   - accusation_crime_claim <- justice.AccusationCrimeClaim
   - nullification <- justice.AccusationNullification
   - nullification_authorship <- justice.AccusationNullification
@@ -9517,22 +9528,22 @@
   - holding -> societies.DomainHolding [FK]
   - material_category -> items.MaterialCategory [FK]
 
-### HouseAspectDefinition
+### HouseCharterOption
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - definition -> societies.HouseCharterQuestion [FK]
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - being -> worship.WorshippedBeing [FK] (nullable)
+  - being_nickname -> worship.BeingNickname [FK] (nullable)
+
+### HouseCharterQuestion
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - templates <- societies.HouseTemplate
-  - options <- societies.HouseAspectOption
-
-### HouseAspectOption
-**Foreign Keys:**
-  - written_by -> contributors.ContentContributor [FK] (nullable)
-  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - definition -> societies.HouseAspectDefinition [FK]
-  - codex_entry -> codex.CodexEntry [FK] (nullable)
-  - being -> worship.WorshippedBeing [FK] (nullable)
-  - being_nickname -> worship.BeingNickname [FK] (nullable)
+  - options <- societies.HouseCharterOption
 
 ### HouseClaim
 **Foreign Keys:**
@@ -9542,16 +9553,16 @@
   - estate_district -> areas.Area [FK] (nullable)
   - reviewed_by -> evennia.AccountDB [FK] (nullable)
 **Pointed to by:**
-  - aspects <- societies.HouseClaimAspect
+  - facets <- societies.HouseClaimFacet
   - kin <- societies.HouseClaimKin
   - lands <- societies.HouseClaimLand
   - observances <- societies.HouseClaimObservance
 
-### HouseClaimAspect
+### HouseClaimFacet
 **Foreign Keys:**
   - claim -> societies.HouseClaim [FK]
-  - definition -> societies.HouseAspectDefinition [FK]
-  - option -> societies.HouseAspectOption [FK]
+  - definition -> societies.HouseCharterQuestion [FK]
+  - option -> societies.HouseCharterOption [FK]
 
 ### HouseClaimKin
 **Foreign Keys:**
@@ -9599,7 +9610,7 @@
   - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
   - served_house_choices -> societies.Organization [M2M]
   - holdings -> societies.HoldingKind [M2M]
-  - aspect_definitions -> societies.HouseAspectDefinition [M2M]
+  - charter_questions -> societies.HouseCharterQuestion [M2M]
   - features -> societies.HouseFeature [M2M]
 **Pointed to by:**
   - upbringings <- character_creation.OriginTemplate
@@ -9814,7 +9825,7 @@
   - pacts_as_senior <- societies.MarriagePact
   - pacts_as_junior <- societies.MarriagePact
   - house_templates <- societies.HouseTemplate
-  - aspects <- societies.OrganizationAspect
+  - facets <- societies.OrganizationFacet
   - features <- societies.OrganizationFeature
   - observances <- societies.OrganizationObservance
   - stature <- societies.HouseStature
@@ -9864,17 +9875,17 @@
   - org_tasks_targeting <- tasking.OrgTask
   - capability_projects <- societies.OrganizationCapabilityProjectDetails
 
-### OrganizationAspect
-**Foreign Keys:**
-  - organization -> societies.Organization [FK]
-  - definition -> societies.HouseAspectDefinition [FK]
-  - option -> societies.HouseAspectOption [FK]
-
 ### OrganizationCapabilityProjectDetails
 **Foreign Keys:**
   - project -> projects.Project [OneToOne]
   - gift -> magic.Gift [FK]
   - organization -> societies.Organization [FK]
+
+### OrganizationFacet
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - definition -> societies.HouseCharterQuestion [FK]
+  - option -> societies.HouseCharterOption [FK]
 
 ### OrganizationFeature
 **Foreign Keys:**
@@ -10597,6 +10608,7 @@
   - narrative_messages <- narrative.NarrativeMessage
   - gemits <- narrative.Gemit
   - muted_by <- narrative.UserStoryMute
+  - anchored_secrets <- secrets.Secret
   - participants <- stories.StoryParticipation
   - chapters <- stories.Chapter
   - feedback <- stories.StoryFeedback
@@ -11156,7 +11168,7 @@
   - being -> worship.WorshippedBeing [FK]
 **Pointed to by:**
   - patron_organizations <- societies.Organization
-  - house_aspect_options <- societies.HouseAspectOption
+  - house_charter_options <- societies.HouseCharterOption
 
 ### BeingRelationship
 **Foreign Keys:**
@@ -11404,7 +11416,7 @@
   - modifier_targets <- mechanics.ModifierTarget
   - ceremonies <- ceremonies.Ceremony
   - sacrifices <- ceremonies.CeremonyOffering
-  - house_aspect_options <- societies.HouseAspectOption
+  - house_charter_options <- societies.HouseCharterOption
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - manifest_options <- magic.TechniqueManifestOption
   - keepsakes <- items.Keepsake

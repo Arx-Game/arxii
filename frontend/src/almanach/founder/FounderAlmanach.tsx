@@ -109,14 +109,14 @@ function estateLineOf(estateName: string, capitalName: string | undefined): stri
   return estateName;
 }
 
-/** The picked template's first aspect definition's chosen option name(s)
+/** The picked template's first charter question's chosen option name(s)
  * (plate F-II's "quiddity" row, plate F-VI's `.row3` "quiddity" field) —
  * `''` before a template/pick exist. */
 function quiddityNameOf(
   template: HouseTemplateOption | undefined,
   picks: Record<number, number[]>
 ): string {
-  const quiddity = template?.aspect_definitions[0];
+  const quiddity = template?.charter_questions[0];
   if (!quiddity) return '';
   const pickedIds = picks[quiddity.id] ?? [];
   return quiddity.options
@@ -263,7 +263,7 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
     fd.template_id != null
       ? title?.templates.find((t) => t.id === fd.template_id)
       : title?.templates[0];
-  const quiddityName = quiddityNameOf(template, fd.aspect_picks);
+  const quiddityName = quiddityNameOf(template, fd.facet_picks);
   const features = (template?.features ?? []).map((feature) => ({
     name: feature.name,
     // `HouseFeature` (`src/generated/api.d.ts`) carries no codex link field

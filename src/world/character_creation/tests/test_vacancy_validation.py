@@ -13,7 +13,7 @@ from world.roster.constants import CRIME_KIND_NAME
 from world.roster.factories import FamilyFactory, FamilyKindFactory, KinSlotPoolFactory
 from world.societies.factories import OrganizationFactory, VacancyFactory
 from world.societies.houses.factories import HouseTemplateFactory
-from world.societies.houses.models import HouseAspectDefinition, HouseAspectOption
+from world.societies.houses.models import HouseCharterOption, HouseCharterQuestion
 
 
 class NamePathTemplateRulesTest(TestCase):
@@ -25,9 +25,9 @@ class NamePathTemplateRulesTest(TestCase):
             name="Household A", realm=realm, name_pattern=r"[A-Z][a-z]+"
         )
         cls.tpl_b = HouseTemplateFactory(name="Household B", realm=realm)
-        cls.charge = HouseAspectDefinition.objects.create(name="Charge", prompt="Kept what?")
-        cls.granaries = HouseAspectOption.objects.create(definition=cls.charge, name="Granaries")
-        cls.tpl_a.aspect_definitions.add(cls.charge)
+        cls.charge = HouseCharterQuestion.objects.create(name="Charge", prompt="Kept what?")
+        cls.granaries = HouseCharterOption.objects.create(definition=cls.charge, name="Granaries")
+        cls.tpl_a.charter_questions.add(cls.charge)
         cls.served = OrganizationFactory(name="House Regency")
         cls.tpl_a.served_house_choices.add(cls.served)
 
@@ -53,7 +53,7 @@ class NamePathTemplateRulesTest(TestCase):
         assert any("does not fit" in e for e in errors)
         assert any("Charge" in e for e in errors)
         draft.draft_data["new_family_name"] = "Wright"
-        draft.draft_data["family_aspect_picks"] = {str(self.charge.id): [self.granaries.id]}
+        draft.draft_data["family_facet_picks"] = {str(self.charge.id): [self.granaries.id]}
         draft.served_house = OrganizationFactory(name="House Elsewhere")
         assert "That house is not one your family could have served" in get_lineage_errors(draft)
         draft.served_house = self.served
@@ -71,21 +71,21 @@ class NamePathTemplateRulesTest(TestCase):
         errors = get_lineage_errors(draft)
         assert "This family template's naming rule is misconfigured; tell staff" in errors
 
-    def test_family_aspect_picks_as_a_string_fails_soft(self):
+    def test_family_facet_picks_as_a_string_fails_soft(self):
         draft = self._draft(
             OriginTemplateFactory(beginning=self.beginning, family_templates=[self.tpl_a]),
-            draft_data={"new_family_name": "Wright", "family_aspect_picks": "garbage"},
+            draft_data={"new_family_name": "Wright", "family_facet_picks": "garbage"},
         )
         assert "Your family's choices could not be read" in get_lineage_errors(draft)
 
-    def test_family_aspect_picks_as_a_list_fails_soft(self):
+    def test_family_facet_picks_as_a_list_fails_soft(self):
         draft = self._draft(
             OriginTemplateFactory(beginning=self.beginning, family_templates=[self.tpl_a]),
-            draft_data={"new_family_name": "Wright", "family_aspect_picks": [1, 2, 3]},
+            draft_data={"new_family_name": "Wright", "family_facet_picks": [1, 2, 3]},
         )
         assert "Your family's choices could not be read" in get_lineage_errors(draft)
 
-    def test_family_aspect_picks_inner_value_as_a_string_fails_soft(self):
+    def test_family_facet_picks_inner_value_as_a_string_fails_soft(self):
         """A dict outer shape with a non-list inner value must not silently pass (#3648 review).
 
         Iterating a string yields its characters, so without an explicit
@@ -96,7 +96,7 @@ class NamePathTemplateRulesTest(TestCase):
             OriginTemplateFactory(beginning=self.beginning, family_templates=[self.tpl_a]),
             draft_data={
                 "new_family_name": "Wright",
-                "family_aspect_picks": {str(self.charge.id): "34"},
+                "family_facet_picks": {str(self.charge.id): "34"},
             },
         )
         assert "Your family's choices could not be read" in get_lineage_errors(draft)

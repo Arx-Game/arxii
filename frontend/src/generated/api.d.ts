@@ -27699,18 +27699,6 @@ export interface components {
       requires_field?: boolean;
     };
     /**
-     * @description One picked aspect (mirrors ``almanach_reads.aspect_facet``): ``being_name``
-     *     is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
-     *     entry it opens.
-     */
-    AlmanachHouseAspect: {
-      definition: string;
-      option: string;
-      description: string;
-      being_name: string;
-      target_entry_id: number | null;
-    };
-    /**
      * @description The document's ``house`` section (mirrors ``_house_payload``) — the
      *     only section given its own nested serializer, per the #3983 Task 5
      *     decision, so the schema documents its keys instead of a bare dict.
@@ -27728,10 +27716,22 @@ export interface components {
       particle_example: string;
       default_succession_law: components['schemas']['AlmanachSuccessionLaw'] | null;
       patron: components['schemas']['AlmanachHousePatron'] | null;
-      aspects: components['schemas']['AlmanachHouseAspect'][];
+      facets: components['schemas']['AlmanachHouseFacet'][];
       features: components['schemas']['AlmanachHouseFeature'][];
       offices: components['schemas']['AlmanachHouseOffice'][];
       observances: components['schemas']['AlmanachHouseObservance'][];
+    };
+    /**
+     * @description One picked facet (mirrors ``almanach_reads.facet_payload``): ``being_name``
+     *     is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
+     *     entry it opens.
+     */
+    AlmanachHouseFacet: {
+      definition: string;
+      option: string;
+      description: string;
+      being_name: string;
+      target_entry_id: number | null;
     };
     AlmanachHouseFeature: {
       name: string;
@@ -28158,6 +28158,12 @@ export interface components {
       readonly provenance: components['schemas']['ProvenanceEnum'];
       readonly provenance_display: string;
       readonly is_act_anchored: boolean;
+      /** @description The persona this secret is about when not the subject (#4528); staff-set. */
+      about_persona?: number | null;
+      readonly about_persona_name: string;
+      /** @description The story this secret belongs to, if any (#4528); staff-set. */
+      story?: number | null;
+      readonly story_title: string;
       /** Format: date-time */
       readonly created_date: string;
       /** Format: date-time */
@@ -28184,6 +28190,10 @@ export interface components {
       consequences?: string;
       /** @description Whether the subject starts knowing this secret about themselves. False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten hasn't discovered): excluded from the subject's own-secrets shelf until a SecretKnowledge row grants it. */
       subject_aware?: boolean;
+      /** @description The persona this secret is about when not the subject (#4528); staff-set. */
+      about_persona?: number | null;
+      /** @description The story this secret belongs to, if any (#4528); staff-set. */
+      story?: number | null;
     };
     /** @description Read-only serializer for AvailableEnhancement (technique enhancement option). */
     AvailableEnhancement: {
@@ -33713,7 +33723,7 @@ export interface components {
       readonly born_particle: string;
       /** @description Particle a married/adopted/legitimized member wears; '' when none. */
       readonly taken_in_particle: string;
-      /** @description Aspects/features/liege a house materialized on this family carries (#3648). */
+      /** @description Facets/features/liege a house materialized on this family carries (#3648). */
       readonly inherited: {
         [key: string]: unknown;
       };
@@ -35404,28 +35414,6 @@ export interface components {
      * @enum {string}
      */
     HorizonEnum: 'short_term' | 'long_term';
-    /** @description A required catalog choice on a template, with its active options (#2079). */
-    HouseAspectDefinition: {
-      readonly id: number;
-      name: string;
-      /** @description Player-facing question the founder answers by picking options. */
-      prompt: string;
-      min_picks?: number;
-      max_picks?: number;
-      readonly options: components['schemas']['HouseAspectOption'][];
-    };
-    /**
-     * @description One picked identity facet on the house block (#2079; mirrors
-     *     ``almanach_reads.aspect_facet``). ``being_name`` is the god or totem the answer
-     *     is (#4205), ``target_entry_id`` the one Codex entry it opens.
-     */
-    HouseAspectFacet: {
-      definition: string;
-      option: string;
-      description: string;
-      being_name: string;
-      target_entry_id: number | null;
-    };
     /**
      * @description One authored answer in an aspect catalog (#2079).
      *
@@ -35435,7 +35423,7 @@ export interface components {
      *     ``target_entry_id`` is the one entry the card opens: the option's own, else
      *     the being's page.
      */
-    HouseAspectOption: {
+    HouseCharterOption: {
       readonly id: number;
       name: string;
       /** @description Player-facing blurb shown on the option card. */
@@ -35445,6 +35433,16 @@ export interface components {
       /** @default  */
       readonly being_name: string;
       readonly target_entry_id: number | null;
+    };
+    /** @description A required catalog choice on a template, with its active options (#2079). */
+    HouseCharterQuestion: {
+      readonly id: number;
+      name: string;
+      /** @description Player-facing question the founder answers by picking options. */
+      prompt: string;
+      min_picks?: number;
+      max_picks?: number;
+      readonly options: components['schemas']['HouseCharterOption'][];
     };
     /** @description One founder-written kin row, as CG echoes it back (#3983 Plan B). */
     HouseClaimKin: {
@@ -35488,7 +35486,7 @@ export interface components {
       colors?: string;
       /** @description The sigil, described (#2079). */
       sigil_description?: string;
-      readonly aspects: {
+      readonly facets: {
         [key: string]: unknown;
       }[];
       readonly kin: components['schemas']['HouseClaimKin'][];
@@ -35537,7 +35535,7 @@ export interface components {
       colors: string;
       /** @default  */
       sigil_description: string;
-      aspects?: components['schemas']['ClaimAspectPickRequest'][];
+      facets?: components['schemas']['ClaimAspectPickRequest'][];
       /** @default 0 */
       mercy: number;
       /** @default 0 */
@@ -35593,7 +35591,7 @@ export interface components {
       titles: components['schemas']['HouseTitle'][];
       domains: components['schemas']['HouseDomain'][];
       patron: components['schemas']['HousePatron'] | null;
-      aspects: components['schemas']['HouseAspectFacet'][];
+      facets: components['schemas']['HouseFacet'][];
       features: components['schemas']['HouseFeatureFacet'][];
       open_crises: components['schemas']['HouseCrisis'][];
       stature: components['schemas']['HouseStature'] | null;
@@ -35646,6 +35644,18 @@ export interface components {
       /** @description 0-100 PLACEHOLDER. */
       unrest?: number;
       readonly holding_names: string[];
+    };
+    /**
+     * @description One picked identity facet on the house block (#2079; mirrors
+     *     ``almanach_reads.facet_payload``). ``being_name`` is the god or totem the answer
+     *     is (#4205), ``target_entry_id`` the one Codex entry it opens.
+     */
+    HouseFacet: {
+      definition: string;
+      option: string;
+      description: string;
+      being_name: string;
+      target_entry_id: number | null;
     };
     /** @description A cultural fact houses of a template carry (#2079). */
     HouseFeature: {
@@ -35733,7 +35743,7 @@ export interface components {
       allegiance_max?: number;
       power_min?: number;
       power_max?: number;
-      readonly aspect_definitions: components['schemas']['HouseAspectDefinition'][];
+      readonly charter_questions: components['schemas']['HouseCharterQuestion'][];
       readonly features: components['schemas']['HouseFeature'][];
       readonly holdings: components['schemas']['HoldingKindOption'][];
       readonly default_succession_law: components['schemas']['SuccessionLawOption'] | null;
@@ -44063,6 +44073,10 @@ export interface components {
       consequences?: string;
       /** @description Whether the subject starts knowing this secret about themselves. False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten hasn't discovered): excluded from the subject's own-secrets shelf until a SecretKnowledge row grants it. */
       subject_aware?: boolean;
+      /** @description The persona this secret is about when not the subject (#4528); staff-set. */
+      about_persona?: number | null;
+      /** @description The story this secret belongs to, if any (#4528); staff-set. */
+      story?: number | null;
     };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     PatchedBeatRequest: {

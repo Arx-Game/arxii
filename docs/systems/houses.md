@@ -199,8 +199,8 @@ character has always been its representative. Founding a brand-new house in
 play (ennoblement, new lands) is a separate future loop.
 
 `SuccessionLaw`, `HoldingKind`, `HouseTemplate` and `HouseFeature` all joined
-`CONTENT_MODELS` in #2875 (same shape as `HouseAspectDefinition`/
-`HouseAspectOption` below). `world/seeds/houses.py`'s `seed_houses_demo()` and
+`CONTENT_MODELS` in #2875 (same shape as `HouseCharterQuestion`/
+`HouseCharterOption` below). `world/seeds/houses.py`'s `seed_houses_demo()` and
 `_seed_house_creator()` look all four up via `authored_or_sample()` rather
 than inventing them with `get_or_create()` (#2875 Task 2), mirroring the
 #2868 aspect-catalog migration referenced above: a real content universe's
@@ -241,9 +241,9 @@ describes.
   Area) + the house channel. Approval alone creates nothing — an abandoned
   application leaves no ghost house.
 - **`build_family_org` is the shared builder (#3648).** `materialize_house_claim`
-  no longer assembles Family + org + rank ladder + aspects + features + fealty
+  no longer assembles Family + org + rank ladder + facets + features + fealty
   itself; it calls `world.societies.houses.creator.build_family_org(template, name,
-  *, description, aspect_picks, served_house, created_by, origin_realm, influence)`
+  *, description, facet_picks, served_house, created_by, origin_realm, influence)`
   for that package, then does what only the title path needs: seat the title
   (FOUNDING membership), reassign the seat domain and materialize the holdings
   package, and sync the house channel. The CG name path (below, and
@@ -268,8 +268,8 @@ generalized past nobles) plus the four catalogs it draws on.
   template needs one), its `holdings` (a set of `HoldingKind` rows materialized on
   the seat domain at founding, title path only), its `features` (a set of
   `HouseFeature` rows stamping structural cultural facts on every house of this
-  template, no player input), and its `aspect_definitions` (a set of
-  `HouseAspectDefinition` rows, each with its own `HouseAspectOption` catalog,
+  template, no player input), and its `charter_questions` (a set of
+  `HouseCharterQuestion` rows, each with its own `HouseCharterOption` catalog,
   the required choices a founder answers at CG).
 - **`org_type`** (FK `OrganizationType`, required, #3648): the organization type a
   family of this template gets. Exports by the type's natural key and resolves on
@@ -305,7 +305,7 @@ generalized past nobles) plus the four catalogs it draws on.
   finalization's `materialize_house_claim` reads the approved `HouseClaim`'s
   template and stamps a one-time copy into play state: a `Family`, an
   `Organization` sworn to the template's `liege`, `OrganizationFeature` rows
-  for each template feature, `OrganizationAspect` rows for the founder's
+  for each template feature, `OrganizationFacet` rows for the founder's
   picks, and the template's `holdings` package materialized on the title's
   seat `Domain`. Editing the `HouseTemplate` after a house has founded off it
   never changes that house; it only changes what the next founder sees.
@@ -325,20 +325,20 @@ generalized past nobles) plus the four catalogs it draws on.
   and can be credited) but is **not** in `CONTENT_MODELS` and never reaches the
   corpus export, the same installation-state reasoning as `served_house_choices`.
 
-## Regional flavor: aspects + features (#2079)
+## Regional flavor: charter questions (facets) + features (#2079; renamed from "aspects" by #4532, ADR-4532-A)
 
 Two deliberately distinct concepts give each realm's (and each noble-type's)
 houses a unique creation experience (ADR-0101). Staff authoring a culture-specific
 family fact off the CG claim path (a quiddity, a Letter of Marque) follows the same
 two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
 
-- **Aspect** — a required, normalized CHOICE. `HouseAspectDefinition` (name,
+- **Charter question** (was "aspect") — a required, normalized CHOICE; a house's picked answer is its **facet**. `HouseCharterQuestion` (name,
   player-facing prompt, `min_picks`/`max_picks`) attaches to templates via
-  `HouseTemplate.aspect_definitions` (M2M — both Inferna templates can share
+  `HouseTemplate.charter_questions` (M2M — both Inferna templates can share
   "House Vice" while only the Cinderi template carries a diaspora choice);
-  `HouseAspectOption` rows are its catalog. **Catalog-only by
-  design** — no free-text answer path (ADR-0101). `HouseClaimAspect` records
-  the founder's picks; `_validate_aspect_picks` refuses submission unless
+  `HouseCharterOption` rows are its catalog. **Catalog-only by
+  design** — no free-text answer path (ADR-0101). `HouseClaimFacet` records
+  the founder's picks; `_validate_facet_picks` refuses submission unless
   every attached definition is answered within [min, max] with active options
   of that definition.
   - **The catalog is lore-repo content (#2868).** Both models carry
@@ -347,16 +347,16 @@ two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
     the content repo and imported — the seeder may no longer invent them
     (`_seed_house_creator` uses `authored_or_sample`, #2698/ADR-0168). Its
     `PLACEHOLDER` catalog only appears under `ARXII_SEED_SAMPLE_CONTENT`.
-  - **`HouseAspectOption.codex_entry` (#2868)** binds an option to the
+  - **`HouseCharterOption.codex_entry` (#2868)** binds an option to the
     `CodexEntry` carrying its write-up — Inferna's seven House Quiddities each
     have one. Same shape as `Species.codex_entry` (PROTECT, nullable); exposed
-    to CG as `codex_entry_id` on `HouseAspectOptionSerializer` so the option
+    to CG as `codex_entry_id` on `HouseCharterOptionSerializer` so the option
     card can link its lore. This is a *property of the catalog row*, NOT a
     grant: picking a Quiddity does not award the entry to a character, which is
-    what the `*CodexGrant` models do. `HouseAspectDefinition` has no such FK —
+    what the `*CodexGrant` models do. `HouseCharterQuestion` has no such FK —
     the definition is the question the founder answers, not a lore subject.
   - **An option is a typed thing (#4205, ADR-4205).** Beside `codex_entry` (the
-    lore target: a founding battle, a tradition), `HouseAspectOption.being`
+    lore target: a founding battle, a tradition), `HouseCharterOption.being`
     (`WorshippedBeing`, PROTECT) says the option IS a god or a totem, and
     `being_nickname` (`BeingNickname`, PROTECT, one of that being's own) is the
     name a house on this option calls it by. `clean()` refuses a nickname of
@@ -366,21 +366,21 @@ two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
     nicknames are installation rows, so both FKs leave the content export
     (`EXPORT_FIELD_EXCLUSIONS`, the `served_house_choices` precedent) and are
     re-bound in admin elsewhere.
-  - **The patron question (#4205).** `HouseAspectDefinition.sets_patron` marks
+  - **The patron question (#4205).** `HouseCharterQuestion.sets_patron` marks
     the one question per charter (`HouseTemplate.clean()` refuses two) whose
     pick names the house's patron: `build_family_org` writes
-    `Organization.patron_nickname` from it (`_stamp_aspects` /
+    `Organization.patron_nickname` from it (`_stamp_facets` /
     `patron_option_from_picks`), on the title path and the name path alike, in
-    the same transaction as the `OrganizationAspect` rows. Fixed at founding;
+    the same transaction as the `OrganizationFacet` rows. Fixed at founding;
     staff change it in the org admin; nothing else writes the column. Whether
     the question is required is the definition's own `min_picks`.
   - **Reads.** Every house surface emits a pick through one reader,
-    `almanach_reads.aspect_facet` (`definition`, `option`, `description`,
+    `almanach_reads.facet_payload` (`definition`, `option`, `description`,
     `being_name`, `target_entry_id`): the org payload's house block, the
     Almanach document, the family read and `family_views`' inherited facts;
     the house block and the document also carry `patron`
     (`almanach_reads.patron_payload`: `nickname`, `being_name`,
-    `codex_entry_id`). `HouseAspectOptionSerializer` (CG) adds `being_id`,
+    `codex_entry_id`). `HouseCharterOptionSerializer` (CG) adds `being_id`,
     `being_name`, `target_entry_id`, and the option cards link the target. The
     deity's Codex companion (`worship/companion.py`) lists its **Sworn houses**:
     published organisations whose `patron_nickname.being` is that god, each a
@@ -392,8 +392,8 @@ two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
   anchor future systems key off (`org.features` has slug `black-ledger` — data
   row + slug, never a bespoke code path). **Authored content (#2875):**
   carries `NaturalKeyMixin` (`name`) + `CreditedContent` and is registered in
-  `CONTENT_MODELS`, the same shape as `HouseAspectDefinition`/
-  `HouseAspectOption` below.
+  `CONTENT_MODELS`, the same shape as `HouseCharterQuestion`/
+  `HouseCharterOption` below.
 - **Shared stylings** — `Organization.words/colors/sigil_description`
   (org-level: gangs and guilds get them free), collected as required claim
   inputs. Land writing is a separate, structured surface: see "Founder
@@ -416,17 +416,17 @@ two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
   (`"Masquing 18 (10/18)"`, the `when` key beside the raw month and day). No
   mechanic rides on the day; the calendar and tidings may read it later the way
   they read birthdays and feast days.
-- **Materialization** — claim picks become `OrganizationAspect` rows and
+- **Materialization** — claim picks become `OrganizationFacet` rows and
   template features stamp `OrganizationFeature` rows (both also directly
   authorable for staff-seeded houses); stylings copy onto the org.
 - **Surfaces:** template payloads carry the definitions-with-options tree +
   features (CG panel renders option cards + a features orientation panel and
   gates submit on completeness); the org payload carries stylings + house-block
-  `aspects`/`features`; `sheet/house` lists words, colors, facets, features;
+  `facets`/`features`; `sheet/house` lists words, colors, facets, features;
   admin registers definitions (options inline), features, and a read-only
   picks inline on the claim review queue.
 - **Content:** per-region catalogs (deities, vices, virtues, totems, geasa,
-  traditions) arrive from later per-region brainstorms — targets: 2 aspects
+  traditions) arrive from later per-region brainstorms — targets: 2 charter questions
   per region (3 only if genuinely fun), ≥1 advantageous RP-usable feature.
   Seeds ship one PLACEHOLDER exemplar of each on the Arx demo template.
 
@@ -749,7 +749,7 @@ itself.
   defaults BEFORE any claim exists, read straight off the realm's tier-less fallback
   `HouseTemplate` (or its first by name): `succession_law` (`{name, codex_entry_id}`),
   `particle` (the realm's blank-floor Noble particle, `{born, taken_in}`), `quiddity_prompt` (the
-  template's first aspect definition's prompt), and `capital_name` (`Area.objects.filter(realm=
+  template's first charter question's prompt), and `capital_name` (`Area.objects.filter(realm=
   realm, is_capital=True).first()`, `""` when the realm has none yet — the founder Estate leaf
   reads this to show where an estate will sit before the founder writes anything).
 - **The nested submit payload** — `POST /api/character-creation/drafts/{id}/house-claim/`
@@ -764,7 +764,7 @@ itself.
     "words": "...",
     "colors": "...",
     "sigil_description": "...",
-    "aspects": [{"definition": 3, "options": [11]}],
+    "facets": [{"definition": 3, "options": [11]}],
     "mercy": 2, "method": 0, "status": -1, "change": 0, "allegiance": 1, "power": 0,
     "founder_relation": "head",
     "founder_is_heir": false,
@@ -800,7 +800,7 @@ itself.
   | `Title.holder` | the placed head-of-house node |
   | `Area` (+ `LocationOwnership`) for an optional estate | `plan_estate`, under the draft's (or sheet's) realm capital |
   | House channel audience | `sync_house_channel` |
-- **Admin review** (`HouseClaimAdmin`, `world/societies/admin.py`) — `HouseClaimAspectInline`/
+- **Admin review** (`HouseClaimAdmin`, `world/societies/admin.py`) — `HouseClaimFacetInline`/
   `HouseClaimKinInline`/`HouseClaimLandInline` render the founder's whole write-up read-only on the
   review queue (`can_delete=False`, no add permission); `approve_claims`/`reject_claims` actions run
   `approve_house_claim`/`reject_house_claim`. Approval is the human greenlight only — materialization
@@ -816,7 +816,7 @@ Ten REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
 `StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`),
 `AlmanachBatchUnclaimedAction` (`almanach_batch_unclaimed`), `AlmanachNameRungAction`
 (`almanach_name_rung`), `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
-state, succession law default, and a wholesale `OrganizationAspect`/`OrganizationFeature`/
+state, succession law default, and a wholesale `OrganizationFacet`/`OrganizationFeature`/
 `OrganizationObservance` replace; an `observances` row is `{ic_month, ic_day, name, lore}`,
 #4206), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneAction`
 (`almanach_describe_demesne`), `AlmanachAddHoldingAction` (`almanach_add_holding`),

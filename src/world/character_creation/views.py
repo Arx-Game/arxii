@@ -717,7 +717,7 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
                 # PREFETCH_STRING (see roster/services/kinship.py:913): plain-string
                 # prefetch, no ``to_attr`` - the nested serializer reads
                 # ``obj.family_templates.all()`` straight off the prefetch cache.
-                "family_templates__aspect_definitions__options",  # noqa: PREFETCH_STRING
+                "family_templates__charter_questions__options",  # noqa: PREFETCH_STRING
                 "family_templates__features",  # noqa: PREFETCH_STRING
                 "family_templates__served_house_choices",  # noqa: PREFETCH_STRING
                 # The founder's template option (#3983) also renders what the

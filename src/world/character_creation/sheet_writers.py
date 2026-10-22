@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from world.classes.models import Path
     from world.distinctions.models import Distinction
     from world.forms.models import FormTrait, FormTraitOption
+    from world.realms.models import Realm
     from world.roster.models import RosterEntry
     from world.scenes.models import Persona
     from world.skills.models import Skill, Specialization
@@ -332,6 +333,18 @@ def grant_beginnings_codex(sheet: CharacterSheet, beginnings: Beginnings) -> Non
         BeginningsCodexGrant.objects.filter(beginnings=beginnings).values_list(
             "entry_id", flat=True
         ),
+    )
+
+
+def grant_realm_codex(sheet: CharacterSheet, realm: Realm | None) -> None:
+    """The codex entries public within the realm the character began in (#4531)."""
+    from world.codex.models import RealmCodexGrant  # noqa: PLC0415
+
+    if realm is None:
+        return
+    grant_codex_entries(
+        sheet,
+        RealmCodexGrant.objects.filter(realm=realm).values_list("entry_id", flat=True),
     )
 
 

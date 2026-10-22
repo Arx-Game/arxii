@@ -38,7 +38,7 @@ class FamilySerializer(serializers.ModelSerializer):
         help_text="Particle a married/adopted/legitimized member wears; '' when none."
     )
     inherited = serializers.SerializerMethodField(
-        help_text="Aspects/features/liege a house materialized on this family carries (#3648)."
+        help_text="Facets/features/liege a house materialized on this family carries (#3648)."
     )
 
     class Meta:
@@ -98,21 +98,21 @@ class FamilySerializer(serializers.ModelSerializer):
         """
         grouping = self.context.get("inherited_by_family")
         if grouping is not None:
-            return grouping.get(obj.id, {"aspects": [], "features": [], "liege_name": ""})
-        from world.societies.houses.almanach_reads import aspect_facet  # noqa: PLC0415
+            return grouping.get(obj.id, {"facets": [], "features": [], "liege_name": ""})
+        from world.societies.houses.almanach_reads import facet_payload  # noqa: PLC0415
         from world.societies.houses.services import house_for_family  # noqa: PLC0415
 
         org = house_for_family(obj)
         if org is None:
-            return {"aspects": [], "features": [], "liege_name": ""}
+            return {"facets": [], "features": [], "liege_name": ""}
         try:
             liege = org.fealty
         except ObjectDoesNotExist:
             liege = None
         return {
-            "aspects": [
-                aspect_facet(facet)
-                for facet in org.aspects.select_related("definition", "option", "option__being")
+            "facets": [
+                facet_payload(facet)
+                for facet in org.facets.select_related("definition", "option", "option__being")
             ],
             "features": [
                 {

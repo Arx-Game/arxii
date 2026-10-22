@@ -464,7 +464,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (#2410) on every CG catalog card. Read service (`world/magic/services/cg_catalog.py`):
     `get_gift_options(tradition, path) -> list[Gift]` /
     `get_technique_options(path, gift, tradition) -> TechniqueOptions` (callers pass
-    `draft.selected_tradition` / `draft.selected_path`). The rankable
+    `draft.selected_tradition` / `draft.selected_path`); both filter pools through
+    `cg_technique_queryset(*, include_unready, exclude_gated) -> QuerySet[Technique]`,
+    and `cg_takeable_techniques()` is the picker's rule the Required content dashboard
+    also reads (#4545). The rankable
     **Tradition Training** distinction (`ModifierTarget` "Starting Technique Picks")
     adds +1 CG technique pick per rank above the Unbound baseline of 1, read via
     `CharacterDraft._get_distinction_bonus`. `Organization.tradition` (nullable FK →
@@ -1868,13 +1871,13 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 (`family` FK → `roster.Family`) on the kinship graph (#2062, ADR-0098).
 
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `LandShape`, `Domain`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law` / `Organization.house_state` / `Organization.published_at`
-- **Aspects point at real things (#4205, ADR-4205):** `HouseAspectOption.being` /
+- **Charter options point at real things (#4205, ADR-4205; "aspects" until #4532):** `HouseCharterOption.being` /
   `being_nickname` (PROTECT, nullable) say an authored answer IS a god or a totem and
   what a house calls it; `codex_entry` stays the lore target; `target_entry_id` is the
-  one entry a pick opens. `HouseAspectDefinition.sets_patron` marks the one question per
+  one entry a pick opens. `HouseCharterQuestion.sets_patron` marks the one question per
   charter whose pick writes `Organization.patron_nickname` at founding
-  (`creator._stamp_aspects`). Every house read goes through
-  `almanach_reads.aspect_facet` / `patron_payload`; the deity's Codex companion lists
+  (`creator._stamp_facets`). Every house read goes through
+  `almanach_reads.facet_payload` / `patron_payload`; the deity's Codex companion lists
   its sworn houses. Member effects (quiddity, totem bonuses) are a later issue.
 - **Developments (#4060 slice 2, ADR-0320):** a `DomainHolding` is the physical
   income-generating thing a family possesses: `HoldingKind.site_kind`
@@ -1943,7 +1946,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **DRF:** `OrganizationSerializer.house` block + `/api/societies/organizations/{id}/feed/`
 - **Web:** `/orgs/:id` house section + House Tidings; **Telnet:** `sheet/house`
 - **House creator (Phase D, CG-only):** `HouseTemplate` + `HouseClaim`; gates in `houses/creator.py` (`submit_house_claim`, `approve_house_claim`, `materialize_house_claim` at CG finalization, now built on the shared `build_family_org`); admin review; `/api/character-creation/house-titles/` + draft `house-claim` action
-- **The charter catalog is lore-repo content (#2875):** `SuccessionLaw`, `HoldingKind`, `HouseTemplate` and `HouseFeature` all carry `NaturalKeyMixin` (`name`) + `CreditedContent` and sit in `CONTENT_MODELS`, the same shape #2868 already gave `HouseAspectDefinition`/`HouseAspectOption` below. `world/seeds/houses.py` looks all four up via `authored_or_sample()` (#2875 Task 2) rather than inventing them with `get_or_create()`; the Crown organization and its Society (plain seeder-owned config, not `CONTENT_MODELS`) moved to `world.seeds.config_prerequisites._house_charter_anchors`, run before the content load so a content-repo row can FK them by name (ADR-0171). `SuccessionLaw` also carries a `description` field now (the writer's field, how the law shapes inheritance), and all four models have a registered `ModelAdmin` so the Workbench change link and backlog queue reach them. Authoring guide (what a charter holds, the Workbench/admin authoring path per ADR-0238, the liege/society code prerequisites, and what founding copies): "Authoring a realm's charter" in [houses.md](houses.md).
+- **The charter catalog is lore-repo content (#2875):** `SuccessionLaw`, `HoldingKind`, `HouseTemplate` and `HouseFeature` all carry `NaturalKeyMixin` (`name`) + `CreditedContent` and sit in `CONTENT_MODELS`, the same shape #2868 already gave `HouseCharterQuestion`/`HouseCharterOption` below. `world/seeds/houses.py` looks all four up via `authored_or_sample()` (#2875 Task 2) rather than inventing them with `get_or_create()`; the Crown organization and its Society (plain seeder-owned config, not `CONTENT_MODELS`) moved to `world.seeds.config_prerequisites._house_charter_anchors`, run before the content load so a content-repo row can FK them by name (ADR-0171). `SuccessionLaw` also carries a `description` field now (the writer's field, how the law shapes inheritance), and all four models have a registered `ModelAdmin` so the Workbench change link and backlog queue reach them. Authoring guide (what a charter holds, the Workbench/admin authoring path per ADR-0238, the liege/society code prerequisites, and what founding copies): "Authoring a realm's charter" in [houses.md](houses.md).
 - **`HouseTemplate` generalized past nobles (#3648, ADR-0273):** verbose name "Family
   Template". `liege`/`default_succession_law` are now nullable (only a title-path
   template needs them) and `org_type` (FK `OrganizationType`, required) and
@@ -1951,7 +1954,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   `EXPORT_FIELD_EXCLUSIONS["societies.housetemplate"]`) are new. The Caretaker/crime
   family/crew cases in [family-authoring-recipes.md](family-authoring-recipes.md)
   use the same model as a noble charter.
-- **Regional flavor (#2079):** `HouseAspectDefinition`/`HouseAspectOption` (required catalog-only choices per template, ADR-0101), `HouseFeature` (slug-anchored cultural facts), `HouseClaimAspect` picks → `OrganizationAspect`/`OrganizationFeature` facets at materialization; `Organization.words/colors/sigil_description` stylings (all org types); `Domain.description` lands writeup. **The aspect catalog is lore-repo content (#2868)** — both aspect models carry `NaturalKeyMixin` and sit in `CONTENT_MODELS`; `HouseAspectOption.codex_entry` binds an option to its lore write-up (Inferna's House Quiddities), surfaced to CG as `codex_entry_id`
+- **Regional flavor (#2079):** `HouseCharterQuestion`/`HouseCharterOption` (required catalog-only choices per template, ADR-0101), `HouseFeature` (slug-anchored cultural facts), `HouseClaimFacet` picks → `OrganizationFacet`/`OrganizationFeature` facets at materialization; `Organization.words/colors/sigil_description` stylings (all org types); `Domain.description` lands writeup. **The aspect catalog is lore-repo content (#2868)** — both aspect models carry `NaturalKeyMixin` and sit in `CONTENT_MODELS`; `HouseCharterOption.codex_entry` binds an option to its lore write-up (Inferna's House Quiddities), surfaced to CG as `codex_entry_id`
 - **House Stature (#3091, ADR-0209/0210):** perceived-vs-true deterrence for landed orgs. Models: `StatureBand` (authored percentile tiers; `threat_multiplier` scales ambient predation; headline templates), `HouseStature` (components renown/military/economic/allied, `crisis_penalty`, true/perceived totals, band + trend, `prestige_rank`, stored realm rank), `StatureShift` (why-it-moved ledger → tidings), `PrestigeRankBand` (rank-relative benefits → prosperity drift), `OrgPrestigeRank` (unlanded orgs). Services in `stature_services.py`: `recompute_stature` (renown channels: members, head's COURT covenant, kin via `Kinsperson.gifted_rating`, union partners — marriage both-ways full, consorts half/senior-only/landed-title-gated/capped, paramours zero), `converge_perceived`, `apply_death_shock` (vitals seam), `apply_pact_shift`, `crisis_stature_shift` (covert threats hit perceived only after surfacing), `apply_whisper`, `assign_bands`/`assign_realm_ranks`/`recompute_org_prestige_ranks`, `apply_prestige_prosperity_drift` (zero-open-threats gate; ~3x income ceiling via prosperity clamp), `weekly_stature_tick` (rollover processor before crisis generation), `gifted_power_rating` (first live `MOST_POWERFUL_GIFTED` rater), `award_marriage_tier_prestige`. Six-step `TitleTier` (empire/kingdom/duchy/march/county/barony). Surfaces: org API `house.stature` panel, `domain stature` telnet, `FeedItemKind.STATURE` tidings, spy `_stature_lines` + `whisper_stature_delta` payout. Seeds: cluster `stature` (bands, rank bands, consort/paramour `UnionKind` rows — Luxen's non-recognition = no row)
 - **Predator ecology (#3093, ADR-0211):** named NPC antagonists in `world/predators/` (thin dedicated models, never Organizations): `PredatorKind` (authored vocabulary), `PredatorBand` (strength/loot/prey/home region + `MenaceStage` ladder: rumors → lawlessness → robbery → raids → terror, ~10 weekly crons rumor→raid, advancing only while unanswered), `MenaceEvent` (tidings source), `AfflictionSign` (the dread week before an outbreak). Services: `weekly_menace_tick` (spawn/stalk/pressure/escalate; prey = weakest-perceived landed org honoring consort regional peace), `strike_band`/`sabotage_band` (counterplay: burn, knockdown, dormancy, disband; wired into `resolve_crisis` for attributed raids), `weekly_affliction_tick` (SIGNS → deterrence-blind outbreak → capped one-hop spread; `DomainCrisisType.ignores_stature`/`affliction_spreads`, `DomainCrisis.aggressor_band`/`spread_count`, `CrisisOrigin.PREDATOR`/`AFFLICTION`). Espionage: `TaskTargetKind.PREDATOR` + `scout_predator`/`sabotage_predator` payouts. `FeedItemKind.MENACE` tidings. Grand displays: `apply_grand_display` (event PROVISION quality → bounded upward perceived-stature bluff, seamed at `complete_event`). **Defenses resist predation (#696 gap 5):** LAWLESSNESS's unrest tick and ROBBERY's skim percentage are each reduced by `houses.services.effective_defenses(domain) // PLACEHOLDER_DEFENSE_STEP`, floored at 0; `_ensure_raid_crisis` targets the prey's lowest-`effective_defenses` domain, not its lowest-prosperity one. Seeds: cluster `predators`. Details: [predators.md](predators.md)
 - **Org pacts & marriage-in-play (#2999, ADR-0212):** `PactKind` lever catalog + `OrgPact` (propose/ratify by leadership; income tithe mints `OrgObligation`; BETRAYAL is a stamped world event with a permanent prestige cost, auto-flagged when offensive spy tasks hit a pact partner), `Betrothal`/`BetrothalTerm` (25% stature preview; breaking costs standing), `solemnize_wedding` via the WEDDING `CeremonyTypeKey` (union + marriage pact + tier prestige in one rite — first in-play `record_union` caller; **a betrothal is optional since #4232/ADR-4232**: a consented wedding with none records the marriage alone through `kinship.record_marriage`; #2358 adds officiant-driven dual consent at ceremony start and `initiate_divorce` — unilateral, `Union.ended_at` + `PactDissolutionReason.DIVORCE`, both spouses' prestige hit, initiator steeper). Stature's allied slot reads ratified OrgPacts at their authored share. **Match dossier**: `dossier_services.build_dossier` + `GET .../organizations/{id}/dossier/` + `/orgs/:id/dossier` — any authenticated player; covert crises enriched only via the viewer org's `CrisisIntel`. Telnet `CmdPact`. Seeds: cluster `pacts`. Union membership reads the m2m through table (idmapper corrupts `prefetch_related` grouping — `_union_membership`)
@@ -2142,7 +2145,7 @@ Lore storage and character knowledge tracking.
   file_entry_under`/`unfile_entry` are the only sanctioned way to add/remove a filing.
   Reach tooling (#3775, ADR-0303): every grant model (`BeginningsCodexGrant`,
   `PathCodexGrant`, `DistinctionCodexGrant`, `TraditionCodexGrant`,
-  `OrganizationCodexGrant`) has `holder_roster_entries()`, and
+  `OrganizationCodexGrant`, `RealmCodexGrant`) has `holder_roster_entries()`, and
   `services.grant_to_current_holders(grant)` hands its entry to everyone already
   holding the group; `species_holder_roster_entries(entry)`/
   `grant_entry_to_species_holders(entry)` are the species-side equivalent.
@@ -2330,6 +2333,7 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
 - **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);
   Secret = self-serve hidden fact about a concrete entity
 - **Source:** `src/world/secrets/`
+- **Links (#4528):** `Secret.about_persona` (who it is about when not the subject) and `Secret.story` (the story anchor), staff-set; `CharacterDistinction.secret` is a plain FK so one secret holds many distinctions, ticked from the Secret admin (`set_secret_distinctions`).
 - **Details:** [secrets.md](secrets.md)
 
 ### Justice (#1765)
@@ -9298,7 +9302,7 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   (through `BeingTarotCard`, #4198: the link row carries `is_reversed`; the auto table adopted in place)
   (#3776 Task 9, blank, no cap, `related_name="represented_beings"`), nullable `codex_entry` FK →
   `codex.CodexEntry` (#3776 Task 11, `PROTECT`, `related_name="worshipped_beings"` — mirrors
-  `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`; visibility reads
+  `Gift.codex_entry`/`Technique.codex_entry`/`HouseCharterOption.codex_entry`; visibility reads
   entirely through the linked entry's `is_public` tier)), `BeingFacet` (favored
   aesthetic Facets, #3776), `BeingNickname` (#3776: alternate names worshippers use, unique per
   being+name; `societies.Organization.patron_nickname` reaches the being transitively through

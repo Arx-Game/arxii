@@ -183,13 +183,13 @@ class DraftUpbringingPatchTest(TestCase):
         res = self.client.patch(self.url, {"selected_origin_template_id": other.id}, format="json")
         assert res.status_code == 400
 
-    def test_patch_refuses_a_malformed_family_aspect_picks(self):
+    def test_patch_refuses_a_malformed_family_facet_picks(self):
         """A garbage payload gets a 400, not a 500 (#3648 review)."""
         res = self.client.patch(
-            self.url, {"draft_data": {"family_aspect_picks": "garbage"}}, format="json"
+            self.url, {"draft_data": {"family_facet_picks": "garbage"}}, format="json"
         )
         assert res.status_code == 400
-        assert "family_aspect_picks" in res.json()["draft_data"]
+        assert "family_facet_picks" in res.json()["draft_data"]
 
     def test_changing_upbringing_clears_downstream_keys(self):
         self.client.patch(

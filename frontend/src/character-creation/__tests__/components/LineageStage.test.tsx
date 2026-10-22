@@ -607,7 +607,7 @@ describe('LineageStage', () => {
   });
 
   describe('Family Template (name path)', () => {
-    it('clicking a Family Template aspect option PATCHes family_aspect_picks', async () => {
+    it('clicking a Family Template aspect option PATCHes family_facet_picks', async () => {
       const draft = createMockDraft({
         ...mockDraftWithHeritageNoUpbringing,
         selected_origin_template: mockUpbringingNamedWithTemplate,
@@ -617,12 +617,12 @@ describe('LineageStage', () => {
         queryClient,
       });
 
-      const charge = mockFamilyTemplate.aspect_definitions[0];
+      const charge = mockFamilyTemplate.charter_questions[0];
       expect(await screen.findByText(charge.prompt)).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: /Granaries/ }));
 
       expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
-        draft_data: { family_aspect_picks: { [charge.id]: [charge.options[0].id] } },
+        draft_data: { family_facet_picks: { [charge.id]: [charge.options[0].id] } },
       });
     });
 

@@ -47,7 +47,11 @@ magic." Each is a filed issue — work these, not micro-hardening tickets.
    reported their missing rows, so staff were told to create a row through a page that did
    not exist; both are now singleton-guarded admin pages. The `path-gift-starter-pools`
    sentinel (ADR-0282) reports each `(path, gift)` pair a tradition makes pickable with no
-   path pool behind it — 8 pairs today. Two stale-cache holes closed alongside: a dispel
+   path pool behind it, 8 pairs at the time. Since #4545 a pool counts only techniques a new
+   character can take (`cg_catalog.cg_takeable_techniques`), and a `cg-gift-pools-takeable`
+   row lists each (tradition, path, gift) combination character creation hides for want of
+   one; the 2026-10-21 production dump had no technique with a cast template, so it hid
+   every gift while the old row read complete. Two stale-cache holes closed alongside: a dispel
    row edited on its own changelist, and a condition delivery-channel edit that changes
    what every technique applying it is worth.
 

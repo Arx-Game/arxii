@@ -464,7 +464,19 @@ when the row is absent.
   `DependencyRow.admin_url` resolves `admin_model`, else the probe's own
   `model_label()`, through `web.admin.authoring.links.admin_changelist_url`, and
   renders no link for a model with no registered `ModelAdmin`. Set `admin_model` on a
-  `CustomProbe` declaration, which names no model itself.
+  `CustomProbe` declaration, which names no model itself. A probe that knows the exact
+  page its gap is fixed on sets `ProbeResult.admin_url` instead, which wins (the Soulfray
+  Stage Builder rows, #4089; the character creation readiness rows link the Technique
+  changelist filtered by `authoring_gap`, or the Path Gift Grant list when a starter-pool
+  gap has nothing authored to wire, #4545).
+- **A readiness probe calls the consumer's own filter, never a copy of it (#4545).** The
+  character creation rows (`path-gift-starter-pools`, `cg-gift-pools-takeable`, and the
+  Tuning row `cg-techniques-cast-effect`) count techniques through
+  `world.magic.services.cg_catalog.cg_takeable_techniques()`, the same queryset the gift
+  list and technique picker filter on. The starter-pool row once counted every starter
+  technique and read complete on a production catalog where no technique had a cast
+  template and character creation offered no gift. Reviewer:
+  `tools/agents/derived-classifier-reviewer.md` (its sentinel section).
 - Four probe shapes, all subclasses of `ContentProbe`: `NamedRowsProbe` (every one
   of a set of names exists on a model, case-sensitive by default - opt into
   `case_insensitive=True` only for a declaration whose consumer itself resolves
@@ -565,6 +577,9 @@ mirrors the gate `game_setup_views.py` and the seed views already use (ADR-0022)
   `metrics.py`'s query helpers.
 - `src/web/admin/tests/test_required_content.py` - the required-content registry
   and collector, both directions (present and missing) per probe shape.
+- `src/web/admin/tests/test_cg_gift_readiness_sentinel.py`,
+  `test_path_gift_pool_sentinel.py` - the character creation readiness rows, driven
+  through the panel and checked against `get_gift_options` combination by combination.
 - `src/web/admin/tests/test_content_load_views.py` — content-load confirm/run flow.
 - `src/world/combat/tests/test_simulation.py` — the simulator's isolation contract
   (nothing persists across a batch) and outcome tallying.

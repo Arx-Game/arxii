@@ -4,6 +4,10 @@
 A hidden fact or relationship about one character (its `subject_sheet`, who is both the subject and sole owner), with a level, an optional category, and consequences. The missing fourth privacy primitive alongside Distinction (permanent trait), Condition (live state), and Resonance — a fact that must be earned and shared rather than a trait or state.
 _Avoid_: private distinction, hidden flag, shared secret (a multi-party situation is two distinct single-owner Secrets).
 
+**Secret links (#4528)**:
+`Secret.about_persona` (who the secret is about when not the subject: the demon behind a voice, a familiar, a person) and `Secret.story` (the story the truth belongs to, the fourth act anchor beside deed, legend and scene; `Story.anchored_secrets`). Staff-set, on `AuthoredSecretSerializer` only, never on the knowledge-scoped shape. The held distinctions a secret holds (`secret.distinctions`, a plain FK since #4528) are ticked from the secret's side on the Secret admin (`set_secret_distinctions`); a ticked one is private, an unticked one public again.
+_Avoid_: a story or persona link on the distinction kind or the held row; "NPC link" as a field name.
+
 **Secret Level (1–4)**:
 An ordinal (`SecretLevel`: Uncommon Knowledge, Whispers, Carefully Kept, Dangerous) giving a secret its narrative weight and default share-scope. The 1–4 value is structural and load-bearing — only Level-1 player-flavor may be free-authored, and the value defaults a victim's reputation hit — while the display names are placeholder.
 _Avoid_: tier, severity, depth.
