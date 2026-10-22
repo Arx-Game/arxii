@@ -603,14 +603,43 @@ class KeepingTheHousehold(HouseCase):
         self.assertEqual(self.grants_for(wren), sorted([LocationRole.GUEST, LocationRole.TENANT]))
 
         # The web names the persona and the rung; the ladder is the same service.
+        # The web names the persona and the rung, and the room by id, as the building
+        # manager's tenant section sends them (frontend/src/buildings/components/TenantSection.tsx).
         told = self.web(
-            self.ysmay, "assign_room_tenant", tenant_persona_id=wren_persona.pk, kind="landlord"
+            self.ysmay,
+            "assign_room_tenant",
+            room_id=self.entry.pk,
+            tenant_persona_id=wren_persona.pk,
+            kind="landlord",
         )
         self.assertEqual(told.detail.message, "Grant a guest key, a tenancy or a trusteeship.")
-        told = self.web(self.ysmay, "assign_room_tenant", tenant_persona_id=999999)
+        told = self.web(
+            self.ysmay, "assign_room_tenant", room_id=self.entry.pk, tenant_persona_id=999999
+        )
         self.assertEqual(told.detail.message, "No such persona.")
-        told = self.web(self.hobb, "assign_room_tenant", tenant_persona_id=wren_persona.pk)
+        told = self.web(
+            self.hobb,
+            "assign_room_tenant",
+            room_id=self.entry.pk,
+            tenant_persona_id=wren_persona.pk,
+        )
         self.assertEqual(told.detail.message, "Wren is now a tenant here.")
+        # A trustee of the hall reaches it by id from the street; a tenant naming the same
+        # id is held to the same ladder.
+        self.hobb.location = self.make_room("The Street")
+        told = self.web(
+            self.hobb,
+            "assign_room_tenant",
+            room_id=self.entry.pk,
+            tenant_persona_id=wren_persona.pk,
+            kind="guest",
+        )
+        self.assertEqual(told.detail.message, "Wren now holds a key here.")
+        told = self.web(
+            wren, "assign_room_tenant", room_id=self.entry.pk, tenant_persona_id=hobb_persona.pk
+        )
+        self.assertEqual(told.detail.message, "You can hand out a key here, but not a tenancy.")
+        self.hobb.location = self.entry
         self.assertEqual(
             LocationTenancy.objects.filter(
                 tenant_persona=wren_persona, kind=LocationRole.TENANT, ends_at__isnull=True
