@@ -19,7 +19,7 @@ pg_dump -U "{{ backups_db_user }}" -h 127.0.0.1 "{{ backups_db }}" | gzip -9 > "
 
 AWS_ACCESS_KEY_ID="${BACKUP_WRITER_ACCESS_KEY}" \
 AWS_SECRET_ACCESS_KEY="${BACKUP_WRITER_SECRET_KEY}" \
-aws --endpoint-url "{{ backups_s3_endpoint }}" --region "{{ backups_region }}" \
+aws --ca-bundle /etc/ssl/certs/ca-certificates.crt --endpoint-url "{{ backups_s3_endpoint }}" --region "{{ backups_region }}" \
     s3 cp "$dump" "s3://{{ backups_bucket }}/db/arxii-${ts}.sql.gz"
 
 # Keep only the newest local copy (the offsite job consumes it). Server-side

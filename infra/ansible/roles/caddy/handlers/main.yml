@@ -1,9 +1,4 @@
 ---
-- name: Reload caddy
-  ansible.builtin.systemd_service:
-    name: caddy
-    state: reloaded
-
 # A Caddyfile change only needs a reload, but a BINARY swap does not take
 # effect until the process is replaced — a reload keeps the old image running,
 # so the newly added DNS-01 plugin would appear absent until something else
@@ -14,3 +9,10 @@
     name: caddy
     state: restarted
     daemon_reload: true
+
+# Handlers execute in definition order. A plugin/binary swap must restart the
+# process before a changed Caddyfile can be reloaded by that process.
+- name: Reload caddy
+  ansible.builtin.systemd_service:
+    name: caddy
+    state: reloaded

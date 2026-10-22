@@ -22,6 +22,11 @@ if [[ -f .devcontainer/dev.env ]]; then
   source .devcontainer/dev.env
   set +a
 fi
+# dev.env is sourced above as well as passed by Compose. Preserve the security
+# guards inside this setup process even if a retained file enables downloads.
+export MISE_AUTO_INSTALL=false
+export MISE_NOT_FOUND_AUTO_INSTALL=false
+export MISE_NOT_FOUND_SYSTEM_FALLBACK=false
 if [[ -n "${GIT_USER_NAME:-}" ]] && [[ -n "${GIT_USER_EMAIL:-}" ]]; then
   git config --global user.name "$GIT_USER_NAME"
   git config --global user.email "$GIT_USER_EMAIL"

@@ -24,6 +24,9 @@ base_packages:
   - git            # used by app_deploy to check out the release
   - python3
 
+# Ubuntu noble USN-8944-1; allow newer vendor updates, including on old hosts.
+base_ca_certificates_min_version: "20260816ubuntu0.24.04.1"
+
 # uv (Astral) is arxii's Python project + venv manager. We install the
 # upstream standalone binary at a pinned version with SHA verification
 # (the apt repos do not yet ship uv). To bump: change both values together;

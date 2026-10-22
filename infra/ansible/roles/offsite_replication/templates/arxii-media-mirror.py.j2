@@ -68,7 +68,7 @@ def list_existing_keys(env: dict[str, str]) -> set[str]:
     continuation_token: str | None = None
     while True:
         cmd = [
-            "aws", "--endpoint-url", R2_ENDPOINT, "s3api", "list-objects-v2",
+            "aws", "--ca-bundle", "/etc/ssl/certs/ca-certificates.crt", "--endpoint-url", R2_ENDPOINT, "s3api", "list-objects-v2",
             "--bucket", R2_BUCKET, "--prefix", MEDIA_PREFIX, "--output", "json",
         ]
         if continuation_token:
@@ -111,7 +111,7 @@ def mirror_one(resource: dict, existing_keys: set[str], env: dict[str, str]) -> 
                 tmp.write(resp.read())
 
         upload = subprocess.run(
-            ["aws", "--endpoint-url", R2_ENDPOINT, "s3", "cp", tmp_path, f"s3://{R2_BUCKET}/{key}"],
+            ["aws", "--ca-bundle", "/etc/ssl/certs/ca-certificates.crt", "--endpoint-url", R2_ENDPOINT, "s3", "cp", tmp_path, f"s3://{R2_BUCKET}/{key}"],
             env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=False,
         )
         if upload.returncode != 0:

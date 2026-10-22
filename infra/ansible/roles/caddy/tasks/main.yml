@@ -206,3 +206,20 @@
     name: caddy
     enabled: true
     state: started
+
+# Repair the plugin binary/configuration and apply the EnvironmentFile before
+# any trust-driven restart. A stock apt upgrade can leave the running old
+# process healthy while its on-disk replacement cannot load the DNS-01 config.
+- name: Apply pending Caddy configuration and binary changes before trust reconciliation
+  ansible.builtin.meta: flush_handlers
+
+# Run every converge: unattended-upgrades may have updated CA trust before apt
+# ran in the base role, leaving that task unchanged and Go's root pool stale.
+- name: Inventory services before reconciling Caddy trust
+  ansible.builtin.service_facts:
+
+- name: Reconcile running Caddy with the current CA bundle
+  ansible.builtin.include_tasks: refresh-caddy-trust.yml
+  when:
+    - "'caddy.service' in ansible_facts.services"
+    - ansible_facts.services['caddy.service'].state == 'running'

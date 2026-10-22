@@ -72,6 +72,7 @@ fail() { printf '[rehearse] REFUSING: %s\n' "$*" >&2; exit 1; }
 command -v jq      >/dev/null 2>&1 || fail "jq not found (required to parse 'tofu output -json')"
 command -v python3 >/dev/null 2>&1 || fail "python3 not found (required to validate the generated group_vars YAML)"
 command -v aws     >/dev/null 2>&1 || fail "aws CLI not found (required to verify the stage backup object)"
+require_patched_system_ca
 
 # Preflight — fail closed BEFORE spinning up a billed stage box.
 : "${STAGE_LINODE_TOKEN:?set STAGE_LINODE_TOKEN (stage-scoped Linode token — NEVER the prod LINODE_TOKEN)}"
@@ -126,7 +127,7 @@ teardown() {
     log "emptying stage bucket s3://${stage_bucket}/ before destroy…"
     AWS_ACCESS_KEY_ID="${stage_bucket_writer_access_key}" \
     AWS_SECRET_ACCESS_KEY="${stage_bucket_writer_secret_key}" \
-    aws --endpoint-url "${stage_bucket_s3_endpoint}" --region "${stage_bucket_region}" \
+    aws --ca-bundle /etc/ssl/certs/ca-certificates.crt --endpoint-url "${stage_bucket_s3_endpoint}" --region "${stage_bucket_region}" \
       s3 rm "s3://${stage_bucket}/" --recursive >/dev/null 2>&1 || true
   fi
 
@@ -384,7 +385,7 @@ log "verifying a backup object landed in the stage bucket (using the stage" \
   "systemd unit exiting 0)…"
 backup_objects="$(AWS_ACCESS_KEY_ID="${stage_bucket_writer_access_key}" \
   AWS_SECRET_ACCESS_KEY="${stage_bucket_writer_secret_key}" \
-  aws --endpoint-url "${stage_bucket_s3_endpoint}" --region "${stage_bucket_region}" \
+  aws --ca-bundle /etc/ssl/certs/ca-certificates.crt --endpoint-url "${stage_bucket_s3_endpoint}" --region "${stage_bucket_region}" \
   s3 ls "s3://${stage_bucket}/db/" | awk '{print $4}')"
 [[ -n "${backup_objects}" ]] \
   || fail "no backup object found in s3://${stage_bucket}/db/ after triggering arxii-backup.service"

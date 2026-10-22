@@ -206,17 +206,46 @@
       Signed-By: /usr/share/keyrings/nodesource.gpg
   register: app_nodesource_sources
 
-# update_cache only fires when the sources file above actually changed (a
-# stale cache would miss a brand-new repo on the run that added it, but an
-# unconditional update_cache: true was paying the full `apt-get update`
-# cost on every single converge forever after, even once nodejs is already
-# installed and the sources file is untouched).
-- name: Install NodeSource Node.js major {{ app_frontend_node_major }}
+- name: Require the Node security minimum to match the selected major
+  ansible.builtin.assert:
+    that:
+      - app_frontend_node_min_version.split('.')[0] == app_frontend_node_major | string
+    quiet: true
+
+# A major-only state: present silently keeps old installations. Refresh the
+# candidate list so a previously provisioned host sees newly published fixes.
+- name: Install patched NodeSource Node.js major {{ app_frontend_node_major }}
   ansible.builtin.apt:
-    name: nodejs
+    name: "nodejs>={{ app_frontend_node_min_version }}"
     state: present
-    update_cache: "{{ app_nodesource_sources is changed }}"
+    update_cache: true
     lock_timeout: 600
+  register: app_node_package
+
+- name: Check the Node runtime used by the build user
+  ansible.builtin.command: node --version
+  become: true
+  become_user: "{{ app_user }}"
+  register: app_node_runtime
+  changed_when: false
+  check_mode: false
+  failed_when: not ansible_check_mode and app_node_runtime.rc != 0
+
+# A higher unsupported major (or a shadowing binary on PATH) can satisfy apt's
+# lower bound. Refuse it rather than silently claiming that it is patched.
+- name: Require the effective Node runtime to be on the configured patched line
+  ansible.builtin.assert:
+    that:
+      - app_node_runtime.stdout is match('^v' ~ app_frontend_node_major ~ '\\.')
+      - app_node_runtime.stdout[1:] is version(app_frontend_node_min_version, '>=')
+    fail_msg: >-
+      The build user resolves Node to {{ app_node_runtime.stdout }}; require
+      major {{ app_frontend_node_major }} at least {{ app_frontend_node_min_version }}.
+      Replace unsupported packages or PATH overrides before retrying deployment.
+    quiet: true
+  # In a dry run apt cannot actually replace the old runtime. Probe it, but
+  # defer the post-upgrade assertion until the package has really changed.
+  when: not ansible_check_mode or not app_node_package.changed
 
 - name: Enable corepack shims (system-wide; bundled with Node.js)
   ansible.builtin.command: corepack enable

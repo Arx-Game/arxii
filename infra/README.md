@@ -276,6 +276,10 @@ updated lockfile to refresh the application venv. Restart the running services
 alone does not refresh the Portal. Development uses the matching mise uv pin;
 the existing CI setup-uv configuration continues to install the latest release.
 Linux system and Node trust-policy assessment is tracked separately in #4506.
+The supported Linux/Node minimums, devcontainer rebuild procedure and
+credential-free validation are documented in
+[outbound TLS trust](../docs/operations/tls-trust.md). Applying the repository
+change does not by itself update running containers or restart clients.
 
 The deploy is idempotent: re-runs are safe and mostly no-ops. Per release,
 after the box itself is provisioned, the app_deploy role runs (in order):
@@ -285,10 +289,10 @@ after the box itself is provisioned, the app_deploy role runs (in order):
 2. **`uv sync --frozen --no-dev`** — rebuild the project venv from the
    locked `uv.lock` (no implicit resolution drift). Idempotent: a no-op
    if nothing changed.
-3. **Frontend build, on-box.** Installs Node.js 20.x (NodeSource, signed apt
-   keyring) and pnpm (corepack) if not already present, then
+3. **Frontend build, on-box.** Installs patched Node.js 22.x (NodeSource, signed apt
+   keyring) and pnpm (corepack), then
    `pnpm install --frozen-lockfile && pnpm build` for the release's frontend
-   bundle. Node/pnpm installation only happens once; the frontend rebuild
+   bundle. Node is upgraded when below the supported minimum; the frontend rebuild
    recurs every release. **The first deploy takes noticeably longer** than
    subsequent ones as a result.
 4. **`python -m django migrate --noinput`** — apply Django/Evennia migrations.

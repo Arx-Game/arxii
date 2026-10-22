@@ -111,6 +111,36 @@
   changed_when: false
   failed_when: false
 
+# Refresh metadata and upgrade an existing CA package BEFORE TLS downloads.
+# state: present without a version constraint would leave old hosts unchanged.
+- name: Require the vendor CA trust fix (USN-8944-1)
+  ansible.builtin.apt:
+    name: "ca-certificates>={{ base_ca_certificates_min_version }}"
+    state: present
+    update_cache: true
+    lock_timeout: 600
+  register: base_ca_package
+
+- name: Read the installed CA package version
+  ansible.builtin.command:
+    argv: [dpkg-query, -W, '-f=${Version}', ca-certificates]
+  register: base_ca_installed
+  changed_when: false
+  check_mode: false
+  failed_when: not ansible_check_mode and base_ca_installed.rc != 0
+
+- name: Verify the installed CA package meets the vendor floor
+  ansible.builtin.command:
+    argv:
+      - dpkg
+      - --compare-versions
+      - "{{ base_ca_installed.stdout }}"
+      - ge
+      - "{{ base_ca_certificates_min_version }}"
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode or not base_ca_package.changed
+
 - name: Install baseline packages
   ansible.builtin.apt:
     name: "{{ base_packages }}"
@@ -197,6 +227,21 @@
       # tree in place; without it the installer refuses when one is present.
       ansible.builtin.command: /tmp/aws/install --update
       changed_when: true
+
+# AWS CLI's private CA bundle is independent of Ubuntu's patched bundle.
+# Install this even when the pinned AWS version is already present. Replace
+# the installer's public symlink, never its real executable or private files.
+- name: Route managed AWS CLI calls through the patched system trust store
+  ansible.builtin.copy:
+    dest: "{{ base_awscli_bin }}"
+    follow: false
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Managed by Ansible (base), issue 4506. AWS's bundled roots are separate.
+      exec /usr/local/aws-cli/v2/current/bin/aws --ca-bundle /etc/ssl/certs/ca-certificates.crt "$@"
 
 - name: Keep the host clock disciplined (TOTP codes fail site-wide past 30s of drift, issue 3591)
   ansible.builtin.systemd:

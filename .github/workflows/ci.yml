@@ -88,9 +88,11 @@ jobs:
           version: 9
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.12
+          node-version: 22.23.4
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Check TLS diagnostic error classification
+        run: node --test scripts/check-tls-trust.test.mjs
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
       - uses: astral-sh/setup-uv@v7
@@ -474,7 +476,7 @@ jobs:
           version: 9
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.12
+          node-version: 22.23.4
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
@@ -581,7 +583,7 @@ jobs:
           version: 9
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.12
+          node-version: 22.23.4
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile

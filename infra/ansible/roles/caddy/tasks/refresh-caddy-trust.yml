@@ -1,0 +1,50 @@
+---
+# Go caches roots for the process lifetime. Record a bundle only after a
+# successful restart; failures must leave the next converge able to retry.
+- name: Fingerprint the current system CA bundle
+  ansible.builtin.stat:
+    path: /etc/ssl/certs/ca-certificates.crt
+    checksum_algorithm: sha256
+  register: caddy_ca_bundle
+
+- name: Require a readable system CA bundle
+  ansible.builtin.assert:
+    that:
+      - caddy_ca_bundle.stat.checksum is defined
+    fail_msg: System CA bundle is missing or unreadable.
+
+- name: Inspect Caddy's last applied CA fingerprint
+  ansible.builtin.stat:
+    path: /var/lib/arxii-ca-trust/caddy.sha256
+  register: caddy_ca_stamp
+
+- name: Read Caddy's last applied CA fingerprint
+  ansible.builtin.slurp:
+    src: /var/lib/arxii-ca-trust/caddy.sha256
+  register: caddy_ca_previous
+  when: caddy_ca_stamp.stat.exists
+
+- name: Apply changed or previously unrecorded CA trust to Caddy
+  when: (caddy_ca_previous.content | default('') | b64decode | trim) != caddy_ca_bundle.stat.checksum
+  block:
+    - name: Restart running Caddy to refresh its Go root pool
+      ansible.builtin.systemd_service:
+        name: caddy
+        state: restarted
+
+    - name: Create the CA trust state directory
+      ansible.builtin.file:
+        path: /var/lib/arxii-ca-trust
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Record the CA bundle applied to Caddy
+      ansible.builtin.copy:
+        dest: /var/lib/arxii-ca-trust/caddy.sha256
+        content: "{{ caddy_ca_bundle.stat.checksum }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+      when: not ansible_check_mode
