@@ -121,9 +121,18 @@ jobs:
 
   caddy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: caddy adapt (render every Caddyfile* Jinja template, plugin build)
+      - name: Refresh system trust before downloading build tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y ca-certificates
+          fail() { echo "$*" >&2; exit 1; }
+          source infra/scripts/lib.sh
+          require_patched_system_ca
+      - name: caddy adapt (render every Caddyfile* Jinja template, pinned builds)
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -139,12 +148,32 @@ jobs:
           # see roles/caddy/tasks/main.yml's caddy_rehearsal_mode branch,
           # which installs the SAME stock/plugin split per file.
           #
-          # Prod Caddy is a custom build WITH caddy-dns/cloudflare; build it
-          # once, use for any file needing it.
-          curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com/caddy-dns/cloudflare" -o /tmp/caddy-plugin
-          chmod +x /tmp/caddy-plugin
-          curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /tmp/caddy-stock
-          chmod +x /tmp/caddy-stock
+          # The public build API can stall for hours. Build pinned upstream
+          # releases here instead; Go verifies module downloads via its checksum
+          # database. These prove template compatibility, not production binary
+          # identity (production retains its apt-selected Caddy core version).
+          # Pin and verify the compiler before executing it, using the digest
+          # published at https://go.dev/dl/?mode=json for this exact archive.
+          curl -fsSL --connect-timeout 10 --max-time 120 --retry 2 \
+            https://go.dev/dl/go1.26.10.linux-amd64.tar.gz -o /tmp/go.tgz
+          echo 'ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5  /tmp/go.tgz' | sha256sum --check --strict
+          mkdir -p /tmp/arxii-go
+          tar -xzf /tmp/go.tgz -C /tmp/arxii-go
+          export GOROOT=/tmp/arxii-go/go
+          export GOBIN=/tmp/arxii-go/bin
+          export PATH="${GOROOT}/bin:$PATH"
+          export GOTOOLCHAIN=local
+          go install github.com/caddyserver/xcaddy/cmd/xcaddy@v0.4.7
+          builder="${GOBIN}/xcaddy"
+          "$builder" build v2.11.7 --with github.com/caddy-dns/cloudflare@v0.2.4 --output /tmp/caddy-plugin
+          "$builder" build v2.11.7 --output /tmp/caddy-stock
+          plugin_modules="$(/tmp/caddy-plugin list-modules)"
+          stock_modules="$(/tmp/caddy-stock list-modules)"
+          grep -Fx 'dns.providers.cloudflare' <<< "$plugin_modules"
+          if grep -Fxq 'dns.providers.cloudflare' <<< "$stock_modules"; then
+            echo "stock validation binary unexpectedly includes the Cloudflare plugin" >&2
+            exit 1
+          fi
 
           for cf in "${cfs[@]}"; do
             echo "== $cf =="
