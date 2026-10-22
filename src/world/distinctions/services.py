@@ -9,6 +9,7 @@ presence is the secret-state — there is no separate flag to keep in sync.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -64,17 +65,49 @@ def mint_distinction_secret(
 
 
 def clear_distinction_secret(character_distinction: CharacterDistinction) -> None:
-    """Make a relocated distinction public again by deleting its Secret (#1334).
+    """Make a relocated distinction public again (#1334).
 
-    Deleting the Secret cascades a ``SET_NULL`` onto the back-reference, so the distinction
-    returns to the public distinctions list. No-op if it has no secret.
+    The distinction returns to the public distinctions list. The Secret goes with it only
+    when nothing else stands on it: since #4528 a secret may hold several distinctions and
+    carry GM truths under it as a hook, and neither is this distinction's to delete. No-op
+    if it has no secret.
     """
     if character_distinction.secret_id is None:
         return
     secret = character_distinction.secret
     character_distinction.secret = None
     character_distinction.save(update_fields=["secret", "updated_at"])
-    secret.delete()
+    if not secret.distinctions.exists() and not secret.truths.exists():
+        secret.delete()
+
+
+def set_secret_distinctions(
+    secret: Secret, chosen: Iterable[CharacterDistinction]
+) -> tuple[int, int]:
+    """Link exactly ``chosen`` of the subject's held distinctions to ``secret`` (#4528).
+
+    The staff picker on a secret: every ticked distinction is relocated into this secret
+    (a linked distinction is private), and every distinction this secret held that is no
+    longer ticked goes public again. The secret itself is never deleted here, even when it
+    ends up holding nothing: staff are standing on its page. A distinction not held by the
+    secret's subject is ignored. Returns ``(linked, unlinked)``.
+    """
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+
+    chosen_ids = {cd.pk for cd in chosen}
+    held = CharacterDistinction.objects.filter(character_id=secret.subject_sheet_id)
+    linked = unlinked = 0
+    with transaction.atomic():
+        for cd in held:
+            if cd.pk in chosen_ids and cd.secret_id != secret.pk:
+                cd.secret = secret
+                cd.save(update_fields=["secret", "updated_at"])
+                linked += 1
+            elif cd.pk not in chosen_ids and cd.secret_id == secret.pk:
+                cd.secret = None
+                cd.save(update_fields=["secret", "updated_at"])
+                unlinked += 1
+    return linked, unlinked
 
 
 def _check_exclusions(character: CharacterSheet, distinction: Distinction) -> None:
