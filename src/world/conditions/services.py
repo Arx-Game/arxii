@@ -2772,6 +2772,23 @@ def condition_contributions(
     return contributions
 
 
+def contributing_condition_ids(breakdown: ModifierBreakdown) -> tuple[int, ...]:
+    """The condition instances whose nonzero term is in ``breakdown``, in pk order (#4584).
+
+    A zero term moved nothing, so it is not a use. Lasting and once-only instances both
+    appear here; ``spend_conditions_by_id`` decides which of them a use ends.
+    """
+    return tuple(
+        sorted(
+            {
+                c.condition_instance_id
+                for c in breakdown.contributions
+                if c.condition_instance_id is not None and c.value != 0
+            }
+        )
+    )
+
+
 def spend_contributing_conditions(breakdown: ModifierBreakdown) -> None:
     """Spend every once-only condition whose nonzero term helped a real roll (#4584).
 
@@ -2786,15 +2803,22 @@ def spend_contributing_conditions(breakdown: ModifierBreakdown) -> None:
     previews too and returns only a number, with no instance provenance. The once-only
     rule covers the bearer's own rolls.
     """
-    instance_ids = {
-        c.condition_instance_id
-        for c in breakdown.contributions
-        if c.condition_instance_id is not None and c.value != 0
-    }
-    if not instance_ids:
+    spend_conditions_by_id(contributing_condition_ids(breakdown))
+
+
+def spend_conditions_by_id(instance_ids: Iterable[int]) -> None:
+    """Spend the once-only conditions among ``instance_ids`` with one query (#4584).
+
+    The id-based entry point for a roll that happens later than the breakdown that fed it:
+    a paused resolution carries ``contributing_condition_ids`` and spends them when its
+    resume rolls. An id whose instance is already gone, or whose template is lasting,
+    is skipped; no ids means no query.
+    """
+    ids = set(instance_ids)
+    if not ids:
         return
     instances = ConditionInstance.objects.filter(
-        pk__in=instance_ids,
+        pk__in=ids,
         condition__default_duration_type=DurationType.UNTIL_USED,
     ).select_related("condition", "target")
     for instance in instances:

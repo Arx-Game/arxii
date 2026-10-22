@@ -25,7 +25,7 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.utils import timezone
 
-from actions.services import start_action_resolution
+from actions.services import spend_or_defer_condition_uses, start_action_resolution
 from world.checks.types import ResolutionContext
 from world.combat.cast_seed import (
     encounter_requiring_risk_acknowledgement,
@@ -206,7 +206,6 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     # (world/scenes/action_services.py) already use. Without this, conditions
     # are structurally invisible to standalone casts (#2697).
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
-    from world.conditions.services import spend_contributing_conditions  # noqa: PLC0415
 
     check_modifier_total = 0
     cast_breakdown = None
@@ -256,10 +255,10 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
             extra_modifiers=extra_modifiers + check_modifier_total,
             extra_traits=cast_check.extra_traits if cast_check is not None else (),
         )
-        # Spent here, not after use_technique: a gate (the Soulfray confirmation) can stop
+        # Settled here, not after use_technique: a gate (the Soulfray confirmation) can stop
         # the cast before this closure runs, and then nothing was rolled (#4584).
-        if cast_breakdown is not None and resolution.main_result is not None:
-            spend_contributing_conditions(cast_breakdown)
+        if cast_breakdown is not None:
+            spend_or_defer_condition_uses(resolution, cast_breakdown)
         return resolution
 
     technique_result = use_technique(

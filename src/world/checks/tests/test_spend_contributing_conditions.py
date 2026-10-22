@@ -197,42 +197,64 @@ class KnockoutRollSpendsTests(TestCase):
         self.assertFalse(ConditionInstance.objects.filter(pk=blessing_pk).exists())
 
 
-# Files that call ``collect_check_modifiers`` without a roll of their own to spend on.
+# Functions that call ``collect_check_modifiers`` without a roll of their own to spend on,
+# as "file::function" (a method is "file::Class.method").
 _NOT_A_ROLL = {
     # preview grading: previews never spend
-    "world/standoffs/services/view.py",
+    "world/standoffs/services/view.py::_Grader.grade",
     # records provenance; the roll at :109 carries no condition terms
-    "world/mechanics/challenge_resolution.py",
-    # defines it, and ``perform_check_with_modifiers`` already spends
-    "world/checks/services.py",
+    "world/mechanics/challenge_resolution.py::_record_challenge_outcome",
 }
+# Calls that settle a breakdown's once-only terms (the second defers to the resume).
+_SPENDERS = {"spend_contributing_conditions", "spend_or_defer_condition_uses"}
 
 
-def _called_names(tree: ast.AST) -> set[str]:
-    """Every function or method name called anywhere in ``tree`` (docstrings do not count)."""
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            func = node.func
-            if isinstance(func, ast.Name):
-                names.add(func.id)
-            elif isinstance(func, ast.Attribute):
-                names.add(func.attr)
-    return names
+def _call_counts(node: ast.AST) -> tuple[int, int]:
+    """(collect_check_modifiers calls, spend calls) in ``node``, nested closures included."""
+    collects = spends = 0
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if isinstance(func, ast.Name):
+            name = func.id
+        elif isinstance(func, ast.Attribute):
+            name = func.attr
+        else:
+            continue
+        if name == "collect_check_modifiers":
+            collects += 1
+        elif name in _SPENDERS:
+            spends += 1
+    return collects, spends
+
+
+def _outer_functions(tree: ast.Module) -> list[tuple[str, ast.AST]]:
+    """Module-level functions and the methods of module-level classes, by qualified name."""
+    found: list[tuple[str, ast.AST]] = []
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            found.append((node.name, node))
+        elif isinstance(node, ast.ClassDef):
+            found.extend(
+                (f"{node.name}.{item.name}", item)
+                for item in node.body
+                if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
+            )
+    return found
 
 
 class EverySiteSpendsTests(TestCase):
-    def test_every_site_that_folds_conditions_into_a_roll_spends_them(self) -> None:
+    def test_every_function_that_folds_conditions_into_a_roll_spends_them(self) -> None:
+        """Per function, so a new unspent site in a file that spends elsewhere is caught."""
         src = Path(world.__file__).resolve().parent.parent
         offenders = []
         for path in sorted(src.rglob("*.py")):
             rel = path.relative_to(src).as_posix()
-            if "/tests/" in rel or rel in _NOT_A_ROLL:
+            if "/tests/" in rel:
                 continue
-            called = _called_names(ast.parse(path.read_text()))
-            if (
-                "collect_check_modifiers" in called
-                and "spend_contributing_conditions" not in called
-            ):
-                offenders.append(rel)
+            for name, node in _outer_functions(ast.parse(path.read_text())):
+                collects, spends = _call_counts(node)
+                if collects > spends and f"{rel}::{name}" not in _NOT_A_ROLL:
+                    offenders.append(f"{rel}::{name} ({collects} collects, {spends} spends)")
         self.assertEqual(offenders, [])

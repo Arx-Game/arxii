@@ -12,9 +12,22 @@ from actions.factories import (
     ConsequencePoolEntryFactory,
     ConsequencePoolFactory,
 )
-from actions.services import advance_resolution, start_action_resolution
+from actions.services import (
+    advance_resolution,
+    spend_or_defer_condition_uses,
+    start_action_resolution,
+)
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import ConsequenceFactory
+from world.checks.services import collect_check_modifiers
 from world.checks.types import CheckResult, ExtraTraitTerm, ResolutionContext
+from world.conditions.constants import DurationType
+from world.conditions.factories import (
+    ConditionCheckModifierFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.models import ConditionInstance
 from world.skills.factories import SkillFactory
 from world.traits.factories import CheckOutcomeFactory
 
@@ -553,3 +566,110 @@ class GatedResumeExtraTraitsTests(TestCase):
         main_calls = [c for c in mock_check.call_args_list if "extra_traits" in c.kwargs]
         assert len(main_calls) == 1
         assert tuple(main_calls[0].kwargs["extra_traits"]) == (self.term,)
+
+
+class PausedResolutionSpendsOnResumeTests(TestCase):
+    """A once-only term folded into a paused GATED roll is spent when the resume rolls (#4584)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.outcome = CheckOutcomeFactory(name="Success", success_level=1)
+        main_pool = ConsequencePoolFactory(name="Spend Resume Main Pool")
+        ConsequencePoolEntryFactory(
+            pool=main_pool,
+            consequence=ConsequenceFactory(
+                outcome_tier=cls.outcome, label="Spend Resume Main", weight=10
+            ),
+        )
+        gate_pool = ConsequencePoolFactory(name="Spend Resume Gate Pool")
+        cls.loss_consequence = ConsequenceFactory(
+            outcome_tier=cls.outcome, label="Spend Resume Death", weight=1, character_loss=True
+        )
+        ConsequencePoolEntryFactory(pool=gate_pool, consequence=cls.loss_consequence)
+        cls.template = ActionTemplateFactory(
+            name="Spend Resume Spell", pipeline=Pipeline.GATED, consequence_pool=main_pool
+        )
+        ActionTemplateGateFactory(
+            action_template=cls.template,
+            consequence_pool=gate_pool,
+            failure_aborts=True,
+            step_order=0,
+        )
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        blessing = ConditionTemplateFactory(
+            name="Held Breath 4584", default_duration_type=DurationType.UNTIL_USED
+        )
+        ConditionCheckModifierFactory(
+            condition=blessing, check_type=self.template.check_type, modifier_value=3
+        )
+        self.blessing_pk = ConditionInstanceFactory(target=self.character, condition=blessing).pk
+        self.context = MagicMock(spec=ResolutionContext)
+        self.context.challenge_instance = None
+        self.context.character = self.character
+
+    def _pause(self):
+        breakdown = collect_check_modifiers(self.sheet, self.template.check_type)
+        pending = start_action_resolution(
+            self.character,
+            self.template,
+            10,
+            self.context,
+            extra_modifiers=breakdown.extra_modifiers_total,
+        )
+        assert pending.awaiting_confirmation is True
+        spend_or_defer_condition_uses(pending, breakdown)
+        return pending
+
+    def _blessing_exists(self) -> bool:
+        return ConditionInstance.objects.filter(pk=self.blessing_pk).exists()
+
+    @patch("actions.services.apply_resolution", return_value=[])
+    @patch("actions.services.select_consequence_from_result")
+    @patch("actions.services.perform_check")
+    def test_resume_that_rolls_spends_the_term(
+        self, mock_check: MagicMock, mock_select: MagicMock, mock_apply: MagicMock
+    ) -> None:
+        from world.checks.types import PendingResolution
+
+        success_result = _make_check_result()
+        mock_check.return_value = success_result
+        mock_select.return_value = PendingResolution(
+            check_result=success_result, selected_consequence=self.loss_consequence
+        )
+
+        pending = self._pause()
+
+        assert self._blessing_exists()  # the pause rolled nothing
+        advance_resolution(pending, self.context, player_decision=PlayerDecision.CONFIRM)
+
+        assert pending.main_result is not None
+        assert not self._blessing_exists()
+
+    def test_abort_does_not_spend_the_term(self) -> None:
+        pending = self._pause()
+
+        advance_resolution(pending, self.context, player_decision=PlayerDecision.ABORT)
+
+        assert pending.main_result is None
+        assert self._blessing_exists()
+
+    @patch("actions.services.perform_check")
+    def test_a_roll_that_happened_at_once_spends_at_once(self, mock_check: MagicMock) -> None:
+        mock_check.return_value = _make_check_result()
+        open_template = ActionTemplateFactory(name="Spend Now Single", pipeline=Pipeline.SINGLE)
+        ConditionCheckModifierFactory(
+            condition=ConditionInstance.objects.get(pk=self.blessing_pk).condition,
+            check_type=open_template.check_type,
+            modifier_value=2,
+        )
+        breakdown = collect_check_modifiers(self.sheet, open_template.check_type)
+
+        pending = start_action_resolution(self.character, open_template, 10, self.context)
+        assert pending.main_result is not None
+        spend_or_defer_condition_uses(pending, breakdown)
+
+        assert not self._blessing_exists()
+        assert pending.contributing_condition_ids == ()

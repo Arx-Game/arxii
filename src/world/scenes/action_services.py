@@ -12,7 +12,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from actions.constants import ActionCategory, ActionTargetType
-from actions.services import start_action_resolution, start_resisted_action_resolution
+from actions.services import (
+    spend_or_defer_condition_uses,
+    start_action_resolution,
+    start_resisted_action_resolution,
+)
 from world.checks.theater import check_outcome_faces, maybe_emit_resolution_theater
 from world.checks.types import ResolutionContext
 from world.fatigue.constants import EffortLevel
@@ -1318,7 +1322,6 @@ def _resolve_action_against_persona(
     """
     from actions.constants import ActionCategory  # noqa: PLC0415
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
-    from world.conditions.services import spend_contributing_conditions  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue, get_fatigue_penalty  # noqa: PLC0415
     from world.magic.services.magic_skills import technique_skill_term  # noqa: PLC0415
     from world.npc_services.social_disposition import (  # noqa: PLC0415
@@ -1424,12 +1427,10 @@ def _resolve_action_against_persona(
             fury_anchor=action_request.fury_anchor,
             extra_traits=technique_terms,
         )
-        # Spend only when the main check rolled: a GATED pipeline that a failed gate
-        # aborted, or that paused for a confirmation, never used the terms. A paused
-        # one's later resume (_resume_confirmed) does not spend either; the pause is
-        # the rare path and its breakdown is gone by then (#4584).
-        if technique_breakdown is not None and result.action_resolution.main_result is not None:
-            spend_contributing_conditions(technique_breakdown)
+        # Spend when the main check rolled; a resolution that paused before it carries
+        # the ids and its resume spends them, one a failed gate aborted spends nothing (#4584).
+        if technique_breakdown is not None:
+            spend_or_defer_condition_uses(result.action_resolution, technique_breakdown)
     else:
         # Plain (non-technique) actions do not use the fury lever; fury is a
         # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
@@ -1472,9 +1473,8 @@ def _resolve_action_against_persona(
             extra_modifiers=fatigue_penalty + breakdown.extra_modifiers_total + pull_flat_bonus,
             effort_level=effort_level,
         )
-        # Same rule as the technique branch: only a main check that rolled spends.
-        if action_resolution.main_result is not None:
-            spend_contributing_conditions(breakdown)
+        # Same rule as the technique branch.
+        spend_or_defer_condition_uses(action_resolution, breakdown)
         result = EnhancedSceneActionResult(
             action_resolution=action_resolution,
             action_key=action_request.action_key,

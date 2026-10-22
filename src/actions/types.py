@@ -470,6 +470,10 @@ class PendingActionResolution:
     # Skill terms the main check adds at call time (#4450), carried like
     # extra_modifiers so a paused GATED pipeline's resume rolls the same terms.
     extra_traits: tuple[ExtraTraitTerm, ...] = ()
+    # Once-only condition instances whose terms are folded into ``extra_modifiers`` but
+    # whose roll has not happened yet (#4584). Set by the scene sites when the resolution
+    # paused before its main check; the resume spends them right after that check rolls.
+    contributing_condition_ids: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
