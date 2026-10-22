@@ -70,7 +70,8 @@ class TurnOrderConditionTests(TestCase):
         self.assertEqual(order, [(ENTITY_TYPE_PC, steady), (ENTITY_TYPE_PC, hindered)])
 
     def test_npc_with_a_condition_moves(self):
-        pc = self._pc(speed_rank=10)
+        # NPCs rank 15; haste (+5) brings this one to 10, ahead of the rank-12 PC.
+        pc = self._pc(speed_rank=12)
         npc = CombatOpponentFactory(encounter=self.encounter)
         self.assertEqual(get_resolution_order(self.encounter)[0], (ENTITY_TYPE_PC, pc))
 
