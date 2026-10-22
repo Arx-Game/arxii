@@ -13,6 +13,7 @@ from world.areas.positioning.services import (
     force_move_to_position,
     position_of,
 )
+from world.character_sheets.models import CharacterSheet
 from world.conditions.models import ConditionInstance
 from world.magic.models.anima import CharacterAnima
 from world.magic.services.soulfray import accumulate_soulfray
@@ -317,6 +318,67 @@ def reflect_damage(*, payload: Any) -> None:
                 participant, amount, bypass_pre_apply=True, damage_type=payload.damage_type
             )
     # else: ref is None / Technique / unknown → payload already zeroed, no bounce
+
+
+def strike_back(*, payload: Any, instance: ConditionInstance) -> None:
+    """Answer a landed hit on a warded bearer by striking the NPC that dealt it (#4584).
+
+    Called from the combat damage seam (``_emit_post_damage_events``) right after it
+    emits DAMAGE_APPLIED, once per instance ``retaliating_instances`` finds on the
+    bearer: the ward is designated by its template's ``retaliation_damage`` /
+    ``retaliation_condition`` fields, never by its name, and no flow rows are needed.
+    That seam only runs for hits on player characters, so a strike-back ward on an
+    NPC or a summon does nothing (out of scope for #4584).
+
+    Answers only a blow that dealt damage, from a ``CombatOpponent`` still in the
+    fight: PCs roll and NPCs are targets, so it never strikes a player character
+    (ADR-0023, as ``_fire_rampart_retaliation``). The payer (the ward's caster, else
+    the bearer) pays ``reactive_anima_cost`` through ``_try_spend_reactive``, which
+    narrates a fizzle; a ward with neither damage nor a condition charges nothing.
+    The damage carries the payer's sheet, so it counts as the payer's threat, and the
+    condition is laid with the payer as its source (pair it with a provoke and the
+    struck NPC turns on the caster). No condition is laid on an NPC the strike-back
+    defeated. ``bypass_pre_apply=True``, and the opponent damage path never emitting
+    DAMAGE_APPLIED, end any retaliation loop.
+    """
+    if payload.amount_dealt <= 0 or instance.pk is None:
+        return  # nothing landed, or the ward was spent earlier this round
+    template = instance.condition
+    if template.retaliation_damage <= 0 and template.retaliation_condition_id is None:
+        return
+
+    # Lazy imports: combat.services lazy-imports world.magic.services.
+    from world.combat.constants import OpponentStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.combat.services import apply_damage_to_opponent  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    opponent = payload.source.ref
+    if not isinstance(opponent, CombatOpponent) or opponent.status != OpponentStatus.ACTIVE:
+        return
+    if not _try_spend_reactive(instance):
+        return
+
+    payer = instance.source_character or instance.target
+    defeated = False
+    if template.retaliation_damage > 0:
+        result = apply_damage_to_opponent(
+            opponent,
+            template.retaliation_damage,
+            bypass_pre_apply=True,
+            damage_type=template.retaliation_damage_type,
+            source_sheet=_sheet_of(payer),
+        )
+        defeated = result.defeated
+    if template.retaliation_condition is not None and opponent.objectdb_id and not defeated:
+        apply_condition(opponent.objectdb, template.retaliation_condition, source_character=payer)
+
+
+def _sheet_of(
+    character: "ObjectDB",  # noqa: OBJECTDB_PARAM - a ward's payer may be any bearer
+) -> CharacterSheet | None:
+    """The character's sheet, or None for an object without one (an NPC payer)."""
+    return CharacterSheet.objects.filter(pk=character.pk).first()
 
 
 def summon_ally(*, payload: Any) -> None:

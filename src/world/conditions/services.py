@@ -3044,12 +3044,11 @@ def clear_all_conditions(
     return len(instances)
 
 
-def _active_flagged_instances(
+def _active_matching_instances(
     targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
-    *,
-    flag_field: str,
+    template_q: Q,
 ) -> QuerySet[ConditionInstance]:
-    """Active instances on ``targets`` whose template has ``flag_field`` set, unordered.
+    """Active instances on ``targets`` matching ``template_q``, unordered.
 
     Uses ``get_active_conditions``'s notion of active (not suppressed, not past an
     INGAME_TIME ``expires_at``) but, unlike it, does not sweep expired rows: this is
@@ -3060,8 +3059,8 @@ def _active_flagged_instances(
     return (
         ConditionInstance.objects.filter(
             _not_suppressed_q(),
+            template_q,
             target_id__in=target_ids,
-            **{f"condition__{flag_field}": True},
         )
         .exclude(
             expires_at__isnull=False,
@@ -3069,6 +3068,40 @@ def _active_flagged_instances(
             condition__default_duration_type=DurationType.INGAME_TIME,
         )
         .order_by()
+    )
+
+
+def _active_flagged_instances(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+    *,
+    flag_field: str,
+) -> QuerySet[ConditionInstance]:
+    """Active instances on ``targets`` whose template has ``flag_field`` set, unordered."""
+    return _active_matching_instances(targets, Q(**{f"condition__{flag_field}": True}))
+
+
+def retaliating_instances(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> list[ConditionInstance]:
+    """The bearer's active strike-back instances, oldest first, in one query (#4584).
+
+    A strike-back instance is one whose template deals ``retaliation_damage`` or lays a
+    ``retaliation_condition`` on an NPC that hits the bearer. The damage seam
+    (``_emit_post_damage_events``) hands each one to ``strike_back``; the template and
+    the two retaliation FKs ``strike_back`` reads are fetched in the same query.
+    """
+    return list(
+        _active_matching_instances(
+            [target],
+            Q(condition__retaliation_damage__gt=0)
+            | Q(condition__retaliation_condition__isnull=False),
+        )
+        .select_related(
+            "condition",
+            "condition__retaliation_damage_type",
+            "condition__retaliation_condition",
+        )
+        .order_by("pk")
     )
 
 
