@@ -184,7 +184,7 @@ def sync_covert_membership_secret(membership: OrganizationMembership) -> None:
     )
 
     org = membership.organization
-    if not (org.org_type_id and org.org_type.is_covert):
+    if not org.is_covert:
         return
     tier = membership.rank.tier if membership.rank_id else None
     level = COVERT_SECRET_LEVEL_BY_TIER.get(tier, COVERT_SECRET_DEFAULT_LEVEL)

@@ -117,13 +117,9 @@ class BeatPlacementApiTests(APITestCase):
 class PlacementPickerTests(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.societies.factories import OrganizationTypeFactory
-
         cls.staff = AccountFactory(is_staff=True)
         cls.open_org = OrganizationFactory(name="PLACEHOLDER Open Company")
-        cls.covert_org = OrganizationFactory(
-            name="PLACEHOLDER Hidden Company", org_type=OrganizationTypeFactory(is_covert=True)
-        )
+        cls.covert_org = OrganizationFactory(name="PLACEHOLDER Hidden Company", is_covert=True)
         cls.prop = PropertyFactory(name="PLACEHOLDER Greedy")
 
     def test_the_affiliation_picker_searches_by_name(self) -> None:

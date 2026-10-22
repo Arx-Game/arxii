@@ -4717,7 +4717,7 @@ consumers, not systems.
   `listener_services` (post/sweep/collect — weekly cron `tasking.listener_sweep`;
   mechanical residue only, ADR-0175), `counterplay_services`
   (suppress/flip/plant/detect/clear; `espionage` consent category)
-- **Covert layer (societies/assets):** `OrganizationType.is_covert`,
+- **Covert layer (societies/assets):** `Organization.is_covert` (#4570: on the organization, not its type),
   `Organization.parent_org`, `OrganizationMembership.covert_secret`
   (`sync_covert_membership_secret` — level tracks rank tier),
   `NPCAsset.promoter_org` XOR `promoter_persona` (`transfer_asset_to_org`),

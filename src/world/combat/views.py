@@ -308,7 +308,7 @@ class PlacementOrganizationViewSet(ReadOnlyModelViewSet):
     def get_queryset(self) -> QuerySet[Organization]:
         queryset = Organization.objects.select_related("org_type").order_by("name")
         if not self.request.user.is_staff:
-            queryset = queryset.exclude(org_type__is_covert=True)
+            queryset = queryset.exclude(is_covert=True)
         return queryset
 
 

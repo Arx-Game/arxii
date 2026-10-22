@@ -791,7 +791,7 @@ def _pool_slot_matches(slot: OriginTemplateSlot, org: Organization) -> bool:
         return False
     if slot.anchor_society_id and org.society_id != slot.anchor_society_id:
         return False
-    return not (slot.exclude_covert and org.org_type is not None and org.org_type.is_covert)
+    return not (slot.exclude_covert and org.is_covert)
 
 
 def _batch_pool_groups(

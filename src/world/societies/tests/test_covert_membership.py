@@ -4,11 +4,7 @@ from django.test import TestCase
 
 from world.scenes.factories import PersonaFactory
 from world.secrets.constants import SecretProvenance
-from world.societies.factories import (
-    OrganizationFactory,
-    OrganizationMembershipFactory,
-    OrganizationTypeFactory,
-)
+from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 from world.societies.membership_services import join_organization, promote_member
 from world.societies.models import OrganizationRank
 
@@ -16,8 +12,7 @@ from world.societies.models import OrganizationRank
 class CovertMembershipSecretTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.covert_type = OrganizationTypeFactory(name="spy_network", is_covert=True)
-        cls.org = OrganizationFactory(org_type=cls.covert_type)
+        cls.org = OrganizationFactory(is_covert=True)
         cls.persona = PersonaFactory()
 
     def test_covert_join_mints_subject_secret(self):
