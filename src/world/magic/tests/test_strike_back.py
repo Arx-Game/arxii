@@ -8,6 +8,7 @@ fixtures are rebuilt in ``setUp``.
 """
 
 from dataclasses import replace
+from unittest.mock import patch
 
 from django.test import TestCase
 from evennia import create_object
@@ -34,6 +35,8 @@ from world.magic.factories import CharacterAnimaFactory
 from world.magic.models.anima import CharacterAnima
 from world.magic.services.effect_handlers import strike_back
 from world.vitals.models import CharacterVitals
+
+RETALIATING_PATH = "world.conditions.services.retaliating_instances"
 
 
 class _StrikeBackFixture(TestCase):
@@ -254,6 +257,13 @@ class StrikeBackAtTheDamageSeamTests(_StrikeBackFixture):
         self.brute.refresh_from_db()
         self.assertEqual(self.brute.health, 50)
         self.assertEqual(CharacterVitals.objects.get(character_sheet=self.knight_sheet).health, 92)
+
+    def test_a_hit_from_a_player_character_never_reads_the_wards(self) -> None:
+        """A blow only a CombatOpponent can be answered for skips the wards query."""
+        with patch(RETALIATING_PATH) as wards:
+            apply_damage_to_participant(self.knight_seat, 8, source=self.caster_char)
+
+        wards.assert_not_called()
 
 
 class RetaliatingInstancesTests(_StrikeBackFixture):
