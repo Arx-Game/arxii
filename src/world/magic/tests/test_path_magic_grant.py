@@ -9,9 +9,12 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
 from world.magic.constants import AcquisitionOrigin, TargetKind
 from world.magic.factories import (
+    CharacterTraditionFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
+    TraditionFactory,
+    TraditionGiftGrantFactory,
 )
 from world.magic.models import (
     CharacterGift,
@@ -130,3 +133,38 @@ class GrantPathMagicTests(TestCase):
         self.assertEqual(result.granted_gifts, [])
         self.assertEqual(result.granted_techniques, [])
         self.assertFalse(CharacterGift.objects.filter(character=sheet).exists())
+
+
+class GrantPathMagicTraditionTests(TestCase):
+    """#4555: a technique a Tradition grant lists goes only to that Tradition's members."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.path = PathFactory(name="Lantern Warden")
+        cls.gift = GiftFactory(name="Lamplight")
+        cls.gift.resonances.add(ResonanceFactory(name="Glow"))
+        cls.hymn = TechniqueFactory(name="Lamp Hymn", gift=cls.gift)
+        PathGiftGrant.objects.create(path=cls.path, gift=cls.gift).starter_techniques.add(cls.hymn)
+        cls.lamplighters = TraditionFactory(name="Lamplighters")
+        TraditionGiftGrantFactory(tradition=cls.lamplighters, gift=cls.gift).special_techniques.add(
+            cls.hymn
+        )
+
+    def test_a_member_of_the_listing_tradition_gets_the_technique(self):
+        sheet = CharacterSheetFactory()
+        CharacterTraditionFactory(character=sheet, tradition=self.lamplighters)
+
+        result = grant_path_magic(sheet, self.path)
+
+        self.assertEqual(result.granted_techniques, [self.hymn])
+
+    def test_anyone_else_gets_the_paths_gift_without_the_technique(self):
+        """The Path still grants its gift; only the kept technique is held back."""
+        sheet = CharacterSheetFactory()
+        CharacterTraditionFactory(character=sheet, tradition=TraditionFactory(name="Wardens"))
+
+        result = grant_path_magic(sheet, self.path)
+
+        self.assertEqual(result.granted_gifts, [self.gift])
+        self.assertEqual(result.granted_techniques, [])
+        self.assertFalse(CharacterTechnique.objects.filter(character=sheet).exists())

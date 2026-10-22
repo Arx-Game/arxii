@@ -745,6 +745,23 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
                 raise ValidationError({"is_ultimate": msg})
 
     @cached_property
+    def cached_own_paths(self) -> list:
+        """The Paths whose ``PathGiftGrant.starter_techniques`` list holds this technique.
+
+        In Path order (stage, sort order, name, then pk), each with its technique skill
+        select_related: the technique's own Paths for its cast skill (#4555,
+        ``magic_skills.skill_path``). Cached so a cast costs no query after the first.
+        The Path Gift Grant and Path admins clear it on every save through
+        ``magic_skills.invalidate_technique_own_paths``.
+        """
+        return [
+            grant.path
+            for grant in self.granted_by_path_gifts.select_related(
+                "path__technique_skill__trait"
+            ).order_by("path__stage", "path__sort_order", "path__name", "path__pk")
+        ]
+
+    @cached_property
     def cached_restrictions(self) -> list:
         """Restrictions for this technique. Supports Prefetch(to_attr=)."""
         return list(self.restrictions.all())

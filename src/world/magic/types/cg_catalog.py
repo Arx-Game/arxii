@@ -13,11 +13,12 @@ if TYPE_CHECKING:
 class TechniqueOptions:
     """Availability pool for one (path, gift, tradition) combination during CG.
 
-    ``pool`` is the path's curated starter set (``PathGiftGrant.starter_techniques``);
-    ``tradition`` is the tradition's special technique set
-    (``TraditionGiftGrant.special_techniques``). ``species`` contains techniques
-    belonging to the selected species' granted gifts. The lists are not deduplicated
-    here — callers treat availability as their union.
+    ``pool`` and ``tradition`` both come from the path's list for the gift
+    (``PathGiftGrant.starter_techniques``, #4555): ``pool`` holds the techniques no
+    Tradition grant lists, ``tradition`` the ones this tradition's grant
+    (``TraditionGiftGrant.special_techniques``) lists, so the two never overlap.
+    ``species`` contains techniques belonging to the selected species' granted
+    gifts. Callers treat availability as the union of all three.
     """
 
     pool: list[Technique] = field(default_factory=list)

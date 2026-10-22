@@ -187,7 +187,8 @@ for the five-branch validation gate this data must satisfy before submission.
   resolver's own fallback rungs above — now resolves for every freshly finalized
   character instead of always returning `None` at CG time.
 - `draft.draft_data["selected_technique_ids"]` names the chosen catalog
-  `Technique`s (drawn from the gift's pool ∪ the tradition's signature set); each
+  `Technique`s (drawn from the Path's list for the gift, less the techniques other traditions
+  keep for their own members, #4555); each
   gets a `CharacterTechnique.objects.get_or_create` link (`origin=CHARACTER_CREATION`,
   #3055 — same for the gift link's `grant_gift_to_character(..., origin=...)` call).
   `announce_access_change` fires once with every linked technique as `gained`.

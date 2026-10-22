@@ -689,11 +689,14 @@ def _technique_available_to_learner(
 ) -> bool:
     """Whether ``technique`` is in ``sheet``'s TRAIN availability via ``role`` (#2440).
 
-    Availability = the learner's own (Path × Gift) pool ∪ their Tradition's
-    signature list (ruling 3 on #2440). The pool half is tradition-agnostic
-    (any Academy trainer can teach it); the signature half is members-only —
-    offerable only when the trainer's own ``role.teaches_tradition`` matches the
-    learner's currently ACTIVE ``CharacterTradition`` membership
+    Availability is read from the learner's own Path's list for the gift, the same
+    rule character creation offers by (``cg_catalog.get_technique_options``, #4555):
+    a technique on no Path list of the learner's current Path is never available. Of
+    the techniques on it, one no Tradition grant lists is tradition-agnostic (any
+    Academy trainer can teach it); one a Tradition grant lists is members-only
+    (ruling 3 on #2440) — offerable only when the trainer's own
+    ``role.teaches_tradition`` is a listing Tradition and matches the learner's
+    currently ACTIVE ``CharacterTradition`` membership
     (``left_at__isnull=True``). #2441 Task 8 gave ``CharacterTradition`` history
     (``left_at``) and an active-row constraint, so "current tradition" is now a
     real, singular concept — this seam was upgraded from the old
@@ -713,17 +716,17 @@ def _technique_available_to_learner(
 
     gift = technique.gift
     trainer_tradition = role.teaches_tradition
-    # get_technique_options' pool half never reads `tradition` (it's sourced
-    # from PathGiftGrant(path, gift) only) — safe to pass trainer_tradition
-    # (even None) as the query arg; only the signature half is scoped by it.
+    # Both halves come from PathGiftGrant(path, gift). The pool half (listed by no
+    # Tradition grant) never reads `tradition`, so trainer_tradition may be None;
+    # only the members-only half is scoped by it.
     options = get_technique_options(path, gift, trainer_tradition, include_unready=True)
     if technique in options.pool:
         return True
     if trainer_tradition is None:
         # Generalist trainer: check for ghost tutelage (#2460).
-        # The tradition technique list from get_technique_options(path, gift, None) is
-        # empty (TraditionGiftGrant.tradition is non-nullable), so re-query
-        # with each tutelage's tradition to get the real signature list.
+        # The members-only list from get_technique_options(path, gift, None) is empty,
+        # so re-query with each tutelage's tradition to get that tradition's techniques
+        # on the learner's Path.
         for tutelage in sheet.ghost_tutelages.select_related("tradition"):
             tutelage_options = get_technique_options(
                 path, gift, tutelage.tradition, include_unready=True

@@ -93,6 +93,8 @@ from world.standoffs.services.state import (
 from world.standoffs.types import DisplayCast, StandoffActionResult
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult, ExtraTraitTerm
     from world.classes.models import Path
@@ -537,13 +539,14 @@ def display_cast_terms(sheet: CharacterSheet, technique: Technique) -> tuple[Ext
 
 
 def display_cast_terms_for_path(
-    technique: Technique, path: Path | None
+    technique: Technique, path: Path | None, own_paths: Sequence[Path] | None = None
 ) -> tuple[ExtraTraitTerm, ...]:
     """:func:`display_cast_terms` for a caster whose current Path is already known.
 
-    Lets the view grade every display technique without one Path read per technique.
+    Lets the view grade every display technique without one Path read per technique;
+    ``own_paths`` is the technique's own Paths from one ``technique_paths`` call (#4555).
     """
-    term = technique_skill_term_for_path(technique, path)
+    term = technique_skill_term_for_path(technique, path, own_paths)
     return (term,) if term is not None else ()
 
 

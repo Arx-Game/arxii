@@ -15,7 +15,7 @@ from world.magic.services.cg_catalog import get_gift_options, get_technique_opti
 
 
 class TechniqueOptionsTest(TestCase):
-    """get_technique_options resolves pool (path) + signature (tradition) sets."""
+    """get_technique_options splits the Path's list into open and Tradition-kept halves."""
 
     @classmethod
     def setUpTestData(cls):
@@ -30,11 +30,19 @@ class TechniqueOptionsTest(TestCase):
             2, gift=cls.gift, action_template=cast_template
         )
         cls.unready_technique = TechniqueFactory(gift=cls.gift)
-        path_grant.starter_techniques.set([*cls.pool_techniques, cls.unready_technique])
+        cls.special_technique = TechniqueFactory(gift=cls.gift, action_template=cast_template)
+        path_grant.starter_techniques.set(
+            [*cls.pool_techniques, cls.unready_technique, cls.special_technique]
+        )
+
+        # Kept for the tradition, but on another Path's list only (#4555).
+        cls.elsewhere_technique = TechniqueFactory(gift=cls.gift, action_template=cast_template)
+        PathGiftGrantFactory(path=PathFactory(), gift=cls.gift).starter_techniques.set(
+            [cls.elsewhere_technique]
+        )
 
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.special_technique = TechniqueFactory(gift=cls.gift, action_template=cast_template)
-        tradition_grant.special_techniques.set([cls.special_technique])
+        tradition_grant.special_techniques.set([cls.special_technique, cls.elsewhere_technique])
 
         # A second tradition has an authored grant row but no signature techniques.
         TraditionGiftGrantFactory(tradition=cls.other_tradition, gift=cls.gift)
@@ -59,6 +67,18 @@ class TechniqueOptionsTest(TestCase):
 
     def test_pool_present_signature_empty_for_other_tradition(self):
         options = get_technique_options(self.path, self.gift, self.other_tradition)
+
+        self.assertCountEqual(options.pool, self.pool_techniques)
+        self.assertEqual(options.tradition, [])
+
+    def test_a_tradition_technique_is_offered_only_on_its_paths(self):
+        options = get_technique_options(self.path, self.gift, self.tradition)
+
+        offered_ids = {technique.id for technique in [*options.pool, *options.tradition]}
+        self.assertNotIn(self.elsewhere_technique.id, offered_ids)
+
+    def test_no_tradition_is_offered_only_the_open_techniques(self):
+        options = get_technique_options(self.path, self.gift, None)
 
         self.assertCountEqual(options.pool, self.pool_techniques)
         self.assertEqual(options.tradition, [])
@@ -94,8 +114,22 @@ class GiftOptionsTest(TestCase):
         cls.empty_gift = GiftFactory()
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.empty_gift)
 
+        # The Path's only technique for this gift is kept by another tradition (#4555).
+        cls.kept_gift = GiftFactory()
+        kept = TechniqueFactory(gift=cls.kept_gift, action_template=get_standalone_cast_template())
+        PathGiftGrantFactory(path=cls.path, gift=cls.kept_gift).starter_techniques.set([kept])
+        TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.kept_gift)
+        cls.keeper = TraditionFactory()
+        TraditionGiftGrantFactory(tradition=cls.keeper, gift=cls.kept_gift).special_techniques.set(
+            [kept]
+        )
+
     def test_excludes_gift_with_no_available_techniques(self):
         gifts = get_gift_options(self.tradition, self.path)
 
         self.assertIn(self.available_gift, gifts)
         self.assertNotIn(self.empty_gift, gifts)
+
+    def test_a_gift_whose_techniques_another_tradition_keeps_is_not_offered(self):
+        self.assertNotIn(self.kept_gift, get_gift_options(self.tradition, self.path))
+        self.assertIn(self.kept_gift, get_gift_options(self.keeper, self.path))
