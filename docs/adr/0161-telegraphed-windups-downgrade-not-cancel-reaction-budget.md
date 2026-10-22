@@ -45,6 +45,8 @@ a different module (`world.magic.services.effect_handlers`) for a mechanic (`dec
 _interpose`'s round-scoped budget) that standing conditions don't share the lifecycle
 of. Flagged judgment call — worth revisiting if a future situation lets a standing
 condition and a declared reaction meaningfully compete for the same hit.
+Amended by ADR-4584-A (#4584): a standing guard condition (`source_guards_bearer`)
+counts against both budgets; absorb, reflect, blink and strike-back stay outside them.
 
 **No new dive/brace verb.** The existing defense check on maturation (whatever
 `ThreatPoolEntry.defense_check_type` the entry authors, or flat damage if none) IS the

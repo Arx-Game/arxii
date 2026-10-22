@@ -577,6 +577,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `summon_ally`, `move_position`, `create_obstacle`; adapters: `summon_ally_on_condition`,
     `move_position_on_condition`, `create_obstacle_on_condition`, `init_absorb_buffer`.
     See magic.md §"Effect Palette" for the full handler/adapter table.
+    `strike_back(*, payload, instance)` (#4584) is read directly where combat damage lands on a PC
+    (`_answer_with_strike_backs`), not through a flow; `UNTIL_USED` wards and the `*_on_condition`
+    markers end after a successful fire through `spend_condition_use`.
   - Ally + party ward variants (#2208, ADR-0118): Aegis Ward/Communion, Mirror Vigil/Communion,
     Phase Guard/Communion — ALLY SINGLE/FILTERED_GROUP Technique variants of the three reactive
     wards above (no new ConditionTemplates); reactive fire (`_try_spend_reactive`) and upkeep
@@ -1181,6 +1184,15 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   (`turn_order_modifier_by_target` via `effective_speed_ranks`), DoT ticks reach NPC
   opponents, and `absorb_pool` / `reflect_damage` find their condition by field, not by name.
   See `docs/systems/conditions.md` "Condition effects combat reads".
+- **Conditions react when someone is struck (#4584, ADR-4584-A) [BUILT & WIRED]:**
+  `ConditionTemplate` fields `forces_attack_on_source` (provoke; `provoking_source_by_target`),
+  `source_guards_bearer` (standing guard; `guardians_by_target`), `prevents_knockout` (grace;
+  `knockout_preventing_instance`) and `retaliation_damage` / `retaliation_damage_type` /
+  `retaliation_condition` (strike-back; `retaliating_instances`). `UNTIL_USED` conditions end by
+  use: `spend_condition_use`, `spend_contributing_conditions`, `spend_conditions_by_id`;
+  `condition_contributions` records `condition_instance_id`, and previews never spend. See
+  `docs/systems/conditions.md` "Condition effects combat reads" and
+  `docs/architecture/combat-conditions.md` "Reactive condition effects".
 - **Integrates with:** combat (DoT, capability blocking, NPC allegiance reads via
   `ConditionTemplate.sets_allegiance`; `select_npc_actions` consults `effective_allegiances`
   and condition aggro; `get_resolution_order` consults turn order modifiers),
@@ -8628,6 +8640,22 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     Aegis Field / Mirror Ward names.
   - Reviewer agent `tools/agents/condition-effect-reach-reviewer.md`; journeys in
     `src/integration_tests/test_conditions_that_reach_the_fight_journeys.py`.
+- **Reactive condition effects (#4584, ADR-4584-A) [BUILT & WIRED]:**
+  - Provoke: `select_npc_actions` -> `_provoking_participant_ids` / `_narrow_to_locked_or_provoker`
+    narrows an NPC to its provoker from the round after it lands; an engagement lock wins; charmed,
+    turned and summoned opponents ignore it.
+  - Standing guard: `_ensure_interpose_challenges` and `_try_interpose`
+    (`world/combat/services/damage/`) via `guardians_by_target`; the shared tail is now
+    `_attempt_guardian_interpose(guardian, protected, pre_payload, *, action)` (`_dispatch_interpose_action`
+    is a wrapper for declarations). A guard counts against `REACTIONS_PER_ROUND` and
+    `ABSORPTION_CAP_PER_MOMENT` and pays interpose fatigue (this revisits ADR-0161 for guards only).
+  - Strike-back: `_answer_with_strike_backs` in `_emit_post_damage_events` -> `strike_back`; PC
+    bearers, NPC attackers only; counts as duel interference and probing; success not narrated.
+  - Grace: `_process_knockout_tier` skips the roll via `knockout_preventing_instance`.
+  - Once-only: `spend_contributing_conditions` after every real roll (all roll sites, a resumed
+    paused resolution via `contributing_condition_ids`), guarded by
+    `world/checks/tests/test_spend_contributing_conditions.py`; journeys in
+    `src/integration_tests/test_holding_the_line_journeys.py`.
 - **PC sustained actions (#2705; ADR-0190 — extends ADR-0161's pre-armed shape to the
   PC side):**
   - `SustainedAction` (`world/combat/models.py`) — the PC-side mirror of

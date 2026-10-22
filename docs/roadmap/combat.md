@@ -444,6 +444,23 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `world/companions/tests/test_combat_bridge_e2e.py`, and
   `world/companions/tests/test_deployment.py`.
 
+- **Conditions that react when someone is struck (#4584, ADR-4584-A):** a condition can now
+  be a provoke (`forces_attack_on_source`: the NPC attacks only the condition's source, from the
+  round after it lands, an engagement lock wins), a standing guard (`source_guards_bearer`: the
+  source interposes for the bearer on every hit without declaring, spending her one reaction and
+  the hit's answer budget and paying interpose fatigue at very low effort, while still taking her
+  own turn; this revisits ADR-0161 for guards only), a grace (`prevents_knockout`: stops one
+  knockout on a PC), and a strike-back ward (`retaliation_damage` / `retaliation_damage_type` /
+  `retaliation_condition`: answers an NPC that hits a PC bearer, read directly at
+  `_emit_post_damage_events`, counted as duel interference and probing). `UNTIL_USED` conditions
+  now end by use: a blessing's term after the real roll it fed (all roll sites and a resumed
+  paused resolution, never a preview), a ward after a successful fire, a seeded marker once its
+  flow has run. Proven by `src/integration_tests/test_holding_the_line_journeys.py`. **Known
+  gaps:** a successful strike-back is not narrated (only the fizzle speaks); strike-back, guard
+  and provoke read PC bearers/wards and NPC attackers only (no strike-back ward on an NPC or
+  summon, no standing guard of an ALLY summon); staff author strike-back as a plain condition,
+  there is no seeded strike-back content to load.
+
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
 - Thread-pull final outcome in combat. (Combo full journey proven in #2017; enemy-NPC

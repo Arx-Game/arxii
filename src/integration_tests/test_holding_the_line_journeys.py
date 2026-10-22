@@ -24,8 +24,9 @@ not something read back from the code under test:
   interpose base fatigue 3 at very low effort (x 0.1), floored at 1: 1 physical fatigue. She
   has one reaction a round, so a brute with 2 actions lands its second blow (100 - 12 = 88).
 - "Steadying Word" (once only) and "Steady Hand" (3 rounds) each add 3 to Brenna's technique
-  check. A look at the roll (``collect_check_modifiers``, what previews call) counts the +3
-  and spends nothing.
+  check. A look at the roll (``collect_check_modifiers``, which the consider check and the
+  standoff grade view call; other previews use their own paths) counts the +3 and spends
+  nothing.
 - "Stay Standing" (once only, stops a knockout) sits on Cassian at 15 of 100 health while the
   brute swings for 2: 13 of 100 is inside the knockout band, the knockout roll is forced to
   fail, and the knockout pool's only result for that failure is Unconscious.
@@ -348,8 +349,8 @@ class HoldingTheLine(_TheYard):
         apply_condition(self.brenna, steadying_word)
         blessing_pk = ConditionInstance.objects.get(target=self.brenna, condition=steadying_word).pk
 
-        # A look at the roll is what every preview asks (``collect_check_modifiers``): it counts
-        # the blessing's +3 and spends nothing.
+        # A look at the roll is what the consider check and the standoff grade view ask
+        # (``collect_check_modifiers``): it counts the blessing's +3 and spends nothing.
         look = collect_check_modifiers(self.brenna.sheet_data, self.technique_check_type)
         self.assertIn(
             (blessing_pk, BLESSING),

@@ -91,12 +91,16 @@
 ### Service Functions
 - `advance_resolution(pending: 'PendingActionResolution', context: 'ResolutionContext', player_decision: 'str | None' = None) -> 'PendingActionResolution' - Resume a paused pipeline after player decision.`
 - `apply_resolution(pending: 'PendingResolution', context: 'ResolutionContext') -> 'list[AppliedEffect]' - Apply all effects from the selected consequence.`
+- `contributing_condition_ids(breakdown: world.checks.types.ModifierBreakdown) -> tuple[int, ...] - The condition instances whose nonzero term is in ``breakdown``, in pk order (#4584).`
 - `get_effective_consequences(pool: 'ConsequencePool') -> 'list[WeightedConsequence]' - Resolve pool inheritance into a flat list of weighted consequences.`
 - `merge_pool_entries(own_entries: 'list[ConsequencePoolEntry]', parent_entries: 'list[ConsequencePoolEntry] | None') -> 'list[WeightedConsequence]' - Single-depth pool inheritance over already-fetched entries; runs no query.`
 - `mirrored_outcome(outcome: 'CheckOutcome') -> 'CheckOutcome | None' - The outcome on the other side of a resisted roll (#4418).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Main check resolution function.`
 - `resolve_scene_action(*, character: 'ObjectDB', action_template: 'ActionTemplate | None', action_key: 'str', difficulty: 'int') -> 'SceneActionResult' - Resolve a scene-based action check using an ActionTemplate.`
 - `select_consequence_from_result(character: 'ObjectDB', check_result: 'CheckResult', consequences: 'list[WeightedConsequence]') -> 'PendingResolution' - Select a consequence using an existing check result.`
+- `spend_conditions_by_id(instance_ids: collections.abc.Iterable[int]) -> None - Spend the once-only conditions among ``instance_ids`` with one query (#4584).`
+- `spend_contributing_conditions(breakdown: world.checks.types.ModifierBreakdown) -> None - Spend every once-only condition whose nonzero term helped a real roll (#4584).`
+- `spend_or_defer_condition_uses(pending: 'PendingActionResolution', breakdown: 'ModifierBreakdown') -> 'None' - Spend the once-only terms of ``breakdown`` if ``pending`` rolled its main check (#4584).`
 - `start_action_resolution(character: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext', extra_modifiers: 'int' = 0, *, check_type: 'CheckType | None' = None, effort_level: 'str | None' = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> 'PendingActionResolution' - Start an action resolution pipeline and run it to completion or pause.`
 - `start_resisted_action_resolution(*, initiator: 'ObjectDB', resister: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext', effort_level: 'str | None', extra_modifiers: 'int' = 0) -> 'PendingActionResolution' - Resolve an action whose target rolls instead of its actor (#4418).`
 
@@ -2768,7 +2772,7 @@
 - `active_combat_engagement_for(character: 'ObjectDB') -> 'CharacterEngagement | None' - The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None, level: 'int | None' = None) -> 'CombatOpponent' - Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' - Create a CombatParticipant linking a PC to an encounter.`
-- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
+- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0'), skip_condition_interactions: 'bool' = False) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' - Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' - Map a graded interpose resolution onto *pre_payload*.`
@@ -3066,6 +3070,8 @@
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - allegiance_break_check_type -> checks.CheckType [FK] (nullable)
   - settle_consequence_pool -> actions.ConsequencePool [FK] (nullable)
+  - retaliation_damage_type -> conditions.DamageType [FK] (nullable)
+  - retaliation_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
   - properties -> mechanics.Property [M2M]
   - reactive_triggers -> flows.TriggerDefinition [M2M]
@@ -3185,6 +3191,7 @@
 - `acute_peril_hand_off_condition_names() -> list[str] - Names of the acute-peril conditions combat hands to a scene round at its end.`
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult - Increment a condition's severity and advance stage if threshold crossed.`
 - `advance_condition_stage(*, payload: object, condition_name: str) -> int | None - Advance the bearer's condition by one stage *now*, on this event (#3416).`
+- `aggro_priority_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - Total aggro priority per target from active draws_aggro conditions (#4572).`
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult - Apply a condition to a target, handling stacking and interactions.`
 - `apply_condition_by_name(*, payload: object, condition_name: str) -> None - Apply a named condition to the character carried by the event payload.`
 - `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None - On ascending stage changes, apply the stage's on_entry_conditions.`
@@ -3195,8 +3202,10 @@
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int - Remove all conditions from a target.`
 - `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] - Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
 - `condition_modifier_totals_by_sheet(sheet_ids: collections.abc.Iterable[int], modifier_target: 'ModifierTarget') -> dict[int, int] - Batched ``get_condition_modifier_total`` across many sheets (#4090).`
+- `contributing_condition_ids(breakdown: world.checks.types.ModifierBreakdown) -> tuple[int, ...] - The condition instances whose nonzero term is in ``breakdown``, in pk order (#4584).`
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary - Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult - Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
+- `draws_aggro_target_ids(targets: collections.abc.Iterable['ObjectDB']) -> set[int] - ObjectDB pks among ``targets`` carrying an active draws_aggro condition (#4572).`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_conditions_content() -> None - Idempotently seed all core conditions content.`
 - `ensure_poison_content() -> None - Idempotently seed poison content (#1050).`
@@ -3223,10 +3232,12 @@
 - `get_settle_config() -> world.conditions.models.SettleConfig - Return the SettleConfig singleton (pk=1), creating it lazily on first call.`
 - `get_treatment_candidates(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene') -> list[dict[str, typing.Any]] - Return valid (treatment, target_effect) pairs for helper to attempt on target.`
 - `get_turn_order_modifier(character_sheet: 'CharacterSheet') -> int - Get the total turn order modifier from all conditions.`
+- `guardians_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, list[int]] - Guardian ObjectDB pks for each target from active source_guards_bearer conditions.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool - Check if target has a specific condition.`
 - `has_death_deferred(character: 'ObjectDB') -> bool - Return True if the character has any active condition granting death_deferred.`
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
 - `is_untargetable(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
+- `knockout_preventing_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).`
 - `loss_of_self_terms(template: world.conditions.models.ConditionTemplate) -> 'tuple[ExtraTraitTerm, ...]' - The skills a resist or break-free roll adds for ``template``, usually none.`
 - `opponent_condition_opposition(objectdb: 'ObjectDB', check_type: world.checks.models.CheckType) -> int - Difficulty delta an opposing entity's active conditions contribute (#3384).`
 - `passes_concealment_check(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Check concealment after the caller has established readable spatial scope.`
@@ -3238,15 +3249,21 @@
 - `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult - Process condition interactions when target takes damage.`
 - `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult - Process end-of-round effects for all conditions on a target.`
 - `process_round_start(target: 'ObjectDB') -> world.conditions.types.RoundTickResult - Process start-of-round effects for all conditions on a target.`
+- `provoking_source_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - ObjectDB pk of each target's provoker from active forces_attack_on_source conditions.`
 - `register_detection(observer_sheet: 'CharacterSheet', target: 'ObjectDB') -> None - Record that observer_sheet has pierced target's active concealment(s) (#1225).`
 - `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool - Remove a condition from a target.`
 - `remove_condition_by_name(*, payload: object, condition_name: str) -> bool - Remove a named condition from the character carried by the payload.`
 - `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] - Remove all conditions in a category from a target.`
 - `resolve_damage_type_resistance(character: 'ObjectDB', damage_amount: int, damage_type: 'DamageType | None') -> int - Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).`
+- `retaliating_instances(target: 'ObjectDB') -> list[world.conditions.models.ConditionInstance] - The bearer's active strike-back instances, oldest first, in one query (#4584).`
 - `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
 - `settle_round_effects(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionInstance] - Convert round-counted conditions on the targets into wall-clock expiries (#4120).`
 - `settled_effects_tick() -> world.conditions.types.SettledTickSummary - Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).`
+- `spend_condition_use(instance: world.conditions.models.ConditionInstance) -> bool - End a once-only (``UNTIL_USED``) condition because it was just used (#4584).`
+- `spend_conditions_by_id(instance_ids: collections.abc.Iterable[int]) -> None - Spend the once-only conditions among ``instance_ids`` with one query (#4584).`
+- `spend_contributing_conditions(breakdown: world.checks.types.ModifierBreakdown) -> None - Spend every once-only condition whose nonzero term helped a real roll (#4584).`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool - Temporarily suppress a condition's effects.`
+- `turn_order_modifier_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - Total turn order modifier per target from active conditions (positive = acts earlier).`
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool - Remove suppression from a condition.`
 
 
@@ -11050,6 +11067,7 @@
 - `is_alive(character_sheet: 'CharacterSheet | None') -> 'bool' - Return True if the character is not dead.`
 - `is_dead(character_sheet: 'CharacterSheet | None') -> 'bool' - Return True if the character's mortality marker is DEAD.`
 - `is_retired(character_sheet: 'CharacterSheet | None') -> 'bool' - True when the dead character has been released (retire fired, #2287).`
+- `knockout_preventing_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).`
 - `mark_fed_to_death(victim_sheet: 'CharacterSheet') -> 'bool' - Kill an NPC drained past empty by feeding (#2853). Returns True on death.`
 - `mend_wound(healer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', wound_instance: 'ConditionInstance', amount: 'int') -> 'int' - Raise a wounded target's health, double-bounded (#2644 — the attrition invariant).`
 - `perceives_dreamside(character_sheet: 'CharacterSheet | None') -> 'bool' - True when the character's perception is relocated to the dream side (#2287).`
@@ -11059,6 +11077,8 @@
 - `resolve_abandonment(character_sheet: 'CharacterSheet | None') -> 'bool' - Resolve an abandoned downed victim's fate through the abandonment pool (#1479 T8).`
 - `resolve_vitals_consequence(character_sheet: 'CharacterSheet', check_type: 'CheckTypeHint', target_difficulty: 'int', pool: 'ConsequencePool', *, extra_modifiers: 'int' = 0, source_character: 'ObjectDB | None' = None) -> 'PendingResolution' - Resolve one survivability consequence through the consequence-pool pipeline.`
 - `retire_character(character_sheet: 'CharacterSheet', *, forced_by: 'object | None' = None) -> 'None' - Release a dead character: the final lock of the ghost interlude (#2287).`
+- `spend_condition_use(instance: world.conditions.models.ConditionInstance) -> bool - End a once-only (``UNTIL_USED``) condition because it was just used (#4584).`
+- `spend_contributing_conditions(breakdown: world.checks.types.ModifierBreakdown) -> None - Spend every once-only condition whose nonzero term helped a real roll (#4584).`
 - `tick_round_for_targets(targets: 'Iterable[ObjectDB]', *, timing: "Literal['start', 'end']" = 'end') -> 'None' - Apply one round's worth of per-target effects for a set of targets.`
 - `unconscious_instance(character_sheet: 'CharacterSheet | None') -> 'ConditionInstance | None' - Return the character's active Unconscious ConditionInstance, if any.`
 

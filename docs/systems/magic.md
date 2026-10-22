@@ -3503,11 +3503,31 @@ grammar is what #2206 made actually reach validation/persistence in combat.
 | `absorb_pool(*, payload)` | reactive handler (prio 10) | Drain `absorb_remaining` buffer; sets `payload.amount=0` when fully absorbed; overflow lands |
 | `reflect_damage(*, payload)` | reactive handler (prio 20) | Pay `reactive_anima_cost`; resolve attacker from `payload.source.ref`; bounce via `bypass_pre_apply`; set `payload.amount=0` |
 | `blink_dodge(*, payload)` | reactive handler (prio 30) | Pay `reactive_anima_cost`; move bearer; set `payload.amount=0` |
+| `strike_back(*, payload, instance)` | direct read at the damage seam (#4584) | Not a flow handler: `_answer_with_strike_backs` in `_emit_post_damage_events` calls it for each instance `retaliating_instances` finds on a PC bearer, right after `DAMAGE_APPLIED`. Pay `reactive_anima_cost`; deal `retaliation_damage` to the `CombatOpponent` that struck (typed, counted as the payer's threat); lay `retaliation_condition` with the ward's source as its source. Never strikes a PC |
 | `summon_ally(*, payload)` | direct handler | Create a `CombatOpponent` with `allegiance=ALLY`, `summoned_by=caster` |
 | `move_position_on_condition(*, payload, destination_position_id)` | CONDITION_APPLIED adapter | Thin wrapper → `move_position` |
 | `create_obstacle_on_condition(*, payload, ...)` | CONDITION_APPLIED adapter | Thin wrapper → `create_obstacle` |
 | `summon_ally_on_condition(*, payload, threat_pool_name, ...)` | CONDITION_APPLIED adapter | Bridges `ConditionAppliedPayload` (`.target` as bearer/caster) → `summon_ally` |
 | `init_absorb_buffer(*, payload, buffer)` | CONDITION_APPLIED handler | Seeds `ConditionInstance.absorb_remaining` on Aegis Field application |
+
+**Once-only wards and markers end after a successful fire (#4584).** An `UNTIL_USED`
+condition is spent through `spend_condition_use` (`world/conditions/services.py`): `reflect_damage`,
+`blink_dodge` and `strike_back` spend their ward after a successful fire (a fizzle is not a
+use), `absorb_pool` ends an `UNTIL_USED` barrier after its first soak through the full
+teardown (a lasting barrier keeps today's drain-to-zero behavior), and each `*_on_condition`
+adapter (`move_position_on_condition`, `force_move_target_on_condition`,
+`create_obstacle_on_condition`, `create_zone_hazard_on_condition`,
+`raise_rampart_on_condition`, `summon_ally_on_condition`) spends its marker through
+`_spend_marker` on normal exit of its effect, not on error. A condition staff give a lasting
+duration is never spent by use.
+
+**Strike-back has no seeded bundle (#4584).** There is no `ensure_strike_back_content`, no
+strike-back flow, step or trigger row: the read is hard-coded at the damage seam and staff
+author only the condition. The knobs are the `ConditionTemplate` fields `retaliation_damage`,
+`retaliation_damage_type` and `retaliation_condition` (plus `reactive_anima_cost` and the
+duration). Pairing `retaliation_condition` with a `forces_attack_on_source` condition makes
+striking the ward mean facing its caster. Known gap: only a fizzle is narrated; a successful
+strike-back moves the NPC's health with no line saying why.
 
 **Reactive interceptor cost pattern** (ADR-0060):
 

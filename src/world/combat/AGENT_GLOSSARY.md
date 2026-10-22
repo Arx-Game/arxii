@@ -42,7 +42,11 @@ _Avoid_: intimidate (that name is the CheckType), frighten, cow
 
 **Taunt**:
 The social-combat maneuver by which a PC draws an NPC's aggro — rolling wits + Persuasion + Intimidation to accumulate threat on the existing `ThreatRecord` seam, biasing the NPC's target selection toward the taunter next round.
-_Avoid_: provoke, mock, aggro (colloquial)
+_Avoid_: mock, aggro (colloquial). Not **Provoke** (below): Taunt biases an NPC's choice through threat, Provoke removes the choice.
+
+**Provoke** (#4584):
+A condition with `ConditionTemplate.forces_attack_on_source` on an NPC opponent: it attacks only the condition's source (`source_character`), from the round after the condition lands (the hard form of Taunt's soft threat bias). An active engagement lock wins; a source who is down, untargetable or out of the fight leaves the opponent choosing as normal; charmed, turned and summoned opponents ignore it. Read by `select_npc_actions` through `provoking_source_by_target`.
+_Avoid_: taunt (the soft, threat-based maneuver), aggro, lock (an engagement lock is a different, duel-style hold)
 
 **Parley**:
 The social-combat maneuver by which a PC talks a foe down mid-fight — rolling charm + Persuasion + Seduction against the target's Composure to apply a disposition delta (via `apply_social_disposition_delta`), calm the opponent on a decisive success, or yield a broken foe on a critical success. Gated: the opponent must be faltering/broken or the PC must hold sufficient standing. Even mindless targets can be parleyed with — a breakthrough grants a fleeting mind (Sharlotte charming a lake).
@@ -54,7 +58,7 @@ _Avoid_: surrender, forfeit, submit, defeat
 
 **Interpose**:
 The maneuver by which a PC stands ready to step in front of an attack aimed at an ally and intercept it (a clean block). It costs fatigue only on the round it actually fires; an armed-but-never-triggered interpose costs nothing. See `world/scenes/AGENT_GLOSSARY.md`'s Sudden Harm entry for the out-of-combat sibling, which arms via a bootstrapped scene round instead of a `CombatRoundAction`. Interpose is the **mundane case** of the more general Guardian reaction (below): a plain `declare_interpose(technique=None)` rolls best-of Reflexes/Melee Defense instead of a declared protective technique.
-_Avoid_: block, guard, intercept, bodyguard
+_Avoid_: block, guard (for a declared Interpose; a condition-made guard is a **Standing guard**, below), intercept, bodyguard
 
 **Guardian reaction** (#2207):
 The declared protect-with-technique reaction a PC arms via `declare_interpose(participant, ally=None, technique=None)`. Two mechanically distinct resolution branches share the one declaration field (`CombatRoundAction.focused_action`, reused rather than adding a parallel column):
@@ -63,6 +67,14 @@ The declared protect-with-technique reaction a PC arms via `declare_interpose(pa
 
 `world.magic.services.targeting.protective_flavor(technique)` classifies a technique's reactive-trigger handler into `barrier` (absorb_pool) / `blink` (blink_dodge) / `redirect` (reflect_damage) by walking its authored condition→reactive-trigger→flow data — no new authored field. A guardian can also shield an ALLY-allegiance `CombatOpponent` (a summon) — but only via the *any-ally* (`ally=None`) declaration, since `focused_ally_target` FKs `CombatParticipant` and cannot name a `CombatOpponent` directly (a named-ally guard of a summon is a follow-up).
 _Avoid_: guardian ward, protect action
+
+**Standing guard** (#4584, ADR-4584-A):
+A condition with `ConditionTemplate.source_guards_bearer`: its source (`source_character`) tries the mundane interpose on every hit on the bearer without declaring anything, from the round after the condition lands. She still takes her own turn. It counts against her one reaction (`REACTIONS_PER_ROUND`) and the hit's answer cap (`ABSORPTION_CAP_PER_MOMENT`) and pays interpose fatigue at very low effort. A guardian who declared any Interpose that round acts only through her declaration; a guard cast on its own bearer never interposes; PC wards in combat only. Read by `_try_interpose` through `guardians_by_target`.
+_Avoid_: bodyguard maneuver, auto-interpose
+
+**Strike-back** (#4584):
+The `ConditionTemplate.retaliation_damage` / `retaliation_damage_type` / `retaliation_condition` fields, read by `strike_back` directly where combat damage lands on a PC bearer (`_answer_with_strike_backs`): the NPC that dealt the blow takes the damage and/or is laid the condition with the ward's source as its source. Never strikes a PC. Not a flow or trigger, and a success is not narrated (only a fizzle is).
+_Avoid_: thorns, reflect (`reflect_damage` bounces the blow's own amount before it lands; strike-back adds fixed damage after)
 
 **Redirect** (#2210):
 A REDIRECT-flavor Guardian reaction's saved-damage destination, declared at
@@ -93,11 +105,12 @@ NPC side. See `world/covenants/AGENT_GLOSSARY.md`'s Wind-up / Interception (wind
 _Avoid_: charge-up, cast time (a caster's own resolution delay, not an authored multi-round threat).
 
 **Reaction Economy** (#2639, ADR-0161):
-The two budgets gating the shared interpose fire seam (`_dispatch_interpose_action`):
+The two budgets gating the shared interpose fire seam (`_attempt_guardian_interpose`):
 `CombatParticipant.reactions_used` vs `REACTIONS_PER_ROUND` (1, per-participant, reset each
 `begin_declaration_phase`) and `DamagePreApplyPayload.answers_consumed` vs
 `ABSORPTION_CAP_PER_MOMENT` (2, per-landing-hit, regardless of who fired). Standing defenses
-(absorb/reflect/blink — their own `reactive_anima_cost`, ADR-0060) sit outside both budgets.
+(absorb/reflect/blink/strike-back, their own `reactive_anima_cost`, ADR-0060) sit outside both
+budgets; a **Standing guard** does not (ADR-4584-A).
 A declined guardian is told privately why (#3574, ADR-0271); the table is not.
 _Avoid_: reaction points, action economy (this is specifically the interpose-family reaction
 budget, not a general action-point system).

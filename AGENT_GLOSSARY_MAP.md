@@ -396,7 +396,10 @@ Interpose (a plain `declare_interpose(technique=None)`) is its mundane case, rol
 best-of Reflexes/Melee Defense; supplying a known technique that classifies to a
 non-`redirect` protective flavor (`world.magic.services.targeting.protective_flavor`)
 instead rolls the guardian's own cast check and pays anima, not fatigue (ADR-0118). The
-combat per-app glossary has the full entry. _Avoid_: guardian ward, protect action.
+combat per-app glossary has the full entry. A **Standing guard** (#4584, ADR-4584-A) is
+the same mundane interpose made by a `source_guards_bearer` condition instead of a
+declaration: it spends the guardian's reaction and answer budget like a declared one. _Avoid_:
+guardian ward, protect action.
 
 **Sustained Action** (#2705, ADR-0190):
 The PC-side mirror of the combat per-app glossary's Wind-up entry: a `SustainedAction`
