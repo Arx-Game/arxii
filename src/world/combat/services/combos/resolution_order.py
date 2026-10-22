@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from world.combat.constants import (
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
@@ -18,6 +20,37 @@ from world.combat.models import (
     ComboSlot,
 )
 from world.combat.types import ComboSlotFill, ComboSlotMatch
+from world.conditions.services import turn_order_modifier_by_target
+
+
+def effective_speed_ranks(
+    participants: Iterable[CombatParticipant],
+    opponents: Iterable[CombatOpponent] = (),
+) -> dict[tuple[str, int], int]:
+    """Effective speed rank per combatant, keyed ``(entity_type, pk)`` (#4572).
+
+    The one place round order is decided: ``get_resolution_order`` and the encounter
+    serializer's initiative chips both sort on it, so they cannot disagree. Base rank
+    is the PC's covenant role speed (NO_ROLE_SPEED_RANK when none) or NPC_SPEED_RANK;
+    the bearer's summed active turn order modifier is subtracted, so a positive
+    modifier acts earlier (lower rank). One conditions query covers the whole batch.
+    Participants need ``covenant_role`` and ``character_sheet__character`` loaded;
+    an opponent with no ObjectDB cannot bear conditions and keeps its base rank.
+    """
+    participants = list(participants)
+    opponents = list(opponents)
+    bearers = [p.character_sheet.character for p in participants]
+    bearers.extend(o.objectdb for o in opponents if o.objectdb_id is not None)
+    modifiers = turn_order_modifier_by_target(bearers)
+
+    ranks: dict[tuple[str, int], int] = {}
+    for p in participants:
+        base = p.covenant_role.speed_rank if p.covenant_role_id else NO_ROLE_SPEED_RANK
+        ranks[(ENTITY_TYPE_PC, p.pk)] = base - modifiers.get(p.character_sheet.character.pk, 0)
+    for o in opponents:
+        shift = modifiers.get(o.objectdb_id, 0) if o.objectdb_id is not None else 0
+        ranks[(ENTITY_TYPE_NPC, o.pk)] = NPC_SPEED_RANK - shift
+    return ranks
 
 
 def get_resolution_order(
@@ -26,7 +59,8 @@ def get_resolution_order(
     """Build the resolution order for a combat round.
 
     Returns a sorted list of (entity_type, entity) tuples where entity_type
-    is "pc" or "npc". Sorted by speed rank ascending (lower = faster).
+    is "pc" or "npc". Sorted by effective speed rank ascending (lower = faster),
+    see ``effective_speed_ranks`` (turn order conditions shift a combatant's rank).
 
     Includes:
     - PCs who can_act (not dead, not incapacitated; dying-but-conscious included)
@@ -47,24 +81,21 @@ def get_resolution_order(
         ).select_related("covenant_role", "character_sheet__character")
     )
 
-    ranked: list[tuple[int, str, CombatParticipant | CombatOpponent]] = []
-    for p in participants:
-        if not can_act(p.character_sheet):
-            continue
-        speed = p.covenant_role.speed_rank if p.covenant_role_id else NO_ROLE_SPEED_RANK
-        ranked.append((speed, ENTITY_TYPE_PC, p))
-
+    actors = [p for p in participants if can_act(p.character_sheet)]
     opponents = list(
         CombatOpponent.objects.filter(
             encounter=encounter,
             status=OpponentStatus.ACTIVE,
-        )
+        ).select_related("objectdb")
     )
-    ranked.extend((NPC_SPEED_RANK, ENTITY_TYPE_NPC, o) for o in opponents)
+    ranks = effective_speed_ranks(actors, opponents)
 
-    ranked.sort(key=lambda item: (item[0], item[2].pk))
-
-    return [(entity_type, entity) for _, entity_type, entity in ranked]
+    ranked: list[tuple[str, CombatParticipant | CombatOpponent]] = [
+        (ENTITY_TYPE_PC, p) for p in actors
+    ]
+    ranked.extend((ENTITY_TYPE_NPC, o) for o in opponents)
+    ranked.sort(key=lambda item: (ranks[(item[0], item[1].pk)], item[1].pk))
+    return ranked
 
 
 # ---------------------------------------------------------------------------

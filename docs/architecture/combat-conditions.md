@@ -181,7 +181,8 @@ resolve_round(encounter)
   │
   ├─ select_for_update encounter; status DECLARING → RESOLVING
   ├─ build action lookups (existing)
-  ├─ resolution_order = speed-rank sorted (existing)
+  ├─ resolution_order = effective speed rank sorted (role speed rank minus the bearer's
+  │     turn order modifier conditions, #4572; NPC opponents shift too)
   │
   └─ for each (entity_type, entity) in resolution_order:
         │
@@ -257,7 +258,8 @@ After all actions resolved:
   ├─ dying final round consumption (existing)
   ├─ boss phase transitions (existing)
   ├─ NEW: process_round_end for each active participant + active opponent
-  │     # decrements rounds_remaining on conditions, ticks DoT, fires expiry
+  │     # decrements rounds_remaining on conditions, ticks DoT (an NPC opponent's
+  │     # health takes it through apply_damage_to_opponent, #4572), fires expiry
   └─ encounter completion check
        ├─ if completed: status → COMPLETED
        │     └─ run cleanup_completed_encounter(encounter)

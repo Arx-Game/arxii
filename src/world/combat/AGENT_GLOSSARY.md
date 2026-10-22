@@ -324,7 +324,7 @@ _Avoid_: familiar, pet, companion (for the in-combat summon row specifically)
 **Reactive interceptor**:
 A mutation-only `DAMAGE_PRE_APPLY` flow handler that can reduce or nullify an incoming hit —
 force-field (absorb_pool, priority 10), reflect (reflect_damage, priority 20), or blink
-(blink_dodge, priority 30). Each sets `payload.amount = 0` on success; lower-priority
+(blink_dodge, priority 30). Force-field and reflect find their condition by field, never by its name (#4572). Each sets `payload.amount = 0` on success; lower-priority
 interceptors guard `if payload.amount <= 0: return`. Cost: `reactive_anima_cost` per fire;
 can't pay → fizzle, attack lands. No `CANCEL_EVENT` child step (ADR-0060).
 _Avoid_: cancel-event interceptor, reactive cancel, shield handler
@@ -334,7 +334,7 @@ A deterministic on-hit effect that shoves the defender one Position away from th
 _Avoid_: push ("push" is already ambiguous with Strain and Clash's tug-of-war progress — see those entries), shove, displace
 
 **ThreatRecord**:
-A per-(opponent, participant) threat score accumulated from real events — damage dealt, taunts (#2015), protective actions. The substrate for NPC target selection: `HIGHEST_THREAT` sorts candidates by threat value, and `SPECIFIC_ROLE` prioritizes SHIELD-archetype PCs then breaks ties by threat. An active `EngagementLock` narrows the locked NPC's targeting to just the locked PC.
+A per-(opponent, participant) threat score accumulated from real events: damage dealt, taunts (#2015), protective actions. The substrate for NPC target selection: `HIGHEST_THREAT` sorts candidates by threat value, and `SPECIFIC_ROLE` prioritizes SHIELD-archetype PCs then breaks ties by threat. An active `EngagementLock` narrows the locked NPC's targeting to just the locked PC. A PC's active `draws_aggro` conditions add their summed `aggro_priority` to its threat with every opponent at selection time (#4572); that bonus is read, never stored as a `ThreatRecord`.
 _Avoid_: aggro table, hate list, enmity
 
 **EngagementLock**:

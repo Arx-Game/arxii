@@ -1184,8 +1184,16 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   (`settled_effects_tick`) applies clamped non-lethal DoT via `apply_clamped_chronic_damage` and
   removes expired converted rows; `lapsed_allegiance_sweep` warns a PC charmer once and
   auto-rolls the break check at lapse (no encounter opens). See `docs/systems/conditions.md`.
+- **Combat reads condition effects for both sides (#4572) [BUILT & WIRED]:** NPC target
+  selection adds a PC's `draws_aggro` / `aggro_priority` conditions to its threat
+  (`aggro_priority_by_target`), round order and the initiative chips subtract the
+  `affects_turn_order` / `turn_order_modifier` total from a combatant's speed rank
+  (`turn_order_modifier_by_target` via `effective_speed_ranks`), DoT ticks reach NPC
+  opponents, and `absorb_pool` / `reflect_damage` find their condition by field, not by name.
+  See `docs/systems/conditions.md` "Condition effects combat reads".
 - **Integrates with:** combat (DoT, capability blocking, NPC allegiance reads via
-  `ConditionTemplate.sets_allegiance`; `select_npc_actions` consults `effective_allegiances`),
+  `ConditionTemplate.sets_allegiance`; `select_npc_actions` consults `effective_allegiances`
+  and condition aggro; `get_resolution_order` consults turn order modifiers),
   magic (power sources, resonance-environment boon/injury application, behavior-consent gating
   via `ConditionCategory.alters_behavior`), progression (interactions), scenes (telnet `treat` +
   web Treat panel surface converges on the `SceneActionRequest` consent seam via the
@@ -8390,8 +8398,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `ConditionTemplate.reactive_anima_cost` (int) — anima paid per reactive-defense fire;
     can't pay → fizzle, the attack lands (0 = free).
   - `ConditionInstance.absorb_remaining` (int, nullable) — remaining absorption buffer for
-    the Aegis Field (force-field) handler; seeded by `init_absorb_buffer` on
-    `CONDITION_APPLIED`.
+    the force-field (`absorb_pool`) handler, which finds it by that field and not by the
+    condition's name (#4572); seeded by `init_absorb_buffer` on `CONDITION_APPLIED`.
   - `ConditionInstance.soulfray_consented` (bool, default False, #3573) - the caster
     consented at cast time to keep this condition's reactive cost/upkeep firing past zero
     anima at the price of Soulfray; stamped by `_create_instance_from_context` from both
@@ -8641,6 +8649,25 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     when the round has no NPC selection of EITHER shape yet — no `CombatOpponentAction` AND
     no `PendingOpponentAttack` declared this round — a conservative, idempotent fallback;
     any explicit prior selection (staff, simulation, tests) is left alone.
+- **Conditions reach the fight for both sides (#4572) [BUILT & WIRED]:**
+  - `select_npc_actions` -> `_apply_aggro_conditions` (`world/combat/services/npc/npc_selection.py`)
+    adds each PC's summed `aggro_priority` (`world.conditions.services.aggro_priority_by_target`,
+    `draws_aggro` conditions only) to its threat with every opponent and puts it in the
+    `SPECIFIC_ROLE` preferred set. Selection-time only (no `ThreatRecord` written); an
+    `EngagementLock` still overrides.
+  - `effective_speed_ranks(participants, opponents=())` (`world/combat/services/combos/
+    resolution_order.py`) is the one place round order is decided: base rank minus the bearer's
+    `turn_order_modifier_by_target` total, keyed `(entity_type, pk)`. `get_resolution_order` and
+    `EncounterDetailSerializer.get_resolution_order` (initiative chips, one extra query) both
+    sort on it. NPC opponents shift too (base `NPC_SPEED_RANK`).
+  - `_apply_round_tick_damage` (`world/vitals/services.py`) routes a tick on an NPC opponent's
+    body through `_apply_round_tick_damage_to_opponent` -> `apply_damage_to_opponent`
+    (`bypass_soak`, `bypass_pre_apply`), so DoT lowers an NPC's health and can defeat it.
+  - `absorb_pool` and `reflect_damage` designate their condition by field (an instance holding
+    an absorb buffer; a template with a reactive trigger calling the handler), not by the
+    Aegis Field / Mirror Ward names.
+  - Reviewer agent `tools/agents/condition-effect-reach-reviewer.md`; journeys in
+    `src/integration_tests/test_conditions_that_reach_the_fight_journeys.py`.
 - **PC sustained actions (#2705; ADR-0190 — extends ADR-0161's pre-armed shape to the
   PC side):**
   - `SustainedAction` (`world/combat/models.py`) — the PC-side mirror of

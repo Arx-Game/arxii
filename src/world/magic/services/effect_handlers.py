@@ -6,16 +6,12 @@ its dotted path from a seeded FlowDefinition's CALL_SERVICE_FUNCTION step.
 
 from typing import TYPE_CHECKING, Any, cast
 
+from flows.consts import FlowActionChoices
 from world.areas.positioning.models import Position, PositionEdge
 from world.areas.positioning.services import (
     create_conjured_obstacle,
     force_move_to_position,
     position_of,
-)
-from world.conditions.constants import (
-    BLINK_CONDITION_NAME,
-    FORCE_FIELD_CONDITION_NAME,
-    REFLECT_CONDITION_NAME,
 )
 from world.conditions.models import ConditionInstance
 from world.magic.models.anima import CharacterAnima
@@ -201,7 +197,8 @@ def absorb_pool(*, payload: Any) -> None:
     negative debit.
 
     Mechanics:
-    - Finds the bearer's oldest active force-field ConditionInstance.
+    - Finds the bearer's oldest active ConditionInstance holding a buffer
+      (``absorb_remaining > 0``), whatever its template is named.
     - Pays reactive_anima_cost (fizzles if unaffordable, narrated by
       ``_try_spend_reactive``, unless the instance is consented (#3573)).
     - Reduces payload.amount by min(buffer, amount); decrements absorb_remaining.
@@ -212,7 +209,6 @@ def absorb_pool(*, payload: Any) -> None:
     instance = (
         ConditionInstance.objects.filter(
             target=payload.target,
-            condition__name=FORCE_FIELD_CONDITION_NAME,
             absorb_remaining__gt=0,
             resolved_at__isnull=True,
         )
@@ -230,10 +226,24 @@ def absorb_pool(*, payload: Any) -> None:
         instance.save(update_fields=["absorb_remaining"])
 
 
+#: Dotted path a reflect ward's flow step carries.  ``reflect_damage`` designates the
+#: reflecting ConditionInstance by this step (not by template name); the seed in
+#: ``world.magic.effect_palette_content`` authors the same path.
+REFLECT_DAMAGE_HANDLER_PATH: str = "world.magic.services.effect_handlers.reflect_damage"
+
+
+#: Dotted path a blink ward's flow step carries.  ``blink_dodge`` designates the
+#: blinking ConditionInstance by this step (not by template name); the seed in
+#: ``world.magic.effect_palette_content`` authors the same path.
+BLINK_DODGE_HANDLER_PATH: str = "world.magic.services.effect_handlers.blink_dodge"
+
+
 def reflect_damage(*, payload: Any) -> None:
     """Bounce incoming damage back to the attacker (DAMAGE_PRE_APPLY, priority 20).
 
-    Finds the bearer's oldest active Mirror Ward ConditionInstance, pays
+    Finds the bearer's oldest active ConditionInstance whose template carries a
+    reactive trigger wired to this handler (designated by the template's own
+    trigger data, not its name, so staff may call a reflect ward anything), pays
     reactive_anima_cost via ``_try_spend_reactive`` (fizzles if unaffordable,
     narrated by ``_try_spend_reactive``, unless the instance is consented
     (#3573)), zeros ``payload.amount``, then applies the
@@ -253,7 +263,12 @@ def reflect_damage(*, payload: Any) -> None:
     instance = (
         ConditionInstance.objects.filter(
             target=payload.target,
-            condition__name=REFLECT_CONDITION_NAME,
+            condition__reactive_triggers__flow_definition__steps__action=(
+                FlowActionChoices.CALL_SERVICE_FUNCTION
+            ),
+            condition__reactive_triggers__flow_definition__steps__variable_name=(
+                REFLECT_DAMAGE_HANDLER_PATH
+            ),
             resolved_at__isnull=True,
         )
         .order_by("pk")  # oldest first — pk is monotone
@@ -848,7 +863,9 @@ def init_absorb_buffer(*, payload: Any, buffer: int) -> None:
 def blink_dodge(*, payload: Any) -> None:
     """Teleport the bearer to an alternate position, fully avoiding incoming damage.
 
-    Highest-priority DAMAGE_PRE_APPLY interceptor (priority 30). When the bearer
+    Highest-priority DAMAGE_PRE_APPLY interceptor (priority 30). Finds the bearer's
+    oldest active ConditionInstance whose template carries a reactive trigger wired to
+    this handler (designated by trigger data, not template name). When the bearer
     can pay ``reactive_anima_cost`` via ``_try_spend_reactive``:
 
     - Repositions the bearer to any other ``Position`` in their current room
@@ -867,7 +884,12 @@ def blink_dodge(*, payload: Any) -> None:
     instance = (
         ConditionInstance.objects.filter(
             target=payload.target,
-            condition__name=BLINK_CONDITION_NAME,
+            condition__reactive_triggers__flow_definition__steps__action=(
+                FlowActionChoices.CALL_SERVICE_FUNCTION
+            ),
+            condition__reactive_triggers__flow_definition__steps__variable_name=(
+                BLINK_DODGE_HANDLER_PATH
+            ),
             resolved_at__isnull=True,
         )
         .order_by("pk")
