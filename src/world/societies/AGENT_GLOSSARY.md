@@ -16,11 +16,11 @@ differently in their own records. Written once, at founding, from the pick on th
 charter's patron question (#4205); staff change it in admin afterwards.
 _Avoid_: patron deity FK (there is no such field), patron being.
 
-**Aspect target** (`HouseAspectOption.being` / `being_nickname` / `codex_entry`, #4205):
+**Charter option target** (`HouseCharterOption.being` / `being_nickname` / `codex_entry`, #4205):
 What an authored aspect answer IS: a god or totem (`being`, with the name a house calls
 it by in `being_nickname`) or a lore entry (`codex_entry`), never both. A pick opens that
 page from every house surface (`target_entry_id`). A **patron question** is the one
-`HouseAspectDefinition` per charter with `sets_patron` on; its pick names the house's
+`HouseCharterQuestion` per charter with `sets_patron` on; its pick names the house's
 patron. The target is a property of the catalog row, not a grant to anyone.
 _Avoid_: patron aspect (the question sets the patron; the option is a god), free-text
 aspect (ADR-0101), a geas as a house aspect (a geas is a personal Distinction, ruled #4205).
@@ -368,8 +368,8 @@ concepts. In short: a staff-authored opening on a staff-minted family's org
 (`societies.Vacancy`), kin or retainer, priced flat plus per-influence, with an
 optional standing (uncapped) capacity. See ADR-0273.
 
-**Aspect (house)**:
-A required, normalized catalog choice on a house template (#2079, ADR-0101): `HouseAspectDefinition` (prompt, min/max picks) + its `HouseAspectOption` catalog, answered at CG by picks alone (never free text; the authored list IS the thematic fence). Picks become permanent `OrganizationAspect` identity facets at materialization. Also the recipe for a culture-specific family fact WITH variants (a house quiddity, #3617): see `docs/systems/family-authoring-recipes.md` Recipe 7.
+**Charter question** (house; was "Aspect (house)" until #4532):
+A required, normalized catalog choice on a house template (#2079, ADR-0101): `HouseCharterQuestion` (prompt, min/max picks) + its `HouseCharterOption` catalog, answered at CG by picks alone (never free text; the authored list IS the thematic fence). Picks become permanent `OrganizationFacet` identity facets at materialization. Also the recipe for a culture-specific family fact WITH variants (a house quiddity, #3617): see `docs/systems/family-authoring-recipes.md` Recipe 7.
 _Avoid_: trait, flaw, house perk, custom aspect (there is no free-text path).
 
 **Feature (house)**:

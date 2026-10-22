@@ -155,7 +155,7 @@ describe('OrgPageInner', () => {
     expect(screen.getByText(/not yet public/i)).toBeInTheDocument();
   });
 
-  it('renders stylings, aspects, and features for a house org (#2079)', () => {
+  it('renders stylings, facets, and features for a house org (#2079)', () => {
     const housedOrg: Organization = {
       ...ORG,
       name: 'House Maldrave',
@@ -173,7 +173,7 @@ describe('OrgPageInner', () => {
         domains: [],
         open_crises: [],
         stature: null,
-        aspects: [
+        facets: [
           {
             definition: 'Patron Deity',
             option: 'The Chained Judge',
@@ -257,7 +257,7 @@ describe('OrgPageInner', () => {
         vassal_names: [],
         titles: [],
         domains: [],
-        aspects: [],
+        facets: [],
         features: [],
         stature: null,
         open_crises: [
@@ -325,7 +325,7 @@ describe('OrgPageInner', () => {
         vassal_names: [],
         titles: [],
         domains: [],
-        aspects: [],
+        facets: [],
         features: [],
         open_crises: [],
         stature: {

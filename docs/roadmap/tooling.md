@@ -294,6 +294,22 @@ name a covenant or ship type of two words, and `companion order` could not name 
 companion of two words; and a ship read "Sloop (building 12)" on its status line and in
 its project descriptions.
 
+Tranche 18 moved a character's own affairs onto the harness: `accuse`, `deed`, `consent`,
+`search` and the window verbs `open`/`close`. The five hand-built modules
+(`test_accuse_command`, `test_consent_preferences`, `test_deed_commands`,
+`test_investigation` and `test_windows`, 37 tests) are removed; the new
+`integration_tests/test_minding_your_own_affairs_journeys.py` types each verb through
+the handler against real rows: a scandal refused until the target opens the hostile
+category and minted once he does, a crime claim filed against a real crime kind, the
+refute and denounce lists; a tale told on a real Spread a Tale roll in a scene, the
+listener's new knowledge of the deed and his written account; the consent summary, the
+modes, both lists and a category rule; a room searched on the Search check, the lead
+held, and the investigation opened at a real Lab; a window opened and closed by the
+tenant and refused a guest. Three fixes in place: a bare `deed` and a bare `consent`
+from a sheetless character each answered "there was an error" with a logged traceback
+(the usage or refusal was raised past the dispatcher's handling); and the accusation
+actions named their target "Hobb (Primary)".
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,

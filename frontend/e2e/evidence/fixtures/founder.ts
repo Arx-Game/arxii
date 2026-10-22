@@ -34,7 +34,7 @@ export const TEMPLATE: HouseTemplateOption = {
   allegiance_max: 5,
   power_min: -5,
   power_max: 5,
-  aspect_definitions: [
+  charter_questions: [
     {
       id: 1,
       name: 'House Quiddity',

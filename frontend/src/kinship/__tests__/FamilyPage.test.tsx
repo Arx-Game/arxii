@@ -66,7 +66,7 @@ function katta(): FamilyTree {
       born_particle: 'mar',
       taken_in_particle: 'mal',
       standing: null,
-      inherited: { aspects: [], features: [], liege_name: '' },
+      inherited: { facets: [], features: [], liege_name: '' },
     },
     house: {
       id: 3,

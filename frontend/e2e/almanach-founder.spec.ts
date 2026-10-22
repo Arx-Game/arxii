@@ -210,7 +210,7 @@ const TEMPLATE = {
   allegiance_max: 5,
   power_min: -5,
   power_max: 5,
-  aspect_definitions: [] as unknown[],
+  charter_questions: [] as unknown[],
   features: [] as unknown[],
   holdings: [] as unknown[],
   default_succession_law: null,

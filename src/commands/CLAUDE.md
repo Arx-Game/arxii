@@ -202,7 +202,12 @@ actions, backends, and service functions.
   investigation.py`), which had zero telnet command before. Mirrors `CmdRest`'s
   (`fatigue.py`) thin-shell shape. #1825 adds the `search start [<#>]` subverb —
   list your held RESEARCH-mode leads / dispatch `StartInvestigationAction` (opens
-  the collaborative investigation project at an active LAB).
+  the collaborative investigation project at an active LAB). The Search check rolled
+  against a placed clue's difficulty, the lead held, the list and the investigation
+  opened at a real Lab are typed in
+  `integration_tests/test_minding_your_own_affairs_journeys.py` (`SearchingTheRoom`,
+  #3657 tranche 18; the hand-built `tests/test_investigation.py`, which mocked the
+  action, is gone). The actions' lines still carry their PLACEHOLDER marker.
 - **`outfit.py`**: `CmdOutfit` (`outfit`, #1866) — the outfit CRUD + wear/present
   namespace. One `ArxCommand` routes a leading subverb (`save`/`rename`/`delete`/
   `addslot`/`removeslot`/`wear`/`undress`/`present`) to `SaveOutfitAction`/
@@ -250,6 +255,27 @@ actions, backends, and service functions.
   the command, the Action re-checks `_actor_may_gm_place` server-side. Lives here rather than
   `CmdEncounter` because the gate is "staff, or the active *scene's* GM" — nothing to do with
   a live `CombatEncounter` existing, unlike every `CmdEncounter` subverb.
+- **`windows.py`**: `CmdOpenWindow`/`CmdCloseWindow` (`open <exit>`/`close <exit>`, #2175) —
+  thin `ArxCommand`s over `OpenWindowAction`/`CloseWindowAction`
+  (`actions/definitions/windows.py`), the door-lock shape: the exit resolves through
+  `search_or_raise` in the caller's room ("Could not find an exit called '<name>'."), the
+  action refuses a non-window exit and the owner-or-tenant standing lives in
+  `IsExitRoomOwnerPrerequisite`. Evennia's builder `@open` keeps its `@`, so the keys do not
+  collide. Both verbs, the usages, a door, a guest refused and the web's dispatch are typed
+  in `integration_tests/test_minding_your_own_affairs_journeys.py` (`OpeningAWindow`, #3657
+  tranche 18; the hand-built `tests/test_windows.py`, which mocked both actions, is gone).
+- **`deeds.py`**: `CmdDeed` (`deed`, #1503) — `deed spread <deed name or id> [effort=<low |
+  medium | high>] [specialization=<name or id>] [pose=<text>]` and `deed story <deed name or
+  id>=<written account>`, a `DispatchCommand` over the two SCENE_ADAPTIVE actions
+  `spread_tale` and `save_deed_story` (`actions/definitions/deeds.py`). The deed resolves
+  among `get_spreadable_deeds(persona)` (society awareness, own deeds, deeds heard told); a
+  spread needs the room's active scene with the caller a participant, and the scene's
+  anti-spam cooldown applies to the next spread or story. Its usage is sent, not raised
+  (#3657 tranche 18: a bare `deed` reached the player as "there was an error"). The tale
+  told on a real Spread a Tale roll, the listener's knowledge and story, and every refusal
+  are typed in `integration_tests/test_minding_your_own_affairs_journeys.py`
+  (`SpreadingATale`; the hand-built `tests/test_deed_commands.py`, which mocked the
+  dispatch, is gone).
 - **`door.py`**: `CmdLock`/`CmdUnlock` (`lock`/`unlock`, #1866) — real
   implementation (replacing the former stubs) dispatching to `LockAction`/
   `UnlockAction` (`actions/definitions/doors.py`). Room-owner/tenant gated via the
@@ -672,7 +698,14 @@ actions, backends, and service functions.
   Actions in `actions/definitions/consent_preferences.py`
   (`set_social_consent_preference` / `set_social_consent_category_rule` /
   `add_social_consent_whitelist` / `remove_social_consent_whitelist`). Bare `consent` and
-  `consent whitelist list [category]` render the caller's social-consent summary.
+  `consent whitelist list [category]` render the caller's social-consent summary; `consent
+  modes` explains each mode. `func` routes through `_route` and sends a `CommandError` the
+  way `DispatchCommand.func` does (#3657 tranche 18: the summary's "You have no character
+  identity." was raised past the handler for a sheetless character). The summary, the
+  modes, every usage, the lists and a category rule set and reverted are typed in
+  `integration_tests/test_minding_your_own_affairs_journeys.py` (`SettingHerTerms`); the
+  modes' effect on a carry is `test_membership_and_consent_journeys.py`'s. The hand-built
+  `tests/test_consent_preferences.py` is gone.
 - **`endorse.py`**: `CmdPoses` (`poses`) and `CmdEndorse` (`endorse`) — telnet faces of
   `PoseEndorseAction`, `SceneEntryEndorseAction`, `StylePresentationEndorseAction`.
   `poses <char>` lists endorseable poses in the current scene.
@@ -1533,7 +1566,13 @@ actions, backends, and service functions.
   `/denounce [<#>]` (list proven-fabrication authorship facts + dispatch
   `DenounceFramerAction` — the consent-gated backfire). `CmdFrame` (`frame <char> =
   <crime-kind> : <the claim>`) opens a frame-job project from your held gathered
-  evidence at a Workshop of Iniquity; bare `frame` lists what you hold.
+  evidence at a Workshop of Iniquity; bare `frame` lists what you hold. The mint, the
+  consent refusal, `accuse/crime` against a real crime kind, and the refute and
+  denounce lists are typed against a target who opens and closes the hostile category
+  in `integration_tests/test_minding_your_own_affairs_journeys.py`
+  (`ManufacturingAScandal`, #3657 tranche 18; the hand-built
+  `tests/test_accuse_command.py`, four parse checks, is gone). The accusation actions
+  name the target by `persona.name` (they had read "Hobb (Primary)").
 - **`gossip.py`**: `CmdGossip` (`gossip`, #1572) — work the rumor mill at a **social hub**. Thin over
   `world.secrets.gossip`: `gossip` (list your gossipable Level-1 secrets + their heat here), `gossip
   seek` (roll to overhear a hot secret you don't know), `gossip plant <#>` (spread it — raises

@@ -1,7 +1,7 @@
 """House charter models are authored content, not seeder invention (#2875).
 
 SuccessionLaw, HoldingKind, HouseFeature and HouseTemplate carry the same
-shape as HouseAspectDefinition (#2079/#2868): a natural key, CreditedContent,
+shape as HouseCharterQuestion (#2079/#2868): a natural key, CreditedContent,
 and a CONTENT_MODELS registration, so the lore repo owns them going forward.
 """
 
@@ -17,7 +17,7 @@ from world.currency.constants import IncomeStreamKind
 from world.societies.houses.constants import SuccessionDerivation, SuccessionOrdering
 from world.societies.houses.models import (
     HoldingKind,
-    HouseAspectDefinition,
+    HouseCharterQuestion,
     HouseFeature,
     HouseTemplate,
     SuccessionLaw,
@@ -172,10 +172,10 @@ class HouseTemplateRoundTripTests(TestCase):
             slug="rt-open-hearth",
             description="This house's hearth is open to any traveler.",
         )
-        aspect_a = HouseAspectDefinition.objects.create(
+        aspect_a = HouseCharterQuestion.objects.create(
             name="Round Trip Vice", prompt="Pick the house's founding vice."
         )
-        aspect_b = HouseAspectDefinition.objects.create(
+        aspect_b = HouseCharterQuestion.objects.create(
             name="Round Trip Totem", prompt="Pick the house's founding totem."
         )
 
@@ -190,7 +190,7 @@ class HouseTemplateRoundTripTests(TestCase):
         )
         template.holdings.add(holding_a, holding_b)
         template.features.add(feature_a, feature_b)
-        template.aspect_definitions.add(aspect_a, aspect_b)
+        template.charter_questions.add(aspect_a, aspect_b)
 
         result = export_to_content_repo(self.root)
         self.assertEqual(result.errors, [])
@@ -198,7 +198,7 @@ class HouseTemplateRoundTripTests(TestCase):
         # Wipe only the CONTENT_MODELS rows, child-first: the template links
         # to all four, so it goes first, then the four catalogs it referenced.
         HouseTemplate.objects.filter(pk=template.pk).delete()
-        HouseAspectDefinition.objects.filter(pk__in=[aspect_a.pk, aspect_b.pk]).delete()
+        HouseCharterQuestion.objects.filter(pk__in=[aspect_a.pk, aspect_b.pk]).delete()
         HouseFeature.objects.filter(pk__in=[feature_a.pk, feature_b.pk]).delete()
         HoldingKind.objects.filter(pk__in=[holding_a.pk, holding_b.pk]).delete()
         SuccessionLaw.objects.filter(pk=law.pk).delete()
@@ -222,7 +222,7 @@ class HouseTemplateRoundTripTests(TestCase):
             {"Round Trip Black Ledger", "Round Trip Open Hearth"},
         )
         self.assertEqual(
-            {aspect.name for aspect in reloaded.aspect_definitions.all()},
+            {aspect.name for aspect in reloaded.charter_questions.all()},
             {"Round Trip Vice", "Round Trip Totem"},
         )
 

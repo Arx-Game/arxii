@@ -56,18 +56,22 @@ class CmdDeed(DispatchCommand):
     )
 
     def func(self) -> None:
-        """Parse sub-verb, then hand off to DispatchCommand for dispatch."""
-        raw = (self.args or "").strip()
-        if not raw:
-            msg = self._usage()
-            raise CommandError(msg)
+        """Parse sub-verb, then hand off to DispatchCommand for dispatch.
 
+        The usage line is sent, not raised: a ``CommandError`` raised here is outside
+        ``DispatchCommand.func``'s own handling, and the command handler answered a bare
+        ``deed`` or ``deed dance`` with "there was an error" and a logged traceback
+        (#3657 tranche 18, the same shape ``form`` had in tranche 17).
+        """
+        raw = (self.args or "").strip()
         head, _, tail = raw.partition(" ")
         self._sub_verb = head.lower()
         self._rest = tail.strip()
-        if self._sub_verb not in _SUBVERBS:
-            msg = self._usage()
-            raise CommandError(msg)
+        if not raw or self._sub_verb not in _SUBVERBS:
+            usage = self._usage()
+            self.msg(usage)
+            self.msg(command_error={"error": usage, "command": self.raw_string or ""})
+            return
 
         super().func()
 

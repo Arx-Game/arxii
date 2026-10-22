@@ -20,7 +20,7 @@ from world.societies.houses.almanach_reads import document_for_house
 from world.societies.houses.constants import SuccessionDerivation, TitleTier
 from world.societies.houses.factories import OrganizationObservanceFactory
 from world.societies.houses.models import (
-    HouseAspectDefinition,
+    HouseCharterQuestion,
     HouseTemplate,
     NobiliaryParticle,
     SuccessionLaw,
@@ -217,10 +217,10 @@ class AlmanachApiTests(TestCase):
             liege=self.crown,
             default_succession_law=self.law,
         )
-        quiddity = HouseAspectDefinition.objects.create(
+        quiddity = HouseCharterQuestion.objects.create(
             name="Almanach API Quiddity", prompt="Which virtue rules the house?"
         )
-        template.aspect_definitions.add(quiddity)
+        template.charter_questions.add(quiddity)
         NobiliaryParticle.objects.create(
             realm=self.realm, kind=template.kind, particle="del", taken_in_particle="von"
         )

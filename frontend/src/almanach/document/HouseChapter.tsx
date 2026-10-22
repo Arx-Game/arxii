@@ -9,9 +9,9 @@
  *
  * Three ABSENT-catalog omissions share one root cause: nothing in the wire
  * payload lists the pickable options.
- * - Quiddity: `house.aspects` gives only the house's OWN chosen
+ * - Quiddity: `house.facets` gives only the house's OWN chosen
  *   definition/option/description triples, never the full
- *   `HouseAspectOption` catalog a "change" picker would need — the
+ *   `HouseCharterOption` catalog a "change" picker would need — the
  *   `.entries.compact` list renders the chosen options with their
  *   description folded in (only shown on `.on`) and an inert `⊕ change` door.
  * - Features: same shape (`HouseFeature` has no list endpoint here) — the
@@ -92,11 +92,11 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
   // an Umbral house has no Quiddity, so the heading is the question's own name and
   // a house with no answers shows no block at all.
   const facetGroups = Array.from(
-    house.aspects.reduce((groups, aspect) => {
+    house.facets.reduce((groups, aspect) => {
       const list = groups.get(aspect.definition) ?? [];
       list.push(aspect);
       return groups.set(aspect.definition, list);
-    }, new Map<string, typeof house.aspects>())
+    }, new Map<string, typeof house.facets>())
   );
   // Staged like the state toggle, not a per-field draft: the list is one value
   // and the action replaces it wholesale (#4206).

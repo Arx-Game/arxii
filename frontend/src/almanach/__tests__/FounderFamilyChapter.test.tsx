@@ -94,7 +94,7 @@ function baseDraft(kinRows: FounderKin[]): FounderDraft {
     colors: '',
     sigil_description: '',
     backstory: '',
-    aspect_picks: {},
+    facet_picks: {},
     principles: {},
     founder_relation: 'child',
     founder_is_heir: true,

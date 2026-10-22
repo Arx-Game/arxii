@@ -198,17 +198,17 @@ class AlmanachActionTests(TestCase):
     def test_edit_house_replaces_aspects_features_and_succession_law(self) -> None:
         from world.societies.houses.constants import SuccessionDerivation
         from world.societies.houses.models import (
-            HouseAspectDefinition,
-            HouseAspectOption,
+            HouseCharterOption,
+            HouseCharterQuestion,
             HouseFeature,
-            OrganizationAspect,
+            OrganizationFacet,
             OrganizationFeature,
             SuccessionLaw,
         )
 
-        definition = HouseAspectDefinition.objects.create(name="Quiddity", prompt="Pick one.")
-        option_a = HouseAspectOption.objects.create(definition=definition, name="Ember-Touched")
-        option_b = HouseAspectOption.objects.create(definition=definition, name="Ashbound")
+        definition = HouseCharterQuestion.objects.create(name="Quiddity", prompt="Pick one.")
+        option_a = HouseCharterOption.objects.create(definition=definition, name="Ember-Touched")
+        option_b = HouseCharterOption.objects.create(definition=definition, name="Ashbound")
         feature = HouseFeature.objects.create(
             name="Black Ledger", slug="black-ledger", description="Keeps a debt ledger."
         )
@@ -219,7 +219,7 @@ class AlmanachActionTests(TestCase):
         result = AlmanachEditHouseAction().run(
             self.staff,
             org_id=self.crown.pk,
-            aspect_option_ids=[option_a.pk],
+            facet_option_ids=[option_a.pk],
             feature_ids=[feature.pk],
             default_succession_law_id=law.pk,
         )
@@ -227,7 +227,7 @@ class AlmanachActionTests(TestCase):
         self.crown.refresh_from_db()
         assert self.crown.default_succession_law_id == law.pk
         assert list(
-            OrganizationAspect.objects.filter(organization=self.crown).values_list(
+            OrganizationFacet.objects.filter(organization=self.crown).values_list(
                 "option_id", flat=True
             )
         ) == [option_a.pk]
@@ -239,11 +239,11 @@ class AlmanachActionTests(TestCase):
 
         # Replace with the other option; the first row is gone, the second present.
         result = AlmanachEditHouseAction().run(
-            self.staff, org_id=self.crown.pk, aspect_option_ids=[option_b.pk]
+            self.staff, org_id=self.crown.pk, facet_option_ids=[option_b.pk]
         )
         assert result.success, result.message
         assert list(
-            OrganizationAspect.objects.filter(organization=self.crown).values_list(
+            OrganizationFacet.objects.filter(organization=self.crown).values_list(
                 "option_id", flat=True
             )
         ) == [option_b.pk]

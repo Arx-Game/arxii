@@ -168,7 +168,7 @@ function NamedFamilyPath({
   const [name, setName] = useState(draft.draft_data.new_family_name ?? '');
   const offered = template.family_templates;
   const familyTemplate = resolveFamilyTemplate(draft);
-  const picks = draft.draft_data.family_aspect_picks ?? {};
+  const picks = draft.draft_data.family_facet_picks ?? {};
 
   useEffect(() => {
     setName(draft.draft_data.new_family_name ?? '');
@@ -191,7 +191,7 @@ function NamedFamilyPath({
     else next = [...current, optionId];
     updateDraft.mutate({
       draftId: draft.id,
-      data: { draft_data: { family_aspect_picks: { ...picks, [definitionId]: next } } },
+      data: { draft_data: { family_facet_picks: { ...picks, [definitionId]: next } } },
     });
   };
 

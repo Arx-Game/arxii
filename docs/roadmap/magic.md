@@ -995,7 +995,7 @@ from the check type, once as the technique skill.
 **Built:**
 - The four pickers (`MagicActivitySkill.skill`, `Path.technique_skill`, `Gift.technique_skill`,
   `Technique.skill`) offer and accept Magic-category skills only, in admin and in `full_clean()`
-  (`world/magic/skill_choices.py`). Schema-only migration `0276_magic_skill_pickers_magic_only`.
+  (`world/magic/skill_choices.py`). Schema-only migration `0277_magic_skill_pickers_magic_only`.
 - `seeds_checks.py` and `seeds_cast.py` name, create and weight no skill; the magic check types and
   the "Technique Cast" fallback weight their stat only. Sanctum ritual configs take their skill from
   the `RITUAL_WORKING` mapping.

@@ -41,7 +41,7 @@ from world.roster.services.kinship import (
     kin_tree_for_sheet,
     open_slots_for,
 )
-from world.societies.houses.almanach_reads import aspect_facet
+from world.societies.houses.almanach_reads import facet_payload
 
 
 def _viewer_entry(request: Request) -> object:
@@ -60,14 +60,14 @@ def _inherited_by_family(families: list[Family]) -> dict[int, dict]:
     Mirrors ``character_creation.views._claimable_kind_ids_by_template`` -
     bounded to four queries regardless of how many families are being
     listed, grouped by family id in Python, and passed through serializer
-    context instead of a per-row ``house_for_family``/``.aspects.all()`` call
+    context instead of a per-row ``house_for_family``/``.facets.all()`` call
     (``FamilySerializer.get_inherited``). Never ``Prefetch(to_attr=...)`` or a
     bare ``prefetch_related`` here - both are unreliable across requests on
     these SharedMemoryModel instances (see the roster/CLAUDE.md idmapper notes).
     """
     from world.societies.houses.models import (  # noqa: PLC0415
         FealtyEdge,
-        OrganizationAspect,
+        OrganizationFacet,
         OrganizationFeature,
     )
     from world.societies.models import Organization  # noqa: PLC0415
@@ -92,10 +92,10 @@ def _inherited_by_family(families: list[Family]) -> dict[int, dict]:
     family_id_by_org_id = {org_id: family_id for family_id, org_id in org_by_family.items()}
 
     aspects_by_org: dict[int, list[dict]] = {}
-    for aspect in OrganizationAspect.objects.filter(organization_id__in=org_ids).select_related(
+    for aspect in OrganizationFacet.objects.filter(organization_id__in=org_ids).select_related(
         "definition", "option", "option__being"
     ):
-        aspects_by_org.setdefault(aspect.organization_id, []).append(aspect_facet(aspect))
+        aspects_by_org.setdefault(aspect.organization_id, []).append(facet_payload(aspect))
 
     features_by_org: dict[int, list[dict]] = {}
     for stamped in OrganizationFeature.objects.filter(organization_id__in=org_ids).select_related(
@@ -115,7 +115,7 @@ def _inherited_by_family(families: list[Family]) -> dict[int, dict]:
 
     for org_id, family_id in family_id_by_org_id.items():
         grouping[family_id] = {
-            "aspects": aspects_by_org.get(org_id, []),
+            "facets": aspects_by_org.get(org_id, []),
             "features": features_by_org.get(org_id, []),
             "liege_name": liege_name_by_org.get(org_id, ""),
         }

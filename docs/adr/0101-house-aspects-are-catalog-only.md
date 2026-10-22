@@ -16,3 +16,5 @@ surfaces) — prose never could be. **Rejected alternative:**
 pick-or-author-with-staff-approval — it converts every review into a taste
 argument and lets covers accumulate. Catalog gaps are fixed by authoring new
 options, not by opening text input.
+
+**Renamed (ADR-4532-A, 2026-10-21):** the house-side "aspect" is now a *charter question* (`HouseCharterQuestion`, its answers `HouseCharterOption`) and a house's picked answer a *facet* (`OrganizationFacet`, `HouseClaimFacet`); "aspect" names the check-side archetype only. The catalog-only decision stands.

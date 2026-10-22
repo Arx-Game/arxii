@@ -45,15 +45,15 @@ from world.societies.houses.constants import (
 )
 from world.societies.houses.models import (
     Domain,
-    HouseAspectOption,
+    HouseCharterOption,
     HouseClaim,
-    HouseClaimAspect,
+    HouseClaimFacet,
     HouseClaimKin,
     HouseClaimLand,
     HouseClaimObservance,
     HouseTemplate,
     LandShape,
-    OrganizationAspect,
+    OrganizationFacet,
     OrganizationFeature,
     OrganizationObservance,
     Title,
@@ -201,7 +201,7 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
     words: str,
     colors: str,
     sigil_description: str,
-    aspect_picks: dict[int, list[int]],
+    facet_picks: dict[int, list[int]],
     kin: list[ClaimKinDraft],
     lands: list[ClaimLandDraft],
     estate_name: str,
@@ -238,7 +238,7 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
         raise HousesServiceError(msg, user_message="The house needs its story.")
     _validate_stylings(words=words, colors=colors, sigil_description=sigil_description)
     validate_observances(observances)
-    _validate_aspect_picks(template=template, aspect_picks=aspect_picks)
+    _validate_facet_picks(template=template, facet_picks=facet_picks)
     for axis in _PRINCIPLE_AXES:
         value = principles.get(axis, 0)
         low = getattr(template, f"{axis}_min")
@@ -387,17 +387,17 @@ def _validate_estate_realm(*, draft: CharacterDraft, estate_name: str) -> None:
 # Module-private, but world.character_creation.validators._get_aspect_pick_errors
 # also calls it (#3648) - same cross-module pattern already used for
 # family_name_is_taken.
-def _validate_aspect_picks(*, template: HouseTemplate, aspect_picks: dict[int, list[int]]) -> None:
+def _validate_facet_picks(*, template: HouseTemplate, facet_picks: dict[int, list[int]]) -> None:
     """The catalog fence (#2079, ADR-0101): picks only, counted, from the template."""
-    definitions = {d.pk: d for d in template.aspect_definitions.all()}
-    unknown = set(aspect_picks) - set(definitions)
+    definitions = {d.pk: d for d in template.charter_questions.all()}
+    unknown = set(facet_picks) - set(definitions)
     if unknown:
         msg = f"aspect picks for definitions {sorted(unknown)} not on template {template.pk}"
         raise HousesServiceError(
             msg, user_message="One of those choices does not apply to this charter."
         )
     for definition in definitions.values():
-        picks = aspect_picks.get(definition.pk, [])
+        picks = facet_picks.get(definition.pk, [])
         if len(set(picks)) != len(picks):
             msg = f"duplicate picks for definition {definition.pk}"
             raise HousesServiceError(msg, user_message=f"{definition.name}: duplicate choice.")
@@ -433,7 +433,7 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
     words: str = "",
     colors: str = "",
     sigil_description: str = "",
-    aspect_picks: dict[int, list[int]] | None = None,
+    facet_picks: dict[int, list[int]] | None = None,
     kin: list[ClaimKinDraft] = (),
     lands: list[ClaimLandDraft] = (),
     estate_name: str = "",
@@ -445,7 +445,7 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
     """Run the automated gates and file the claim (+ its kin/land/observance
     rows) for staff review (#3983 Plan B, #4206)."""
     principles = principles or {}
-    aspect_picks = aspect_picks or {}
+    facet_picks = facet_picks or {}
     kin = list(kin)
     lands = list(lands)
     observances = list(observances)
@@ -459,7 +459,7 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
         words=words,
         colors=colors,
         sigil_description=sigil_description,
-        aspect_picks=aspect_picks,
+        facet_picks=facet_picks,
         kin=kin,
         lands=lands,
         estate_name=estate_name,
@@ -483,9 +483,9 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
             founder_is_heir=founder_is_heir,
             **field_values,
         )
-        for definition_id, option_ids in aspect_picks.items():
+        for definition_id, option_ids in facet_picks.items():
             for option_id in option_ids:
-                HouseClaimAspect.objects.create(
+                HouseClaimFacet.objects.create(
                     claim=claim, definition_id=definition_id, option_id=option_id
                 )
         for index, row in enumerate(kin):
@@ -553,25 +553,25 @@ def reject_house_claim(claim: HouseClaim, *, reviewer: AccountDB, note: str = ""
     return claim
 
 
-def _claim_aspect_picks(claim: HouseClaim) -> dict[int, list[int]]:
+def _claim_facet_picks(claim: HouseClaim) -> dict[int, list[int]]:
     picks: dict[int, list[int]] = {}
-    for picked in claim.aspects.all():
+    for picked in claim.facets.all():
         picks.setdefault(picked.definition_id, []).append(picked.option_id)
     return picks
 
 
-def patron_option_from_picks(aspect_picks: dict[int, list[int]]) -> HouseAspectOption | None:
+def patron_option_from_picks(facet_picks: dict[int, list[int]]) -> HouseCharterOption | None:
     """The one picked option on a ``sets_patron`` question (#4205), or ``None``.
 
     Two such picks cannot both be the patron, and an option on that question
     without a name for the house to use is a catalog error the founder cannot
     fix; both refuse rather than found a house with the wrong god.
     """
-    option_ids = [option_id for ids in aspect_picks.values() for option_id in ids]
+    option_ids = [option_id for ids in facet_picks.values() for option_id in ids]
     if not option_ids:
         return None
     options = list(
-        HouseAspectOption.objects.filter(
+        HouseCharterOption.objects.filter(
             pk__in=option_ids, definition__sets_patron=True
         ).select_related("being_nickname")
     )
@@ -591,7 +591,7 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     name: str,
     *,
     description: str = "",
-    aspect_picks: dict[int, list[int]] | None = None,
+    facet_picks: dict[int, list[int]] | None = None,
     served_house: Organization | None = None,
     created_by: AccountDB | None = None,
     origin_realm=None,
@@ -601,10 +601,10 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     crew_slot: CrewSlot | None = None,
     existing_family: Family | None = None,
 ) -> tuple[Family, Organization]:
-    """Family + org + rank ladder + fealty + aspects + features, from a Family Template.
+    """Family + org + rank ladder + fealty + facets + features, from a Family Template.
 
     ``existing_family`` (#4239): a family whose people already exist and that
-    now takes standing. The organization, ranks, fealty, aspects, features
+    now takes standing. The organization, ranks, fealty, facets, features
     and holdings attach to it; no second Family row is made, and ``name``
     is read from it.
 
@@ -615,7 +615,7 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     the Upbringing answer the player picked, else the default).
 
     Shared by the noble title claim (which then seats the title, domain and
-    holdings) and the CG name path (which adds nothing more). ``aspect_picks``
+    holdings) and the CG name path (which adds nothing more). ``facet_picks``
     is ``{definition_id: [option_id, ...]}``; ``served_house`` (else the
     template's liege) receives the new org's fealty.
     """
@@ -658,7 +658,7 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
         liege = served_house or template.liege
         if liege is not None:
             swear_fealty(vassal=org, liege=liege)
-    _stamp_aspects(org, aspect_picks or {})
+    _stamp_facets(org, facet_picks or {})
     for feature in template.features.all():
         OrganizationFeature.objects.create(organization=org, feature=feature)
     if template.starting_kin_slots:
@@ -675,19 +675,19 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     return family, org
 
 
-def _stamp_aspects(org: Organization, aspect_picks: dict[int, list[int]]) -> None:
+def _stamp_facets(org: Organization, facet_picks: dict[int, list[int]]) -> None:
     """Write the picks as the house's facets, and the patron the one patron pick names.
 
     The patron is fixed at founding (#4205): the pick on the charter's ``sets_patron``
     question becomes the house's own name for its god. Nothing else writes the
     column; staff change it in the org admin.
     """
-    for definition_id, option_ids in aspect_picks.items():
+    for definition_id, option_ids in facet_picks.items():
         for option_id in option_ids:
-            OrganizationAspect.objects.create(
+            OrganizationFacet.objects.create(
                 organization=org, definition_id=definition_id, option_id=option_id
             )
-    patron_option = patron_option_from_picks(aspect_picks)
+    patron_option = patron_option_from_picks(facet_picks)
     if patron_option is not None:
         org.patron_nickname = patron_option.being_nickname
         org.save(update_fields=["patron_nickname"])
@@ -968,7 +968,7 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet) -> Orga
         template,
         claim.house_name,
         description=claim.backstory,
-        aspect_picks=_claim_aspect_picks(claim),
+        facet_picks=_claim_facet_picks(claim),
         served_house=served_liege,
     )
     org.words = claim.words

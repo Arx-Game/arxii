@@ -20,7 +20,7 @@ those terms, not the `_Avoid_` synonyms listed there.
 ## Recipe 1: an Upbringing for a beginning
 Admin > Societies > Family Templates > Add: kind, `org_type` (resolves against the
 prerequisite anchors, which now include `commoner_family` alongside `noble_family`),
-society, features, aspect definitions, and served house choices (staff houses this
+society, features, charter questions (the house-side "aspects" until #4532), and served house choices (staff houses this
 family's kind may declare it served; blank = the question is not offered). Then
 Admin > Character Creation > Upbringings > Add: beginning, name, frame text, CG cost
 (0 = free, negative refunds), trust required, the family paths it allows, the kinds it
@@ -58,8 +58,8 @@ Add a `PactKind` row if none fits (e.g. "Patronage" with the levers it carries),
 `OrgPact` between the two organisations, ratified. Do not: add a patron FK to Family.
 
 ## Recipe 7: a culture-specific fact (quiddity, Letter of Marque)
-A fact with variants: a `HouseAspectDefinition` (the question) with `HouseAspectOption`
-rows, stamped on the org as `OrganizationAspect`. A flat fact: a `HouseFeature` (with a
+A fact with variants: a `HouseCharterQuestion` (the question) with `HouseCharterOption`
+rows, stamped on the org as `OrganizationFacet`. A flat fact: a `HouseFeature` (with a
 stable slug code can check) stamped as `OrganizationFeature`. Both can be set directly
 on staff-authored houses. Do not: add a boolean per fact.
 
@@ -69,7 +69,7 @@ this option will use); a battle or a tradition is its `codex_entry`. One or the 
 never both. The pick then opens that page from the house, the family and the CG card.
 
 ## Recipe 7b: a patron question (Umbros's patron god, Aythirmok's totem)
-One `HouseAspectDefinition` on the charter with `sets_patron` on, `max_picks` 1, and one
+One `HouseCharterQuestion` on the charter with `sets_patron` on, `max_picks` 1, and one
 option per god the realm's houses may serve, each with `being` and `being_nickname`. The
 founder's pick becomes `Organization.patron_nickname` at founding and the god's Codex
 page lists the house among its sworn houses once published. Optional patron: `min_picks`
@@ -92,7 +92,7 @@ kind on the Upbringings that should offer it. Do not: edit a code list.
 
 ## Recipe 10: a Family Template on the name path
 Admin > Societies > Family Templates > Add (as Recipe 1): kind, `org_type`, society,
-aspect definitions and their options, features, served house choices. The template's
+charter questions and their options, features, served house choices. The template's
 `name_pattern` (default `[A-Z][a-z]{2,19}`, a full-match regex) gates the family name a
 player may pick; the default matches only a single title-case word, so a template
 that wants a multi-word or apostrophized name (e.g. a Caretaker household name with a
@@ -101,7 +101,7 @@ template. A malformed pattern is a staff error, not a player one: it surfaces to
 player as "This family template's naming rule is misconfigured; tell staff" rather
 than crashing. Tick the template under an Upbringing's **Family Templates**. Every
 named family of that type comes out shaped the same: same kind, same org type, same
-aspect questions, same served-house options.
+charter questions, same served-house options.
 
 ## Recipe 11: a kin Vacancy backed by a pool
 On a staff family's Organization admin page, add a Vacancy inline (or via Admin >
@@ -187,13 +187,13 @@ same answer prices separately, at the Distinction's own cost per rank (#3675, Re
 ## Worked examples (illustrative names; not shipped content)
 
 **Caretaker (Arx).** Family Template "Caretaker Household": kind Commoner, `org_type`
-`commoner_family`, society Arx, no liege, no served house choices; aspect definition
+`commoner_family`, society Arx, no liege, no served house choices; charter question
 "What did your family keep?" (granaries, aqueducts, watch rolls, archive, gates,
 bridges). Upbringing "Raised to a Charge": name path only, offers Caretaker Household.
-No Vacancies; the family's identity lives entirely on the org aspects.
+No Vacancies; the family's identity lives entirely on the org's facets.
 
 **A crime family in Salvation.** Staff family "the Marrow" (Recipe 4: kind Crime,
-influence 5, org type gang) with a "House Vice" `OrganizationAspect` (Recipe 7).
+influence 5, org type gang) with a "House Vice" `OrganizationFacet` (Recipe 7).
 Vacancies: "Low thug" (retainer, importance 1/presumed 1, cost 0, standing); "Enforcer"
 (retainer, 3/2, 2 + 1 per influence, count 3); "The Matriarch's niece" (kin via a
 pool, 2/5, 1 + 1 per influence, count 1); "Counsel" (retainer, 5/1, 3 + 2 per
@@ -209,8 +209,8 @@ existing house.
 
 **Reavers.** Family Kind "Crew" (Recipe 9). Family Template "Reaver Crew": kind Crew,
 org type gang (or an authored crew type), society Inferna, served house choices set to
-the staff-authored captains' orgs; aspect definition "What does your crew take?".
+the staff-authored captains' orgs; charter question "What does your crew take?".
 Upbringing "Raised on the Deck": name path, offers Reaver Crew. A player names the
-crew, answers the aspect, declares which captain it served (fealty via the served
+crew, answers the question, declares which captain it served (fealty via the served
 house), and may take a standing retainer Vacancy "Deckhand" (1/1, cost 0) on that
 captain's org: the served-house-plus-retainer combination.

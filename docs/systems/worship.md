@@ -26,7 +26,7 @@ issue bodies; the model decision is ADR-0132.
   so `being.tarot_cards` and `.add()` still answer, and a reversed representation still
   counts as the card for birth favor), nullable `codex_entry` FK (#3776 Task 11:
   `codex.CodexEntry`, `on_delete=PROTECT`, `related_name="worshipped_beings"` —
-  mirrors `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`;
+  mirrors `Gift.codex_entry`/`Technique.codex_entry`/`HouseCharterOption.codex_entry`;
   visibility (Public/Obscure/Secret) is read entirely through the linked entry's
   `is_public` tier, no separate visibility field on `WorshippedBeing` itself; #3780
   spells the three tiers out as `BeingVisibility` in `editor_services.visibility_of`:
