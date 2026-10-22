@@ -463,7 +463,8 @@ class KeepingACompanion(JourneyCase):
 
 
 class TakingAnotherShape(JourneyCase):
-    """Ysmay can shift at will between her true self and the Beast; Hobb cannot shift."""
+    """Ysmay can shift at will between her true self and the Beast; Hobb cannot shift
+    (the "shift_form" and "revert_form" actions, typed and sent)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -644,7 +645,8 @@ class TakingAnotherShape(JourneyCase):
 
 class CommissioningAShip(JourneyCase):
     """Ysmay commissions a sloop from the quay and keeps the Wavecutter, whose deck she
-    owns; Hobb stands on her deck and owns nothing."""
+    owns; Hobb stands on her deck and owns nothing (the "commission_ship", "upgrade_ship",
+    "repair_ship" and "ship_status" actions, typed and sent)."""
 
     def setUp(self) -> None:
         super().setUp()

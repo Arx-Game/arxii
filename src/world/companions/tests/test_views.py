@@ -80,7 +80,8 @@ class CompanionArchetypeViewSetTests(APITestCase):
 # SanctumViewSet's HTTP contract: success → 200/201 with result.data; failure
 # → 400 {"detail": result.message}; no-puppet → 400 {"detail": "No active character."}.
 # The Actions are mocked so these tests exercise the view wiring, not the
-# game logic (that's covered by test_companion_actions.py).
+# game logic (the companion journey in
+# integration_tests/test_keeping_what_is_yours_journeys.py types and sends it).
 # ===========================================================================
 
 
