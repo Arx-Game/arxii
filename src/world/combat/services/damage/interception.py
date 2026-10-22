@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from django.db.models import Case, Q, When
+from django.db.models import Q
 
 from flows.constants import EventName
 from flows.events.payloads import DamagePreApplyPayload
@@ -57,6 +57,7 @@ from world.combat.services.damage.swarm import _apply_swarm_damage, _zero_oppone
 from world.combat.services.declarations.redirect import _redirect_away, _redirect_to_object
 from world.combat.services.encounter.threat import _accumulate_damage_threat
 from world.combat.types import OpponentDamageResult
+from world.fatigue.constants import EffortLevel
 from world.fatigue.services import apply_fatigue
 from world.mechanics.types import ChallengeResolutionResult
 from world.scenes.constants import RoundStatus
@@ -326,12 +327,26 @@ def _try_interpose(
     participant: CombatParticipant,
     pre_payload: DamagePreApplyPayload,
 ) -> None:
-    """Select and dispatch the highest-precedence armed INTERPOSE this round.
+    """Select and dispatch the highest-precedence guardian for this hit.
 
-    Named-ally declarations precede guard-anyone declarations. Ties use the
-    guardian participant id and then declaration id. An unavailable declaration
-    is skipped, but an attempted challenge (including a failed roll) ends the
-    search so reaction and per-hit budgets retain their existing semantics.
+    Order: named-ally declarations, then standing guards, then guard-anyone
+    declarations. Within the declaration tiers, ties use the guardian participant
+    id and then declaration id. An unavailable guardian is skipped, but an
+    attempted challenge (including a failed roll) ends the search so reaction and
+    per-hit budgets retain their existing semantics. A guardian participant is
+    tried at most once per hit, so one holding both a declaration and a standing
+    guard on this ward is not tried twice.
+
+    **Standing guards (#4584, ADR-4584-A):** a ward bearing an active
+    ``ConditionTemplate.source_guards_bearer`` condition is guarded by its
+    ``source_character`` when she is an ACTIVE participant of this encounter,
+    without her declaring INTERPOSE (:func:`~world.conditions.services.guardians_by_target`,
+    oldest instance first). A guard cast on oneself never interposes for its own
+    bearer. A standing guard counts against both budgets exactly as a declaration
+    does (``REACTIONS_PER_ROUND`` and ``ABSORPTION_CAP_PER_MOMENT``); ADR-4584-A
+    revisits ADR-0161 for this. It covers player-character wards in combat only:
+    not an ALLY summon ward (:func:`_try_interpose_for_opponent`) and not
+    out-of-combat Sudden Harm.
 
     Looks for a :class:`~world.combat.models.CombatRoundAction` declaring
     ``INTERPOSE`` for *participant* (or any ally) in the current round, resolves
@@ -347,14 +362,14 @@ def _try_interpose(
     non-combat callers of :func:`apply_damage_to_participant` are unaffected.
 
     At most one guardian is exercised for a hit. If a higher-precedence guardian
-    cannot attempt, selection falls through to the next declaration.
+    cannot attempt, selection falls through to the next one.
 
     **Technique-guardian branch (#2207):** when the declaration carries a
     validated protective technique (``action.focused_action_id`` set — see
     :func:`declare_interpose`), dispatch replaces the mundane capability-reaction
     challenge with :func:`_try_technique_interpose` (the guardian's own cast
     check, anima cost instead of fatigue). The mundane path below is otherwise
-    unchanged.
+    unchanged. A standing guard always takes the mundane path.
     """
     encounter = participant.encounter
     if encounter.status != RoundStatus.RESOLVING:
@@ -367,10 +382,10 @@ def _try_interpose(
     # actually fire here, even though `ally_intercepted_for_me` and
     # `_ensure_interpose_challenges` both correctly treat it as armed cover.
     # Q(...) | Q(...) is required to express the OR NULL branch.
-    # Named guardians have precedence over guard-anyone declarations. Within a
-    # precedence tier, participant id and declaration id provide stable ordering
-    # rather than relying on database insertion order. Exclude self-interpose
-    # before selection so a victim's broad declaration cannot shadow a backup.
+    # Within a precedence tier, participant id and declaration id provide stable
+    # ordering rather than relying on database insertion order. Exclude
+    # self-interpose before selection so a victim's broad declaration cannot
+    # shadow a backup.
     actions = list(
         CombatRoundAction.objects.filter(
             Q(focused_ally_target=participant) | Q(focused_ally_target__isnull=True),
@@ -381,22 +396,60 @@ def _try_interpose(
         )
         .exclude(participant=participant)
         .select_related("participant__character_sheet__character")
-        .order_by(
-            Case(When(focused_ally_target=participant, then=0), default=1),
-            "participant_id",
-            "pk",
-        )
+        .order_by("participant_id", "pk")
     )
-    if not actions:
-        return
+    named_actions = [a for a in actions if a.focused_ally_target_id == participant.pk]
+    anyone_actions = [a for a in actions if a.focused_ally_target_id is None]
 
     protected = participant.character_sheet.character
-    for action in actions:
-        # A false result means this declaration could not attempt (for example,
-        # its reaction or technique is unavailable). Only an actual attempt,
-        # including a failed roll, ends protector selection.
+    tried: set[int] = set()
+    for action in named_actions:
+        tried.add(action.participant_id)
+        # A false result means this guardian could not attempt (for example, its
+        # reaction or technique is unavailable). Only an actual attempt, including
+        # a failed roll, ends protector selection.
         if _dispatch_interpose_action(action, protected, pre_payload):
             return
+    for guardian in _standing_guardians(participant, protected):
+        if guardian.pk in tried:
+            continue
+        tried.add(guardian.pk)
+        if _attempt_guardian_interpose(guardian, protected, pre_payload, action=None):
+            return
+    for action in anyone_actions:
+        if action.participant_id in tried:
+            continue
+        tried.add(action.participant_id)
+        if _dispatch_interpose_action(action, protected, pre_payload):
+            return
+
+
+def _standing_guardians(
+    participant: CombatParticipant,
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM - the ward's own character
+) -> list[CombatParticipant]:
+    """ACTIVE participants of the ward's encounter standing guard over her, in guard order.
+
+    Guard order is :func:`~world.conditions.services.guardians_by_target`'s (oldest
+    instance first). The ward herself is never her own guardian.
+    """
+    from world.conditions.services import guardians_by_target  # noqa: PLC0415
+
+    guardian_ids = guardians_by_target([protected]).get(protected.pk, [])
+    if not guardian_ids:
+        return []
+    # CharacterSheet shares its character's pk, so character ids match sheet ids.
+    by_character = {
+        p.character_sheet_id: p
+        for p in CombatParticipant.objects.filter(
+            encounter_id=participant.encounter_id,
+            status=ParticipantStatus.ACTIVE,
+            character_sheet_id__in=guardian_ids,
+        )
+        .exclude(pk=participant.pk)
+        .select_related("character_sheet__character")
+    }
+    return [by_character[pk] for pk in guardian_ids if pk in by_character]
 
 
 def _try_interpose_for_opponent(
@@ -451,30 +504,51 @@ def _dispatch_interpose_action(
 ) -> bool:
     """Resolve an armed INTERPOSE action and report whether it attempted.
 
-    A false result means the declaration was unavailable and selection may try
-    another guardian. A true result includes a failed challenge: once a
-    guardian actually attempts, its reaction and this hit's answer budget are
-    consumed and no later declaration is retried.
+    The declared-guardian entry to :func:`_attempt_guardian_interpose`.
     """
-    participant = action.participant
-    if participant.reactions_used >= REACTIONS_PER_ROUND:
-        _narrate_reaction_declined(participant.character_sheet.character, protected, cap=False)
+    return _attempt_guardian_interpose(action.participant, protected, pre_payload, action=action)
+
+
+def _attempt_guardian_interpose(
+    guardian: CombatParticipant,
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    pre_payload: DamagePreApplyPayload,
+    *,
+    action: CombatRoundAction | None,
+) -> bool:
+    """Have *guardian* try to intercept this hit and report whether she attempted.
+
+    ``action`` is her declared INTERPOSE, or ``None`` for a standing guard
+    (``ConditionTemplate.source_guards_bearer``, #4584). A standing guard covers
+    player-character wards in combat only (no ALLY summon ward, no out-of-combat
+    Sudden Harm) and counts against both budgets exactly as a declaration does
+    (ADR-4584-A).
+
+    A false result means the guardian was unavailable and selection may try
+    another. A true result includes a failed challenge: once a guardian actually
+    attempts, her reaction and this hit's answer budget are consumed and no later
+    guardian is retried.
+    """
+    interposer = guardian.character_sheet.character
+    if guardian.reactions_used >= REACTIONS_PER_ROUND:
+        _narrate_reaction_declined(interposer, protected, cap=False)
         return False
     if pre_payload.answers_consumed >= ABSORPTION_CAP_PER_MOMENT:
-        _narrate_reaction_declined(participant.character_sheet.character, protected, cap=True)
+        _narrate_reaction_declined(interposer, protected, cap=True)
         return False
-
-    interposer = action.participant.character_sheet.character
 
     # Bond combat bonus (#2021): relationship-scaled protection.
     from world.relationships.services import bond_bonus  # noqa: PLC0415
 
     modifiers = bond_bonus(interposer, protected)
 
+    technique_action = (
+        action if action is not None and action.focused_action_id is not None else None
+    )
     amount_before = pre_payload.amount
-    if action.focused_action_id is not None:
+    if technique_action is not None:
         attempted = _try_technique_interpose(
-            action,
+            technique_action,
             interposer,
             protected,
             pre_payload,
@@ -492,31 +566,47 @@ def _dispatch_interpose_action(
             select_best_check_rating=True,
         )
         if result is None:
-            # No qualifying reaction action is an unavailable declaration, not
-            # an attempted failure. Leave both budgets untouched for fallback.
+            # No qualifying reaction action is an unavailable guardian, not an
+            # attempted failure. Leave both budgets untouched for fallback.
             return False
 
     if pre_payload.amount < amount_before:
-        _record_story_envoy_rescue(action, protected)
+        source_action = action if action is not None else _own_round_action(guardian)
+        if source_action is not None:
+            _record_story_envoy_rescue(guardian, source_action, protected)
 
     # Increment both budgets only after a dispatch/technique has truly started.
     # This preserves the fallback path for unavailable guardians while counting
     # failed rolls as real attempts.
-    participant.reactions_used += 1
-    participant.save(update_fields=["reactions_used"])
+    guardian.reactions_used += 1
+    guardian.save(update_fields=["reactions_used"])
     pre_payload.answers_consumed += 1
 
-    if action.focused_action_id is None:
+    if technique_action is None:
         # Charge fatigue to the interposer ONLY on fire (readiness is free).
         # Mirror _resolve_pc_action: apply_fatigue(sheet, category, base_cost, effort).
-        fatigue_category = action.focused_category or ActionCategory.PHYSICAL
+        # A standing guard declared nothing, so she pays physical at very low effort.
+        if action is not None:
+            fatigue_category = action.focused_category or ActionCategory.PHYSICAL
+            effort_level = action.effort_level
+        else:
+            fatigue_category = ActionCategory.PHYSICAL
+            effort_level = EffortLevel.VERY_LOW
         apply_fatigue(
-            action.participant.character_sheet,
+            guardian.character_sheet,
             fatigue_category,
             INTERPOSE_BASE_FATIGUE_COST,
-            action.effort_level,
+            effort_level,
         )
     return True
+
+
+def _own_round_action(guardian: CombatParticipant) -> CombatRoundAction | None:
+    """The guardian's own declaration this round, if she made one."""
+    return CombatRoundAction.objects.filter(
+        participant=guardian,
+        round_number=guardian.encounter.round_number,
+    ).first()
 
 
 def _guardian_can_fire_technique_interpose(

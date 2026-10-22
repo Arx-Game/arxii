@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.db.models import Q, QuerySet, Sum
+from django.db.models import F, Q, QuerySet, Sum
 from django.utils import timezone
 
 from flows.constants import EventName
@@ -3184,6 +3184,34 @@ def provoking_source_by_target(
         .values_list("target_id", "source_character_id")
     )
     return dict(rows)
+
+
+def guardians_by_target(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> dict[int, list[int]]:
+    """Guardian ObjectDB pks for each target from active source_guards_bearer conditions.
+
+    Keyed by the ward's ObjectDB pk; the value lists the distinct ``source_character_id``s
+    of the ward's active, unsuppressed flagged instances, oldest instance first. An
+    instance with no source has nobody to step in, and one whose source is its own
+    bearer is a self-cast guard that never interposes for her, so both are skipped.
+    Wards with no guardian are absent. One query for all ``targets`` (#4584). The
+    interpose seam (``_try_interpose``) tries each guardian between named and
+    guard-anyone declarations.
+    """
+    rows = (
+        _active_flagged_instances(targets, flag_field="source_guards_bearer")
+        .filter(source_character__isnull=False)
+        .exclude(source_character_id=F("target_id"))
+        .order_by("pk")
+        .values_list("target_id", "source_character_id")
+    )
+    guardians: dict[int, list[int]] = {}
+    for target_id, guardian_id in rows:
+        ward_guardians = guardians.setdefault(target_id, [])
+        if guardian_id not in ward_guardians:
+            ward_guardians.append(guardian_id)
+    return guardians
 
 
 def get_turn_order_modifier(character_sheet: "CharacterSheet") -> int:

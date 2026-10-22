@@ -8,6 +8,7 @@ from world.combat.models import (
     BreakBarContribution,
     CombatEncounter,
     CombatOpponent,
+    CombatParticipant,
     CombatRoundAction,
 )
 
@@ -15,9 +16,17 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 
-def _record_story_envoy_rescue(action: CombatRoundAction, protected: ObjectDB) -> None:
-    """Persist a successful PC guardian rescue for an active story contract."""
-    encounter = action.participant.encounter
+def _record_story_envoy_rescue(
+    guardian: CombatParticipant,
+    source_action: CombatRoundAction,
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM - the interpose seam's protected character
+) -> None:
+    """Persist a successful PC guardian rescue for an active story contract.
+
+    ``source_action`` is the guardian's declared INTERPOSE, or for a standing guard
+    (``ConditionTemplate.source_guards_bearer``, #4584) her own declaration this round.
+    """
+    encounter = guardian.encounter
     beat = encounter.story_beat
     if beat is None:
         return
@@ -35,9 +44,9 @@ def _record_story_envoy_rescue(action: CombatRoundAction, protected: ObjectDB) -
 
     record_envoy_rescue(
         activation,
-        action.participant.character_sheet,
-        source_id=action.pk,
-        source_action_id=action.pk,
+        guardian.character_sheet,
+        source_id=source_action.pk,
+        source_action_id=source_action.pk,
         protected_sheet=protected_sheet,
     )
 
