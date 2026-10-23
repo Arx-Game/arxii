@@ -69,7 +69,7 @@ from evennia_extensions.models import RoomProfile
 from world.areas.services import area_subtree_pks
 from world.checks.models import Consequence
 from world.checks.outcome_utils import select_weighted
-from world.checks.services import level_opposition, perform_check
+from world.checks.services import OppositionPoints, level_opposition_points, perform_check
 from world.checks.theater import maybe_emit_resolution_theater
 from world.checks.types import CheckResult, ResolutionContext
 from world.covenants.mentorship import effective_combat_level
@@ -353,15 +353,16 @@ def _resolve_check_type(option: MissionOption) -> CheckType:
     return check_type
 
 
-def _contest_opposition(option: MissionOption) -> int:
+def _contest_opposition(option: MissionOption) -> OppositionPoints:
     """The passive opposition term a CONTEST adds to the template's difficulty (#3568).
 
     ``level_opposition`` at the opposition sheet's effective combat level; the
     NPC never rolls (spec Decision 2). Every caller of ``level_opposition`` adds
-    it to an authored difficulty, as here.
+    it to an authored difficulty, as here. Returned split (#4601) so the roll can pass the
+    opposition's conditions as ``target_modifiers``: they are modifiers, not its standing.
     """
     sheet = option.opposition_sheet
-    return level_opposition(
+    return level_opposition_points(
         option.opposition_check_type,
         level=effective_combat_level(sheet),
         character=sheet.character,
@@ -752,12 +753,16 @@ def resolve_option(  # noqa: PLR0913
     else:
         check_type = _resolve_check_type(option)
         target_difficulty = _authored_check_difficulty(instance)
+        target_modifiers = 0
         if option.option_kind == OptionKind.CONTEST:
-            target_difficulty += _contest_opposition(option)
+            opposition = _contest_opposition(option)
+            target_difficulty += opposition.total
+            target_modifiers = opposition.modifiers
         result = perform_check(
             character,
             check_type,
             target_difficulty=target_difficulty,
+            target_modifiers=target_modifiers,
             extra_modifiers=extra_modifiers,
             situation_ctx=mission_situation_ctx(character, instance),
         )

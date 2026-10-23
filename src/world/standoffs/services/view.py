@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from world.checks.services import (
     collect_check_modifiers,
-    level_opposition,
+    level_opposition_points,
     preview_check_difficulty,
 )
 from world.combat.constants import CauseKind, ParticipantStatus
@@ -184,7 +184,7 @@ class _Grader:
 
     sheet: CharacterSheet
     base_totals: dict[tuple[int, _TermsKey], int] = field(default_factory=dict)
-    graded: dict[tuple[int, _TermsKey, int, int], str] = field(default_factory=dict)
+    graded: dict[tuple[int, _TermsKey, int, int, int], str] = field(default_factory=dict)
 
     def grade(
         self,
@@ -192,6 +192,7 @@ class _Grader:
         difficulty: int,
         contributions: list[ModifierContribution],
         extra_traits: Sequence[ExtraTraitTerm] = (),
+        target_modifiers: int = 0,
     ) -> str:
         """The shown grade. ``extra_traits`` are the roll's skill terms (a display cast's)."""
         terms_key = tuple((term.trait.pk, term.weight) for term in extra_traits)
@@ -201,10 +202,15 @@ class _Grader:
                 self.sheet, check_type, extra_traits=extra_traits
             ).extra_modifiers_total
         extra = self.base_totals[base_key] + sum(c.value for c in contributions)
-        key = (*base_key, difficulty, extra)
+        key = (*base_key, difficulty, extra, target_modifiers)
         if key not in self.graded:
             rank = preview_check_difficulty(
-                self.sheet.character, check_type, difficulty, extra, extra_traits=extra_traits
+                self.sheet.character,
+                check_type,
+                difficulty,
+                extra,
+                extra_traits=extra_traits,
+                target_modifiers=target_modifiers,
             )
             self.graded[key] = difficulty_indicator_for_rank_difference(rank).value
         return self.graded[key]
@@ -515,8 +521,11 @@ def _read_grade(config: StandoffConfig, ctx, grader: _Grader) -> tuple[str, str]
         return "", ""
     if ctx is None:
         return check_type.name, ""
-    difficulty = level_opposition(check_type, level=ctx.level, character=ctx.first.objectdb)
-    return check_type.name, grader.grade(check_type, difficulty, [])
+    opposition = level_opposition_points(check_type, level=ctx.level, character=ctx.first.objectdb)
+    # The group's conditions are modifiers, not its standing (#4601), as the read roll has it.
+    return check_type.name, grader.grade(
+        check_type, opposition.total, [], target_modifiers=opposition.modifiers
+    )
 
 
 def _append_approaches(  # noqa: PLR0913 - one approach-list build context

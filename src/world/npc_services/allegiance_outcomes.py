@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from actions.models import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
+    from world.checks.services import OppositionPoints
     from world.checks.types import CheckResult
     from world.combat.models import CombatOpponent
     from world.conditions.models import ConditionInstance
@@ -153,7 +154,9 @@ def harm_pressure_points(damage: int, max_health: int) -> int:
     return (max(0, damage) * 10 // max(1, max_health)) * BREAK_PRESSURE_POINTS_PER_TENTH_HEALTH
 
 
-def _caster_level_opposition_points(instance: ConditionInstance, check_type: CheckType) -> int:
+def _caster_level_opposition_points(
+    instance: ConditionInstance, check_type: CheckType
+) -> OppositionPoints:
     """The hold's own caster's level opposing an attempt to break it (#4091 fix round 2).
 
     Without this, the break difficulty only counted the TARGET's level (via
@@ -169,16 +172,22 @@ def _caster_level_opposition_points(instance: ConditionInstance, check_type: Che
     ``CharacterSheet`` (sheetless) -- deliberately NOT the level-1 floor
     ``get_character_path_level`` would otherwise return for an unresolvable
     character, since an unknown/gone caster contributes no real opposition.
+
+    Returned split (#4601): the caster's conditions are modifiers, not the hold's
+    standing, and the break roll passes them as ``target_modifiers``.
     """
+    from world.checks.services import OppositionPoints, level_opposition_points  # noqa: PLC0415
+
     caster = instance.source_character
     if caster is None or caster.character_sheet is None:  # type: ignore[attr-defined]
-        return 0
-    from world.checks.services import level_opposition  # noqa: PLC0415
+        return OppositionPoints(standing=0, modifiers=0)
     from world.progression.services.skill_development import (  # noqa: PLC0415
         get_character_path_level,
     )
 
-    return level_opposition(check_type, level=get_character_path_level(caster), character=caster)
+    return level_opposition_points(
+        check_type, level=get_character_path_level(caster), character=caster
+    )
 
 
 def attempt_allegiance_break(
@@ -230,9 +239,8 @@ def attempt_allegiance_break(
             instance.condition_id,
         )
         return None
-    strength = charm_strength_points(instance) + _caster_level_opposition_points(
-        instance, check_type
-    )
+    caster_opposition = _caster_level_opposition_points(instance, check_type)
+    strength = charm_strength_points(instance) + caster_opposition.total
     resistance = compute_resist_increment(
         opponent.objectdb, EffortLevel.MEDIUM, level_override=opponent.level
     )
@@ -242,6 +250,9 @@ def attempt_allegiance_break(
         striker.character,
         check_type,
         target_difficulty=difficulty,
+        # The caster's conditions are modifiers, not the hold's standing (#4601). The
+        # floor at 0 can swallow part of them; never count more than the difficulty.
+        target_modifiers=min(caster_opposition.modifiers, difficulty),
     )
     broke = check_result.outcome is not None and check_result.outcome.success_level > 0
     ending = None

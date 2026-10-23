@@ -139,7 +139,10 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     from world.checks.test_helpers import _consume_forced_outcome, _record_capture  # noqa: PLC0415
 
     _record_capture(
-        check_type=check_type, target_difficulty=target_difficulty, extra_traits=extra_traits
+        check_type=check_type,
+        target_difficulty=target_difficulty,
+        extra_traits=extra_traits,
+        target_modifiers=target_modifiers,
     )
 
     forced_outcome = _consume_forced_outcome()
@@ -1493,6 +1496,7 @@ def preview_check_difficulty(  # noqa: PLR0913 - keyword-only check params mirro
     *,
     stat_override: str | int | None = None,
     extra_traits: "Sequence[ExtraTraitTerm]" = (),
+    target_modifiers: int = 0,
 ) -> int:
     """
     Preview the rank difference for a check without rolling.
@@ -1510,6 +1514,8 @@ def preview_check_difficulty(  # noqa: PLR0913 - keyword-only check params mirro
     character's own standing lands on an impossible chart the returned difference is that
     chart's (the hopeless pin holds the roll there), and ``chart_has_success_outcomes`` of
     it is False however large the modifiers. A buff never changes an Impossible label.
+    ``target_modifiers`` is the part of ``target_difficulty`` that is modifiers on the
+    target, as for :func:`perform_check`.
     """
     breakdown = _compute_check_breakdown(
         character,
@@ -1521,6 +1527,7 @@ def preview_check_difficulty(  # noqa: PLR0913 - keyword-only check params mirro
         specialization=None,
         stat_override=stat_override,
         extra_traits=extra_traits,
+        target_modifiers=target_modifiers,
     )
     return breakdown.rank_difference
 
