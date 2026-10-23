@@ -37,6 +37,7 @@ from world.magic.models.techniques import (
     TechniqueAppliedCondition,
     TechniqueCapabilityGrant,
     TechniqueDamageProfile,
+    TechniqueMoraleEffect,
     TechniqueRemovedCondition,
     TechniqueTreatment,
 )
@@ -333,6 +334,11 @@ def technique_payload_prefetches(
             to_attr="cached_treatments",
         ),
         Prefetch(
+            f"{prefix}morale_effect",
+            queryset=TechniqueMoraleEffect.objects.all(),
+            to_attr="cached_morale_effect",
+        ),
+        Prefetch(
             f"{prefix}capability_grants",
             queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
             to_attr="cached_capability_grants",
@@ -456,6 +462,7 @@ _PAYLOAD_CACHE_ATTRS = (
     "cached_removed_conditions",
     "cached_damage_profiles",
     "cached_treatments",
+    "cached_morale_effect",
     "cached_capability_grants",
     "cached_effect_summary",
     "is_lock_applying",

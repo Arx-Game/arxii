@@ -844,6 +844,18 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         return list(self.treatments.select_related("treatment_template__target_condition"))
 
     @cached_property
+    def cached_morale_effect(self) -> "TechniqueMoraleEffect | None":
+        """The technique's morale payload row, or None (#4619). Filled by the payload prefetch.
+
+        One row at most (a one-to-one), so this is a single object, not a list.
+        A technique whose only authored effect is shaking morale still has an
+        effect; the summary and the hostility test read this row.
+
+        To invalidate: ``del instance.cached_morale_effect``.
+        """
+        return TechniqueMoraleEffect.objects.filter(technique=self).first()
+
+    @cached_property
     def cached_target_prerequisites(self) -> list:
         """Targeting preconditions for this technique. Supports Prefetch(to_attr=).
 
@@ -1095,6 +1107,48 @@ class AbstractAppliedCondition(SharedMemoryModel):
             success_level,
             self.minimum_success_level,
         )
+
+
+class AbstractMoraleEffect(SharedMemoryModel):
+    """Abstract base for the morale payload: how much enemy morale a cast removes (#4619).
+
+    Concrete subclasses add their own owner FK. The amount scales like damage:
+    a base, plus a share of the cast's effective power, plus a step per success
+    level above the minimum.
+    """
+
+    minimum_success_level = models.PositiveIntegerField(
+        default=1,
+        help_text="Success level at which the extra-success-level step starts counting.",
+    )
+    base_morale = models.PositiveIntegerField(
+        default=0,
+        help_text="Morale removed from each shaken opponent before any scaling.",
+    )
+    morale_intensity_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+        help_text="Morale added per point of the cast's effective power (rounded down).",
+    )
+    morale_per_extra_sl = models.PositiveIntegerField(
+        default=0,
+        help_text="Morale added for each success level above the minimum.",
+    )
+
+    def compute_morale(self, *, effective_power: int, success_level: int) -> int:
+        """Morale removed from one opponent by a cast at this power and success level."""
+        return _scale_by_power_and_sl(
+            self.base_morale,
+            self.morale_intensity_multiplier,
+            effective_power,
+            self.morale_per_extra_sl,
+            success_level,
+            self.minimum_success_level,
+        )
+
+    class Meta:
+        abstract = True
 
 
 class AbstractDamageProfile(SharedMemoryModel):
@@ -1847,3 +1901,43 @@ class TechniqueDamageProfile(NaturalKeyMixin, AbstractDamageProfile):
     def __str__(self) -> str:
         type_str = self.damage_type.name if self.damage_type else "untyped"
         return f"{self.technique.name} → {self.base_damage} {type_str}"
+
+
+class TechniqueMoraleEffect(NaturalKeyMixin, AbstractMoraleEffect):
+    """The morale a technique removes from the enemies it hits (#4619).
+
+    At most one row per technique. Combat reads it after the cast's roll and
+    removes ``compute_morale`` from each enemy opponent the cast reaches.
+    """
+
+    technique = models.OneToOneField(
+        Technique,
+        on_delete=models.CASCADE,
+        related_name="morale_effect",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["technique"]
+        dependencies = [_TECHNIQUE_MODEL]
+
+    class Meta:
+        verbose_name = "Technique Morale Effect"
+        verbose_name_plural = "Technique Morale Effects"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            not self.base_morale
+            and not self.morale_intensity_multiplier
+            and not self.morale_per_extra_sl
+        ):
+            msg = (
+                "This row removes no morale. Set a base amount, a power multiplier "
+                "or an amount per extra success level."
+            )
+            raise ValidationError(msg)
+
+    def __str__(self) -> str:
+        return f"{self.technique.name} -> shakes {self.base_morale} morale"

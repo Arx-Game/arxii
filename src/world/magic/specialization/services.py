@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from world.magic.models import Thread
     from world.magic.models.affinity import Resonance
     from world.magic.models.gifts import CharacterGift, Gift
-    from world.magic.models.techniques import Technique
+    from world.magic.models.techniques import Technique, TechniqueMoraleEffect
 
 
 # Sentinel: caller has not yet fetched the sheet (distinct from None = "no sheet").
@@ -647,6 +647,15 @@ class _ResolvedTechnique:
         to ``__getattr__`` so the asymmetry stays visible.
         """
         return self.technique.cached_treatments
+
+    @property
+    def cached_morale_effect(self) -> TechniqueMoraleEffect | None:
+        """Morale row, always the parent's (#4619).
+
+        Same asymmetry as ``cached_treatments``: there is no variant morale
+        model, so a variant cannot override how much morale the technique shakes.
+        """
+        return self.technique.cached_morale_effect
 
     # Pass-through for the cast pipeline's other technique reads.
     def __getattr__(self, item):
