@@ -312,6 +312,7 @@ function collectEdges(
 
 const LABEL_SEPARATOR = ' · ';
 const COLUMN_GAP = 420;
+const MAX_LABEL_LENGTH = 80;
 
 /**
  * One arrow per (source, target, style): a check option's five routes into the same
@@ -337,11 +338,16 @@ function mergeParallel(specs: readonly EdgeSpec[]): EdgeSpec[] {
       if (rest) parts.push(rest);
       byOption.set(option, parts);
     }
-    const label = [...byOption.entries()]
+    const full = [...byOption.entries()]
       .map(([option, parts]) =>
         parts.length ? `${option}${LABEL_SEPARATOR}${parts.join(', ')}` : option
       )
       .join('; ');
+    // Past a readable length the arrow says how many it carries; the option page lists them.
+    const label =
+      full.length <= MAX_LABEL_LENGTH
+        ? full
+        : `${byOption.size} ${byOption.size === 1 ? 'option' : 'options'}${LABEL_SEPARATOR}${group.length} routes`;
     return { ...group[0], label };
   });
 }

@@ -185,6 +185,16 @@ describe('computeLayout', () => {
     ]);
   });
 
+  it('counts the options and routes on an arrow whose full label would not fit', () => {
+    const opts = [0, 1, 2, 3, 4].map((i) => option(10 + i, 1, { key: `long-option-key-${i}` }));
+    const rts = opts.flatMap((o, i) => [
+      route(100 + i * 2, o.id, null, { outcome_tier: 7 }),
+      route(101 + i * 2, o.id, null, { outcome_tier: 1 }),
+    ]);
+    const result = layout([node(1, 'src')], opts, rts);
+    expect(result.layoutedEdges.map((e) => e.label)).toEqual(['5 options · 10 routes']);
+  });
+
   it('sends a random route with no candidates to Mission ends', () => {
     const result = layout(
       [node(1, 'src')],
