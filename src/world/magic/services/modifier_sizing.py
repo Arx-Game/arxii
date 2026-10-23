@@ -113,6 +113,20 @@ def applied_condition_size_warnings(technique: Technique) -> list[str]:
     changes no check also warns, since the size has nothing to act on yet.
     """
     effect_count = _technique_effect_count(technique)
+    sized_condition_ids = {
+        row.condition_id
+        for row in technique.cached_condition_applications
+        if row.modifier_size is not None
+    }
+    # One query for every sized condition that changes a check, template- or stage-level.
+    checked_condition_ids: set[int] = set()
+    if sized_condition_ids:
+        for condition_id, stage_condition_id in ConditionCheckModifier.objects.filter(
+            Q(condition_id__in=sized_condition_ids) | Q(stage__condition_id__in=sized_condition_ids)
+        ).values_list("condition_id", "stage__condition_id"):
+            checked_condition_ids.update(
+                cid for cid in (condition_id, stage_condition_id) if cid is not None
+            )
     warnings: list[str] = []
     for row in technique.cached_condition_applications:
         if row.modifier_size is None:
@@ -132,9 +146,7 @@ def applied_condition_size_warnings(technique: Technique) -> list[str]:
                 f"{row.condition.name} is sized {size_label}, but it is everything "
                 f"{technique.name} does, so it gets the whole power budget: Large."
             )
-        if not ConditionCheckModifier.objects.filter(
-            Q(condition=row.condition) | Q(stage__condition=row.condition)
-        ).exists():
+        if row.condition_id not in checked_condition_ids:
             warnings.append(
                 f"{row.condition.name} is sized {size_label}, but it changes no check, "
                 "so its size has nothing to act on yet."

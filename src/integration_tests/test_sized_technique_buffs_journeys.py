@@ -32,6 +32,7 @@ from world.checks.types import CheckResult
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.conditions.factories import ConditionCheckModifierFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
+from world.conditions.services import opponent_condition_opposition
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
@@ -118,8 +119,10 @@ class SizedBuffsOnChecks(JourneyCase):
 
     # -- the cast and the check -------------------------------------------------
 
-    def cast(self, caster: ObjectDB, target: ObjectDB, technique: Technique) -> None:
-        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+    def cast(
+        self, caster: ObjectDB, target: ObjectDB, technique: Technique, *, outcome: str = "Success"
+    ) -> None:
+        with force_check_outcome(CheckOutcome.objects.get(name=outcome)):
             result = self.web(
                 caster,
                 "cast_technique",
@@ -197,6 +200,59 @@ class SizedBuffsOnChecks(JourneyCase):
 
         self.assertEqual(self.ward_check(self.corin).total_points - before.total_points, 5)
 
+    def test_totals_ranks_and_charts_through_the_check(self) -> None:
+        """Own totals are the stat's 20 points plus LEVEL_POINTS_PER_LEVEL (5) per level."""
+        corin = self.ward_check(self.corin)
+        self.assertEqual((corin.total_points, corin.roller_rank.name), (50, "Expert"))
+        self.assertEqual(corin.rank_difference, 0)
+
+        self.cast(self.maren, self.corin, self.buffs[0])
+        (instance,) = self.landed(self.corin)
+        # Intensity 20 at Success sits in the seed's 16-29 power row: level 6, Large = 10.
+        self.assertEqual(instance.modifier_level, 6)
+        one = self.ward_check(self.corin)
+        self.assertEqual((one.total_points, one.roller_rank.name), (60, "Expert"))
+        self.assertEqual(one.chart.rank_difference, 0)
+
+        for technique in self.buffs[1:]:
+            self.cast(self.maren, self.corin, technique)
+        ten = self.ward_check(self.corin)
+        self.assertEqual((ten.total_points, ten.roller_rank.name), (123, "Grandmaster"))
+        self.assertEqual(ten.chart.rank_difference, 2)
+
+        breakdown = collect_check_modifiers(self.corin.sheet_data, self.ward_reading)
+        # The recorded provenance rows add up to the tapered total.
+        self.assertEqual(sum(breakdown.counted_values()), 73)
+        # An opponent carrying the same pile presents the same tapered total.
+        self.assertEqual(opponent_condition_opposition(self.corin, self.ward_reading), 73)
+
+        self.assertEqual(self.ward_check(self.pell).total_points, 25)
+        self.assertEqual(self.ward_check(self.hale).total_points, 100)
+
+    def test_the_cast_outcome_shifts_the_level(self) -> None:
+        self.cast(self.maren, self.corin, self.buffs[0], outcome="Critical Success")
+        _set_rows(self.buffs[1], minimum_success_level=0)
+        self.cast(self.maren, self.pell, self.buffs[1], outcome="Partial Success")
+
+        (critical,) = self.landed(self.corin)
+        (partial,) = self.landed(self.pell)
+        # The seed's outcome rows: Critical Success +2, Partial Success -1.
+        self.assertEqual(critical.modifier_level, 8)
+        self.assertEqual(partial.modifier_level, 5)
+
+    def test_an_unsized_buff_keeps_its_flat_value(self) -> None:
+        _set_rows(self.buffs[0], modifier_size=None)
+        before = self.ward_check(self.corin)
+
+        self.cast(self.maren, self.corin, self.buffs[0])
+
+        (instance,) = self.landed(self.corin)
+        self.assertIsNone(instance.modifier_level)
+        self.assertIsNone(instance.modifier_size)
+        self.assertEqual(
+            self.ward_check(self.corin).total_points - before.total_points, FLAT_AUTHORED
+        )
+
 
 class StaffSeeTheSizeCheck(JourneyCase):
     """Staff saving a technique in admin see the size warning (#4551 section 5.3)."""
@@ -255,6 +311,109 @@ class StaffSeeTheSizeCheck(JourneyCase):
         messages = self.resave(self.technique(with_damage=False))
 
         self.assertFalse([m for m in messages if "is sized" in m], messages)
+
+    def test_narrow_use_allows_one_step_more(self) -> None:
+        technique = self.technique(with_damage=True)
+        _set_rows(technique, narrow_use=True)
+
+        messages = self.resave(technique)
+
+        self.assertFalse([m for m in messages if "is sized" in m], messages)
+
+    def test_a_sized_condition_that_changes_no_check_warns(self) -> None:
+        technique = TechniqueFactory(name="Empty Gesture", damage_profile=False)
+        TechniqueAppliedConditionFactory(
+            technique=technique,
+            condition=ConditionTemplateFactory(name="Hollow"),
+            target_kind=ConditionTargetKind.ALLY,
+            modifier_size=ModifierSize.LARGE,
+        )
+
+        messages = self.resave(technique)
+
+        self.assertIn(
+            "Hollow is sized Large, but it changes no check, so its size has nothing to act "
+            "on yet.",
+            messages,
+        )
+
+
+class StaffTuneTheValueTable(JourneyCase):
+    """Staff author the rows in admin and read a pile on the tuning dashboard (#4594)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        seed_check_resolution_tables()
+        seed_modifier_value_tables()
+        staff = get_user_model().objects.create_user(
+            username="tuner", password="pw", is_staff=True, is_superuser=True
+        )
+        self.client.force_login(staff)
+
+    def test_every_new_table_has_an_admin_page(self) -> None:
+        for name in (
+            "modifiervalue",
+            "modifierlevelbaseline",
+            "modifiertaper",
+            "castpowerlevel",
+            "castoutcomelevelshift",
+        ):
+            response = self.client.get(reverse(f"admin:arxii_{name}_changelist"))
+            self.assertEqual(response.status_code, 200, name)
+
+    def test_staff_add_a_value_row_and_read_it_in_ranks(self) -> None:
+        response = self.client.post(
+            reverse("admin:arxii_modifiervalue_add"),
+            {
+                "lane": ModifierLane.CHECK,
+                "level": "7",
+                "size": str(ModifierSize.LARGE),
+                "value": "15",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        row = ModifierValue.objects.get(level=7, size=ModifierSize.LARGE)
+        self.assertEqual(row.value, 15)
+
+        page = self.client.get(reverse("admin:arxii_modifiervalue_change", args=[row.pk]))
+
+        # Level 7 reads the level-6 baseline of 58 (Expert, a 30-point band): 15 is 26% of
+        # the total and half a rank.
+        self.assertContains(
+            page,
+            "A level-7 character&#x27;s typical total is 58: this value is 26% of it; "
+            "0.50 of a rank band at that total.",
+        )
+
+    def test_the_dashboard_shows_a_tapered_pile(self) -> None:
+        response = self.client.get(
+            reverse("admin_tuning_checks"),
+            {
+                "pile_character_level": "6",
+                "pile_modifier_level": "6",
+                "pile_size": str(ModifierSize.LARGE),
+                "pile_count": "10",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        pile = response.context["pile"]
+        self.assertEqual(
+            (pile.baseline, pile.modifier_value, pile.plain_total, pile.tapered_total),
+            (58, 10, 100, 73),
+        )
+        self.assertEqual(pile.rank_before, "Expert (rank 3)")
+        self.assertEqual(pile.rank_after, "Grandmaster (rank 5)")
+        self.assertContains(response, "+73: Grandmaster (rank 5)")
+
+
+def _set_rows(technique: Technique, **fields: object) -> None:
+    """Edit a technique's applied-condition rows the way an admin save does (one save each)."""
+    for row in technique.condition_applications.all():
+        for name, value in fields.items():
+            setattr(row, name, value)
+        row.save()
 
 
 def _filled(bound_fields) -> dict[str, str]:
