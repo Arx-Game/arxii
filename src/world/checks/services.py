@@ -11,8 +11,10 @@ from django.db.models import Q
 from world.checks.constants import (
     BOTCH_SUCCESS_LEVEL_MAX,
     LEVEL_POINTS_PER_LEVEL,
+    ModifierLane,
     ModifierSourceKind,
 )
+from world.checks.modifier_values import load_taper_rules
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.types import CheckResult, ModifierBreakdown, ModifierContribution
 from world.classes.models import PathAspect
@@ -1725,7 +1727,13 @@ def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror
     if extra_contributions:
         contributions.extend(extra_contributions)
 
-    return ModifierBreakdown(contributions=contributions)
+    # --- The light taper by kind (#4594) ---
+    # Staff-tuned ModifierTaper rows name which source kinds taper in the check lane;
+    # the breakdown's totals apply them. No rows = a plain sum, as before.
+    return ModifierBreakdown(
+        contributions=contributions,
+        tapers=load_taper_rules(ModifierLane.CHECK),
+    )
 
 
 def _character_and_equipment_contributions(

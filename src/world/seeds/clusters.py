@@ -94,6 +94,12 @@ def _seed_checks() -> None:
     seed_check_resolution_tables()
 
 
+def _seed_modifier_values() -> None:
+    from world.seeds.modifier_values import seed_modifier_value_tables  # noqa: PLC0415
+
+    seed_modifier_value_tables()
+
+
 def _seed_combat_checks() -> None:
     from world.seeds.combat_checks import seed_combat_check_content  # noqa: PLC0415
 
@@ -544,6 +550,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # so the canonical rows exist before the other clusters run. (Idempotency
     # holds regardless of order — magic also ensures the spine itself.)
     "checks": _seed_checks,
+    # Example modifier value table, level baselines, tapers and cast-level rows (#4594).
+    # After "checks" so the rank ladder the examples are sized against exists.
+    "modifier_values": _seed_modifier_values,
     # Combat checks: the Melee Combat skill catalog + weapon-class specializations
     # + the Melee Attack CheckType (stat + skill + spec). After "checks" for the
     # resolution spine; before "social" and "combat" (the penetration/flee retrofits

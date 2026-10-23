@@ -22,6 +22,7 @@ from django.utils.functional import cached_property
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.checks.constants import ModifierSize
 from world.conditions.constants import (
     Allegiance,
     BreakFreeMode,
@@ -1549,6 +1550,24 @@ class ConditionInstance(SharedMemoryModel):
         max_length=200,
         blank=True,
         help_text="Freeform description of source (e.g., 'poisoned wine')",
+    )
+    modifier_level = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The level this condition's check modifiers count at (#4594): resolved from "
+            "the applying cast's power and outcome. Null keeps the flat authored values."
+        ),
+    )
+    modifier_size = models.PositiveSmallIntegerField(
+        choices=ModifierSize.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "The size the applying technique authored for this buff or debuff (#4594). "
+            "With modifier_level, its check modifiers read the value table instead of "
+            "their flat values."
+        ),
     )
     soulfray_consented = models.BooleanField(
         default=False,

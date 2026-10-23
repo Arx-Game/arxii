@@ -89,6 +89,10 @@ class BulkConditionApplication:
     cast_destination_id: int | None = None
     cast_position_a_id: int | None = None
     cast_position_b_id: int | None = None
+    # #4594: the level and size a sized technique row stamps on the instance, so its
+    # check modifiers read the value table. None keeps the flat authored values.
+    modifier_level: int | None = None
+    modifier_size: int | None = None
 
 
 @dataclass(frozen=True)
