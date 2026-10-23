@@ -141,6 +141,8 @@ def select_npc_actions(
         if role is not None and role.blend_weight_for(RoleArchetype.SHIELD) > 0:
             shield_participant_ids.add(p.pk)
 
+    _apply_aggro_conditions(opponents, active_participants, threat_maps, shield_participant_ids)
+
     actions: list[CombatOpponentAction] = []
 
     for opponent in opponents:
@@ -162,6 +164,45 @@ def select_npc_actions(
         )
 
     return actions
+
+
+def _apply_aggro_conditions(
+    opponents: list[CombatOpponent],
+    active_participants: list[CombatParticipant],
+    threat_maps: dict[int, dict[int, int]],
+    shield_participant_ids: set[int],
+) -> None:
+    """Fold draws_aggro conditions into this round's target selection (#4572).
+
+    A PC carrying a draws_aggro condition counts its summed aggro_priority as extra
+    threat with every opponent (an entry is created where no ThreatRecord exists, so
+    HIGHEST_THREAT does not fall back to rotation) and joins the SPECIFIC_ROLE preferred
+    set beside shield-role PCs. Preferred-set membership is "carries an active draws_aggro
+    condition" (even at aggro_priority 0); the priority sum only feeds threat. Aggro is read
+    for player characters only because NPC targeting picks among PC participants.
+    Selection-time only: no ThreatRecord is written, and an engagement lock still narrows the
+    pool afterwards.
+    """
+    from world.conditions.services import (  # noqa: PLC0415
+        aggro_priority_by_target,
+        draws_aggro_target_ids,
+    )
+
+    characters = [p.character_sheet.character for p in active_participants]
+    aggro_by_character = aggro_priority_by_target(characters)
+    drawing_aggro = draws_aggro_target_ids(characters)
+    aggro_by_participant = {
+        p.pk: aggro_by_character[p.character_sheet.character.pk]
+        for p in active_participants
+        if p.character_sheet.character.pk in aggro_by_character
+    }
+    for opponent in opponents:
+        opponent_threat = threat_maps[opponent.pk]
+        for participant_id, aggro in aggro_by_participant.items():
+            opponent_threat[participant_id] = opponent_threat.get(participant_id, 0) + aggro
+    shield_participant_ids.update(
+        p.pk for p in active_participants if p.character_sheet.character.pk in drawing_aggro
+    )
 
 
 def _build_opponent_round_actions(  # noqa: PLR0913

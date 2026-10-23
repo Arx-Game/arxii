@@ -483,3 +483,15 @@ _Avoid_: master/apprentice (a future flavor display-label only, with no model su
 **Sworn Face** (`CharacterCovenantRole.sworn_as`, #4208, ADR-4208):
 The `Persona` a vow was sworn under — one of the character's own, PRIMARY or ESTABLISHED, never a temporary mask. Presentation only: the world knows the vow by that face (the alt's sheet shows the alt's covenant, the roster names the alt), while the vow's mechanics stay on the sheet. Set once at joining (the active persona unless the service is told otherwise), carried across a role change, read by the sheet, the roster and `sheet/covenant`.
 _Avoid_: persona-scoped membership (the row is sheet-keyed; only the face is persona-scoped), mask vow (a mask cannot swear).
+
+**Vow added effect** (`VowAddedEffect`, #4581, ADR-4581-A):
+A staff-authored payload a covenant vow adds to a technique cast: applied conditions, removed conditions, treatments and damage, the same shapes a technique carries itself. A header row (role, technique function, optional gift or technique, in or out of combat, one situation, whose casts it rides, how often, the holder's vow thread level it needs) plus four child payload rows. Not a perk: a perk is a numeric bonus or outcome guarantee with an announced line; an added effect is something that lands on the cast. Never carries a behavior-altering condition (compulsion, charm, fear), which `clean()` refuses.
+_Avoid_: vow rider (a rider is one of the five code-owned `CovenantRole` switches such as `grants_insight`), vow switch, vow perk (a perk is `VowSituationalPerk`).
+
+**Upgrade (of a vow added effect)** (`VowAddedEffect.upgrades`, #4581):
+The link by which one added effect replaces another for a holder who qualifies for both: a resonance sub-role's version of its parent role's effect, or a later-unlock effect on the same role. Every effect without the link adds. The replacement is decided before the once-per-round or once-per-fight limit is read, so a spent upgrade still suppresses the effect it replaces.
+_Avoid_: override, evolution, tier-up (none is a field on the row).
+
+**Added-effect firing** (`VowAddedEffectFiring`, #4581):
+One recorded use of a once-per-round or once-per-fight vow added effect by one holder in one fight round. Play state in the combat ledger, written only when a cast lands (success level 1 or higher, not bounced by a ward), so a failed cast leaves the effect for the holder's next cast. Full entry: combat glossary.
+_Avoid_: charge, cooldown (the ledger records a use; nothing counts down).

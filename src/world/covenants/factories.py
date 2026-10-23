@@ -1,5 +1,6 @@
 """FactoryBoy factories for covenant models."""
 
+from decimal import Decimal
 from typing import TYPE_CHECKING, NamedTuple
 
 import factory
@@ -14,6 +15,8 @@ from world.covenants.constants import (
     DefenseStyle,
     InsightTargetKind,
     MentorBondAdjusted,
+    VowEffectContext,
+    VowEffectFrequency,
 )
 from world.covenants.models import (
     CharacterCovenantRole,
@@ -33,6 +36,11 @@ from world.covenants.models import (
     InsightTableEntry,
     MentorBond,
     MentorBondConfig,
+    VowAddedEffect,
+    VowAddedEffectAppliedCondition,
+    VowAddedEffectDamageProfile,
+    VowAddedEffectRemovedCondition,
+    VowAddedEffectTreatment,
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
@@ -40,7 +48,8 @@ from world.covenants.models import (
 )
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
 from world.items.constants import GearArchetype
-from world.magic.constants import TechniqueFunction
+from world.magic.constants import TargetKind, TechniqueFunction
+from world.magic.models.techniques import ConditionTargetKind
 
 CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
 
@@ -194,6 +203,78 @@ class VowSituationalPerkRungFactory(factory_django.DjangoModelFactory):
     rung_number = 1
     extra_situation = Situation.ALLY_LOW_HEALTH
     magnitude_tenths = 20
+
+
+class VowAddedEffectFactory(factory_django.DjangoModelFactory):
+    """Factory for VowAddedEffect (#4581): a SELF Hold effect with no narrowing."""
+
+    class Meta:
+        model = VowAddedEffect
+
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    function = TechniqueFunction.HOLD
+    gift = None
+    technique = None
+    cast_context = VowEffectContext.ANY
+    situation = ""
+    beneficiary = PerkBeneficiary.SELF
+    frequency = VowEffectFrequency.EVERY_CAST
+    unlock_thread_level = 0
+    severity_per_thread_level = 0
+    duration_per_thread_level = 0
+    damage_per_thread_level = 0
+    upgrades = None
+
+
+class VowAddedEffectAppliedConditionFactory(factory_django.DjangoModelFactory):
+    """Factory for VowAddedEffectAppliedCondition (#4581)."""
+
+    class Meta:
+        model = VowAddedEffectAppliedCondition
+
+    effect = factory.SubFactory(VowAddedEffectFactory)
+    condition = factory.SubFactory(CONDITION_TEMPLATE_FACTORY)
+    target_kind = ConditionTargetKind.ENEMY
+    minimum_success_level = 1
+    base_severity = 1
+
+
+class VowAddedEffectRemovedConditionFactory(factory_django.DjangoModelFactory):
+    """Factory for VowAddedEffectRemovedCondition (#4581)."""
+
+    class Meta:
+        model = VowAddedEffectRemovedCondition
+
+    effect = factory.SubFactory(VowAddedEffectFactory)
+    condition = factory.SubFactory(CONDITION_TEMPLATE_FACTORY)
+    target_kind = ConditionTargetKind.ALLY
+    minimum_success_level = 1
+    remove_all_stacks = True
+    cure_power_multiplier = Decimal(0)
+
+
+class VowAddedEffectTreatmentFactory(factory_django.DjangoModelFactory):
+    """Factory for VowAddedEffectTreatment (#4581)."""
+
+    class Meta:
+        model = VowAddedEffectTreatment
+
+    effect = factory.SubFactory(VowAddedEffectFactory)
+    treatment_template = factory.SubFactory("world.conditions.factories.TreatmentTemplateFactory")
+    target_kind = ConditionTargetKind.ALLY
+    minimum_success_level = 1
+
+
+class VowAddedEffectDamageProfileFactory(factory_django.DjangoModelFactory):
+    """Factory for VowAddedEffectDamageProfile (#4581): an untyped 5-damage component."""
+
+    class Meta:
+        model = VowAddedEffectDamageProfile
+
+    effect = factory.SubFactory(VowAddedEffectFactory)
+    damage_type = None
+    minimum_success_level = 1
+    base_damage = 5
 
 
 class InsightTableEntryFactory(factory_django.DjangoModelFactory):
@@ -1262,6 +1343,44 @@ def make_engaged_member(
         covenant_role=role,
     )
     set_engaged_membership(membership=membership)
+    return membership
+
+
+def engage_vow_with_thread(  # noqa: PLR0913 - mirrors the vow's own shape
+    sheet: "CharacterSheet",
+    role: CovenantRole,
+    *,
+    covenant: Covenant,
+    thread_level: int,
+    resonance: "Resonance | None" = None,
+    is_secondary: bool = False,
+) -> CharacterCovenantRole:
+    """An engaged vow on ``role`` plus its COVENANT_ROLE thread at ``thread_level`` (#4581).
+
+    The thread sits on the role's anchor (its ``parent_role`` for a sub-role,
+    else the role itself), where COVENANT_ROLE threads always key, with
+    ``resonance`` or a fresh one. The character's covenant-role handler is
+    invalidated so the new membership is read on the next access.
+    """
+    from world.magic.factories import ResonanceFactory, ThreadFactory
+
+    membership = CharacterCovenantRoleFactory(
+        character_sheet=sheet,
+        covenant=covenant,
+        covenant_role=role,
+        engaged=True,
+        is_secondary=is_secondary,
+    )
+    anchor = role.parent_role if role.parent_role_id is not None else role
+    ThreadFactory(
+        owner=sheet,
+        resonance=resonance if resonance is not None else ResonanceFactory(),
+        target_kind=TargetKind.COVENANT_ROLE,
+        target_trait=None,
+        target_covenant_role=anchor,
+        level=thread_level,
+    )
+    sheet.character.covenant_roles.invalidate()
     return membership
 
 

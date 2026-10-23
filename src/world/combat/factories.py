@@ -74,6 +74,7 @@ from world.combat.models import (
     ThreatPool,
     ThreatPoolEntry,
     ThreatRecord,
+    VowAddedEffectFiring,
 )
 from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind
@@ -259,6 +260,17 @@ class CombatParticipantFactory(factory_django.DjangoModelFactory):
     encounter = factory.SubFactory(CombatEncounterFactory)
     character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     status = ParticipantStatus.ACTIVE
+
+
+class VowAddedEffectFiringFactory(factory_django.DjangoModelFactory):
+    """Factory for VowAddedEffectFiring (#4581): one limited vow effect spent in round 1."""
+
+    class Meta:
+        model = VowAddedEffectFiring
+
+    participant = factory.SubFactory(CombatParticipantFactory)
+    effect = factory.SubFactory("world.covenants.factories.VowAddedEffectFactory")
+    round_number = 1
 
 
 class BreakBarContributionFactory(factory_django.DjangoModelFactory):
