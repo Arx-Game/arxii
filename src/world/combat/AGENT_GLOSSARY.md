@@ -29,7 +29,7 @@ The seeded `ConditionTemplate` applied to a JOUST's decisive-margin loser, which
 _Avoid_: dismounted (that's the state after Unhorsed resolves, not the condition's own name), thrown
 
 **Morale**:
-A first-class depletable resolve pool on `CombatOpponent` (#2015), mirroring war-scale `BattleUnit.morale`. The derived state (STEADY/FALTER/BREAK) is read via `morale_state_for` — never stored. Falter weakens NPC output in `select_npc_actions`; Break sets `OpponentStatus.FLED`. Mindless opponents (`OpponentTierTemplate.has_morale=False`) resist morale checks with a flat difficulty modifier — not an immunity; a powerful enough roll breaks through (Arx's "power can do the impossible" tenet).
+A first-class depletable resolve pool on `CombatOpponent` (#2015), mirroring war-scale `BattleUnit.morale`. The derived state (STEADY/FALTER/BREAK) is read via `morale_state_for` - never stored. Falter weakens NPC output in `select_npc_actions`; Break sets `OpponentStatus.FLED`. Mindless opponents (`OpponentTierTemplate.has_morale=False`) resist morale checks with a flat difficulty modifier - not an immunity; a powerful enough roll breaks through (Arx's "power can do the impossible" tenet). A technique can also shake the enemies it lands on by its own **technique morale effect** (#4619): after the cast's damage, each enemy opponent it resolves on loses the row's amount, a mindless tier takes `SpectacleConfig.mindless_percent` of it, and allies, charmed enemies and fled or defeated opponents are skipped. See the magic glossary.
 _Avoid_: willpower, resolve (as a field name — `morale` is the canonical column)
 
 **Rally**:

@@ -241,10 +241,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Technique effect summary (#2898):** the one block every technique surface
     shows. `summarize_technique_effects(technique) -> TechniqueEffectPayload`
     (`services/technique_effects.py`, types in `types/technique_effects.py`)
-    reads the five payload tables — `TechniqueCapabilityGrant` /
+    reads the payload tables - `TechniqueCapabilityGrant` /
     `TechniqueAppliedCondition` / `TechniqueDamageProfile` /
-    `TechniqueRemovedCondition` / `TechniqueTreatment` (the fifth joined in
-    #3682) — none of which reached any display surface
+    `TechniqueRemovedCondition` / `TechniqueTreatment` (joined in
+    #3682) / `TechniqueMoraleEffect` (joined in #4619) - none of which reached any display surface
     before, and renders both structured data and a plain-words line ("Cast on an
     ally, anywhere in the room, in the physical arena. Costs 5 anima. Applies
     Guarded."). A capability grant reads "Knowing it grants X" — standing
@@ -628,10 +628,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `provision_player_anima_ritual(...)` (`services/anima.py`) — updated to point
     `RitualCheckConfig.check_type` at the per-character check so ritual and technique
     casts roll the same personal check.
+  - Technique morale effect (#4619, ADR-4619-A): `TechniqueMoraleEffect` (one-to-one payload
+    row, `Technique.cached_morale_effect`), `TechniqueDraftMoraleEffect` (draft copy), shared
+    columns and `compute_morale` on `AbstractMoraleEffect`; `MoraleEffectSpec` /
+    `TechniqueDesignInput.morale_effect` (builder, flat `payload_base_cost` price);
+    `set_draft_morale_effect` / `clear_draft_morale_effect` (`services/technique_draft.py`);
+    `_morale_valuation` (`services/technique_power_eval.py`, ESTIMATE). Detail:
+    `docs/systems/magic.md` "Technique morale effect".
   - Technique targeting (#1321):
     `derive_target_relationship(technique) -> ConditionTargetKind` (`world/magic/services/targeting.py`)
     — ENEMY if hostile; ALLY if any applied, removed or treatment row has
-    `target_kind=ALLY`; ENEMY if a treatment row targets an enemy; else SELF.
+    `target_kind=ALLY`; ENEMY if a treatment row targets an enemy or the technique has a morale row
+    (#4619); else SELF.
     Hostility itself reads the payload rows only — `EffectType.base_power` is a
     magnitude knob and is NOT consulted (ADR-0281, #3682): it used to be, which
     made all 54 authored Defense techniques classify as hostile.
@@ -8036,7 +8044,8 @@ caster and move, and allied NPCs take heart. Ultimates never fail (ADR-4147).
   `AudereThreshold.check_level_bonus`, `AudereMajoraThreshold.check_level_bonus`,
   `StandoffApproach.casts_technique`, `StandoffConfig.terms_ease_faltering` / `terms_ease_broken`.
 - **Key functions:** `apply_spectacle`, `classify_cast`, `is_devastating`, `spectacle_hit`,
-  `encounter_for_character`, `deliver_spectacle` (`combat/spectacle.py`);
+  `encounter_for_character`, `deliver_spectacle` (`combat/spectacle.py`; its morale helpers
+  `tier_morale_map` and `mindless_share` moved to `combat/morale.py` in #4619);
   `audere_check_level_bonus`, `shake_witnesses` (`magic/audere.py`); `floor_ultimate_check`
   (`magic/services/ultimates.py`). The combat action rider is unguarded, but every spectacle
   line posts after commit (`deliver_spectacle`, `robust=True`); Audere entry and a Crossing
@@ -8569,7 +8578,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     triggers (e.g. Shielded) fire in the same round
 - **Key Services — social/mental combat (#2015):**
   - `morale_state_for(opponent)` / `apply_morale_damage(opponent, amount)` /
-    `tier_has_morale(opponent)` (`world/combat/morale.py`) — derived state + mutation
+    `tier_has_morale(opponent)` (`world/combat/morale.py`) - derived state + mutation;
+    `tier_morale_map()` (one query, tier to has-morale) and `mindless_share(amount, *,
+    mindless_percent)` live beside them (moved out of `spectacle.py`, #4619)
+  - `CombatTechniqueResolver._apply_morale` - a cast's own `TechniqueMoraleEffect` shakes the
+    enemy opponents it resolves on, after damage; `CombatTechniqueResolution.morale_shifts`
+    carries the state changes (#4619)
   - `declare_rally` / `declare_demoralize` / `declare_taunt` / `declare_parley`
     (`world/combat/services/`) — arm the four social-combat `CombatRoundAction`s
   - `_resolve_rally` / `_resolve_demoralize` / `_resolve_taunt` / `_resolve_parley` —
