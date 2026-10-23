@@ -8,8 +8,9 @@ every reader of the encounter sees it.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from actions.constants import ActionBackend
 from actions.factories import ActionTemplateFactory
@@ -17,6 +18,8 @@ from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
+from world.checks.services import perform_check
+from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import ActionCategory, OpponentStatus, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -25,7 +28,18 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatMark, CombatRoundAction
 from world.combat.services import begin_declaration_phase, resolve_round
+from world.covenants.constants import CovenantType
+from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
+    CovenantFactory,
+    CovenantRoleFactory,
+    VowSituationalPerkFactory,
+    VowSituationalPerkSituationFactory,
+    engage_vow_with_thread,
+)
+from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
 from world.fatigue.constants import EffortLevel
+from world.fatigue.services import get_or_create_fatigue_pool
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
@@ -36,12 +50,21 @@ from world.magic.factories import (
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneParticipationFactory
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
+from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from evennia.objects.models import ObjectDB
+
+    from world.checks.models import CheckType
+    from world.checks.types import CheckResult
+    from world.combat.models import CombatOpponent
     from world.magic.models import Technique
 
 NOT_IN_ROUND = "You are not in an active combat round."
+VOW_ANSWERS = "vow answers the mark!"
 
 
 def _flat_roll(*_args: object, **_kwargs: object) -> MagicMock:
@@ -218,3 +241,170 @@ class MarkingATarget(JourneyCase):
         self.assertFalse(result.detail.success)
         self.assertEqual(result.detail.message, NOT_IN_ROUND)
         self.assertFalse(CombatMark.objects.exists())
+
+
+@contextmanager
+def recorded_successes() -> Iterator[list[tuple[ObjectDB, CheckType, CheckResult]]]:
+    """Every combat check in the block lands at Success, each real result recorded.
+
+    Patches ``world.combat.services.perform_check`` (the seam the round's checks call
+    through, as ``every_check_at`` does) to run each call inside ``force_check_outcome``
+    and keeps ``(character, check type, result)`` so a journey reads the roll's points.
+    """
+    outcome = CheckOutcome.objects.get(name="Success")
+    rolled: list[tuple[ObjectDB, CheckType, CheckResult]] = []
+
+    def forced(
+        character: ObjectDB, check_type: CheckType, *args: object, **kw: object
+    ) -> CheckResult:
+        with force_check_outcome(outcome):
+            result = perform_check(character, check_type, *args, **kw)
+        rolled.append((character, check_type, result))
+        return result
+
+    with patch("world.combat.services.perform_check", side_effect=forced):
+        yield rolled
+
+
+class AMarkPaysOff(JourneyCase):
+    """Tomas's vow answers a target a covenant-mate marked, by its authored bonus.
+
+    Mira and Tomas share a covenant; Ilse is in none. Tomas's engaged role carries a perk of
+    +10 tenths per thread level on his own checks when the target is marked by an ally, and his
+    thread sits at level 3, so the authored bonus is 3 x 10 / 10 = +3 points. The captain has
+    500 health, so nobody ends the fight.
+    """
+
+    PAYOFF = 3
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        self.road = self.make_room("The Road")
+        self.mira = self.make_player("Mira", room=self.road)
+        self.tomas = self.make_player("Tomas", room=self.road)
+        self.ilse = self.make_player("Ilse", room=self.road)
+
+        self.check_type = CheckTypeFactory()
+        CheckTypeTraitFactory(check_type=self.check_type, trait=StatTraitFactory(), weight=1)
+        self.strike = TechniqueFactory(
+            gift=GiftFactory(),
+            anima_cost=1,
+            effect_type=EffectTypeFactory(base_power=10),
+            damage_profile=False,
+            action_category=ActionCategory.PHYSICAL,
+            action_template=ActionTemplateFactory(check_type=self.check_type),
+        )
+        self.encounter = CombatEncounterFactory(
+            status=RoundStatus.DECLARING, round_number=1, room=self.road
+        )
+        for player in (self.mira, self.tomas, self.ilse):
+            sheet = player.sheet_data
+            CharacterVitals.objects.create(
+                character_sheet=sheet, health=100, max_health=100, base_max_health=100
+            )
+            CharacterTechniqueFactory(character=sheet, technique=self.strike)
+            CharacterAnimaFactory(character=sheet, current=20, maximum=30)
+            CombatParticipantFactory(
+                encounter=self.encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
+            )
+        self.captain = CombatOpponentFactory(
+            encounter=self.encounter, name="Bandit Captain", health=500, max_health=500
+        )
+        self.guard = CombatOpponentFactory(encounter=self.encounter, name="Bandit Guard")
+
+        covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        tomas_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        engage_vow_with_thread(self.tomas.sheet_data, tomas_role, covenant=covenant, thread_level=3)
+        perk = VowSituationalPerkFactory(
+            covenant_role=tomas_role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            magnitude_tenths=10,
+            check_type=None,
+            announce_template="{holder}'s vow answers the mark!",
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.TARGET_IS_MARKED_BY_ALLY)
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mira.sheet_data,
+            covenant=covenant,
+            covenant_role=CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
+        )
+        self.mira.covenant_roles.invalidate()
+        self.watch(self.tomas)
+
+    # -- helpers ---------------------------------------------------------------
+
+    def _round(
+        self,
+        target: CombatOpponent,
+        *,
+        marker: ObjectDB | None = None,
+        marked: CombatOpponent | None = None,
+    ) -> int:
+        """Play one round: ``marker`` marks ``marked`` first, Tomas strikes ``target``.
+
+        Returns the points on Tomas's own offense roll. Tomas starts every round rested, so
+        the fatigue his last strike cost never shifts the points the two rounds compare.
+        """
+        pool = get_or_create_fatigue_pool(self.tomas.sheet_data)
+        pool.physical_current = 0
+        pool.save(update_fields=["physical_current"])
+        if marker is not None:
+            result = self.web(marker, "combat_mark", opponent_id=marked.pk)
+            self.assertTrue(result.detail.success, result.detail.message)
+        ref = ActionRef(
+            backend=ActionBackend.COMBAT, technique_id=self.strike.pk, action_slot="focused"
+        )
+        declared = dispatch_player_action(
+            self.tomas,
+            ref,
+            {"effort_level": EffortLevel.MEDIUM, "focused_opponent_target_id": target.pk},
+        )
+        self.assertTrue(declared.deferred, declared)
+        with recorded_successes() as rolled:
+            resolve_round(self.encounter)
+        begin_declaration_phase(self.encounter)
+        self.encounter.refresh_from_db()
+        offense = [
+            r.total_points
+            for who, check_type, r in rolled
+            if who == self.tomas and check_type == self.check_type
+        ]
+        self.assertEqual(len(offense), 1, offense)
+        return offense[0]
+
+    # -- the journeys ----------------------------------------------------------
+
+    def test_tomas_rolls_higher_at_the_captain_mira_marked(self) -> None:
+        first = self._round(self.captain)
+        self.assertNotTold(self.tomas, VOW_ANSWERS)
+
+        second = self._round(self.captain, marker=self.mira, marked=self.captain)
+
+        self.assertEqual(second, first + self.PAYOFF)
+        self.assertTold(self.tomas, VOW_ANSWERS)
+
+    def test_a_mark_from_outside_the_covenant_pays_nothing(self) -> None:
+        first = self._round(self.captain)
+
+        second = self._round(self.captain, marker=self.ilse, marked=self.captain)
+
+        self.assertEqual(second, first)
+        self.assertNotTold(self.tomas, VOW_ANSWERS)
+
+    def test_a_mark_on_another_bandit_pays_nothing(self) -> None:
+        first = self._round(self.captain)
+
+        second = self._round(self.captain, marker=self.mira, marked=self.guard)
+
+        self.assertEqual(second, first)
+        self.assertNotTold(self.tomas, VOW_ANSWERS)
+
+    def test_tomas_marking_for_himself_pays_nothing(self) -> None:
+        first = self._round(self.captain)
+
+        second = self._round(self.captain, marker=self.tomas, marked=self.captain)
+
+        self.assertEqual(second, first)
+        self.assertNotTold(self.tomas, VOW_ANSWERS)
