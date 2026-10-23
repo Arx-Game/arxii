@@ -105,6 +105,45 @@ Django-only command that doesn't fully initialize Evennia.
 - `just scan-prod-logs` — Recent production tracebacks through the gated
   read-only `arxops` SSH account (`docs/operations/ops-access.md`).
 
+## Django admin names
+
+The admin is the tool of last resort: players and GMs never reach it, so a tool
+(the almanach, the world builder) is the right home for anything they touch. When you
+do need it, a model's admin section is its `verbose_name`, which usually matches the
+class name spelled out ("Succession Law" is `SuccessionLaw`). These
+22 admin sections do not, so a search by class name finds nothing:
+
+| Admin section | Class |
+|---|---|
+| Family Template | `HouseTemplate` |
+| Upbringing | `OriginTemplate` |
+| Upbringing Prompt | `OriginTemplateSlot` |
+| Upbringing Prompt Choice | `OriginTemplateSlotChoice` |
+| Character Upbringing Answer | `CharacterOriginSlot` |
+| Pronoun Set | `Pronouns` |
+| Social Consent Whitelist Entry | `SocialConsentWhitelist` |
+| Social Consent Blacklist Entry | `SocialConsentBlacklist` |
+| Currency Instrument | `CurrencyInstrumentDetails` |
+| Favor Token | `FavorTokenDetails` |
+| Character Distinction Other Entry | `CharacterDistinctionOther` |
+| Scheduled Task | `ScheduledTaskRecord` |
+| Soulfray Configuration | `SoulfrayConfig` |
+| Prepared Crossing Text | `CharacterCrossingText` |
+| Prepared Surge Text | `CharacterSurgeText` |
+| Fall / Redemption Config | `FallRedemptionConfig` |
+| Fall / Redemption Record | `FallRedemptionRecord` |
+| Spreading Configuration | `SpreadingConfig` |
+| Association settings | `AssociationConfig` |
+| Legend Settlement Configuration | `LegendSettlementConfig` |
+| Naming Ritual Configuration | `NamingRitualConfig` |
+| Player Allow List Entry | `PlayerAllowList` |
+
+Most of these are deliberate renames toward the player-facing term in the glossary,
+so the class name lags the display name on purpose. When you send someone to the
+admin, name both ("Family Template, `HouseTemplate`"). The table is a snapshot:
+`arx shell` with `admin.site._registry` compared against
+`camel_case_to_spaces(model.__name__)` regenerates it.
+
 ## Linting and Formatting
 
 - `ruff check .` — Run Python linting (import sorting, flake8 rules, and more)
