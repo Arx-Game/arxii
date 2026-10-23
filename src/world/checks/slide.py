@@ -326,22 +326,18 @@ def resolve_standing(
         )
     lowest, highest = authored
 
-    own_whole, own_share = _normalize(own_difference, lowest, highest)
+    own_whole, _own_share = _normalize(own_difference, lowest, highest)
     own_chart = ResultChart.get_chart_for_difference(own_whole)
     own_rows = _chart_rows(own_chart)
     hopeless = chart_is_impossible(own_rows, own_chart)
 
-    gain = difference - own_difference
     whole, share = _normalize(difference, lowest, highest)
-    pinned = False
-    if hopeless and own_share + gain >= 0:
-        # Pinned: modifiers slide within the own-standing chart, up to its full band.
-        pinned = whole > own_whole
-        whole, share = own_whole, min(1.0, own_share + gain)
-    elif hopeless:
-        # Net penalties resolve normally, from the own-standing chart downward.
-        whole, share = _normalize(own_whole + own_share + gain, lowest, highest)
-
+    pinned = hopeless and whole > own_whole
+    if pinned:
+        # The pin: modifiers slide within the own-standing chart, to at most its full
+        # band, and never lift the roll onto a higher chart. Anything that stays on or
+        # below the own-standing chart resolves exactly as it would unpinned.
+        whole, share = own_whole, 1.0
     chart = ResultChart.get_chart_for_difference(whole)
     toward = ResultChart.get_chart_for_difference(whole + 1) if share > 0 else None
     rows = own_rows if chart is own_chart and toward is None else _chart_rows(chart, toward)

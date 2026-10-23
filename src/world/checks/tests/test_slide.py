@@ -148,3 +148,22 @@ class StandingTests(SlideTestBase):
         self.assertTrue(standing.hopeless)
         self.assertFalse(standing.pinned)
         self.assertEqual(standing.chart_difference, -8)
+
+    def test_a_buff_that_stays_on_the_own_chart_slides_as_it_would_unpinned(self):
+        # Own: Incompetent (rank 0) against Mythic (rank 8): -8.0. +5 points: -7.5.
+        standing = resolve_standing(5, 250, own_roller_points=0)
+        self.assertTrue(standing.hopeless)
+        self.assertFalse(standing.pinned)
+        self.assertEqual(standing.chart_difference, -8)
+        self.assertAlmostEqual(standing.share, 0.5)
+
+    def test_buffs_below_the_lowest_chart_never_slide_further_than_unpinned(self):
+        """Own standing below the lowest chart: a buff that leaves the total still below
+        it gives that chart's own odds, never a slide (review finding on #4604)."""
+        ResultChart.objects.filter(rank_difference=-8).delete()
+        ResultChart.clear_cache()
+        # Own -8.0 is now below the lowest chart (-7); +5 points is -7.5, still below.
+        standing = resolve_standing(5, 250, own_roller_points=0)
+        self.assertTrue(standing.hopeless)
+        self.assertEqual(standing.chart_difference, -7)
+        self.assertEqual(standing.share, 0.0)
