@@ -742,7 +742,8 @@ class PositionEdgeInfo:
     """One edge in the tactical-map graph (#2006) — obstacle/gate visibility.
 
     Unlike PositionAdjacency (the ADJACENT-reach graph), this carries every
-    edge regardless of is_passable, plus the gating challenge's public name.
+    edge. ``is_passable`` is the walker rule (``edge_blocks_crossing``), and
+    ``gating_challenge_name`` names only a gate that is still active (#4606).
     """
 
     position_a_id: int
@@ -778,12 +779,16 @@ def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
 
 
 def _position_edge_info(edge: PositionEdge) -> PositionEdgeInfo:
-    gating_name = edge.gating_challenge.template.name if edge.gating_challenge_id else None
+    # The map shows what a walker meets (#4606): a resolved gate is no longer named,
+    # and a climbed wall reads as passable even though its row stays sealed.
+    blocked = edge_blocks_crossing(edge)
+    gate = edge.gating_challenge if edge.gating_challenge_id else None
+    gating_name = gate.template.name if gate is not None and gate.is_active else None
     barrier = edge.barrier_integrity
     return PositionEdgeInfo(
         position_a_id=edge.position_a_id,
         position_b_id=edge.position_b_id,
-        is_passable=edge.is_passable,
+        is_passable=not blocked,
         blocks_flight=edge.blocks_flight,
         gating_challenge_name=gating_name,
         integrity=barrier[0] if barrier else None,

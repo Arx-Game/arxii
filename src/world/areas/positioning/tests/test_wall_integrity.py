@@ -144,6 +144,23 @@ class WallRowTests(_Yard):
         info = next(e for e in position_graph(self.room).edges if e.position_a_id == self.west.pk)
         self.assertEqual((info.integrity, info.max_integrity), (7, 12))
 
+    def test_the_map_shows_a_climbed_wall_as_open(self) -> None:
+        gate = self.gate()
+        self.wall(self.west, self.middle, gate=gate)
+
+        def west_middle():
+            return next(
+                e for e in position_graph(self.room).edges if e.position_a_id == self.west.pk
+            )
+
+        self.assertFalse(west_middle().is_passable)
+        self.assertEqual(west_middle().gating_challenge_name, gate.template.name)
+        gate.is_active = False
+        gate.save()
+        self.room.__dict__.pop("positions_cached", None)
+        self.assertTrue(west_middle().is_passable)
+        self.assertIsNone(west_middle().gating_challenge_name)
+
 
 class RestoreEdgeTests(_Yard):
     """restore_edge is the one way a wall ends."""

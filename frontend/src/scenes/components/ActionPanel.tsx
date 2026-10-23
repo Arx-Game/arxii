@@ -18,6 +18,7 @@ import {
   castTechnique,
   useCastableTechniques,
   useAvailableActionsQuery,
+  availableActionsKeys,
   toastDispositionMessage,
 } from '../actionQueries';
 import { fetchScene, sceneKeys } from '../queries';
@@ -46,6 +47,8 @@ import { StrainSlider } from './StrainSlider';
 import { TargetPicker, type TargetCandidate } from './TargetPicker';
 import { BoonAskForm } from './BoonAskForm';
 import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
+import { useDispatchPlayerAction } from '@/combat/queries';
+import { isDispatchFailure } from '@/combat/types';
 
 interface Props {
   sceneId: string;
@@ -212,6 +215,9 @@ export function ActionPanel({ sceneId }: Props) {
   const initiatorPersonaId = actingPersonaId(activeEntry);
 
   const { data, isLoading } = useAvailableActionsQuery(characterId, { enabled: open });
+  // A challenge approach (a wall's climb, a door's lock) resolves through the dispatch
+  // seam, never a scene action request: it has no target to ask (#4606).
+  const { mutateAsync: dispatchChallenge } = useDispatchPlayerAction(characterId ?? 0);
 
   // Scene participants — used as candidates when a targeted action is selected.
   const { data: scene } = useQuery<SceneDetail>({
@@ -371,7 +377,32 @@ export function ActionPanel({ sceneId }: Props) {
     });
   }
 
+  function resolveChallenge(action: PlayerAction) {
+    dispatchChallenge({ ref: action.ref, kwargs: {} })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'That did not work.');
+          return;
+        }
+        invalidateActionOutcomeQueries();
+        queryClient.invalidateQueries({ queryKey: sceneKeys.detail(sceneId) }).catch(() => {});
+        if (characterId !== null) {
+          queryClient
+            .invalidateQueries({ queryKey: availableActionsKeys.forCharacter(characterId) })
+            .catch(() => {});
+        }
+        setOpen(false);
+      })
+      .catch((err: unknown) => {
+        toast.error(extractErrorMessage(err));
+      });
+  }
+
   function handleActionClick(action: PlayerAction) {
+    if (action.ref.backend === 'challenge') {
+      resolveChallenge(action);
+      return;
+    }
     // Targeted actions: open the picker.  Non-targeted: commit immediately.
     if (action.target_spec !== null) {
       setTargetingAction(action);

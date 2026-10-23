@@ -68,6 +68,12 @@ vi.mock('../queries', async () => {
 });
 
 // Mock the roster query — component resolves active character → characterId
+// The dispatch endpoint a challenge approach resolves through (#4606).
+vi.mock('@/combat/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/combat/api')>();
+  return { ...actual, postDispatchAction: vi.fn() };
+});
+
 vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: vi.fn(() => ({
     data: [
@@ -507,6 +513,40 @@ describe('ActionPanel', () => {
         })
       );
     });
+  });
+
+  it('a challenge approach dispatches the challenge instead of asking anyone (#4606)', async () => {
+    const { postDispatchAction } = await import('@/combat/api');
+    const climbRef = {
+      backend: 'challenge',
+      challenge_instance_id: 9,
+      approach_id: 3,
+      technique_id: null,
+      registry_key: null,
+    };
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [makeAction({ backend: 'challenge', display_name: 'Climb Over', ref: climbRef })],
+    });
+    vi.mocked(postDispatchAction).mockResolvedValue({
+      backend: 'challenge',
+      deferred: false,
+      message: 'Conjured Barrier',
+      success: null,
+      data: { challenge_instance_id: 9, resolution_type: 'destroy' },
+    });
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole('button'));
+    await user.click(await screen.findByText('Climb Over'));
+
+    await waitFor(() => {
+      expect(postDispatchAction).toHaveBeenCalledWith(42, { ref: climbRef, kwargs: {} });
+    });
+    expect(createActionRequest).not.toHaveBeenCalled();
   });
 
   it('toasts the disposition message when createActionRequest resolves an NPC target', async () => {
