@@ -173,17 +173,36 @@ class OutcomeGuaranteeTests(TestCase):
 
         self.assertEqual(result.outcome, outcomes[-2])
 
-    def test_chart_without_qualifying_outcome_falls_back_to_global(self) -> None:
+    def test_floor_above_the_chart_is_capped_at_its_best_outcome(self) -> None:
+        """A Success floor on a chart with no Success gives the chart's best (#4601).
+
+        It used to fall back to the global outcome table, which produced Success on a
+        chart that has none; a guarantee never adds an outcome the chart lacks.
+        """
         _chart, outcomes = self._chart(-2, -1)
-        global_outcome = CheckOutcomeFactory(name="GlobalOnly", success_level=1)
+        CheckOutcomeFactory(name="GlobalOnly", success_level=1)
         self._guarantee_perk(effect_kind=PerkEffectKind.TIER_FLOOR, floor=1)
 
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
         with force_check_outcome(outcomes[-2]):
             result = perform_check(self.character, self.check_type, situation_ctx=ctx)
 
-        self.assertEqual(result.outcome, global_outcome)
-        self.assertEqual(result.outcome.success_level, 1)
+        self.assertEqual(result.outcome, outcomes[-1])
+        self.assertEqual(result.outcome.success_level, -1)
+
+    def test_floor_already_met_by_the_chart_best_changes_nothing(self) -> None:
+        _chart, outcomes = self._chart(-2, -1)
+        self._guarantee_perk(effect_kind=PerkEffectKind.TIER_FLOOR, floor=1)
+
+        ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
+        with (
+            patch("world.covenants.perks.services.announce_fired_perks") as mock_announce,
+            force_check_outcome(outcomes[-1]),
+        ):
+            result = perform_check(self.character, self.check_type, situation_ctx=ctx)
+
+        self.assertEqual(result.outcome, outcomes[-1])
+        mock_announce.assert_not_called()
 
     def test_announced_exactly_once_and_only_on_alteration(self) -> None:
         from evennia import create_object

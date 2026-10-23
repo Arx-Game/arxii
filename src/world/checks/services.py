@@ -14,6 +14,7 @@ from world.checks.constants import (
     ModifierSourceKind,
 )
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
+from world.checks.slide import CheckRoll, CheckStanding, resolve_standing
 from world.checks.types import CheckResult, ModifierBreakdown, ModifierContribution
 from world.classes.models import PathAspect
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
@@ -64,6 +65,8 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     level_override: int | None = None,
     stat_override: str | int | None = None,
     extra_traits: "Sequence[ExtraTraitTerm]" = (),
+    extra_standing: int = 0,
+    target_modifiers: int = 0,
 ) -> CheckResult:
     """
     Main check resolution function.
@@ -74,10 +77,11 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
        guaranteed floor every check gets, on top of (not instead of) the aspect bonus
     4. Sum: trait_points + aspect_bonus + level_points + extra_modifiers + effort_modifier
        + fatigue_penalty
-    5. total_points -> CheckRank -> ResultChart (existing pipeline)
-    6. Roll 1-100
+    5. Both totals -> band positions -> the slid chart, with the hopeless pin decided on
+       own standing (``world.checks.slide``, #4601)
+    6. Roll 1-100, plus a fraction inside the face
     7. Apply rollmod: effective = max(1, min(100, roll + rollmod))
-    8. Look up outcome on chart using effective roll
+    8. Look up the outcome on the slid chart at the effective roll's position
     9. Award check-based development points (#3039) via ``_award_check_development`` —
        the sole chokepoint for ``world.progression.services.skill_development
        .award_check_development``. Covers both the rolled path and the test-rig
@@ -124,6 +128,12 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             roll, even when the trait is also on the check type), and their trait ids
             ride the capability ``involved_traits``. ``()`` (the default) is
             byte-identical to before.
+        extra_standing: (#4601) the part of ``extra_modifiers`` that is the character's
+            own standing rather than a modifier (fatigue, strain and soulfray passed as
+            contributions). Own standing decides the hopeless pin.
+        target_modifiers: (#4601) the part of ``target_difficulty`` that comes from
+            modifiers on the target (its conditions, through ``level_opposition``).
+            ``target_difficulty - target_modifiers`` is the target's own standing.
     """
     # Test-rig seam (NOT a production code path).
     from world.checks.test_helpers import _consume_forced_outcome, _record_capture  # noqa: PLC0415
@@ -147,6 +157,8 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             level_override=level_override,
             stat_override=stat_override,
             extra_traits=extra_traits,
+            extra_standing=extra_standing,
+            target_modifiers=target_modifiers,
         )
         _award_check_development(character, check_type, effort_level, extra_traits=extra_traits)
         _record_legend_contribution(character, check_type, result)
@@ -164,12 +176,17 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         level_override=level_override,
         stat_override=stat_override,
         extra_traits=extra_traits,
+        extra_standing=extra_standing,
+        target_modifiers=target_modifiers,
     )
 
     roll = random.randint(1, 100)  # noqa: S311
     rollmod = get_rollmod(character)
     effective_roll = max(1, min(100, roll + rollmod))
-    outcome = _get_outcome_for_roll(breakdown.chart, effective_roll) if breakdown.chart else None
+    # One roll: the face, plus where inside it the roll fell, so a slid chart's
+    # fractional band edges count exactly (#4601). An unslid chart reads only the face.
+    check_roll = CheckRoll(face=effective_roll, fraction=random.random())  # noqa: S311
+    outcome = breakdown.standing.slid.outcome_for(check_roll.position) if breakdown.chart else None
     outcome = _apply_outcome_guarantees(character, outcome, breakdown.chart, situation_ctx)
 
     result = _check_result(check_type, outcome, breakdown, effective_roll=effective_roll)
@@ -291,6 +308,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
     skip_fashion: bool = False,
     stat_override: str | int | None = None,
     extra_traits: "Sequence[ExtraTraitTerm]" = (),
+    target_modifiers: int = 0,
 ) -> CheckResult:
     """Run a check with all character modifiers gathered automatically.
 
@@ -328,6 +346,9 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
         extra_traits: (#4450) call-time skill terms; see :func:`perform_check`. Also
             forwarded to ``collect_check_modifiers`` so capability rows see the term
             traits as involved.
+        target_modifiers: (#4601) see :func:`perform_check`. The gathered breakdown's
+            own-standing kinds (``ModifierBreakdown.standing_total``) go to
+            ``perform_check`` as ``extra_standing``.
 
     Returns:
         CheckResult from perform_check.
@@ -347,6 +368,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
             level_override=level_override,
             stat_override=stat_override,
             extra_traits=extra_traits,
+            target_modifiers=target_modifiers,
         )
     breakdown = collect_check_modifiers(
         sheet,
@@ -368,6 +390,8 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
         level_override=level_override,
         stat_override=stat_override,
         extra_traits=extra_traits,
+        extra_standing=breakdown.standing_total,
+        target_modifiers=target_modifiers,
     )
     # Lazy import: world.conditions.services imports this module at load time.
     from world.conditions.services import spend_contributing_conditions  # noqa: PLC0415
@@ -389,6 +413,8 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
     level_override: int | None = None,
     stat_override: str | int | None = None,
     extra_traits: "Sequence[ExtraTraitTerm]" = (),
+    extra_standing: int = 0,
+    target_modifiers: int = 0,
 ) -> CheckResult:
     """Build a synthetic CheckResult for the test-rig forced-outcome path.
 
@@ -413,6 +439,8 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
         level_override=level_override,
         stat_override=stat_override,
         extra_traits=extra_traits,
+        extra_standing=extra_standing,
+        target_modifiers=target_modifiers,
     )
     outcome = _apply_outcome_guarantees(character, forced_outcome, breakdown.chart, situation_ctx)
     return _check_result(check_type, outcome, breakdown)
@@ -431,6 +459,7 @@ class _CheckBreakdown(NamedTuple):
     target_rank: "CheckRank | None"
     rank_difference: int
     chart: "ResultChart | None"
+    standing: CheckStanding
 
 
 def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirror perform_check
@@ -446,6 +475,8 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     level_override: int | None = None,
     stat_override: str | int | None = None,
     extra_traits: "Sequence[ExtraTraitTerm]" = (),
+    extra_standing: int = 0,
+    target_modifiers: int = 0,
 ) -> _CheckBreakdown:
     """Compute stat + skill + specialization + aspect + level points, ranks, and chart
 
@@ -468,6 +499,12 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
 
     ``extra_traits`` (#4450): call-time skill terms added to the trait points and the
     capability ``involved_traits`` exactly like extra ``CheckTypeTrait`` rows.
+
+    Ranks and the chart come from ``world.checks.slide.resolve_standing`` (#4601): both
+    totals' band positions, the fractional rank difference, and the hopeless pin decided on
+    own standing. The roller's own standing is ``total_points - extra_modifiers +
+    extra_standing``; the target's is ``target_difficulty - target_modifiers``.
+    ``rank_difference`` is the whole difference of the chart the roll uses.
     """
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
     if level_override is not None:
@@ -500,12 +537,12 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         + fatigue_penalty
     )
 
-    roller_rank = CheckRank.get_rank_for_points(total_points)
-    target_rank = CheckRank.get_rank_for_points(target_difficulty)
-    rank_difference = (roller_rank.rank if roller_rank else 0) - (
-        target_rank.rank if target_rank else 0
+    standing = resolve_standing(
+        total_points,
+        target_difficulty,
+        own_roller_points=total_points - extra_modifiers + extra_standing,
+        own_target_points=target_difficulty - target_modifiers,
     )
-    chart = ResultChart.get_chart_for_difference(rank_difference)
 
     return _CheckBreakdown(
         trait_points=trait_points,
@@ -514,10 +551,11 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         level_points=level_points,
         capability_points=capability_points,
         total_points=total_points,
-        roller_rank=roller_rank,
-        target_rank=target_rank,
-        rank_difference=rank_difference,
-        chart=chart,
+        roller_rank=standing.roller.rank,
+        target_rank=standing.target.rank,
+        rank_difference=standing.chart_difference,
+        chart=standing.chart,
+        standing=standing,
     )
 
 
@@ -787,7 +825,8 @@ def _apply_outcome_guarantees(
 
     effective_floor = max(floor for floor, _firing in binding)
     replacement = _lowest_outcome_at_or_above(chart, effective_floor)
-    if replacement is None:
+    if replacement is None or replacement.success_level <= raw_level:
+        # Capped at the chart's best outcome (#4601): nothing on this chart is better.
         return outcome
 
     announce_fired_perks(
@@ -797,20 +836,24 @@ def _apply_outcome_guarantees(
 
 
 def _lowest_outcome_at_or_above(chart: "ResultChart | None", floor: int) -> "CheckOutcome | None":
-    """The least-good outcome satisfying a guarantee floor: chart-scoped first
-    (guarantees respect what this chart can produce), global ``CheckOutcome``
-    fallback when the chart has no row at/above the floor, ``None`` when no such
-    outcome is authored anywhere (guarantee is then a no-op — never invent rows).
+    """The least-good outcome satisfying a guarantee floor, capped at the chart's best.
+
+    Chart-scoped: the chart's lowest outcome at or above the floor; when the chart has
+    none, its best outcome (#4601, #4551 section 5.2 step 4: a guarantee never produces an
+    outcome the chart lacks, so a Success floor on an impossible chart gives its least
+    bad outcome, never Success). The global ``CheckOutcome`` table is the fallback only
+    when there is no chart (forced outcomes without chart rows). ``None`` when nothing
+    is authored (the guarantee is then a no-op; never invent rows).
     """
     if chart is not None:
-        row = (
-            ResultChartOutcome.objects.filter(chart=chart, outcome__success_level__gte=floor)
+        rows = list(
+            ResultChartOutcome.objects.filter(chart=chart)
             .select_related("outcome")
             .order_by("outcome__success_level")
-            .first()
         )
-        if row is not None:
-            return row.outcome
+        if rows:
+            at_or_above = [row for row in rows if row.outcome.success_level >= floor]
+            return (at_or_above[0] if at_or_above else rows[-1]).outcome
     return CheckOutcome.objects.filter(success_level__gte=floor).order_by("success_level").first()
 
 
@@ -897,6 +940,7 @@ def _check_result(
         capability_points=breakdown.capability_points,
         level_points=breakdown.level_points,
         effective_roll=effective_roll,
+        standing=breakdown.standing,
     )
 
 
@@ -1264,6 +1308,39 @@ def get_rollmod(character: "ObjectDB") -> int:
     return total
 
 
+class OppositionPoints(NamedTuple):
+    """``level_opposition`` split into the defender's own standing and its modifiers.
+
+    ``modifiers`` is the defender's active condition modifiers; a caller passes it to
+    ``perform_check`` as ``target_modifiers`` so the hopeless pin reads own standing on
+    both sides (#4601).
+    """
+
+    standing: int
+    modifiers: int
+
+    @property
+    def total(self) -> int:
+        return self.standing + self.modifiers
+
+
+def level_opposition_points(
+    check_type: "CheckType",
+    *,
+    level: int,
+    character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM
+) -> OppositionPoints:
+    """:func:`level_opposition`, with the defender's condition modifiers kept apart."""
+    standing = LEVEL_POINTS_PER_LEVEL * max(0, level)
+    modifiers = 0
+    if character is not None:
+        standing += _calculate_aspect_bonus(character, check_type, level)
+        from world.conditions.services import opponent_condition_opposition  # noqa: PLC0415
+
+        modifiers = opponent_condition_opposition(character, check_type)
+    return OppositionPoints(standing=standing, modifiers=modifiers)
+
+
 def level_opposition(
     check_type: "CheckType",
     *,
@@ -1297,14 +1374,12 @@ def level_opposition(
     site uses one or the other, never both. Callers ADD the result to any
     authored difficulty (a lock's rating, a ward's barrier strength) rather than
     replacing it.
-    """
-    total = LEVEL_POINTS_PER_LEVEL * max(0, level)
-    if character is not None:
-        total += _calculate_aspect_bonus(character, check_type, level)
-        from world.conditions.services import opponent_condition_opposition  # noqa: PLC0415
 
-        total += opponent_condition_opposition(character, check_type)
-    return total
+    The condition term is a modifier on the target, not its own standing; a caller
+    that rolls against this difficulty uses :func:`level_opposition_points` to pass it
+    as ``target_modifiers`` (#4601).
+    """
+    return level_opposition_points(check_type, level=level, character=character).total
 
 
 def compute_resist_increment(
@@ -1429,6 +1504,11 @@ def preview_check_difficulty(  # noqa: PLR0913 - keyword-only check params mirro
     this function has no ``situation_ctx`` parameter, so ``_situational_perk_check_bonus``
     short-circuits before firing — deliberately, since it has the side effect of
     announcing perk firings and a preview must never announce anything.
+
+    Graded on own standing (#4601): ``extra_modifiers`` are modifiers, so when the
+    character's own standing lands on an impossible chart the returned difference is that
+    chart's (the hopeless pin holds the roll there), and ``chart_has_success_outcomes`` of
+    it is False however large the modifiers. A buff never changes an Impossible label.
     """
     breakdown = _compute_check_breakdown(
         character,
@@ -1547,22 +1627,6 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         )
 
     return outcome
-
-
-def _get_outcome_for_roll(chart: "ResultChart", roll: int) -> CheckOutcome | None:
-    """Query ResultChartOutcome for matching roll range, return the CheckOutcome."""
-    chart_outcome = (
-        ResultChartOutcome.objects.filter(
-            chart=chart,
-            min_roll__lte=roll,
-            max_roll__gte=roll,
-        )
-        .select_related("outcome")
-        .first()
-    )
-    if chart_outcome:
-        return chart_outcome.outcome
-    return None
 
 
 def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror perform_check

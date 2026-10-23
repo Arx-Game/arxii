@@ -640,6 +640,16 @@ class ResultChart(NaturalKeyMixin, SharedMemoryModel):
         return cls._chart_cache[closest_diff]
 
     @classmethod
+    def authored_range(cls) -> tuple[int, int] | None:
+        """The lowest and highest authored rank differences, or None with no charts."""
+        if not cls._chart_cache:
+            cls._build_chart_cache()
+        differences = sorted(cls._chart_cache)
+        if not differences:
+            return None
+        return differences[0], differences[-1]
+
+    @classmethod
     def _build_chart_cache(cls) -> None:
         """Build the chart cache dictionary."""
         cls._chart_cache = {chart.rank_difference: chart for chart in cls.objects.all()}
