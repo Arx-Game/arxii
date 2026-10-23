@@ -9,6 +9,9 @@ and the wound's running total hold.
 
 The authored numbers fix the expected values: 0.40 x 20 = 8 and 0.70 x 20 = 14, and
 no combination of casts heals past the highest fraction anyone cast.
+
+Staff author the fraction in the Technique admin's treatment inline: 0.40 saves, and a
+fraction above the 0.75 ceiling is refused with the field named.
 """
 
 from __future__ import annotations
@@ -18,6 +21,8 @@ from contextlib import contextmanager
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
+from django.urls import reverse
 from evennia.objects.models import ObjectDB
 
 from actions.factories import ActionTemplateFactory
@@ -200,3 +205,87 @@ class TwoHealersTendOneWound(JourneyCase):
 
         self.assertEqual(self.mended_on_the_wound(), 14)
         self.assertEqual(self.ilses_health(), ILSE_HEALTH + 14)
+
+
+def _filled(bound_fields) -> dict[str, str]:
+    """What a browser posts for these bound fields untouched; unchecked boxes are left out."""
+    data: dict[str, str] = {}
+    for bound in bound_fields:
+        value = bound.value()
+        if isinstance(value, bool):
+            if value:
+                data[bound.html_name] = "on"
+        elif isinstance(value, list):
+            data[bound.html_name] = value  # type: ignore[assignment]
+        else:
+            data[bound.html_name] = "" if value is None else str(value)
+    return data
+
+
+class StaffSetTheFractionInTheTechniqueAdmin(JourneyCase):
+    """Staff open a healing technique's change form and set its treatment's fraction."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        staff = get_user_model().objects.create_user(
+            username="warden", password="pw", is_staff=True, is_superuser=True
+        )
+        self.client.force_login(staff)
+        self.technique = TechniqueFactory(name="Field Mend", damage_profile=False)
+        self.row = TechniqueTreatment.objects.create(
+            technique=self.technique,
+            treatment_template=TreatmentTemplateFactory(name="Binding the Wound"),
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        self.url = reverse("admin:arxii_technique_change", args=[self.technique.pk])
+
+    def change_post(self, fraction: str) -> dict[str, str]:
+        """The change form exactly as a browser posts it, with the treatment's fraction set."""
+        page = self.client.get(self.url)
+        self.assertEqual(page.status_code, 200)
+        data = _filled(page.context["adminform"].form)
+        for inline in page.context["inline_admin_formsets"]:
+            formset = inline.formset
+            data.update(_filled(formset.management_form))
+            for form in formset.forms:
+                data.update(_filled(form))
+        data[f"{self.treatment_formset(page).prefix}-0-mend_cap_fraction"] = fraction
+        return data
+
+    def treatment_formset(self, response):
+        [formset] = [
+            inline.formset
+            for inline in response.context["inline_admin_formsets"]
+            if inline.formset.model is TechniqueTreatment
+        ]
+        return formset
+
+    def stored_fraction(self) -> Decimal:
+        return (
+            TechniqueTreatment.objects.filter(pk=self.row.pk)
+            .values_list("mend_cap_fraction", flat=True)
+            .get()
+        )
+
+    def test_the_treatment_inline_shows_the_fraction(self) -> None:
+        page = self.client.get(self.url)
+
+        formset = self.treatment_formset(page)
+        self.assertIn("mend_cap_fraction", formset.forms[0].fields)
+        self.assertContains(page, f'name="{formset.prefix}-0-mend_cap_fraction"')
+        self.assertContains(page, 'value="0.75"')
+
+    def test_staff_save_a_field_mend_at_forty_percent(self) -> None:
+        response = self.client.post(self.url, self.change_post("0.40"))
+
+        self.assertEqual(response.status_code, 302, response.content[:800])
+        self.assertEqual(self.stored_fraction(), Decimal("0.40"))
+
+    def test_a_fraction_above_the_ceiling_is_refused_by_name(self) -> None:
+        response = self.client.post(self.url, self.change_post("0.80"))
+
+        self.assertEqual(response.status_code, 200)
+        errors = self.treatment_formset(response).forms[0].errors
+        self.assertIn("mend_cap_fraction", errors)
+        self.assertIn("less than or equal to 0.75", str(errors["mend_cap_fraction"]))
+        self.assertEqual(self.stored_fraction(), Decimal("0.75"))

@@ -4838,21 +4838,31 @@ def _persist_treatment_attempt(  # noqa: PLR0913
         raise
 
 
-def _treatment_skill_terms(
-    treatment: TreatmentTemplate, *, technique_driven: bool
-) -> "tuple[ExtraTraitTerm, ...]":
-    """The Magical treatment skills for ``treatment``'s roll; empty for mundane first aid.
+def is_magical_treatment(treatment: TreatmentTemplate, *, technique_driven: bool = False) -> bool:
+    """Whether ``treatment`` is magical; otherwise it is mundane first aid (#4450, #4600).
 
-    Magical means a technique drives the treatment or the template debits resonance or
-    anima or requires a bond, the same costs ``perform_treatment`` charges.
+    Magical means a technique drives the treatment, or the template debits resonance or
+    anima, or requires a bond: the same costs ``perform_treatment`` charges. The one
+    definition both the Magical treatment skills (``_treatment_skill_terms``) and the scene
+    ``treat`` path's mend fraction (first aid's own share applies only to a mundane
+    treatment) read.
     """
-    magical = (
+    return (
         technique_driven
         or treatment.resonance_cost > 0
         or treatment.anima_cost > 0
         or treatment.requires_bond
     )
-    if not magical:
+
+
+def _treatment_skill_terms(
+    treatment: TreatmentTemplate, *, technique_driven: bool
+) -> "tuple[ExtraTraitTerm, ...]":
+    """The Magical treatment skills for ``treatment``'s roll; empty for mundane first aid.
+
+    Magical is ``is_magical_treatment``.
+    """
+    if not is_magical_treatment(treatment, technique_driven=technique_driven):
         return ()
     from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
@@ -4904,7 +4914,8 @@ def perform_treatment(  # noqa: PLR0913
     ``mend_cap_fraction`` (#4600) is how far this treatment may heal a wound, as a
     share of the damage the wound did, handed to ``mend_wound()``. A technique cast
     passes its treatment row's authored fraction; the scene ``treat`` path passes
-    ``FIRST_AID_MEND_FRACTION``. ``None`` means the never-to-full ceiling.
+    ``FIRST_AID_MEND_FRACTION`` for a mundane treatment (``is_magical_treatment`` False)
+    and nothing for a magical one. ``None`` means the never-to-full ceiling.
     """
     helper = helper_sheet.character
     target = target_sheet.character

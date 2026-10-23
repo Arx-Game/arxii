@@ -18,11 +18,11 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.magic.models.techniques import (
     MEND_CAP_FRACTION_HELP,
     MEND_CAP_FRACTION_IN_RANGE,
+    MEND_CAP_FRACTION_VALIDATORS,
     AbstractAppliedCondition,
     AbstractCapabilityGrant,
     AbstractDamageProfile,
     ConditionTargetKind,
-    validate_mend_cap_fraction,
 )
 from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
@@ -242,6 +242,7 @@ class TechniqueDraftTreatment(SharedMemoryModel):
         max_digits=3,
         decimal_places=2,
         default=NEVER_TO_FULL_FRACTION,
+        validators=MEND_CAP_FRACTION_VALIDATORS,
         help_text=MEND_CAP_FRACTION_HELP,
     )
 
@@ -257,8 +258,3 @@ class TechniqueDraftTreatment(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.draft} → treats {self.treatment_template.name} ({self.target_kind})"
-
-    def clean(self) -> None:
-        """Refuse a mend fraction above the never-to-full ceiling (#4600)."""
-        super().clean()
-        validate_mend_cap_fraction(self.mend_cap_fraction)

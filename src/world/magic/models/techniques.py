@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils.functional import cached_property
@@ -1697,22 +1698,12 @@ MEND_CAP_FRACTION_HELP = (
 MEND_CAP_FRACTION_IN_RANGE = Q(mend_cap_fraction__gt=0) & Q(mend_cap_fraction__lt=1)
 
 
-def validate_mend_cap_fraction(fraction: Decimal | None) -> None:
-    """Refuse a treatment row's mend fraction when it is above the never-to-full ceiling.
-
-    Shared by ``TechniqueTreatment``, ``TechniqueDraftTreatment`` and
-    ``VowAddedEffectTreatment`` (#4600). The CheckConstraint keeps the value
-    between 0 and 1; this keeps it at or below ``NEVER_TO_FULL_FRACTION``, the
-    share no healing ever passes (ADR-0156).
-    """
-    if fraction is not None and fraction > NEVER_TO_FULL_FRACTION:
-        raise ValidationError(
-            {
-                "mend_cap_fraction": (
-                    f"At most {NEVER_TO_FULL_FRACTION}: no healing brings a wound back to full."
-                )
-            }
-        )
+#: The field half of the mend-fraction rule (#4600): at least 0.01 and at most the
+#: never-to-full ceiling, so an admin form names the field and the limit in plain words.
+MEND_CAP_FRACTION_VALIDATORS = [
+    MinValueValidator(Decimal("0.01")),
+    MaxValueValidator(NEVER_TO_FULL_FRACTION),
+]
 
 
 class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
@@ -1757,6 +1748,7 @@ class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
         max_digits=3,
         decimal_places=2,
         default=NEVER_TO_FULL_FRACTION,
+        validators=MEND_CAP_FRACTION_VALIDATORS,
         help_text=MEND_CAP_FRACTION_HELP,
     )
 
@@ -1782,11 +1774,6 @@ class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.technique.name} → treats {self.treatment_template.name} ({self.target_kind})"
-
-    def clean(self) -> None:
-        """Refuse a mend fraction above the never-to-full ceiling (#4600)."""
-        super().clean()
-        validate_mend_cap_fraction(self.mend_cap_fraction)
 
 
 class TechniqueDamageProfile(NaturalKeyMixin, AbstractDamageProfile):

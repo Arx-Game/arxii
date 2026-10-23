@@ -182,6 +182,11 @@ class MendWoundFractionTests(TestCase):
 
         self.assertEqual(self._mend(vitals, instance, None), 15)
 
+    def test_a_zero_fraction_mends_nothing_rather_than_meaning_the_ceiling(self) -> None:
+        vitals, instance = self._wound()
+
+        self.assertEqual(self._mend(vitals, instance, Decimal("0.00")), 0)
+
     def test_first_aid_stops_at_its_own_fraction(self) -> None:
         vitals, instance = self._wound()
 

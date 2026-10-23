@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 
+import django.core.validators
 from django.db import migrations, models
 
 
@@ -19,6 +20,10 @@ class Migration(migrations.Migration):
                 default=Decimal("0.75"),
                 help_text="How far this treatment may heal a wound, as a share of the damage the wound did (0.40 heals at most 40%). Healing on one wound never passes the highest share any healer used on it. At most 0.75, the ceiling no healing passes.",
                 max_digits=3,
+                validators=[
+                    django.core.validators.MinValueValidator(Decimal("0.01")),
+                    django.core.validators.MaxValueValidator(Decimal("0.75")),
+                ],
             ),
         ),
         migrations.AddField(
@@ -29,6 +34,10 @@ class Migration(migrations.Migration):
                 default=Decimal("0.75"),
                 help_text="How far this treatment may heal a wound, as a share of the damage the wound did (0.40 heals at most 40%). Healing on one wound never passes the highest share any healer used on it. At most 0.75, the ceiling no healing passes.",
                 max_digits=3,
+                validators=[
+                    django.core.validators.MinValueValidator(Decimal("0.01")),
+                    django.core.validators.MaxValueValidator(Decimal("0.75")),
+                ],
             ),
         ),
         migrations.AddField(
@@ -39,6 +48,10 @@ class Migration(migrations.Migration):
                 default=Decimal("0.75"),
                 help_text="How far this treatment may heal a wound, as a share of the damage the wound did (0.40 heals at most 40%). Healing on one wound never passes the highest share any healer used on it. At most 0.75, the ceiling no healing passes.",
                 max_digits=3,
+                validators=[
+                    django.core.validators.MinValueValidator(Decimal("0.01")),
+                    django.core.validators.MaxValueValidator(Decimal("0.75")),
+                ],
             ),
         ),
         migrations.AddConstraint(

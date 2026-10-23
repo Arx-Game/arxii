@@ -192,8 +192,9 @@ WOUND_BLEEDING_NAME: str = "Bleeding Wound"
 # setting). See mend_wound() in world/vitals/services.py and ADR-0156.
 NEVER_TO_FULL_FRACTION: Decimal = Decimal("0.75")
 
-# The fraction mundane first aid may mend a wound to (#4600): a technique-free
-# treat (the scene ``treat`` offer) stops here. Lower than the ceiling, so a
-# healing technique authored at or above it is never worse than a bandage. A
-# tuning value to be set after play.
+# The fraction mundane first aid may mend a wound to (#4600): a mundane treatment
+# (``is_magical_treatment`` False: no technique, no resonance or anima cost, no bond)
+# offered through the scene ``treat`` path stops here; a magical one keeps the
+# ceiling. Lower than the ceiling, so a healing technique authored at or above it
+# is never worse than a bandage. A tuning value to be set after play.
 FIRST_AID_MEND_FRACTION: Decimal = Decimal("0.50")

@@ -96,6 +96,30 @@ class ResolveTreatmentRequestTests(TestCase):
         )
 
     @patch("world.conditions.services.perform_treatment")
+    def test_a_magical_treatment_keeps_the_ceiling(self, mock_perform_treatment):
+        """Only mundane first aid takes the first-aid fraction (#4600)."""
+        mock_perform_treatment.return_value = TreatmentOutcome(
+            attempt=MagicMock(),
+            outcome=MagicMock(),
+            effect_applied=False,
+            severity_reduced=0,
+            tiers_reduced=0,
+            helper_backlash_applied=0,
+            target_resolved=True,
+        )
+        for magical in ({"anima_cost": 5}, {"resonance_cost": 1}, {"requires_bond": True}):
+            with self.subTest(**magical):
+                mock_perform_treatment.reset_mock()
+                self.request.treatment = TreatmentTemplateFactory(**magical)
+                self.request.status = ActionRequestStatus.PENDING
+                self.request.save()
+
+                _resolve_treatment_request(self.request)
+
+                kwargs = mock_perform_treatment.call_args.kwargs
+                self.assertIsNone(kwargs["mend_cap_fraction"])
+
+    @patch("world.conditions.services.perform_treatment")
     def test_resolve_treatment_no_target_raises(self, mock_perform_treatment):
         self.request.target_condition_instance = None
         self.request.save()

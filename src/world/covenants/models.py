@@ -52,11 +52,11 @@ from world.magic.constants import TechniqueFunction
 from world.magic.models.techniques import (
     MEND_CAP_FRACTION_HELP,
     MEND_CAP_FRACTION_IN_RANGE,
+    MEND_CAP_FRACTION_VALIDATORS,
     AbstractAppliedCondition,
     AbstractDamageProfile,
     ConditionTargetKind,
     validate_inert_removal_knobs,
-    validate_mend_cap_fraction,
 )
 from world.magic.specialization.models import AbstractSpecializedVariant
 from world.magic.types.aura import AffinityType
@@ -2681,6 +2681,7 @@ class VowAddedEffectTreatment(RelatedCacheClearingMixin, NaturalKeyMixin, Shared
         max_digits=3,
         decimal_places=2,
         default=NEVER_TO_FULL_FRACTION,
+        validators=MEND_CAP_FRACTION_VALIDATORS,
         help_text=MEND_CAP_FRACTION_HELP,
     )
 
@@ -2705,11 +2706,6 @@ class VowAddedEffectTreatment(RelatedCacheClearingMixin, NaturalKeyMixin, Shared
 
     def __str__(self) -> str:
         return f"{self.effect}: treats {self.treatment_template.name} ({self.target_kind})"
-
-    def clean(self) -> None:
-        """Refuse a mend fraction above the never-to-full ceiling (#4600)."""
-        super().clean()
-        validate_mend_cap_fraction(self.mend_cap_fraction)
 
 
 class VowAddedEffectDamageProfile(
