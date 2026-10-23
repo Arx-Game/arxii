@@ -395,8 +395,13 @@ anything below -8 resolves to chart -8 (there is no clamp).
   target_modifiers=)` carries the split; `perform_check_with_modifiers` passes the gathered
   fatigue, strain and soulfray contributions (`ModifierBreakdown.standing_total`,
   `OWN_STANDING_SOURCE_KINDS`) as `extra_standing`. `level_opposition_points` splits the
-  defender's condition modifiers out of `level_opposition`; the combat offense,
-  penetration and NPC-attack rolls, the consider roll and the standoff read pass them as
+  defender's condition modifiers out of `level_opposition`, and every roll against a
+  `level_opposition` difficulty passes them as `target_modifiers`: combat offense,
+  penetration and NPC attack, consider, the standoff read (roll and preview grade),
+  reveal, rally, break-free, cast detection, mission contests and the allegiance break.
+  Social scene actions fold the fatigue penalty into `extra_modifiers` and pass it as
+  `extra_standing` too (`start_action_resolution(..., extra_standing=)`, kept on
+  `PendingActionResolution`). `force_check_outcome`'s capture records
   `target_modifiers`.
 - **The hopeless pin.** When own standing lands on a chart with no Success (1) (the
   `chart_has_success_outcomes` test), the roll stays on that chart; modifiers slide it at

@@ -62,9 +62,9 @@ seven ranks below a foe, buffed by a crowd, won about 14% of the time.
 be one lower than the old whole-rank subtraction (Expert at 10% against Expert at 90% is
 -0.8: chart -1 slid 20%). `CheckResult.standing` carries both sides' band positions, the
 slid chart and the pin. A chart whose authored bands do not cover 1 to 100 is read as its
-bands' shares of the whole roll. Callers that fold own-standing terms into
-`extra_modifiers` (the social scene path folds fatigue there) or modifiers into
-`target_difficulty` (the `level_opposition` callers outside combat and standoffs) count
-them on the wrong side of the pin; the combat, consider and standoff read paths pass
-`target_modifiers`, and gathered fatigue, strain and soulfray contributions pass as
-`extra_standing`.
+bands' shares of the whole roll. A caller that folds an own-standing term into
+`extra_modifiers` or a modifier into `target_difficulty` must say so with
+`extra_standing` / `target_modifiers`, or the pin reads it on the wrong side: every
+`level_opposition` roll passes the defender's conditions as `target_modifiers`, social
+scene actions pass their fatigue as `extra_standing`, and gathered fatigue, strain and
+soulfray contributions go as `extra_standing` automatically.
