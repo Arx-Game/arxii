@@ -582,8 +582,9 @@ class TechniqueAdmin(admin.ModelAdmin):
         """Prefetch every payload table the Gap/Targets columns read (#3682).
 
         ``get_authoring_gap`` and ``get_relationship`` both walk the derived
-        effect summary, which reads four payload relations. Without this the
-        changelist paid four queries per row; the ``to_attr`` names are the
+        effect summary, which reads every payload family (grants, applied and
+        removed conditions, damage, treatments, morale). Without this the
+        changelist paid one query per family per row; the ``to_attr`` names are the
         ``cached_*`` properties those derivations read, so the prefetched rows
         are what answers them (and cannot go stale against the identity map,
         #2728).

@@ -706,8 +706,9 @@ class CombatTechniqueResolver:
         reaches here (``__call__`` returns first), so it shakes nothing.
 
         Returns:
-            One ``SpectacleShift`` per opponent shaken, its morale state before
-            and after.
+            One ``SpectacleShift`` per opponent whose morale state changed, its
+            state before and after. An opponent already past the floor (or one
+            the hit leaves in the same state) records none.
         """
         from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
 
@@ -737,9 +738,9 @@ class CombatTechniqueResolver:
                 hit = mindless_share(amount, mindless_percent=mindless_percent)
             before = morale_state_for(opponent)
             apply_morale_damage(opponent, hit)
-            shifts.append(
-                SpectacleShift(opponent.pk, before.value, morale_state_for(opponent).value)
-            )
+            after = morale_state_for(opponent)
+            if after != before:
+                shifts.append(SpectacleShift(opponent.pk, before.value, after.value))
         return shifts
 
     def _apply_penetration(self, combat_ledger: PowerLedger) -> tuple[PowerLedger, bool]:

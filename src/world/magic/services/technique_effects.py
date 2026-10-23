@@ -1,11 +1,12 @@
 """Derived effect summary for a Technique — the one thing every surface shows (#2898).
 
 A technique's ``Technique`` row carries almost no differentiation; everything that
-tells one technique from another lives in five sibling tables
+tells one technique from another lives in sibling payload tables
 (``TechniqueCapabilityGrant`` / ``TechniqueAppliedCondition`` /
 ``TechniqueDamageProfile`` / ``TechniqueRemovedCondition`` /
-``TechniqueTreatment``) that no display surface ever read. This module reads them
-once and renders them, both as structured data and as a plain-words line.
+``TechniqueTreatment`` / ``TechniqueMoraleEffect``) that no display surface ever
+read. This module reads them once and renders them, both as structured data and as a
+plain-words line.
 ``TechniqueTreatment`` joined in #3682 — it was the one payload family #2898
 missed, so a treatment-only technique described itself as having no effect.
 
@@ -283,12 +284,14 @@ def _capability_payload(row: AbstractCapabilityGrant) -> CapabilityEffectPayload
 def technique_payload_prefetches(
     *, prefix: str = "", include_condition_diagnostics: bool = False
 ) -> list[Prefetch]:
-    """The five payload prefetches any queryset feeding the effect summary needs.
+    """The payload prefetches any queryset feeding the effect summary needs.
 
-    ``summarize_technique_effects`` reads five sibling tables, so a surface that
+    One per payload family: capability grants, applied conditions, damage
+    profiles, removed conditions, treatments and the morale effect.
+    ``summarize_technique_effects`` reads all of them, so a surface that
     builds a summary per row in a list — the in-scene cast list, the character
-    sheet's magic section, the ``TechniqueAdmin`` changelist — pays five queries
-    per technique unless it prefetches them. Each ``to_attr`` is the
+    sheet's magic section, the ``TechniqueAdmin`` changelist — pays one query
+    per family per technique unless it prefetches them. Each ``to_attr`` is the
     ``cached_*`` property name the derivations read, which is also what keeps a
     prefetched row from going stale against the identity map (#2728, ADR-0263).
 
