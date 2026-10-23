@@ -180,6 +180,41 @@ describe('OptionPage CONTEST fields', () => {
   });
 });
 
+describe('OptionPage external act', () => {
+  it('shows Act for an EXTERNAL_ACT option and saves required_act', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.getMissionOption).mockResolvedValue({
+      ...CONTEST_OPTION,
+      option_kind: 'external_act',
+      authored_check_type: null,
+    } as MissionOption);
+    render(<OptionPage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5/options/9') });
+
+    await user.click(await screen.findByLabelText('Act'));
+    await user.click(screen.getByRole('option', { name: 'Thread Woven' }));
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+    expect(api.patchMissionOption).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ required_act: 'thread_woven' })
+    );
+  });
+
+  it('sends an empty act for any other kind', async () => {
+    const user = userEvent.setup();
+    render(<OptionPage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5/options/9') });
+
+    const order = await screen.findByLabelText('Order');
+    expect(screen.queryByLabelText('Act')).toBeNull();
+    await user.type(order, '2');
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+    expect(api.patchMissionOption).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ required_act: '' })
+    );
+  });
+});
+
 describe('OptionPage opens_as_standoff', () => {
   it('shows the toggle for an ENCOUNTER option and saves it', async () => {
     const user = userEvent.setup();

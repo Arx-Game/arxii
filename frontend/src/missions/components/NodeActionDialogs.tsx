@@ -25,6 +25,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+import { useCheckTypeCatalog } from '@/gm-adjudication/queries';
+
 import {
   useCopyNode,
   useCopySubtree,
@@ -43,6 +45,50 @@ const OPTION_KINDS = [
 ] as const;
 
 type OptionKindValue = (typeof OPTION_KINDS)[number]['value'];
+
+/** A track node accepts only these kinds. */
+const TRACK_KINDS: OptionKindValue[] = ['branch', 'check', 'contest'];
+
+const RISK_LEVELS = ['low', 'moderate', 'high', 'extreme', 'lethal'] as const;
+type RiskLevel = (typeof RISK_LEVELS)[number];
+
+const EXTERNAL_ACTS = [
+  { value: 'technique_cast', label: 'Technique Cast' },
+  { value: 'thread_woven', label: 'Thread Woven' },
+  { value: 'covenant_sworn', label: 'Covenant Sworn' },
+] as const;
+type ExternalActValue = (typeof EXTERNAL_ACTS)[number]['value'];
+
+function CheckTypeSelect({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { data: checkTypes = [] } = useCheckTypeCatalog('', true);
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id}>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id}>
+          <SelectValue placeholder="Select a check type" />
+        </SelectTrigger>
+        <SelectContent>
+          {checkTypes.map((c) => (
+            <SelectItem key={c.id} value={String(c.id)}>
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 interface DialogProps {
   open: boolean;
@@ -70,7 +116,7 @@ function InlineError({ message }: { message: string | null }) {
 }
 
 interface AddOptionDialogProps extends DialogProps {
-  nodeId: number;
+  node: MissionNode;
   existingOptions: MissionOption[];
   onCreated: (option: MissionOption) => void;
 }
@@ -78,19 +124,59 @@ interface AddOptionDialogProps extends DialogProps {
 export function AddOptionDialog({
   open,
   onOpenChange,
-  nodeId,
+  node,
   existingOptions,
   onCreated,
 }: AddOptionDialogProps) {
   const [key, setKey] = useState('');
   const [kind, setKind] = useState<OptionKindValue>('branch');
+  const [checkType, setCheckType] = useState('');
+  const [oppositionSheet, setOppositionSheet] = useState('');
+  const [oppositionCheckType, setOppositionCheckType] = useState('');
+  const [riskLevel, setRiskLevel] = useState<RiskLevel | ''>('');
+  const [act, setAct] = useState<ExternalActValue | ''>('');
   const [error, setError] = useState<string | null>(null);
   const create = useCreateMissionOption();
   useResetOnOpen(open, () => {
     setKey('');
     setKind('branch');
+    setCheckType('');
+    setOppositionSheet('');
+    setOppositionCheckType('');
+    setRiskLevel('');
+    setAct('');
     setError(null);
   });
+
+  const isTrack = (node.track_successes ?? 0) > 0;
+  const kinds = OPTION_KINDS.filter((k) => !isTrack || TRACK_KINDS.includes(k.value));
+  const sheetNumber = Number(oppositionSheet);
+  const sheetValid = oppositionSheet !== '' && Number.isInteger(sheetNumber) && sheetNumber > 0;
+  const kindReady =
+    kind === 'branch' ||
+    (kind === 'check' && checkType !== '') ||
+    (kind === 'contest' && checkType !== '' && sheetValid && oppositionCheckType !== '') ||
+    (kind === 'encounter' && riskLevel !== '') ||
+    (kind === 'external_act' && act !== '');
+
+  const kindFields = (): Record<string, unknown> => {
+    switch (kind) {
+      case 'check':
+        return { authored_check_type: Number(checkType) };
+      case 'contest':
+        return {
+          authored_check_type: Number(checkType),
+          opposition_sheet: sheetNumber,
+          opposition_check_type: Number(oppositionCheckType),
+        };
+      case 'encounter':
+        return { encounter_risk_level: riskLevel };
+      case 'external_act':
+        return { required_act: act };
+      default:
+        return {};
+    }
+  };
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -102,12 +188,13 @@ export function AddOptionDialog({
     const order = existingOptions.reduce((max, o) => Math.max(max, o.order), 0) + 1;
     try {
       const created = await create.mutateAsync({
-        node: nodeId,
+        node: node.id,
         key: trimmed,
         option_kind: kind,
         order,
         source_kind: 'authored',
-      });
+        ...kindFields(),
+      } as Parameters<typeof create.mutateAsync>[0]);
       onOpenChange(false);
       onCreated(created);
     } catch (e) {
@@ -139,7 +226,7 @@ export function AddOptionDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {OPTION_KINDS.map((k) => (
+                {kinds.map((k) => (
                   <SelectItem key={k.value} value={k.value}>
                     {k.label}
                   </SelectItem>
@@ -147,12 +234,74 @@ export function AddOptionDialog({
               </SelectContent>
             </Select>
           </div>
+          {kind === 'check' || kind === 'contest' ? (
+            <CheckTypeSelect
+              id="add-option-check-type"
+              label="Check type"
+              value={checkType}
+              onChange={setCheckType}
+            />
+          ) : null}
+          {kind === 'contest' ? (
+            <>
+              <div className="space-y-1">
+                <Label htmlFor="add-option-opposition-sheet">Opposition sheet id</Label>
+                <Input
+                  id="add-option-opposition-sheet"
+                  type="number"
+                  min={1}
+                  value={oppositionSheet}
+                  onChange={(e) => setOppositionSheet(e.target.value)}
+                />
+              </div>
+              <CheckTypeSelect
+                id="add-option-opposition-check-type"
+                label="Opposition check type"
+                value={oppositionCheckType}
+                onChange={setOppositionCheckType}
+              />
+            </>
+          ) : null}
+          {kind === 'encounter' ? (
+            <div className="space-y-1">
+              <Label htmlFor="add-option-risk">Encounter risk level</Label>
+              <Select value={riskLevel} onValueChange={(v) => setRiskLevel(v as RiskLevel)}>
+                <SelectTrigger id="add-option-risk">
+                  <SelectValue placeholder="Select a risk level" />
+                </SelectTrigger>
+                <SelectContent>
+                  {RISK_LEVELS.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r.charAt(0).toUpperCase() + r.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+          {kind === 'external_act' ? (
+            <div className="space-y-1">
+              <Label htmlFor="add-option-act">Act</Label>
+              <Select value={act} onValueChange={(v) => setAct(v as ExternalActValue)}>
+                <SelectTrigger id="add-option-act">
+                  <SelectValue placeholder="Select an act" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EXTERNAL_ACTS.map((a) => (
+                    <SelectItem key={a.value} value={a.value}>
+                      {a.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           <InlineError message={error} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={create.isPending}>
+            <Button type="submit" disabled={create.isPending || !kindReady}>
               Add option
             </Button>
           </DialogFooter>

@@ -10,7 +10,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MissionNode } from '../types';
 
@@ -28,6 +28,10 @@ vi.mock('../api', () => ({
   deleteMissionNode: vi.fn(),
   copyNode: vi.fn(),
   copySubtree: vi.fn(),
+}));
+
+vi.mock('@/gm-adjudication/queries', () => ({
+  useCheckTypeCatalog: () => ({ data: [{ id: 7, name: 'Wrestling' }] }),
 }));
 
 import * as api from '../api';
@@ -83,6 +87,11 @@ function makeWrapper(initialPath: string) {
     </QueryClientProvider>
   );
 }
+
+afterEach(() => {
+  // A dialog unmounted by navigation can leave Radix's body lock behind.
+  document.body.style.pointerEvents = '';
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -204,6 +213,48 @@ describe('NodePage graph controls', () => {
     expect(await screen.findByTestId('where')).toHaveTextContent(
       '/staff/missions/1/nodes/5/options/22'
     );
+  });
+
+  it('posts authored_check_type for a Check option and waits for a check type', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.createMissionOption).mockResolvedValue(OPT({ id: 22, order: 1 }) as never);
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Add option' }));
+    await user.type(await screen.findByLabelText('Option key'), 'dig');
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByLabelText('Option kind'));
+    await user.click(screen.getByRole('option', { name: 'Check' }));
+
+    const submit = within(dialog).getByRole('button', { name: 'Add option' });
+    expect(submit).toBeDisabled();
+    await user.click(within(dialog).getByLabelText('Check type'));
+    await user.click(screen.getByRole('option', { name: 'Wrestling' }));
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    expect(api.createMissionOption).toHaveBeenCalledWith({
+      node: 5,
+      key: 'dig',
+      option_kind: 'check',
+      order: 1,
+      source_kind: 'authored',
+      authored_check_type: 7,
+    });
+  });
+
+  it('offers only Branch, Check and Contest on a track node', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.getMissionNode).mockResolvedValue({ ...TRACK_NODE, track_successes: 3 });
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Add option' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByLabelText('Option kind'));
+    const names = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(names).toEqual(['Branch', 'Check', 'Contest']);
+    await user.keyboard('{Escape}');
+    await user.keyboard('{Escape}');
   });
 
   it('marks an option the graph check has a problem with', async () => {

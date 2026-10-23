@@ -67,6 +67,11 @@ import { useMutation } from '@tanstack/react-query';
 
 const KINDS = ['branch', 'check', 'contest', 'external_act', 'encounter'] as const;
 const SOURCES = ['authored', 'challenge'] as const;
+const EXTERNAL_ACTS = [
+  { value: 'technique_cast', label: 'Technique Cast' },
+  { value: 'thread_woven', label: 'Thread Woven' },
+  { value: 'covenant_sworn', label: 'Covenant Sworn' },
+] as const;
 const RISK_LEVELS = ['low', 'moderate', 'high', 'extreme', 'lethal'] as const;
 
 function opponentLineDraftsFromOption(lines: MissionOption['opponent_lines']): OpponentLineDraft[] {
@@ -228,6 +233,7 @@ function optionDraftFromOption(o: MissionOption) {
     opponent_lines: opponentLineDraftsFromOption(o.opponent_lines),
     opposition_sheet: o.opposition_sheet ?? null,
     opposition_check_type: o.opposition_check_type ?? null,
+    required_act: (o.required_act ?? '') as '' | (typeof EXTERNAL_ACTS)[number]['value'],
   };
 }
 
@@ -251,6 +257,8 @@ function optionPatchPayload(draft: OptionDraft, leaves: PredicateLeaf[] | undefi
       (isCheck && draft.source_kind === 'authored') || isContest ? draft.authored_check_type : null,
     opposition_sheet: isContest ? draft.opposition_sheet : null,
     opposition_check_type: isContest ? draft.opposition_check_type : null,
+    // Only an external act carries an act; the server forbids it elsewhere.
+    required_act: draft.option_kind === 'external_act' ? draft.required_act : '',
   };
 }
 
@@ -425,6 +433,32 @@ function OptionEditor({ option }: { option: MissionOption }) {
                 {checkTypes.map((c) => (
                   <SelectItem key={c.id} value={String(c.id)}>
                     {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        {draft.option_kind === 'external_act' ? (
+          <div>
+            <Label htmlFor="opt-required-act">Act</Label>
+            <Select
+              value={draft.required_act || 'none'}
+              onValueChange={(v) =>
+                setDraft({
+                  ...draft,
+                  required_act: v === 'none' ? '' : (v as (typeof EXTERNAL_ACTS)[number]['value']),
+                })
+              }
+            >
+              <SelectTrigger id="opt-required-act">
+                <SelectValue placeholder="Select an act" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unset</SelectItem>
+                {EXTERNAL_ACTS.map((a) => (
+                  <SelectItem key={a.value} value={a.value}>
+                    {a.label}
                   </SelectItem>
                 ))}
               </SelectContent>

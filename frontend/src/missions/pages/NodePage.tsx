@@ -169,7 +169,7 @@ export function NodePage() {
           <AddOptionDialog
             open={dialog === 'option'}
             onOpenChange={closeDialog}
-            nodeId={node.id}
+            node={node}
             existingOptions={options}
             onCreated={(opt: MissionOption) => navigate(paths.option(node.id, opt.id))}
           />
