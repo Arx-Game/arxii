@@ -139,5 +139,5 @@ _Avoid_: staff template, catalog scenario (a GM-owned scenario is deliberately o
 catalog - it never appears on boards or in `opportunities_for_character`).
 
 **Graph Problem**:
-Something the Mission Studio's graph check (#4558, `GET /api/missions/templates/<id>/graph-check/`) finds wrong with a mission's node graph, one `GraphProblemKind` each: no entry node, unreachable node, missing tiers, joint node missing a success or failure route, encounter without a risk level, random route without candidates. It warns and never blocks a save; a BRANCH or EXTERNAL_ACT option with no route is an ending, not a problem.
+Something the Mission Studio's graph check (#4558, `GET /api/missions/templates/<id>/graph-check/`) finds wrong with a mission's node graph, one `GraphProblemKind` each: no entry node, unreachable node, missing tiers, a branch on a joint node, joint check with no chart tier and no success or failure route, encounter without a risk level, random route without candidates. It warns and never blocks a save; a BRANCH or EXTERNAL_ACT option with no route is an ending, not a problem.
 _Avoid_: validation error, lint (a problem is advice shown beside the graph, not a refusal).
