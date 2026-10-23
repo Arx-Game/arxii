@@ -147,6 +147,9 @@ MIDDLEWARE += [
 # Enable webclient
 WEBCLIENT_ENABLED = True
 
+# Reject unsupported telnet framing at the Portal boundary.
+TELNET_PROTOCOL_CLASS = "server.portal.telnet.ValidatedTelnetProtocol"
+
 # Custom WebSocket client that reads session from cookies instead of URL parameters
 WEBSOCKET_PROTOCOL_CLASS = "server.portal.secure_websocket.SecureWebSocketClient"
 
