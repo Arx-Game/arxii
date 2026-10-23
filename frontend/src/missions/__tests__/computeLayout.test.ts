@@ -252,6 +252,36 @@ describe('computeLayout', () => {
     ]);
   });
 
+  it('draws no route edge for a check on a track node, and ends an untargeted side', () => {
+    const result = layout(
+      [
+        node(1, 'siege', { track_successes: 2, track_failures: 2, track_success_target: 2 }),
+        node(2, 'won'),
+      ],
+      [option(10, 1, { key: 'storm' })],
+      [route(20, 10, null)]
+    );
+    expect(result.layoutedEdges.map((e) => [e.target, e.label])).toEqual([
+      ['2', 'track success'],
+      ['end', 'track failure'],
+    ]);
+  });
+
+  it('drops tiered routes of a branch option and labels an unknown tier by option alone', () => {
+    const branch = layout(
+      [node(1, 'a'), node(2, 'b')],
+      [option(10, 1, { option_kind: 'branch', key: 'fork' })],
+      [route(20, 10, 2)]
+    );
+    expect(branch.layoutedEdges.map((e) => [e.target, e.label])).toEqual([['end', 'fork']]);
+    const unknown = layout(
+      [node(1, 'a'), node(2, 'b')],
+      [option(10, 1, { key: 'roll' })],
+      [route(20, 10, 2, { outcome_tier: 99 })]
+    );
+    expect(unknown.layoutedEdges[0].label).toBe('roll');
+  });
+
   it('marks a node with a problem with a warning prefix and border', () => {
     const problem = {
       kind: 'unreachable_node',

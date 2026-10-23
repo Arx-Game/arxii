@@ -102,7 +102,8 @@ function MissionCanvasInner({ templateId, paths }: { templateId: number; paths: 
     nodesQuery.isLoading ||
     optionsQuery.isLoading ||
     routesQuery.isLoading ||
-    candidatesQuery.isLoading;
+    candidatesQuery.isLoading ||
+    tiersQuery.isLoading;
 
   const { layoutedNodes, layoutedEdges } = useMemo(
     () =>
@@ -202,6 +203,8 @@ interface EdgeSpec {
 
 /** Options whose routes are optional: with no way on they simply end the mission. */
 const ENDS_WITHOUT_ROUTE = new Set(['branch', 'external_act']);
+/** Options that roll a check; on a track node the track, not a route, decides. */
+const ROLLED_KINDS = new Set(['check', 'contest']);
 
 function collectEdges(
   rawNodes: readonly MissionNode[],
@@ -212,6 +215,8 @@ function collectEdges(
 ): EdgeSpec[] {
   const optionMap = new Map<number, MissionOption>();
   for (const opt of rawOptions) optionMap.set(opt.id, opt);
+  const trackNodes = new Set<number>();
+  for (const n of rawNodes) if ((n.track_successes ?? 0) > 0) trackNodes.add(n.id);
   const tierNames = new Map<number, string>();
   for (const t of tiers) tierNames.set(t.id, t.name);
 
@@ -224,11 +229,13 @@ function collectEdges(
     const label = optionLabel(opt);
     const tierless = route.outcome_tier === null || route.outcome_tier === undefined;
     if (tierless) tierlessByOption.add(opt.id);
+    // The engine reads only a branch option's tier-less route, never a tiered one.
+    if (!tierless && ENDS_WITHOUT_ROUTE.has(opt.option_kind)) continue;
+    // On a track node the track decides where a check goes, not its routes.
+    if (ROLLED_KINDS.has(opt.option_kind) && trackNodes.has(opt.node)) continue;
     // A branch option's own target wins over its tier-less route, random or not.
     if (tierless && opt.branch_target) continue;
-    const tierName = tierless
-      ? null
-      : (tierNames.get(route.outcome_tier as number) ?? `tier ${route.outcome_tier}`);
+    const tierName = tierless ? null : tierNames.get(route.outcome_tier as number);
     const routeLabel = tierName ? `${label} · ${tierName}` : label;
 
     if (route.is_random_set) {
@@ -280,19 +287,21 @@ function collectEdges(
   }
 
   for (const n of rawNodes) {
-    if (n.track_success_target) {
+    // A track with no target for a side ends the mission on that side.
+    const tracked = (n.track_successes ?? 0) > 0;
+    if (n.track_success_target || tracked) {
       specs.push({
         id: `ts${n.id}`,
         source: n.id,
-        target: n.track_success_target,
+        target: n.track_success_target ?? END_NODE_ID,
         label: 'track success',
       });
     }
-    if (n.track_failure_target) {
+    if (n.track_failure_target || tracked) {
       specs.push({
         id: `tf${n.id}`,
         source: n.id,
-        target: n.track_failure_target,
+        target: n.track_failure_target ?? END_NODE_ID,
         label: 'track failure',
       });
     }
