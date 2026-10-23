@@ -30,6 +30,7 @@ import {
   useCopySubtree,
   useCreateMissionOption,
   useDeleteMissionNode,
+  useDeleteMissionOption,
 } from '../queries';
 import type { MissionNode, MissionOption } from '../types';
 
@@ -358,6 +359,57 @@ export function DeleteNodeDialog({
           </Button>
           <Button type="button" variant="destructive" onClick={onConfirm} disabled={del.isPending}>
             Delete node
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface DeleteOptionDialogProps extends DialogProps {
+  option: MissionOption;
+  /** What to call the option in the question, from optionLabel. */
+  label: string;
+  onDeleted: () => void;
+}
+
+export function DeleteOptionDialog({
+  open,
+  onOpenChange,
+  option,
+  label,
+  onDeleted,
+}: DeleteOptionDialogProps) {
+  const [error, setError] = useState<string | null>(null);
+  const del = useDeleteMissionOption();
+  useResetOnOpen(open, () => setError(null));
+
+  const onConfirm = async () => {
+    try {
+      await del.mutateAsync(option.id);
+      onOpenChange(false);
+      onDeleted();
+    } catch (e) {
+      setError(errorText(e, 'Failed to delete option'));
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete option</DialogTitle>
+          <DialogDescription>
+            {`Delete option "${label}" and its routes? Nothing else is removed.`}
+          </DialogDescription>
+        </DialogHeader>
+        <InlineError message={error} />
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" onClick={onConfirm} disabled={del.isPending}>
+            Delete option
           </Button>
         </DialogFooter>
       </DialogContent>

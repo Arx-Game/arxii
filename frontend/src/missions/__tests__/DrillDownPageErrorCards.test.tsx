@@ -24,6 +24,9 @@ vi.mock('../api', () => ({
   listPredicateLeaves: vi.fn(),
   patchMissionNode: vi.fn(),
   patchMissionOption: vi.fn(),
+  listMissionNodes: vi.fn(),
+  listOutcomeTiers: vi.fn(),
+  getGraphCheck: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -69,6 +72,14 @@ beforeEach(() => {
     results: [],
   });
   vi.mocked(api.listPredicateLeaves).mockResolvedValue([]);
+  vi.mocked(api.listMissionNodes).mockResolvedValue({
+    count: 0,
+    next: null,
+    previous: null,
+    results: [],
+  });
+  vi.mocked(api.listOutcomeTiers).mockResolvedValue([]);
+  vi.mocked(api.getGraphCheck).mockResolvedValue([]);
 });
 
 // ---------------------------------------------------------------------------

@@ -25,6 +25,8 @@ vi.mock('../api', () => ({
   getGraphCheck: vi.fn(),
   createMissionOption: vi.fn(),
   deleteMissionNode: vi.fn(),
+  copyNode: vi.fn(),
+  copySubtree: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -238,5 +240,37 @@ describe('NodePage graph controls', () => {
     expect(
       await within(dialog).findByText('A mission run has used this node, so it cannot be deleted.')
     ).toBeInTheDocument();
+  });
+
+  it('copies the node and opens the copy', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.copyNode).mockResolvedValue({ ...OTHER_NODE, id: 77, key: 'siege-2' });
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Copy node' }));
+    await user.type(await screen.findByLabelText('New node key'), 'siege-2');
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Copy node' }));
+
+    expect(api.copyNode).toHaveBeenCalledWith(5, { new_key: 'siege-2' });
+    await vi.waitFor(() => expect(api.getMissionNode).toHaveBeenCalledWith(77));
+  });
+
+  it('copies the node and everything after it with a key prefix', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.copySubtree).mockResolvedValue({ ...OTHER_NODE, id: 88, key: 'b-siege' });
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Copy node and everything after it' })
+    );
+    await user.type(await screen.findByLabelText('Key prefix'), 'b-');
+    const dialog = screen.getByRole('dialog');
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Copy node and everything after it' })
+    );
+
+    expect(api.copySubtree).toHaveBeenCalledWith(5, { new_key_prefix: 'b-' });
+    await vi.waitFor(() => expect(api.getMissionNode).toHaveBeenCalledWith(88));
   });
 });
