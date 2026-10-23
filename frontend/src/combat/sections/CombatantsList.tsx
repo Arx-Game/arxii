@@ -17,7 +17,7 @@
  *
  * Opponent click-menu (#3381): each opponent row carries a kebab-trigger
  * dropdown (Radix, mirrors PersonaContextMenu.tsx's pattern) offering
- * Taunt/Demoralize/Parley — a kebab icon rather than the row itself as the
+ * Taunt/Demoralize/Parley/Mark — a kebab icon rather than the row itself as the
  * trigger, so it doesn't collide with the condition-badge deep-link already
  * on the row. Only rendered when the caller passes `canDeclareManeuvers`
  * (derived by CombatTurnPanel from `is_participant && status === 'declaring'`
@@ -35,6 +35,11 @@
  * renders only when the GM-gated fields are non-null - the server sends
  * `null` for those fields to players, and always sends them together, so
  * `opponent.morale != null` alone gates the whole chip row.
+ *
+ * Mark badge (#4603): an opponent row shows "Marked by <name>" once per participant
+ * whose mark currently sits on it (`encounter.marks`; a participant holds one mark, so
+ * it moves when they mark someone else). The badge renders on every row, GM and
+ * observer included; only the kebab menu's "Mark" item is gated by `canDeclareManeuvers`.
  *
  * Phase 8, Task 8.3 — unified-combat-ui plan.
  */
@@ -231,6 +236,8 @@ interface OpponentRowProps {
   lockedToName?: string;
   /** True when the active lock on this opponent belongs to the viewer (#3447). */
   lockedToViewer?: boolean;
+  /** Names of the participants whose mark currently sits on this opponent (#4603). */
+  markedByNames?: string[];
 }
 
 /** Label for the GM boss-state morale chip (#3552) - defaults to "Steady". */
@@ -245,12 +252,13 @@ function moraleStateLabel(state: string | null | undefined): string {
 
 /** One opponent-targeted maneuver offered by the click-menu (#3381). */
 const OPPONENT_MANEUVERS: {
-  key: 'combat_taunt' | 'combat_demoralize' | 'combat_parley';
+  key: 'combat_taunt' | 'combat_demoralize' | 'combat_parley' | 'combat_mark';
   label: string;
 }[] = [
   { key: 'combat_taunt', label: 'Taunt' },
   { key: 'combat_demoralize', label: 'Demoralize' },
   { key: 'combat_parley', label: 'Parley' },
+  { key: 'combat_mark', label: 'Mark' },
 ];
 
 function OpponentRow({
@@ -260,6 +268,7 @@ function OpponentRow({
   canDeclareManeuvers = false,
   lockedToName,
   lockedToViewer = false,
+  markedByNames = [],
 }: OpponentRowProps) {
   const showMenu = canDeclareManeuvers && characterId != null;
   const { mutateAsync, isPending } = useRegistryDispatch(encounterId, characterId ?? 0);
@@ -314,6 +323,18 @@ function OpponentRow({
               Locked: {lockedToName}
             </span>
           )}
+          {markedByNames.map((name) => (
+            <span
+              key={name}
+              data-testid="mark-badge"
+              className={cn(
+                'shrink-0 rounded bg-sky-500/15 px-1 py-0.5 text-[10px]',
+                'text-sky-700 dark:text-sky-300'
+              )}
+            >
+              Marked by {name}
+            </span>
+          ))}
           {(opponent.current_phase ?? 1) > 1 && (
             <span
               data-testid="phase-badge"
@@ -457,7 +478,19 @@ export function CombatantsList({
     opponents,
     engagement_locks: engagementLocks,
     companion_orders: companionOrders,
+    marks,
   } = encounter;
+
+  // Map opponent id -> names of the participants whose mark sits on it (#4603).
+  // A mark whose marker is not in the roster cannot be named, so it is skipped.
+  const markedByNames = new Map<number, string[]>();
+  for (const mark of marks ?? []) {
+    const markerName = participants.find((p) => p.id === mark.participant_id)?.character_name;
+    if (markerName === undefined) continue;
+    const names = markedByNames.get(mark.opponent_id) ?? [];
+    names.push(markerName);
+    markedByNames.set(mark.opponent_id, names);
+  }
 
   // Map participant id -> companion names currently ordered to defend them (#3576).
   const guardedByNames = new Map<number, string[]>();
@@ -555,6 +588,7 @@ export function CombatantsList({
                   canDeclareManeuvers={canDeclareManeuvers}
                   lockedToName={lockedOpponentNames.get(o.id)}
                   lockedToViewer={viewerLockedOpponentIds.has(o.id)}
+                  markedByNames={markedByNames.get(o.id)}
                 />
               ))}
             </div>
