@@ -724,8 +724,9 @@ class Rampart(SharedMemoryModel):
     def delete(self, *args, **kwargs):
         """Open every edge this Rampart sealed, then delete it (#4606).
 
-        On the instance, so a collapse, an expiry, a teardown and a staff delete in
-        the admin all open the seal. ``sealed_edges`` is ``SET_NULL`` only so a bulk
+        On the instance, so a collapse, an expiry, a teardown and any other single
+        delete (a staff hand-delete in the shell; live Ramparts are not in the admin)
+        all open the seal. ``sealed_edges`` is ``SET_NULL`` only so a bulk
         queryset delete does not fail on the FK; an edge orphaned that way stays a
         hard seal, so bulk deletes of Ramparts loop the rows instead.
         """
