@@ -263,7 +263,7 @@ export function usePredicateLeaves(): UseQueryResult<PredicateLeaf[]> {
 // ---------------------------------------------------------------------------
 
 /** Any graph edit can change what the graph check reports, so refresh all of it. */
-function invalidateGraph(qc: QueryClient) {
+export function invalidateGraph(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: missionKeys.nodes() });
   qc.invalidateQueries({ queryKey: missionKeys.options() });
   qc.invalidateQueries({ queryKey: missionKeys.routes() });

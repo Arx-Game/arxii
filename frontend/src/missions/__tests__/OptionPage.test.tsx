@@ -76,9 +76,9 @@ const page = (results: unknown[]) =>
   ({ count: results.length, next: null, previous: null, results }) as never;
 
 const TIERS = [
-  { id: 1, name: 'Failure', success_level: -1 },
-  { id: 2, name: 'Success', success_level: 1 },
-  { id: 3, name: 'Critical Success', success_level: 2 },
+  { id: 1, name: 'Failure', success_level: -1, rolled_by_checks: true },
+  { id: 2, name: 'Success', success_level: 1, rolled_by_checks: true },
+  { id: 3, name: 'Critical Success', success_level: 2, rolled_by_checks: true },
 ];
 const NODES = [
   { id: 5, key: 'gate' },
@@ -268,6 +268,47 @@ describe('OptionPage route editor', () => {
       outcome_tier: 1,
       target_node: null,
     });
+  });
+
+  it('offers only tiers a result chart names when adding a route to a check', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listOutcomeTiers).mockResolvedValue([
+      { id: 4, name: 'Mapped Only', success_level: -3, rolled_by_checks: false },
+      ...TIERS,
+    ] as never);
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([]));
+    vi.mocked(api.createMissionRoute).mockResolvedValue(ROUTE as never);
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    expect(api.createMissionRoute).toHaveBeenCalledWith({
+      option: 9,
+      outcome_tier: 1,
+      target_node: null,
+    });
+  });
+
+  it('hides the destination and beat outcome for a check route on a track node', async () => {
+    vi.mocked(api.listMissionNodes).mockResolvedValue(
+      page([{ id: 5, key: 'gate', track_successes: 2, track_failures: 2 }, NODES[1]])
+    );
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([{ ...ROUTE, target_node: null }]));
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    const row = await screen.findByTestId('route-row');
+    expect(within(row).queryByLabelText('Leads to')).toBeNull();
+    expect(within(row).queryByLabelText('Beat outcome')).toBeNull();
+    expect(within(row).getByLabelText('Outcome tier')).toBeInTheDocument();
+  });
+
+  it('refreshes the graph check after the option settings save', async () => {
+    const user = userEvent.setup();
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    await screen.findByLabelText('Check type');
+    const before = vi.mocked(api.getGraphCheck).mock.calls.length;
+    await user.type(screen.getByLabelText('IC framing'), 'x');
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+    await vi.waitFor(() =>
+      expect(vi.mocked(api.getGraphCheck).mock.calls.length).toBeGreaterThan(before)
+    );
   });
 
   it('hides Add route for a branch option that already has its route', async () => {

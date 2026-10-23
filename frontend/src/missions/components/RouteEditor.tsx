@@ -73,9 +73,11 @@ interface RouteRowProps {
   route: MissionOptionRoute;
   tiers: OutcomeTier[];
   nodes: MissionNode[];
+  /** The node page sets where a track goes, so its check routes carry no destination. */
+  trackDecides: boolean;
 }
 
-function RouteRow({ route, tiers, nodes }: RouteRowProps) {
+function RouteRow({ route, tiers, nodes, trackDecides }: RouteRowProps) {
   const saved = draftFromRoute(route);
   const [draft, setDraft] = useState<RouteDraft>(saved);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +85,7 @@ function RouteRow({ route, tiers, nodes }: RouteRowProps) {
   const patch = usePatchMissionRoute();
   const del = useDeleteMissionRoute();
   const dirty = !sameDraft(draft, saved);
-  const toEnd = draft.target === ENDS && !draft.random;
+  const toEnd = draft.target === ENDS && !draft.random && !trackDecides;
   const rowId = `route-${route.id}`;
 
   const onSave = async () => {
@@ -96,7 +98,7 @@ function RouteRow({ route, tiers, nodes }: RouteRowProps) {
           outcome_tier: draft.tier === NONE ? null : Number(draft.tier),
           // A random route draws its destination from candidates, so its own target is
           // left as it stands rather than wiped on an unrelated edit.
-          ...(draft.random
+          ...(draft.random || trackDecides
             ? {}
             : { target_node: draft.target === ENDS ? null : Number(draft.target) }),
           is_random_set: draft.random,
@@ -138,26 +140,28 @@ function RouteRow({ route, tiers, nodes }: RouteRowProps) {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor={`${rowId}-target`}>Leads to</Label>
-          <Select
-            value={draft.target}
-            onValueChange={(v) => setDraft({ ...draft, target: v })}
-            disabled={draft.random}
-          >
-            <SelectTrigger id={`${rowId}-target`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ENDS}>Mission ends</SelectItem>
-              {nodes.map((n) => (
-                <SelectItem key={n.id} value={String(n.id)}>
-                  {n.key}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {trackDecides ? null : (
+          <div className="space-y-1">
+            <Label htmlFor={`${rowId}-target`}>Leads to</Label>
+            <Select
+              value={draft.target}
+              onValueChange={(v) => setDraft({ ...draft, target: v })}
+              disabled={draft.random}
+            >
+              <SelectTrigger id={`${rowId}-target`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ENDS}>Mission ends</SelectItem>
+                {nodes.map((n) => (
+                  <SelectItem key={n.id} value={String(n.id)}>
+                    {n.key}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <Switch
@@ -234,6 +238,8 @@ function RouteRow({ route, tiers, nodes }: RouteRowProps) {
 
 interface RouteEditorProps {
   option: MissionOption;
+  /** The option's own node; a track node's check routes do not set the destination. */
+  node?: MissionNode;
   routes: MissionOptionRoute[];
   /** Every node of the mission, this option's own node included. */
   nodes: MissionNode[];
@@ -242,15 +248,25 @@ interface RouteEditorProps {
   missingTierNames: string[];
 }
 
-export function RouteEditor({ option, routes, nodes, tiers, missingTierNames }: RouteEditorProps) {
+export function RouteEditor({
+  option,
+  node,
+  routes,
+  nodes,
+  tiers,
+  missingTierNames,
+}: RouteEditorProps) {
   const [error, setError] = useState<string | null>(null);
   // Held for the whole of a multi-route add, so a second click cannot start a second loop.
   const [adding, setAdding] = useState(false);
   const create = useCreateMissionRoute();
   const orderedTiers = [...tiers].sort((a, b) => a.success_level - b.success_level);
   const tierless = option.option_kind === 'branch' || option.option_kind === 'external_act';
+  const rolled = option.option_kind === 'check' || option.option_kind === 'contest';
+  const trackDecides = rolled && (node?.track_successes ?? 0) > 0;
   const used = new Set(routes.map((r) => r.outcome_tier));
-  const nextTier = orderedTiers.find((t) => !used.has(t.id));
+  // A check can only land on a tier a result chart names; an encounter uses every listed tier.
+  const nextTier = orderedTiers.find((t) => !used.has(t.id) && (!rolled || t.rolled_by_checks));
   const canAdd = tierless ? routes.length === 0 : nextTier !== undefined;
   const busy = adding || create.isPending;
 
@@ -295,6 +311,7 @@ export function RouteEditor({ option, routes, nodes, tiers, missingTierNames }: 
             route={r}
             tiers={orderedTiers}
             nodes={nodes}
+            trackDecides={trackDecides}
           />
         ))
       )}

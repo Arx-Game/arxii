@@ -50,6 +50,7 @@ import { StudioBreadcrumb } from '../components/StudioBreadcrumb';
 import { getMissionOption, patchMissionOption } from '../api';
 import { useServerDraft } from '../hooks/useServerDraft';
 import {
+  invalidateGraph,
   missionKeys,
   usePredicateLeaves,
   useMissionNodes,
@@ -178,6 +179,7 @@ export function OptionPage() {
           {option && routesPage && tiers ? (
             <RouteEditor
               option={option}
+              node={(nodesPage?.results ?? []).find((n) => n.id === option.node)}
               routes={routesPage.results}
               nodes={nodesPage?.results ?? []}
               tiers={tiers}
@@ -277,12 +279,8 @@ function OptionEditor({ option }: { option: MissionOption }) {
 
   const mutation = useMutation({
     mutationFn: () => patchMissionOption(option.id, optionPatchPayload(draft, leaves.data)),
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: [...missionKeys.options(), 'detail', option.id],
-      });
-      qc.invalidateQueries({ queryKey: missionKeys.options() });
-    },
+    // Re-kinding an option changes what the graph check reports, so refresh all of it.
+    onSuccess: () => invalidateGraph(qc),
   });
 
   return (
