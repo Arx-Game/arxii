@@ -94,6 +94,38 @@ fraction clamp inside `mend_wound()`) are unchanged and remain authoritative ove
 `amount` is offered, however that amount was computed. Power scaling composes with the
 double-bound; it cannot bypass either half of it.
 
+## Addendum (#4600, 2026-10-23): the fraction comes from the technique
+
+Healing now depends on the technique (Part F of #4573). Bound 2 keeps its shape but its
+fraction is no longer one global number:
+
+- **The fraction is authored per technique.** `TechniqueTreatment.mend_cap_fraction`
+  (`DecimalField(3,2)`, default `0.75`, a `CheckConstraint` keeping it above 0 and below 1,
+  and `clean()` refusing anything above `NEVER_TO_FULL_FRACTION`) is how far that technique may
+  heal a wound, as a share of the damage the wound did. The same field sits on
+  `TechniqueDraftTreatment`, the builder's `TreatmentSpec`, and `VowAddedEffectTreatment` (a
+  vow's treatment rides a cast as its own tending, so it carries its own fraction). It lives on
+  the technique row, not on `TreatmentTemplate`: the template is a shared, named recipe that
+  mundane first aid uses too, and a fraction there would need a new template for every fraction.
+- **`NEVER_TO_FULL_FRACTION` is now the ceiling**, not the only value. `mend_wound(...,
+  cap_fraction=None)` caps the mend at `int(min(cap_fraction or CEIL, CEIL) x damage_taken) -
+  health_mended_total`. No fraction reaches full, so the attrition invariant holds.
+- **Mundane first aid has its own lower fraction**, `FIRST_AID_MEND_FRACTION` (`0.50`, a tuning
+  value set beside the ceiling in `world/vitals/constants.py`). The scene `treat` path passes it,
+  so a healing technique authored at or above it is never worse than first aid.
+- **The highest-fraction rule.** Each mend reads the running `health_mended_total`, so after any
+  mend the total is at most that mend's own fraction of the damage. The total therefore never
+  passes the highest fraction any mend on the wound used: a 0.40 mend then a 0.70 mend on a
+  20-damage wound restore 8 then 6 (14); a later 0.40 mend restores nothing; the reverse order
+  also stops at 14. Nothing new is stored.
+
+Bound 1 (one tending per healer per wound) is unchanged: one healer's techniques never stack on
+the same wound, so the fraction rule governs different healers.
+
+Rejected: putting the fraction on `TreatmentTemplate` (a prose template per fraction, and first
+aid would share it); storing the highest fraction used on `WoundDetails` (derivable from the
+running total, so a stored copy could only drift).
+
 > Status: accepted · Source: issue #2644 (lore repo `design/covenant-vows-consolidated.md` §3.1)
 > · Related: ADR-0010 (FK direction specific→general), ADR-0007 (no JSON fields), ADR-0013 (no
 > data migrations pre-production)

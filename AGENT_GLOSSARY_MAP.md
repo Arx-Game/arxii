@@ -34,7 +34,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [conditions](src/world/conditions/AGENT_GLOSSARY.md), also holds the #4091 settle terms
   (ADR-4091): Settle, Settle pool, Hold strength; and (ADR-4120) Settled round / Settle round
   effects
-- [vitals](src/world/vitals/AGENT_GLOSSARY.md) - also holds Certain death (deferred) (#4098)
+- [vitals](src/world/vitals/AGENT_GLOSSARY.md) - also holds Certain death (deferred) (#4098) and Mend fraction (#4600)
 - [worship](src/world/worship/AGENT_GLOSSARY.md) - also holds the #4333 favor terms
   (ADR-4333-A): Favor, Invocation, Earning rate, Favor modifier; and the pledge terms (slice 2,
   ADR-4362): Pledge, Favor target, Deed, Sacrifice, Pledge credit, Closing rite, Lapse; and
