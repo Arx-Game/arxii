@@ -228,6 +228,8 @@ class CombatTechniqueResolution:
     scaled_damage: int
     power_ledger: PowerLedger = field(default_factory=lambda: _empty_ledger())
     removed_conditions: list[RemovedConditionResult] = field(default_factory=list)
+    # Each enemy the cast's own morale row shook, before and after (#4619).
+    morale_shifts: list[SpectacleShift] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

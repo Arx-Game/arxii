@@ -23,6 +23,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.combat.services import CombatTechniqueResolver
+from world.combat.types import SpectacleShift
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory, DamageTypeFactory
 from world.fatigue.constants import EffortLevel
 from world.magic.factories import (
@@ -30,6 +31,7 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueDamageProfileFactory,
     TechniqueFactory,
+    TechniqueMoraleEffectFactory,
 )
 from world.magic.types.power_ledger import PowerLedger
 from world.mechanics.factories import (
@@ -576,6 +578,37 @@ class CombatTechniqueResolverCallTests(TestCase):
         self.assertEqual(len(result.damage_results), 1)
         self.assertEqual(result.applied_conditions, [])
         self.assertIsNotNone(result.check_result)
+
+
+class ApplyMoraleTests(TestCase):
+    """The cast's own morale row shakes the opponent it resolves on (#4619)."""
+
+    def test_apply_morale_records_each_opponent_before_and_after(self) -> None:
+        resolver = _build_resolver()
+        opponent = resolver.action.focused_opponent_target
+        TechniqueMoraleEffectFactory(
+            technique=resolver.action.focused_action, base_morale=30, minimum_success_level=1
+        )
+        check = MagicMock(success_level=1)
+
+        shifts = resolver._apply_morale(check, eff_intensity=0)
+
+        self.assertEqual(shifts, [SpectacleShift(opponent.pk, "steady", "falter")])
+        opponent.refresh_from_db()
+        self.assertEqual(opponent.morale, 40)
+
+    def test_the_resolution_carries_the_shifts(self) -> None:
+        resolver = _build_resolver()
+        opponent = resolver.action.focused_opponent_target
+        TechniqueMoraleEffectFactory(
+            technique=resolver.action.focused_action, base_morale=30, minimum_success_level=1
+        )
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=1)
+            result = resolver(power=0, ledger=_ledger(0))
+
+        self.assertEqual(result.morale_shifts, [SpectacleShift(opponent.pk, "steady", "falter")])
 
 
 class SumActiveFlatBonusesTests(TestCase):
