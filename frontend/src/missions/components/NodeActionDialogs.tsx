@@ -117,13 +117,10 @@ export function AddOptionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <form onSubmit={onSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Add option</DialogTitle>
-            <DialogDescription>
-              A short name for the choice, and what kind of choice it is.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-1">
             <Label htmlFor="add-option-key">Option key</Label>
@@ -197,11 +194,10 @@ export function CopyNodeDialog({ open, onOpenChange, nodeId, onCreated }: CopyDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <form onSubmit={onSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Copy node</DialogTitle>
-            <DialogDescription>Makes one new node with this node's options.</DialogDescription>
           </DialogHeader>
           <div className="space-y-1">
             <Label htmlFor="copy-node-key">New node key</Label>
@@ -289,12 +285,18 @@ export function CopySubtreeDialog({ open, onOpenChange, nodeId, onCreated }: Cop
   );
 }
 
+/** One line of the delete-node list; ``id`` is a stable key, ``text`` what the author reads. */
+export interface DeleteLink {
+  id: string;
+  text: string;
+}
+
 interface DeleteNodeDialogProps extends DialogProps {
   node: MissionNode;
   /** Links that become mission endings when this node goes. */
-  endings: string[];
+  endings: DeleteLink[];
   /** Random route destinations that disappear with this node. */
-  lostDestinations: string[];
+  lostDestinations: DeleteLink[];
   onDeleted: () => void;
 }
 
@@ -328,8 +330,8 @@ export function DeleteNodeDialog({
           <DialogTitle>Delete node</DialogTitle>
           <DialogDescription>
             {hasLinks
-              ? `Delete node "${node.key}" and its options? These links lead here.`
-              : `Delete node "${node.key}" and its options? Nothing leads here.`}
+              ? `Delete node "${node.key}" and its options. These links lead here.`
+              : `Delete node "${node.key}" and its options. Nothing leads here.`}
           </DialogDescription>
         </DialogHeader>
         {endings.length > 0 && (
@@ -337,7 +339,7 @@ export function DeleteNodeDialog({
             <p className="text-sm font-medium">These will become a mission ending</p>
             <ul className="list-disc pl-5 text-sm" data-testid="delete-node-endings">
               {endings.map((e) => (
-                <li key={e}>{e}</li>
+                <li key={e.id}>{e.text}</li>
               ))}
             </ul>
           </div>
@@ -347,7 +349,7 @@ export function DeleteNodeDialog({
             <p className="text-sm font-medium">Random routes that lose this destination</p>
             <ul className="list-disc pl-5 text-sm" data-testid="delete-node-lost">
               {lostDestinations.map((e) => (
-                <li key={e}>{e}</li>
+                <li key={e.id}>{e.text}</li>
               ))}
             </ul>
           </div>
@@ -400,7 +402,7 @@ export function DeleteOptionDialog({
         <DialogHeader>
           <DialogTitle>Delete option</DialogTitle>
           <DialogDescription>
-            {`Delete option "${label}" and its routes? Nothing else is removed.`}
+            {`Delete option "${label}" and its routes. Nothing else is removed.`}
           </DialogDescription>
         </DialogHeader>
         <InlineError message={error} />

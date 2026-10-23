@@ -57,15 +57,15 @@ export function AddNodeDialog({ open, onOpenChange, templateId, isFirstNode }: A
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent {...(isFirstNode ? {} : { 'aria-describedby': undefined })}>
         <form onSubmit={onSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Add node</DialogTitle>
-            <DialogDescription>
-              {isFirstNode
-                ? 'This is the first node, so it becomes the entry node.'
-                : 'A short name, such as gate or ambush, used to find this node later.'}
-            </DialogDescription>
+            {isFirstNode ? (
+              <DialogDescription>
+                This is the first node, so it becomes the entry node.
+              </DialogDescription>
+            ) : null}
           </DialogHeader>
           <div className="space-y-1">
             <Label htmlFor="add-node-key">Node key</Label>

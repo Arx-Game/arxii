@@ -23,6 +23,7 @@ vi.mock('../api', () => ({
   listMissionRoutes: vi.fn(),
   listRouteCandidates: vi.fn(),
   getGraphCheck: vi.fn(),
+  listOutcomeTiers: vi.fn(),
   createMissionOption: vi.fn(),
   deleteMissionNode: vi.fn(),
   copyNode: vi.fn(),
@@ -107,6 +108,9 @@ beforeEach(() => {
   vi.mocked(api.listMissionRoutes).mockResolvedValue(page([]));
   vi.mocked(api.listRouteCandidates).mockResolvedValue(page([]));
   vi.mocked(api.getGraphCheck).mockResolvedValue([]);
+  vi.mocked(api.listOutcomeTiers).mockResolvedValue([
+    { id: 2, name: 'Success', success_level: 1, rolled_by_checks: true },
+  ]);
 });
 
 describe('NodePage progress track', () => {
@@ -217,13 +221,13 @@ describe('NodePage graph controls', () => {
     vi.mocked(api.listMissionOptions).mockImplementation((async (f: { node?: number }) =>
       f.node ? page([]) : page([OPT({ id: 30, node: 6, key: 'knock' })])) as never);
     vi.mocked(api.listMissionRoutes).mockResolvedValue(
-      page([{ id: 40, option: 30, target_node: 5 }])
+      page([{ id: 40, option: 30, target_node: 5, outcome_tier: 2 }])
     );
     render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
 
     await user.click(await screen.findByRole('button', { name: 'Delete node' }));
     const dialog = await screen.findByRole('dialog');
-    expect(await within(dialog).findByText('aftermath: knock')).toBeInTheDocument();
+    expect(await within(dialog).findByText('aftermath: knock · Success')).toBeInTheDocument();
     expect(within(dialog).getByText('These will become a mission ending')).toBeInTheDocument();
   });
 

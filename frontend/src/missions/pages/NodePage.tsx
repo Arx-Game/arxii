@@ -37,6 +37,7 @@ import {
   CopyNodeDialog,
   CopySubtreeDialog,
   DeleteNodeDialog,
+  type DeleteLink,
 } from '../components/NodeActionDialogs';
 import { ServerChangedBanner } from '../components/ServerChangedBanner';
 import { StudioBreadcrumb } from '../components/StudioBreadcrumb';
@@ -50,6 +51,7 @@ import {
   useMissionRouteCandidates,
   useMissionRoutes,
   useMissionTemplate,
+  useOutcomeTiers,
   usePatchMissionNode,
 } from '../queries';
 import { optionLabel } from '../optionLabel';
@@ -215,38 +217,48 @@ function DeleteNodeDialogLoader({
   const { data: optionsPage } = useMissionOptions({ template: node.template });
   const { data: routesPage } = useMissionRoutes({ template: node.template });
   const { data: candidatesPage } = useMissionRouteCandidates({ template: node.template });
+  const { data: tiers } = useOutcomeTiers();
 
   const nodes = nodesPage?.results ?? [];
   const options = optionsPage?.results ?? [];
+  const tierName = new Map((tiers ?? []).map((t) => [t.id, t.name]));
   const nodeKey = (id: number) => nodes.find((n) => n.id === id)?.key ?? 'another node';
   const optionById = new Map(options.map((o) => [o.id, o]));
-  const describe = (opt: MissionOption | undefined) =>
-    opt ? `${nodeKey(opt.node)}: ${optionLabel(opt)}` : 'another node';
+  const describe = (opt: MissionOption | undefined, tierId?: number | null) => {
+    if (!opt) return 'another node';
+    const tier = tierId == null ? undefined : tierName.get(tierId);
+    return `${nodeKey(opt.node)}: ${optionLabel(opt)}${tier ? ` · ${tier}` : ''}`;
+  };
 
-  const endings: string[] = [];
+  const endings: DeleteLink[] = [];
   for (const route of routesPage?.results ?? []) {
     const opt = optionById.get(route.option);
     if (route.target_node === node.id && opt && opt.node !== node.id) {
-      endings.push(describe(opt));
+      endings.push({ id: `r${route.id}`, text: describe(opt, route.outcome_tier) });
     }
   }
   for (const opt of options) {
-    if (opt.branch_target === node.id && opt.node !== node.id) endings.push(describe(opt));
+    if (opt.branch_target === node.id && opt.node !== node.id) {
+      endings.push({ id: `b${opt.id}`, text: describe(opt) });
+    }
   }
   for (const other of nodes) {
     if (other.id === node.id) continue;
-    if (other.track_success_target === node.id) endings.push(`${other.key}: track success`);
-    if (other.track_failure_target === node.id) endings.push(`${other.key}: track failure`);
+    if (other.track_success_target === node.id) {
+      endings.push({ id: `ts${other.id}`, text: `${other.key}: track success` });
+    }
+    if (other.track_failure_target === node.id) {
+      endings.push({ id: `tf${other.id}`, text: `${other.key}: track failure` });
+    }
   }
 
-  const routeOption = new Map(
-    (routesPage?.results ?? []).map((r) => [r.id, optionById.get(r.option)])
-  );
-  const lostDestinations: string[] = [];
+  const routeById = new Map((routesPage?.results ?? []).map((r) => [r.id, r]));
+  const lostDestinations: DeleteLink[] = [];
   for (const cand of candidatesPage?.results ?? []) {
-    const opt = routeOption.get(cand.route);
+    const route = routeById.get(cand.route);
+    const opt = route ? optionById.get(route.option) : undefined;
     if (cand.target_node === node.id && opt && opt.node !== node.id) {
-      lostDestinations.push(describe(opt));
+      lostDestinations.push({ id: `c${cand.id}`, text: describe(opt, route?.outcome_tier) });
     }
   }
 
