@@ -27,31 +27,9 @@ export type MissionGiverRequest = components['schemas']['MissionGiverRequest'];
 
 export type OptionKind = components['schemas']['OptionKindEnum'];
 
-// #4558 graph authoring. Hand-typed: the graph-check and outcome-tiers
-// endpoints are not in the generated schema yet (regenerate with
-// `just gen-api-types` and swap these for aliases).
-export type GraphProblemKind =
-  | 'no_entry'
-  | 'unreachable_node'
-  | 'missing_tiers'
-  | 'joint_missing_bucket'
-  | 'no_risk_level'
-  | 'empty_random_set';
-
-export interface GraphProblem {
-  kind: GraphProblemKind;
-  message: string;
-  node: number | null;
-  option: number | null;
-  route: number | null;
-  missing_tiers: string[];
-}
-
-export interface OutcomeTier {
-  id: number;
-  name: string;
-  success_level: number;
-}
+// #4558 graph authoring.
+export type GraphProblem = components['schemas']['GraphProblem'];
+export type OutcomeTier = components['schemas']['OutcomeTier'];
 
 export type MissionVisibility = components['schemas']['MissionVisibilityEnum'];
 

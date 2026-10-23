@@ -6,9 +6,8 @@
  * is undefined; nested filters require a parent id).
  */
 
-import { act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
 
