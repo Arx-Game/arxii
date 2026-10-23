@@ -5,7 +5,7 @@ A named, database-defined check (Stealth, Diplomacy, Composure, Penetration) com
 _Avoid_: skill check, roll type, test
 
 **CheckRank**:
-A lookup table mapping a point total to a discrete rank level via exponential thresholds. Both the roller's points and the target difficulty are converted to ranks, and the rank difference selects which result chart applies.
+A lookup table mapping a point total to a discrete rank level via authored point thresholds (0/10/25/50/80/115/155/200/250 in the seed: widening bands, not exponential). Both the roller's points and the target difficulty are converted to ranks, and the rank difference selects which result chart applies.
 _Avoid_: tier, grade, rank band
 
 **ResultChart**:
@@ -150,3 +150,43 @@ _Avoid_: "pull" (a thread pull's flat bonus), "boon"
 **Extra trait term** (#4450, ADR-4450):
 An `ExtraTraitTerm(trait, weight)` a caller adds to one roll through `extra_traits=`, on top of the check type's own `CheckTypeTrait` rows. It scores like one more row (value times weight, through the skill conversion table), earns check-based development once per roll, and counts as involved for capability and thread matching. A system uses it to put a skill into a roll without authoring a check type per character and skill.
 _Avoid_: bonus skill, injected trait, synthetic check type (the rejected alternative)
+
+**Modifier level** (#4594, ADR-4594-A):
+The level a modifier counts at. A technique's buff or debuff takes it from its cast: the
+effective power picks a `CastPowerLevel` row and the outcome shifts it by a
+`CastOutcomeLevelShift` row; the `ConditionInstance` keeps it as `modifier_level`. It is the
+buff's own level, never the bearer's or the target's.
+_Avoid_: buff tier, power level (power is the cast's number; the level is what it resolves to)
+
+**Modifier size** (#4594, ADR-4594-A):
+How big a modifier is for its level, from the `ModifierSize` ladder: Minor, Moderate, Large,
+Exceptional (placeholder name), Paramount (placeholder name, reached only through a vow's size
+step). Authored on `TechniqueAppliedCondition.modifier_size`: a technique that only buffs is
+Large, one that also does something else is Minor or Moderate, narrow use is one step higher.
+_Avoid_: magnitude, strength, small/big buff
+
+**Value table** (#4594, ADR-4594-A):
+The `ModifierValue` rows: what a modifier of each size is worth at each level, in its lane's units
+(check points for the check lane). Sparse rows read as steps: a level reads the row at the highest
+authored level at or below it. The value is a magnitude; the authored modifier keeps its sign.
+_Avoid_: buff table, modifier curve
+
+**Level baseline** (#4594):
+The `ModifierLevelBaseline` rows: the typical total a character of each level reaches in a lane.
+Staff read a value-table row against it, as a share and, on the check lane, as the share of the
+rank band that total sits in.
+_Avoid_: expected total, par
+
+**Taper** (#4594, ADR-4594-A, #4551 decision 1):
+In one roll, each further modifier of the same source kind on the same lane counts less: largest
+first, the k-th at `max(ratio^(k-1), floor)` of its value (the owner's light taper: 7/8, never
+below 2/3), bonuses and penalties in separate piles. Set by `ModifierTaper` rows; a kind with no
+row never tapers. The character's own standing and a vow's step are never tapered.
+_Avoid_: diminishing returns (too broad; ADR-0158's vow-keyed grouping is a different rule),
+stacking penalty, soft cap
+
+**Lane** (#4594, #4551 section 5.5):
+One kind of quantity a modifier can change (`ModifierLane`). Only the check lane exists so far;
+later lanes (stats, cast power, damage, soak, healing and more) add a choice and rows to the same
+tables.
+_Avoid_: channel, track
