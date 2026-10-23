@@ -6,6 +6,7 @@
  * is undefined; nested filters require a parent id).
  */
 
+import { act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -13,6 +14,10 @@ import { vi } from 'vitest';
 
 import {
   missionKeys,
+  useCreateMissionNode,
+  useDeleteMissionNode,
+  useGraphCheck,
+  useOutcomeTiers,
   useMissionTemplate,
   useMissionTemplates,
   useMissionOptions,
@@ -37,6 +42,15 @@ vi.mock('../api', () => ({
   deleteMissionInstance: vi.fn(),
   createMissionTemplate: vi.fn(),
   listMissionCategories: vi.fn(),
+  getGraphCheck: vi.fn(),
+  listOutcomeTiers: vi.fn(),
+  createMissionNode: vi.fn(),
+  deleteMissionNode: vi.fn(),
+  createMissionOption: vi.fn(),
+  deleteMissionOption: vi.fn(),
+  createMissionRoute: vi.fn(),
+  patchMissionRoute: vi.fn(),
+  deleteMissionRoute: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -174,5 +188,62 @@ describe('usePredicateLeaves', () => {
     expect(result.current.data).toEqual([
       { name: 'has_distinction', params: [{ name: 'slug', type: 'str' }] },
     ]);
+  });
+});
+
+describe('graph authoring hooks (#4558)', () => {
+  it('fetches the graph check for a template', async () => {
+    vi.mocked(api.getGraphCheck).mockResolvedValue([
+      {
+        kind: 'no_entry',
+        message: 'No entry node',
+        node: null,
+        option: null,
+        route: null,
+        missing_tiers: [],
+      },
+    ]);
+    const { result } = renderHook(() => useGraphCheck(3), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(api.getGraphCheck).toHaveBeenCalledWith(3);
+    expect(result.current.data?.[0].kind).toBe('no_entry');
+  });
+
+  it('loads outcome tiers', async () => {
+    vi.mocked(api.listOutcomeTiers).mockResolvedValue([
+      { id: 1, name: 'Success', success_level: 1 },
+    ]);
+    const { result } = renderHook(() => useOutcomeTiers(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.[0].name).toBe('Success');
+  });
+
+  it('creating a node invalidates nodes and the graph check', async () => {
+    vi.mocked(api.createMissionNode).mockResolvedValue({ id: 9 } as never);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    const w = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useCreateMissionNode(), { wrapper: w });
+    await act(async () => {
+      await result.current.mutateAsync({ template: 3, key: 'start', is_entry: true });
+    });
+    const keys = spy.mock.calls.map((c) => c[0]?.queryKey);
+    expect(keys).toContainEqual(missionKeys.nodes());
+    expect(keys).toContainEqual(missionKeys.graphChecks());
+  });
+
+  it('a delete refused with 409 surfaces the server message', async () => {
+    vi.mocked(api.deleteMissionNode).mockRejectedValue(
+      new Error('A mission run has recorded this node.')
+    );
+    const { result } = renderHook(() => useDeleteMissionNode(), { wrapper: wrapper() });
+    await act(async () => {
+      await result.current.mutateAsync(4).catch(() => undefined);
+    });
+    await waitFor(() =>
+      expect(result.current.error?.message).toBe('A mission run has recorded this node.')
+    );
   });
 });
