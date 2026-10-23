@@ -87,6 +87,8 @@ export interface PositionEdgeInfo {
   is_passable: boolean;
   blocks_flight: boolean;
   gating_challenge_name: string | null;
+  integrity: number | null;
+  max_integrity: number | null;
 }
 
 /** A persona present in the scene and the position it currently occupies (or null). */

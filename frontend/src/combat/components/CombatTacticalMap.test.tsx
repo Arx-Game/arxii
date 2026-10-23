@@ -218,6 +218,8 @@ describe('CombatTacticalMap', () => {
             is_passable: true,
             blocks_flight: false,
             gating_challenge_name: null,
+            integrity: null,
+            max_integrity: null,
           },
         ],
       }),
@@ -415,6 +417,8 @@ describe('CombatTacticalMap', () => {
       is_passable: true,
       blocks_flight: false,
       gating_challenge_name: null,
+      integrity: null,
+      max_integrity: null,
     },
   ];
 
@@ -552,6 +556,8 @@ describe('CombatTacticalMap', () => {
             is_passable: true,
             blocks_flight: false,
             gating_challenge_name: null,
+            integrity: null,
+            max_integrity: null,
           },
         ],
       }),

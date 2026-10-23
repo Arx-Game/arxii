@@ -554,7 +554,9 @@ class CombatEncounterViewSet(ModelViewSet):
                     ),
                     Prefetch(
                         "edges_as_a",
-                        queryset=PositionEdge.objects.select_related("gating_challenge__template"),
+                        queryset=PositionEdge.objects.select_related(
+                            "gating_challenge__template", "source_rampart"
+                        ),
                         to_attr="all_edges_as_a",
                     ),
                 ),

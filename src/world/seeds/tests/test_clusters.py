@@ -50,6 +50,7 @@ class TestClusterRegistry(TestCase):
                 "domain_tasks",
                 "stealth",
                 "security",
+                "conjured_barrier",
                 "perception",
                 "civic_hubs",
                 "counterplay",

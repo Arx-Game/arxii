@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from django.test import TestCase
 
+from world.areas.positioning.constants import CONJURED_BARRIER_CHALLENGE_NAME
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.models import PositionEdge
 from world.areas.positioning.services import (
@@ -27,6 +28,7 @@ from world.magic.services.effect_handlers import (
     force_move_target_on_condition,
     move_position_on_condition,
 )
+from world.mechanics.factories import ChallengeTemplateFactory
 from world.room_features.trap_services import (
     teardown_conjured_hazards,
     tick_zone_hazards,
@@ -66,6 +68,7 @@ class BattlefieldShapingE2ETest(TestCase):
 
         # Condition templates for each effect
         self.barricade_template = ConditionTemplateFactory(name="Barricade")
+        ChallengeTemplateFactory(name=CONJURED_BARRIER_CHALLENGE_NAME)
         self.teleport_template = ConditionTemplateFactory(name="Phase Jump")
         self.telekinesis_template = ConditionTemplateFactory(name="Force Grip")
         self.fire_template = ConditionTemplateFactory(name="Conjure Fire")
@@ -91,7 +94,11 @@ class BattlefieldShapingE2ETest(TestCase):
     def test_barricade_expires_via_round_tick(self) -> None:
         """2. Obstacle duration decrements and restores at 0."""
         create_conjured_obstacle(
-            self.bravo, self.charlie, caster_sheet=self.caster_sheet, duration_rounds=1
+            self.bravo,
+            self.charlie,
+            caster_sheet=self.caster_sheet,
+            integrity=10,
+            duration_rounds=1,
         )
         expire_obstacle_rounds(self.room)
 
@@ -168,7 +175,11 @@ class BattlefieldShapingE2ETest(TestCase):
         """6. Encounter-end teardown restores obstacles + disarms hazards."""
         # Create a conjured obstacle
         create_conjured_obstacle(
-            self.bravo, self.charlie, caster_sheet=self.caster_sheet, duration_rounds=5
+            self.bravo,
+            self.charlie,
+            caster_sheet=self.caster_sheet,
+            integrity=10,
+            duration_rounds=5,
         )
         # Create a conjured hazard
         from actions.factories import ConsequencePoolFactory

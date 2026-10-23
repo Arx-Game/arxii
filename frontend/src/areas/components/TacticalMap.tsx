@@ -63,6 +63,14 @@ export interface PositionEdgeLike extends TacticalEdge {
   is_passable: boolean;
   blocks_flight: boolean;
   gating_challenge_name: string | null;
+  /** A conjured wall's remaining and starting strength (#4606); null when indestructible. */
+  integrity?: number | null;
+  max_integrity?: number | null;
+}
+
+function wallStrength(edge: PositionEdgeLike): string | null {
+  if (edge.integrity == null || edge.max_integrity == null) return null;
+  return `${edge.integrity}/${edge.max_integrity}`;
 }
 
 /**
@@ -114,14 +122,15 @@ export interface TacticalMapProps {
 }
 
 function edgeStyle(edge: PositionEdgeLike): { style: React.CSSProperties; label?: string } {
+  const strength = wallStrength(edge);
   if (edge.gating_challenge_name) {
     return {
       style: { strokeDasharray: '4 4', stroke: 'var(--color-amber-500, #f59e0b)' },
-      label: edge.gating_challenge_name,
+      label: strength ? `${edge.gating_challenge_name} ${strength}` : edge.gating_challenge_name,
     };
   }
   if (!edge.is_passable) {
-    return { style: { strokeDasharray: '2 4', opacity: 0.4 } };
+    return { style: { strokeDasharray: '2 4', opacity: 0.4 }, label: strength ?? undefined };
   }
   return { style: {} };
 }

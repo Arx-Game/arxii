@@ -159,7 +159,7 @@ class Position(PositionNodeBase):
 
     @cached_property
     def all_edges_as_a(self) -> list[PositionEdge]:
-        return list(self.edges_as_a.select_related("gating_challenge__template"))
+        return list(self.edges_as_a.select_related("gating_challenge__template", "source_rampart"))
 
     rampart_or_none = ReverseOneToOneOrNone("rampart")
 
@@ -205,6 +205,28 @@ class PositionEdge(PositionEdgeBase):
             "Provenance: the caster who conjured this obstacle. Null for staff-authored edges."
         ),
     )
+    # Wall strength (#4606). Both null = indestructible (staff-authored edges, and
+    # every Rampart-sealed edge, which reads its strength from the Rampart).
+    integrity = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="For a conjured wall: damage it can still take before it falls. "
+        "Null = indestructible, or a Rampart's seal (the Rampart holds the integrity).",
+    )
+    max_integrity = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="The wall's integrity when it was raised. Null together with integrity.",
+    )
+    source_rampart = models.ForeignKey(
+        "arxii.Rampart",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sealed_edges",
+        help_text="The Rampart whose seal this is, so its collapse, expiry or teardown "
+        "opens the edge. A later spell that overwrites the edge clears it.",
+    )
 
     class Meta:
         app_label = "arxii"
@@ -215,8 +237,37 @@ class PositionEdge(PositionEdgeBase):
             models.CheckConstraint(
                 condition=Q(position_a__lt=F("position_b")), name="position_edge_canonical_order"
             ),
+            models.CheckConstraint(
+                condition=(
+                    Q(integrity__isnull=True, max_integrity__isnull=True)
+                    | Q(
+                        integrity__isnull=False,
+                        max_integrity__isnull=False,
+                        integrity__lte=F("max_integrity"),
+                    )
+                ),
+                name="position_edge_integrity_pair",
+            ),
+            models.CheckConstraint(
+                condition=Q(source_rampart__isnull=True) | Q(integrity__isnull=True),
+                name="position_edge_rampart_owns_integrity",
+            ),
         ]
         ordering = ["position_a", "position_b"]
+
+    @property
+    def barrier_integrity(self) -> tuple[int, int] | None:
+        """``(integrity, max_integrity)`` of the wall on this edge, else None.
+
+        A Rampart-sealed edge reads the Rampart's integrity (the two share one
+        pool); a plain conjured wall reads its own columns.
+        """
+        if self.source_rampart_id is not None:
+            rampart = self.source_rampart
+            return (rampart.integrity, rampart.max_integrity)
+        if self.integrity is not None and self.max_integrity is not None:
+            return (self.integrity, self.max_integrity)
+        return None
 
     def clean(self) -> None:
         super().clean()
@@ -573,6 +624,16 @@ class RampartElementProfile(NaturalKeyMixin, CreditedContent, SharedMemoryModel)
 
     def __str__(self) -> str:
         return self.name
+
+    def base_resist(self, damage_type: Any) -> int:
+        """The authored resist row for ``damage_type`` (signed; 0 when none or no type).
+
+        The delivery-independent part of a strike's resist against this element,
+        shared by combat interception and ``damage_barrier`` (#4606).
+        """
+        if damage_type is None:
+            return 0
+        return sum(self.resistances.filter(damage_type=damage_type).values_list("value", flat=True))
 
 
 class RampartElementResistance(NaturalKeyMixin, SharedMemoryModel):

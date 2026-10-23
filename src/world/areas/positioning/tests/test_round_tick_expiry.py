@@ -21,7 +21,7 @@ class RoundTickExpiryTest(TestCase):
     def test_expire_decrements_duration(self) -> None:
         """Each expiry tick decrements duration_rounds by 1."""
         edge = create_conjured_obstacle(
-            self.pos_a, self.pos_b, caster_sheet=self.sheet, duration_rounds=3
+            self.pos_a, self.pos_b, caster_sheet=self.sheet, integrity=10, duration_rounds=3
         )
         expire_obstacle_rounds(self.room)
         edge.refresh_from_db()
@@ -31,7 +31,7 @@ class RoundTickExpiryTest(TestCase):
     def test_expire_restores_at_zero(self) -> None:
         """At 0, the obstacle is restored to passable."""
         edge = create_conjured_obstacle(
-            self.pos_a, self.pos_b, caster_sheet=self.sheet, duration_rounds=1
+            self.pos_a, self.pos_b, caster_sheet=self.sheet, integrity=10, duration_rounds=1
         )
         expire_obstacle_rounds(self.room)
         edge.refresh_from_db()

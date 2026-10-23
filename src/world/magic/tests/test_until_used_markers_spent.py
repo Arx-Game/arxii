@@ -14,6 +14,7 @@ from evennia import create_object
 
 from actions.factories import ConsequencePoolFactory
 from actions.models import ConsequencePool
+from world.areas.positioning.constants import CONJURED_BARRIER_CHALLENGE_NAME
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.models import PositionEdge, Rampart
 from world.areas.positioning.services import place_in_position, position_of
@@ -46,6 +47,7 @@ from world.magic.services.effect_handlers import (
     raise_rampart_on_condition,
     summon_ally_on_condition,
 )
+from world.mechanics.factories import ChallengeTemplateFactory
 from world.room_features.models import Trap
 
 
@@ -136,6 +138,7 @@ class MovementMarkersSpentTests(_PlacedCharacterFixture):
 class BattlefieldMarkersSpentTests(_PlacedCharacterFixture):
     def test_a_barricade_marker_is_spent_after_the_edge_is_sealed(self) -> None:
         ensure_obstacle_content()
+        ChallengeTemplateFactory(name=CONJURED_BARRIER_CHALLENGE_NAME)
         marker = self._marker(
             ConditionTemplate.objects.get(name=OBSTACLE_CONDITION_NAME),
             cast_position_a=self.start,

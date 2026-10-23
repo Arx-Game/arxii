@@ -13,7 +13,7 @@ which leaves a lasting condition alone.
 from typing import TYPE_CHECKING, Any, cast
 
 from flows.consts import FlowActionChoices
-from world.areas.positioning.models import Position, PositionEdge
+from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
     create_conjured_obstacle,
     force_move_to_position,
@@ -43,13 +43,24 @@ def move_position(*, payload: Any) -> None:
     force_move_to_position(payload.target, dest)
 
 
-def create_obstacle(*, payload: Any) -> None:
-    """Make the edge between two positions impassable (an obstacle).
+def create_obstacle(*, payload: Any, power: int = 0) -> None:
+    """Raise a conjured wall on the edge between two positions (#2019, #4606).
 
-    Delegates to create_conjured_obstacle when a caster_sheet is available on
-    the payload (conjured obstacle with lifecycle). Falls back to the bare
-    connect_positions for backward compatibility.
+    Every spell wall gets a strength and a way past it: integrity is
+    ``CONJURED_WALL_BASE_INTEGRITY`` plus the cast's power term (``power``, the
+    marker's power-scaled severity), and the edge is gated by a fresh instance of
+    the authored "Conjured Barrier" challenge (climb over or smash through,
+    ADR-0109), held by the room. ``power`` is the cast's power term; the Barricade
+    adapter passes the marker's severity. Delegates to ``create_conjured_obstacle``; with no
+    caster on the payload the wall has no owner, so scene teardown leaves it.
     """
+    from world.areas.positioning.constants import (  # noqa: PLC0415
+        CONJURED_BARRIER_CHALLENGE_NAME,
+        CONJURED_WALL_BASE_INTEGRITY,
+    )
+    from world.mechanics.challenge_resolution import instantiate_challenge  # noqa: PLC0415
+    from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
+
     a = Position.objects.get(pk=payload.position_a_id)
     b = Position.objects.get(pk=payload.position_b_id)
     # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
@@ -59,23 +70,21 @@ def create_obstacle(*, payload: Any) -> None:
     # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     duration_rounds = getattr(payload, "duration_rounds", None)  # noqa: GETATTR_LITERAL
 
-    if caster_sheet is not None:
-        create_conjured_obstacle(
-            a,
-            b,
-            caster_sheet=caster_sheet,
-            duration_rounds=duration_rounds,
-            blocks_flight=blocks_flight,
-        )
-    else:
-        # Fallback: update_or_create so sealing an existing edge doesn't crash.
-        if a.pk > b.pk:
-            a, b = b, a
-        PositionEdge.objects.update_or_create(
-            position_a=a,
-            position_b=b,
-            defaults={"is_passable": False, "blocks_flight": blocks_flight},
-        )
+    room = a.room
+    gate = instantiate_challenge(
+        ChallengeTemplate.objects.get(name=CONJURED_BARRIER_CHALLENGE_NAME),
+        location=room,
+        target_object=room,
+    )
+    create_conjured_obstacle(
+        a,
+        b,
+        caster_sheet=caster_sheet,
+        integrity=CONJURED_WALL_BASE_INTEGRITY + power,
+        duration_rounds=duration_rounds,
+        gating_challenge=gate,
+        blocks_flight=blocks_flight,
+    )
 
 
 def _caster_sheet_from_instance(instance: ConditionInstance | None):
@@ -837,7 +846,8 @@ def _create_obstacle_on_condition_effect(
             position_b_id=pos_b_pk,
             caster_sheet=_caster_sheet_from_instance(instance),
             duration_rounds=_duration_from_instance(instance),
-        )
+        ),
+        power=instance.severity if instance is not None else 0,
     )
 
 
