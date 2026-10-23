@@ -169,13 +169,14 @@ If either level fails:
 
 ### Interaction with IMPOSSIBLE Difficulty
 
-Currently `_match_approaches()` skips actions with `DifficultyIndicator.IMPOSSIBLE`.
+`_match_approaches()` lists actions graded `DifficultyIndicator.IMPOSSIBLE` (the chart has no
+Success outcome) with that label rather than skipping them (#4593).
 With prerequisites, the ordering is:
 
 1. Effect property check (existing)
 2. **Prerequisite check (new)**
 3. Difficulty calculation (existing, skipped if prerequisite fails)
-4. IMPOSSIBLE filter (existing, skipped if prerequisite fails)
+4. IMPOSSIBLE label (the action stays listed; no grade is computed if a prerequisite fails)
 
 If a prerequisite fails, the action is included with `prerequisite_met=False` and
 difficulty calculation is skipped entirely. This means `difficulty_indicator` needs a

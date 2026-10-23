@@ -51,6 +51,20 @@ def _null_links(objs: list[Any], attname: str, deleted: set[Any]) -> None:
             setattr(obj, attname, None)
 
 
+def _reverse_relations(model: type[Model]) -> list[Any]:
+    """Every reverse relation onto ``model``, hidden ones included.
+
+    ``_meta.related_objects`` leaves out a relation declared ``related_name="+"``,
+    yet its ``SET_NULL`` is still applied by the ``Collector`` (#4558: deleting a
+    mission node left every cached route into it naming the gone node).
+    """
+    return [
+        f
+        for f in model._meta.get_fields(include_hidden=True)  # noqa: SLF001 - Django's model introspection API
+        if f.auto_created and not f.concrete and (f.one_to_many or f.one_to_one)
+    ]
+
+
 def clear_set_null_referrers(
     model: type[Model], pks: Iterable[Any], *, using: str | None = None
 ) -> None:
@@ -69,7 +83,7 @@ def clear_set_null_referrers(
     if not deleted:
         return
     deferred = using is not None and connections[using].in_atomic_block
-    for rel in model._meta.related_objects:  # noqa: SLF001 - Django's model introspection API
+    for rel in _reverse_relations(model):
         if rel.on_delete is not SET_NULL:
             continue
         referrer = rel.related_model

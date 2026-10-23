@@ -7,9 +7,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0283_condition_template_reaction_fields"),
-    ]
+    dependencies = [("arxii", "0284_monotonic_result_charts_and_deeper_charts")]
 
     operations = [
         migrations.CreateModel(

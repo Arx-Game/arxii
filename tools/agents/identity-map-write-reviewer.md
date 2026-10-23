@@ -47,7 +47,17 @@ is the paths around it.
 4. **`on_delete=SET`/`SET_DEFAULT`.** `clear_set_null_referrers` handles `SET_NULL`
    only, because nothing used the other two when it was written. A diff introducing one
    leaves its referrers stale on delete until that helper learns the new value.
-5. **The read-side shape that turned a stale id into a 500.** Code that tests
+5. **Code that lists a model's reverse relations with `_meta.related_objects`.** It
+   leaves out every relation declared `related_name="+"`, while Django's `Collector`
+   still applies their `on_delete`. `core.deletion` once walked `related_objects`, so
+   deleting a mission node left every cached route into it naming the gone node until a
+   restart, and the Mission Studio showed an arrow to a node that no longer existed
+   (#4558; mission routes, branch targets and track targets are all `+`). Any walk of
+   reverse relations meant to be complete (a delete cleanup, a merge that repoints every
+   link, a "no relation unhandled" guard) needs
+   `_meta.get_fields(include_hidden=True)`. Ask what the walk is for before flagging it:
+   one that only offers accessors to a user may rightly skip hidden ones.
+6. **The read-side shape that turned a stale id into a 500.** Code that tests
    `obj.<fk>_id is not None` and then dereferences `obj.<fk>.<attr>`. On a correct cache
    the two agree, so do not ask for a guard. Flag it only when one of the writes above
    can make them disagree, and name that write.

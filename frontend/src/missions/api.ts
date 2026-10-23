@@ -29,7 +29,10 @@ import type {
   MissionReportResult,
   MissionTemplate,
   MissionTemplateDetail,
+  GraphProblem,
   MissionTemplateFilters,
+  OptionKind,
+  OutcomeTier,
   PaginatedResponse,
   ReportStyle,
   ResolvedBeat,
@@ -70,6 +73,19 @@ export function flattenErrorMessage(value: unknown): string {
   }
   return String(value);
 }
+
+/** Throw an Error whose message is the server's `detail` (409s) or flattened field errors. */
+async function throwServerError(res: Response, fallback: string): Promise<never> {
+  const body: unknown = await res.json().catch(() => null);
+  const detail =
+    body !== null && typeof body === 'object' && 'detail' in body
+      ? (body as { detail: unknown }).detail
+      : body;
+  const message = detail === null || detail === undefined ? '' : flattenErrorMessage(detail);
+  throw new Error(message || fallback);
+}
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 function buildQueryString(params: object): string {
   const search = new URLSearchParams();
@@ -153,6 +169,25 @@ export async function listMissionCategories(): Promise<PaginatedResponse<Mission
 // MissionNode (D2)
 // ---------------------------------------------------------------------------
 
+/**
+ * Every row of one mission-graph list, across pages (#4558). The graph page,
+ * the delete confirmation and the problem marks all reason about the WHOLE
+ * graph; page 1 alone (25 rows) silently dropped arrows from any mission with
+ * more routes than that. Returned in the paginated shape callers already read.
+ */
+async function listWholeGraph<T>(
+  path: string,
+  filters: object,
+  errorMessage: string
+): Promise<PaginatedResponse<T>> {
+  const query = buildQueryString({ ...filters, page_size: GRAPH_PAGE_SIZE });
+  const results = await fetchAllPages<T>(`${BASE_URL}/${path}/${query}`, errorMessage);
+  return { count: results.length, next: null, previous: null, results };
+}
+
+/** The Studio API's max_page_size, so a whole graph takes as few requests as possible. */
+const GRAPH_PAGE_SIZE = 100;
+
 export async function listMissionNodes(
   filters: {
     template?: number;
@@ -162,6 +197,9 @@ export async function listMissionNodes(
     page_size?: number;
   } = {}
 ): Promise<PaginatedResponse<MissionNode>> {
+  if (filters.page === undefined) {
+    return listWholeGraph<MissionNode>('nodes', filters, 'Failed to load nodes');
+  }
   const res = await apiFetch(`${BASE_URL}/nodes/${buildQueryString(filters)}`);
   if (!res.ok) throw new Error('Failed to load nodes');
   return res.json();
@@ -216,9 +254,7 @@ export async function listMissionOptions(
     needs_rewrite?: boolean;
   } = {}
 ): Promise<PaginatedResponse<MissionOption>> {
-  const res = await apiFetch(`${BASE_URL}/options/${buildQueryString(filters)}`);
-  if (!res.ok) throw new Error('Failed to load options');
-  return res.json();
+  return listWholeGraph<MissionOption>('options', filters, 'Failed to load options');
 }
 
 export async function listMissionRoutes(
@@ -228,19 +264,20 @@ export async function listMissionRoutes(
     needs_rewrite?: boolean;
   } = {}
 ): Promise<PaginatedResponse<MissionOptionRoute>> {
-  const res = await apiFetch(`${BASE_URL}/routes/${buildQueryString(filters)}`);
-  if (!res.ok) throw new Error('Failed to load routes');
-  return res.json();
+  return listWholeGraph<MissionOptionRoute>('routes', filters, 'Failed to load routes');
 }
 
 export async function listRouteCandidates(
   filters: {
     route?: number;
+    template?: number;
   } = {}
 ): Promise<PaginatedResponse<MissionOptionRouteCandidate>> {
-  const res = await apiFetch(`${BASE_URL}/route-candidates/${buildQueryString(filters)}`);
-  if (!res.ok) throw new Error('Failed to load candidates');
-  return res.json();
+  return listWholeGraph<MissionOptionRouteCandidate>(
+    'route-candidates',
+    filters,
+    'Failed to load candidates'
+  );
 }
 
 export async function listRouteRewards(
@@ -257,6 +294,95 @@ export async function listRouteRewards(
 // NPC-mediated mission-giver editor moved to the npc-services framework
 // per #686 (Phase 3). NPCRole + NPCServiceOffer + MissionOfferDetails now
 // own that surface; a dedicated /api/npc-services/ editor is the follow-up.
+
+// ---------------------------------------------------------------------------
+// Graph authoring (#4558): create / delete nodes, options, routes
+// ---------------------------------------------------------------------------
+
+export async function createMissionNode(body: {
+  template: number;
+  key: string;
+  is_entry?: boolean;
+  conflict_mode: MissionNode['conflict_mode'];
+}): Promise<MissionNode> {
+  const res = await apiFetch(`${BASE_URL}/nodes/`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwServerError(res, 'Failed to add node');
+  return res.json();
+}
+
+export async function deleteMissionNode(id: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/nodes/${id}/`, { method: 'DELETE' });
+  if (!res.ok) await throwServerError(res, 'Failed to delete node');
+}
+
+export async function createMissionOption(body: {
+  node: number;
+  key: string;
+  option_kind: OptionKind;
+  order: number;
+  source_kind?: 'authored';
+}): Promise<MissionOption> {
+  const res = await apiFetch(`${BASE_URL}/options/`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwServerError(res, 'Failed to add option');
+  return res.json();
+}
+
+export async function deleteMissionOption(id: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/options/${id}/`, { method: 'DELETE' });
+  if (!res.ok) await throwServerError(res, 'Failed to delete option');
+}
+
+export async function createMissionRoute(
+  body: Partial<MissionOptionRoute> & { option: number }
+): Promise<MissionOptionRoute> {
+  const res = await apiFetch(`${BASE_URL}/routes/`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwServerError(res, 'Failed to add route');
+  return res.json();
+}
+
+export async function patchMissionRoute(
+  id: number,
+  body: Partial<MissionOptionRoute>
+): Promise<MissionOptionRoute> {
+  const res = await apiFetch(`${BASE_URL}/routes/${id}/`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwServerError(res, 'Failed to update route');
+  return res.json();
+}
+
+export async function deleteMissionRoute(id: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/routes/${id}/`, { method: 'DELETE' });
+  if (!res.ok) await throwServerError(res, 'Failed to delete route');
+}
+
+export async function getGraphCheck(templateId: number): Promise<GraphProblem[]> {
+  const res = await apiFetch(`${BASE_URL}/templates/${templateId}/graph-check/`);
+  if (!res.ok) await throwServerError(res, 'Failed to check the mission graph');
+  const data = (await res.json()) as { problems: GraphProblem[] };
+  return data.problems;
+}
+
+export async function listOutcomeTiers(): Promise<OutcomeTier[]> {
+  return fetchAllPages<OutcomeTier>(
+    `${BASE_URL}/outcome-tiers/?page_size=200`,
+    'Failed to load outcome tiers'
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Copy actions (D4.2)
@@ -287,7 +413,7 @@ export async function copyNode(id: number, body: { new_key: string }): Promise<M
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to copy node');
+  if (!res.ok) await throwServerError(res, 'Failed to copy node');
   return res.json();
 }
 
@@ -300,7 +426,7 @@ export async function copySubtree(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to copy subtree');
+  if (!res.ok) await throwServerError(res, 'Failed to copy subtree');
   return res.json();
 }
 

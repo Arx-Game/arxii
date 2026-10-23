@@ -6,11 +6,11 @@
  * pattern.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MissionNode } from '../types';
 
@@ -20,6 +20,18 @@ vi.mock('../api', () => ({
   listMissionNodes: vi.fn(),
   listMissionOptions: vi.fn(),
   patchMissionNode: vi.fn(),
+  listMissionRoutes: vi.fn(),
+  listRouteCandidates: vi.fn(),
+  getGraphCheck: vi.fn(),
+  listOutcomeTiers: vi.fn(),
+  createMissionOption: vi.fn(),
+  deleteMissionNode: vi.fn(),
+  copyNode: vi.fn(),
+  copySubtree: vi.fn(),
+}));
+
+vi.mock('@/gm-adjudication/queries', () => ({
+  useCheckTypeCatalog: () => ({ data: [{ id: 7, name: 'Wrestling' }] }),
 }));
 
 import * as api from '../api';
@@ -55,6 +67,13 @@ const OTHER_NODE: MissionNode = {
   key: 'aftermath',
 };
 
+function Where() {
+  return <div data-testid="where">{useLocation().pathname}</div>;
+}
+
+const page = (results: unknown[]) =>
+  ({ count: results.length, next: null, previous: null, results }) as never;
+
 function makeWrapper(initialPath: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return ({ children }: { children: ReactNode }) => (
@@ -62,11 +81,17 @@ function makeWrapper(initialPath: string) {
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/staff/missions/:id/nodes/:nodeId" element={children} />
+          <Route path="*" element={<Where />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
   );
 }
+
+afterEach(() => {
+  // A dialog unmounted by navigation can leave Radix's body lock behind.
+  document.body.style.pointerEvents = '';
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -89,6 +114,12 @@ beforeEach(() => {
     results: [TRACK_NODE, OTHER_NODE],
   });
   vi.mocked(api.patchMissionNode).mockResolvedValue(TRACK_NODE);
+  vi.mocked(api.listMissionRoutes).mockResolvedValue(page([]));
+  vi.mocked(api.listRouteCandidates).mockResolvedValue(page([]));
+  vi.mocked(api.getGraphCheck).mockResolvedValue([]);
+  vi.mocked(api.listOutcomeTiers).mockResolvedValue([
+    { id: 2, name: 'Success', success_level: 1, rolled_by_checks: true },
+  ]);
 });
 
 describe('NodePage progress track', () => {
@@ -143,5 +174,174 @@ describe('NodePage progress track', () => {
         track_failure_beat_outcome: '',
       })
     );
+  });
+});
+
+const OPT = (over: Record<string, unknown>) => ({
+  id: 20,
+  node: 5,
+  order: 1,
+  key: 'dig',
+  option_kind: 'check',
+  source_kind: 'authored',
+  authored_ic_framing: 'Dig in',
+  branch_target: null,
+  ...over,
+});
+
+describe('NodePage graph controls', () => {
+  it('adds an option with order one past the highest existing order', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listMissionOptions).mockResolvedValue(
+      page([OPT({ id: 20, order: 1 }), OPT({ id: 21, order: 4, key: 'run' })])
+    );
+    vi.mocked(api.createMissionOption).mockResolvedValue(OPT({ id: 22, order: 5 }) as never);
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Add option' }));
+    await user.type(await screen.findByLabelText('Option key'), 'flee');
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Add option' }));
+
+    expect(api.createMissionOption).toHaveBeenCalledWith({
+      node: 5,
+      key: 'flee',
+      option_kind: 'branch',
+      order: 5,
+      source_kind: 'authored',
+    });
+    expect(await screen.findByTestId('where')).toHaveTextContent(
+      '/staff/missions/1/nodes/5/options/22'
+    );
+  });
+
+  it('posts authored_check_type for a Check option and waits for a check type', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.createMissionOption).mockResolvedValue(OPT({ id: 22, order: 1 }) as never);
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Add option' }));
+    await user.type(await screen.findByLabelText('Option key'), 'dig');
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByLabelText('Option kind'));
+    await user.click(screen.getByRole('option', { name: 'Check' }));
+
+    const submit = within(dialog).getByRole('button', { name: 'Add option' });
+    expect(submit).toBeDisabled();
+    await user.click(within(dialog).getByLabelText('Check type'));
+    await user.click(screen.getByRole('option', { name: 'Wrestling' }));
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    expect(api.createMissionOption).toHaveBeenCalledWith({
+      node: 5,
+      key: 'dig',
+      option_kind: 'check',
+      order: 1,
+      source_kind: 'authored',
+      authored_check_type: 7,
+    });
+  });
+
+  it('offers only Branch, Check and Contest on a track node', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.getMissionNode).mockResolvedValue({ ...TRACK_NODE, track_successes: 3 });
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Add option' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByLabelText('Option kind'));
+    const names = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(names).toEqual(['Branch', 'Check', 'Contest']);
+    await user.keyboard('{Escape}');
+    await user.keyboard('{Escape}');
+  });
+
+  it('offers only Technique Cast as the act off the entry node', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.getMissionNode).mockResolvedValue({ ...TRACK_NODE, is_entry: false });
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Add option' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByLabelText('Option kind'));
+    await user.click(screen.getByRole('option', { name: 'External act' }));
+    await user.click(within(dialog).getByLabelText('Act'));
+    const names = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(names).toEqual(['Technique Cast']);
+    await user.keyboard('{Escape}');
+    await user.keyboard('{Escape}');
+  });
+
+  it('marks an option the graph check has a problem with', async () => {
+    vi.mocked(api.listMissionOptions).mockResolvedValue(page([OPT({ id: 20 })]));
+    vi.mocked(api.getGraphCheck).mockResolvedValue([
+      { kind: 'missing_tiers', message: 'x', node: 5, option: 20, route: null, missing_tiers: [] },
+    ] as never);
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+    expect(await screen.findByLabelText('Has a problem')).toBeInTheDocument();
+  });
+
+  it('lists an incoming route in the delete confirmation', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listMissionNodes).mockResolvedValue(page([TRACK_NODE, OTHER_NODE]));
+    vi.mocked(api.listMissionOptions).mockImplementation((async (f: { node?: number }) =>
+      f.node ? page([]) : page([OPT({ id: 30, node: 6, key: 'knock' })])) as never);
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(
+      page([{ id: 40, option: 30, target_node: 5, outcome_tier: 2 }])
+    );
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Delete node' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('aftermath: knock · Success')).toBeInTheDocument();
+    expect(within(dialog).getByText('These will become a mission ending')).toBeInTheDocument();
+  });
+
+  it('shows the server message when the delete is refused', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.deleteMissionNode).mockRejectedValue(
+      new Error('A mission run has used this node, so it cannot be deleted.')
+    );
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Delete node' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete node' }));
+    expect(
+      await within(dialog).findByText('A mission run has used this node, so it cannot be deleted.')
+    ).toBeInTheDocument();
+  });
+
+  it('copies the node and opens the copy', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.copyNode).mockResolvedValue({ ...OTHER_NODE, id: 77, key: 'siege-2' });
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Copy node' }));
+    await user.type(await screen.findByLabelText('New node key'), 'siege-2');
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Copy node' }));
+
+    expect(api.copyNode).toHaveBeenCalledWith(5, { new_key: 'siege-2' });
+    await vi.waitFor(() => expect(api.getMissionNode).toHaveBeenCalledWith(77));
+  });
+
+  it('copies the node and everything after it with a key prefix', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.copySubtree).mockResolvedValue({ ...OTHER_NODE, id: 88, key: 'b-siege' });
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Copy node and everything after it' })
+    );
+    await user.type(await screen.findByLabelText('Key prefix'), 'b-');
+    const dialog = screen.getByRole('dialog');
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Copy node and everything after it' })
+    );
+
+    expect(api.copySubtree).toHaveBeenCalledWith(5, { new_key_prefix: 'b-' });
+    await vi.waitFor(() => expect(api.getMissionNode).toHaveBeenCalledWith(88));
   });
 });

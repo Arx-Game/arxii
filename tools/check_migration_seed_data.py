@@ -76,6 +76,12 @@ ALLOWED_MIGRATIONS: set[str] = {
     # creature template's drives live; the snapshot now lives on each opponent's
     # object as ObjectProperty rows. It stamps the template's own CreatureDrive
     # rows onto those opponents; nothing authored is invented or overwritten.
+    # #4593: the owner's explicit ruling on #4551 (decision 9, "since there's no LLM
+    # prose, it's pure numbers"). Repairs the existing result charts' numeric bands and
+    # adds charts -7 and -8, two ResultChart rows of example odds with placeholder names
+    # for the owner to author. Numeric configuration only; no prose is invented, and a
+    # fresh database gets the same rows from world.seeds.checks instead.
+    "world/migrations/0284_monotonic_result_charts_and_deeper_charts.py",
 }
 
 # Patterns that suggest seed data in migrations

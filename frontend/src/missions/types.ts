@@ -25,6 +25,12 @@ export type MissionInstance = components['schemas']['MissionInstance'];
 export type MissionGiver = components['schemas']['MissionGiver'];
 export type MissionGiverRequest = components['schemas']['MissionGiverRequest'];
 
+export type OptionKind = components['schemas']['OptionKindEnum'];
+
+// #4558 graph authoring.
+export type GraphProblem = components['schemas']['GraphProblem'];
+export type OutcomeTier = components['schemas']['OutcomeTier'];
+
 export type MissionVisibility = components['schemas']['MissionVisibilityEnum'];
 
 // #885 player journal/beat surface.

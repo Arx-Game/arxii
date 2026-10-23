@@ -5,10 +5,10 @@
  * all). Mirrors DrillDownPageErrorCards.test.tsx's api-mocking pattern.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MissionOption } from '../types';
@@ -19,6 +19,13 @@ vi.mock('../api', () => ({
   listMissionRoutes: vi.fn(),
   listPredicateLeaves: vi.fn(),
   patchMissionOption: vi.fn(),
+  listMissionNodes: vi.fn(),
+  listOutcomeTiers: vi.fn(),
+  getGraphCheck: vi.fn(),
+  createMissionRoute: vi.fn(),
+  patchMissionRoute: vi.fn(),
+  deleteMissionRoute: vi.fn(),
+  deleteMissionOption: vi.fn(),
 }));
 
 vi.mock('@/gm-adjudication/queries', () => ({
@@ -61,6 +68,32 @@ const CONTEST_OPTION: MissionOption = {
   opposition_check_type: null,
 } as MissionOption;
 
+function Where() {
+  return <div data-testid="where">{useLocation().pathname}</div>;
+}
+
+const page = (results: unknown[]) =>
+  ({ count: results.length, next: null, previous: null, results }) as never;
+
+const TIERS = [
+  { id: 1, name: 'Failure', success_level: -1, rolled_by_checks: true },
+  { id: 2, name: 'Success', success_level: 1, rolled_by_checks: true },
+  { id: 3, name: 'Critical Success', success_level: 2, rolled_by_checks: true },
+];
+const NODES = [
+  { id: 5, key: 'gate' },
+  { id: 6, key: 'courtyard' },
+];
+const ROUTE = {
+  id: 50,
+  option: 9,
+  outcome_tier: 2,
+  target_node: 6,
+  is_random_set: false,
+  outcome_text: '',
+  beat_outcome: '',
+};
+
 function makeWrapper(initialPath: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return ({ children }: { children: ReactNode }) => (
@@ -68,6 +101,7 @@ function makeWrapper(initialPath: string) {
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/staff/missions/:id/nodes/:nodeId/options/:optionId" element={children} />
+          <Route path="*" element={<Where />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -90,6 +124,9 @@ beforeEach(() => {
   });
   vi.mocked(api.listPredicateLeaves).mockResolvedValue([]);
   vi.mocked(api.patchMissionOption).mockResolvedValue(CONTEST_OPTION);
+  vi.mocked(api.listMissionNodes).mockResolvedValue(page(NODES));
+  vi.mocked(api.listOutcomeTiers).mockResolvedValue(TIERS as never);
+  vi.mocked(api.getGraphCheck).mockResolvedValue([]);
 });
 
 describe('OptionPage CONTEST fields', () => {
@@ -143,6 +180,41 @@ describe('OptionPage CONTEST fields', () => {
   });
 });
 
+describe('OptionPage external act', () => {
+  it('shows Act for an EXTERNAL_ACT option and saves required_act', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.getMissionOption).mockResolvedValue({
+      ...CONTEST_OPTION,
+      option_kind: 'external_act',
+      authored_check_type: null,
+    } as MissionOption);
+    render(<OptionPage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5/options/9') });
+
+    await user.click(await screen.findByLabelText('Act'));
+    await user.click(screen.getByRole('option', { name: 'Thread Woven' }));
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+    expect(api.patchMissionOption).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ required_act: 'thread_woven' })
+    );
+  });
+
+  it('sends an empty act for any other kind', async () => {
+    const user = userEvent.setup();
+    render(<OptionPage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5/options/9') });
+
+    const order = await screen.findByLabelText('Order');
+    expect(screen.queryByLabelText('Act')).toBeNull();
+    await user.type(order, '2');
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+    expect(api.patchMissionOption).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ required_act: '' })
+    );
+  });
+});
+
 describe('OptionPage opens_as_standoff', () => {
   it('shows the toggle for an ENCOUNTER option and saves it', async () => {
     const user = userEvent.setup();
@@ -167,5 +239,177 @@ describe('OptionPage opens_as_standoff', () => {
 
     await screen.findByText('Option settings');
     expect(screen.queryByLabelText('Opens as a standoff')).toBeNull();
+  });
+});
+
+describe('OptionPage route editor', () => {
+  const url = '/staff/missions/1/nodes/5/options/9';
+
+  it('shows each route with tier and destination by name', async () => {
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([ROUTE]));
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    const row = await screen.findByTestId('route-row');
+    expect(within(row).getByLabelText('Outcome tier')).toHaveTextContent('Success');
+    expect(within(row).getByLabelText('Leads to')).toHaveTextContent('courtyard');
+  });
+
+  it('saves Mission ends as a null target', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([ROUTE]));
+    vi.mocked(api.patchMissionRoute).mockResolvedValue(ROUTE as never);
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    const row = await screen.findByTestId('route-row');
+    await user.click(within(row).getByLabelText('Leads to'));
+    await user.click(screen.getByRole('option', { name: 'Mission ends' }));
+    await user.click(within(row).getByRole('button', { name: 'Save route' }));
+    expect(api.patchMissionRoute).toHaveBeenCalledWith(
+      50,
+      expect.objectContaining({ target_node: null, outcome_tier: 2, beat_outcome: '' })
+    );
+  });
+
+  it('leaves a random route target alone when saving', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([ROUTE]));
+    vi.mocked(api.patchMissionRoute).mockResolvedValue(ROUTE as never);
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    const row = await screen.findByTestId('route-row');
+    await user.click(within(row).getByLabelText('Random set'));
+    await user.click(within(row).getByRole('button', { name: 'Save route' }));
+    const body = vi.mocked(api.patchMissionRoute).mock.calls[0][1];
+    expect(body).toMatchObject({ is_random_set: true });
+    expect(body).not.toHaveProperty('target_node');
+  });
+
+  it('shows the server message on the row', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([ROUTE]));
+    vi.mocked(api.patchMissionRoute).mockRejectedValue(new Error('A check route may not lead on.'));
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    const row = await screen.findByTestId('route-row');
+    await user.click(within(row).getByLabelText('Random set'));
+    await user.click(within(row).getByRole('button', { name: 'Save route' }));
+    expect(await within(row).findByText('A check route may not lead on.')).toBeInTheDocument();
+  });
+
+  it('adds a route with the first tier that has none', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([ROUTE]));
+    vi.mocked(api.createMissionRoute).mockResolvedValue(ROUTE as never);
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    expect(api.createMissionRoute).toHaveBeenCalledWith({
+      option: 9,
+      outcome_tier: 1,
+      target_node: null,
+    });
+  });
+
+  it('offers only tiers a result chart names when adding a route to a check', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listOutcomeTiers).mockResolvedValue([
+      { id: 4, name: 'Mapped Only', success_level: -3, rolled_by_checks: false },
+      ...TIERS,
+    ] as never);
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([]));
+    vi.mocked(api.createMissionRoute).mockResolvedValue(ROUTE as never);
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    expect(api.createMissionRoute).toHaveBeenCalledWith({
+      option: 9,
+      outcome_tier: 1,
+      target_node: null,
+    });
+  });
+
+  it('hides the destination and beat outcome for a check route on a track node', async () => {
+    vi.mocked(api.listMissionNodes).mockResolvedValue(
+      page([{ id: 5, key: 'gate', track_successes: 2, track_failures: 2 }, NODES[1]])
+    );
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([{ ...ROUTE, target_node: null }]));
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    const row = await screen.findByTestId('route-row');
+    expect(within(row).queryByLabelText('Leads to')).toBeNull();
+    expect(within(row).queryByLabelText('Beat outcome')).toBeNull();
+    expect(within(row).getByLabelText('Outcome tier')).toBeInTheDocument();
+  });
+
+  it('refreshes the graph check after the option settings save', async () => {
+    const user = userEvent.setup();
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    await screen.findByLabelText('Check type');
+    const before = vi.mocked(api.getGraphCheck).mock.calls.length;
+    await user.type(screen.getByLabelText('IC framing'), 'x');
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+    await vi.waitFor(() =>
+      expect(vi.mocked(api.getGraphCheck).mock.calls.length).toBeGreaterThan(before)
+    );
+  });
+
+  it('hides Add route for a branch option that already has its route', async () => {
+    vi.mocked(api.getMissionOption).mockResolvedValue({
+      ...CONTEST_OPTION,
+      option_kind: 'branch',
+    });
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([{ ...ROUTE, outcome_tier: null }]));
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    await screen.findByTestId('route-row');
+    expect(screen.queryByRole('button', { name: 'Add route' })).toBeNull();
+  });
+
+  it('adds the missing tiers one route each', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([]));
+    vi.mocked(api.getGraphCheck).mockResolvedValue([
+      {
+        kind: 'missing_tiers',
+        message: 'x',
+        node: 5,
+        option: 9,
+        route: null,
+        missing_tiers: ['Failure', 'Critical Success'],
+      },
+    ] as never);
+    vi.mocked(api.createMissionRoute).mockResolvedValue(ROUTE as never);
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    await user.click(await screen.findByRole('button', { name: 'Add the missing tiers' }));
+    await vi.waitFor(() => expect(api.createMissionRoute).toHaveBeenCalledTimes(2));
+    expect(api.createMissionRoute).toHaveBeenNthCalledWith(1, {
+      option: 9,
+      outcome_tier: 1,
+      target_node: null,
+    });
+    expect(api.createMissionRoute).toHaveBeenNthCalledWith(2, {
+      option: 9,
+      outcome_tier: 3,
+      target_node: null,
+    });
+  });
+
+  it('deletes the option and returns to the node page', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.deleteMissionOption).mockResolvedValue(undefined);
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    await user.click(await screen.findByRole('button', { name: 'Delete option' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete option' }));
+    expect(await screen.findByTestId('where')).toHaveTextContent('/staff/missions/1/nodes/5');
+    expect(api.deleteMissionOption).toHaveBeenCalledWith(9);
+  });
+
+  it('shows the server message when the option delete is refused', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.deleteMissionOption).mockRejectedValue(
+      new Error('A mission run has used this option, so it cannot be deleted.')
+    );
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    await user.click(await screen.findByRole('button', { name: 'Delete option' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete option' }));
+    expect(
+      await within(dialog).findByText(
+        'A mission run has used this option, so it cannot be deleted.'
+      )
+    ).toBeInTheDocument();
   });
 });

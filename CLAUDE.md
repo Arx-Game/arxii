@@ -301,6 +301,19 @@ exceptions. File only for something substantial enough to need its own PR
 human call), with the reason stated in the issue body. Overrides any skill step
 that says to file a follow-up — see `issue-to-merged-pr`'s SKILL.md for detail.
 
+**Ask before filing a new capability.** Sort every candidate filing first. A
+**bug** is something built that behaves wrongly, or an authored field or row
+the code ignores: the field existing shows the intent, so file it after the
+`verify-against-code` check. A **new capability** is something nothing in the
+game promises yet, the shape an audit produces as "X can't happen" or "NPCs
+have it, PCs don't". An absence can be deliberate and only the maintainer
+knows which, so ask first, in one plain sentence phrased as the feature
+("Should player characters get haste effects that grant extra actions?"), and
+file only on a yes. Subagents and workflows never file a new capability; they
+return it to their coordinator as a question. #4574 (a PC acting twice in a
+round) was filed from an audit, passed every code check, and was an
+anti-feature (ADR-0003).
+
 ## Reviewer Agents — every production defect gets one
 
 **When a defect reaches `main` or production, the fix PR also adds a reviewer agent

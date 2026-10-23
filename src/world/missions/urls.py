@@ -15,6 +15,7 @@ from world.missions.views import (
     MissionOptionRouteViewSet,
     MissionOptionViewSet,
     MissionTemplateViewSet,
+    OutcomeTierViewSet,
     PredicateLeafCatalogViewSet,
 )
 
@@ -47,6 +48,8 @@ router.register(r"givers", MissionGiverViewSet, basename="mission-giver")
 router.register(r"instances", MissionInstanceViewSet, basename="mission-instance")
 # D4 category browse (read-only; drives the category multi-select in Mission Studio).
 router.register(r"categories", MissionCategoryViewSet, basename="missioncategory")
+# #4558 outcome tiers a route can key on (read-only; drives the route tier picker).
+router.register(r"outcome-tiers", OutcomeTierViewSet, basename="mission-outcome-tier")
 # D5 predicate-leaf catalog (read-only; drives the Studio builder palette).
 router.register(r"predicate-leaves", PredicateLeafCatalogViewSet, basename="mission-predicate-leaf")
 # #885 player journal/beat surface — the one PLAYER-scoped missions API.

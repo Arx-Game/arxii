@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.db.models import Sum
 
-from world.missions.constants import ConflictMode, JointCombine
+from world.missions.constants import SUCCESS_TIER_LEVEL, ConflictMode, JointCombine
 from world.missions.models import MissionOptionRoute
 from world.missions.services.resolution import (
     _current_room_profile,
@@ -66,15 +66,6 @@ if TYPE_CHECKING:
         MissionParticipant,
     )
     from world.missions.types import PresentedOption
-
-# Established success-tier threshold. The codebase classifies a check
-# outcome's tier by ``CheckOutcome.success_level`` (see
-# ``world.conditions.services._SUCCESS_LEVEL`` = 1, mirrored by
-# ``vitals``/``combat``): success_level >= 1 is a clear success, 0 is
-# partial, < 0 is failure. A JOINT attempt "succeeded" iff its deed's
-# resolved outcome is at this success tier. A BRANCH attempt (deed.outcome
-# is None — no dice) is NOT a dice success.
-_SUCCESS_LEVEL = 1
 
 
 def _banked_easing_for_node(instance: MissionInstance, node: MissionNode) -> int:
@@ -384,8 +375,8 @@ def _combined_route(
         )
         raise ValueError(msg)
 
-    success_routes = [r for r in routes if int(r.outcome_tier.success_level) >= _SUCCESS_LEVEL]
-    fail_routes = [r for r in routes if int(r.outcome_tier.success_level) < _SUCCESS_LEVEL]
+    success_routes = [r for r in routes if int(r.outcome_tier.success_level) >= SUCCESS_TIER_LEVEL]
+    fail_routes = [r for r in routes if int(r.outcome_tier.success_level) < SUCCESS_TIER_LEVEL]
     pool = success_routes if combined_success else fail_routes
     if not pool:
         msg = (

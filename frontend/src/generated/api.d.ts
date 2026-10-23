@@ -17351,6 +17351,29 @@ export interface paths {
     patch: operations['missions_options_partial_update'];
     trace?: never;
   };
+  '/api/missions/outcome-tiers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The check outcome tiers a route can key on, worst to best (#4558).
+     *
+     *     Only tiers a result chart or an encounter outcome mapping actually names
+     *     are listed; a tier nothing can ever roll would be a route that never fires.
+     *     Same audience as the category browse: staff or any GM.
+     */
+    get: operations['missions_outcome_tiers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/predicate-leaves/': {
     parameters: {
       query?: never;
@@ -17716,6 +17739,28 @@ export interface paths {
      *     flavor fields are flagged ``needs_rewrite``.
      */
     post: operations['missions_templates_copy_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/templates/{id}/graph-check/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description What is wrong with this mission's graph (#4558); warns, never blocks a save.
+     *
+     *     Scoped exactly like template retrieve: ``get_object`` applies the
+     *     caller's queryset scope and object permission.
+     */
+    get: operations['missions_templates_graph_check_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -35147,6 +35192,19 @@ export interface components {
       readonly content: string;
       readonly heat: number;
     };
+    /** @description Response shape of ``GET templates/<pk>/graph-check/``. */
+    GraphCheck: {
+      problems: components['schemas']['GraphProblem'][];
+    };
+    /** @description One graph-check problem; ``node``/``option``/``route`` are ids or null. */
+    GraphProblem: {
+      kind: string;
+      message: string;
+      node: number | null;
+      option: number | null;
+      route: number | null;
+      missing_tiers: string[];
+    };
     /** @description A preset grievance swing offered to a wronged character (#1429). */
     GrievanceOption: {
       readonly id: number;
@@ -37918,6 +37976,14 @@ export interface components {
       /** @description The character this sheet belongs to */
       opposition_sheet?: number | null;
       opposition_check_type?: number | null;
+      /**
+       * @description EXTERNAL_ACT options only: the non-mission act (cast/weave/covenant) that resolves this option (#1035). Blank for BRANCH/CHECK options.
+       *
+       *     * `technique_cast` - Technique Cast
+       *     * `thread_woven` - Thread Woven
+       *     * `covenant_sworn` - Covenant Sworn
+       */
+      required_act?: components['schemas']['RequiredActEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description One authored opponent line on an ENCOUNTER option (#3565).
@@ -38045,6 +38111,14 @@ export interface components {
       /** @description The character this sheet belongs to */
       opposition_sheet?: number | null;
       opposition_check_type?: number | null;
+      /**
+       * @description EXTERNAL_ACT options only: the non-mission act (cast/weave/covenant) that resolves this option (#1035). Blank for BRANCH/CHECK options.
+       *
+       *     * `technique_cast` - Technique Cast
+       *     * `thread_woven` - Thread Woven
+       *     * `covenant_sworn` - Covenant Sworn
+       */
+      required_act?: components['schemas']['RequiredActEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
@@ -40266,6 +40340,20 @@ export interface components {
       weight: number;
       is_selected: boolean;
     };
+    /**
+     * @description A check outcome tier an authored route can key on (read-only, #4558).
+     *
+     *     ``rolled_by_checks`` is true when a result chart names the tier, so a CHECK or
+     *     CONTEST roll can land on it; a tier only an encounter mapping names is false.
+     */
+    OutcomeTier: {
+      readonly id: number;
+      /** @description Outcome name (e.g., 'Success', 'Catastrophic Failure') */
+      readonly name: string;
+      /** @description Numeric success level (-10 worst failure to +10 best success) */
+      readonly success_level: number;
+      readonly rolled_by_checks: boolean;
+    };
     /** @description Read serializer for Outfit — nests slot rows. */
     OutfitRead: {
       readonly id: number;
@@ -42299,6 +42387,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['OrganizationSearch'][];
+    };
+    PaginatedOutcomeTierList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OutcomeTier'][];
     };
     PaginatedOutfitReadList: {
       count: number;
@@ -44755,6 +44858,14 @@ export interface components {
       /** @description The character this sheet belongs to */
       opposition_sheet?: number | null;
       opposition_check_type?: number | null;
+      /**
+       * @description EXTERNAL_ACT options only: the non-mission act (cast/weave/covenant) that resolves this option (#1035). Blank for BRANCH/CHECK options.
+       *
+       *     * `technique_cast` - Technique Cast
+       *     * `thread_woven` - Thread Woven
+       *     * `covenant_sworn` - Covenant Sworn
+       */
+      required_act?: components['schemas']['RequiredActEnum'] | components['schemas']['BlankEnum'];
     };
     /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
     PatchedMissionOptionRouteCandidateRequest: {
@@ -48188,6 +48299,13 @@ export interface components {
       points: number;
       where: string;
     };
+    /**
+     * @description * `technique_cast` - Technique Cast
+     *     * `thread_woven` - Thread Woven
+     *     * `covenant_sworn` - Covenant Sworn
+     * @enum {string}
+     */
+    RequiredActEnum: 'technique_cast' | 'thread_woven' | 'covenant_sworn';
     /**
      * @description * `unsatisfied` - Unsatisfied
      *     * `success` - Success
@@ -77214,6 +77332,31 @@ export interface operations {
       };
     };
   };
+  missions_outcome_tiers_list: {
+    parameters: {
+      query?: {
+        name?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOutcomeTierList'];
+        };
+      };
+    };
+  };
   missions_predicate_leaves_list: {
     parameters: {
       query?: never;
@@ -77883,6 +78026,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['MissionTemplate'];
+        };
+      };
+    };
+  };
+  missions_templates_graph_check_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this mission template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GraphCheck'];
         };
       };
     };
