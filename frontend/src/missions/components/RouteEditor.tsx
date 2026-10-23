@@ -94,7 +94,11 @@ function RouteRow({ route, tiers, nodes }: RouteRowProps) {
         id: route.id,
         body: {
           outcome_tier: draft.tier === NONE ? null : Number(draft.tier),
-          target_node: draft.target === ENDS || draft.random ? null : Number(draft.target),
+          // A random route draws its destination from candidates, so its own target is
+          // left as it stands rather than wiped on an unrelated edit.
+          ...(draft.random
+            ? {}
+            : { target_node: draft.target === ENDS ? null : Number(draft.target) }),
           is_random_set: draft.random,
           outcome_text: draft.text,
           beat_outcome: beat,
@@ -136,7 +140,11 @@ function RouteRow({ route, tiers, nodes }: RouteRowProps) {
         </div>
         <div className="space-y-1">
           <Label htmlFor={`${rowId}-target`}>Leads to</Label>
-          <Select value={draft.target} onValueChange={(v) => setDraft({ ...draft, target: v })}>
+          <Select
+            value={draft.target}
+            onValueChange={(v) => setDraft({ ...draft, target: v })}
+            disabled={draft.random}
+          >
             <SelectTrigger id={`${rowId}-target`}>
               <SelectValue />
             </SelectTrigger>
@@ -208,7 +216,7 @@ function RouteRow({ route, tiers, nodes }: RouteRowProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete route</DialogTitle>
-            <DialogDescription>Delete this route from the option?</DialogDescription>
+            <DialogDescription>This removes the route from the option.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>
@@ -236,15 +244,19 @@ interface RouteEditorProps {
 
 export function RouteEditor({ option, routes, nodes, tiers, missingTierNames }: RouteEditorProps) {
   const [error, setError] = useState<string | null>(null);
+  // Held for the whole of a multi-route add, so a second click cannot start a second loop.
+  const [adding, setAdding] = useState(false);
   const create = useCreateMissionRoute();
   const orderedTiers = [...tiers].sort((a, b) => a.success_level - b.success_level);
   const tierless = option.option_kind === 'branch' || option.option_kind === 'external_act';
-  const canAdd = !(tierless && routes.length > 0);
+  const used = new Set(routes.map((r) => r.outcome_tier));
+  const nextTier = orderedTiers.find((t) => !used.has(t.id));
+  const canAdd = tierless ? routes.length === 0 : nextTier !== undefined;
+  const busy = adding || create.isPending;
 
   const onAdd = async () => {
     setError(null);
-    const used = new Set(routes.map((r) => r.outcome_tier));
-    const tier = tierless ? null : (orderedTiers.find((t) => !used.has(t.id)) ?? orderedTiers[0]);
+    const tier = tierless ? null : nextTier;
     try {
       await create.mutateAsync({
         option: option.id,
@@ -258,6 +270,7 @@ export function RouteEditor({ option, routes, nodes, tiers, missingTierNames }: 
 
   const onAddMissing = async () => {
     setError(null);
+    setAdding(true);
     try {
       for (const name of missingTierNames) {
         const tier = tiers.find((t) => t.name === name);
@@ -266,15 +279,15 @@ export function RouteEditor({ option, routes, nodes, tiers, missingTierNames }: 
       }
     } catch (e) {
       setError(errorText(e, 'Failed to add the missing tiers'));
+    } finally {
+      setAdding(false);
     }
   };
 
   return (
     <div className="space-y-3" data-testid="option-routes-list">
       {routes.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
-          {tierless ? 'No routes, so this option ends the mission.' : 'No routes yet.'}
-        </div>
+        <div className="text-sm text-muted-foreground">No routes yet.</div>
       ) : (
         routes.map((r) => (
           <RouteRow
@@ -292,12 +305,12 @@ export function RouteEditor({ option, routes, nodes, tiers, missingTierNames }: 
       ) : null}
       <div className="flex flex-wrap gap-2">
         {canAdd ? (
-          <Button type="button" variant="outline" onClick={onAdd} disabled={create.isPending}>
+          <Button type="button" variant="outline" onClick={onAdd} disabled={busy}>
             Add route
           </Button>
         ) : null}
         {missingTierNames.length > 0 ? (
-          <Button type="button" onClick={onAddMissing} disabled={create.isPending}>
+          <Button type="button" onClick={onAddMissing} disabled={busy}>
             Add the missing tiers
           </Button>
         ) : null}

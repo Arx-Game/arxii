@@ -233,6 +233,19 @@ describe('OptionPage route editor', () => {
     );
   });
 
+  it('leaves a random route target alone when saving', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listMissionRoutes).mockResolvedValue(page([ROUTE]));
+    vi.mocked(api.patchMissionRoute).mockResolvedValue(ROUTE as never);
+    render(<OptionPage />, { wrapper: makeWrapper(url) });
+    const row = await screen.findByTestId('route-row');
+    await user.click(within(row).getByLabelText('Random set'));
+    await user.click(within(row).getByRole('button', { name: 'Save route' }));
+    const body = vi.mocked(api.patchMissionRoute).mock.calls[0][1];
+    expect(body).toMatchObject({ is_random_set: true });
+    expect(body).not.toHaveProperty('target_node');
+  });
+
   it('shows the server message on the row', async () => {
     const user = userEvent.setup();
     vi.mocked(api.listMissionRoutes).mockResolvedValue(page([ROUTE]));
