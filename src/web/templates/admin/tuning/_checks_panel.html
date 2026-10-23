@@ -283,7 +283,7 @@
 
 <h3>{% translate "Modifier pile" %}</h3>
 <p>
-  {% translate "Equal buffs valued by the modifier value table and tapered as condition modifiers, on a character whose own total is the level baseline, against a target at that same baseline. Odds use whole rank differences until the slide lands." %}
+  {% translate "Equal buffs valued by the modifier value table and tapered as condition modifiers, on a character whose own total is the level baseline, against a target at that same baseline. Odds slide by band position, with the tapered pile counted as modifiers on top of own standing." %}
 </p>
 <form class="tuning-form" hx-get="{% url 'admin_tuning_checks' %}" hx-target="#panel-checks"
       hx-include="#panel-checks .tuning-form" hx-trigger="input changed delay:300ms">

@@ -344,7 +344,9 @@ class ModifierPileReport:
     The check lane's piece of the simulator: ``count`` modifiers of one level and size,
     each valued by the value table, tapered as CONDITION contributions, laid on a
     character whose own total is the level baseline, against a target at that same
-    baseline. The odds use whole rank differences until the slide lands (#4551 slice b).
+    baseline. The odds are the engine's own (#4601): the baseline is own standing and the
+    tapered pile is modifiers, so they slide by band position and a hopeless own standing
+    stays pinned however large the pile.
     """
 
     baseline: int
@@ -401,5 +403,7 @@ def compute_modifier_pile(
         rank_before=_rank_name(baseline),
         rank_after=_rank_name(baseline + tapered),
         unbuffed=compute_matchup(roller_points=baseline, target_difficulty=baseline),
-        buffed=compute_matchup(roller_points=baseline + tapered, target_difficulty=baseline),
+        buffed=compute_matchup(
+            roller_points=baseline, target_difficulty=baseline, modifier_points=tapered
+        ),
     )

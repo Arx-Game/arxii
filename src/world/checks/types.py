@@ -309,10 +309,19 @@ class ModifierBreakdown:
 
         Fatigue, strain and soulfray contributions count as own standing (#4551 decision
         7); everything else gathered here is a modifier. ``perform_check`` takes this as
-        ``extra_standing`` so the hopeless pin is decided on own standing (#4601).
+        ``extra_standing`` so the hopeless pin is decided on own standing (#4601). Counted
+        after the taper like ``extra_modifiers_total``, so own standing is exactly the total
+        less the tapered modifier pile (#4594 tapers none of these kinds by default).
         """
-        return sum(
-            c.value for c in self.contributions if c.source_kind in OWN_STANDING_SOURCE_KINDS
+        return _round_half_up(
+            sum(
+                (
+                    c.counted
+                    for c in self.counted()
+                    if c.contribution.source_kind in OWN_STANDING_SOURCE_KINDS
+                ),
+                Decimal(0),
+            )
         )
 
 
