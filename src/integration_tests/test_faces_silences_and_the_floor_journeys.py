@@ -71,6 +71,8 @@ class WearingAnotherFace(JourneyCase):
 
         told = self.telnet(self.ysmay, "persona Nobody")
         self.assertIn("No persona named 'Nobody'. Available: Ysmay, The Grey Lady.", told)
+        told = self.telnet(self.ysmay, "persona profile Nobody")
+        self.assertIn("No persona named 'Nobody'. Available: Ysmay, The Grey Lady.", told)
         self.assertIn("Usage: persona create <name>", self.telnet(self.ysmay, "persona create"))
 
         # A face is matched by name in any case; two faces apart only by case are refused.

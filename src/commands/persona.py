@@ -169,7 +169,7 @@ class CmdPersona(DispatchCommand):
         matches = list(Persona.objects.filter(character_sheet_id=sheet.pk, name__iexact=name))
         if not matches:
             available = ", ".join(
-                p.name for p in Persona.objects.filter(character_sheet_id=sheet.pk)
+                p.name for p in Persona.objects.filter(character_sheet_id=sheet.pk).order_by("pk")
             )
             self.msg(f"No persona named '{name}'. Available: {available}.")
             return None
@@ -212,7 +212,7 @@ class CmdPersona(DispatchCommand):
         )
         if not matches:
             available = ", ".join(
-                p.name for p in Persona.objects.filter(character_sheet_id=sheet.pk)
+                p.name for p in Persona.objects.filter(character_sheet_id=sheet.pk).order_by("pk")
             )
             msg = f"No persona named '{self._name}'. Available: {available}."
             raise CommandError(msg)
