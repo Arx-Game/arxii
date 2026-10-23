@@ -91,3 +91,15 @@ text line it used to send, and the inputfunc reaches the same idempotent
   not exactly one of `account.get_available_characters()`.
 
 `@ic` stays the telnet spelling and is unchanged.
+
+## Telnet framing at the Portal boundary
+
+`TELNET_PROTOCOL_CLASS` selects `server.portal.telnet.ValidatedTelnetProtocol`.
+It checks command framing before calling Evennia's receive wrapper, closes a
+connection on an unsupported command, and ignores further input while it closes.
+A warning contains no input bytes. Valid streams still use the complete Evennia
+receive path, including window-size sync and Twisted's option negotiation.
+The preflight starts from Twisted's current state on every packet; when upgrading
+Twisted, compare its framing transitions and run `server.portal.tests.test_telnet`.
+This is Portal-loaded code: a full Portal restart is required. The deploy
+fingerprint covers `src/server/portal` and `TELNET_` settings.
