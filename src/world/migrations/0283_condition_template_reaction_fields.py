@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0281_vow_added_effects")]
+    dependencies = [("arxii", "0282_damage_profile_defense_piercing")]
 
     operations = [
         migrations.AddField(

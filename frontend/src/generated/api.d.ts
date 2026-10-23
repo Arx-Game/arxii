@@ -31984,6 +31984,9 @@ export interface components {
       readonly damage_type: string | null;
       readonly base_damage: number;
       readonly uses_equipped_weapon: boolean;
+      readonly ignores_soak: boolean;
+      readonly resistance_shift: number;
+      readonly bypasses_wards: boolean;
       readonly minimum_success_level: number;
     };
     /** @description Serializer for damage types. */

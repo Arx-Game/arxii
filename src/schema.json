@@ -54281,13 +54281,25 @@ components:
         uses_equipped_weapon:
           type: boolean
           readOnly: true
+        ignores_soak:
+          type: boolean
+          readOnly: true
+        resistance_shift:
+          type: integer
+          readOnly: true
+        bypasses_wards:
+          type: boolean
+          readOnly: true
         minimum_success_level:
           type: integer
           readOnly: true
       required:
       - base_damage
+      - bypasses_wards
       - damage_type
+      - ignores_soak
       - minimum_success_level
+      - resistance_shift
       - uses_equipped_weapon
     DamageType:
       type: object

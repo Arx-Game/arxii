@@ -154,7 +154,8 @@ pushed power negative.
 
 ## 4. Penetration-vs-resistance contest
 
-When the focused opponent has a `barrier_strength > 0` (a ward), the combat resolver runs a
+Unless an effective damage profile authors `bypasses_wards`, when the focused opponent
+has a `barrier_strength > 0` (a ward), the combat resolver runs a
 **penetration check** (`perform_check` against `barrier_strength` as the difficulty) before
 damage and condition resolution.
 
@@ -166,6 +167,9 @@ unauthored ladder must never accidentally zero out a working).
 
 ```mermaid
 flowchart TD
+    BYPASS{"any effective profile<br/>bypasses_wards?"}
+    BYPASS -- yes --> NOPEN
+    BYPASS -- no --> START
     START{"focused opponent has<br/>barrier_strength &gt; 0?"}
     START -- no --> NOPEN["no PENETRATION entry<br/>power unchanged"]
     START -- yes --> CHECK["perform_check vs barrier_strength<br/>(difficulty = ward, + pen modifiers)"]
@@ -179,6 +183,11 @@ flowchart TD
     FO --> SOAK
     NOPEN --> SOAK
 ```
+
+`bypasses_wards` skips the contest for the whole technique, including conditions
+and ordinary damage rows, while preserving offense and effect-specific success gates.
+The effective profile set includes variants, active signature bonuses and eligible vow-added effects. A bypassed
+ward is not consumed or weakened; no PENETRATION entry or power modifier is added.
 
 `barrier_strength` is the **ward gate** only; damage-type **resistance/soak** is a
 separate, downstream step (see "No double-counting" below). The two never interact.

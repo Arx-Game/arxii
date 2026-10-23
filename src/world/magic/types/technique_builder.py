@@ -17,6 +17,9 @@ class DamageProfileSpec:
     damage_type_id: int | None
     base_damage: int = 0
     damage_intensity_multiplier: float = 0.0
+    ignores_soak: bool = False
+    resistance_shift: int = 0
+    bypasses_wards: bool = False
 
 
 @dataclass(frozen=True)

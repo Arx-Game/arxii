@@ -98,6 +98,44 @@ class TechniqueBuilderAPITests(APITestCase):
     # price (dry-run)
     # ------------------------------------------------------------------
 
+    def test_author_preserves_defense_piercing(self) -> None:
+        self.client.force_authenticate(user=self.staff_account)
+        response = self.client.post(
+            reverse("magic:technique-author"),
+            self._payload(
+                gift_id=self.staff_gift.pk,
+                damage_profiles=[
+                    {
+                        "damage_type_id": None,
+                        "base_damage": 5,
+                        "ignores_soak": True,
+                        "resistance_shift": 5,
+                        "bypasses_wards": True,
+                    }
+                ],
+            ),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        profile = Technique.objects.get(name="Spark").damage_profiles.get()
+        assert profile.ignores_soak is True
+        assert profile.resistance_shift == 5
+        assert profile.bypasses_wards is True
+
+    def test_author_rejects_negative_resistance_shift(self) -> None:
+        self.client.force_authenticate(user=self.staff_account)
+        response = self.client.post(
+            reverse("magic:technique-author"),
+            self._payload(
+                gift_id=self.staff_gift.pk,
+                damage_profiles=[{"damage_type_id": None, "resistance_shift": -1}],
+            ),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert "resistance_shift" in response.data["damage_profiles"][0]
+        assert not Technique.objects.filter(name="Spark").exists()
+
     def test_price_returns_breakdown_and_creates_no_rows(self):
         url = reverse("magic:technique-price")
         res = self.client.post(url, self._payload(), format="json")

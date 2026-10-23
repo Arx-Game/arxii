@@ -826,7 +826,13 @@ GMs and Guides play Story NPCs; the actions are web tools over services, with no
    down bar by bar), the tale, window and new evidence journeys of
    `test_minding_your_own_affairs_journeys.py` and the station journey of
    `test_keeping_what_is_yours_journeys.py`; nothing in the browser sends the door,
-   window, deed or evidence keys, recorded in `docs/testing/journeys.md`),
+   window, deed or evidence keys, recorded in `docs/testing/journeys.md`; tranche 22
+   took `test_companion_actions`, `test_companion_emote_action`, `test_forms`,
+   `test_ship_actions` and `test_portals` into the companion, shape and ship journeys
+   of `test_keeping_what_is_yours_journeys.py` (the companions view's and the forms
+   view's own sends, a pose sent twice under one request id) and the portal journey of
+   `test_keeping_a_house_journeys.py`; the ship and portal keys have no web caller
+   either),
    and a new `tests/test_<verb>.py`
    that only calls `.run()` down the happy path is the shape that gets removed next.
    Never patch the room's `msg_contents` to keep a test quiet: `secure` raised on its

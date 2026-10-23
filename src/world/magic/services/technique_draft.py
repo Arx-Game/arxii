@@ -126,12 +126,16 @@ def remove_draft_capability_grant(row_id: int) -> None:
 # =============================================================================
 
 
-def add_draft_damage_profile(
+# A draft damage row exposes each independently authored profile property.
+def add_draft_damage_profile(  # noqa: PLR0913
     draft: TechniqueDraft,
     *,
     damage_type,
     base_damage: int,
     damage_intensity_multiplier: float,
+    ignores_soak: bool = False,
+    resistance_shift: int = 0,
+    bypasses_wards: bool = False,
 ) -> TechniqueDraftDamageProfile:
     """Append a damage profile row to the draft and return it."""
     return TechniqueDraftDamageProfile.objects.create(
@@ -139,6 +143,9 @@ def add_draft_damage_profile(
         damage_type=damage_type,
         base_damage=base_damage,
         damage_intensity_multiplier=damage_intensity_multiplier,
+        ignores_soak=ignores_soak,
+        resistance_shift=resistance_shift,
+        bypasses_wards=bypasses_wards,
     )
 
 
@@ -278,6 +285,9 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
                 damage_type_id=row.damage_type_id,
                 base_damage=row.base_damage,
                 damage_intensity_multiplier=float(row.damage_intensity_multiplier),
+                ignores_soak=row.ignores_soak,
+                resistance_shift=row.resistance_shift,
+                bypasses_wards=row.bypasses_wards,
             )
             for row in draft.damage_profiles.all()
         ),

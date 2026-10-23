@@ -358,6 +358,20 @@ Postgres and no line of the twelve source files behind them is reached by the ol
 alone. Nothing in the browser sends the door, window, deed or evidence actions (recorded
 as a gap). No production code changed; the ledger marks the five rows R (50 of 172 ruled).
 
+Tranche 22 removed the five `actions.tests` modules the companion, shape, ship and portal
+journeys of tranches 13 and 17 already duplicated (`test_companion_actions`,
+`test_companion_emote_action`, `test_forms`, `test_ship_actions`, `test_portals`, 64
+tests), after the journeys took what those alone had reached: the companions view's own
+bind, release and pose sends, with a pose sent twice under one request id recorded and
+told once and the reused id a conflict; another's alternate self and a bad-seed grant
+refused in words, a shift while not in control allowed; a covenant-held deck answering to
+the covenant's member, the status by id and the commission's own refusals; the portal
+kind by id and by name, an anchor by id and a stale id that does not fall through to the
+one anchor left. The journeys and the five modules ran under coverage on Postgres and no
+line of the eleven source files behind them is reached by the old modules alone. Nothing
+in the browser sends the ship or portal actions (recorded as a gap). No production code
+changed; the ledger marks the five rows R (55 of 172 ruled).
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,
