@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
 _LABEL_FRAMING_MAX = 40
 _ROLLED_KINDS = (OptionKind.CHECK, OptionKind.CONTEST)
+_BRANCHING_KINDS = (OptionKind.BRANCH, OptionKind.EXTERNAL_ACT)
 
 
 def option_label(option: MissionOption) -> str:
@@ -61,14 +62,19 @@ def _graph_edges(
             for target_id in (node.track_success_target_id, node.track_failure_target_id)
             if target_id is not None
         )
-    node_of_option = {option.pk: option.node_id for option in options}
+    option_by_pk = {option.pk: option for option in options}
     for option in options:
         if option.branch_target_id is not None:
             edges[option.node_id].add(option.branch_target_id)
-    node_of_route = {route.pk: node_of_option[route.option_id] for route in routes}
     for route in routes:
+        option = option_by_pk[route.option_id]
+        if option.option_kind in _BRANCHING_KINDS and (
+            option.branch_target_id is not None or route.outcome_tier_id is not None
+        ):
+            continue  # the engine reads only a branch option's tier-less route
         if route.target_node_id is not None:
-            edges[node_of_route[route.pk]].add(route.target_node_id)
+            edges[option.node_id].add(route.target_node_id)
+    node_of_route = {route.pk: option_by_pk[route.option_id].node_id for route in routes}
     for candidate in candidates:
         edges[node_of_route[candidate.route_id]].add(candidate.target_node_id)
     return edges
@@ -114,11 +120,25 @@ def _option_problems(
     label = option_label(option)
     tiered = [route for route in routes if route.outcome_tier_id is not None]
     problems: list[GraphProblem] = []
-    if option.option_kind in _ROLLED_KINDS and node.conflict_mode == ConflictMode.JOINT:
+    joint = node.conflict_mode == ConflictMode.JOINT
+    if joint and option.option_kind in _BRANCHING_KINDS:
+        return [
+            GraphProblem(
+                kind=GraphProblemKind.JOINT_MISSING_BUCKET,
+                message=f'"{label}" is a branch on a joint node, which can\'t decide '
+                "where the group goes.",
+                node_id=node.pk,
+                option_id=option.pk,
+            )
+        ]
+    if joint and option.option_kind in _ROLLED_KINDS and not check_tiers:
+        # No chart names a tier, so MISSING_TIERS has nothing to list; the combined
+        # result still needs a success route and a failure route.
         levels = [int(route.outcome_tier.success_level) for route in tiered]
-        has_success = any(level >= SUCCESS_TIER_LEVEL for level in levels)
-        has_failure = any(level < SUCCESS_TIER_LEVEL for level in levels)
-        if not (has_success and has_failure):
+        if not (
+            any(level >= SUCCESS_TIER_LEVEL for level in levels)
+            and any(level < SUCCESS_TIER_LEVEL for level in levels)
+        ):
             problems.append(
                 GraphProblem(
                     kind=GraphProblemKind.JOINT_MISSING_BUCKET,

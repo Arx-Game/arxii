@@ -1,5 +1,7 @@
 """The Mission Studio graph check endpoint (#4558)."""
 
+from unittest.mock import patch
+
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -27,6 +29,7 @@ from world.missions.factories import (
     MissionOptionRouteFactory,
     MissionTemplateFactory,
 )
+from world.missions.services import graph_check
 from world.stories.factories import StoryFactory, StoryScenarioFactory
 from world.traits.factories import (
     CheckOutcomeFactory,
@@ -194,8 +197,8 @@ class GraphCheckTests(TestCase):
         self.assertTrue(messages[0].startswith('"' + "x" * 40 + '" has no route'))
         self.assertTrue(messages[1].startswith('"option 7" has no route'))
 
-    def test_joint_check_with_one_success_and_one_failure_route_is_clean(self) -> None:
-        template = MissionTemplateFactory(name="joint-ok-graph")
+    def _joint_entry(self, name: str):
+        template = MissionTemplateFactory(name=name)
         entry = MissionNodeFactory(
             template=template,
             key="entry",
@@ -203,25 +206,63 @@ class GraphCheckTests(TestCase):
             conflict_mode=ConflictMode.JOINT,
             joint_combine=JointCombine.ANY,
         )
-        self._check_option(entry, ["Success", "Failure"])
+        return template, entry
+
+    def test_joint_check_missing_tiers_are_reported_like_any_node(self) -> None:
+        template, entry = self._joint_entry("joint-tiers-graph")
+        option, _ = self._check_option(entry, ["Success", "Failure"])
+        problems = self._problems(template)
+        self.assertEqual([p["kind"] for p in problems], [GraphProblemKind.MISSING_TIERS])
+        self.assertEqual(problems[0]["option"], option.pk)
+        self.assertEqual(
+            problems[0]["missing_tiers"],
+            ["Critical Failure", "Partial Success", "Critical Success"],
+        )
+
+    def test_joint_check_with_every_tier_is_clean(self) -> None:
+        template, entry = self._joint_entry("joint-ok-graph")
+        self._check_option(entry, [name for name, _ in TIERS])
         self.assertEqual(self._problems(template), [])
 
-    def test_joint_check_missing_a_bucket_flagged(self) -> None:
-        template = MissionTemplateFactory(name="joint-bad-graph")
-        entry = MissionNodeFactory(
-            template=template,
-            key="entry",
-            is_entry=True,
-            conflict_mode=ConflictMode.JOINT,
-            joint_combine=JointCombine.ANY,
-        )
-        option, _ = self._check_option(entry, ["Success", "Critical Success", "Partial Success"])
-        # Partial Success is level 0 and counts as the failure bucket, so this is fine;
-        # drop it to leave only successes.
-        option.routes.filter(outcome_tier=self.tiers["Partial Success"]).delete()
+    def test_joint_check_missing_a_bucket_flagged_when_no_chart_names_a_tier(self) -> None:
+        template, entry = self._joint_entry("joint-bad-graph")
+        option, _ = self._check_option(entry, ["Success", "Critical Success"])
+        with patch.object(graph_check, "_rollable_check_tiers", return_value=set()):
+            problems = self._problems(template)
+        self.assertEqual([p["kind"] for p in problems], [GraphProblemKind.JOINT_MISSING_BUCKET])
+        self.assertEqual(problems[0]["option"], option.pk)
+
+    def test_branch_option_on_joint_node_flagged(self) -> None:
+        template, entry = self._joint_entry("joint-branch-graph")
+        option = MissionOptionFactory(node=entry, option_kind=OptionKind.BRANCH, key="split")
         problems = self._problems(template)
         self.assertEqual([p["kind"] for p in problems], [GraphProblemKind.JOINT_MISSING_BUCKET])
         self.assertEqual(problems[0]["option"], option.pk)
+        self.assertEqual(
+            problems[0]["message"],
+            '"split" is a branch on a joint node, which can\'t decide where the group goes.',
+        )
+
+    def test_branch_target_makes_the_options_tier_less_route_unreachable(self) -> None:
+        template, entry = self._template("branch-target-graph")
+        via_target = MissionNodeFactory(template=template, key="via-target")
+        via_route = MissionNodeFactory(template=template, key="via-route")
+        option = MissionOptionFactory(
+            node=entry, option_kind=OptionKind.BRANCH, branch_target=via_target
+        )
+        MissionOptionRouteFactory(option=option, target_node=via_route)
+        problems = self._problems(template)
+        self.assertEqual([p["node"] for p in problems], [via_route.pk])
+        self.assertEqual(problems[0]["kind"], GraphProblemKind.UNREACHABLE_NODE)
+
+    def test_branch_tiered_route_is_never_followed(self) -> None:
+        template, entry = self._template("branch-tiered-graph")
+        via_tiered = MissionNodeFactory(template=template, key="via-tiered")
+        option = MissionOptionFactory(node=entry, option_kind=OptionKind.BRANCH)
+        MissionOptionRouteFactory(
+            option=option, outcome_tier=self.tiers["Success"], target_node=via_tiered
+        )
+        self.assertEqual([p["node"] for p in self._problems(template)], [via_tiered.pk])
 
     def test_encounter_without_risk_level_flagged(self) -> None:
         template, entry = self._template("no-risk-graph")
