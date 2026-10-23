@@ -1119,7 +1119,9 @@ class AbstractMoraleEffect(SharedMemoryModel):
 
     minimum_success_level = models.PositiveIntegerField(
         default=1,
-        help_text="Success level at which the extra-success-level step starts counting.",
+        help_text=(
+            "Minimum success level for the cast to shake morale; extra levels count from here."
+        ),
     )
     base_morale = models.PositiveIntegerField(
         default=0,

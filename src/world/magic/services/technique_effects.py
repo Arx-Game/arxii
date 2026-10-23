@@ -290,7 +290,7 @@ def technique_payload_prefetches(
     profiles, removed conditions, treatments and the morale effect.
     ``summarize_technique_effects`` reads all of them, so a surface that
     builds a summary per row in a list — the in-scene cast list, the character
-    sheet's magic section, the ``TechniqueAdmin`` changelist — pays one query
+    sheet's magic section, the ``TechniqueAdmin`` changelist, pays one query
     per family per technique unless it prefetches them. Each ``to_attr`` is the
     ``cached_*`` property name the derivations read, which is also what keeps a
     prefetched row from going stale against the identity map (#2728, ADR-0263).

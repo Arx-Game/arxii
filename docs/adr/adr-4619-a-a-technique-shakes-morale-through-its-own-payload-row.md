@@ -13,7 +13,9 @@ that minimum. Combat reads it in the technique resolver, after damage, over the 
 cast resolved on, and removes the computed amount from each enemy. It adds no roll: it reads
 the cast's existing check result. Allies, charmed enemies and opponents that are fled or
 defeated are skipped, and a mindless tier takes the configured share of the amount. The
-row makes a technique hostile and enemy-aimed like any other hostile payload.
+row makes a technique hostile and enemy-aimed like any other hostile payload. The builder
+prices it per point like damage (`payload_base_cost` plus the computed amount times
+`damage_unit_cost`), reusing existing config columns; the figure is a tuning value.
 
 ## Rejected
 

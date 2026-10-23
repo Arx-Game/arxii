@@ -148,6 +148,16 @@ class TechniqueBuilderAPITests(APITestCase):
         assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
         assert "morale_effect" in response.data
 
+    def test_an_all_zero_morale_effect_is_refused(self) -> None:
+        self.client.force_authenticate(user=self.staff_account)
+        response = self.client.post(
+            reverse("magic:technique-author"),
+            self._payload(gift_id=self.staff_gift.pk, morale_effect={}),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert "morale_effect" in response.data
+
     def test_author_rejects_negative_resistance_shift(self) -> None:
         self.client.force_authenticate(user=self.staff_account)
         response = self.client.post(

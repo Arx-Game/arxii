@@ -631,15 +631,15 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - Technique morale effect (#4619, ADR-4619-A): `TechniqueMoraleEffect` (one-to-one payload
     row, `Technique.cached_morale_effect`), `TechniqueDraftMoraleEffect` (draft copy), shared
     columns and `compute_morale` on `AbstractMoraleEffect`; `MoraleEffectSpec` /
-    `TechniqueDesignInput.morale_effect` (builder, flat `payload_base_cost` price);
+    `TechniqueDesignInput.morale_effect` (builder, priced per point like damage);
     `set_draft_morale_effect` / `clear_draft_morale_effect` (`services/technique_draft.py`);
     `_morale_valuation` (`services/technique_power_eval.py`, ESTIMATE). Detail:
     `docs/systems/magic.md` "Technique morale effect".
   - Technique targeting (#1321):
     `derive_target_relationship(technique) -> ConditionTargetKind` (`world/magic/services/targeting.py`)
-    — ENEMY if hostile; ALLY if any applied, removed or treatment row has
-    `target_kind=ALLY`; ENEMY if a treatment row targets an enemy or the technique has a morale row
-    (#4619); else SELF.
+    - ENEMY if hostile (damage, an ENEMY condition or removal, or a morale row, #4619); ALLY if
+    any applied, removed or treatment row has `target_kind=ALLY`; ENEMY if a treatment row
+    targets an enemy; else SELF.
     Hostility itself reads the payload rows only — `EffectType.base_power` is a
     magnitude knob and is NOT consulted (ADR-0281, #3682): it used to be, which
     made all 54 authored Defense techniques classify as hostile.

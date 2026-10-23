@@ -3630,6 +3630,18 @@ class _MoraleEffectSpecSerializer(serializers.Serializer):
     morale_intensity_multiplier = serializers.FloatField(min_value=0, default=0.0)
     morale_per_extra_sl = serializers.IntegerField(min_value=0, default=0)
 
+    def validate(self, attrs: dict) -> dict:
+        # One source for the rule: the model's own clean() (an all-zero row removes no morale).
+        from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
+
+        from world.magic.models import TechniqueMoraleEffect  # noqa: PLC0415
+
+        try:
+            TechniqueMoraleEffect(**attrs).clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+        return attrs
+
 
 class _TreatmentSpecSerializer(serializers.Serializer):
     """A treatment payload row for technique authoring (#2668)."""

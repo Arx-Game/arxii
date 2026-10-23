@@ -509,7 +509,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   aimed at an enemy. Proven by `src/integration_tests/test_shaking_morale_journeys.py`.
   **Known gaps:** no narrated line for a technique's morale shift (players see only the
   opponent's state chip); no vow added effect can carry morale; the power valuation formula
-  and the builder price are estimates awaiting tuning.
+  and the builder price (per point, like damage) are estimates awaiting tuning.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 

@@ -13,6 +13,7 @@ from world.magic.models import (
     CharacterTechnique,
     Technique,
     TechniqueBudgetConfig,
+    TechniqueMoraleEffect,
     TechniqueTierBudget,
 )
 from world.magic.seeds_cast import TECHNIQUE_CAST_TEMPLATE_NAME
@@ -147,15 +148,42 @@ class PriceDesignTests(TestCase):
         assert bd.gross_cost == 27
         assert bd.within_budget is False
 
-    def test_morale_effect_charges_one_payload_line(self):
-        """A morale effect pays the flat payload base, like a treatment or dispel (#4619)."""
+    def test_morale_effect_is_priced_per_point_like_damage(self):
+        """A morale row costs the payload base plus its computed amount per point (#4619)."""
         cfg = get_technique_budget_config()
-        d = _design(morale_effect=MoraleEffectSpec(base_morale=30))
+        d = _design(morale_effect=MoraleEffectSpec(base_morale=30, morale_intensity_multiplier=2.0))
         bd = price_design(d, config=cfg, budget=99)
         lines = [line for line in bd.lines if line.dimension == "morale"]
+        amount = 30 + 2 * d.intensity
         assert [(line.label, line.power_cost) for line in lines] == [
-            ("Morale effect", cfg.payload_base_cost)
+            ("Morale effect", cfg.payload_base_cost + amount * cfg.damage_unit_cost)
         ]
+
+    def test_a_bigger_morale_row_costs_more(self):
+        cfg = get_technique_budget_config()
+
+        def cost(amount: int) -> int:
+            bd = price_design(
+                _design(morale_effect=MoraleEffectSpec(base_morale=amount)), config=cfg, budget=99
+            )
+            return next(line.power_cost for line in bd.lines if line.dimension == "morale")
+
+        assert cost(60) > cost(10)
+
+    def test_build_refuses_a_morale_row_that_removes_no_morale(self):
+        """The all-zero row never reaches the database, even from a draft (#4619)."""
+        from django.core.exceptions import ValidationError
+
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory(creator=sheet)
+        d = _design(
+            gift_id=gift.id,
+            effect_type_id=EffectTypeFactory().id,
+            morale_effect=MoraleEffectSpec(),
+        )
+        with self.assertRaises(ValidationError):
+            build_technique(d, creator=None)
+        assert not TechniqueMoraleEffect.objects.exists()
 
     def test_removed_condition_priced_at_payload_base(self):
         """A removal (dispel) payload costs the flat payload base, no scaling (#1585)."""

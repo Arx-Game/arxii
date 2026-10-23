@@ -1109,7 +1109,7 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 
 | Function | Purpose |
 |----------|---------|
-| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any applied, removed or **treatment** row has `target_kind=ALLY`; ENEMY if the technique has a morale row (#4619; it only lands on opposing combatants) or a treatment row targets an enemy (stabilising a downed foe is aimed at an adversary without being hostile); else SELF. Treatments joined in #3682 - a technique whose only payload was an ALLY treatment derived SELF, and the SELF branch of `_check_relationship` then refused to let the authored heal name its ally. Reads the technique's `cached_*` payload lists rather than its own `.filter().exists()` queries (#2898). Exactly one relationship comes back, so a technique whose payload rows disagree gets a guess - see `technique_relationship_is_ambiguous` below. |
+| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile (damage, an ENEMY condition or removal, or a morale row, #4619; it only lands on opposing combatants); ALLY if any applied, removed or **treatment** row has `target_kind=ALLY`; ENEMY if a treatment row targets an enemy (stabilising a downed foe is aimed at an adversary without being hostile); else SELF. Treatments joined in #3682 - a technique whose only payload was an ALLY treatment derived SELF, and the SELF branch of `_check_relationship` then refused to let the authored heal name its ally. Reads the technique's `cached_*` payload lists rather than its own `.filter().exists()` queries (#2898). Exactly one relationship comes back, so a technique whose payload rows disagree gets a guess - see `technique_relationship_is_ambiguous` below. |
 | `technique_alters_behavior(technique) -> bool` | True if any applied condition's `category.alters_behavior` is True |
 | `cast_requires_consent(technique) -> bool` | True iff `technique_alters_behavior` — **behavior only**, not blanket benign |
 | `validate_cast_target(*, technique, initiator_persona, target_personas)` | Raises `InvalidCastTarget` on cardinality or relationship violations |
@@ -3551,8 +3551,9 @@ counts as specified (`technique_is_underspecified`), and derives an ENEMY relati
 technique is aimed at an opponent. The effect sentence adds "Shakes morale."
 
 **Authoring:** the Technique admin has a `TechniqueMoraleEffectInline` (one row at most).
-The builder takes `MoraleEffectSpec` on `TechniqueDesignInput.morale_effect`, priced at the flat
-`payload_base_cost` line "Morale effect" (like treatments and dispels, no new budget column);
+The builder takes `MoraleEffectSpec` on `TechniqueDesignInput.morale_effect`, priced per point like
+damage: `payload_base_cost + (base_morale + morale_intensity_multiplier * intensity) *
+damage_unit_cost` on the "Morale effect" line (no new budget column);
 `build_technique` writes the row before the payload caches are cleared. The draft workbench
 carries `TechniqueDraftMoraleEffect` through `set_draft_morale_effect` /
 `clear_draft_morale_effect` and `draft_to_design`.
@@ -3561,7 +3562,7 @@ carries `TechniqueDraftMoraleEffect` through `set_draft_morale_effect` /
 as an ESTIMATE: the expected morale over the matchup bands, capped at one break (the distance
 from the default 70 to the break threshold 25, 45 points), as that share of one opponent's
 round of reference incoming damage. It is a control-kind payload valuation. Both this
-formula and the flat builder price await tuning.
+formula and the builder price (per point, like damage) are tuning values.
 
 **Cache:** writers of the row call `invalidate_technique_payload_caches`; the prefetch is in
 `technique_payload_prefetches` and `_PAYLOAD_CACHE_ATTRS`.
