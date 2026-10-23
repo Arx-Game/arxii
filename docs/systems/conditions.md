@@ -56,7 +56,7 @@ from world.conditions.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings (`cure_check_type`/`cure_difficulty`), apply-time resist-check (`resist_check_type`/`resist_difficulty`, #1738), combat settings (`affects_turn_order`, `draws_aggro`), display settings, allegiance settings (`sets_allegiance`, `allegiance_break_check_type`, `settle_consequence_pool`, #4091, see below) |
+| `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings (`cure_check_type`/`cure_difficulty`), apply-time resist-check (`resist_check_type`/`resist_difficulty`, #1738), combat settings (`affects_turn_order`, `draws_aggro`, and the #4584 reactive fields `forces_attack_on_source`, `source_guards_bearer`, `prevents_knockout`), reactive-effect settings (`reactive_anima_cost`, and the strike-back trio `retaliation_damage`, `retaliation_damage_type`, `retaliation_condition`, #4584), display settings, allegiance settings (`sets_allegiance`, `allegiance_break_check_type`, `settle_consequence_pool`, #4091, see below) |
 | `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty`, `severity_multiplier`, `settle_consequence_pool` (#4091, overrides the template's pool at this stage) |
 
 **Charm / Calm content (#1590).** The `Charm` `ConditionCategory` (`alters_behavior=True`) and
@@ -480,6 +480,11 @@ by its field and never by the condition's name:
 | `affects_turn_order`, `turn_order_modifier` | `effective_speed_ranks` (`world/combat/services/combos/resolution_order.py`), through `turn_order_modifier_by_target` | Round order sorts on the combatant's base speed rank (covenant role `speed_rank`, `NO_ROLE_SPEED_RANK`, or `NPC_SPEED_RANK`) minus its summed modifier, so a positive modifier acts earlier. PCs and NPC opponents both shift. `get_resolution_order` and the encounter payload's `resolution_order` (the initiative chips) sort on the same ranks. |
 | `ConditionDamageOverTime` | `tick_round_for_targets` -> `_apply_round_tick_damage` (`world/vitals/services.py`) | An NPC opponent has no sheet or vitals, so its tick damage goes through `apply_damage_to_opponent` with damage-type resistance netted once, no armor soak and no `DAMAGE_PRE_APPLY` (the same as PC DoT); defeat follows as from a hit. |
 | `absorb_remaining`, a reactive trigger calling `reflect_damage` | `absorb_pool`, `reflect_damage` (`world/magic/services/effect_handlers.py`) | The barrier handlers designate their condition by field: `absorb_pool` takes the bearer's oldest active instance holding a buffer, `reflect_damage` takes an instance whose template carries a reactive trigger calling the handler. A barrier staff name anything else works. The "Aegis Field" / "Mirror Ward" name constants remain for seed content only. |
+| `forces_attack_on_source` | `select_npc_actions` (`_provoking_participant_ids`, `_narrow_to_locked_or_provoker`), through `provoking_source_by_target` (#4584) | **Provoke.** An NPC opponent carrying the condition attacks only the condition's `source_character` (the newest active instance with a source wins). An active `EngagementLock` that narrowed the pool wins over it. A source who is down, untargetable, out of the fight or not a PC falls back to the opponent's normal target choice, never a skipped turn. Charmed, turned and summoned opponents ignore it (they do not target the PC side) and so does a PC bearer (PCs choose their own targets). |
+| `source_guards_bearer` | `_ensure_interpose_challenges` and `_try_interpose` (`world/combat/services/damage/`), through `guardians_by_target` (#4584, ADR-4584-A) | **Standing guard.** The condition's source tries the mundane interpose on every hit on the bearer, through the shared tail `_attempt_guardian_interpose`. It counts against `REACTIONS_PER_ROUND` and `ABSORPTION_CAP_PER_MOMENT` and pays interpose fatigue at very low effort, but she still takes her own turn. A guardian who declared any Interpose that round acts only through her declaration. A guardian who cannot act (`can_act`: knocked unconscious, though still ACTIVE) does not step in. A self-cast guard never interposes. PC wards in combat only. |
+| `prevents_knockout` | `_process_knockout_tier` (`world/vitals/services.py`), through `knockout_preventing_instance` (#4584) | **Grace.** The knockout roll is skipped (looked up only after the difficulty and check-type guards, so it is used only when a roll would happen). An `UNTIL_USED` grace stops one knockout and ends; a `ROUNDS` grace stops every knockout while it lasts. `CHARACTER_INCAPACITATED` still fires on entering the band. PCs only: NPC opponents have no knockout roll. |
+| `retaliation_damage`, `retaliation_damage_type`, `retaliation_condition` | `_answer_with_strike_backs` in `_emit_post_damage_events` (`world/combat/services/damage/damage.py`) calls `strike_back` for each instance `retaliating_instances` finds (#4584) | **Strike-back.** After a hit lands on a PC bearer, each ward answers the NPC that dealt it: `retaliation_damage` (typed by `retaliation_damage_type`) through `apply_damage_to_opponent`, and `retaliation_condition` laid with the ward's source as its source (not on an NPC the damage defeated). It is a hard-coded read at the damage seam, not a flow, trigger or seeded row. It answers hits on PC bearers only and strikes `CombatOpponent` attackers only (never a PC, ADR-0023). It pays `reactive_anima_cost` (a fizzle speaks, a success is not narrated: known gap), counts as the caster's threat, as duel interference and as probing, as rampart retaliation does. |
+| `default_duration_type = UNTIL_USED` | `spend_condition_use`, `spend_contributing_conditions`, `spend_conditions_by_id` (`world/conditions/services.py`) (#4584) | **Once-only.** Spending is a full removal through `_teardown_removed_condition_instance` plus a synchronous trigger-cache refresh, so a ward spent on the first hit of a round is gone for the second. See "Until used" below. |
 
 The two batched helpers share `_active_template_sum_by_target`: one query for all targets,
 keyed by ObjectDB pk, suppressed and expired rows skipped, zero totals omitted. The
@@ -487,7 +492,38 @@ single-sheet `get_turn_order_modifier` / `get_aggro_priority` are thin wrappers 
 A new condition field or handler that combat reads must be read for both sides and by field;
 the `condition-effect-reach-reviewer` agent (`tools/agents/`) checks a diff for that. The
 journeys in `src/integration_tests/test_conditions_that_reach_the_fight_journeys.py` operate
-all of it through a combat round.
+all of it through a combat round. The #4584 effects have their own journey set in
+`src/integration_tests/test_holding_the_line_journeys.py` (provoke, thorn ward, standing
+guard, grace, once-only blessing).
+
+**Timing: round N to N+1 (#4584).** `forces_attack_on_source` is read when an opponent
+chooses its target, so a provoke applied by an action in round N first steers round N+1,
+and a 1-round provoke ends before it is ever read. `source_guards_bearer` is bound before
+the round resolves (`_ensure_interpose_challenges`), so a guard holds from the round after
+it lands. Give either at least 2 rounds.
+
+**Until used (#4584).** `UNTIL_USED` conditions end when used, through `spend_condition_use`
+(which returns False and touches nothing for an already-gone instance or a non-`UNTIL_USED`
+template, so a lasting condition is never spent by use):
+
+- **A blessing's check term** is spent after a real roll it fed: every roll site calls
+  `spend_contributing_conditions(breakdown)` after the roll (`perform_check_with_modifiers`
+  does it itself), and a paused resolution carries `contributing_condition_ids` on its
+  `PendingActionResolution` and spends them when its resume rolls. A zero term is not a
+  use. `collect_check_modifiers` and previews never spend (the consider check and the
+  standoff grade view call it), and an NPC's `opponent_condition_opposition` term is not
+  spent by a PC's roll. `condition_contributions` records each term's
+  `condition_instance_id` for this. A mechanical guard test
+  (`world/checks/tests/test_spend_contributing_conditions.py`) checks that every function
+  that collects condition modifiers also spends.
+- **A reactive ward** (`absorb_pool`, `reflect_damage`, `blink_dodge`, `strike_back`) is
+  spent after a successful fire; a fizzle (cannot pay) is not a use. An `UNTIL_USED` absorb
+  barrier soaks one blow and ends through the full teardown, whatever buffer is left.
+- **A knockout grace** (`prevents_knockout`) stops one knockout, PCs only.
+- **A marker** (the `*_on_condition` adapters: Summoning, Phase Jump, Barricade, Force
+  Grip, the Ramparts, and a zone-hazard marker through `create_zone_hazard_on_condition`) is
+  spent when its `CONDITION_APPLIED` flow has run, on normal exit of
+  the effect only (early returns count; an error does not spend, the apply rolls back).
 
 ### Querying Modifiers
 

@@ -276,6 +276,45 @@ full active participant list. Allegiance is derived on read from active `alters_
 conditions (`Charmed` / `Calm`) on the opponent's ObjectDB. See ADR-0058 for the two-tier NPC
 disposition model.
 
+## Reactive condition effects (#4584)
+
+Six `ConditionTemplate` fields let a condition change how a fight reacts to its bearer,
+each read by field (never by name) at one named seam:
+
+```
+select_npc_actions
+  └─ _provoking_participant_ids  ← provoking_source_by_target       forces_attack_on_source
+       narrow pool: engagement lock wins, else the provoker; a provoker who is down or
+       gone leaves the pool alone; charmed/turned/summoned opponents never narrow
+
+resolve_round
+  ├─ _ensure_interpose_challenges ← guardians_by_target             source_guards_bearer
+  └─ hit on a PC ward:
+       _try_interpose: named declaration → standing guards → guard-anyone declaration
+         └─ _attempt_guardian_interpose (REACTIONS_PER_ROUND, ABSORPTION_CAP_PER_MOMENT,
+            interpose fatigue); a guardian with any declared Interpose acts only through it
+       apply_damage_to_participant
+         └─ _emit_post_damage_events: DAMAGE_APPLIED, then _answer_with_strike_backs
+              ← retaliating_instances → strike_back  retaliation_damage / _damage_type /
+              _condition: NPC attackers only, PC bearers only, not narrated on success
+       vitals _process_knockout_tier ← knockout_preventing_instance   prevents_knockout
+         PC only (an NPC opponent has no knockout roll)
+
+any real roll that counted a condition's check term
+  └─ spend_contributing_conditions / spend_conditions_by_id → spend_condition_use
+                                                               default_duration_type=UNTIL_USED
+```
+
+Provoke and guard are read at the start of a round (target selection; challenge binding),
+so one laid by an action in round N holds from round N+1. Strike-back is a hard-coded
+read at the damage seam rather than a flow, trigger or seeded row, so it needs no
+production content step. It counts as duel interference and probing through
+`apply_damage_to_opponent` with the payer's sheet, as rampart retaliation does. A standing
+guard revisits ADR-0161 (ADR-4584-A): it spends the guardian's reaction. `UNTIL_USED` ends
+a condition by use: after a real roll it helped, after a ward's successful fire, after a
+knockout it stopped, or when a marker's flow has run. Previews never spend. See
+`docs/systems/conditions.md` ("Condition effects combat reads") for the per-field table.
+
 begin_declaration_phase(encounter)  # next round
   ├─ status BETWEEN_ROUNDS → DECLARING; round_number += 1
   ├─ NEW: process_round_start for each active participant + active opponent

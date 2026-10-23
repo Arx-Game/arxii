@@ -163,10 +163,15 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         "can_be_dispelled",
         "default_duration_type",
         "draws_aggro",
+        "forces_attack_on_source",
+        "source_guards_bearer",
+        "prevents_knockout",
     ]
     search_fields = ["name", "description"]
     filter_horizontal = ["reactive_triggers"]
     autocomplete_fields = [
+        "retaliation_damage_type",
+        "retaliation_condition",
         "allegiance_break_check_type",
         "settle_consequence_pool",
         "cure_check_type",
@@ -218,6 +223,12 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
                     "turn_order_modifier",
                     "draws_aggro",
                     "aggro_priority",
+                    "forces_attack_on_source",
+                    "source_guards_bearer",
+                    "prevents_knockout",
+                    "retaliation_damage",
+                    "retaliation_damage_type",
+                    "retaliation_condition",
                 ],
                 "classes": ["collapse"],
             },

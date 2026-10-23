@@ -138,11 +138,17 @@ class ResolutionContext:
 
 @dataclass(frozen=True)
 class ModifierContribution:
-    """A single modifier with its provenance label and numeric value."""
+    """A single modifier with its provenance label and numeric value.
+
+    ``condition_instance_id`` names the ConditionInstance a CONDITION contribution came
+    from, so a real roll can spend a once-only (UNTIL_USED) condition that helped it
+    (``spend_contributing_conditions``, #4584). None for every other source kind.
+    """
 
     source_kind: str
     source_label: str
     value: int
+    condition_instance_id: int | None = None
 
 
 @dataclass

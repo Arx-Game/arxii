@@ -53,6 +53,16 @@ harm then ticks through `apply_clamped_chronic_damage` and can never wound, down
 "settle round effects" for the conversion and "settle" alone only for the social action.
 _Avoid_: freeze, convert-to-time (informal), AFK timer, fast-forward
 
+**Until used / spent** (#4584):
+A condition whose template has `default_duration_type = UNTIL_USED` ends when it is used, not
+after a time. **Spending** is `spend_condition_use(instance)`: a full removal through the
+shared teardown (CONDITION_REMOVED, stories hook, trigger-cache refresh), a no-op for an
+instance already gone or a template that is not `UNTIL_USED`. What counts as a use: a nonzero
+check term that fed a real roll (`spend_contributing_conditions`; previews and
+`collect_check_modifiers` never spend), a reactive ward's successful fire (a fizzle is not a
+use), a grace stopping a knockout, a seeded marker's flow having run.
+_Avoid_: consumed, charges, expired (that is the time-based end)
+
 **conceals_from_perception**:
 A boolean flag on `ConditionCategory` marking conditions that make the bearer imperceptible to others (invisibility, magical concealment, stealth). Aggregated by `is_concealed()`; `can_perceive()` composes it with per-observer detection state (`ConditionInstance.detected_by`) and co-location. Distinct from `grants_intangibility` — untargetable is not the same as unseen. The OOC player-transparency guarantee this powers is a separate, unconditional mechanism (ADR-0083), not gated by this flag's detection contest.
 _Avoid_: is_invisible, is_hidden, is_stealthed (the flag is about perceptibility, not any one source of it)

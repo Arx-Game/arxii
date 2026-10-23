@@ -64,7 +64,9 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatOpponent, CombatRoundAction
 from world.combat.services import begin_declaration_phase, resolve_round, select_npc_actions
+from world.conditions.constants import SUMMONING_CONDITION_NAME
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.magic.effect_palette_content import SUMMON_TECHNIQUE_NAME, ensure_effect_palette_content
 from world.magic.factories import CharacterAnimaFactory
 from world.magic.models import CharacterTechnique, Technique
@@ -228,6 +230,13 @@ class SummonSpiritTelnetE2ETests(TestCase):
         self.assertTrue(
             summon.objectdb_is_ephemeral,
             "a summoned ally must be ephemeral (no pre-existing persona)",
+        )
+        # The Summoning marker is UNTIL_USED: its flow fired, so it was spent (#4584).
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.character,
+                condition=ConditionTemplate.objects.get(name=SUMMONING_CONDITION_NAME),
+            ).exists()
         )
 
         # --- Step 4: advance to round 2 ---

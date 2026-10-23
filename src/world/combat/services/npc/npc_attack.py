@@ -24,6 +24,7 @@ from world.combat.services.combos.combo_outcome import _damage_multiplier_for_su
 from world.combat.services.npc.npc_targeting import _set_npc_action_targets
 from world.combat.services.npc.windup import _declare_windup_attack
 from world.combat.types import DefenseResult, ParticipantDamageResult
+from world.conditions.services import spend_contributing_conditions
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -242,6 +243,7 @@ def resolve_npc_attack(
         situation_ctx=situation_ctx,
         stat_override=DEFENSE_STAT,
     )
+    spend_contributing_conditions(breakdown)
 
     multiplier = _damage_multiplier_for_success(result.success_level)
     # damage_multiplier is a Decimal field (authored per-opponent scaling);

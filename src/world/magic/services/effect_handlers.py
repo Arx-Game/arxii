@@ -2,6 +2,12 @@
 
 Each handler is keyword-only ``def h(*, payload) -> None`` and is referenced by
 its dotted path from a seeded FlowDefinition's CALL_SERVICE_FUNCTION step.
+
+Once-only (``UNTIL_USED``) conditions end when used (#4584): the reactive wards
+(``absorb_pool``, ``reflect_damage``, ``blink_dodge``, ``strike_back``) spend theirs
+after a successful fire, and the one-shot marker adapters (``*_on_condition``) spend
+the marker once its flow has fired. Spending goes through ``spend_condition_use``,
+which leaves a lasting condition alone.
 """
 
 from typing import TYPE_CHECKING, Any, cast
@@ -13,7 +19,9 @@ from world.areas.positioning.services import (
     force_move_to_position,
     position_of,
 )
+from world.character_sheets.models import CharacterSheet
 from world.conditions.models import ConditionInstance
+from world.conditions.services import spend_condition_use
 from world.magic.models.anima import CharacterAnima
 from world.magic.services.soulfray import accumulate_soulfray
 
@@ -89,6 +97,30 @@ def _duration_from_instance(instance: ConditionInstance | None) -> int | None:
     if instance is None:
         return None
     return instance.rounds_remaining
+
+
+def _marker_instance(payload: Any) -> ConditionInstance | None:
+    """The marker instance a CONDITION_APPLIED payload carries, or None when it has none."""
+    try:
+        return payload.instance
+    except AttributeError:
+        return None
+
+
+def _spend_marker(payload: Any) -> None:
+    """Spend the one-shot marker whose CONDITION_APPLIED flow just fired (#4584).
+
+    Called by each ``*_on_condition`` adapter after its ``_*_effect`` helper returns, early
+    returns included: the marker's flow fired and cannot fire again for that instance,
+    whether or not it found a destination. Never called while an exception unwinds (no
+    ``finally``): the apply is atomic, so an errored effect rolls back the marker anyway,
+    and a teardown during unwind could raise and mask the original error. Tolerates a
+    payload with no ``instance`` (or ``instance=None``); ``spend_condition_use`` leaves a
+    non-``UNTIL_USED`` marker in place and ignores one already spent.
+    """
+    instance = _marker_instance(payload)
+    if instance is not None:
+        spend_condition_use(instance)
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +234,11 @@ def absorb_pool(*, payload: Any) -> None:
     - Pays reactive_anima_cost (fizzles if unaffordable, narrated by
       ``_try_spend_reactive``, unless the instance is consented (#3573)).
     - Reduces payload.amount by min(buffer, amount); decrements absorb_remaining.
-    - Deletes the instance when absorb_remaining reaches 0 (buffer spent).
+    - A once-only (``UNTIL_USED``) barrier soaks one blow and ends through
+      ``spend_condition_use`` (#4584), whatever buffer is left, so CONDITION_REMOVED,
+      the stories hook and the trigger refresh run as for every other spend.
+    - A lasting barrier is deleted when absorb_remaining reaches 0 (buffer spent);
+      otherwise the remaining buffer is saved.
     """
     if payload.amount <= 0:
         return
@@ -220,6 +256,8 @@ def absorb_pool(*, payload: Any) -> None:
     soaked = min(instance.absorb_remaining, payload.amount)
     payload.amount -= soaked
     instance.absorb_remaining -= soaked
+    if spend_condition_use(instance):
+        return  # a once-only barrier is used up by its first soak
     if instance.absorb_remaining <= 0:
         instance.delete()  # buffer fully consumed; condition expires
     else:
@@ -256,6 +294,9 @@ def reflect_damage(*, payload: Any) -> None:
       ``apply_damage_to_participant``
     - None / Technique / unresolvable / no active participant → payload zeroed,
       no bounce (no attacker to hit; no crash).
+
+    A once-only (``UNTIL_USED``) ward is spent through ``spend_condition_use`` after
+    the bounce (#4584); a fizzle spends nothing.
     """
     if payload.amount <= 0:
         return
@@ -279,7 +320,12 @@ def reflect_damage(*, payload: Any) -> None:
 
     amount = payload.amount
     payload.amount = 0
+    _bounce_to_attacker(payload, amount)
+    spend_condition_use(instance)
 
+
+def _bounce_to_attacker(payload: Any, amount: int) -> None:
+    """Apply a reflected ``amount`` to the attacker ``payload.source.ref`` names, if any."""
     ref = payload.source.ref
 
     # Lazy imports to avoid circular dependency: combat.services already
@@ -317,6 +363,70 @@ def reflect_damage(*, payload: Any) -> None:
                 participant, amount, bypass_pre_apply=True, damage_type=payload.damage_type
             )
     # else: ref is None / Technique / unknown → payload already zeroed, no bounce
+
+
+def strike_back(*, payload: Any, instance: ConditionInstance) -> None:
+    """Answer a landed hit on a warded bearer by striking the NPC that dealt it (#4584).
+
+    Called from the combat damage seam (``_emit_post_damage_events``) right after it
+    emits DAMAGE_APPLIED, once per instance ``retaliating_instances`` finds on the
+    bearer: the ward is designated by its template's ``retaliation_damage`` /
+    ``retaliation_condition`` fields, never by its name, and no flow rows are needed.
+    That seam only runs for hits on player characters, so a strike-back ward on an
+    NPC or a summon does nothing (out of scope for #4584).
+
+    Answers only a blow that dealt damage, from a ``CombatOpponent`` still in the
+    fight: PCs roll and NPCs are targets, so it never strikes a player character
+    (ADR-0023, as ``_fire_rampart_retaliation``). The payer (the ward's caster, else
+    the bearer) pays ``reactive_anima_cost`` through ``_try_spend_reactive``, which
+    narrates a fizzle; a ward with neither damage nor a condition charges nothing.
+    The damage carries the payer's sheet, so it counts as the payer's threat, and the
+    condition is laid with the payer as its source (pair it with a provoke and the
+    struck NPC turns on the caster). No condition is laid on an NPC the strike-back
+    defeated. ``bypass_pre_apply=True``, and the opponent damage path never emitting
+    DAMAGE_APPLIED, end any retaliation loop. A once-only (``UNTIL_USED``) ward is spent
+    through ``spend_condition_use`` once it has struck, so a second hit in the same round
+    finds it gone (``retaliating_instances`` queries afresh per hit).
+    """
+    if payload.amount_dealt <= 0 or instance.pk is None:
+        return  # nothing landed, or the ward was spent earlier this round
+    template = instance.condition
+    if template.retaliation_damage <= 0 and template.retaliation_condition_id is None:
+        return
+
+    # Lazy imports: combat.services lazy-imports world.magic.services.
+    from world.combat.constants import OpponentStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.combat.services import apply_damage_to_opponent  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    opponent = payload.source.ref
+    if not isinstance(opponent, CombatOpponent) or opponent.status != OpponentStatus.ACTIVE:
+        return
+    if not _try_spend_reactive(instance):
+        return
+
+    payer = instance.source_character or instance.target
+    defeated = False
+    if template.retaliation_damage > 0:
+        result = apply_damage_to_opponent(
+            opponent,
+            template.retaliation_damage,
+            bypass_pre_apply=True,
+            damage_type=template.retaliation_damage_type,
+            source_sheet=_sheet_of(payer),
+        )
+        defeated = result.defeated
+    if template.retaliation_condition is not None and opponent.objectdb_id and not defeated:
+        apply_condition(opponent.objectdb, template.retaliation_condition, source_character=payer)
+    spend_condition_use(instance)
+
+
+def _sheet_of(
+    character: "ObjectDB",  # noqa: OBJECTDB_PARAM - a ward's payer may be any bearer
+) -> CharacterSheet | None:
+    """The character's sheet, or None for an object without one (an NPC payer)."""
+    return CharacterSheet.objects.filter(pk=character.pk).first()
 
 
 def summon_ally(*, payload: Any) -> None:
@@ -614,13 +724,18 @@ def move_position_on_condition(*, payload: Any, destination_position_id: int) ->
     effect bundles. For SELF conditions payload.target is the caster; for ENEMY
     conditions it is the enemy objectdb.
     """
+    _move_position_on_condition_effect(
+        payload=payload, destination_position_id=destination_position_id
+    )
+    _spend_marker(payload)
+
+
+def _move_position_on_condition_effect(*, payload: Any, destination_position_id: int) -> None:
+    """The effect of ``move_position_on_condition``, before its marker is spent."""
     from types import SimpleNamespace  # noqa: PLC0415
 
     # #2019: Prefer the cast-time destination on the instance.
-    try:
-        instance = payload.instance
-    except AttributeError:
-        instance = None
+    instance = _marker_instance(payload)
     if instance is not None and instance.cast_destination_id is not None:
         destination_pk = instance.cast_destination_id
     elif destination_position_id > 0:
@@ -646,14 +761,19 @@ def force_move_target_on_condition(*, payload: Any, destination_position_id: int
     If the target becomes unplaced between declaration and resolution (KO, etc.),
     the force-move is a no-op with a clean return (not a crash).
     """
+    _force_move_target_on_condition_effect(
+        payload=payload, destination_position_id=destination_position_id
+    )
+    _spend_marker(payload)
+
+
+def _force_move_target_on_condition_effect(*, payload: Any, destination_position_id: int) -> None:
+    """The effect of ``force_move_target_on_condition``, before its marker is spent."""
     from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
     from world.room_features.trap_services import check_traps_at_position  # noqa: PLC0415
 
     # #2019: Prefer the cast-time destination on the instance.
-    try:
-        instance = payload.instance
-    except AttributeError:
-        instance = None
+    instance = _marker_instance(payload)
     if instance is not None and instance.cast_destination_id is not None:
         destination_pk = instance.cast_destination_id
     elif destination_position_id > 0:
@@ -685,13 +805,23 @@ def create_obstacle_on_condition(
 
     Used by the obstacle (Barricade, SELF) effect bundle.
     """
+    _create_obstacle_on_condition_effect(
+        payload=payload, position_a_id=position_a_id, position_b_id=position_b_id
+    )
+    _spend_marker(payload)
+
+
+def _create_obstacle_on_condition_effect(
+    *,
+    payload: Any,
+    position_a_id: int,
+    position_b_id: int,
+) -> None:
+    """The effect of ``create_obstacle_on_condition``, before its marker is spent."""
     from types import SimpleNamespace  # noqa: PLC0415
 
     # #2019: Prefer the cast-time positions on the instance.
-    try:
-        instance = payload.instance
-    except AttributeError:
-        instance = None
+    instance = _marker_instance(payload)
     if instance is not None and instance.cast_position_a_id is not None:
         pos_a_pk = instance.cast_position_a_id
         pos_b_pk = instance.cast_position_b_id
@@ -730,13 +860,33 @@ def create_zone_hazard_on_condition(  # noqa: PLR0913
     Reads the destination from payload.instance.cast_destination (set by the
     cast pipeline via position_params).
     """
+    _create_zone_hazard_on_condition_effect(
+        payload=payload,
+        position_id=position_id,
+        duration_rounds=duration_rounds,
+        consequence_pool_id=consequence_pool_id,
+        detect_check_type_id=detect_check_type_id,
+        disarm_check_type_id=disarm_check_type_id,
+        hazard_name=hazard_name,
+    )
+    _spend_marker(payload)
+
+
+def _create_zone_hazard_on_condition_effect(  # noqa: PLR0913
+    *,
+    payload: Any,
+    position_id: int,
+    duration_rounds: int,
+    consequence_pool_id: int,
+    detect_check_type_id: int,
+    disarm_check_type_id: int | None = None,
+    hazard_name: str = "Conjured Hazard",
+) -> None:
+    """The effect of ``create_zone_hazard_on_condition``, before its marker is spent."""
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
 
     # #2019: Prefer the cast-time destination on the instance.
-    try:
-        instance = payload.instance
-    except AttributeError:
-        instance = None
+    instance = _marker_instance(payload)
     if instance is not None and instance.cast_destination_id is not None:
         position = instance.cast_destination
     elif position_id > 0:
@@ -790,13 +940,29 @@ def raise_rampart_on_condition(
     any existing rampart on the position (re-cast semantics) and — for a
     SEAL_EDGES profile — also seals every PositionEdge touching the position.
     """
+    _raise_rampart_on_condition_effect(
+        payload=payload,
+        position_id=position_id,
+        element_profile_name=element_profile_name,
+        integrity=integrity,
+        duration_rounds=duration_rounds,
+    )
+    _spend_marker(payload)
+
+
+def _raise_rampart_on_condition_effect(
+    *,
+    payload: Any,
+    position_id: int,
+    element_profile_name: str,
+    integrity: int,
+    duration_rounds: int | None = None,
+) -> None:
+    """The effect of ``raise_rampart_on_condition``, before its marker is spent."""
     from world.areas.positioning.models import RampartElementProfile  # noqa: PLC0415
     from world.areas.positioning.services import raise_rampart  # noqa: PLC0415
 
-    try:
-        instance = payload.instance
-    except AttributeError:
-        instance = None
+    instance = _marker_instance(payload)
     if instance is not None and instance.cast_destination_id is not None:
         position = instance.cast_destination
     elif position_id > 0:
@@ -834,6 +1000,19 @@ def summon_ally_on_condition(
     ``payload.target`` is the bearer of the condition, which — for a SELF condition —
     is the caster. We repackage it into the bespoke namespace ``summon_ally`` reads.
     """
+    _summon_ally_on_condition_effect(
+        payload=payload,
+        threat_pool_name=threat_pool_name,
+        bond_rounds=bond_rounds,
+        max_health=max_health,
+    )
+    _spend_marker(payload)
+
+
+def _summon_ally_on_condition_effect(
+    *, payload: Any, threat_pool_name: str, bond_rounds: int | None = None, max_health: int = 30
+) -> None:
+    """The effect of ``summon_ally_on_condition``, before its marker is spent."""
     from types import SimpleNamespace  # noqa: PLC0415
 
     summon_ally(
@@ -877,6 +1056,8 @@ def blink_dodge(*, payload: Any) -> None:
     Mutation-only: setting ``payload.amount = 0`` is what stops lower-priority
     interceptors (they guard on ``payload.amount <= 0``) and zeroes the damage; there
     is no CANCEL_EVENT step (an unconditional cancel would fire on the fizzle path too).
+    A once-only (``UNTIL_USED``) ward is spent through ``spend_condition_use`` after the
+    dodge (#4584).
     """
     if payload.amount <= 0:
         return
@@ -909,3 +1090,4 @@ def blink_dodge(*, payload: Any) -> None:
         force_move_to_position(payload.target, dest)
 
     payload.amount = 0
+    spend_condition_use(instance)

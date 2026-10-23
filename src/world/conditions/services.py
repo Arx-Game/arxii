@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.db.models import Q, QuerySet, Sum
+from django.db.models import F, Q, QuerySet, Sum
 from django.utils import timezone
 
 from flows.constants import EventName
@@ -34,7 +34,7 @@ from world.achievements.constants import ConditionEventType
 from world.checks.constants import ModifierSourceKind
 from world.checks.models import CheckType
 from world.checks.services import perform_check_with_modifiers
-from world.checks.types import ModifierContribution
+from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.conditions.constants import (
     POISON_CATEGORY_NAME,
     POISON_DAMAGE_TYPE_NAME,
@@ -514,6 +514,27 @@ class _BulkConditionContext:
 
     def get_active_condition_ids(self, target_id: int) -> set[int]:
         return {i.condition_id for i in self.active_instances_by_target.get(target_id, [])}
+
+    def forget_spent_instances(self, target_id: int) -> None:
+        """Drop instances deleted since the batch was fetched (#4584).
+
+        A resist roll inside the batch can spend a once-only ward
+        (``spend_contributing_conditions``). The identity map hands the same object to
+        the spend, whose delete sets ``pk`` to None, so the stale entry is found by that.
+        Without this a later item in the batch would still see the spent ward as active:
+        as a prevention match, an interaction partner, or a row to stack onto.
+        """
+        instances = self.active_instances_by_target.get(target_id)
+        if not instances:
+            return
+        spent = [i for i in instances if i.pk is None]
+        if not spent:
+            return
+        self.active_instances_by_target[target_id] = [i for i in instances if i.pk is not None]
+        for inst in spent:
+            key = (target_id, inst.condition_id)
+            if self.existing_pairs.get(key) is inst:
+                self.existing_pairs.pop(key)
 
 
 def _build_bulk_context(
@@ -1117,7 +1138,10 @@ def _bulk_apply_one(  # noqa: PLR0913
                 applied_conditions=[],
             )
 
-    if _check_application_resist(app.target, app.template):
+    resisted = _check_application_resist(app.target, app.template)
+    # The resist roll may have spent a once-only ward the batch context still holds.
+    ctx.forget_spent_instances(app.target.pk)
+    if resisted:
         return ApplyConditionResult(
             success=False,
             instance=None,
@@ -1163,6 +1187,11 @@ def _bulk_apply_one(  # noqa: PLR0913
             ),
             location=target_location,
         )
+        # A marker's own CONDITION_APPLIED flow may spend it at once. The next item's
+        # post-resist forget would also drop it; forgetting here keeps the context
+        # true at the end of every item, so nothing read between items stacks onto,
+        # or re-inserts, a spent marker.
+        ctx.forget_spent_instances(app.target.pk)
 
     return result
 
@@ -1472,6 +1501,36 @@ def _teardown_removed_condition_instance(
     _clear_unseen_observer_if_concealing(target, condition)
     _resolve_deferred_death_on_expiry(target, condition)
     return condition
+
+
+def spend_condition_use(instance: ConditionInstance) -> bool:
+    """End a once-only (``UNTIL_USED``) condition because it was just used (#4584).
+
+    The one primitive every "once then spent" effect calls: a blessing whose term helped
+    a real roll (``spend_contributing_conditions``), and the reactive wards and markers
+    that fire once. Spending is a full removal through
+    ``_teardown_removed_condition_instance``, so CONDITION_REMOVED, the stories hook and
+    every other removal side effect run exactly as for any other removal.
+
+    The bearer's trigger cache is then refreshed synchronously. The instance's reactive
+    Trigger rows cascade away with it, but ``TriggerHandler.invalidate`` defers its reset
+    to commit, and ``resolve_round`` is one transaction: without the refresh a ward spent
+    on the first hit of a round would still fire on the second. ``hasattr`` guards a bare
+    ObjectDB target with no handler, as ``_invalidate_condition_handler`` does.
+
+    Returns True when this call ended the instance. Returns False, touching nothing, when
+    the instance is already gone (``pk is None``, so spending twice is harmless) or its
+    template is not ``UNTIL_USED`` (a lasting condition is never spent by use).
+    """
+    if instance.pk is None:
+        return False
+    if instance.condition.default_duration_type != DurationType.UNTIL_USED:
+        return False
+    target = instance.target
+    _teardown_removed_condition_instance(target, instance)
+    if hasattr(target, "trigger_handler"):
+        target.trigger_handler.refresh()
+    return True
 
 
 @transaction.atomic
@@ -2715,9 +2774,63 @@ def condition_contributions(
                 source_kind=ModifierSourceKind.CONDITION,
                 source_label=label,
                 value=modifier_value,
+                condition_instance_id=instance.pk,
             )
         )
     return contributions
+
+
+def contributing_condition_ids(breakdown: ModifierBreakdown) -> tuple[int, ...]:
+    """The condition instances whose nonzero term is in ``breakdown``, in pk order (#4584).
+
+    A zero term moved nothing, so it is not a use. Lasting and once-only instances both
+    appear here; ``spend_conditions_by_id`` decides which of them a use ends.
+    """
+    return tuple(
+        sorted(
+            {
+                c.condition_instance_id
+                for c in breakdown.contributions
+                if c.condition_instance_id is not None and c.value != 0
+            }
+        )
+    )
+
+
+def spend_contributing_conditions(breakdown: ModifierBreakdown) -> None:
+    """Spend every once-only condition whose nonzero term helped a real roll (#4584).
+
+    Called by a roll site AFTER the roll its ``breakdown`` fed, never by
+    ``collect_check_modifiers`` itself (previews read that breakdown too). Each distinct
+    ``condition_instance_id`` on a contribution with a nonzero value is a use; a zero term
+    moved nothing, so it is not one. The instances load in one query restricted to
+    ``UNTIL_USED`` templates, so a lasting condition is never touched.
+
+    An NPC's own ``UNTIL_USED`` check modifier counted through
+    ``opponent_condition_opposition`` is not spent by a PC's roll: opposition is read by
+    previews too and returns only a number, with no instance provenance. The once-only
+    rule covers the bearer's own rolls.
+    """
+    spend_conditions_by_id(contributing_condition_ids(breakdown))
+
+
+def spend_conditions_by_id(instance_ids: Iterable[int]) -> None:
+    """Spend the once-only conditions among ``instance_ids`` with one query (#4584).
+
+    The id-based entry point for a roll that happens later than the breakdown that fed it:
+    a paused resolution carries ``contributing_condition_ids`` and spends them when its
+    resume rolls. An id whose instance is already gone, or whose template is lasting,
+    is skipped; no ids means no query.
+    """
+    ids = set(instance_ids)
+    if not ids:
+        return
+    instances = ConditionInstance.objects.filter(
+        pk__in=ids,
+        condition__default_duration_type=DurationType.UNTIL_USED,
+    ).select_related("condition", "target")
+    for instance in instances:
+        spend_condition_use(instance)
 
 
 def get_resistance_modifier(
@@ -3047,12 +3160,11 @@ def clear_all_conditions(
     return len(instances)
 
 
-def _active_flagged_instances(
+def _active_matching_instances(
     targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
-    *,
-    flag_field: str,
+    template_q: Q,
 ) -> QuerySet[ConditionInstance]:
-    """Active instances on ``targets`` whose template has ``flag_field`` set, unordered.
+    """Active instances on ``targets`` matching ``template_q``, unordered.
 
     Uses ``get_active_conditions``'s notion of active (not suppressed, not past an
     INGAME_TIME ``expires_at``) but, unlike it, does not sweep expired rows: this is
@@ -3063,8 +3175,8 @@ def _active_flagged_instances(
     return (
         ConditionInstance.objects.filter(
             _not_suppressed_q(),
+            template_q,
             target_id__in=target_ids,
-            **{f"condition__{flag_field}": True},
         )
         .exclude(
             expires_at__isnull=False,
@@ -3072,6 +3184,58 @@ def _active_flagged_instances(
             condition__default_duration_type=DurationType.INGAME_TIME,
         )
         .order_by()
+    )
+
+
+def _active_flagged_instances(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+    *,
+    flag_field: str,
+) -> QuerySet[ConditionInstance]:
+    """Active instances on ``targets`` whose template has ``flag_field`` set, unordered."""
+    return _active_matching_instances(targets, Q(**{f"condition__{flag_field}": True}))
+
+
+def retaliating_instances(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> list[ConditionInstance]:
+    """The bearer's active strike-back instances, oldest first, in one query (#4584).
+
+    A strike-back instance is one whose template deals ``retaliation_damage`` or lays a
+    ``retaliation_condition`` on an NPC that hits the bearer. The damage seam
+    (``_emit_post_damage_events``) hands each one to ``strike_back``; the template and
+    the two retaliation FKs ``strike_back`` reads are fetched in the same query.
+    """
+    return list(
+        _active_matching_instances(
+            [target],
+            Q(condition__retaliation_damage__gt=0)
+            | Q(condition__retaliation_condition__isnull=False),
+        )
+        .select_related(
+            "condition",
+            "condition__retaliation_damage_type",
+            "condition__retaliation_condition",
+        )
+        .order_by("pk")
+    )
+
+
+def knockout_preventing_instance(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> ConditionInstance | None:
+    """The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).
+
+    Read by the vitals knockout tier (``_process_knockout_tier``), which skips the
+    knockout roll when one is found and spends it through ``spend_condition_use`` (an
+    ``UNTIL_USED`` grace ends; a lasting one keeps holding). Designated by the
+    template's ``prevents_knockout`` field, never by its name.
+    """
+    return (
+        _active_flagged_instances([target], flag_field="prevents_knockout")
+        .select_related("condition")
+        .order_by("pk")
+        .first()
     )
 
 
@@ -3135,6 +3299,53 @@ def draws_aggro_target_ids(
         .values_list("target_id", flat=True)
         .distinct()
     )
+
+
+def provoking_source_by_target(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> dict[int, int]:
+    """ObjectDB pk of each target's provoker from active forces_attack_on_source conditions.
+
+    Keyed by the bearer's ObjectDB pk; the value is the ``source_character_id`` of the
+    bearer's newest (highest pk) active, unsuppressed flagged instance that has a source.
+    An instance with no source has nobody to attack and is skipped. One query for all
+    ``targets`` (#4584). Enemy target selection narrows an NPC to its provoker.
+    """
+    rows = (
+        _active_flagged_instances(targets, flag_field="forces_attack_on_source")
+        .filter(source_character__isnull=False)
+        .order_by("pk")
+        .values_list("target_id", "source_character_id")
+    )
+    return dict(rows)
+
+
+def guardians_by_target(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+) -> dict[int, list[int]]:
+    """Guardian ObjectDB pks for each target from active source_guards_bearer conditions.
+
+    Keyed by the ward's ObjectDB pk; the value lists the distinct ``source_character_id``s
+    of the ward's active, unsuppressed flagged instances, oldest instance first. An
+    instance with no source has nobody to step in, and one whose source is its own
+    bearer is a self-cast guard that never interposes for her, so both are skipped.
+    Wards with no guardian are absent. One query for all ``targets`` (#4584). The
+    interpose seam (``_try_interpose``) tries each guardian between named and
+    guard-anyone declarations.
+    """
+    rows = (
+        _active_flagged_instances(targets, flag_field="source_guards_bearer")
+        .filter(source_character__isnull=False)
+        .exclude(source_character_id=F("target_id"))
+        .order_by("pk")
+        .values_list("target_id", "source_character_id")
+    )
+    guardians: dict[int, list[int]] = {}
+    for target_id, guardian_id in rows:
+        ward_guardians = guardians.setdefault(target_id, [])
+        if guardian_id not in ward_guardians:
+            ward_guardians.append(guardian_id)
+    return guardians
 
 
 def get_turn_order_modifier(character_sheet: "CharacterSheet") -> int:

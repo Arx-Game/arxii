@@ -16,6 +16,11 @@ from django.utils import timezone
 
 from world.checks.models import CheckCategory, CheckType
 from world.checks.services import collect_check_modifiers, perform_check_with_modifiers
+from world.conditions.services import (
+    knockout_preventing_instance,
+    spend_condition_use,
+    spend_contributing_conditions,
+)
 from world.vitals.constants import (
     DEATH_CHECK_NAME,
     DEATH_HEALTH_THRESHOLD,
@@ -555,6 +560,7 @@ def _apply_wound_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
         wound_pool,
         extra_modifiers=extra_modifiers + wound_breakdown.extra_modifiers_total,
     )
+    spend_contributing_conditions(wound_breakdown)
     wounds = _wounds_from(pending)
     if wounds:
         result.wounds_applied.extend(wounds)
@@ -654,6 +660,7 @@ def _apply_death_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
         extra_modifiers=extra_modifiers + death_breakdown.extra_modifiers_total,
         source_character=source_character,
     )
+    spend_contributing_conditions(death_breakdown)
     result.modifier_breakdown = death_breakdown
     if _applied_bleed_out(pending):
         result.dying = True
@@ -691,6 +698,7 @@ def _apply_knockout_tier(  # noqa: PLR0913 - one keyword arg per resolved tier i
         knockout_pool,
         extra_modifiers=extra_modifiers + ko_breakdown.extra_modifiers_total,
     )
+    spend_contributing_conditions(ko_breakdown)
     result.modifier_breakdown = ko_breakdown
     if _applied_unconscious(pending):
         result.knocked_out = True
@@ -795,6 +803,14 @@ def _process_knockout_tier(  # noqa: PLR0913
 
     Skips when knockout difficulty is non-positive, the pool is missing, or the
     endurance CheckType is unauthored (seeding gap).
+
+    A grace condition (``prevents_knockout``, #4584) stops the roll: it is looked up
+    only after those guards, so it is used only when a knockout roll would actually
+    happen, and spent through ``spend_condition_use`` (an ``UNTIL_USED`` grace stops
+    one knockout and ends; a ``ROUNDS`` grace stops every knockout while it lasts).
+    ``CHARACTER_INCAPACITATED`` still fires on entering the knockout band, because it
+    marks the band, not the knockout. NPC opponents have no knockout tier (they have
+    no ``CharacterSheet``), so the flag has nothing to stop on them.
     """
     knockout_difficulty = calculate_knockout_difficulty(
         health_pct=health_pct,
@@ -804,6 +820,10 @@ def _process_knockout_tier(  # noqa: PLR0913
         return
     endurance_check_type = _ensure_endurance_check_type()
     if endurance_check_type is None:
+        return
+    grace = knockout_preventing_instance(character_sheet.character)
+    if grace is not None:
+        spend_condition_use(grace)
         return
     _apply_knockout_tier(
         character_sheet=character_sheet,

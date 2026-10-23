@@ -20,7 +20,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.services import declare_action, resolve_cast_position_params, resolve_round
 from world.conditions.constants import OBSTACLE_CONDITION_NAME
-from world.conditions.models import ConditionInstance
+from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.fatigue.constants import EffortLevel
 from world.magic.effect_palette_content import OBSTACLE_TECHNIQUE_NAME, ensure_obstacle_content
 from world.magic.factories import CharacterAnimaFactory, TechniqueFactory
@@ -65,10 +65,10 @@ class BarricadeCastPositionJourneyTests(TestCase):
     """Task 3 (#2206): a declared cast position pair reaches the applied condition.
 
     Full journey: declare a Barricade cast with a validated position_a/position_b
-    pair, resolve the round, and assert the resulting ConditionInstance carries
-    the declared ``cast_position_a`` FK and that the pair's PositionEdge was
-    sealed impassable — proving ``CombatTechniqueResolver._apply_conditions``
-    forwards ``position_params`` to ``apply_technique_conditions``.
+    pair, resolve the round, and assert the pair's PositionEdge was sealed
+    impassable and the once-only marker was spent (#4584). The sealed edge proves
+    ``CombatTechniqueResolver._apply_conditions`` forwards ``position_params`` to
+    ``apply_technique_conditions``.
     """
 
     @classmethod
@@ -107,11 +107,14 @@ class BarricadeCastPositionJourneyTests(TestCase):
 
         resolve_round(self.encounter, offense_check_fn=mock_check_fn)
 
-        instance = ConditionInstance.objects.get(
-            condition__name=OBSTACLE_CONDITION_NAME,
-            target=self.participant.character_sheet.character,
+        # The Barricade marker is UNTIL_USED: its adapter read the stamped cast
+        # positions (the sealed edge below proves they reached it) and spent it (#4584).
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                condition=ConditionTemplate.objects.get(name=OBSTACLE_CONDITION_NAME),
+                target=self.participant.character_sheet.character,
+            ).exists()
         )
-        self.assertEqual(instance.cast_position_a_id, self.pos_a.pk)
 
         edge = PositionEdge.objects.get(position_a=self.pos_a, position_b=self.pos_b)
         self.assertFalse(edge.is_passable)

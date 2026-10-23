@@ -12,7 +12,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from actions.constants import ActionCategory, ActionTargetType
-from actions.services import start_action_resolution, start_resisted_action_resolution
+from actions.services import (
+    spend_or_defer_condition_uses,
+    start_action_resolution,
+    start_resisted_action_resolution,
+)
 from world.checks.theater import check_outcome_faces, maybe_emit_resolution_theater
 from world.checks.types import ResolutionContext
 from world.fatigue.constants import EffortLevel
@@ -1231,6 +1235,7 @@ def _resolve_pc_resisting(
     mirrored outcome drives the template's consequence pool from the NPC's side.
     """
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
+    from world.conditions.services import spend_contributing_conditions  # noqa: PLC0415
 
     action_template = action_request.action_template
     resist_breakdown = collect_check_modifiers(
@@ -1238,16 +1243,19 @@ def _resolve_pc_resisting(
         action_template.resist_check_type,
         scene=action_request.scene,
     )
+    action_resolution = start_resisted_action_resolution(
+        initiator=context.character,
+        resister=target_persona.character_sheet.character,
+        template=action_template,
+        target_difficulty=difficulty,
+        context=context,
+        effort_level=resist_effort or None,
+        extra_modifiers=resist_breakdown.extra_modifiers_total,
+    )
+    # The resister's roll happened at once above, so their once-only terms are used (#4584).
+    spend_contributing_conditions(resist_breakdown)
     return EnhancedSceneActionResult(
-        action_resolution=start_resisted_action_resolution(
-            initiator=context.character,
-            resister=target_persona.character_sheet.character,
-            template=action_template,
-            target_difficulty=difficulty,
-            context=context,
-            effort_level=resist_effort or None,
-            extra_modifiers=resist_breakdown.extra_modifiers_total,
-        ),
+        action_resolution=action_resolution,
         action_key=action_request.action_key,
         fury_committed=None,
     )
@@ -1391,13 +1399,15 @@ def _resolve_action_against_persona(
         skill_term = technique_skill_term(character, action_request.technique)
         technique_terms = (skill_term,) if skill_term is not None else ()
         technique_check_modifiers = 0
+        technique_breakdown = None
         if tech_check_type is not None:
-            technique_check_modifiers = collect_check_modifiers(
+            technique_breakdown = collect_check_modifiers(
                 action_request.initiator_persona.character_sheet,
                 tech_check_type,
                 scene=action_request.scene,
                 extra_traits=technique_terms,
-            ).extra_modifiers_total
+            )
+            technique_check_modifiers = technique_breakdown.extra_modifiers_total
         result = _resolve_enhanced_action(
             character=character,
             technique=action_request.technique,
@@ -1417,6 +1427,10 @@ def _resolve_action_against_persona(
             fury_anchor=action_request.fury_anchor,
             extra_traits=technique_terms,
         )
+        # Spend when the main check rolled; a resolution that paused before it carries
+        # the ids and its resume spends them, one a failed gate aborted spends nothing (#4584).
+        if technique_breakdown is not None:
+            spend_or_defer_condition_uses(result.action_resolution, technique_breakdown)
     else:
         # Plain (non-technique) actions do not use the fury lever; fury is a
         # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
@@ -1459,6 +1473,8 @@ def _resolve_action_against_persona(
             extra_modifiers=fatigue_penalty + breakdown.extra_modifiers_total + pull_flat_bonus,
             effort_level=effort_level,
         )
+        # Same rule as the technique branch.
+        spend_or_defer_condition_uses(action_resolution, breakdown)
         result = EnhancedSceneActionResult(
             action_resolution=action_resolution,
             action_key=action_request.action_key,

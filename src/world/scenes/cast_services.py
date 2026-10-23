@@ -25,7 +25,7 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.utils import timezone
 
-from actions.services import start_action_resolution
+from actions.services import spend_or_defer_condition_uses, start_action_resolution
 from world.checks.types import ResolutionContext
 from world.combat.cast_seed import (
     encounter_requiring_risk_acknowledgement,
@@ -208,13 +208,15 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
 
     check_modifier_total = 0
+    cast_breakdown = None
     if cast_check is not None and character_sheet is not None:
-        check_modifier_total = collect_check_modifiers(
+        cast_breakdown = collect_check_modifiers(
             character_sheet,
             cast_check.check_type,
             scene=scene,
             extra_traits=cast_check.extra_traits,
-        ).extra_modifiers_total
+        )
+        check_modifier_total = cast_breakdown.extra_modifiers_total
 
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
@@ -244,7 +246,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         extra_modifiers: int = 0,
     ) -> PendingActionResolution:
         captured["ledger"] = ledger
-        return start_action_resolution(
+        resolution = start_action_resolution(
             character=character,
             template=action_template,
             target_difficulty=difficulty,
@@ -253,6 +255,11 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
             extra_modifiers=extra_modifiers + check_modifier_total,
             extra_traits=cast_check.extra_traits if cast_check is not None else (),
         )
+        # Settled here, not after use_technique: a gate (the Soulfray confirmation) can stop
+        # the cast before this closure runs, and then nothing was rolled (#4584).
+        if cast_breakdown is not None:
+            spend_or_defer_condition_uses(resolution, cast_breakdown)
+        return resolution
 
     technique_result = use_technique(
         character=character,

@@ -89,6 +89,32 @@ personal defense above, and before `DAMAGE_PRE_APPLY` even emits.
   not a single bearer. See `docs/systems/areas.md`'s "Rampart — Living Barriers" section
   and ADR-0125 for the full model + firing-order detail.
 
+## Guardian interpose precedence (declared and standing)
+
+A hit on a PC ward is answered by at most one guardian. `_try_interpose`
+(`world/combat/services/damage/interception.py`) tries, in order:
+
+1. **Declared Interpose naming the ward** (`CombatRoundAction`), by participant id.
+2. **Standing guards** (#4584, ADR-4584-A): a `source_guards_bearer` condition on the ward
+   makes its source a guardian (`guardians_by_target`, oldest condition first), if she is
+   an active participant, is not the ward, and **declared no Interpose this round**. A
+   guardian with a declaration (naming this ward, another ward, or anyone) is tried only
+   through it, so she is never tried twice for one hit. A guard cast on its own bearer never
+   interposes.
+3. **Declared guard-anyone Interpose**, by participant id.
+
+All three reach the same tail, `_attempt_guardian_interpose`, so a standing guard counts
+against `REACTIONS_PER_ROUND` and `ABSORPTION_CAP_PER_MOMENT`, and pays interpose fatigue
+(physical, very low effort: she declared nothing to read an effort from). She still takes
+her own turn. A guardian who cannot act (`can_act`: knocked unconscious, though still
+ACTIVE) is never tried. An unavailable guardian falls through to the next; an attempt, even
+a failed roll, ends the search. Standing guards cover PC wards in combat only: not an ALLY summon
+ward, and not Sudden Harm outside combat. Absorb, reflect, blink and strike-back stay
+outside both budgets (ADR-0161). A guard laid in round N holds from round N+1.
+
+A standing guard that is declined by either budget uses the same private decline line as a
+declared one (`_narrate_reaction_declined`, below).
+
 ## Barrier (force-field absorb)
 
 A `DAMAGE_PRE_APPLY` interceptor drains a `ConditionInstance.absorb_remaining`
@@ -115,12 +141,22 @@ numbers.
 | Event | Where | Who is told |
 |---|---|---|
 | Technique-guardian cannot pay `reactive_anima_cost` | `_narrate_technique_interpose_fizzle` (`world/combat/services/`) | guardian (private, names the unguarded ally); room (soft line) |
-| Reaction declined by `REACTIONS_PER_ROUND` / `ABSORPTION_CAP_PER_MOMENT` | `_narrate_reaction_declined` (`_dispatch_interpose_action`, `_try_catch_sent_flying`) | guardian only (private) |
+| Reaction declined by `REACTIONS_PER_ROUND` / `ABSORPTION_CAP_PER_MOMENT` | `_narrate_reaction_declined` (`_attempt_guardian_interpose`, `_try_catch_sent_flying`), declared or standing guard | guardian only (private) |
 | Ward lapses at upkeep | `_narrate_upkeep_lapse` (`drain_reactive_upkeep`) | payer (private, why); bearer if different (private, that); room |
 | Standing ward cannot pay its fee | `_narrate_reactive_fizzle` (`world/magic/services/effect_handlers.py`, from `_try_spend_reactive`) | payer (private, why); bearer if different (private, that); room only inside an encounter |
 
 The Guard panel (`YourTurn.tsx`, `guard-unaffordable-hint`) warns a guardian before the
 round when their anima is below the selected technique's fee and Soulfray consent is off.
+
+## Strike-back (answers after the hit lands)
+
+Not part of the pre-apply pipeline: once a hit has landed on a PC and `DAMAGE_APPLIED` is
+emitted, `_answer_with_strike_backs` (`world/combat/services/damage/damage.py`) calls
+`strike_back` for each of the bearer's wards with `retaliation_damage` or
+`retaliation_condition` (#4584). It only answers an NPC (`CombatOpponent`) attacker, pays the
+ward's `reactive_anima_cost` (a fizzle is narrated per the table above), and its damage
+counts as duel interference and probing as rampart retaliation does. A successful strike is
+not narrated (known gap). It is outside both reaction budgets.
 
 ## Mitigation (armor soak + thread DR)
 

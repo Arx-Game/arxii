@@ -76,6 +76,10 @@ class ConditionMechanicsInspectionTests(TestCase):
             reactive_anima_cost=1,
             is_clash_lock=True,
             passive_decay_per_day=1,
+            forces_attack_on_source=True,
+            source_guards_bearer=True,
+            prevents_knockout=True,
+            retaliation_damage=3,
         )
         ConditionCapabilityEffectFactory(condition=template)
         ConditionModifierEffectFactory(condition=template)
@@ -108,6 +112,10 @@ class ConditionMechanicsInspectionTests(TestCase):
             "category.conceals_from_perception",
             "combat.affects_turn_order",
             "combat.draws_aggro",
+            "combat.forces_attack_on_source",
+            "combat.source_guards_bearer",
+            "combat.prevents_knockout",
+            "combat.retaliation",
             "combat.break_free",
             "combat.exploitable_tiers",
             "combat.upkeep_anima",

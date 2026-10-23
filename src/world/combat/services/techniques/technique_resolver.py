@@ -38,6 +38,7 @@ from world.combat.services.techniques.technique_targets import (
 )
 from world.combat.types import CombatTechniqueResolution, OpponentDamageResult
 from world.conditions.constants import Allegiance
+from world.conditions.services import spend_contributing_conditions
 from world.fatigue.services import get_fatigue_penalty
 from world.magic.constants import EffectKind
 
@@ -230,6 +231,7 @@ class CombatTechniqueResolver:
             stat_override=stat_override,
             extra_traits=self.offense_extra_traits,
         )
+        spend_contributing_conditions(breakdown)
         from world.magic.services.ultimates import floor_ultimate_check  # noqa: PLC0415
 
         return floor_ultimate_check(result, self.action.focused_action)
@@ -755,6 +757,7 @@ class CombatTechniqueResolver:
             situation_ctx=situation_ctx,
             extra_traits=pen_extra_traits,
         )
+        spend_contributing_conditions(pen_breakdown)
         factor = get_penetration_factor(pen_result.success_level)
         builder = PowerLedgerBuilder.from_ledger(combat_ledger)
         if factor == 0:

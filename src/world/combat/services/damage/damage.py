@@ -14,7 +14,7 @@ from flows.events.payloads import (
 from world.combat import services as _svc
 from world.combat.constants import StrikeDelivery
 from world.combat.damage_source import classify_source
-from world.combat.models import CombatParticipant
+from world.combat.models import CombatOpponent, CombatParticipant
 from world.combat.services.damage.companion_defend import _fire_on_hit_pool, _try_companion_defend
 from world.combat.services.damage.condition_interaction import _apply_condition_damage_interactions
 from world.combat.services.damage.execute import _apply_execute_multiplier
@@ -41,6 +41,27 @@ if TYPE_CHECKING:
     from world.vitals.models import CharacterVitals
 
 
+def _answer_with_strike_backs(applied_payload: DamageAppliedPayload) -> None:
+    """Let each strike-back ward on the struck PC answer the blow, oldest first (#4584).
+
+    Read here, where the hit has landed, from the wards' own retaliation fields
+    (``retaliating_instances``), not through a seeded flow. ``strike_back`` decides
+    whether the blow is answered (an NPC striker, damage dealt, the fee paid).
+    A hit from anything but a ``CombatOpponent`` can never be answered (PCs roll,
+    NPCs are targets), so it skips the wards query.
+    """
+    if applied_payload.amount_dealt <= 0:
+        return
+    if not isinstance(applied_payload.source.ref, CombatOpponent):
+        return
+    # Lazy imports: magic.services imports combat.services.
+    from world.conditions.services import retaliating_instances  # noqa: PLC0415
+    from world.magic.services.effect_handlers import strike_back  # noqa: PLC0415
+
+    for instance in retaliating_instances(applied_payload.target):
+        strike_back(payload=applied_payload, instance=instance)
+
+
 def _emit_post_damage_events(  # noqa: PLR0913
     *,
     character: Character,
@@ -57,6 +78,7 @@ def _emit_post_damage_events(  # noqa: PLR0913
     """Emit DAMAGE_APPLIED, CHARACTER_INCAPACITATED, and CHARACTER_KILLED events post-save.
 
     Called after vitals.save(); no-op when room is None (unlocated characters).
+    Strike-back wards on the struck PC answer right after DAMAGE_APPLIED (#4584).
     """
     if room is None:
         return
@@ -68,6 +90,7 @@ def _emit_post_damage_events(  # noqa: PLR0913
         hp_after=health_after,
     )
     _svc.emit_event(EventName.DAMAGE_APPLIED, applied_payload, location=room)
+    _answer_with_strike_backs(applied_payload)
 
     will_emit_death_gate = death_eligible or force_death
     if knockout_eligible and not was_in_knockout_band and not will_emit_death_gate:

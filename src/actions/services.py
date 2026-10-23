@@ -19,6 +19,11 @@ from world.checks.consequence_resolution import (
 )
 from world.checks.services import mirrored_outcome, perform_check
 from world.checks.types import PendingResolution, ResolutionContext
+from world.conditions.services import (
+    contributing_condition_ids,
+    spend_conditions_by_id,
+    spend_contributing_conditions,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -29,7 +34,7 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate, ActionTemplateGate
     from actions.models.consequence_pools import ConsequencePoolEntry
     from world.checks.models import CheckType
-    from world.checks.types import CheckResult, ExtraTraitTerm
+    from world.checks.types import CheckResult, ExtraTraitTerm, ModifierBreakdown
     from world.mechanics.types import AppliedEffect
 
 
@@ -305,9 +310,29 @@ def _resume_confirmed(
             extra_traits=pending.extra_traits,
         )
         pending.current_phase = ResolutionPhase.MAIN_RESOLVED
+        # The main check just rolled with the condition terms the caller folded into
+        # ``extra_modifiers``: spend them now, once (#4584).
+        spend_conditions_by_id(pending.contributing_condition_ids)
+        pending.contributing_condition_ids = ()
 
     pending.current_phase = ResolutionPhase.COMPLETE
     return pending
+
+
+def spend_or_defer_condition_uses(
+    pending: PendingActionResolution, breakdown: ModifierBreakdown
+) -> None:
+    """Spend the once-only terms of ``breakdown`` if ``pending`` rolled its main check (#4584).
+
+    Call after ``start_action_resolution`` with the breakdown whose total was passed as
+    ``extra_modifiers``. A resolution that rolled spends at once. One that paused or was
+    aborted before its main check keeps the ids on ``contributing_condition_ids``, so the
+    resume spends them when (and only when) it rolls; an aborted one never does.
+    """
+    if pending.main_result is not None:
+        spend_contributing_conditions(breakdown)
+        return
+    pending.contributing_condition_ids = contributing_condition_ids(breakdown)
 
 
 def advance_resolution(

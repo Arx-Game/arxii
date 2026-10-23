@@ -1586,18 +1586,27 @@ dismisses `EncounterOutcomeBanner`'s digests.
 
 ### The reaction economy fire seam (#2639, F-10c)
 
-`_dispatch_interpose_action` — the shared tail `_try_interpose` (PC ward) and
-`_try_interpose_for_opponent` (ALLY-summon ward) both call — gates on TWO independent
-budgets before doing anything else:
+`_attempt_guardian_interpose`, the shared tail `_try_interpose` (PC ward) and
+`_try_interpose_for_opponent` (ALLY-summon ward) both reach, through the one-line wrapper
+`_dispatch_interpose_action` for a declaration, gates on TWO independent budgets before
+doing anything else:
 
 ```
-_dispatch_interpose_action(action, protected, pre_payload)
-  action.participant.reactions_used >= REACTIONS_PER_ROUND (1)?      → return (no-op)
+_attempt_guardian_interpose(guardian, protected, pre_payload, *, action)
+  guardian.reactions_used >= REACTIONS_PER_ROUND (1)?                → return (no-op)
   pre_payload.answers_consumed >= ABSORPTION_CAP_PER_MOMENT (2)?     → return (no-op)
-  action.participant.reactions_used += 1; save()
+  guardian.reactions_used += 1; save()
   pre_payload.answers_consumed += 1
   # ...existing technique-vs-mundane branch, unchanged...
 ```
+
+`action` is the guardian's declared Interpose, or `None` for a standing guard (#4584,
+ADR-4584-A, which amends ADR-0161 for guards only): a `source_guards_bearer` condition
+makes its source try the mundane interpose on every hit on the bearer, counted against
+both budgets and paying interpose fatigue at very low effort. `_try_interpose` tries, in
+order, named-ally declarations, standing guards (`_standing_guardians`, oldest condition
+first), then guard-anyone declarations; a guardian who declared any Interpose that round
+acts only through her declaration, and a self-cast guard never interposes.
 
 `reactions_used` resets to 0 for every `CombatParticipant` in `begin_declaration_phase`
 — via an identity-map-safe `bulk_update` over freshly-queried instances, NOT a raw

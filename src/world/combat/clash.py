@@ -49,6 +49,7 @@ from world.combat.types import (
     ClashRoundResult,
     PreparedClashContribution,
 )
+from world.conditions.services import spend_contributing_conditions
 from world.magic.constants import AffinityInteractionAggressor, ResonanceValence
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services import use_technique
@@ -277,7 +278,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         # extra_modifiers carries FLAT_BONUS pull effects from use_technique; combat
         # pulls already apply their flat bonus via the CombatAction offense path and
         # cast_pull is never set in clash, so extra_modifiers will always be 0 here.
-        return perform_check(
+        result = perform_check(
             objectdb,
             check_type,
             target_difficulty=0,
@@ -285,6 +286,9 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
             situation_ctx=check_situation_ctx,
             extra_traits=cast_check.extra_traits,
         )
+        # Spent here, not above: use_technique may stop before calling this closure.
+        spend_contributing_conditions(breakdown)
+        return result
 
     # 4. Route through the full magic pipeline (anima cost, Soulfray, mishap,
     #    reactive events, corruption, resonance environment).

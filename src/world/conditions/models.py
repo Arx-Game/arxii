@@ -384,6 +384,33 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=0,
         help_text="Higher = more likely to be targeted",
     )
+    forces_attack_on_source = models.BooleanField(
+        default=False,
+        help_text=(
+            "While active on an NPC opponent, it attacks only the condition's source each "
+            "round, unless an engagement lock holds it or the source is down, out of reach "
+            "or gone. Read when the opponent chooses its target, so a provoke laid in round "
+            "N holds from round N+1, and a 1-round duration ends before it is read. Player "
+            "characters ignore it."
+        ),
+    )
+    source_guards_bearer = models.BooleanField(
+        default=False,
+        help_text=(
+            "While active, the condition's source tries to intercept each hit on the bearer "
+            "with her own interpose roll, paying interpose fatigue and spending her reaction "
+            "for the round. She still takes her own turn. Guards are bound before the round "
+            "resolves, so a guard holds from the round after it lands."
+        ),
+    )
+    prevents_knockout = models.BooleanField(
+        default=False,
+        help_text=(
+            "While active, the bearer's knockout roll is skipped. Until used: stops one "
+            "knockout, then ends. Rounds: no knockout for that many rounds. NPC opponents "
+            "have no knockout roll."
+        ),
+    )
 
     # === Display Settings ===
     icon = models.CharField(
@@ -516,6 +543,33 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=0,
         help_text="Anima spent each time this condition's reactive effect fires "
         "(a dodge/reflect/absorb); can't pay → the effect fizzles. 0 = free.",
+    )
+    retaliation_damage = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Damage dealt to an NPC that hits the bearer, as a strike-back read directly "
+            "where combat damage lands. 0 deals none. Never strikes a player character."
+        ),
+    )
+    retaliation_damage_type = models.ForeignKey(
+        _DAMAGE_TYPE_FK,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Damage type of the strike-back damage. Empty is untyped.",
+    )
+    retaliation_condition = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Condition laid on an NPC that hits the bearer, with this condition's source as "
+            "its source. Pair it with a provoke to make striking the ward mean facing the "
+            "caster."
+        ),
     )
 
     # === Corruption (Scope 7) ===

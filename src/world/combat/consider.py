@@ -355,6 +355,7 @@ def consider_opponent(participant: CombatParticipant, opponent: CombatOpponent) 
         perform_check,
     )
     from world.combat.models import ConsiderReading  # noqa: PLC0415
+    from world.conditions.services import spend_contributing_conditions  # noqa: PLC0415
     from world.progression.services.skill_development import (  # noqa: PLC0415
         get_character_path_level,
     )
@@ -385,6 +386,7 @@ def consider_opponent(participant: CombatParticipant, opponent: CombatOpponent) 
         target_difficulty=difficulty,
         extra_modifiers=modifier_breakdown.extra_modifiers_total,
     )
+    spend_contributing_conditions(modifier_breakdown)
     success_level = result.success_level
 
     # Compute the player's level for the gap.
