@@ -17374,29 +17374,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/missions/outcome-tiers/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description The check outcome tiers a route can key on, worst to best (#4558).
-     *
-     *     Only tiers a result chart or an encounter outcome mapping actually names
-     *     are listed; a tier nothing can ever roll would be a route that never fires.
-     *     Same audience as the category browse: staff or any GM.
-     */
-    get: operations['missions_outcome_tiers_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/missions/predicate-leaves/': {
     parameters: {
       query?: never;
@@ -40347,13 +40324,19 @@ export interface components {
       weight: number;
       is_selected: boolean;
     };
-    /** @description A check outcome tier an authored route can key on (read-only, #4558). */
+    /**
+     * @description A check outcome tier an authored route can key on (read-only, #4558).
+     *
+     *     ``rolled_by_checks`` is true when a result chart names the tier, so a CHECK or
+     *     CONTEST roll can land on it; a tier only an encounter mapping names is false.
+     */
     OutcomeTier: {
       readonly id: number;
       /** @description Outcome name (e.g., 'Success', 'Catastrophic Failure') */
       readonly name: string;
       /** @description Numeric success level (-10 worst failure to +10 best success) */
       readonly success_level: number;
+      readonly rolled_by_checks: boolean;
     };
     /** @description Read serializer for Outfit — nests slot rows. */
     OutfitRead: {
@@ -77339,28 +77322,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PaginatedOutcomeTierList'];
-        };
-      };
-    };
-  };
-  missions_outcome_tiers_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this check outcome. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['OutcomeTier'];
         };
       };
     };

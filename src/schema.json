@@ -26808,33 +26808,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedOutcomeTierList'
           description: ''
-  /api/missions/outcome-tiers/{id}/:
-    get:
-      operationId: missions_outcome_tiers_retrieve
-      description: |-
-        The check outcome tiers a route can key on, worst to best (#4558).
-
-        Only tiers a result chart or an encounter outcome mapping actually names
-        are listed; a tier nothing can ever roll would be a route that never fires.
-        Same audience as the category browse: staff or any GM.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this check outcome.
-        required: true
-      tags:
-      - missions
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OutcomeTier'
-          description: ''
   /api/missions/predicate-leaves/:
     get:
       operationId: missions_predicate_leaves_list
@@ -71559,8 +71532,11 @@ components:
       - weight
     OutcomeTier:
       type: object
-      description: 'A check outcome tier an authored route can key on (read-only,
-        #4558).'
+      description: |-
+        A check outcome tier an authored route can key on (read-only, #4558).
+
+        ``rolled_by_checks`` is true when a result chart names the tier, so a CHECK or
+        CONTEST roll can land on it; a tier only an encounter mapping names is false.
       properties:
         id:
           type: integer
@@ -71573,9 +71549,13 @@ components:
           type: integer
           readOnly: true
           description: Numeric success level (-10 worst failure to +10 best success)
+        rolled_by_checks:
+          type: boolean
+          readOnly: true
       required:
       - id
       - name
+      - rolled_by_checks
       - success_level
     OutfitRead:
       type: object

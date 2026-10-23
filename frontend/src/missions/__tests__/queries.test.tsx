@@ -210,7 +210,7 @@ describe('graph authoring hooks (#4558)', () => {
 
   it('loads outcome tiers', async () => {
     vi.mocked(api.listOutcomeTiers).mockResolvedValue([
-      { id: 1, name: 'Success', success_level: 1 },
+      { id: 1, name: 'Success', success_level: 1, rolled_by_checks: true },
     ]);
     const { result } = renderHook(() => useOutcomeTiers(), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
