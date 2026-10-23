@@ -13,7 +13,7 @@ ConditionTemplate with formula-based severity/duration scaling.
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
@@ -845,7 +845,9 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
 
     @cached_property
     def cached_morale_effect(self) -> "TechniqueMoraleEffect | None":
-        """The technique's morale payload row, or None (#4619). Filled by the payload prefetch.
+        """The technique's morale payload row, or None (#4619).
+
+        Read through the reverse one-to-one, which the payload prefetch fills.
 
         One row at most (a one-to-one), so this is a single object, not a list.
         A technique whose only authored effect is shaking morale still has an
@@ -853,7 +855,21 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
 
         To invalidate: ``del instance.cached_morale_effect``.
         """
-        return TechniqueMoraleEffect.objects.filter(technique=self).first()
+        # The reverse one-to-one descriptor: the payload prefetch fills its cache.
+        try:
+            return self.morale_effect
+        except ObjectDoesNotExist:
+            return None
+
+    def forget_morale_effect(self) -> None:
+        """Drop the cached morale row so the next ``cached_morale_effect`` re-reads it.
+
+        The payload prefetch fills the reverse one-to-one's relation cache, which
+        Django offers no public call to clear; ``invalidate_technique_payload_caches``
+        calls this beside popping the ``cached_*`` names.
+        """
+        self.__dict__.pop("cached_morale_effect", None)
+        self._state.fields_cache.pop("morale_effect", None)
 
     @cached_property
     def cached_target_prerequisites(self) -> list:

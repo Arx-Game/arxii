@@ -339,11 +339,11 @@ def technique_payload_prefetches(
             ),
             to_attr="cached_treatments",
         ),
-        Prefetch(
-            f"{prefix}morale_effect",
-            queryset=TechniqueMoraleEffect.objects.all(),
-            to_attr="cached_morale_effect",
-        ),
+        # No to_attr, unlike its siblings: this is a reverse one-to-one, and when this
+        # block rides inside an outer Prefetch (the character sheet's spellbook) Django
+        # re-walks each lookup with getattr(obj, "morale_effect") -- a query per technique
+        # unless the descriptor's own cache is filled. ``cached_morale_effect`` reads it.
+        Prefetch(f"{prefix}morale_effect", queryset=TechniqueMoraleEffect.objects.all()),
         Prefetch(
             f"{prefix}capability_grants",
             queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
@@ -529,6 +529,7 @@ def invalidate_technique_payload_caches(technique: Technique) -> None:
     """
     for attr in _PAYLOAD_CACHE_ATTRS:
         technique.__dict__.pop(attr, None)
+    technique.forget_morale_effect()
     bump_technique_catalog_revision()
 
 
