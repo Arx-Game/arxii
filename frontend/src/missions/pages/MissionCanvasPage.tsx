@@ -32,19 +32,23 @@ function problemLink(
 
 function ProblemsPanel({
   problems,
+  loaded,
   paths,
   optionNode,
 }: {
   problems: readonly GraphProblem[];
+  /** False until the graph check answers, so a loading panel never says all is well. */
+  loaded: boolean;
   paths: StudioPaths;
   optionNode: ReadonlyMap<number, number>;
 }) {
   return (
     <section aria-label="Problems" className="rounded border p-3 text-sm">
       <h2 className="font-medium">Problems</h2>
-      {problems.length === 0 ? (
+      {loaded && problems.length === 0 ? (
         <p className="text-muted-foreground">No problems found.</p>
-      ) : (
+      ) : null}
+      {loaded && problems.length > 0 ? (
         <ul className="mt-1 space-y-1">
           {problems.map((p, i) => {
             const nodeId = p.node ?? (p.option !== null ? optionNode.get(p.option) : undefined);
@@ -62,7 +66,7 @@ function ProblemsPanel({
             );
           })}
         </ul>
-      )}
+      ) : null}
     </section>
   );
 }
@@ -134,7 +138,12 @@ export function MissionCanvasPage() {
         </div>
         <Button onClick={() => setAddOpen(true)}>Add node</Button>
       </div>
-      <ProblemsPanel problems={problemsQuery.data ?? []} paths={paths} optionNode={optionNode} />
+      <ProblemsPanel
+        problems={problemsQuery.data ?? []}
+        loaded={problemsQuery.isSuccess}
+        paths={paths}
+        optionNode={optionNode}
+      />
       <AddNodeDialog
         open={addOpen}
         onOpenChange={setAddOpen}

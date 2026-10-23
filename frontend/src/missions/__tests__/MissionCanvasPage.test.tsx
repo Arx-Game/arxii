@@ -97,6 +97,13 @@ beforeEach(() => {
 });
 
 describe('MissionCanvasPage', () => {
+  it('says nothing about problems while the check is still loading', async () => {
+    vi.mocked(api.getGraphCheck).mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await screen.findByRole('heading', { name: 'Problems' });
+    expect(screen.queryByText('No problems found.')).toBeNull();
+  });
+
   it('says there are no problems when the check is clean', async () => {
     renderPage();
     expect(await screen.findByText('No problems found.')).toBeInTheDocument();

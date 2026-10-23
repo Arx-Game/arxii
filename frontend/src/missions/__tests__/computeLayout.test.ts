@@ -174,6 +174,17 @@ describe('computeLayout', () => {
     expect(result.layoutedNodes.find((n) => n.id === 'end')).toBeUndefined();
   });
 
+  it('draws routes sharing a source and destination as one arrow naming every tier', () => {
+    const result = layout(
+      [node(1, 'src')],
+      [option(10, 1, { key: 'pick' })],
+      [route(100, 10, null, { outcome_tier: 7 }), route(101, 10, null, { outcome_tier: 1 })]
+    );
+    expect(result.layoutedEdges.map((e) => [e.target, e.label])).toEqual([
+      ['end', 'pick · Failure, Success'],
+    ]);
+  });
+
   it('sends a random route with no candidates to Mission ends', () => {
     const result = layout(
       [node(1, 'src')],

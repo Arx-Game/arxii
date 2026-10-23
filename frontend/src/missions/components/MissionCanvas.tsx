@@ -19,6 +19,7 @@ import {
   Controls,
   type Edge,
   MarkerType,
+  Position,
   type Node,
   ReactFlow,
   ReactFlowProvider,
@@ -309,6 +310,41 @@ function collectEdges(
   return specs;
 }
 
+const LABEL_SEPARATOR = ' · ';
+
+/**
+ * One arrow per (source, target, style): a check option's five routes into the same
+ * node draw as one arrow labelled with every tier, not five stacked arrows whose labels
+ * overprint. Labels sharing an option keep it once ("pick · Failure, Success").
+ */
+function mergeParallel(specs: readonly EdgeSpec[]): EdgeSpec[] {
+  const groups = new Map<string, EdgeSpec[]>();
+  for (const e of specs) {
+    const key = `${e.source}>${e.target}>${e.dashed ? 'd' : 's'}`;
+    const group = groups.get(key);
+    if (group) group.push(e);
+    else groups.set(key, [e]);
+  }
+  return [...groups.values()].map((group) => {
+    if (group.length === 1) return group[0];
+    const byOption = new Map<string, string[]>();
+    for (const e of group) {
+      const cut = e.label.indexOf(LABEL_SEPARATOR);
+      const option = cut === -1 ? e.label : e.label.slice(0, cut);
+      const rest = cut === -1 ? '' : e.label.slice(cut + LABEL_SEPARATOR.length);
+      const parts = byOption.get(option) ?? [];
+      if (rest) parts.push(rest);
+      byOption.set(option, parts);
+    }
+    const label = [...byOption.entries()]
+      .map(([option, parts]) =>
+        parts.length ? `${option}${LABEL_SEPARATOR}${parts.join(', ')}` : option
+      )
+      .join('; ');
+    return { ...group[0], label };
+  });
+}
+
 /**
  * Build React Flow nodes + edges and apply dagre auto-layout to any
  * node without stored editor_x/y. Nodes with stored coords keep them;
@@ -322,7 +358,7 @@ export function computeLayout(
   tiers: readonly OutcomeTier[],
   problems: readonly GraphProblem[]
 ): LayoutResult {
-  const specs = collectEdges(rawNodes, rawOptions, rawRoutes, candidates, tiers);
+  const specs = mergeParallel(collectEdges(rawNodes, rawOptions, rawRoutes, candidates, tiers));
   const hasEnd = specs.some((e) => e.target === END_NODE_ID);
 
   const g = new dagre.graphlib.Graph();
@@ -352,6 +388,8 @@ export function computeLayout(
     return {
       id: String(n.id),
       position: { x, y },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
       data: {
         label:
           (warned ? '⚠ ' : '') +
@@ -373,6 +411,7 @@ export function computeLayout(
       id: END_NODE_ID,
       position: { x: endNode.x - NODE_WIDTH / 2, y: endNode.y - NODE_HEIGHT / 2 },
       data: { label: END_LABEL },
+      targetPosition: Position.Left,
       draggable: false,
       style: { width: NODE_WIDTH, borderStyle: 'dashed' },
     });
