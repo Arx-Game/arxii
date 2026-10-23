@@ -335,6 +335,27 @@ class HoldingTheLine(_TheYard):
         self.assertEqual(self._swing_targets(round_number=2), [self.brenna_seat])
         self.assertEqual(self._health(self.brenna), PC_HEALTH - BRUTE_SWING)
 
+    def test_a_once_only_thorn_ward_answers_only_the_first_of_two_hits(self) -> None:
+        self.brute.actions_per_round = 2
+        self.brute.save(update_fields=["actions_per_round"])
+        thorn_oath = ConditionTemplateFactory(
+            name="Thorn Oath",
+            default_duration_type=DurationType.UNTIL_USED,
+            retaliation_damage=THORN_DAMAGE,
+            retaliation_damage_type=DamageTypeFactory(name="Thorn"),
+            reactive_anima_cost=THORN_COST,
+        )
+        apply_condition(self.cassian, thorn_oath, source_character=self.brenna)
+
+        self._round()
+
+        # Both blows land on Cassian, but only the first is answered, and the oath is spent.
+        self.assertEqual(self._health(self.cassian), PC_HEALTH - 2 * BRUTE_SWING)
+        self.brute.refresh_from_db()
+        self.assertEqual(self.brute.health, BRUTE_HEALTH - THORN_DAMAGE)
+        self.assertEqual(self._anima(self.brenna), BRENNA_ANIMA - THORN_COST)
+        self.assertFalse(self._has(self.cassian, thorn_oath))
+
     # -- a once-only blessing -------------------------------------------------
 
     def test_a_steadying_word_helps_one_offense_roll_and_survives_a_look(self) -> None:
