@@ -5,8 +5,24 @@ A named, database-defined check (Stealth, Diplomacy, Composure, Penetration) com
 _Avoid_: skill check, roll type, test
 
 **CheckRank**:
-A lookup table mapping a point total to a discrete rank level via exponential thresholds. Both the roller's points and the target difficulty are converted to ranks, and the rank difference selects which result chart applies.
+A lookup table mapping a point total to a discrete rank level by point thresholds (0/10/25/50/80/115/155/200/250 seeded; they widen with rank but are not exponential). Both the roller's points and the target difficulty are converted to ranks with band positions, and the fractional rank difference selects the chart and how far it slides. Shown with its number: Expert (rank 3).
 _Avoid_: tier, grade, rank band
+
+**Band position** (#4601):
+How far a total sits through its check rank's band, as a share: 40 points is Competent (rank 2), 60% toward Expert (rank 3). 0 at the rank's own threshold; 0 at the top rank. Both the roller's total and the difficulty have one (`world.checks.slide.band_position`), and result text shows it ("Expert (rank 3), 67% toward Master (rank 4)").
+_Avoid_: progress, fraction of a rank, partial rank
+
+**Slide** (#4601):
+How a check's odds move inside a band. The rank difference is fractional (roller band position minus target band position); the roll uses chart `lo` (the whole part) slid that share of the way toward chart `lo + 1`, over the "at least X" chances of chart `lo`'s own outcomes. An outcome the next chart has and this chart lacks counts as this chart's nearest outcome by success level, so nothing new appears: everything shifts toward the better outcomes the chart already has, and Critical Success (2) first appears at difference 0. `world.checks.slide.slide_chart`; one d100 roll plus a fraction inside the face.
+_Avoid_: blend (the owner's first word; "slide" is the term), interpolation, chart mix
+
+**Own standing** (#4551 decision 7, #4601):
+A side's check total without modifiers: traits, skills, specialization, level points, path aspect, capabilities, perks, effort, fatigue, strain and soulfray, against the target's difficulty without the modifiers on it. Modifiers are everything else gathered for the roll (conditions, equipment, distinctions, scene, fashion, relationships, favor, caller bonuses) and the defender's conditions in `level_opposition`. `perform_check(..., extra_standing=, target_modifiers=)` carries the split.
+_Avoid_: base total, unbuffed total, raw total
+
+**Hopeless pin** (#4601):
+The rule that holds a check on the chart its own standing lands on when that chart has no Success (1) (an impossible chart, -7 and -8 today): modifiers only slide the odds within it, up to 100% of its band, never onto another chart. Net penalties still resolve normally onto a lower chart. The preview grades Impossible on own standing, so a buff never changes that label. Outcome guarantees are capped at the chart's best outcome.
+_Avoid_: hopeless clamp, impossible lock, cap
 
 **ResultChart**:
 A 0–100 outcome table selected by the rank difference between roller and target. After the effective roll is taken it maps the roll to a `CheckOutcome`. Fifteen charts run from -8 to +6; every "at least X" chance is non-decreasing as the difference rises, and charts -7 and -8 have no Success (1) (the impossible zone, listed to the player as Impossible). A difference below -8 resolves to chart -8.

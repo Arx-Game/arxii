@@ -489,8 +489,9 @@ class CheckRank(NaturalKeyMixin, SharedMemoryModel):
     """
     Maps point totals to rank levels for check resolution.
 
-    Based on Arx I's CheckRank system with exponential thresholds.
-    Uses caching for performance.
+    Thresholds widen with rank (seeded 0/10/25/50/80/115/155/200/250); they are not
+    exponential. A total's place inside its rank's band is its band position
+    (``world.checks.slide.band_position``, #4601).
     """
 
     rank = models.SmallIntegerField(
