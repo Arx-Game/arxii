@@ -33,3 +33,5 @@ rollback it never runs and the held copy's old id is right again. The clear runs
 the SQL, never before: only `collect()` knows the cascaded rows, and a read between an
 early eviction and the `UPDATE` would cache the stale row again. Related: ADR-0008
 (SharedMemoryModel everywhere), ADR-0326.
+
+**Amendment (2026-10-23, #4558):** the referrers are found with `_meta.get_fields(include_hidden=True)`, not `_meta.related_objects`, which omits every relation declared `related_name="+"`. Their `SET_NULL` runs in the database all the same, so deleting a mission node had left every cached route into it naming the gone node.
