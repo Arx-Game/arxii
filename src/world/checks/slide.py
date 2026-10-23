@@ -50,7 +50,8 @@ class BandPosition:
 
     ``share`` is 0 at the rank's own threshold and approaches 1 just below the next
     rank's. At the top rank there is no next rank and the share is 0. A total below every
-    rank's threshold counts as the lowest rank at 0%.
+    rank's threshold has no rank (``rank`` None, counted as rank number 0, as the whole-rank
+    pipeline always did) and ``next_rank`` names the lowest rank.
     """
 
     points: int
@@ -74,6 +75,8 @@ class BandPosition:
     def text(self) -> str:
         """For example "Expert (rank 3), 67% toward Master (rank 4)"."""
         if self.rank is None:
+            if self.next_rank is not None:
+                return f"Below {self.next_rank.name} (rank {self.next_rank.rank})"
             return "No rank"
         here = f"{self.rank.name} (rank {self.rank.rank})"
         if self.next_rank is None or self.percent == 0:
@@ -91,6 +94,8 @@ def band_position(points: int, ranks: Sequence[CheckRank] | None = None) -> Band
     ranks = load_ranks() if ranks is None else ranks
     if not ranks:
         return BandPosition(points=points, rank=None, next_rank=None, share=0.0)
+    if points < ranks[0].min_points:
+        return BandPosition(points=points, rank=None, next_rank=ranks[0], share=0.0)
     index = 0
     for position, rank in enumerate(ranks):
         if rank.min_points <= points:
