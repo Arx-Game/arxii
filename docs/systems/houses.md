@@ -823,6 +823,13 @@ state, succession law default, and a wholesale `OrganizationFacet`/`Organization
 `AlmanachPlanEstateAction` (`almanach_plan_estate`), `AlmanachEditKinAction`
 (`almanach_edit_kin`), `AlmanachPublishAction` (`almanach_publish`).
 
+In the staff UI, `almanach_name_rung` is called from the rung's domain page
+(`/staff/almanach/titles/<id>`, `TitlePage`): an unnamed rung gets a Name field, a named one
+Rename (#4612). The realm ladder links every rung's name, and the `Undefined` chip of an unnamed
+one, to that page (`LadderTable`'s `rowHref`); selecting a row for the plant/batch savebar is the
+tier label's job there. The Founder Almanach passes no `rowHref`, so its names stay selection
+buttons.
+
 `AlmanachEditKinAction` mints a new family-tree/household node on create (`kinsperson_id`
 absent, via `almanach.record_kin` — see "Founder claims" above, the same engine founder finalize
 uses), or edits an existing one (`kinsperson_id` given). An update touches ONLY a plain field

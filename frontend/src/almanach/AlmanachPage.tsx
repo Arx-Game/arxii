@@ -42,6 +42,7 @@ import { StaffFamilyPage } from './family/StaffFamilyPage';
 import type { AlmanachRealm } from './types';
 import './almanach.css';
 import { urls } from '@/utils/urls';
+import { titleUrl } from './shared/tier';
 
 /**
  * Exported for the Founder Almanach's own Seat picker (#3983 Plan B Task 4),
@@ -214,8 +215,14 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
             pressedTier={effectivePressedTier}
             selectedTitleId={selectedRow?.title_id ?? null}
             onSelectRow={(row) => setSelectedTitleId(row.title_id)}
+            rowHref={(row) => titleUrl(row.title_id)}
           />
           <div className="savebar">
+            {selectedRow && (
+              <span className="meta">
+                under {selectedRow.is_defined ? selectedRow.name : `undefined ${selectedRow.tier}`}
+              </span>
+            )}
             <button type="button" className="btn quiet" onClick={() => setPlantOpen(true)}>
               ⊕ plant a rung
             </button>

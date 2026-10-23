@@ -3,6 +3,7 @@
  * tier, Holdings, Books, Forces, and Vassals with Create vassal domain.
  */
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -55,8 +56,11 @@ const doc: RungDocument = {
   vassals: [{ title_id: 4, name: '', held_by: '', demesne: 2, vassals: 0 }],
 };
 
+const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
+let currentDoc: RungDocument = doc;
+
 vi.mock('../queries', () => ({
-  useTitleDocument: () => ({ data: doc }),
+  useTitleDocument: () => ({ data: currentDoc }),
   useSearch: () => ({ data: undefined }),
   useHouses: () => ({ data: { results: [] } }),
   useHoldingKinds: () => ({
@@ -66,7 +70,7 @@ vi.mock('../queries', () => ({
       ],
     },
   }),
-  useAlmanachMutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useAlmanachMutation: () => ({ mutate, mutateAsync: vi.fn() }),
 }));
 
 test('the rung page: holder, location, holdings, books, forces, vassals', () => {
@@ -90,4 +94,32 @@ test('the rung page: holder, location, holdings, books, forces, vassals', () => 
   expect(screen.getByRole('button', { name: 'Create vassal domain' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Add vacant seats' })).toBeInTheDocument();
   expect(screen.getByText('unsited')).toBeInTheDocument();
+});
+
+test('an unnamed rung is named from its own page', async () => {
+  mutate.mockClear();
+  currentDoc = { ...doc, title: { ...doc.title, name: '', house_id: null, held_by: '' } };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    const save = screen.getByRole('button', { name: 'Name' });
+    expect(save).toBeDisabled();
+    await userEvent.type(
+      screen.getByLabelText('name', { selector: '#r-name' }),
+      'Kingdom of Umbros'
+    );
+    await userEvent.click(save);
+    expect(mutate).toHaveBeenCalledWith({ title_id: 3, name: 'Kingdom of Umbros' });
+  } finally {
+    currentDoc = doc;
+  }
+});
+
+test('a named rung offers Rename, enabled only once the name changes', async () => {
+  mutate.mockClear();
+  renderWithProviders(<TitlePage titleId={3} />);
+  const rename = screen.getByRole('button', { name: 'Rename' });
+  expect(rename).toBeDisabled();
+  await userEvent.type(screen.getByLabelText('name', { selector: '#r-name' }), ' II');
+  await userEvent.click(rename);
+  expect(mutate).toHaveBeenCalledWith({ title_id: 3, name: 'Duchy of Katta II' });
 });
