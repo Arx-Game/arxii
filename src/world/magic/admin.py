@@ -110,6 +110,7 @@ from world.magic.models import (
     TechniqueFunctionTag,
     TechniqueGrant,
     TechniqueManifestOption,
+    TechniqueMoraleEffect,
     TechniqueOutcomeModifier,
     TechniqueProgress,
     TechniqueRemovedCondition,
@@ -413,6 +414,28 @@ class TechniqueTreatmentInline(admin.TabularInline):
     extra = 1
 
 
+class TechniqueMoraleEffectInline(admin.TabularInline):
+    """The morale a technique removes from each enemy opponent it hits (#4619).
+
+    Amount removed = base_morale + morale_intensity_multiplier * intensity
+    + morale_per_extra_sl * (success levels above the minimum), by
+    ``AbstractMoraleEffect.compute_morale``. One row per technique; a row that
+    removes no morale is refused by the model's ``clean``.
+    """
+
+    model = TechniqueMoraleEffect
+    extra = 1
+    max_num = 1
+    fields = [
+        "minimum_success_level",
+        "base_morale",
+        "morale_intensity_multiplier",
+        "morale_per_extra_sl",
+    ]
+    verbose_name = "Morale effect"
+    verbose_name_plural = "Morale effect"
+
+
 class TechniqueFunctionTagInline(admin.TabularInline):
     """Inline fine-grained function labels on the Technique admin (#2443)."""
 
@@ -550,6 +573,7 @@ class TechniqueAdmin(admin.ModelAdmin):
         TechniqueCapabilityGrantInline,
         TechniqueRemovedConditionInline,
         TechniqueTreatmentInline,
+        TechniqueMoraleEffectInline,
         TechniqueFunctionTagInline,
         TechniqueManifestOptionInline,
     ]

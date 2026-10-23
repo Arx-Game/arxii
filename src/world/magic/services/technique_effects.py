@@ -193,6 +193,7 @@ def render_technique_effect_sentence(  # noqa: PLR0913
     treatments: list[TreatmentEffectPayload],
     grants: list[CapabilityEffectPayload],
     is_underspecified: bool,
+    shakes_morale: bool,
 ) -> str:
     """Render the plain-words line a player reads on every surface.
 
@@ -223,6 +224,8 @@ def render_technique_effect_sentence(  # noqa: PLR0913
             applies=applies, removes=removes, damage=damage, treatments=treatments
         )
     )
+    if shakes_morale:
+        sentences.append("Shakes morale.")
     if grants:
         sentences.append(f"Knowing it grants {_join_phrases([row['name'] for row in grants])}.")
 
@@ -369,6 +372,7 @@ def technique_is_underspecified(technique: SummarizableTechnique) -> bool:
         or technique.cached_removed_conditions
         or technique.cached_damage_profiles
         or technique.cached_treatments
+        or technique.cached_morale_effect is not None
     )
 
 
@@ -405,6 +409,9 @@ def technique_relationship_is_ambiguous(technique: SummarizableTechnique) -> boo
     kinds = {row.target_kind for row in technique.cached_condition_applications}
     kinds |= {row.target_kind for row in technique.cached_removed_conditions}
     kinds |= {row.target_kind for row in technique.cached_treatments}
+    if technique.cached_morale_effect is not None:
+        # Morale only ever lands on enemy opponents.
+        kinds.add(ConditionTargetKind.ENEMY)
     return len(kinds) > 1
 
 
@@ -451,6 +458,7 @@ def summarize_technique_effects(technique: SummarizableTechnique) -> TechniqueEf
             treatments=treatments,
             grants=grants,
             is_underspecified=is_underspecified,
+            shakes_morale=technique.cached_morale_effect is not None,
         ),
         is_underspecified=is_underspecified,
     )
