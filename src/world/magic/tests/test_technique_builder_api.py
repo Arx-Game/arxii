@@ -14,6 +14,8 @@ Covers:
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
@@ -137,6 +139,23 @@ class TechniqueBuilderAPITests(APITestCase):
         assert response.status_code == status.HTTP_201_CREATED, response.data
         row = TechniqueMoraleEffect.objects.get(technique__name="Spark")
         assert row.base_morale == 30
+
+    def test_a_fractional_morale_multiplier_saves_as_two_places(self) -> None:
+        # The API carries a float; 0.1 and 0.3 must not trip the DecimalField validator.
+        self.client.force_authenticate(user=self.staff_account)
+        for name, mult in (("Spark", 0.1), ("Flare", 0.3)):
+            response = self.client.post(
+                reverse("magic:technique-author"),
+                self._payload(
+                    name=name,
+                    gift_id=self.staff_gift.pk,
+                    morale_effect={"base_morale": 5, "morale_intensity_multiplier": mult},
+                ),
+                format="json",
+            )
+            assert response.status_code == status.HTTP_201_CREATED, response.data
+            row = TechniqueMoraleEffect.objects.get(technique__name=name)
+            assert row.morale_intensity_multiplier == Decimal(str(mult)).quantize(Decimal("0.01"))
 
     def test_a_negative_morale_amount_is_refused(self) -> None:
         self.client.force_authenticate(user=self.staff_account)

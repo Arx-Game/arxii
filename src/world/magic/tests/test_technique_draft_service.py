@@ -350,6 +350,14 @@ class DraftToDesignTests(TestCase):
         assert built.morale_effect.base_morale == 25
         assert built.morale_effect.minimum_success_level == 2
 
+    def test_a_drafted_fractional_morale_multiplier_builds(self) -> None:
+        draft = self._make_complete_draft()
+        set_draft_morale_effect(draft, base_morale=5, morale_intensity_multiplier=Decimal("0.10"))
+
+        built = build_technique(draft_to_design(draft), creator=self.sheet)
+
+        assert built.morale_effect.morale_intensity_multiplier == Decimal("0.10")
+
     def test_a_drafted_all_zero_morale_row_is_refused_at_build(self) -> None:
         from django.core.exceptions import ValidationError
 

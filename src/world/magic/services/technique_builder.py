@@ -434,7 +434,9 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
             technique=tech,
             minimum_success_level=design.morale_effect.minimum_success_level,
             base_morale=design.morale_effect.base_morale,
-            morale_intensity_multiplier=design.morale_effect.morale_intensity_multiplier,
+            morale_intensity_multiplier=Decimal(
+                str(design.morale_effect.morale_intensity_multiplier)
+            ),
             morale_per_extra_sl=design.morale_effect.morale_per_extra_sl,
         )
         morale_row.full_clean()
