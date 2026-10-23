@@ -16,6 +16,13 @@ from world.checks.constants import (
     PositionDestination,
 )
 
+# Modifier value table, level baselines and tapers (#4594).
+from world.checks.modifier_models import (  # noqa: F401
+    ModifierLevelBaseline,
+    ModifierTaper,
+    ModifierValue,
+)
+
 # Import outcome models so migrations and admin discover them.
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier  # noqa: F401
 from world.contributors.models import CreditedContent

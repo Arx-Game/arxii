@@ -2869,6 +2869,82 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=AnyRowProbe(label="StandoffReactionLine"),
         ),
         ContentDependency(
+            key="modifier-value-table",
+            label="Modifier value table (check lane)",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/conditions/services.py _check_modifier_for_target() via "
+                "world/checks/modifier_values.py load_value_table()"
+            ),
+            consequence=(
+                "A sized technique buff or debuff keeps its condition's flat authored "
+                "check modifier instead of the value its level and size are worth."
+            ),
+            probe=FilteredRowProbe(
+                label="ModifierValue",
+                filters=(("lane", "check"),),
+                absent_detail="No check-lane ModifierValue rows exist.",
+            ),
+        ),
+        ContentDependency(
+            key="modifier-level-baseline",
+            label="Modifier level baselines (check lane)",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/checks/modifier_values.py level_baseline(): the value table admin "
+                "and the tuning dashboard's modifier pile"
+            ),
+            consequence=(
+                "Staff cannot read a value-table row as a share of a typical total or a "
+                "rank band, and the modifier pile simulator shows nothing."
+            ),
+            probe=FilteredRowProbe(
+                label="ModifierLevelBaseline",
+                filters=(("lane", "check"),),
+                absent_detail="No check-lane ModifierLevelBaseline rows exist.",
+            ),
+        ),
+        ContentDependency(
+            key="modifier-taper",
+            label="Modifier taper rows (check lane)",
+            tier=DependencyTier.TUNING,
+            consumer="world/checks/services.py collect_check_modifiers() load_taper_rules()",
+            consequence=(
+                "Piles of check modifiers are a plain sum: ten buffs add ten times one "
+                "buff, with no light taper."
+            ),
+            probe=FilteredRowProbe(
+                label="ModifierTaper",
+                filters=(("lane", "check"),),
+                absent_detail="No check-lane ModifierTaper rows exist.",
+            ),
+        ),
+        ContentDependency(
+            key="cast-power-level",
+            label="Cast power to modifier level",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/magic/services/condition_application.py apply_technique_conditions() "
+                "via world/magic/services/modifier_sizing.py load_cast_level_table()"
+            ),
+            consequence=(
+                "A sized technique buff resolves no level, so it keeps its condition's flat "
+                "authored check modifier."
+            ),
+            probe=AnyRowProbe(label="CastPowerLevel"),
+        ),
+        ContentDependency(
+            key="cast-outcome-level-shift",
+            label="Cast outcome level shifts",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/modifier_sizing.py CastLevelTable.level_for()",
+            consequence=(
+                "A Critical Success cast applies its buff at the same level as a plain "
+                "Success: the outcome no longer moves the buff's level."
+            ),
+            probe=AnyRowProbe(label="CastOutcomeLevelShift"),
+        ),
+        ContentDependency(
             key="capability-power-config",
             label="Capability power config singleton",
             tier=DependencyTier.TUNING,

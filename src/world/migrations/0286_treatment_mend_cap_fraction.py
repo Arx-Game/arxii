@@ -7,9 +7,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0284_monotonic_result_charts_and_deeper_charts"),
-    ]
+    dependencies = [("arxii", "0285_modifier_level_and_size")]
 
     operations = [
         migrations.AddField(

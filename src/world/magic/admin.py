@@ -31,6 +31,8 @@ from world.magic.models import (
     AuraPowerConfig,
     BeginningsRitualGrant,
     CapabilityPowerConfig,
+    CastOutcomeLevelShift,
+    CastPowerLevel,
     CharacterAnima,
     CharacterAura,
     CharacterCrossingText,
@@ -141,6 +143,7 @@ from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.services.facets import merge_facets
 from world.magic.services.glimpse import refresh_glimpse_state
 from world.magic.services.magic_skills import invalidate_technique_own_paths
+from world.magic.services.modifier_sizing import applied_condition_size_warnings
 from world.magic.services.technique_effects import (
     invalidate_technique_payload_caches,
     technique_effect_authoring_gaps,
@@ -621,6 +624,10 @@ class TechniqueAdmin(admin.ModelAdmin):
         """
         super().save_related(request, form, formsets, change)
         invalidate_technique_payload_caches(form.instance)
+        # #4594: the size check warns, never refuses, when a buff's authored size does
+        # not match how the technique spends its power.
+        for warning in applied_condition_size_warnings(form.instance):
+            self.message_user(request, warning, messages.WARNING)
 
 
 @admin.register(CharacterAura)
@@ -2745,3 +2752,21 @@ class TechniqueVariantAppliedConditionAdmin(admin.ModelAdmin):
     list_select_related = ["variant", "condition"]
     autocomplete_fields = ["variant", "condition"]
     search_fields = ["variant__name_override", "variant__parent_technique__name"]
+
+
+@admin.register(CastPowerLevel)
+class CastPowerLevelAdmin(admin.ModelAdmin):
+    """Cast power to modifier level (#4594): the level a technique's buff applies at."""
+
+    list_display = ["min_power", "level"]
+    list_editable = ["level"]
+    ordering = ["min_power"]
+
+
+@admin.register(CastOutcomeLevelShift)
+class CastOutcomeLevelShiftAdmin(admin.ModelAdmin):
+    """How a cast's outcome shifts its applied modifier's level (#4594)."""
+
+    list_display = ["success_level", "level_shift"]
+    list_editable = ["level_shift"]
+    ordering = ["success_level"]

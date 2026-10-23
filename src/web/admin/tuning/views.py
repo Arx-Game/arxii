@@ -32,7 +32,11 @@ from web.admin.tuning import (
     condition_power_analytics,
     technique_analytics,
 )
-from web.admin.tuning.checks_analytics import compute_chart_distributions, compute_matchup
+from web.admin.tuning.checks_analytics import (
+    compute_chart_distributions,
+    compute_matchup,
+    compute_modifier_pile,
+)
 from web.admin.tuning.condition_analytics import compute_condition_danger
 from web.admin.tuning.consequence_analytics import inspect_pool, list_pools
 from world.character_creation.constants import (
@@ -42,6 +46,7 @@ from world.character_creation.constants import (
     STAT_MIN_VALUE,
 )
 from world.character_creation.models import Beginnings
+from world.checks.constants import ModifierSize
 from world.classes.models import Path, PathStage
 from world.combat import simulation
 from world.combat.constants import OpponentTier, RiskLevel
@@ -53,6 +58,12 @@ from world.species.models import Species
 
 _DEFAULT_ROLLER_POINTS = 25
 _DEFAULT_TARGET_DIFFICULTY = 25
+# Modifier pile defaults (#4594): one Large buff cast at level 6 on a level-6 character.
+_DEFAULT_PILE_LEVEL = 6
+_DEFAULT_PILE_SIZE = ModifierSize.LARGE
+_DEFAULT_PILE_COUNT = 1
+_MAX_PILE_COUNT = 20
+_MAX_PILE_LEVEL = 30
 _DEFAULT_CONDITION_SEVERITY = 5
 
 # 24h - a simulation batch is expensive (dozens of full combat rounds), so a
@@ -106,7 +117,33 @@ def tuning_checks_fragment(request: HttpRequest) -> HttpResponse:
     roller_points = _int_query_param(request, "roller_points", _DEFAULT_ROLLER_POINTS)
     target_difficulty = _int_query_param(request, "target_difficulty", _DEFAULT_TARGET_DIFFICULTY)
 
+    pile_character_level = _clamp(
+        _int_query_param(request, "pile_character_level", _DEFAULT_PILE_LEVEL), 1, _MAX_PILE_LEVEL
+    )
+    pile_modifier_level = _clamp(
+        _int_query_param(request, "pile_modifier_level", _DEFAULT_PILE_LEVEL), 1, _MAX_PILE_LEVEL
+    )
+    pile_size = _clamp(
+        _int_query_param(request, "pile_size", _DEFAULT_PILE_SIZE),
+        ModifierSize.MINOR,
+        ModifierSize.PARAMOUNT,
+    )
+    pile_count = _clamp(
+        _int_query_param(request, "pile_count", _DEFAULT_PILE_COUNT), 1, _MAX_PILE_COUNT
+    )
+
     context = {
+        "pile": compute_modifier_pile(
+            character_level=pile_character_level,
+            modifier_level=pile_modifier_level,
+            size=pile_size,
+            count=pile_count,
+        ),
+        "pile_character_level": pile_character_level,
+        "pile_modifier_level": pile_modifier_level,
+        "pile_size": pile_size,
+        "pile_count": pile_count,
+        "pile_sizes": ModifierSize.choices,
         "distributions": compute_chart_distributions(roll_modifier=roll_modifier),
         "matchup": compute_matchup(
             roller_points=roller_points,
