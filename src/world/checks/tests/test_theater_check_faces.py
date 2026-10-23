@@ -109,3 +109,44 @@ class CheckOutcomeFacesTests(TestCase):
         ]
         assert baseline_selected.label == rollmod_selected.label
         assert baseline_selected.weight == rollmod_selected.weight
+
+
+class SlidChartFacesTests(TestCase):
+    """A roll read from a slid chart shows the slid bands (#4601)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.seeds.checks import seed_check_resolution_tables
+
+        seed_check_resolution_tables()
+
+    def test_halfway_through_a_band_the_wheel_shows_the_slid_odds(self) -> None:
+        from world.checks.slide import resolve_standing
+        from world.traits.models import CheckOutcome, ResultChart
+
+        ResultChart.clear_cache()
+        # Competent (rank 2), 48% toward Expert (rank 3), against Expert: chart -1 slid.
+        standing = resolve_standing(37, 50)
+        success = CheckOutcome.objects.get(name="Success")
+        result = CheckResult(
+            check_type=None,
+            outcome=success,
+            chart=standing.chart,
+            roller_rank=standing.roller.rank,
+            target_rank=standing.target.rank,
+            rank_difference=standing.chart_difference,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=37,
+            standing=standing,
+        )
+
+        faces, selected = check_outcome_faces(result)
+
+        by_label = {f.label: f.weight for f in faces}
+        # Success 22% sliding 48% toward 40%: 30.64%, in tenths of a face.
+        assert by_label["Success"] == 306
+        assert "Critical Success" not in by_label
+        assert selected is not None
+        assert selected.label == "Success"
+        assert abs(sum(by_label.values()) - 1000) <= 2
