@@ -107,7 +107,21 @@
       {% translate "Matchup: target difficulty" %}: <span>{{ target_difficulty }}</span>
     </label>
     <input type="range" id="checks-target-difficulty" name="target_difficulty"
-           min="0" max="200" step="1" value="{{ target_difficulty }}">
+           min="0" max="300" step="1" value="{{ target_difficulty }}">
+  </div>
+  <div class="tuning-field">
+    <label for="checks-modifier-points">
+      {% translate "Matchup: modifiers on the roller" %}: <span>{{ modifier_points }}</span>
+    </label>
+    <input type="range" id="checks-modifier-points" name="modifier_points"
+           min="-100" max="200" step="1" value="{{ modifier_points }}">
+  </div>
+  <div class="tuning-field">
+    <label for="checks-target-modifier-points">
+      {% translate "Matchup: modifiers on the target" %}: <span>{{ target_modifier_points }}</span>
+    </label>
+    <input type="range" id="checks-target-modifier-points" name="target_modifier_points"
+           min="-100" max="100" step="1" value="{{ target_modifier_points }}">
   </div>
 </form>
 
@@ -156,10 +170,37 @@
 
 <h3>{% translate "Matchup" %}</h3>
 {% if matchup %}
+<table class="tuning-table matchup-standing">
+  <tbody>
+    <tr>
+      <th>{% translate "Own standing" %}</th>
+      <td>{{ matchup.standing.own_roller.text }} {% translate "against" %} {{ matchup.standing.own_target.text }}</td>
+    </tr>
+    <tr>
+      <th>{% translate "With modifiers" %}</th>
+      <td>{{ matchup.standing.roller.text }} {% translate "against" %} {{ matchup.standing.target.text }}</td>
+    </tr>
+    <tr>
+      <th>{% translate "Chart used" %}</th>
+      <td class="matchup-chart">
+        {{ matchup.chart_name }} (rank difference {{ matchup.rank_difference }}){% if matchup.standing.share > 0 %},
+        {% widthratio matchup.standing.share 1 100 %}% {% translate "of the way toward" %} {{ matchup.standing.slid.toward.name }} (rank difference {{ matchup.standing.slid.toward.rank_difference }}){% endif %}
+      </td>
+    </tr>
+    {% if matchup.standing.hopeless %}
+    <tr>
+      <th>{% translate "Hopeless" %}</th>
+      <td class="matchup-hopeless">
+        {% translate "Own standing lands on a chart with no Success (1). Modifiers only slide the odds within that chart, never onto another." %}
+        {% if matchup.standing.pinned %}{% translate "Pinned: without the hopeless rule these modifiers would have lifted the roll onto a higher chart." %}{% endif %}
+      </td>
+    </tr>
+    {% endif %}
+  </tbody>
+</table>
 <p>
-  {{ matchup.chart_name }} (rank difference {{ matchup.rank_difference }}) &mdash;
-  {% translate "success" %} <span class="success-probability-cell">{% widthratio matchup.success_probability 1 100 %}%</span>,
-  {% translate "expected SL" %} {{ matchup.expected_success_level|floatformat:2 }}
+  {% translate "Success (1) or better" %} <span class="success-probability-cell">{% widthratio matchup.success_probability 1 100 %}%</span>,
+  {% translate "expected success level" %} {{ matchup.expected_success_level|floatformat:2 }}
 </p>
 <div class="stacked-bar" aria-hidden="true">
   {% for band in matchup.bands %}
@@ -176,10 +217,53 @@
     <span class="swatch {% if band.success_level > 0 %}bar-success
                  {% elif band.success_level < 0 %}bar-failure
                  {% else %}bar-neutral{% endif %}"></span>
-    {{ band.name }} {% widthratio band.probability 1 100 %}%
+    {{ band.name }} ({{ band.success_level }}) {% widthratio band.probability 1 100 %}%
   </span>
   {% endfor %}
 </div>
 {% else %}
 <p>{% translate "No result chart found for this matchup." %}</p>
 {% endif %}
+
+<h3>{% translate "The slide" %}</h3>
+<p>
+  {% translate "Each chart's odds at 0%, 25%, 50%, 75% and 100% of the way through its band, sliding toward the next chart over the chart's own outcomes only. A chart with no Success (1) is impossible: a check whose own standing lands there is held on it." %}
+</p>
+<p class="rank-ladder">{% translate "Ranks" %}: {{ rank_ladder|join:", " }}</p>
+<table class="tuning-table slide-table">
+  <thead>
+    <tr>
+      <th>{% translate "Chart" %}</th>
+      <th>0%</th><th>25%</th><th>50%</th><th>75%</th><th>100%</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in slide_table %}
+    <tr>
+      <td>
+        {{ row.chart_name }} ({{ row.rank_difference }}){% if row.impossible %}<br><strong>{% translate "Impossible" %}</strong>{% endif %}
+      </td>
+      {% for step in row.steps %}
+      <td>
+        <div class="stacked-bar" aria-hidden="true">
+          {% for band in step.bands %}
+          <span class="bar-segment {% if band.success_level > 0 %}bar-success
+                       {% elif band.success_level < 0 %}bar-failure
+                       {% else %}bar-neutral{% endif %}"
+                style="width: {% widthratio band.probability 1 100 %}%"
+                title="{{ band.name }} ({{ band.success_level }}): {% widthratio band.probability 1 100 %}%"></span>
+          {% endfor %}
+        </div>
+        <div class="band-detail">
+          {% for band in step.bands %}
+          <span>{{ band.name }} ({{ band.success_level }}) {{ band.percent }}</span>
+          {% endfor %}
+        </div>
+      </td>
+      {% endfor %}
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">{% translate "No result charts are seeded yet." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

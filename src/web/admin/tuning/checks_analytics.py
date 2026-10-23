@@ -8,15 +8,28 @@ possible roll 1..100 we apply the same clamp the engine applies
 rank_difference the same way `_compute_check_breakdown`
 (`world.checks.services.py:170-180`) does, so the "what happens for this
 specific roller/target pair" sub-panel mirrors production exactly.
+
+Since #4601 the matchup reads the slid chart the engine itself builds
+(`world.checks.slide.resolve_standing`): band positions, the slide toward the next
+chart, and the hopeless pin decided on own standing. `compute_slide_table` shows the
+slide at 0%, 25%, 50%, 75% and 100% through every chart's band. Nothing here
+reimplements the slide; it only tallies the engine's own slid bands under a roll
+modifier.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
+from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch
 
-from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
+from world.checks.slide import load_ranks, resolve_standing, slide_chart
+from world.traits.models import ResultChart, ResultChartOutcome
+
+if TYPE_CHECKING:
+    from world.checks.slide import CheckStanding, SlidChart
 
 _ROLL_RANGE = range(1, 101)
 
@@ -28,6 +41,12 @@ class OutcomeBand:
     name: str
     success_level: int
     probability: float  # 0.0-1.0
+
+    @property
+    def percent(self) -> str:
+        """The probability as a percent to one decimal, for example "30.6%" (#4601)."""
+        value = round(self.probability * 100, 1)
+        return f"{value:g}%"
 
 
 @dataclass(frozen=True)
@@ -45,6 +64,7 @@ class ChartDistribution:
     bands: list[OutcomeBand]
     success_probability: float  # P(success_level > 0)
     expected_success_level: float
+    standing: CheckStanding | None = None  # #4601: set on matchups
 
 
 def _tally_outcomes(
@@ -120,35 +140,132 @@ def compute_chart_distributions(*, roll_modifier: int = 0) -> list[ChartDistribu
     ]
 
 
-def compute_matchup(
-    *, roller_points: int, target_difficulty: int, roll_modifier: int = 0
-) -> ChartDistribution | None:
-    """Single-chart distribution for a specific roller-points/target-difficulty matchup.
+def _tally_slid(slid: SlidChart, *, roll_modifier: int) -> list[OutcomeBand]:
+    """Exact outcome odds on a slid chart under a roll modifier, as the engine rolls.
 
-    Derives rank_difference exactly as `_compute_check_breakdown` does: a missing
-    rank (roller or target below every `CheckRank.min_points`) contributes 0. The
-    *returned* `rank_difference` is always this derived roller-minus-target value —
-    even when `ResultChart.get_chart_for_difference` falls back to the nearest
-    seeded chart because there's no exact match, the derived difference (not the
-    fallback chart's own `rank_difference` field) is what's reported, so the UI
-    reflects the true matchup. `chart_name` still names the fallback-selected
-    chart, so the fallback itself stays visible. Returns `None` only when no
-    `ResultChart` exists at all.
+    The engine clamps ``roll + roll_modifier`` to a face 1 to 100 and reads the slid
+    chart at a uniformly random point inside that face (``world.checks.slide.CheckRoll``),
+    so each face contributes its overlap with each band.
     """
-    roller_rank = CheckRank.get_rank_for_points(roller_points)
-    target_rank = CheckRank.get_rank_for_points(target_difficulty)
-    rank_difference = (roller_rank.rank if roller_rank else 0) - (
-        target_rank.rank if target_rank else 0
+    shares: dict[int, float] = {}
+    for roll in _ROLL_RANGE:
+        face = max(1, min(100, roll + roll_modifier))
+        for index, band in enumerate(slid.bands):
+            overlap = min(face, band.high) - max(face - 1, band.low)
+            if overlap > 0:
+                shares[index] = shares.get(index, 0.0) + overlap / 100.0
+    bands = [
+        OutcomeBand(
+            name=slid.bands[index].outcome.name,
+            success_level=slid.bands[index].outcome.success_level,
+            probability=probability,
+        )
+        for index, probability in shares.items()
+    ]
+    bands.sort(key=lambda band: band.success_level, reverse=True)
+    return bands
+
+
+def _distribution_for_slid(
+    slid: SlidChart,
+    *,
+    roll_modifier: int,
+    rank_difference: int,
+    standing: CheckStanding | None = None,
+) -> ChartDistribution:
+    bands = _tally_slid(slid, roll_modifier=roll_modifier)
+    return ChartDistribution(
+        rank_difference=rank_difference,
+        chart_name=slid.chart.name if slid.chart else "",
+        bands=bands,
+        success_probability=sum(b.probability for b in bands if b.success_level > 0),
+        expected_success_level=sum(b.success_level * b.probability for b in bands),
+        standing=standing,
     )
 
-    chart = ResultChart.get_chart_for_difference(rank_difference)
-    if chart is None:
+
+def compute_matchup(
+    *,
+    roller_points: int,
+    target_difficulty: int,
+    roll_modifier: int = 0,
+    modifier_points: int = 0,
+    target_modifier_points: int = 0,
+) -> ChartDistribution | None:
+    """Distribution for one roller/target matchup, exactly as ``perform_check`` rolls it.
+
+    ``roller_points`` and ``target_difficulty`` are each side's own standing;
+    ``modifier_points`` is added to the roller as modifiers (a pile of buffs) and
+    ``target_modifier_points`` to the target (positive buffs it, negative debuffs it).
+    The engine's ``resolve_standing`` decides the band positions, the slide and the
+    hopeless pin; the result carries it as ``standing``. ``rank_difference`` is the
+    whole difference of the chart the roll uses, which may differ from ``chart_name``'s
+    chart field when the lookup falls back to the nearest authored chart. Returns
+    ``None`` only when no ``ResultChart`` exists at all.
+    """
+    standing = resolve_standing(
+        roller_points + modifier_points,
+        target_difficulty + target_modifier_points,
+        own_roller_points=roller_points,
+        own_target_points=target_difficulty,
+    )
+    if standing.chart is None:
         return None
-    outcome_rows = list(
-        ResultChartOutcome.objects.filter(chart=chart)
-        .select_related("outcome")
-        .order_by("min_roll")
+    return _distribution_for_slid(
+        standing.slid,
+        roll_modifier=roll_modifier,
+        rank_difference=standing.chart_difference,
+        standing=standing,
     )
-    return _distribution_for_chart(
-        chart, outcome_rows, roll_modifier=roll_modifier, rank_difference=rank_difference
-    )
+
+
+SLIDE_SHARES: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
+
+
+@dataclass(frozen=True)
+class SlideRow:
+    """One chart's odds at each share of the way through its band (#4601)."""
+
+    rank_difference: int
+    chart_name: str
+    toward_name: str
+    impossible: bool
+    steps: list[ChartDistribution]
+
+
+def compute_slide_table(*, roll_modifier: int = 0) -> list[SlideRow]:
+    """The slide at 0%, 25%, 50%, 75% and 100% through every authored chart's band.
+
+    The highest chart has nothing to slide toward and is left out. Built from the same
+    ``slide_chart`` the roll uses.
+    """
+    charts = list(ResultChart.objects.order_by("rank_difference"))
+    rows = list(ResultChartOutcome.objects.select_related("outcome").order_by("min_roll"))
+    table: list[SlideRow] = []
+    for chart, toward in pairwise(charts):
+        steps = [
+            _distribution_for_slid(
+                slide_chart(chart, toward, share, rows),
+                roll_modifier=roll_modifier,
+                rank_difference=chart.rank_difference,
+            )
+            for share in SLIDE_SHARES
+        ]
+        impossible = not any(
+            row.chart_id == chart.pk and row.outcome.success_level > 0 for row in rows
+        )
+        table.append(
+            SlideRow(
+                rank_difference=chart.rank_difference,
+                chart_name=chart.name,
+                toward_name=toward.name,
+                impossible=impossible,
+                steps=steps,
+            )
+        )
+    return table
+
+
+def rank_ladder() -> list[str]:
+    """Every check rank with its number and threshold, for the panel's key."""
+    return [f"{rank.name} (rank {rank.rank}): {rank.min_points}+" for rank in load_ranks()]

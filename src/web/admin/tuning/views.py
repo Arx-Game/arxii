@@ -32,7 +32,12 @@ from web.admin.tuning import (
     condition_power_analytics,
     technique_analytics,
 )
-from web.admin.tuning.checks_analytics import compute_chart_distributions, compute_matchup
+from web.admin.tuning.checks_analytics import (
+    compute_chart_distributions,
+    compute_matchup,
+    compute_slide_table,
+    rank_ladder,
+)
 from web.admin.tuning.condition_analytics import compute_condition_danger
 from web.admin.tuning.consequence_analytics import inspect_pool, list_pools
 from world.character_creation.constants import (
@@ -98,13 +103,17 @@ def tuning_dashboard(request: HttpRequest) -> HttpResponse:
 def tuning_checks_fragment(request: HttpRequest) -> HttpResponse:
     """Checks-analytics panel: per-chart probability tables + a matchup sub-form (#1221).
 
-    Sliders (`roll_modifier`, `roller_points`, `target_difficulty`) re-render this
-    same fragment via `hx-get` query params so the panel form must live inside the
-    fragment template (see `_checks_panel.html`).
+    Sliders (`roll_modifier`, `roller_points`, `target_difficulty`, and since #4601
+    `modifier_points` and `target_modifier_points`) re-render this same fragment via
+    `hx-get` query params so the panel form must live inside the fragment template (see
+    `_checks_panel.html`). The matchup reads the engine's slide and hopeless pin; the
+    slide table shows every chart at 0% to 100% through its band.
     """
     roll_modifier = _int_query_param(request, "roll_modifier", 0)
     roller_points = _int_query_param(request, "roller_points", _DEFAULT_ROLLER_POINTS)
     target_difficulty = _int_query_param(request, "target_difficulty", _DEFAULT_TARGET_DIFFICULTY)
+    modifier_points = _int_query_param(request, "modifier_points", 0)
+    target_modifier_points = _int_query_param(request, "target_modifier_points", 0)
 
     context = {
         "distributions": compute_chart_distributions(roll_modifier=roll_modifier),
@@ -112,10 +121,16 @@ def tuning_checks_fragment(request: HttpRequest) -> HttpResponse:
             roller_points=roller_points,
             target_difficulty=target_difficulty,
             roll_modifier=roll_modifier,
+            modifier_points=modifier_points,
+            target_modifier_points=target_modifier_points,
         ),
+        "slide_table": compute_slide_table(roll_modifier=roll_modifier),
+        "rank_ladder": rank_ladder(),
         "roll_modifier": roll_modifier,
         "roller_points": roller_points,
         "target_difficulty": target_difficulty,
+        "modifier_points": modifier_points,
+        "target_modifier_points": target_modifier_points,
     }
     return render(request, "admin/tuning/_checks_panel.html", context)
 
