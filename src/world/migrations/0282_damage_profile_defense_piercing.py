@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0280_drop_organizationtype_is_covert"),
+        ("arxii", "0281_vow_added_effects"),
     ]
 
     operations = [
@@ -123,6 +123,30 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="techniquevariantdamageprofile",
+            name="resistance_shift",
+            field=models.PositiveIntegerField(
+                default=0,
+                help_text="Per-hit shift toward vulnerability on the signed damage-type resistance scale.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="vowaddedeffectdamageprofile",
+            name="bypasses_wards",
+            field=models.BooleanField(
+                default=False,
+                help_text="Bypass the ward contest for the whole technique, including conditions.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="vowaddedeffectdamageprofile",
+            name="ignores_soak",
+            field=models.BooleanField(
+                default=False,
+                help_text="Skip armor-like soak for this profile, without bonus against zero soak.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="vowaddedeffectdamageprofile",
             name="resistance_shift",
             field=models.PositiveIntegerField(
                 default=0,

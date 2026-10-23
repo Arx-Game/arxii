@@ -191,6 +191,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     source_sheet: CharacterSheet | None = None,
     skip_guardian_shield: bool = False,
     execute_missing_health_multiplier: Decimal = Decimal(0),
+    skip_condition_interactions: bool = False,
 ) -> OpponentDamageResult:
     """Apply damage to an NPC opponent, accounting for soak, probing,
     and damage-type resistance.
@@ -198,6 +199,10 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     ignores_soak skips soak without suppressing probing. resistance_shift moves
     signed typed resistance toward vulnerability once for this hit, after any
     break-bar override. Neither control mutates the target's defenses.
+
+    ``skip_condition_interactions=True`` skips the condition-damage-interaction
+    multiplier (#2018): the round tick's damage over time passes it so a tick never
+    consumes or transforms conditions, matching the PC tick (#4572).
 
     All raw damage (even fully soaked) contributes to probing. Only damage
     that exceeds soak and resistance actually reduces health.
@@ -271,7 +276,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     # Condition-damage interactions (#2018). Final percentage multiplier on
     # net damage, after soak + resistance. May consume/transform conditions.
     interaction_result = None
-    if damage_through > 0 and opponent.objectdb is not None:
+    if damage_through > 0 and opponent.objectdb is not None and not skip_condition_interactions:
         damage_through, interaction_result = _apply_condition_damage_interactions(
             opponent.objectdb, damage_type, damage_through
         )

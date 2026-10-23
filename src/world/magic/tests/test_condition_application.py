@@ -25,7 +25,10 @@ from world.magic.factories import (
     TechniqueRemovedConditionFactory,
 )
 from world.magic.models.techniques import ConditionTargetKind
-from world.magic.services.condition_application import apply_technique_conditions
+from world.magic.services.condition_application import (
+    apply_technique_conditions,
+    remove_technique_conditions,
+)
 from world.mechanics.models import ModifierTarget
 from world.species.factories import (
     make_language_with_target,
@@ -786,3 +789,110 @@ class TechniqueAppliedUnderstandingTests(TestCase):
             source_character=sheet.character,
         )
         self.assertEqual(comprehension_value(sheet, language), 80)
+
+
+class VowSeamKwargTests(TestCase):
+    """#4581: severity/duration bonus and removed-rows override on the payload seams."""
+
+    def setUp(self) -> None:
+        self.caster_sheet = CharacterSheetFactory()
+        self.caster = self.caster_sheet.character
+        self.target = CharacterSheetFactory().character
+        self.technique = TechniqueFactory(gift=GiftFactory())
+        self.cond = ConditionTemplateFactory(name="VowSeamCond", default_duration_value=2)
+
+    def _apply(self, **kwargs: int) -> list[AppliedConditionResult]:
+        with patch("world.magic.services.condition_application.bulk_apply_conditions") as bulk:
+            bulk.side_effect = lambda apps, **_kw: [ApplyConditionResult(success=True)] * len(apps)
+            return apply_technique_conditions(
+                technique=self.technique,
+                success_level=1,
+                eff_intensity=0,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.target]},
+                source_character=self.caster,
+                **kwargs,
+            )
+
+    def test_severity_and_duration_bonus_add_to_the_row(self) -> None:
+        TechniqueAppliedConditionFactory(
+            technique=self.technique,
+            condition=self.cond,
+            target_kind=ConditionTargetKind.ALLY,
+            base_severity=2,
+            base_duration_rounds=3,
+        )
+        [result] = self._apply(severity_bonus=4, duration_bonus=2)
+        self.assertEqual((result.severity_applied, result.duration_rounds), (6, 5))
+
+    def test_default_bonus_leaves_the_row_untouched(self) -> None:
+        TechniqueAppliedConditionFactory(
+            technique=self.technique,
+            condition=self.cond,
+            target_kind=ConditionTargetKind.ALLY,
+            base_severity=2,
+            base_duration_rounds=3,
+        )
+        [result] = self._apply()
+        self.assertEqual((result.severity_applied, result.duration_rounds), (2, 3))
+
+    def test_a_team_lane_row_ignores_the_bonus(self) -> None:
+        TechniqueAppliedConditionFactory(
+            technique=self.technique,
+            condition=self.cond,
+            target_kind=ConditionTargetKind.ALLY,
+            base_severity=1,
+            base_duration_rounds=3,
+        )
+        with (
+            patch("world.conditions.models.ConditionModifierEffect.objects.filter") as team_filter,
+            patch("world.conditions.services.priced_percent_severity", return_value=7),
+        ):
+            team_filter.return_value.exists.return_value = True
+            [plain] = self._apply(severity_bonus=0, duration_bonus=0)
+            [bonused] = self._apply(severity_bonus=9, duration_bonus=9)
+        self.assertEqual(plain.severity_applied, 7)
+        self.assertEqual(bonused.severity_applied, plain.severity_applied)
+        self.assertEqual(bonused.duration_rounds, plain.duration_rounds)
+
+    def test_removed_rows_override_strips_a_condition_the_technique_does_not_name(self) -> None:
+        other = TechniqueFactory(gift=GiftFactory())
+        cond = ConditionTemplateFactory(name="VowSeamStrip")
+        row = TechniqueRemovedConditionFactory(
+            technique=other, condition=cond, target_kind=ConditionTargetKind.ALLY
+        )
+        with (
+            patch(
+                "world.magic.services.condition_application.get_condition_instance",
+                return_value=object(),
+            ),
+            patch(
+                "world.magic.services.condition_application.remove_condition", return_value=True
+            ) as removed,
+        ):
+            results = remove_technique_conditions(
+                technique=self.technique,
+                success_level=1,
+                eff_intensity=0,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.target]},
+                source_character=self.caster,
+                removed_condition_rows=[row],
+            )
+        self.assertEqual([r.success for r in results], [True])
+        removed.assert_called_once()
+        self.assertEqual(removed.call_args.args[:2], (self.target, cond))
+
+    def test_empty_removed_rows_override_removes_nothing_even_if_technique_has_rows(self) -> None:
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=ConditionTemplateFactory(name="VowSeamOwn"),
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        results = remove_technique_conditions(
+            technique=self.technique,
+            success_level=1,
+            eff_intensity=0,
+            targets_by_kind={ConditionTargetKind.ALLY: [self.target]},
+            source_character=self.caster,
+            removed_condition_rows=[],
+        )
+        self.assertEqual(results, [])

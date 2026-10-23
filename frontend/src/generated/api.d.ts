@@ -31984,6 +31984,9 @@ export interface components {
       readonly damage_type: string | null;
       readonly base_damage: number;
       readonly uses_equipped_weapon: boolean;
+      readonly ignores_soak: boolean;
+      readonly resistance_shift: number;
+      readonly bypasses_wards: boolean;
       readonly minimum_success_level: number;
     };
     /** @description Serializer for damage types. */
@@ -32912,16 +32915,16 @@ export interface components {
       /**
        * @description ACTIVE PC participant PKs in initiative (speed-rank) order.
        *
-       *     Computed in-memory from ``participants_cached`` (which already
-       *     ``select_related("covenant_role")``) so serialization issues **no extra
-       *     query** — mirrors the speed-rank ordering of ``services.get_resolution_order``
-       *     for ACTIVE PCs (speed_rank asc, then pk). The frontend RoundFlow orders its
-       *     initiative chips by this and marks the first not-yet-acted participant as the
-       *     on-deck actor.
+       *     Computed from ``participants_cached`` (which already select_relateds
+       *     ``covenant_role`` and the character) through the same ``effective_speed_ranks``
+       *     that ``services.get_resolution_order`` sorts on, so the chips and the real
+       *     order agree for ACTIVE PCs (effective rank asc, then pk). Costs one query for
+       *     the turn order conditions. The frontend RoundFlow orders its initiative chips
+       *     by this and marks the first not-yet-acted participant as the on-deck actor.
        *
        *     The resolution path additionally applies a ``can_act`` filter (excluding a
-       *     downed-but-not-removed PC); that is omitted here to stay query-free, so such
-       *     a PC may still appear in the display order. Acceptable for a display field.
+       *     downed-but-not-removed PC); that is omitted here to keep the query count down,
+       *     so such a PC may still appear in the display order. Acceptable for a display field.
        */
       readonly resolution_order: number[];
       escalation_curve?: number | null;
@@ -34175,6 +34178,8 @@ export interface components {
      *     * `perception` - Perception
      *     * `concealment` - Concealment
      *     * `hold` - Hold / Lock
+     *     * `strike` - Strike
+     *     * `mend` - Mend
      * @enum {string}
      */
     FunctionEnum:
@@ -34190,7 +34195,9 @@ export interface components {
       | 'weaken'
       | 'perception'
       | 'concealment'
-      | 'hold';
+      | 'hold'
+      | 'strike'
+      | 'mend';
     FundWardResult: {
       resonance_reserve: number;
     };

@@ -1,11 +1,14 @@
 """Authored defense piercing at the combat damage and cast seams."""
 
+from dataclasses import replace
 from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import TestCase
 
+from world.checks.factories import CheckTypeFactory
 from world.combat.factories import CombatOpponentFactory, CombatParticipantFactory
+from world.combat.models import VowAddedEffectFiring
 from world.combat.services import apply_damage_to_opponent, apply_damage_to_participant
 from world.combat.tests.penetration_helpers import _build_resolver, _ledger
 from world.conditions.factories import (
@@ -15,14 +18,23 @@ from world.conditions.factories import (
     DamageTypeFactory,
 )
 from world.conditions.services import apply_condition
+from world.covenants.constants import VowEffectContext, VowEffectFrequency
+from world.covenants.factories import (
+    CovenantFactory,
+    CovenantRoleFactory,
+    VowAddedEffectDamageProfileFactory,
+    VowAddedEffectFactory,
+    engage_vow_with_thread,
+)
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.factories import EquippedItemFactory, ItemInstanceFactory, ItemTemplateFactory
-from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget
+from world.magic.constants import EffectKind, TargetKind, TechniqueFunction, VitalBonusTarget
 from world.magic.factories import (
     ResonanceFactory,
     SignatureMotifBonusFactory,
     TechniqueAppliedConditionFactory,
     TechniqueDamageProfileFactory,
+    TechniqueFunctionTagFactory,
     ThreadFactory,
     ThreadPullEffectFactory,
 )
@@ -228,3 +240,94 @@ class DefensePiercingWardTests(TestCase):
         penetration.assert_not_called()
         self.assertEqual(result.scaled_damage, 0)
         self.assertEqual(result.applied_conditions, [])
+
+
+class DefensePiercingVowTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+
+    def _vow_cast(self, *, offense_sl=2, minimum_success_level=1):
+        resolver = replace(
+            _build_resolver(barrier_strength=100, offense_sl=offense_sl),
+            offense_check_type=CheckTypeFactory(),
+        )
+        technique = resolver.action.focused_action
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.HOLD)
+        role = CovenantRoleFactory()
+        covenant = CovenantFactory(covenant_type=role.covenant_type)
+        engage_vow_with_thread(
+            resolver.participant.character_sheet, role, covenant=covenant, thread_level=3
+        )
+        resolver.participant.character_sheet.character.threads.invalidate()
+        effect = VowAddedEffectFactory(
+            covenant_role=role,
+            cast_context=VowEffectContext.IN_COMBAT,
+            frequency=VowEffectFrequency.ONCE_PER_FIGHT,
+        )
+        damage_type = DamageTypeFactory()
+        VowAddedEffectDamageProfileFactory(
+            effect=effect,
+            damage_type=damage_type,
+            base_damage=20,
+            ignores_soak=True,
+            resistance_shift=5,
+            bypasses_wards=True,
+            minimum_success_level=minimum_success_level,
+        )
+        condition = ConditionTemplateFactory()
+        ConditionResistanceModifierFactory(
+            condition=condition, damage_type=damage_type, modifier_value=8
+        )
+        target = resolver.action.focused_opponent_target
+        target.soak_value = 8
+        target.save(update_fields=["soak_value"])
+        apply_condition(target.objectdb, condition)
+        TechniqueAppliedConditionFactory(
+            technique=technique, condition=ConditionTemplateFactory(name="Vow Piercing Bleeding")
+        )
+        return resolver, effect
+
+    def test_vow_profile_pierces_all_defenses_and_carries_bleeding_then_is_spent(self):
+        resolver, effect = self._vow_cast()
+        with patch.object(
+            type(resolver), "_apply_penetration", return_value=(_ledger(0), True)
+        ) as penetration:
+            result = resolver(power=20, ledger=_ledger(20))
+        penetration.assert_not_called()
+        self.assertEqual(len(result.damage_results), 2)
+        self.assertEqual(result.damage_results[-1].damage_dealt, 17)
+        self.assertEqual(len(result.applied_conditions), 1)
+        self.assertEqual(VowAddedEffectFiring.objects.filter(effect=effect).count(), 1)
+        with patch.object(
+            type(resolver), "_apply_penetration", return_value=(_ledger(0), True)
+        ) as penetration:
+            second = resolver(power=20, ledger=_ledger(20))
+        penetration.assert_called_once()
+        self.assertEqual(second.damage_results, [])
+        self.assertEqual(second.applied_conditions, [])
+        self.assertEqual(VowAddedEffectFiring.objects.filter(effect=effect).count(), 1)
+
+    def test_eligible_vow_bypasses_ward_even_when_damage_row_threshold_is_unmet(self):
+        resolver, effect = self._vow_cast(minimum_success_level=99)
+        with patch.object(
+            type(resolver), "_apply_penetration", return_value=(_ledger(0), True)
+        ) as penetration:
+            result = resolver(power=20, ledger=_ledger(20))
+        penetration.assert_not_called()
+        self.assertEqual(len(result.damage_results), 1)
+        self.assertEqual(len(result.applied_conditions), 1)
+        self.assertEqual(VowAddedEffectFiring.objects.filter(effect=effect).count(), 1)
+
+    def test_failed_offense_cannot_use_or_spend_vow_ward_bypass(self):
+        resolver, effect = self._vow_cast(offense_sl=0, minimum_success_level=0)
+        with patch.object(
+            type(resolver), "_apply_penetration", return_value=(_ledger(0), True)
+        ) as penetration:
+            result = resolver(power=20, ledger=_ledger(20))
+        penetration.assert_called_once()
+        self.assertEqual(result.damage_results, [])
+        self.assertEqual(result.applied_conditions, [])
+        self.assertFalse(VowAddedEffectFiring.objects.filter(effect=effect).exists())

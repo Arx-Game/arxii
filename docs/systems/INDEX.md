@@ -80,7 +80,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `TechniqueCapabilityGrant`,
     `TechniqueFunctionTag` (#2443, NK `(technique, function)`, lore-repo content —
     which fine-grained `TechniqueFunction` labels a technique carries; see
-    `constants.TechniqueFunction`, a 13-value code-defined vocabulary shared by
+    `constants.TechniqueFunction`, a 15-value code-defined vocabulary shared by
     Layer 2 per-vow specialties (`covenants.CovenantRoleTechniqueSpecialty`),
     Layer 4 situational perks (#2536), and the #2645 Insight rider (PERCEPTION
     gates `covenants.insight.maybe_produce_insight`)),
@@ -228,6 +228,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     opt-out via `GMPromptFilter` (`GMPromptGroup`). Full detail + the release/
     frozen-persona rules: `docs/systems/scenes.md` "GM narration of mechanical events",
     `docs/systems/magic.md` "GM Prompt Queue", ADR-4101.
+  - **Vow added effects: payload seams (#4581, ADR-4581-A) [BUILT & WIRED]:** the shared
+    condition seams in `world/magic/services/condition_application.py` take a vow row's
+    payload without a parallel path: `apply_technique_conditions(severity_bonus=,
+    duration_bonus=)`, `remove_technique_conditions(removed_condition_rows=)`,
+    `apply_technique_treatments(treatment_rows=)` (which now skips a target with no
+    `CharacterSheet` instead of raising). `TechniqueFunction` gained `STRIKE` and `MEND` (15
+    values). `render_payload_clauses(...)` (`services/technique_effects.py`) renders the
+    "Deals / Applies / Strips / Treats" clauses for both a technique sentence and a vow row's
+    summary; `validate_inert_removal_knobs` (`models/techniques.py`) is the shared removal-row
+    knob check. Detail: `docs/systems/magic.md` "Vow added effects: the payload seams".
   - **Technique effect summary (#2898):** the one block every technique surface
     shows. `summarize_technique_effects(technique) -> TechniqueEffectPayload`
     (`services/technique_effects.py`, types in `types/technique_effects.py`)
@@ -1180,8 +1190,16 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   (`settled_effects_tick`) applies clamped non-lethal DoT via `apply_clamped_chronic_damage` and
   removes expired converted rows; `lapsed_allegiance_sweep` warns a PC charmer once and
   auto-rolls the break check at lapse (no encounter opens). See `docs/systems/conditions.md`.
+- **Combat reads condition effects for both sides (#4572) [BUILT & WIRED]:** NPC target
+  selection adds a PC's `draws_aggro` / `aggro_priority` conditions to its threat
+  (`aggro_priority_by_target`), round order and the initiative chips subtract the
+  `affects_turn_order` / `turn_order_modifier` total from a combatant's speed rank
+  (`turn_order_modifier_by_target` via `effective_speed_ranks`), DoT ticks reach NPC
+  opponents, and `absorb_pool` / `reflect_damage` find their condition by field, not by name.
+  See `docs/systems/conditions.md` "Condition effects combat reads".
 - **Integrates with:** combat (DoT, capability blocking, NPC allegiance reads via
-  `ConditionTemplate.sets_allegiance`; `select_npc_actions` consults `effective_allegiances`),
+  `ConditionTemplate.sets_allegiance`; `select_npc_actions` consults `effective_allegiances`
+  and condition aggro; `get_resolution_order` consults turn order modifiers),
   magic (power sources, resonance-environment boon/injury application, behavior-consent gating
   via `ConditionCategory.alters_behavior`), progression (interactions), scenes (telnet `treat` +
   web Treat panel surface converges on the `SceneActionRequest` consent seam via the
@@ -7781,6 +7799,27 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `compute_party_profile` calls `effective_combat_level` per ACTIVE participant before
   averaging — outlier distortion is absorbed in the bond math; graduated bonds dissolve
   at `begin_declaration_phase`.
+- **Vow added effects (#4581, ADR-4581-A) [BUILT & WIRED]:** staff-authored payload a
+  covenant vow adds to a technique cast. Models: `VowAddedEffect` (header: `covenant_role`,
+  `function`, optional `gift` / `technique`, `cast_context`, `situation`, `beneficiary`,
+  `frequency`, `unlock_thread_level`, the three `*_per_thread_level` scalers, `upgrades`
+  self-FK `RESTRICT`) and its four children `VowAddedEffectAppliedCondition`,
+  `VowAddedEffectRemovedCondition`, `VowAddedEffectTreatment`,
+  `VowAddedEffectDamageProfile`; the play-state ledger `VowAddedEffectFiring` lives in
+  combat (below). Enums `VowEffectContext`, `VowEffectFrequency`; `Situation.TARGET_IS_BOSS`.
+  Read seams in `world.covenants.added_effects`: `vow_added_effects_for_cast(subject,
+  technique, *, resolution, target) -> list[FiredVowEffect]` (upgrade rule, then the
+  frequency ledger, then dedupe and thread-level scaling), `apply_vow_effect_payloads`,
+  `vow_damage_profiles`, `record_vow_effect_firings`, and `vow_added_effects_on_technique`
+  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary). Runs
+  in combat (`CombatTechniqueResolver`) and out of it (`cast_services`) on casts at success
+  level 1 or higher only. The perk machinery exposed `VowHolderCandidate`,
+  `vow_holder_candidates`, `vow_holder_thread_levels` and `SituationCheck`
+  (`world.covenants.perks.services`). Known limits: on AREA casts vow damage reaches every
+  resolved opponent while the situation reads the primary target only; out of combat the
+  payload is applied but not narrated in the pose. Admin: `VowAddedEffectAdmin` plus a
+  read-only inline on `CovenantRole`; summary via `summarize_vow_added_effect`. Detail:
+  `docs/systems/covenants.md` "Vow added effects".
 - **Covenant Treasury (#2992):** `world.covenants.treasury` —
   `covenant_treasury(covenant) -> OrganizationTreasury` (lazy-created on the
   covenant's backing `Organization`); `deposit_covenant_funds(*, membership, amount,
@@ -8011,6 +8050,15 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `ComboSignature` (covenant+combo narrative flourish, #2017), `Clash`,
   `ClashRound`, `ClashContribution`, `BreakBarContribution` (#2642, see "Boss-fight structure"
   below), `CombatOpponent.reinforces` (self-FK, lieutenant->boss edge, #2642)
+- **Vow added effect firings (#4581):** `VowAddedEffectFiring` (`world/combat/models.py`,
+  play state) - `participant` FK (the HOLDER's `CombatParticipant`), `effect` FK →
+  `VowAddedEffect`, `round_number`; unique on the three. The ledger behind
+  `ONCE_PER_ROUND` / `ONCE_PER_FIGHT` vow rows, written by `record_vow_effect_firings` only
+  when a cast lands (success level 1 or higher, not ward-bounced), read by
+  `vow_added_effects_for_cast`. `CombatTechniqueResolver` feeds a fired row's damage profiles
+  through `_apply_damage(vow_damage=)` (each with its row's `damage_bonus` as a budget
+  bonus) and its conditions, treatments and removals through `_apply_conditions(
+  fired_vow_effects=)`. See `docs/systems/covenants.md` "Vow added effects".
 - **Technique-entrance combat integration (#2183):** `CombatRoundAction.from_entrance`
   (bool, default False) — stamped when a hostile Technique Entrance (see magic.md
   "Technique Entrance") seeds/feeds an encounter (`world.combat.cast_seed
@@ -8077,7 +8125,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     ONLY defense-check site threading `attacker` in v1. Makes CHECK_BONUS/TIER_FLOOR/
     BOTCH_IMMUNITY situational perks — including `ATTACKER_AFFINITY`-gated ones — live on
     defense rolls for the first time. `world.covenants.perks.services.applicable_perks` and its
-    `_PerkResolver` gained the matching `attacker` parameter/field to propagate it into each
+    `_PerkResolver` (whose situation cache is now `SituationCheck`, #4581) gained the matching `attacker` parameter/field to propagate it into each
     candidate holder's `SituationContext`. See ADR-0153/ADR-0154 and `docs/systems/covenants.md`'s
     "Court/Battle scoping + defense-side seam" for the full design.
 - **The Damage Identity — bounded percent lanes, vow-keyed stacking, execute (#2643,
@@ -8356,8 +8404,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `ConditionTemplate.reactive_anima_cost` (int) — anima paid per reactive-defense fire;
     can't pay → fizzle, the attack lands (0 = free).
   - `ConditionInstance.absorb_remaining` (int, nullable) — remaining absorption buffer for
-    the Aegis Field (force-field) handler; seeded by `init_absorb_buffer` on
-    `CONDITION_APPLIED`.
+    the force-field (`absorb_pool`) handler, which finds it by that field and not by the
+    condition's name (#4572); seeded by `init_absorb_buffer` on `CONDITION_APPLIED`.
   - `ConditionInstance.soulfray_consented` (bool, default False, #3573) - the caster
     consented at cast time to keep this condition's reactive cost/upkeep firing past zero
     anima at the price of Soulfray; stamped by `_create_instance_from_context` from both
@@ -8607,6 +8655,25 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     when the round has no NPC selection of EITHER shape yet — no `CombatOpponentAction` AND
     no `PendingOpponentAttack` declared this round — a conservative, idempotent fallback;
     any explicit prior selection (staff, simulation, tests) is left alone.
+- **Conditions reach the fight for both sides (#4572) [BUILT & WIRED]:**
+  - `select_npc_actions` -> `_apply_aggro_conditions` (`world/combat/services/npc/npc_selection.py`)
+    adds each PC's summed `aggro_priority` (`world.conditions.services.aggro_priority_by_target`,
+    `draws_aggro` conditions only) to its threat with every opponent and puts it in the
+    `SPECIFIC_ROLE` preferred set. Selection-time only (no `ThreatRecord` written); an
+    `EngagementLock` still overrides.
+  - `effective_speed_ranks(participants, opponents=())` (`world/combat/services/combos/
+    resolution_order.py`) is the one place round order is decided: base rank minus the bearer's
+    `turn_order_modifier_by_target` total, keyed `(entity_type, pk)`. `get_resolution_order` and
+    `EncounterDetailSerializer.get_resolution_order` (initiative chips, one extra query) both
+    sort on it. NPC opponents shift too (base `NPC_SPEED_RANK`).
+  - `_apply_round_tick_damage` (`world/vitals/services.py`) routes a tick on an NPC opponent's
+    body through `_apply_round_tick_damage_to_opponent` -> `apply_damage_to_opponent`
+    (`bypass_soak`, `bypass_pre_apply`), so DoT lowers an NPC's health and can defeat it.
+  - `absorb_pool` and `reflect_damage` designate their condition by field (an instance holding
+    an absorb buffer; a template with a reactive trigger calling the handler), not by the
+    Aegis Field / Mirror Ward names.
+  - Reviewer agent `tools/agents/condition-effect-reach-reviewer.md`; journeys in
+    `src/integration_tests/test_conditions_that_reach_the_fight_journeys.py`.
 - **PC sustained actions (#2705; ADR-0190 — extends ADR-0161's pre-armed shape to the
   PC side):**
   - `SustainedAction` (`world/combat/models.py`) — the PC-side mirror of

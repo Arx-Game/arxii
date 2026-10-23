@@ -186,7 +186,7 @@ flowchart TD
 
 `bypasses_wards` skips the contest for the whole technique, including conditions
 and ordinary damage rows, while preserving offense and effect-specific success gates.
-The effective profile set includes variants and active signature bonuses. A bypassed
+The effective profile set includes variants, active signature bonuses and eligible vow-added effects. A bypassed
 ward is not consumed or weakened; no PENETRATION entry or power modifier is added.
 
 `barrier_strength` is the **ward gate** only; damage-type **resistance/soak** is a

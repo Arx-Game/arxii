@@ -2500,6 +2500,7 @@
   - covenant_role -> covenants.CovenantRole [FK] (nullable)
 **Pointed to by:**
   - mirror_surface <- combat.CombatOpponent
+  - vow_effect_firings <- combat.VowAddedEffectFiring
   - round_actions <- combat.CombatRoundAction
   - incoming_attacks <- combat.CombatOpponentAction
   - sustained_actions <- combat.SustainedAction
@@ -2761,6 +2762,11 @@
   - opponent -> combat.CombatOpponent [FK]
   - participant -> combat.CombatParticipant [FK]
 
+### VowAddedEffectFiring
+**Foreign Keys:**
+  - participant -> combat.CombatParticipant [FK]
+  - effect -> covenants.VowAddedEffect [FK]
+
 ### Service Functions
 - `accumulate_soulfray(*, character: 'ObjectDB', anima: 'CharacterAnima', deficit: 'int', soulfray_config: 'SoulfrayConfig | None', check_result: 'CheckResult | None', lethal: 'bool' = True, defer_reveal: 'bool' = False) -> 'SoulfrayResult | None' - Accumulate Soulfray severity from the pool state and apply stage consequences.`
 - `accumulate_threat(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant', amount: 'int') -> 'None' - Increment the threat value for an (opponent, participant) pairing (#2020).`
@@ -2768,7 +2774,7 @@
 - `active_combat_engagement_for(character: 'ObjectDB') -> 'CharacterEngagement | None' - The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None, level: 'int | None' = None) -> 'CombatOpponent' - Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' - Create a CombatParticipant linking a PC to an encounter.`
-- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
+- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0'), skip_condition_interactions: 'bool' = False) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' - Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' - Map a graded interpose resolution onto *pre_payload*.`
@@ -3100,6 +3106,8 @@
   - crossing_options <- magic.CrossingOption
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
+  - vowaddedeffectappliedcondition_applied <- covenants.VowAddedEffectAppliedCondition
+  - vowaddedeffectremovedcondition_applied <- covenants.VowAddedEffectRemovedCondition
   - insight_entries <- covenants.InsightTableEntry
   - weakness_pool_entries <- covenants.WeaknessPoolEntry
   - signaturemotifbonusappliedcondition_applied <- magic.SignatureMotifBonusAppliedCondition
@@ -3137,6 +3145,7 @@
   - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
   - techniquevariantdamageprofile_damage_profiles <- magic.TechniqueVariantDamageProfile
+  - vowaddedeffectdamageprofile_damage_profiles <- covenants.VowAddedEffectDamageProfile
   - signaturemotifbonusdamageprofile_damage_profiles <- magic.SignatureMotifBonusDamageProfile
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - thread_pull_resistances <- magic.ThreadPullEffect
@@ -3176,6 +3185,7 @@
 **Pointed to by:**
   - attempts <- conditions.TreatmentAttempt
   - technique_payloads <- magic.TechniqueTreatment
+  - vow_added_effect_payloads <- covenants.VowAddedEffectTreatment
   - draft_technique_payloads <- magic.TechniqueDraftTreatment
   - action_requests <- scenes.SceneActionRequest
 
@@ -3185,6 +3195,7 @@
 - `acute_peril_hand_off_condition_names() -> list[str] - Names of the acute-peril conditions combat hands to a scene round at its end.`
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult - Increment a condition's severity and advance stage if threshold crossed.`
 - `advance_condition_stage(*, payload: object, condition_name: str) -> int | None - Advance the bearer's condition by one stage *now*, on this event (#3416).`
+- `aggro_priority_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - Total aggro priority per target from active draws_aggro conditions (#4572).`
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult - Apply a condition to a target, handling stacking and interactions.`
 - `apply_condition_by_name(*, payload: object, condition_name: str) -> None - Apply a named condition to the character carried by the event payload.`
 - `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None - On ascending stage changes, apply the stage's on_entry_conditions.`
@@ -3197,6 +3208,7 @@
 - `condition_modifier_totals_by_sheet(sheet_ids: collections.abc.Iterable[int], modifier_target: 'ModifierTarget') -> dict[int, int] - Batched ``get_condition_modifier_total`` across many sheets (#4090).`
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary - Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult - Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
+- `draws_aggro_target_ids(targets: collections.abc.Iterable['ObjectDB']) -> set[int] - ObjectDB pks among ``targets`` carrying an active draws_aggro condition (#4572).`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_conditions_content() -> None - Idempotently seed all core conditions content.`
 - `ensure_poison_content() -> None - Idempotently seed poison content (#1050).`
@@ -3247,6 +3259,7 @@
 - `settle_round_effects(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionInstance] - Convert round-counted conditions on the targets into wall-clock expiries (#4120).`
 - `settled_effects_tick() -> world.conditions.types.SettledTickSummary - Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool - Temporarily suppress a condition's effects.`
+- `turn_order_modifier_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - Total turn order modifier per target from active conditions (positive = acts earlier).`
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool - Remove suppression from a condition.`
 
 
@@ -3435,6 +3448,7 @@
   - gift_grants <- covenants.CovenantRoleGiftGrant
   - role_bonuses <- covenants.CovenantRoleBonus
   - situational_perks <- covenants.VowSituationalPerk
+  - added_effects <- covenants.VowAddedEffect
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
   - combat_participations <- combat.CombatParticipant
@@ -3484,6 +3498,40 @@
 ### SecondaryVowConfig
 **Foreign Keys:**
   - updated_by -> evennia.AccountDB [FK] (nullable)
+
+### VowAddedEffect
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [FK]
+  - gift -> magic.Gift [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - upgrades -> covenants.VowAddedEffect [FK] (nullable)
+**Pointed to by:**
+  - upgraded_by <- covenants.VowAddedEffect
+  - applied_conditions <- covenants.VowAddedEffectAppliedCondition
+  - removed_conditions <- covenants.VowAddedEffectRemovedCondition
+  - treatments <- covenants.VowAddedEffectTreatment
+  - damage_profiles <- covenants.VowAddedEffectDamageProfile
+  - firings <- combat.VowAddedEffectFiring
+
+### VowAddedEffectAppliedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - effect -> covenants.VowAddedEffect [FK]
+
+### VowAddedEffectDamageProfile
+**Foreign Keys:**
+  - damage_type -> conditions.DamageType [FK] (nullable)
+  - effect -> covenants.VowAddedEffect [FK]
+
+### VowAddedEffectRemovedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - effect -> covenants.VowAddedEffect [FK]
+
+### VowAddedEffectTreatment
+**Foreign Keys:**
+  - effect -> covenants.VowAddedEffect [FK]
+  - treatment_template -> conditions.TreatmentTemplate [FK]
 
 ### VowSituationalPerk
 **Foreign Keys:**
@@ -5737,6 +5785,7 @@
   - reincarnation <- magic.Reincarnation
   - granted_by_roles <- covenants.CovenantRole
   - role_grants <- covenants.CovenantRoleGiftGrant
+  - vow_added_effects <- covenants.VowAddedEffect
   - technique_drafts <- magic.TechniqueDraft
   - thread_pull_effects <- magic.ThreadPullEffect
   - anchored_threads <- magic.Thread
@@ -6290,6 +6339,7 @@
   - manifest_options <- magic.TechniqueManifestOption
   - character_manifestations <- magic.CharacterManifestation
   - variants <- magic.TechniqueVariant
+  - vow_added_effects <- covenants.VowAddedEffect
   - grants <- magic.TechniqueGrant
   - progress_records <- magic.TechniqueProgress
   - progress_weekly <- magic.TechniqueProgressWeekly

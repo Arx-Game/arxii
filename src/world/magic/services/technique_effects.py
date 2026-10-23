@@ -52,6 +52,7 @@ from world.magic.types.technique_effects import (
 )
 
 if TYPE_CHECKING:
+    from world.covenants.models import VowAddedEffectTreatment
     from world.magic.models.techniques import (
         AbstractAppliedCondition,
         AbstractCapabilityGrant,
@@ -150,6 +151,33 @@ def _piercing_phrases(damage: list[DamageEffectPayload]) -> list[str]:
     return phrases
 
 
+def render_payload_clauses(
+    *,
+    applies: list[ConditionEffectPayload],
+    removes: list[ConditionEffectPayload],
+    damage: list[DamageEffectPayload],
+    treatments: list[TreatmentEffectPayload],
+) -> list[str]:
+    """The plain-words clauses for a payload, in the order a technique sentence reads them.
+
+    "Deals ...", "Applies ...", "Strips ...", "Treats ...", each present only when its
+    list is not empty. A technique's sentence and a vow added effect's summary both
+    render their payload through this one function, so the two cannot drift apart.
+    """
+    clauses: list[str] = []
+    damage_clause = _damage_phrase(damage)
+    if damage_clause:
+        clauses.append(damage_clause)
+    clauses.extend(_piercing_phrases(damage))
+    if applies:
+        clauses.append(f"Applies {_join_phrases([row['name'] for row in applies])}.")
+    if removes:
+        clauses.append(f"Strips {_join_phrases([row['name'] for row in removes])}.")
+    if treatments:
+        clauses.append(f"Treats {_join_phrases(sorted({row['treats'] for row in treatments}))}.")
+    return clauses
+
+
 def render_technique_effect_sentence(  # noqa: PLR0913
     *,
     relationship: str,
@@ -189,16 +217,11 @@ def render_technique_effect_sentence(  # noqa: PLR0913
     if anima_cost:
         sentences.append(f"Costs {anima_cost} anima.")
 
-    damage_clause = _damage_phrase(damage)
-    if damage_clause:
-        sentences.append(damage_clause)
-    sentences.extend(_piercing_phrases(damage))
-    if applies:
-        sentences.append(f"Applies {_join_phrases([row['name'] for row in applies])}.")
-    if removes:
-        sentences.append(f"Strips {_join_phrases([row['name'] for row in removes])}.")
-    if treatments:
-        sentences.append(f"Treats {_join_phrases(sorted({row['treats'] for row in treatments}))}.")
+    sentences.extend(
+        render_payload_clauses(
+            applies=applies, removes=removes, damage=damage, treatments=treatments
+        )
+    )
     if grants:
         sentences.append(f"Knowing it grants {_join_phrases([row['name'] for row in grants])}.")
 
@@ -212,7 +235,7 @@ def render_technique_effect_sentence(  # noqa: PLR0913
 # --------------------------------------------------------------------------- #
 
 
-def _condition_payload(row: AbstractAppliedCondition) -> ConditionEffectPayload:
+def condition_payload(row: AbstractAppliedCondition) -> ConditionEffectPayload:
     return ConditionEffectPayload(
         name=row.condition.name,
         description=row.condition.player_description or row.condition.description,
@@ -222,7 +245,7 @@ def _condition_payload(row: AbstractAppliedCondition) -> ConditionEffectPayload:
     )
 
 
-def _damage_payload(row: AbstractDamageProfile) -> DamageEffectPayload:
+def damage_payload(row: AbstractDamageProfile) -> DamageEffectPayload:
     return DamageEffectPayload(
         damage_type=row.damage_type.name if row.damage_type_id else None,
         base_damage=row.base_damage,
@@ -234,7 +257,7 @@ def _damage_payload(row: AbstractDamageProfile) -> DamageEffectPayload:
     )
 
 
-def _treatment_payload(row: TechniqueTreatment) -> TreatmentEffectPayload:
+def treatment_payload(row: TechniqueTreatment | VowAddedEffectTreatment) -> TreatmentEffectPayload:
     template = row.treatment_template
     return TreatmentEffectPayload(
         name=template.name,
@@ -386,10 +409,10 @@ def summarize_technique_effects(technique: SummarizableTechnique) -> TechniqueEf
     derivations. Prefer ``technique.cached_effect_summary`` at call sites — it
     memoizes this on the row.
     """
-    applies = [_condition_payload(row) for row in technique.cached_condition_applications]
-    removes = [_condition_payload(row) for row in technique.cached_removed_conditions]
-    damage = [_damage_payload(row) for row in technique.cached_damage_profiles]
-    treatments = [_treatment_payload(row) for row in technique.cached_treatments]
+    applies = [condition_payload(row) for row in technique.cached_condition_applications]
+    removes = [condition_payload(row) for row in technique.cached_removed_conditions]
+    damage = [damage_payload(row) for row in technique.cached_damage_profiles]
+    treatments = [treatment_payload(row) for row in technique.cached_treatments]
     grants = [_capability_payload(row) for row in technique.cached_capability_grants]
 
     # str() unwraps the TextChoices member so the payload carries a plain wire value.

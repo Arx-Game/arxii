@@ -1078,6 +1078,42 @@ def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool: 
     )
 
 
+@register(Situation.TARGET_IS_BOSS)
+def target_is_boss(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """The opponent the subject declared as this round's focused target is a boss.
+
+    Reads the SUBJECT's declared ``CombatRoundAction.focused_opponent_target``
+    for the encounter's current ``round_number`` and compares that opponent's
+    ``tier`` to ``OpponentTier.BOSS``. Elite and Hero Killer opponents do not
+    count: the tier is the authored designation, never inferred from health or
+    name.
+
+    Data source, verified: ``CombatRoundAction`` (``world/combat/models.py``)
+    with ``select_related("focused_opponent_target")``. One query, the
+    ``enemy_held_by_ally`` subject-action read. Reads ``resolution``; False
+    outside combat or when the subject declared no opponent target. No params
+    (absent from ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+
+    from world.combat.constants import OpponentTier  # noqa: PLC0415
+    from world.combat.models import CombatRoundAction  # noqa: PLC0415
+
+    subject_action = (
+        CombatRoundAction.objects.filter(
+            participant=participant,
+            round_number=participant.encounter.round_number,
+        )
+        .select_related("focused_opponent_target")
+        .first()
+    )
+    if subject_action is None or subject_action.focused_opponent_target is None:
+        return False
+    return subject_action.focused_opponent_target.tier == OpponentTier.BOSS
+
+
 @register(Situation.BARRIER_CONTESTED)
 def barrier_contested(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
     """A covenant-mate of the holder has an active EngagementLock in the

@@ -272,8 +272,8 @@ never bound stays silent (no announce-on-fire spam).
 disengaged vow says so out loud, at the exact moment it would have answered, instead of silently
 doing nothing. `dormant_perk_firings` enumerates the subject's own active-but-DISENGAGED
 memberships (`_dormant_self_candidates`, the inverted mirror of `_self_candidates` — never a
-co-present mate's disengagement, only the subject's own), runs the same `_PerkResolver`
-situation evaluation as the live path plus the slice-3 scope filter, and returns the set that
+co-present mate's disengagement, only the subject's own), runs the same situation evaluation (`_PerkResolver`, via its
+`SituationCheck`) as the live path plus the slice-3 scope filter, and returns the set that
 WOULD have fired if the vow were engaged. `announce_dormant_perks` delivers the exact line
 `"your vow lies dormant — {perk.name} would have answered here"` to the HOLDER ALONE — a
 narrator-authored WHISPER-mode `Interaction` (receiver-scoped to the subject's primary persona,
@@ -949,12 +949,210 @@ clearing the input on a business-rule rejection.
 `NotAuthorizedToSpendCovenantTreasuryError`, `CovenantTreasuryTransferError` — see
 "Exceptions" below.
 
+## Vow added effects (#4581, ADR-4581-A) [BUILT & WIRED]
+
+A vow can add staff-authored effects to a technique cast: "when my ally casts a Weaken
+against a boss, once a fight, it also burns the target", "my own Hold also slows the held
+enemy", "a Cleanse cast near me also treats the wound". It is payload, the same shapes a
+technique carries itself, authored in plain Django admin. Slice 1 of #4573; the workbench,
+vow board, vow page and spellbook vow section are #4565 and do not exist yet.
+
+### Models (`world.covenants.models`, authored content registered in `CONTENT_MODELS` for export, except the treatment child)
+
+- **`VowAddedEffect`** (the header; `NaturalKeyMixin`, `SituationRequirementMixin`) -
+  `covenant_role` FK (anchor OR sub-role, CASCADE), `function`
+  (`magic.TechniqueFunction`), optional `gift` / `technique` FKs narrowing it (never both,
+  a DB `CheckConstraint`), `cast_context` (`VowEffectContext`: `ANY` / `IN_COMBAT` /
+  `OUT_OF_COMBAT`), `situation` (+ the mixin's four typed parameter columns, blank = none),
+  `beneficiary` (`PerkBeneficiary`: `SELF` / `COVENANT_ALLIES` / `WHOLE_GROUP`),
+  `frequency` (`VowEffectFrequency`: `EVERY_CAST` / `ONCE_PER_ROUND` / `ONCE_PER_FIGHT`),
+  `unlock_thread_level` plus `severity_per_thread_level`, `duration_per_thread_level`,
+  `damage_per_thread_level`, and `upgrades` (self-FK, `RESTRICT`, `related_name=
+  "upgraded_by"`). Natural key is the nine scope fields; a `UniqueConstraint(nulls_distinct=
+  False)` holds it, and a second one holds "one upgrade per base per role"
+  (`covenant_role` + `upgrades`). `cached_effect_summary` (plain-words line, below) and four
+  `PrunedCachedProperty` payload lists: `cached_applied_conditions`,
+  `cached_removed_conditions`, `cached_treatments`, `cached_damage_profiles`.
+- **Four payload children**, each with `effect` FK (CASCADE), `RelatedCacheClearingMixin`
+  (`related_cache_fields = ["effect"]`, so a child save or delete clears the header's cached
+  list on a running server): `VowAddedEffectAppliedCondition` and
+  `VowAddedEffectRemovedCondition` (both on `magic.AbstractAppliedCondition`; the removal
+  child adds `remove_all_stacks` and `cure_power_multiplier`, which the shared removal seam
+  reads off every row), `VowAddedEffectTreatment` (`treatment_template`, `target_kind`,
+  `minimum_success_level`; mirrors `TechniqueTreatment`), and `VowAddedEffectDamageProfile`
+  (on `magic.AbstractDamageProfile`; one row per damage type plus at most one untyped).
+  The header and the applied, removed and damage children are in `CONTENT_MODELS`; the
+  treatment child is not, because `TreatmentTemplate` has no natural key (the same reason
+  `magic.techniquetreatment` is absent).
+- **`VowAddedEffectFiring`** (`world.combat.models`, play state, no natural key) - the
+  combat ledger behind the two limits: `participant` FK (the HOLDER's `CombatParticipant`,
+  not necessarily the caster), `effect` FK, `round_number`; unique on the three. A
+  participant row is per encounter, so a new fight starts with an empty ledger.
+- **`Situation.TARGET_IS_BOSS`** (`perks/constants.py`, evaluator in `perks/evaluators.py`):
+  the opponent the SUBJECT declared as this round's focused target is a BOSS-tier
+  `CombatOpponent` (Elite and Hero Killer do not count). One query; False outside combat or
+  with no declared opponent. It lives in the shared registry, so a situational perk can use
+  it too.
+
+### Authoring rules (`clean()`)
+
+A header form validates before its inline rows exist in the admin, so a rule that reads a
+child lives on the child and reads `self.effect`.
+
+| Rule | Where | Error key |
+|---|---|---|
+| `ONCE_PER_ROUND` / `ONCE_PER_FIGHT` need `IN_COMBAT` (the limit is a fight's ledger) | header | `frequency` |
+| gift and technique both set | header (friendly twin of the DB check) | `technique` |
+| a narrowing `technique` must carry the row's `function` tag | header | `technique` |
+| `upgrades` names itself, a different `function`, or a row that is neither on this role at a lower `unlock_thread_level` nor on this role's `parent_role` | header | `upgrades` |
+| an `upgrades` row more limited than its base (`EVERY_CAST` < `ONCE_PER_ROUND` < `ONCE_PER_FIGHT`), which would leave a holder worse off for qualifying | header | `frequency` |
+| context set away from `IN_COMBAT` while saved damage children exist | header | `cast_context` |
+| a damage child on an effect whose `cast_context` is not `IN_COMBAT` | damage child | non-field |
+| an applied condition whose category `alters_behavior` (consent, ADR-4581-A) | applied child | `condition` |
+| removal knobs that mean nothing on a removal row (severity, duration, stack count) off their defaults (`validate_inert_removal_knobs`, shared with `TechniqueRemovedCondition`) | removed child | the knob field |
+| situation parameters the situation does not read, or that it requires (`SituationRequirementMixin.clean`) | header | the parameter field |
+
+An upgrade onto a parent-role row does not compare unlock levels.
+
+### Who holds a row, and which rows fire
+
+`world.covenants.added_effects` is the read seam. Holders are the ones situational perks use
+(`vow_holder_candidates`): the caster's own engaged vows (anchor role plus resolved sub-role;
+a secondary vow's anchor only) and every co-present covenant ally's vows. A row rides a cast
+when its `beneficiary` counts for that holder (`SELF` and `WHOLE_GROUP` on the caster's own
+vow, `COVENANT_ALLIES` and `WHOLE_GROUP` on an ally's).
+
+`vow_added_effects_for_cast(subject, technique, *, resolution, target) ->
+list[FiredVowEffect]` runs these steps in order:
+
+1. The technique's function tags (none: `[]`, no query).
+2. The holder candidates (none: `[]`, no query).
+3. One `VowAddedEffect` query with the four payload prefetches (none: `[]`).
+4. Per-holder gates: beneficiary, gift / technique narrowing, `cast_context`, the holder's
+   COVENANT_ROLE thread level on the vow's anchor role reaching `unlock_thread_level`
+   (`vow_holder_thread_levels`, one query), and the row's situation last
+   (`SituationCheck`, because it may query).
+5. **The upgrade rule**: a live row whose `upgrades` names another live row of the same
+   holder replaces it. A sub-role's row replaces its parent role's; a later-unlock row
+   replaces the earlier one. Every other row adds. An upgrade that fails a gate leaves its
+   base in place.
+6. **The frequency ledger**, in combat only: a `ONCE_PER_ROUND` row already in the ledger
+   for this round, or a `ONCE_PER_FIGHT` row in the ledger for this fight, is dropped. One
+   ledger query, and only when a live row is limited. This runs AFTER step 5, so a spent
+   once-per-fight upgrade still suppresses its base: the base never comes back because its
+   upgrade is used up.
+7. Dedupe on `(holder, row)`: one holder fires one row at most once per cast (anchor plus
+   resolved sub-role, primary plus secondary, a `WHOLE_GROUP` row seen from both sides). When
+   one holder reaches a row through both a primary and a secondary candidate, the primary
+   fires (no potency scaling), whatever order the candidates came in. Two different holders
+   of the same vow each fire it once.
+8. **Scaling**: each level above `unlock_thread_level` adds the row's
+   `severity_per_thread_level`, `duration_per_thread_level` and `damage_per_thread_level`.
+   A row from a SECONDARY vow has each bonus multiplied by
+   `SecondaryVowConfig.potency_tenths` and floor-divided by 10 (ADR-0159).
+
+`FiredVowEffect` (`world.covenants.types`) carries `effect`, `holder`, `is_secondary` and the
+three bonuses. Every cast in the game calls this, so the order keeps the common cast cheap: a
+technique with no function tag, or a caster with no engaged vow and no co-present holder,
+issues no `VowAddedEffect` query.
+
+The other seams in the module:
+
+- `apply_vow_effect_payloads(fired, *, technique, success_level, eff_intensity,
+  targets_by_kind, source_character, scene, soulfray_consented=False)` hands each fired row's
+  applied conditions, treatments and removed conditions to the technique payload seams in
+  `world.magic.services.condition_application` (the row-override and bonus kwargs, see
+  `docs/systems/magic.md`). It runs in two passes: every row's conditions and treatments,
+  then every row's removals. Both cast paths call it after the technique's own treatments and
+  before the technique's own removals, so every treatment in the cast runs before any
+  removal. SELF is always mapped to the caster. `technique` stays the provenance on
+  everything applied. A team-lane condition row ignores the severity and duration bonuses.
+  An applied condition whose category `alters_behavior` is skipped here (and logged), as well
+  as refused in authoring: a category can gain the flag, or a condition can move category,
+  after the row was saved, and consent folding never sees a vow row (ADR-4581-A).
+- `vow_damage_profiles(fired)` pairs each fired row's damage profiles with its
+  `damage_bonus`; combat's `_apply_damage` runs them through the same per-target loop as the
+  technique's and signature's profiles, the bonus added to the budget right after the weapon
+  augment. A vow damage profile receives the caster's weapon augment and a CHARGE
+  maneuver's damage bonus exactly as a technique's or signature's profile does.
+- `record_vow_effect_firings(fired, *, encounter)` spends the limited rows: one
+  `CombatParticipant` query for the holders, one `bulk_create`; no query when no fired row is
+  limited.
+- `vow_added_effects_on_technique(sheet, technique)` is the static view for #4565's display:
+  the sheet's own engaged vows' rows that match the technique's function and narrowing, with
+  no cast-dependent filter (not unlock level, context, situation or frequency), and it does
+  NOT filter by `beneficiary`, so a display tells a row riding the sheet's own casts from one
+  riding its allies' by reading `beneficiary`. **[BUILT, NOT WIRED]** pending #4565.
+
+### Where it runs
+
+- **Combat** (`CombatTechniqueResolver`): `_fired_vow_effects` reads the rows after the ward
+  check, so a ward-bounced cast computes nothing and spends nothing. The damage, then the
+  conditions / treatments / removals, then the ledger write all use the one `fired` list.
+- **Out of combat** (`world.scenes.cast_services._resolve_and_pose_cast`): the same read with
+  `resolution=None`, the payloads applied over the cast's own resolved targets. No ledger
+  write: no limited row can fire there, the rules above hold `ONCE_PER_ROUND` and
+  `ONCE_PER_FIGHT` to `IN_COMBAT`.
+- **Success gate, one rule for both paths:** vow rows apply only on casts at success level 1
+  or higher, and limited rows are spent only on such casts. A failed or partial cast
+  neither uses nor spends a row, a row authored at `minimum_success_level=0` never lands on a
+  sub-success cast, and a ward-bounced cast spends nothing; the holder keeps a limited row for
+  the next cast.
+- **NPC targets:** conditions go to the `ObjectDB` targets the resolvers already produce, so
+  a vow's enemy condition lands on an NPC opponent. `apply_technique_treatments` skips a
+  target with no `CharacterSheet` (an NPC opponent) instead of raising mid-round.
+
+### Known limits (stated, not hidden)
+
+- **AREA / FILTERED_GROUP casts:** vow damage reaches every resolved opponent, while the
+  row's `situation` is checked against the cast's primary target only (the limit situational
+  perks document at `_resolve_primary_target_sheet`).
+- **Out of combat, vow payload results are applied but not yet narrated in the pose.** The
+  vow's condition, treatment or removal lands; the cast pose does not mention it. A known
+  gap.
+- A treatment still raises for a sheetless CASTER; the vow seam passes a PC caster.
+- A once-per-round or once-per-fight limit is per holder, per row, tracked through the
+  holder's `CombatParticipant`.
+
+### Summary line and admin
+
+`summarize_vow_added_effect` (`world.covenants.added_effect_summary`) is built only from
+the row's own fields: enum labels, the names of the rows it points at, and the payload
+clauses a technique sentence uses (`render_payload_clauses`, see `docs/systems/magic.md`).
+`VowAddedEffect.cached_effect_summary` returns it, for example "From thread 3. On covenant
+allies' Weaken casts, in a fight, when Target Is a Boss, once a fight: Deals Fire damage."
+A bare row reads "... Adds nothing yet." `VowAddedEffectAdmin` is the authoring surface (the
+header with four inlines, `OneRowPerFormSet`, a read-only summary column and field); the
+`CovenantRole` admin carries a read-only `VowAddedEffectInline` listing each added effect's
+summary with a link to its own page.
+
+### The dividing line
+
+- **Specialties** (`CovenantRoleTechniqueSpecialty`, Layer 2) add cast power for matching
+  functions. **Situational perks** (`VowSituationalPerk`, Layer 4) add a numeric bonus or
+  outcome guarantee with an announced line. A **vow added effect** adds payload: conditions,
+  strips, treatments or damage riding the cast. A numeric bonus with an announce line stays a
+  perk; a condition or damage rider is an added effect (a perk kind would carry six columns
+  only one kind reads, ADR-4581-A).
+- The five `CovenantRole` switches (`grants_insight`, `reveals_weakness`, `prepares_ground`,
+  `calls_out_windups`, `enhances_assessment`) stay code-owned riders and are untouched.
+- Consent folding in `world/magic/services/targeting.py` is untouched: a behavior-altering
+  condition is refused at authoring time (see the rule table), not at cast time.
+- The perk refactor behind this exposed `VowHolderCandidate`, `vow_holder_candidates`,
+  `vow_holder_thread_levels` and `SituationCheck` in `world.covenants.perks.services`.
+  `SituationCheck` owns the per-resolution situation-evaluation cache (keyed
+  `(situation, params, holder_pk)`); `_PerkResolver` now delegates to one.
+
 ## Enums / Constants
 
 - **`MentorBondAdjusted`** (`TextChoices` in `world.covenants.constants`) —
   `MENTOR` / `SIDEKICK`: which party the encounter-scaling adjustment is applied to.
 - **`MembershipStanding`** (`TextChoices` in `world.covenants.constants`, #2992) —
   `CORE` / `MINOR`: the durable membership tier. See "Minor covenant membership" above.
+- **`VowEffectContext`** / **`VowEffectFrequency`** (`TextChoices` in
+  `world.covenants.constants`, #4581) - where a vow added effect may fire (`ANY` /
+  `IN_COMBAT` / `OUT_OF_COMBAT`) and how often one holder may fire it (`EVERY_CAST` /
+  `ONCE_PER_ROUND` / `ONCE_PER_FIGHT`). See "Vow added effects" above.
 
 ## Combat Seams
 
@@ -1186,6 +1384,8 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 - `factories.py` — `seed_resonance_subrole_slice`, `SubroleCovenantRoleFactory`
 - `treasury.py` — `covenant_treasury`, `deposit_covenant_funds`,
   `withdraw_covenant_funds` (#2992)
+- `added_effects.py` / `added_effect_summary.py` - the vow added effect read seam and the
+  plain-words summary (#4581)
 - `exceptions.py` — all exceptions
 
 `src/actions/definitions/covenants.py` — nine covenant lifecycle REGISTRY Actions (seven

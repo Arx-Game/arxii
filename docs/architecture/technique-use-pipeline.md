@@ -247,7 +247,7 @@ costs the caster.
 ## Defense piercing (#4575)
 
 Combat damage and ward resolution use the same effective damage-profile collection,
-including variant payloads and active signature bonus rows. If any row authors
+including variant payloads, active signature bonus rows and eligible vow-added-effect rows. If any row authors
 `bypasses_wards`, the cast skips the `barrier_strength` contest and its power
 modifier/bounce; damage and associated conditions retain their normal offense and
 effect-success gates. This does not skip unrelated reactive defenses.

@@ -85,6 +85,32 @@ MENTOR_BOND_MAX_SIDEKICKS: int | None = None
 SECONDARY_VOW_POTENCY_TENTHS_DEFAULT = 6
 
 
+class VowEffectContext(models.TextChoices):
+    """Where a cast must happen for a ``VowAddedEffect`` to fire (#4581).
+
+    ANY fires in and out of combat. IN_COMBAT fires only on a cast resolved
+    inside a combat round. OUT_OF_COMBAT fires only on a cast resolved outside
+    one.
+    """
+
+    ANY = "any", "Any"
+    IN_COMBAT = "in_combat", "In Combat"
+    OUT_OF_COMBAT = "out_of_combat", "Out of Combat"
+
+
+class VowEffectFrequency(models.TextChoices):
+    """How often one holder's ``VowAddedEffect`` may fire (#4581).
+
+    EVERY_CAST fires on each qualifying cast. ONCE_PER_ROUND and ONCE_PER_FIGHT
+    are spent per combat participant through the ``VowAddedEffectFiring``
+    ledger, so they are meaningful only on an IN_COMBAT row.
+    """
+
+    EVERY_CAST = "every_cast", "Every Cast"
+    ONCE_PER_ROUND = "once_per_round", "Once per Round"
+    ONCE_PER_FIGHT = "once_per_fight", "Once per Fight"
+
+
 class InsightTargetKind(models.TextChoices):
     """Who an ``InsightTableEntry``'s condition lands on (#2645).
 

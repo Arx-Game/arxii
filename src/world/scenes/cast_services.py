@@ -622,6 +622,35 @@ def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolu
         source_character=character,
         scene=scene,
     )
+    # Covenant vow added effects (#4581): the staff-authored payload the caster's own
+    # vow, or a co-present covenant ally's, adds to this cast. Same resolved targets
+    # and same seams as the technique's own payload. Read only for a cast that landed
+    # (success level 1+), the same gate combat spends a limited row on, so a row
+    # authored at minimum_success_level 0 never lands on a sub-success cast. No ledger
+    # write: out of combat no once-per-round or once-per-fight row can fire. After the
+    # technique's treatments and before its removals: the seam runs every vow treatment
+    # before any vow removal, so all treatments precede all removals.
+    if success_level >= 1:
+        from world.covenants.added_effects import (  # noqa: PLC0415
+            apply_vow_effect_payloads,
+            vow_added_effects_for_cast,
+        )
+
+        apply_vow_effect_payloads(
+            vow_added_effects_for_cast(
+                caster_persona.character_sheet,
+                technique,
+                resolution=None,
+                target=target_persona.character_sheet if target_persona is not None else None,
+            ),
+            technique=technique,
+            success_level=success_level,
+            eff_intensity=eff_intensity,
+            targets_by_kind=targets_by_kind,
+            source_character=character,
+            scene=scene,
+            soulfray_consented=soulfray_consented,
+        )
     # Dispel/cleanse sibling (#1585): strip technique-authored conditions from the
     # same resolved targets. Independent of the apply call — a technique may apply
     # some conditions and remove others. No-op when the technique has no

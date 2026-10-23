@@ -1591,6 +1591,30 @@ class TechniqueAppliedCondition(NaturalKeyMixin, AbstractAppliedCondition):
         return f"{self.technique.name} → {self.condition.name} ({self.target_kind})"
 
 
+def validate_inert_removal_knobs(row: AbstractAppliedCondition) -> None:
+    """Refuse a removal row whose inert apply-only knobs are off their defaults.
+
+    Shared by ``TechniqueRemovedCondition`` and ``VowAddedEffectRemovedCondition``:
+    a removal row deletes (or decrements) a condition instance, so severity,
+    duration and stack count mean nothing on it. Raises
+    ``ValidationError({field: message})`` for the first knob off its default.
+    """
+    # Defined as (field, expected, message) tuples so the check stays a single
+    # loop instead of seven near-identical blocks.
+    inert_defaults: list[tuple[str, object, str]] = [
+        ("base_severity", 1, "Severity is inert for a removal row; leave at default 1."),
+        ("severity_intensity_multiplier", Decimal(0), _INERT_FOR_REMOVAL_ROW),
+        ("severity_per_extra_sl", 0, _INERT_FOR_REMOVAL_ROW),
+        ("base_duration_rounds", None, "Duration is inert for a removal row; leave null."),
+        ("duration_intensity_multiplier", Decimal(0), _INERT_FOR_REMOVAL_ROW),
+        ("duration_per_extra_sl", 0, _INERT_FOR_REMOVAL_ROW),
+        ("stack_count", 1, "Stack count is inert for a removal row; leave at default 1."),
+    ]
+    for field_name, expected, message in inert_defaults:
+        if getattr(row, field_name) != expected:
+            raise ValidationError({field_name: message})
+
+
 class TechniqueRemovedCondition(NaturalKeyMixin, AbstractAppliedCondition):
     """Authored row binding a Technique to a ConditionTemplate it *removes* on cast.
 
@@ -1652,27 +1676,13 @@ class TechniqueRemovedCondition(NaturalKeyMixin, AbstractAppliedCondition):
     def clean(self) -> None:
         """Enforce that inert apply-only knobs stay at their defaults.
 
-        Severity, duration, and stack_count are meaningless for removal — a removal
+        Severity, duration, and stack_count are meaningless for removal - a removal
         row deletes (or decrements) a condition instance; it does not apply one.
         Keeping these at defaults prevents authored-but-inert data from misleading
         the budget pricer or future readers.
         """
         super().clean()
-        # Inert apply-only knobs must stay at defaults (removal neither applies
-        # severity/duration nor stacks). Defined as (field, expected, label) tuples
-        # so the check stays a single loop instead of seven near-identical blocks.
-        inert_defaults: list[tuple[str, object, str]] = [
-            ("base_severity", 1, "Severity is inert for a removal row; leave at default 1."),
-            ("severity_intensity_multiplier", Decimal(0), _INERT_FOR_REMOVAL_ROW),
-            ("severity_per_extra_sl", 0, _INERT_FOR_REMOVAL_ROW),
-            ("base_duration_rounds", None, "Duration is inert for a removal row; leave null."),
-            ("duration_intensity_multiplier", Decimal(0), _INERT_FOR_REMOVAL_ROW),
-            ("duration_per_extra_sl", 0, _INERT_FOR_REMOVAL_ROW),
-            ("stack_count", 1, "Stack count is inert for a removal row; leave at default 1."),
-        ]
-        for field_name, expected, message in inert_defaults:
-            if getattr(self, field_name) != expected:
-                raise ValidationError({field_name: message})
+        validate_inert_removal_knobs(self)
 
 
 class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):

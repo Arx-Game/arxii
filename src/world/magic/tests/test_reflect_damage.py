@@ -17,22 +17,43 @@ Four cases:
 
 from django.test import TestCase
 
+from flows.constants import EventName
+from flows.consts import FlowActionChoices
 from flows.events.payloads import DamagePreApplyPayload
+from flows.factories import (
+    FlowDefinitionFactory,
+    FlowStepDefinitionFactory,
+    TriggerDefinitionFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.damage_source import classify_source
 from world.combat.factories import CombatOpponentFactory
 from world.conditions.constants import REFLECT_CONDITION_NAME
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.magic.factories import CharacterAnimaFactory
-from world.magic.services.effect_handlers import reflect_damage
+from world.magic.services.effect_handlers import REFLECT_DAMAGE_HANDLER_PATH, reflect_damage
 
 
 def _make_reflect_template(*, reactive_anima_cost: int = 2):
-    """Return a ConditionTemplate seeded as Mirror Ward."""
-    return ConditionTemplateFactory(
+    """Return a ConditionTemplate seeded as Mirror Ward.
+
+    ``reflect_damage`` designates the reflecting instance by the template's reactive
+    trigger (a flow step calling the handler), so the template carries one.
+    """
+    template = ConditionTemplateFactory(
         name=REFLECT_CONDITION_NAME,
         reactive_anima_cost=reactive_anima_cost,
     )
+    flow = FlowDefinitionFactory()
+    FlowStepDefinitionFactory(
+        flow=flow,
+        action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+        variable_name=REFLECT_DAMAGE_HANDLER_PATH,
+    )
+    template.reactive_triggers.add(
+        TriggerDefinitionFactory(flow_definition=flow, event_name=EventName.DAMAGE_PRE_APPLY)
+    )
+    return template
 
 
 def _make_bearer(*, anima_current: int = 10, reactive_anima_cost: int = 2):

@@ -12,18 +12,44 @@ Four cases:
 
 from django.test import TestCase
 
+from flows.constants import EventName
+from flows.consts import FlowActionChoices
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
+from flows.factories import (
+    FlowDefinitionFactory,
+    FlowStepDefinitionFactory,
+    TriggerDefinitionFactory,
+)
 from world.areas.positioning.factories import ObjectPositionFactory, PositionFactory
 from world.areas.positioning.services import position_of
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import BLINK_CONDITION_NAME
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+from world.conditions.models import ConditionTemplate
 from world.magic.factories import CharacterAnimaFactory
-from world.magic.services.effect_handlers import blink_dodge
+from world.magic.services.effect_handlers import BLINK_DODGE_HANDLER_PATH, blink_dodge
 
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
+
+def _blink_template(*, reactive_anima_cost: int) -> ConditionTemplate:
+    """A blink ward: a template whose DAMAGE_PRE_APPLY trigger flow calls blink_dodge."""
+    template = ConditionTemplateFactory(
+        name=BLINK_CONDITION_NAME,
+        reactive_anima_cost=reactive_anima_cost,
+    )
+    flow = FlowDefinitionFactory()
+    FlowStepDefinitionFactory(
+        flow=flow,
+        action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+        variable_name=BLINK_DODGE_HANDLER_PATH,
+    )
+    template.reactive_triggers.add(
+        TriggerDefinitionFactory(flow_definition=flow, event_name=EventName.DAMAGE_PRE_APPLY)
+    )
+    return template
 
 
 def _make_blink_setup(*, anima_current: int = 10, reactive_anima_cost: int = 2):
@@ -37,10 +63,7 @@ def _make_blink_setup(*, anima_current: int = 10, reactive_anima_cost: int = 2):
     bearer = op.objectdb
     sheet = CharacterSheetFactory(character=bearer)
     anima = CharacterAnimaFactory(character=sheet, current=anima_current, maximum=10)
-    template = ConditionTemplateFactory(
-        name=BLINK_CONDITION_NAME,
-        reactive_anima_cost=reactive_anima_cost,
-    )
+    template = _blink_template(reactive_anima_cost=reactive_anima_cost)
     instance = ConditionInstanceFactory(condition=template, target=bearer)
     return bearer, pos_a, pos_b, anima, instance
 
@@ -52,10 +75,7 @@ def _make_single_position_setup(*, anima_current: int = 10, reactive_anima_cost:
     bearer = op.objectdb
     sheet = CharacterSheetFactory(character=bearer)
     anima = CharacterAnimaFactory(character=sheet, current=anima_current, maximum=10)
-    template = ConditionTemplateFactory(
-        name=BLINK_CONDITION_NAME,
-        reactive_anima_cost=reactive_anima_cost,
-    )
+    template = _blink_template(reactive_anima_cost=reactive_anima_cost)
     instance = ConditionInstanceFactory(condition=template, target=bearer)
     return bearer, pos_a, anima, instance
 

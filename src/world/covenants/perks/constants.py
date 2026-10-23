@@ -165,6 +165,11 @@ class Situation(models.TextChoices):
       HOLDER is also actively engaged in, restricted to ACTIVE participants in
       the subject's encounter roster (the mate's own engagement is
       irrelevant). Reads ``holder`` + ``resolution``; False outside combat.
+    - ``TARGET_IS_BOSS`` - the opponent the SUBJECT declared as this round's
+      focused target is a BOSS-tier ``CombatOpponent`` (#4581: a vow added
+      effect scoped to "when I strike a boss"). Elite and Hero Killer tiers
+      do not count. Reads ``resolution``; False outside combat or when the
+      subject declared no opponent target. No params.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -189,6 +194,7 @@ class Situation(models.TextChoices):
     BARRIER_CONTESTED = "barrier_contested", "Barrier Contested"
     SHIELDED_BY_ALLY = "shielded_by_ally", "Shielded by Ally"
     TARGET_IS_MARKED_BY_ALLY = "target_is_marked_by_ally", "Target Is Marked by Ally"
+    TARGET_IS_BOSS = "target_is_boss", "Target Is a Boss"
 
 
 class PerkEffectKind(models.TextChoices):

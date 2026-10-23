@@ -178,6 +178,12 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "covenants.geararchetypecompatibility",
         "covenants.insighttableentry",
         "covenants.weaknesspoolentry",
+        "covenants.vowaddedeffect",
+        "covenants.vowaddedeffectappliedcondition",
+        "covenants.vowaddedeffectremovedcondition",
+        "covenants.vowaddedeffectdamageprofile",
+        # covenants.vowaddedeffecttreatment is absent: TreatmentTemplate has no
+        # natural key, the same reason magic.techniquetreatment is absent.
         "covenants.vowsituationalperk",
         "covenants.vowsituationalperkrung",
         "covenants.vowsituationalperksituation",

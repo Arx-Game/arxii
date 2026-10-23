@@ -890,8 +890,9 @@ Term" below) shows "this much came from your vow" as a distinct announced line.
 2** of `covenants`' four-layer vow-power model (see `docs/systems/covenants.md`'s "Vow
 power, four-layer model" and ADR-0149's 2026-07-20 amendment). It rewards a vow for
 casting techniques that match what the role specializes in, keyed on the shared
-`TechniqueFunction` vocabulary (`constants.py`, 13-value `TextChoices` — also consumed
-by Layer 4's situational perks, #2536) rather than the coarser SWORD/SHIELD/CROWN axis
+`TechniqueFunction` vocabulary (`constants.py`, 15-value `TextChoices`, `STRIKE` and `MEND`
+added by #4581, also consumed by Layer 4's situational perks, #2536, and by vow added
+effects, #4581) rather than the coarser SWORD/SHIELD/CROWN axis
 Layer 1 reads.
 
 For each of `character.covenant_roles.currently_engaged_roles()`, the term collects
@@ -1033,7 +1034,7 @@ may itself exceed the band, and the unclamped sum still reports on the raw
 `DamageInteractionResult`.
 
 **Defense piercing (#4575).** `AbstractDamageProfile` shares three authored
-controls across technique, draft, variant, signature and miracle damage rows:
+controls across technique, draft, variant, signature, miracle and vow-added-effect damage rows:
 `ignores_soak` (false), `resistance_shift` (nonnegative points, 0) and
 `bypasses_wards` (false). The builder API and draft publication preserve them.
 Soak piercing skips armor-like protection without granting an unarmored damage
@@ -3461,6 +3462,51 @@ power_intensity)` — strictly before `mend_wound()`, whose never-to-full fracti
 field's default 0 (every pre-#3391 row), the added term is exactly 0 — byte-identical to
 before. Dispel's sibling power leg is `TechniqueRemovedCondition.cure_power_multiplier` — see
 "Dispel / Cleanse" in `world/magic/CLAUDE.md`.
+
+### Vow added effects: the payload seams (#4581, ADR-4581-A) [BUILT & WIRED]
+
+A covenant vow can add staff-authored payload to a technique cast (`VowAddedEffect` and its
+children, see `docs/systems/covenants.md`'s "Vow added effects"). The magic side of that is
+three additions to the shared payload seams plus one vocabulary change; there is no parallel
+apply path.
+
+- **`TechniqueFunction` gained `STRIKE` and `MEND`** (now 15 values). They are the function
+  tags a vow row can key on for a plain attack or a plain mend. The members are choices on
+  `VowAddedEffect.function`, `CovenantRoleTechniqueSpecialty.function`,
+  `TechniqueFunctionTag.function` and `CompanionAbilityFunctionTag.function`, so migration
+  `0281_vow_added_effects` carries choices-only `AlterField`s for the last three (with the
+  `Situation.TARGET_IS_BOSS` ones on the perk situation and rung) and the OpenAPI enum
+  (`frontend/src/generated/api.d.ts`, `src/schema.json`) changed.
+- **`apply_technique_conditions`** gained `severity_bonus: int = 0` and
+  `duration_bonus: int = 0`. The severity bonus is added to every non-team-lane row's computed
+  severity; the duration bonus is added to a row's duration when it has one. A team-lane row
+  ignores both (its severity is priced against the landing target and the lane is bounded).
+  It already took `applied_condition_rows=` (#1582), which a vow row's children use.
+- **`remove_technique_conditions`** gained `removed_condition_rows: Iterable | None = None`;
+  `None` reads `technique.removed_conditions` as before. Rows are anything exposing
+  `condition`, `target_kind`, `minimum_success_level`, `remove_all_stacks` and
+  `cure_power_multiplier`. The caster still rolls the cure check.
+- **`apply_technique_treatments`** gained `treatment_rows: Iterable | None = None` (rows
+  exposing `treatment_template`, `target_kind`, `minimum_success_level`; the caster stays the
+  helper). It also now **skips a target with no `CharacterSheet`** (an NPC opponent) instead of
+  raising `DoesNotExist` mid-round. It still raises for a sheetless caster.
+- **`render_payload_clauses(*, applies, removes, damage, treatments) -> list[str]`**
+  (`services/technique_effects.py`) renders the payload clauses in the order a technique
+  sentence reads them, "Deals ...", "Applies ...", "Strips ...", "Treats ...". Both
+  `render_technique_effect_sentence` and a vow row's plain-words summary call it, so the two
+  cannot drift. `condition_payload`, `damage_payload` and `treatment_payload` lost their leading
+  underscore (they are shared now); every technique sentence is byte-identical.
+- **`validate_inert_removal_knobs(row)`** (`models/techniques.py`) is the removal-row knob check
+  lifted out of `TechniqueRemovedCondition.clean` so `VowAddedEffectRemovedCondition` shares it.
+
+Callers: `CombatTechniqueResolver._apply_conditions` and `_resolve_and_pose_cast` hand a vow
+row's children through `world.covenants.added_effects.apply_vow_effect_payloads`, which calls
+these three seams per fired row with that row's bonuses and children: every row's conditions
+and treatments first, then every row's removals. Both callers call it after the technique's
+own treatments and before the technique's own removals, so the cast order is: technique
+conditions, signature conditions, technique treatments, vow conditions and treatments, vow
+removals, technique removals. Every treatment still runs before any removal, so a removal
+never strips the wound a treatment in the same cast was going to mend.
 
 ### Effect Palette (#1584) [BUILT & PROVEN]
 

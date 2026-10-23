@@ -18,7 +18,7 @@ Damage profiles carry three independent authoring controls:
   never change; lasting vulnerability is authored as a condition.
 - `bypasses_wards` on any effective profile bypasses the whole technique's
   `barrier_strength` penetration contest, including its associated conditions and
-  other damage rows. Variant and active signature profiles participate. The ward
+  other damage rows. Variant, active signature and eligible vow-added-effect profiles participate. The ward
   is not consumed and ordinary offense/effect success gates still apply.
 
 Defaults are false/0/false, preserving existing content. These controls do not skip

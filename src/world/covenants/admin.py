@@ -3,6 +3,7 @@
 from django.contrib import admin
 
 from world.admin_utils import OneRowPerFormSet
+from world.covenants.added_effect_summary import summarize_vow_added_effect
 from world.covenants.models import (
     CourtGrantConfig,
     Covenant,
@@ -20,6 +21,11 @@ from world.covenants.models import (
     InsightTableEntry,
     MentorBondConfig,
     SecondaryVowConfig,
+    VowAddedEffect,
+    VowAddedEffectAppliedCondition,
+    VowAddedEffectDamageProfile,
+    VowAddedEffectRemovedCondition,
+    VowAddedEffectTreatment,
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
@@ -41,6 +47,42 @@ class CovenantRoleDefenseProfileInline(admin.StackedInline):
     extra = 0
 
 
+class VowAddedEffectInline(admin.TabularInline):
+    """Read-only list of a role's added effects on the CovenantRole admin (#4581).
+
+    Shows what each effect does in plain words and links to its own page, where it
+    is edited; nothing is added or changed from here.
+    """
+
+    model = VowAddedEffect
+    formset = OneRowPerFormSet
+    fk_name = "covenant_role"
+    extra = 0
+    show_change_link = True
+    fields = (
+        "function",
+        "beneficiary",
+        "cast_context",
+        "frequency",
+        "unlock_thread_level",
+        "summary",
+    )
+    readonly_fields = fields
+
+    def has_add_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_delete_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+    @admin.display(description="What it adds")
+    def summary(self, obj: VowAddedEffect) -> str:
+        return summarize_vow_added_effect(obj)
+
+
 @admin.register(CovenantRole)
 class CovenantRoleAdmin(admin.ModelAdmin):
     list_display = [
@@ -55,7 +97,11 @@ class CovenantRoleAdmin(admin.ModelAdmin):
     list_filter = ["covenant_type"]
     search_fields = ["name", "slug"]
     prepopulated_fields = {"slug": ("name",)}
-    inlines = [CovenantRoleTechniqueSpecialtyInline, CovenantRoleDefenseProfileInline]
+    inlines = [
+        CovenantRoleTechniqueSpecialtyInline,
+        CovenantRoleDefenseProfileInline,
+        VowAddedEffectInline,
+    ]
 
 
 @admin.register(CovenantRoleActionScaling)
@@ -287,3 +333,79 @@ class InsightTableEntryAdmin(admin.ModelAdmin):
     list_filter = ("target_kind", "is_active")
     search_fields = ("name",)
     autocomplete_fields = ("condition",)
+
+
+# ---------------------------------------------------------------------------
+# #4581 - vow added effects
+# ---------------------------------------------------------------------------
+
+
+class VowAddedEffectAppliedConditionInline(admin.TabularInline):
+    """Conditions a vow added effect applies when it fires (#4581)."""
+
+    model = VowAddedEffectAppliedCondition
+    formset = OneRowPerFormSet
+    extra = 0
+    autocomplete_fields = ("condition",)
+
+
+class VowAddedEffectRemovedConditionInline(admin.TabularInline):
+    """Conditions a vow added effect strips when it fires (#4581)."""
+
+    model = VowAddedEffectRemovedCondition
+    formset = OneRowPerFormSet
+    extra = 0
+    autocomplete_fields = ("condition",)
+
+
+class VowAddedEffectTreatmentInline(admin.TabularInline):
+    """Treatments a vow added effect performs when it fires (#4581)."""
+
+    model = VowAddedEffectTreatment
+    formset = OneRowPerFormSet
+    extra = 0
+
+
+class VowAddedEffectDamageProfileInline(admin.TabularInline):
+    """Damage a vow added effect deals when it fires (#4581). Needs the In Combat context."""
+
+    model = VowAddedEffectDamageProfile
+    formset = OneRowPerFormSet
+    extra = 0
+    autocomplete_fields = ("damage_type",)
+
+
+@admin.register(VowAddedEffect)
+class VowAddedEffectAdmin(admin.ModelAdmin):
+    """What a covenant vow adds to a technique cast (#4581).
+
+    The summary line is built only from the row's fields and payload rows, so it
+    never disagrees with what the row does.
+    """
+
+    list_display = (
+        "covenant_role",
+        "function",
+        "beneficiary",
+        "cast_context",
+        "frequency",
+        "unlock_thread_level",
+        "summary",
+    )
+    list_filter = ("function", "beneficiary", "cast_context", "frequency")
+    list_select_related = ("covenant_role", "gift", "technique")
+    readonly_fields = ("summary",)
+    search_fields = ("covenant_role__name", "technique__name", "gift__name")
+    autocomplete_fields = ("covenant_role", "gift", "technique", "upgrades")
+    inlines = [
+        VowAddedEffectAppliedConditionInline,
+        VowAddedEffectRemovedConditionInline,
+        VowAddedEffectTreatmentInline,
+        VowAddedEffectDamageProfileInline,
+    ]
+
+    @admin.display(description="What it adds")
+    def summary(self, obj: VowAddedEffect | None) -> str:
+        if obj is None or obj.pk is None:
+            return "Saved rows read back here."
+        return summarize_vow_added_effect(obj)
