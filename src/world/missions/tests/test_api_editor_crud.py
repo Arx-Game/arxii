@@ -220,6 +220,35 @@ class OptionViewSetCRUDTests(TestCase):
         self.assertEqual(response.data["opposition_sheet"], sheet.pk)
         self.assertEqual(response.data["opposition_check_type"], self.check_type.pk)
 
+    def test_create_external_act_round_trips(self) -> None:
+        response = self.client.post(
+            self.URL,
+            {
+                "node": self.node.pk,
+                "order": 5,
+                "option_kind": OptionKind.EXTERNAL_ACT,
+                "source_kind": OptionSource.AUTHORED,
+                "required_act": "technique_cast",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["required_act"], "technique_cast")
+
+    def test_create_external_act_without_act_rejected(self) -> None:
+        response = self.client.post(
+            self.URL,
+            {
+                "node": self.node.pk,
+                "order": 6,
+                "option_kind": OptionKind.EXTERNAL_ACT,
+                "source_kind": OptionSource.AUTHORED,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("required_act", response.data)
+
     def test_list_filters_by_needs_rewrite(self) -> None:
         """E6 follow-up: option-level ``?needs_rewrite=true`` round-trip."""
         flagged = MissionOptionFactory(

@@ -66927,6 +66927,16 @@ components:
         opposition_check_type:
           type: integer
           nullable: true
+        required_act:
+          description: |-
+            EXTERNAL_ACT options only: the non-mission act (cast/weave/covenant) that resolves this option (#1035). Blank for BRANCH/CHECK options.
+
+            * `technique_cast` - Technique Cast
+            * `thread_woven` - Thread Woven
+            * `covenant_sworn` - Covenant Sworn
+          oneOf:
+          - $ref: '#/components/schemas/RequiredActEnum'
+          - $ref: '#/components/schemas/BlankEnum'
       required:
       - id
       - node
@@ -67153,6 +67163,16 @@ components:
         opposition_check_type:
           type: integer
           nullable: true
+        required_act:
+          description: |-
+            EXTERNAL_ACT options only: the non-mission act (cast/weave/covenant) that resolves this option (#1035). Blank for BRANCH/CHECK options.
+
+            * `technique_cast` - Technique Cast
+            * `thread_woven` - Thread Woven
+            * `covenant_sworn` - Covenant Sworn
+          oneOf:
+          - $ref: '#/components/schemas/RequiredActEnum'
+          - $ref: '#/components/schemas/BlankEnum'
       required:
       - node
       - option_kind
@@ -78760,6 +78780,16 @@ components:
         opposition_check_type:
           type: integer
           nullable: true
+        required_act:
+          description: |-
+            EXTERNAL_ACT options only: the non-mission act (cast/weave/covenant) that resolves this option (#1035). Blank for BRANCH/CHECK options.
+
+            * `technique_cast` - Technique Cast
+            * `thread_woven` - Thread Woven
+            * `covenant_sworn` - Covenant Sworn
+          oneOf:
+          - $ref: '#/components/schemas/RequiredActEnum'
+          - $ref: '#/components/schemas/BlankEnum'
     PatchedMissionOptionRouteCandidateRequest:
       type: object
       description: Editor CRUD for MissionOptionRouteCandidate (random-set rolls).
@@ -85472,6 +85502,16 @@ components:
       - points
       - quantity
       - where
+    RequiredActEnum:
+      enum:
+      - technique_cast
+      - thread_woven
+      - covenant_sworn
+      type: string
+      description: |-
+        * `technique_cast` - Technique Cast
+        * `thread_woven` - Thread Woven
+        * `covenant_sworn` - Covenant Sworn
     RequiredOutcomeEnum:
       enum:
       - unsatisfied

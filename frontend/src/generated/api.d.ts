@@ -37976,6 +37976,14 @@ export interface components {
       /** @description The character this sheet belongs to */
       opposition_sheet?: number | null;
       opposition_check_type?: number | null;
+      /**
+       * @description EXTERNAL_ACT options only: the non-mission act (cast/weave/covenant) that resolves this option (#1035). Blank for BRANCH/CHECK options.
+       *
+       *     * `technique_cast` - Technique Cast
+       *     * `thread_woven` - Thread Woven
+       *     * `covenant_sworn` - Covenant Sworn
+       */
+      required_act?: components['schemas']['RequiredActEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description One authored opponent line on an ENCOUNTER option (#3565).
@@ -38103,6 +38111,14 @@ export interface components {
       /** @description The character this sheet belongs to */
       opposition_sheet?: number | null;
       opposition_check_type?: number | null;
+      /**
+       * @description EXTERNAL_ACT options only: the non-mission act (cast/weave/covenant) that resolves this option (#1035). Blank for BRANCH/CHECK options.
+       *
+       *     * `technique_cast` - Technique Cast
+       *     * `thread_woven` - Thread Woven
+       *     * `covenant_sworn` - Covenant Sworn
+       */
+      required_act?: components['schemas']['RequiredActEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
@@ -44842,6 +44858,14 @@ export interface components {
       /** @description The character this sheet belongs to */
       opposition_sheet?: number | null;
       opposition_check_type?: number | null;
+      /**
+       * @description EXTERNAL_ACT options only: the non-mission act (cast/weave/covenant) that resolves this option (#1035). Blank for BRANCH/CHECK options.
+       *
+       *     * `technique_cast` - Technique Cast
+       *     * `thread_woven` - Thread Woven
+       *     * `covenant_sworn` - Covenant Sworn
+       */
+      required_act?: components['schemas']['RequiredActEnum'] | components['schemas']['BlankEnum'];
     };
     /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
     PatchedMissionOptionRouteCandidateRequest: {
@@ -48275,6 +48299,13 @@ export interface components {
       points: number;
       where: string;
     };
+    /**
+     * @description * `technique_cast` - Technique Cast
+     *     * `thread_woven` - Thread Woven
+     *     * `covenant_sworn` - Covenant Sworn
+     * @enum {string}
+     */
+    RequiredActEnum: 'technique_cast' | 'thread_woven' | 'covenant_sworn';
     /**
      * @description * `unsatisfied` - Unsatisfied
      *     * `success` - Success

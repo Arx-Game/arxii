@@ -535,6 +535,7 @@ class MissionOptionSerializer(serializers.ModelSerializer):
             "opponent_lines",
             "opposition_sheet",
             "opposition_check_type",
+            "required_act",
         ]
         read_only_fields = ["id"]
 
