@@ -85,7 +85,9 @@ Decimal | None` (points as a share of the `CheckRank` band `at_total` sits in).
 until #4551 slice d). `ModifierBreakdown(contributions, tapers)` counts each tapered kind's
 bonuses and penalties as separate piles, largest first, the k-th at `TaperRule.weight(k-1) =
 max(ratio**(k-1), floor)` of `value - vow_part`; `counted()` lists what each contribution counts
-for, and `total` / `extra_modifiers_total` round once, half up. `collect_check_modifiers` loads
+for, and `total` / `extra_modifiers_total` round once, half up. `counted_values()` gives whole numbers
+summing exactly to `total` (largest remainder); `record_consequence_outcome` stores those as each
+`ConsequenceOutcomeModifier.value`, so the recorded rows add up to `modifier_total`. `collect_check_modifiers` loads
 the check lane's taper rules into every breakdown it returns, and
 `opponent_condition_opposition` tapers an opponent's own CONDITION pile the same way. The first
 sized source is a technique buff (see `docs/systems/conditions.md` and `docs/systems/magic.md`).
