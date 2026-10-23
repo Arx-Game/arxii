@@ -1,1 +1,1 @@
-0287_position_edge_wall_integrity
+0288_technique_morale_effect
