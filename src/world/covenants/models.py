@@ -50,13 +50,17 @@ from world.covenants.perks.context import SituationParams
 from world.items.constants import GearArchetype
 from world.magic.constants import TechniqueFunction
 from world.magic.models.techniques import (
+    MEND_CAP_FRACTION_HELP,
+    MEND_CAP_FRACTION_IN_RANGE,
     AbstractAppliedCondition,
     AbstractDamageProfile,
     ConditionTargetKind,
     validate_inert_removal_knobs,
+    validate_mend_cap_fraction,
 )
 from world.magic.specialization.models import AbstractSpecializedVariant
 from world.magic.types.aura import AffinityType
+from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -2647,7 +2651,9 @@ class VowAddedEffectRemovedCondition(
 class VowAddedEffectTreatment(RelatedCacheClearingMixin, NaturalKeyMixin, SharedMemoryModel):
     """A treatment a ``VowAddedEffect`` performs when it fires (#4581).
 
-    Mirrors ``TechniqueTreatment``.
+    Mirrors ``TechniqueTreatment``, including its own ``mend_cap_fraction`` (#4600):
+    the vow's treatment rides the cast as a separate tending, so it carries how far
+    it may heal a wound itself rather than borrowing the technique's.
     """
 
     related_cache_fields: ClassVar[list[str]] = ["effect"]
@@ -2671,6 +2677,12 @@ class VowAddedEffectTreatment(RelatedCacheClearingMixin, NaturalKeyMixin, Shared
         default=1,
         help_text="Minimum success level required to perform this treatment.",
     )
+    mend_cap_fraction = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=NEVER_TO_FULL_FRACTION,
+        help_text=MEND_CAP_FRACTION_HELP,
+    )
 
     objects = NaturalKeyManager()
 
@@ -2681,6 +2693,10 @@ class VowAddedEffectTreatment(RelatedCacheClearingMixin, NaturalKeyMixin, Shared
                 fields=["effect", "treatment_template"],
                 name="vow_added_effect_treatment_unique",
             ),
+            models.CheckConstraint(
+                condition=MEND_CAP_FRACTION_IN_RANGE,
+                name="vow_added_effect_treatment_mend_cap_fraction_in_range",
+            ),
         ]
 
     class NaturalKeyConfig:
@@ -2689,6 +2705,11 @@ class VowAddedEffectTreatment(RelatedCacheClearingMixin, NaturalKeyMixin, Shared
 
     def __str__(self) -> str:
         return f"{self.effect}: treats {self.treatment_template.name} ({self.target_kind})"
+
+    def clean(self) -> None:
+        """Refuse a mend fraction above the never-to-full ceiling (#4600)."""
+        super().clean()
+        validate_mend_cap_fraction(self.mend_cap_fraction)
 
 
 class VowAddedEffectDamageProfile(

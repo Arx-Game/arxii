@@ -39,6 +39,7 @@ from world.magic.skill_choices import (
     MAGIC_SKILL_ERROR_MESSAGES,
     MAGIC_SKILL_HELP,
 )
+from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
 if TYPE_CHECKING:
     from world.magic.models.power_config import CapabilityPowerConfig
@@ -1685,6 +1686,35 @@ class TechniqueRemovedCondition(NaturalKeyMixin, AbstractAppliedCondition):
         validate_inert_removal_knobs(self)
 
 
+#: Help text shared by every treatment payload row that carries a mend fraction (#4600).
+MEND_CAP_FRACTION_HELP = (
+    "How far this treatment may heal a wound, as a share of the damage the wound did "
+    "(0.40 heals at most 40%). Healing on one wound never passes the highest share any "
+    f"healer used on it. At most {NEVER_TO_FULL_FRACTION}, the ceiling no healing passes."
+)
+
+#: The database half of the mend-fraction rule: above 0 and below full (#4600).
+MEND_CAP_FRACTION_IN_RANGE = Q(mend_cap_fraction__gt=0) & Q(mend_cap_fraction__lt=1)
+
+
+def validate_mend_cap_fraction(fraction: Decimal | None) -> None:
+    """Refuse a treatment row's mend fraction when it is above the never-to-full ceiling.
+
+    Shared by ``TechniqueTreatment``, ``TechniqueDraftTreatment`` and
+    ``VowAddedEffectTreatment`` (#4600). The CheckConstraint keeps the value
+    between 0 and 1; this keeps it at or below ``NEVER_TO_FULL_FRACTION``, the
+    share no healing ever passes (ADR-0156).
+    """
+    if fraction is not None and fraction > NEVER_TO_FULL_FRACTION:
+        raise ValidationError(
+            {
+                "mend_cap_fraction": (
+                    f"At most {NEVER_TO_FULL_FRACTION}: no healing brings a wound back to full."
+                )
+            }
+        )
+
+
 class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
     """Authored row binding a Technique to a TreatmentTemplate it performs on cast.
 
@@ -1692,7 +1722,13 @@ class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
     attempts to perform the linked TreatmentTemplate on each resolved target
     that carries the treatment's target condition. The treatment runs its own
     internal check roll and enforces all bounded-mend gates (per-healer-once,
-    never-to-full fraction, costs, TreatmentAttempt record) via perform_treatment.
+    the row's own mend fraction, costs, TreatmentAttempt record) via
+    perform_treatment.
+
+    ``mend_cap_fraction`` (#4600) is how far this technique may heal a wound, as
+    a share of the damage the wound did. It lives here, not on the
+    TreatmentTemplate: the template is a shared, named recipe that mundane first
+    aid uses too, so a fraction there would need a new template per fraction.
 
     The engagement gate is skipped for technique-cast treatments (magical
     treatment works in combat); the scene gate still applies.
@@ -1717,6 +1753,12 @@ class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
         default=1,
         help_text="Minimum success level required to perform this treatment.",
     )
+    mend_cap_fraction = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=NEVER_TO_FULL_FRACTION,
+        help_text=MEND_CAP_FRACTION_HELP,
+    )
 
     objects = NaturalKeyManager()
 
@@ -1730,12 +1772,21 @@ class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
                 fields=["technique", "treatment_template"],
                 name="unique_treatment_per_technique",
             ),
+            models.CheckConstraint(
+                condition=MEND_CAP_FRACTION_IN_RANGE,
+                name="technique_treatment_mend_cap_fraction_in_range",
+            ),
         ]
         verbose_name = "Technique Treatment"
         verbose_name_plural = "Technique Treatments"
 
     def __str__(self) -> str:
         return f"{self.technique.name} → treats {self.treatment_template.name} ({self.target_kind})"
+
+    def clean(self) -> None:
+        """Refuse a mend fraction above the never-to-full ceiling (#4600)."""
+        super().clean()
+        validate_mend_cap_fraction(self.mend_cap_fraction)
 
 
 class TechniqueDamageProfile(NaturalKeyMixin, AbstractDamageProfile):

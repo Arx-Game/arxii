@@ -41,6 +41,7 @@ from world.vitals.types import DamageConsequenceResult, WakeResult
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
     from datetime import datetime
+    from decimal import Decimal
 
     from evennia.objects.models import ObjectDB
 
@@ -583,6 +584,7 @@ def mend_wound(
     target_sheet: CharacterSheet,
     wound_instance: ConditionInstance,
     amount: int,
+    cap_fraction: Decimal | None = None,
 ) -> int:
     """Raise a wounded target's health, double-bounded (#2644 — the attrition invariant).
 
@@ -594,10 +596,16 @@ def mend_wound(
     Two independent bounds compose to guarantee the party is always net-weaker
     for having fought (ADR-0156):
 
-    - **Bound 1 (here): the never-to-full fraction.** The total ever mended on
-      *this* wound, across every healer who has ever tended it, cannot exceed
-      ``NEVER_TO_FULL_FRACTION x wound_details.damage_taken``. The remainder
-      is permanent attrition, by design.
+    - **Bound 1 (here): the mend fraction.** This mend may raise the total ever
+      mended on *this* wound, across every healer who has ever tended it, to at
+      most ``cap_fraction x wound_details.damage_taken`` (#4600). The fraction
+      is the mend's own: a healing technique authors it on its treatment row,
+      mundane first aid passes ``FIRST_AID_MEND_FRACTION``. ``None`` means the
+      ceiling, and a fraction above ``NEVER_TO_FULL_FRACTION`` is held to it,
+      so no wound ever heals to full. Because each mend reads the running
+      total, the total never passes the highest fraction any mend on the wound
+      used: a low mend after a high one finds no room. Nothing new is stored.
+      The remainder is permanent attrition, by design.
     - **Bound 2 (one layer up, in ``perform_treatment``):** each healer gets
       exactly one tending per wound, ever (an incompetent healer cannot burn
       the wound's only chance for everyone else) — enforced by
@@ -621,7 +629,8 @@ def mend_wound(
     except (AttributeError, ObjectDoesNotExist) as exc:
         raise NotAWoundError from exc
 
-    cap_total = int(NEVER_TO_FULL_FRACTION * details.damage_taken)
+    fraction = min(cap_fraction or NEVER_TO_FULL_FRACTION, NEVER_TO_FULL_FRACTION)
+    cap_total = int(fraction * details.damage_taken)
     remaining_cap = max(0, cap_total - details.health_mended_total)
     if remaining_cap <= 0 or amount <= 0:
         return 0

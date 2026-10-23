@@ -4727,11 +4727,14 @@ def _mend_treatment_target(  # noqa: PLR0913
     target_effect: "ConditionInstance | PendingAlteration",
     check_outcome: "object",
     power_intensity: int,
+    mend_cap_fraction: Decimal | None = None,
 ) -> int:
     """Return HP mended for a successful ConditionInstance treatment (0 otherwise).
 
-    Routes through vitals.mend_wound() so the never-to-full fraction cap and
-    max_health clamp both apply (the attrition invariant, ADR-0156). No
+    Routes through vitals.mend_wound() so the mend fraction cap and max_health
+    clamp both apply (the attrition invariant, ADR-0156). ``mend_cap_fraction``
+    (#4600) is this mend's own share of the wound's damage, passed through as
+    ``mend_wound``'s ``cap_fraction``; ``None`` means the never-to-full ceiling. No
     mend_on_failure column exists (heals never reward incompetence); a
     PENDING_ALTERATION target has no WoundDetails seam. power_intensity
     (#3391) is applied strictly after the outcome-tier gate (a failed or
@@ -4752,6 +4755,7 @@ def _mend_treatment_target(  # noqa: PLR0913
             target_sheet=target_sheet,
             wound_instance=target_effect,
             amount=mend_amount,
+            cap_fraction=mend_cap_fraction,
         )
     return 0
 
@@ -4867,6 +4871,7 @@ def perform_treatment(  # noqa: PLR0913
     skip_engagement_gate: bool = False,
     power_intensity: int = 0,
     technique_driven: bool = False,
+    mend_cap_fraction: Decimal | None = None,
 ) -> TreatmentOutcome:
     """Resolve a TreatmentTemplate against an effect instance.
 
@@ -4895,6 +4900,11 @@ def perform_treatment(  # noqa: PLR0913
     the template itself spends resonance or anima or needs a bond; the check then adds the
     skills staff mapped to Magical treatment. A zero-cost, bondless treatment is mundane
     first aid and rolls its own check alone.
+
+    ``mend_cap_fraction`` (#4600) is how far this treatment may heal a wound, as a
+    share of the damage the wound did, handed to ``mend_wound()``. A technique cast
+    passes its treatment row's authored fraction; the scene ``treat`` path passes
+    ``FIRST_AID_MEND_FRACTION``. ``None`` means the never-to-full ceiling.
     """
     helper = helper_sheet.character
     target = target_sheet.character
@@ -4948,6 +4958,7 @@ def perform_treatment(  # noqa: PLR0913
             target_effect,
             check_result.outcome,
             power_intensity,
+            mend_cap_fraction,
         )
 
     # ------------------------------------------------------------------

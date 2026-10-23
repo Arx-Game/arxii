@@ -48,6 +48,7 @@ from world.magic.services.technique_draft import (
     add_draft_damage_profile,
     add_draft_removed_condition,
     add_draft_restriction,
+    add_draft_treatment,
     discard_draft,
     draft_to_design,
     get_active_draft,
@@ -287,6 +288,26 @@ class DraftToDesignTests(TestCase):
         assert spec.target_kind == "ally"
         assert spec.minimum_success_level == 2
         assert spec.remove_all_stacks is False
+
+    def test_treatment_fraction_round_trips_through_design(self) -> None:
+        """A draft treatment's mend fraction reaches the TreatmentSpec (#4600)."""
+        from decimal import Decimal
+
+        from world.conditions.factories import TreatmentTemplateFactory
+        from world.magic.types.technique_builder import TreatmentSpec
+
+        template = TreatmentTemplateFactory()
+        draft = self._make_complete_draft()
+        add_draft_treatment(draft, treatment_template=template, mend_cap_fraction=Decimal("0.40"))
+        design = draft_to_design(draft)
+        assert design.treatments == (
+            TreatmentSpec(
+                treatment_template_id=template.pk,
+                target_kind="ally",
+                minimum_success_level=1,
+                mend_cap_fraction=Decimal("0.40"),
+            ),
+        )
 
     def test_remove_draft_removed_condition_deletes_row(self) -> None:
         """remove_draft_removed_condition deletes the row by pk."""

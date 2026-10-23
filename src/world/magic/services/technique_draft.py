@@ -14,6 +14,8 @@ Design notes:
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from world.magic.exceptions import NoActiveTechniqueDraft, TechniqueDraftIncomplete
 from world.magic.models import (
     TechniqueDraft,
@@ -32,6 +34,7 @@ from world.magic.types.technique_builder import (
     TechniqueDesignInput,
     TreatmentSpec,
 )
+from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
 # =============================================================================
 # Draft lifecycle
@@ -214,13 +217,19 @@ def add_draft_treatment(
     treatment_template,
     target_kind: str = "ally",
     minimum_success_level: int = 1,
+    mend_cap_fraction: Decimal = NEVER_TO_FULL_FRACTION,
 ) -> TechniqueDraftTreatment:
-    """Append a treatment payload row to the draft and return it."""
+    """Append a treatment payload row to the draft and return it.
+
+    ``mend_cap_fraction`` (#4600) is how far the technique may heal a wound, as a
+    share of its damage; it defaults to the never-to-full ceiling.
+    """
     return TechniqueDraftTreatment.objects.create(
         draft=draft,
         treatment_template=treatment_template,
         target_kind=target_kind,
         minimum_success_level=minimum_success_level,
+        mend_cap_fraction=mend_cap_fraction,
     )
 
 
@@ -313,6 +322,7 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
                 treatment_template_id=row.treatment_template_id,
                 target_kind=row.target_kind,
                 minimum_success_level=row.minimum_success_level,
+                mend_cap_fraction=row.mend_cap_fraction,
             )
             for row in draft.treatments.all()
         ),

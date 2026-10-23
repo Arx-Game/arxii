@@ -13,6 +13,7 @@ from world.scenes.action_services import (
     register_custom_action_resolver,
 )
 from world.scenes.factories import SceneActionRequestFactory
+from world.vitals.constants import FIRST_AID_MEND_FRACTION
 
 
 class CustomResolverRegistryTests(TestCase):
@@ -62,6 +63,7 @@ class ResolveTreatmentRequestTests(TestCase):
             treatment=self.request.treatment,
             target_effect=self.request.target_condition_instance,
             bond_thread=None,
+            mend_cap_fraction=FIRST_AID_MEND_FRACTION,
         )
 
     @patch("world.conditions.services.perform_treatment")
@@ -90,6 +92,7 @@ class ResolveTreatmentRequestTests(TestCase):
             treatment=self.request.treatment,
             target_effect=self.request.target_condition_instance,
             bond_thread=thread,
+            mend_cap_fraction=FIRST_AID_MEND_FRACTION,
         )
 
     @patch("world.conditions.services.perform_treatment")

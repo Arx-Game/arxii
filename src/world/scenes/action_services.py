@@ -129,12 +129,15 @@ def _resolve_treatment_request(
     """Resolve a treat_condition request by calling perform_treatment.
 
     Treatment carries its own check/cost/reduction logic, so it bypasses the
-    ActionTemplate resolution chain entirely. The result is recorded as a regular
-    scene interaction on the request and the function returns None because there
-    is no PendingActionResolution to hand back to the SCENE_ADAPTIVE pipeline.
+    ActionTemplate resolution chain entirely. No technique drives this path, so it
+    heals a wound at first aid's own share, ``FIRST_AID_MEND_FRACTION`` (#4600).
+    The result is recorded as a regular scene interaction on the request and the
+    function returns None because there is no PendingActionResolution to hand back
+    to the SCENE_ADAPTIVE pipeline.
     The row is delivered live on commit (#3807) via ``deliver_outcome_interaction``.
     """
     from world.conditions.services import perform_treatment  # noqa: PLC0415
+    from world.vitals.constants import FIRST_AID_MEND_FRACTION  # noqa: PLC0415
 
     treatment = action_request.treatment
     target_effect = action_request.target_condition_instance
@@ -151,6 +154,7 @@ def _resolve_treatment_request(
         treatment=treatment,
         target_effect=target_effect,
         bond_thread=action_request.thread_used,
+        mend_cap_fraction=FIRST_AID_MEND_FRACTION,
     )
 
     content = _describe_treatment_outcome(

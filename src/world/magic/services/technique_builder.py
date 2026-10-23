@@ -416,6 +416,7 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
             treatment_template=TreatmentTemplate.objects.get(pk=spec.treatment_template_id),
             target_kind=spec.target_kind,
             minimum_success_level=spec.minimum_success_level,
+            mend_cap_fraction=spec.mend_cap_fraction,
         )
     # The payload rows above are what every display and resolution surface reads
     # off the technique; drop the per-instance caches so the first read after this

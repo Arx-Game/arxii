@@ -34,6 +34,7 @@ from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction, Scene
 from world.traits.factories import CheckSystemSetupFactory
 from world.vitals.constants import SLEEPING_CONDITION_NAME
+from world.vitals.models import CharacterVitals, WoundDetails
 
 # A roll of 95 lands in the top band of every chart CheckSystemSetupFactory builds.
 ROLL_WELL = patch("world.checks.services.random.randint", return_value=95)
@@ -177,6 +178,55 @@ class TreatingAFeverAtTheClinic(JourneyCase):
         )
         self.assertEqual(panel.status_code, 200, panel.content)
         self.assertIn("Willow Poultice", panel.content.decode())
+
+
+class FirstAidOnAWound(JourneyCase):
+    """Hobb binds Ysmay's 20-damage wound with plain first aid (#4600).
+
+    First aid has its own share of a wound it may heal, 0.50 of the damage: a
+    technique-free treat stops at 10 of the 20 however much the bandage offers.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        fresh_check_system()
+        self.room = self.make_room("The Roadside")
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.scene = SceneFactory(
+            room=self.room,
+            participants=[self.account_of(self.hobb), self.account_of(self.ysmay)],
+        )
+        gash = ConditionTemplateFactory(name="Deep Gash")
+        TreatmentTemplateFactory(
+            name="Linen Bandage",
+            target_condition=gash,
+            target_kind=TreatmentTargetKind.PRIMARY,
+            reduction_on_crit=0,
+            reduction_on_success=0,
+            reduction_on_partial=0,
+            mend_on_crit=50,
+            mend_on_success=50,
+            mend_on_partial=50,
+        )
+        self.wound = ConditionInstanceFactory(target=self.ysmay, condition=gash, severity=1)
+        WoundDetails.objects.create(condition_instance=self.wound, damage_taken=20)
+        CharacterVitals.objects.create(
+            character_sheet=self.ysmay.sheet_data, health=30, max_health=100, base_max_health=100
+        )
+
+    def test_first_aid_heals_half_the_wound_and_no_more(self) -> None:
+        self.assertIn("You offer to treat Ysmay for", self.telnet(self.hobb, "treat Ysmay 1"))
+        with ROLL_WELL:
+            self.telnet(self.ysmay, "accept")
+
+        self.assertIn(
+            "Hobb applies Linen Bandage to Ysmay. The treatment takes hold.", feed_of(self.scene)
+        )
+        details = WoundDetails.objects.filter(condition_instance=self.wound)
+        self.assertEqual(details.values_list("health_mended_total", flat=True).get(), 10)
+        vitals = CharacterVitals.objects.filter(character_sheet=self.ysmay.sheet_data)
+        self.assertEqual(vitals.values_list("health", flat=True).get(), 40)
 
 
 class TalkingABerserkerDown(JourneyCase):

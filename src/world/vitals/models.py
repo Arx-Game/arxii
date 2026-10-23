@@ -309,9 +309,12 @@ class WoundDetails(SharedMemoryModel):
     ``damage_taken`` is the debit that caused the wound (accumulated on
     re-wounding the same instance — see ``_record_wound_details``).
     ``health_mended_total`` is the running sum every ``mend_wound()`` call has
-    ever restored on this wound, across every healer; it can never exceed
+    ever restored on this wound, across every healer. Each mend may raise it to
+    at most its own fraction of ``damage_taken`` (a technique's authored
+    ``mend_cap_fraction``, or first aid's ``FIRST_AID_MEND_FRACTION``, #4600), so
+    it never passes the highest fraction any mend used, and never
     ``NEVER_TO_FULL_FRACTION * damage_taken`` (the attrition invariant,
-    ADR-0156) — the per-healer "one tending each" bound lives one layer up, on
+    ADR-0156). The per-healer "one tending each" bound lives one layer up, on
     ``TreatmentAttempt``'s partial UniqueConstraint.
     """
 

@@ -7,6 +7,8 @@ attrition invariant (ADR-0156): the never-to-full fraction cap.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -15,7 +17,11 @@ from world.conditions.factories import ConditionInstanceFactory, ConditionTempla
 from world.conditions.models import ConditionTemplate
 from world.conditions.services import get_active_conditions
 from world.traits.factories import CheckOutcomeFactory
-from world.vitals.constants import WOUND_CRIPPLING_NAME
+from world.vitals.constants import (
+    FIRST_AID_MEND_FRACTION,
+    NEVER_TO_FULL_FRACTION,
+    WOUND_CRIPPLING_NAME,
+)
 from world.vitals.exceptions import NotAWoundError
 from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.models import WoundDetails
@@ -123,3 +129,64 @@ class MendWoundTests(TestCase):
 
         with self.assertRaises(NotAWoundError):
             mend_wound(healer_sheet, vitals.character_sheet, plain_instance, amount=10)
+
+
+class MendWoundFractionTests(TestCase):
+    """Each mend brings its own fraction; the wound never passes the highest one used (#4600).
+
+    A 20-damage wound throughout: a 0.40 mend may restore 8, a 0.70 mend 14.
+    """
+
+    def _wound(self, *, damage_taken: int = 20) -> tuple[object, object]:
+        vitals = CharacterVitalsFactory(health=10, max_health=100)
+        instance = ConditionInstanceFactory(target=vitals.character_sheet.character)
+        WoundDetails.objects.create(condition_instance=instance, damage_taken=damage_taken)
+        return vitals, instance
+
+    def _mend(self, vitals: object, instance: object, fraction: Decimal | None) -> int:
+        return mend_wound(
+            CharacterSheetFactory(),
+            vitals.character_sheet,  # type: ignore[attr-defined]
+            instance,  # type: ignore[arg-type]
+            amount=50,
+            cap_fraction=fraction,
+        )
+
+    def test_low_then_high_totals_the_high_fraction(self) -> None:
+        vitals, instance = self._wound()
+
+        self.assertEqual(self._mend(vitals, instance, Decimal("0.40")), 8)
+        self.assertEqual(self._mend(vitals, instance, Decimal("0.70")), 6)
+        self.assertEqual(self._mend(vitals, instance, Decimal("0.40")), 0)
+
+        details = WoundDetails.objects.get(condition_instance=instance)
+        self.assertEqual(details.health_mended_total, 14)
+
+    def test_high_then_low_never_passes_the_high_fraction(self) -> None:
+        vitals, instance = self._wound()
+
+        self.assertEqual(self._mend(vitals, instance, Decimal("0.70")), 14)
+        self.assertEqual(self._mend(vitals, instance, Decimal("0.40")), 0)
+
+        details = WoundDetails.objects.get(condition_instance=instance)
+        self.assertEqual(details.health_mended_total, 14)
+
+    def test_a_fraction_above_the_ceiling_stops_at_the_ceiling(self) -> None:
+        vitals, instance = self._wound()
+
+        # 0.95 is above the 0.75 ceiling: int(0.75 x 20) = 15.
+        self.assertEqual(self._mend(vitals, instance, Decimal("0.95")), 15)
+
+    def test_no_fraction_means_the_ceiling(self) -> None:
+        vitals, instance = self._wound()
+
+        self.assertEqual(self._mend(vitals, instance, None), 15)
+
+    def test_first_aid_stops_at_its_own_fraction(self) -> None:
+        vitals, instance = self._wound()
+
+        self.assertEqual(FIRST_AID_MEND_FRACTION, Decimal("0.50"))
+        self.assertLess(FIRST_AID_MEND_FRACTION, NEVER_TO_FULL_FRACTION)
+        self.assertEqual(self._mend(vitals, instance, FIRST_AID_MEND_FRACTION), 10)
+        # A healing technique at the ceiling still finds room above first aid.
+        self.assertEqual(self._mend(vitals, instance, NEVER_TO_FULL_FRACTION), 5)

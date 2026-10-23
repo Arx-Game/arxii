@@ -16,11 +16,15 @@ from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.magic.models.techniques import (
+    MEND_CAP_FRACTION_HELP,
+    MEND_CAP_FRACTION_IN_RANGE,
     AbstractAppliedCondition,
     AbstractCapabilityGrant,
     AbstractDamageProfile,
     ConditionTargetKind,
+    validate_mend_cap_fraction,
 )
+from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
 
 class TechniqueDraft(SharedMemoryModel):
@@ -234,10 +238,27 @@ class TechniqueDraftTreatment(SharedMemoryModel):
         default=ConditionTargetKind.ALLY,
     )
     minimum_success_level = models.PositiveIntegerField(default=1)
+    mend_cap_fraction = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=NEVER_TO_FULL_FRACTION,
+        help_text=MEND_CAP_FRACTION_HELP,
+    )
 
     class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=MEND_CAP_FRACTION_IN_RANGE,
+                name="technique_draft_treatment_mend_cap_fraction_in_range",
+            ),
+        ]
         verbose_name = "Technique Draft Treatment"
         verbose_name_plural = "Technique Draft Treatments"
 
     def __str__(self) -> str:
         return f"{self.draft} → treats {self.treatment_template.name} ({self.target_kind})"
+
+    def clean(self) -> None:
+        """Refuse a mend fraction above the never-to-full ceiling (#4600)."""
+        super().clean()
+        validate_mend_cap_fraction(self.mend_cap_fraction)
