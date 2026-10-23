@@ -264,6 +264,29 @@ class GraphCheckTests(TestCase):
         )
         self.assertEqual([p["node"] for p in self._problems(template)], [via_tiered.pk])
 
+    def test_a_counted_roll_on_a_track_node_is_never_followed(self) -> None:
+        template, entry = self._template("track-route-graph")
+        entry.track_successes = 2
+        entry.track_failures = 2
+        entry.save()
+        via_check = MissionNodeFactory(template=template, key="via-check")
+        option = MissionOptionFactory(
+            node=entry,
+            option_kind=OptionKind.CHECK,
+            authored_check_type=self.check_type,
+            key="pick-lock",
+        )
+        # The API refuses a target here; a legacy row can still hold one.
+        MissionOptionRouteFactory(
+            option=option, outcome_tier=self.tiers["Success"], target_node=via_check
+        )
+        unreachable = [
+            p["node"]
+            for p in self._problems(template)
+            if p["kind"] == GraphProblemKind.UNREACHABLE_NODE
+        ]
+        self.assertEqual(unreachable, [via_check.pk])
+
     def test_encounter_without_risk_level_flagged(self) -> None:
         template, entry = self._template("no-risk-graph")
         option = MissionOptionFactory(

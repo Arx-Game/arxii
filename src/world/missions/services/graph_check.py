@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 _LABEL_FRAMING_MAX = 40
 _ROLLED_KINDS = (OptionKind.CHECK, OptionKind.CONTEST)
 _BRANCHING_KINDS = (OptionKind.BRANCH, OptionKind.EXTERNAL_ACT)
+# Kinds whose roll on a track node is counted toward the track instead of routing.
+_TRACK_COUNTED_KINDS = (OptionKind.CHECK, OptionKind.CONTEST)
 
 
 def option_label(option: MissionOption) -> str:
@@ -63,20 +65,25 @@ def _graph_edges(
             if target_id is not None
         )
     option_by_pk = {option.pk: option for option in options}
+    track_node_pks = {node.pk for node in nodes if node.is_track}
     for option in options:
         if option.branch_target_id is not None:
             edges[option.node_id].add(option.branch_target_id)
+    followed: dict[int, int] = {}  # route pk -> the node it leaves from
     for route in routes:
         option = option_by_pk[route.option_id]
         if option.option_kind in _BRANCHING_KINDS and (
             option.branch_target_id is not None or route.outcome_tier_id is not None
         ):
             continue  # the engine reads only a branch option's tier-less route
+        if option.node_id in track_node_pks and option.option_kind in _TRACK_COUNTED_KINDS:
+            continue  # a counted roll on a track node never routes; the track decides
+        followed[route.pk] = option.node_id
         if route.target_node_id is not None:
             edges[option.node_id].add(route.target_node_id)
-    node_of_route = {route.pk: option_by_pk[route.option_id].node_id for route in routes}
     for candidate in candidates:
-        edges[node_of_route[candidate.route_id]].add(candidate.target_node_id)
+        if candidate.route_id in followed:
+            edges[followed[candidate.route_id]].add(candidate.target_node_id)
     return edges
 
 
