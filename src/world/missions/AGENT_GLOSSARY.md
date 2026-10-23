@@ -137,3 +137,7 @@ unrestricted (#3565, ADR-0258). A GM cannot create a bare template directly - on
 catalog template. `MissionGiverViewSet`/`MissionInstanceViewSet` stay staff-only.
 _Avoid_: staff template, catalog scenario (a GM-owned scenario is deliberately outside the
 catalog - it never appears on boards or in `opportunities_for_character`).
+
+**Graph Problem**:
+Something the Mission Studio's graph check (#4558, `GET /api/missions/templates/<id>/graph-check/`) finds wrong with a mission's node graph, one `GraphProblemKind` each: no entry node, unreachable node, missing tiers, joint node missing a success or failure route, encounter without a risk level, random route without candidates. It warns and never blocks a save; a BRANCH or EXTERNAL_ACT option with no route is an ending, not a problem.
+_Avoid_: validation error, lint (a problem is advice shown beside the graph, not a refusal).

@@ -5321,6 +5321,7 @@ state is node position + snapshots + already-applied consequences, never a scrat
   operator's contributor), `views.py` also serves the live check (`.../check/`, writes nothing),
   `.../delete/` and an index. A consequence another row also uses is shown read-only. A
   `MAGICAL_SCARS` effect no longer needs a condition template (the handler reads only severity).
+- **Mission Studio graph check (#4558):** `world/missions/services/graph_check.py` (`check_mission_graph`, kinds in `GraphProblemKind`: no entry, unreachable node, missing tiers, joint node missing a bucket, encounter without a risk level, empty random route) behind `GET /api/missions/templates/<id>/graph-check/`; `GET /api/missions/outcome-tiers/` (`OutcomeTierViewSet`) lists the tiers a check option needs a route for. Node and option DELETE answer 409 with a plain message when a mission run recorded them; node `copy/` and `copy-subtree/` answer 400 with one when a key is taken. Problems warn, never block a save.
 - **Models:** `MissionTemplate` (authored graph: entry node + availability metadata — level
   band, risk tier, draw weight, visibility) → `MissionNode` (`track_successes`/
   `track_failures`/`track_success_target`/`track_failure_target`/`track_success_beat_outcome`/
