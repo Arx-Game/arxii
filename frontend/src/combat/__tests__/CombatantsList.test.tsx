@@ -53,7 +53,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { CombatantsList } from '../sections/CombatantsList';
-import type { EncounterDetail, Participant, Opponent } from '../types';
+import type { CombatMark, EncounterDetail, Participant, Opponent } from '../types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -750,7 +750,7 @@ describe('mark badge (#4603)', () => {
   function withMarks(
     participants: Participant[],
     opponents: Opponent[],
-    marks: { id: number; participant_id: number; opponent_id: number; round_number: number }[]
+    marks: CombatMark[]
   ): EncounterDetail {
     return { ...makeEncounter(participants, opponents), marks };
   }

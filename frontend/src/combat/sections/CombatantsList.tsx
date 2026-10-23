@@ -17,7 +17,7 @@
  *
  * Opponent click-menu (#3381): each opponent row carries a kebab-trigger
  * dropdown (Radix, mirrors PersonaContextMenu.tsx's pattern) offering
- * Taunt/Demoralize/Parley/Mark — a kebab icon rather than the row itself as the
+ * Taunt/Demoralize/Parley/Mark: a kebab icon rather than the row itself as the
  * trigger, so it doesn't collide with the condition-badge deep-link already
  * on the row. Only rendered when the caller passes `canDeclareManeuvers`
  * (derived by CombatTurnPanel from `is_participant && status === 'declaring'`
@@ -236,8 +236,8 @@ interface OpponentRowProps {
   lockedToName?: string;
   /** True when the active lock on this opponent belongs to the viewer (#3447). */
   lockedToViewer?: boolean;
-  /** Names of the participants whose mark currently sits on this opponent (#4603). */
-  markedByNames?: string[];
+  /** Participants whose mark currently sits on this opponent, by mark id (#4603). */
+  markedBy?: { id: number; name: string }[];
 }
 
 /** Label for the GM boss-state morale chip (#3552) - defaults to "Steady". */
@@ -268,7 +268,7 @@ function OpponentRow({
   canDeclareManeuvers = false,
   lockedToName,
   lockedToViewer = false,
-  markedByNames = [],
+  markedBy = [],
 }: OpponentRowProps) {
   const showMenu = canDeclareManeuvers && characterId != null;
   const { mutateAsync, isPending } = useRegistryDispatch(encounterId, characterId ?? 0);
@@ -323,9 +323,9 @@ function OpponentRow({
               Locked: {lockedToName}
             </span>
           )}
-          {markedByNames.map((name) => (
+          {markedBy.map(({ id, name }) => (
             <span
-              key={name}
+              key={id}
               data-testid="mark-badge"
               className={cn(
                 'shrink-0 rounded bg-sky-500/15 px-1 py-0.5 text-[10px]',
@@ -483,13 +483,13 @@ export function CombatantsList({
 
   // Map opponent id -> names of the participants whose mark sits on it (#4603).
   // A mark whose marker is not in the roster cannot be named, so it is skipped.
-  const markedByNames = new Map<number, string[]>();
+  const markedByOpponent = new Map<number, { id: number; name: string }[]>();
   for (const mark of marks ?? []) {
     const markerName = participants.find((p) => p.id === mark.participant_id)?.character_name;
     if (markerName === undefined) continue;
-    const names = markedByNames.get(mark.opponent_id) ?? [];
-    names.push(markerName);
-    markedByNames.set(mark.opponent_id, names);
+    const markers = markedByOpponent.get(mark.opponent_id) ?? [];
+    markers.push({ id: mark.id, name: markerName });
+    markedByOpponent.set(mark.opponent_id, markers);
   }
 
   // Map participant id -> companion names currently ordered to defend them (#3576).
@@ -588,7 +588,7 @@ export function CombatantsList({
                   canDeclareManeuvers={canDeclareManeuvers}
                   lockedToName={lockedOpponentNames.get(o.id)}
                   lockedToViewer={viewerLockedOpponentIds.has(o.id)}
-                  markedByNames={markedByNames.get(o.id)}
+                  markedBy={markedByOpponent.get(o.id)}
                 />
               ))}
             </div>
