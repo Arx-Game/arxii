@@ -26771,6 +26771,70 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/missions/outcome-tiers/:
+    get:
+      operationId: missions_outcome_tiers_list
+      description: |-
+        The check outcome tiers a route can key on, worst to best (#4558).
+
+        Only tiers a result chart or an encounter outcome mapping actually names
+        are listed; a tier nothing can ever roll would be a route that never fires.
+        Same audience as the category browse: staff or any GM.
+      parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOutcomeTierList'
+          description: ''
+  /api/missions/outcome-tiers/{id}/:
+    get:
+      operationId: missions_outcome_tiers_retrieve
+      description: |-
+        The check outcome tiers a route can key on, worst to best (#4558).
+
+        Only tiers a result chart or an encounter outcome mapping actually names
+        are listed; a tier nothing can ever roll would be a route that never fires.
+        Same audience as the category browse: staff or any GM.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this check outcome.
+        required: true
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutcomeTier'
+          description: ''
   /api/missions/predicate-leaves/:
     get:
       operationId: missions_predicate_leaves_list
@@ -27670,6 +27734,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MissionTemplate'
+          description: ''
+  /api/missions/templates/{id}/graph-check/:
+    get:
+      operationId: missions_templates_graph_check_retrieve
+      description: |-
+        What is wrong with this mission's graph (#4558); warns, never blocks a save.
+
+        Scoped exactly like template retrieve: ``get_object`` applies the
+        caller's queryset scope and object permission.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this mission template.
+        required: true
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphCheck'
           description: ''
   /api/mutes/:
     get:
@@ -61011,6 +61101,45 @@ components:
       - content
       - heat
       - id
+    GraphCheck:
+      type: object
+      description: Response shape of ``GET templates/<pk>/graph-check/``.
+      properties:
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphProblem'
+      required:
+      - problems
+    GraphProblem:
+      type: object
+      description: One graph-check problem; ``node``/``option``/``route`` are ids
+        or null.
+      properties:
+        kind:
+          type: string
+        message:
+          type: string
+        node:
+          type: integer
+          nullable: true
+        option:
+          type: integer
+          nullable: true
+        route:
+          type: integer
+          nullable: true
+        missing_tiers:
+          type: array
+          items:
+            type: string
+      required:
+      - kind
+      - message
+      - missing_tiers
+      - node
+      - option
+      - route
     GrievanceOption:
       type: object
       description: A preset grievance swing offered to a wronged character (#1429).
@@ -71428,6 +71557,26 @@ components:
       - label
       - tier_name
       - weight
+    OutcomeTier:
+      type: object
+      description: 'A check outcome tier an authored route can key on (read-only,
+        #4558).'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Outcome name (e.g., 'Success', 'Catastrophic Failure')
+        success_level:
+          type: integer
+          readOnly: true
+          description: Numeric success level (-10 worst failure to +10 best success)
+      required:
+      - id
+      - name
+      - success_level
     OutfitRead:
       type: object
       description: Read serializer for Outfit — nests slot rows.
@@ -74626,6 +74775,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrganizationSearch'
+    PaginatedOutcomeTierList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutcomeTier'
     PaginatedOutfitReadList:
       type: object
       properties:
