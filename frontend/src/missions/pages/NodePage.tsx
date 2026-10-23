@@ -13,6 +13,7 @@
  * visibility_rule will hook into OptionPage in E4.
  */
 
+import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -31,19 +32,29 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
+import {
+  AddOptionDialog,
+  CopyNodeDialog,
+  CopySubtreeDialog,
+  DeleteNodeDialog,
+} from '../components/NodeActionDialogs';
 import { ServerChangedBanner } from '../components/ServerChangedBanner';
 import { StudioBreadcrumb } from '../components/StudioBreadcrumb';
 import { getMissionNode } from '../api';
 import { useServerDraft } from '../hooks/useServerDraft';
 import {
   missionKeys,
+  useGraphCheck,
   useMissionNodes,
   useMissionOptions,
+  useMissionRouteCandidates,
+  useMissionRoutes,
   useMissionTemplate,
   usePatchMissionNode,
 } from '../queries';
+import { optionLabel } from '../optionLabel';
 import { studioBaseFromPath, studioPaths } from '../studioPaths';
-import type { MissionNode } from '../types';
+import type { MissionNode, MissionOption } from '../types';
 import { useQuery } from '@tanstack/react-query';
 
 const CONFLICT_MODES: Array<MissionNode['conflict_mode']> = ['group_vote', 'joint'];
@@ -60,6 +71,13 @@ export function NodePage() {
   const location = useLocation();
   const base = studioBaseFromPath(location.pathname);
   const paths = studioPaths(base, templateId ?? 0, template?.story_id);
+  const { data: problems } = useGraphCheck(templateId);
+  const [dialog, setDialog] = useState<'option' | 'copy' | 'subtree' | 'delete' | null>(null);
+  const options = optionsPage?.results ?? [];
+  const problemOptionIds = new Set((problems ?? []).map((p) => p.option));
+  const closeDialog = (open: boolean) => {
+    if (!open) setDialog(null);
+  };
 
   if (Number.isNaN(numericNodeId)) {
     return <div className="p-6 text-destructive">Bad node id.</div>;
@@ -94,13 +112,29 @@ export function NodePage() {
         ]}
       />
       {isLoading || !node ? <Skeleton className="h-64 w-full" /> : <NodeEditor node={node} />}
+      {node ? (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setDialog('copy')}>
+            Copy node
+          </Button>
+          <Button variant="outline" onClick={() => setDialog('subtree')}>
+            Copy node and everything after it
+          </Button>
+          <Button variant="destructive" onClick={() => setDialog('delete')}>
+            Delete node
+          </Button>
+        </div>
+      ) : null}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>Options on this node</CardTitle>
+          <Button variant="outline" size="sm" onClick={() => setDialog('option')}>
+            Add option
+          </Button>
         </CardHeader>
         <CardContent className="space-y-1" data-testid="node-options-list">
-          {optionsPage && optionsPage.results.length > 0 ? (
-            optionsPage.results.map((opt) => (
+          {options.length > 0 ? (
+            options.map((opt) => (
               <Link
                 key={opt.id}
                 to={
@@ -111,7 +145,12 @@ export function NodePage() {
                 className="flex items-center justify-between rounded border px-2 py-1 text-sm hover:bg-muted"
               >
                 <span>
-                  #{opt.order}: {opt.option_kind} / {opt.source_kind}
+                  {problemOptionIds.has(opt.id) ? (
+                    <span aria-label="Has a problem" title="Has a problem">
+                      ⚠{' '}
+                    </span>
+                  ) : null}
+                  {optionLabel(opt)} ({opt.option_kind})
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {opt.authored_ic_framing || '<no framing>'}
@@ -123,7 +162,103 @@ export function NodePage() {
           )}
         </CardContent>
       </Card>
+      {node && templateId !== undefined ? (
+        <>
+          <AddOptionDialog
+            open={dialog === 'option'}
+            onOpenChange={closeDialog}
+            nodeId={node.id}
+            existingOptions={options}
+            onCreated={(opt: MissionOption) => navigate(paths.option(node.id, opt.id))}
+          />
+          <CopyNodeDialog
+            open={dialog === 'copy'}
+            onOpenChange={closeDialog}
+            nodeId={node.id}
+            onCreated={(n) => navigate(paths.node(n.id))}
+          />
+          <CopySubtreeDialog
+            open={dialog === 'subtree'}
+            onOpenChange={closeDialog}
+            nodeId={node.id}
+            onCreated={(n) => navigate(paths.node(n.id))}
+          />
+          <DeleteNodeDialogLoader
+            node={node}
+            open={dialog === 'delete'}
+            onOpenChange={closeDialog}
+            onDeleted={() => navigate(paths.canvas)}
+          />
+        </>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Works out which links lead to the node, so the delete dialog can say what
+ * becomes a mission ending. Routes, branch targets and track targets are
+ * cleared to an ending; random-route candidates are removed with the node.
+ */
+function DeleteNodeDialogLoader({
+  node,
+  open,
+  onOpenChange,
+  onDeleted,
+}: {
+  node: MissionNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDeleted: () => void;
+}) {
+  const { data: nodesPage } = useMissionNodes({ template: node.template });
+  const { data: optionsPage } = useMissionOptions({ template: node.template });
+  const { data: routesPage } = useMissionRoutes({ template: node.template });
+  const { data: candidatesPage } = useMissionRouteCandidates({ template: node.template });
+
+  const nodes = nodesPage?.results ?? [];
+  const options = optionsPage?.results ?? [];
+  const nodeKey = (id: number) => nodes.find((n) => n.id === id)?.key ?? 'another node';
+  const optionById = new Map(options.map((o) => [o.id, o]));
+  const describe = (opt: MissionOption | undefined) =>
+    opt ? `${nodeKey(opt.node)}: ${optionLabel(opt)}` : 'another node';
+
+  const endings: string[] = [];
+  for (const route of routesPage?.results ?? []) {
+    const opt = optionById.get(route.option);
+    if (route.target_node === node.id && opt && opt.node !== node.id) {
+      endings.push(describe(opt));
+    }
+  }
+  for (const opt of options) {
+    if (opt.branch_target === node.id && opt.node !== node.id) endings.push(describe(opt));
+  }
+  for (const other of nodes) {
+    if (other.id === node.id) continue;
+    if (other.track_success_target === node.id) endings.push(`${other.key}: track success`);
+    if (other.track_failure_target === node.id) endings.push(`${other.key}: track failure`);
+  }
+
+  const routeOption = new Map(
+    (routesPage?.results ?? []).map((r) => [r.id, optionById.get(r.option)])
+  );
+  const lostDestinations: string[] = [];
+  for (const cand of candidatesPage?.results ?? []) {
+    const opt = routeOption.get(cand.route);
+    if (cand.target_node === node.id && opt && opt.node !== node.id) {
+      lostDestinations.push(describe(opt));
+    }
+  }
+
+  return (
+    <DeleteNodeDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      node={node}
+      endings={endings}
+      lostDestinations={lostDestinations}
+      onDeleted={onDeleted}
+    />
   );
 }
 

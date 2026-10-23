@@ -39,6 +39,7 @@ import {
   useOutcomeTiers,
   usePatchMissionNode,
 } from '../queries';
+import { optionLabel } from '../optionLabel';
 import type { StudioPaths } from '../studioPaths';
 import type {
   GraphProblem,
@@ -69,14 +70,6 @@ const WARNING_BORDER = '2px solid hsl(var(--warning, 38 92% 50%))';
 function nodeBorder(warned: boolean, isEntry: boolean): string | undefined {
   if (warned) return WARNING_BORDER;
   return isEntry ? '2px solid hsl(var(--primary))' : undefined;
-}
-
-/** Same rule as `option_label` in the server's graph check. */
-function optionLabel(opt: MissionOption): string {
-  if (opt.key) return opt.key;
-  const framing = opt.authored_ic_framing ?? '';
-  if (framing) return framing.slice(0, 40);
-  return `option ${opt.order}`;
 }
 
 export function MissionCanvas({ templateId, paths }: MissionCanvasProps) {
