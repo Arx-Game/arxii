@@ -581,7 +581,7 @@ class MissionCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     scenario_owner_can_create = False
 
 
-class OutcomeTierViewSet(viewsets.ReadOnlyModelViewSet):
+class OutcomeTierViewSet(viewsets.mixins.ListModelMixin, viewsets.GenericViewSet):
     """The check outcome tiers a route can key on, worst to best (#4558).
 
     Only tiers a result chart or an encounter outcome mapping actually names
@@ -589,16 +589,22 @@ class OutcomeTierViewSet(viewsets.ReadOnlyModelViewSet):
     Same audience as the category browse: staff or any GM.
     """
 
-    queryset = CheckOutcome.objects.filter(
-        Exists(ResultChartOutcome.objects.filter(outcome=OuterRef("pk")))
-        | Exists(EncounterOutcomeMapping.objects.filter(check_outcome=OuterRef("pk")))
-    ).order_by("success_level", "pk")
+    queryset = (
+        CheckOutcome.objects.filter(
+            Exists(ResultChartOutcome.objects.filter(outcome=OuterRef("pk")))
+            | Exists(EncounterOutcomeMapping.objects.filter(check_outcome=OuterRef("pk")))
+        )
+        .annotate(
+            rolled_by_checks=Exists(ResultChartOutcome.objects.filter(outcome=OuterRef("pk")))
+        )
+        .order_by("success_level", "pk")
+    )
     serializer_class = OutcomeTierSerializer
     permission_classes = [IsAuthenticated, IsStaffOrScenarioOwner]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = OutcomeTierFilterSet
-    # Read-only; declared False for the permission class's POST check (never reached).
+    # List only; declared False for the permission class's POST check (never reached).
     scenario_owner_can_create = False
 
 

@@ -838,11 +838,17 @@ class MissionCategorySerializer(serializers.ModelSerializer):
 
 
 class OutcomeTierSerializer(serializers.ModelSerializer):
-    """A check outcome tier an authored route can key on (read-only, #4558)."""
+    """A check outcome tier an authored route can key on (read-only, #4558).
+
+    ``rolled_by_checks`` is true when a result chart names the tier, so a CHECK or
+    CONTEST roll can land on it; a tier only an encounter mapping names is false.
+    """
+
+    rolled_by_checks = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = CheckOutcome
-        fields = ["id", "name", "success_level"]
+        fields = ["id", "name", "success_level", "rolled_by_checks"]
         read_only_fields = fields
 
 

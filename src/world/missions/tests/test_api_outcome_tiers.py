@@ -45,7 +45,28 @@ class OutcomeTierListTests(TestCase):
             [(t["name"], t["success_level"]) for t in response.data["results"]],
             [("Tier Worst", -2), ("Tier Middle", 0), ("Tier Mapped", 1), ("Tier Best", 2)],
         )
-        self.assertEqual(set(response.data["results"][0]), {"id", "name", "success_level"})
+        self.assertEqual(
+            set(response.data["results"][0]), {"id", "name", "success_level", "rolled_by_checks"}
+        )
+
+    def test_rolled_by_checks_true_only_for_chart_tiers(self) -> None:
+        response = self.client.get(URL)
+        self.assertEqual(
+            {t["name"]: t["rolled_by_checks"] for t in response.data["results"]},
+            {
+                "Tier Worst": True,
+                "Tier Middle": True,
+                "Tier Mapped": False,
+                "Tier Best": True,
+            },
+        )
+
+    def test_retrieve_is_not_routed(self) -> None:
+        response = self.client.get(f"{URL}{self.best.pk}/")
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED),
+        )
 
     def test_filter_by_name(self) -> None:
         response = self.client.get(URL, {"name": "Tier Best"})
