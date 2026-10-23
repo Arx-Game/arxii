@@ -461,6 +461,13 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `world/companions/tests/test_combat_bridge_e2e.py`, and
   `world/companions/tests/test_deployment.py`.
 
+- **Players can mark a target (#4603, first half of Part E of #4573):** `combat mark <opp>` and
+  the web opponent menu's "Mark" lay a `CombatMark` for the round without using the round's
+  action; every reader of the encounter sees "Marked by `<name>`" on the opponent, and a
+  covenant-mate's vow perk that reads `TARGET_IS_MARKED_BY_ALLY` now applies to rolls against
+  it. Proven by `src/integration_tests/test_leading_the_fight_journeys.py`. **Known gaps:** no
+  technique places a mark (out of scope by spec); a technique's own morale effect is #4619.
+
 - **Conditions that react when someone is struck (#4584, ADR-4584-A):** a condition can now
   be a provoke (`forces_attack_on_source`: the NPC attacks only the condition's source, from the
   round after it lands, an engagement lock wins), a standing guard (`source_guards_bearer`: the

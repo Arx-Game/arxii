@@ -8573,6 +8573,15 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     (`compute_resist_increment`) and mindless resistance (`MINDLESS_MORALE_RESISTANCE`).
     Taunt reuses `accumulate_threat`; parley reuses `apply_social_disposition_delta`
     + the seeded Calm condition; demoralize depletes morale via `apply_morale_damage`.
+  - **Marks (#4603, Part E of #4573):** `MarkAction` (`actions/definitions/combat_maneuvers.py`,
+    registry key `combat_mark`, kwarg `opponent_id`) wraps `declare_mark` and is reached from
+    telnet `combat mark <opp>` and the web opponent menu's "Mark" entry. A mark is a free act
+    (ADR-0003): it writes only a `CombatMark` row, never a `CombatRoundAction`, one per
+    participant per round (marking again moves it). `EncounterDetailSerializer.marks`
+    (schema-typed by `CombatMarkSerializer`) lists this round's marks for every reader, and
+    `CombatantsList.tsx` shows "Marked by `<name>`" on the opponent row. The only reader is the
+    vow perk situation `TARGET_IS_MARKED_BY_ALLY`. Proven by
+    `src/integration_tests/test_leading_the_fight_journeys.py`.
   - `ensure_social_combat_content()` (`src/world/combat/social_combat_content.py`) —
     idempotent seed for the 4 social-combat CheckTypes (Rally/Demoralize/Taunt/Parley
     with stat+skill+spec), the Inspired condition, and a Charming Word technique.
