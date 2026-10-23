@@ -112,7 +112,8 @@ def format_invocation_breakdown(invocation: BeatInvocation) -> str:
     """The acting player's one-line check breakdown with the favor bonus.
 
     "Perception + Investigation: 48 + 10 Ombrin's favor (invocation: Success) = 58,
-    rank Expert against Expert (rank difference 0)." Never the d100 roll.
+    Expert (rank 3), 32% toward Master (rank 4) against Expert (rank 3) (rank difference
+    0)." Ranks carry their number and band position (#4601). Never the d100 roll.
     """
     ranks = ""
     if invocation.roller_rank and invocation.target_rank:
@@ -123,7 +124,7 @@ def format_invocation_breakdown(invocation: BeatInvocation) -> str:
         ):
             without = f", {invocation.rank_difference_without_bonus} without the bonus"
         ranks = (
-            f", rank {invocation.roller_rank} against {invocation.target_rank}"
+            f", {invocation.roller_rank} against {invocation.target_rank}"
             f" (rank difference {invocation.rank_difference}{without})"
         )
     bonus = f" + {invocation.bonus} {invocation.bonus_label}" if invocation.bonus else " (no bonus)"
@@ -144,8 +145,8 @@ def beat_invocation(outcome: InvocationOutcome, check_result: CheckResult) -> Be
         check_type_name=check_result.check_type.name,
         points_before_bonus=check_result.total_points - outcome.bonus,
         total_points=check_result.total_points,
-        roller_rank=check_result.roller_rank.name if check_result.roller_rank else None,
-        target_rank=check_result.target_rank.name if check_result.target_rank else None,
+        roller_rank=check_result.rank_text or None,
+        target_rank=check_result.target_rank_text or None,
         rank_difference=check_result.rank_difference,
         rank_difference_without_bonus=_rank_difference_without(outcome, check_result),
     )

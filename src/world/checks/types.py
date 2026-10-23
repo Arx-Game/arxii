@@ -89,6 +89,15 @@ class CheckResult:
         return ""
 
     @property
+    def target_rank_text(self) -> str:
+        """The target's rank with its number and band position (#4601)."""
+        if self.standing is not None:
+            return self.standing.target.text
+        if self.target_rank is not None:
+            return f"{self.target_rank.name} (rank {self.target_rank.rank})"
+        return ""
+
+    @property
     def standing_text(self) -> str:
         """Roller against target, each with rank number and band position (#4601)."""
         if self.standing is not None:
