@@ -38,6 +38,7 @@ from world.standoffs.serializers import (
     pop_placement_rows,
     save_placement_rows,
 )
+from world.traits.models import CheckOutcome
 from world.worship.constants import FAVOR_INVOCATION_LINE_MAX_LENGTH
 
 if TYPE_CHECKING:
@@ -534,6 +535,7 @@ class MissionOptionSerializer(serializers.ModelSerializer):
             "opponent_lines",
             "opposition_sheet",
             "opposition_check_type",
+            "required_act",
         ]
         read_only_fields = ["id"]
 
@@ -834,6 +836,38 @@ class MissionCategorySerializer(serializers.ModelSerializer):
         model = MissionCategory
         fields = ["id", "name", "description", "display_order"]
         read_only_fields = ["id"]
+
+
+class OutcomeTierSerializer(serializers.ModelSerializer):
+    """A check outcome tier an authored route can key on (read-only, #4558).
+
+    ``rolled_by_checks`` is true when a result chart names the tier, so a CHECK or
+    CONTEST roll can land on it; a tier only an encounter mapping names is false.
+    """
+
+    rolled_by_checks = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = CheckOutcome
+        fields = ["id", "name", "success_level", "rolled_by_checks"]
+        read_only_fields = fields
+
+
+class GraphProblemSerializer(serializers.Serializer):
+    """One graph-check problem; ``node``/``option``/``route`` are ids or null."""
+
+    kind = serializers.CharField()
+    message = serializers.CharField()
+    node = serializers.IntegerField(source="node_id", allow_null=True)
+    option = serializers.IntegerField(source="option_id", allow_null=True)
+    route = serializers.IntegerField(source="route_id", allow_null=True)
+    missing_tiers = serializers.ListField(child=serializers.CharField())
+
+
+class GraphCheckSerializer(serializers.Serializer):
+    """Response shape of ``GET templates/<pk>/graph-check/``."""
+
+    problems = GraphProblemSerializer(many=True)
 
 
 class MissionGiverSerializer(serializers.ModelSerializer):

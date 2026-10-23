@@ -4,11 +4,9 @@
  * Mounted twice: /staff/missions/:id/nodes/:nodeId/options/:optionId
  * (StaffRoute) and /stories/scenarios/:id/nodes/:nodeId/options/:optionId
  * (GMRoute, #3565) - studioPaths derives which mount is live from the
- * current URL. PATCH on save via D2's MissionOptionViewSet. Routes
- * listed by tier with a tag for is_random_set (= "random pool");
- * per-route candidate / reward editing is a future enhancement (D2's
- * nested CRUD endpoints exist; the UI for them lands in a follow-up
- * Studio iteration).
+ * current URL. PATCH on save via D2's MissionOptionViewSet. Routes are
+ * edited in place by RouteEditor (#4558); per-route candidate / reward
+ * editing is a future enhancement.
  *
  * ENCOUNTER options (#3565) author a risk level + opponent lines:
  * check-only fields (base risk) hide the same way they hide for BRANCH.
@@ -17,10 +15,10 @@
  * PredicateBuilder integration lands in E4.
  */
 
+import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -45,23 +43,35 @@ import {
   validatePredicate,
   type PredicateNode,
 } from '../components/PredicateBuilder';
+import { DeleteOptionDialog } from '../components/NodeActionDialogs';
+import { RouteEditor } from '../components/RouteEditor';
 import { ServerChangedBanner } from '../components/ServerChangedBanner';
 import { StudioBreadcrumb } from '../components/StudioBreadcrumb';
 import { getMissionOption, patchMissionOption } from '../api';
 import { useServerDraft } from '../hooks/useServerDraft';
 import {
+  invalidateGraph,
   missionKeys,
   usePredicateLeaves,
+  useMissionNodes,
   useMissionRoutes,
+  useGraphCheck,
+  useOutcomeTiers,
   useMissionTemplate,
   type PredicateLeaf,
 } from '../queries';
+import { optionLabel } from '../optionLabel';
 import { studioBaseFromPath, studioPaths } from '../studioPaths';
 import type { MissionOption } from '../types';
 import { useMutation } from '@tanstack/react-query';
 
 const KINDS = ['branch', 'check', 'contest', 'external_act', 'encounter'] as const;
 const SOURCES = ['authored', 'challenge'] as const;
+const EXTERNAL_ACTS = [
+  { value: 'technique_cast', label: 'Technique Cast' },
+  { value: 'thread_woven', label: 'Thread Woven' },
+  { value: 'covenant_sworn', label: 'Covenant Sworn' },
+] as const;
 const RISK_LEVELS = ['low', 'moderate', 'high', 'extreme', 'lethal'] as const;
 
 function opponentLineDraftsFromOption(lines: MissionOption['opponent_lines']): OpponentLineDraft[] {
@@ -105,6 +115,13 @@ export function OptionPage() {
   const { data: template } = useMissionTemplate(templateId);
   const { data: option, isLoading, isError } = useOption(numericOptionId);
   const { data: routesPage } = useMissionRoutes({ option: numericOptionId });
+  const { data: nodesPage } = useMissionNodes({ template: templateId });
+  const { data: tiers } = useOutcomeTiers();
+  const { data: problems } = useGraphCheck(templateId);
+  const [deleting, setDeleting] = useState(false);
+  const missingTierNames = (problems ?? [])
+    .filter((p) => p.kind === 'missing_tiers' && p.option === numericOptionId)
+    .flatMap((p) => p.missing_tiers);
   const navigate = useNavigate();
   const location = useLocation();
   const base = studioBaseFromPath(location.pathname);
@@ -155,32 +172,38 @@ export function OptionPage() {
         <OptionEditor option={option} />
       )}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Routes</CardTitle>
+          {option ? (
+            <Button variant="destructive" onClick={() => setDeleting(true)}>
+              Delete option
+            </Button>
+          ) : null}
         </CardHeader>
-        <CardContent className="space-y-1" data-testid="option-routes-list">
-          {routesPage && routesPage.results.length > 0 ? (
-            routesPage.results.map((r) => (
-              <div
-                key={r.id}
-                className="flex items-center justify-between gap-2 rounded border px-2 py-1 text-sm"
-              >
-                <span>
-                  Outcome {r.outcome_tier ?? '<branch>'} → node {r.target_node ?? '<none>'}
-                </span>
-                <span className="flex gap-1 text-xs">
-                  {r.is_random_set ? <Badge variant="outline">random pool</Badge> : null}
-                  {r.outcome_text_needs_rewrite ? (
-                    <Badge variant="secondary">needs rewrite</Badge>
-                  ) : null}
-                </span>
-              </div>
-            ))
+        <CardContent>
+          {option && routesPage && tiers ? (
+            <RouteEditor
+              option={option}
+              node={(nodesPage?.results ?? []).find((n) => n.id === option.node)}
+              routes={routesPage.results}
+              nodes={nodesPage?.results ?? []}
+              tiers={tiers}
+              missingTierNames={missingTierNames}
+            />
           ) : (
-            <div className="text-sm text-muted-foreground">No routes yet.</div>
+            <Skeleton className="h-16 w-full" />
           )}
         </CardContent>
       </Card>
+      {option ? (
+        <DeleteOptionDialog
+          open={deleting}
+          onOpenChange={setDeleting}
+          option={option}
+          label={optionLabel(option)}
+          onDeleted={() => navigate(paths.node(option.node))}
+        />
+      ) : null}
     </div>
   );
 }
@@ -210,6 +233,7 @@ function optionDraftFromOption(o: MissionOption) {
     opponent_lines: opponentLineDraftsFromOption(o.opponent_lines),
     opposition_sheet: o.opposition_sheet ?? null,
     opposition_check_type: o.opposition_check_type ?? null,
+    required_act: (o.required_act ?? '') as '' | (typeof EXTERNAL_ACTS)[number]['value'],
   };
 }
 
@@ -233,6 +257,8 @@ function optionPatchPayload(draft: OptionDraft, leaves: PredicateLeaf[] | undefi
       (isCheck && draft.source_kind === 'authored') || isContest ? draft.authored_check_type : null,
     opposition_sheet: isContest ? draft.opposition_sheet : null,
     opposition_check_type: isContest ? draft.opposition_check_type : null,
+    // Only an external act carries an act; the server forbids it elsewhere.
+    required_act: draft.option_kind === 'external_act' ? draft.required_act : '',
   };
 }
 
@@ -261,12 +287,8 @@ function OptionEditor({ option }: { option: MissionOption }) {
 
   const mutation = useMutation({
     mutationFn: () => patchMissionOption(option.id, optionPatchPayload(draft, leaves.data)),
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: [...missionKeys.options(), 'detail', option.id],
-      });
-      qc.invalidateQueries({ queryKey: missionKeys.options() });
-    },
+    // Re-kinding an option changes what the graph check reports, so refresh all of it.
+    onSuccess: () => invalidateGraph(qc),
   });
 
   return (
@@ -411,6 +433,32 @@ function OptionEditor({ option }: { option: MissionOption }) {
                 {checkTypes.map((c) => (
                   <SelectItem key={c.id} value={String(c.id)}>
                     {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        {draft.option_kind === 'external_act' ? (
+          <div>
+            <Label htmlFor="opt-required-act">Act</Label>
+            <Select
+              value={draft.required_act || 'none'}
+              onValueChange={(v) =>
+                setDraft({
+                  ...draft,
+                  required_act: v === 'none' ? '' : (v as (typeof EXTERNAL_ACTS)[number]['value']),
+                })
+              }
+            >
+              <SelectTrigger id="opt-required-act">
+                <SelectValue placeholder="Select an act" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unset</SelectItem>
+                {EXTERNAL_ACTS.map((a) => (
+                  <SelectItem key={a.value} value={a.value}>
+                    {a.label}
                   </SelectItem>
                 ))}
               </SelectContent>

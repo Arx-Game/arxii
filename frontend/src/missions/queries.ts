@@ -6,7 +6,13 @@
  * views update on copy/assign/edit without manual refetch glue.
  */
 
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 
 import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 
@@ -28,6 +34,15 @@ import {
   copySubtree,
   copyTemplate,
   createGiver,
+  createMissionNode,
+  createMissionOption,
+  createMissionRoute,
+  deleteMissionNode,
+  deleteMissionOption,
+  deleteMissionRoute,
+  getGraphCheck,
+  listOutcomeTiers,
+  patchMissionRoute,
   createMissionTemplate,
   deleteGiver,
   deleteMissionInstance,
@@ -63,9 +78,11 @@ import type {
   MissionOptionRoute,
   MissionOptionRouteCandidate,
   MissionOptionRouteReward,
+  GraphProblem,
   MissionTemplate,
   MissionTemplateDetail,
   MissionTemplateFilters,
+  OutcomeTier,
   PaginatedResponse,
   ReportStyle,
 } from './types';
@@ -86,6 +103,9 @@ export const missionKeys = {
   candidatesFor: (filters: object) => [...missionKeys.candidates(), filters] as const,
   rewards: () => [...missionKeys.all, 'rewards'] as const,
   rewardsFor: (filters: object) => [...missionKeys.rewards(), filters] as const,
+  graphCheck: (templateId: number) => [...missionKeys.all, 'graph-check', templateId] as const,
+  graphChecks: () => [...missionKeys.all, 'graph-check'] as const,
+  outcomeTiers: () => [...missionKeys.all, 'outcome-tiers'] as const,
   predicateLeaves: () => [...missionKeys.all, 'predicate-leaves'] as const,
   categories: () => [...missionKeys.all, 'categories'] as const,
   givers: () => [...missionKeys.all, 'givers'] as const,
@@ -202,6 +222,32 @@ export function useRouteRewards(
   });
 }
 
+export function useMissionRouteCandidates(
+  filters: { template?: number; route?: number } = {}
+): UseQueryResult<PaginatedResponse<MissionOptionRouteCandidate>> {
+  return useQuery({
+    queryKey: missionKeys.candidatesFor(filters),
+    queryFn: () => listRouteCandidates(filters),
+    enabled: Boolean(filters.template ?? filters.route),
+  });
+}
+
+export function useGraphCheck(templateId: number | undefined): UseQueryResult<GraphProblem[]> {
+  return useQuery({
+    queryKey: missionKeys.graphCheck(templateId ?? 0),
+    queryFn: () => getGraphCheck(templateId as number),
+    enabled: templateId !== undefined,
+  });
+}
+
+export function useOutcomeTiers(): UseQueryResult<OutcomeTier[]> {
+  return useQuery({
+    queryKey: missionKeys.outcomeTiers(),
+    queryFn: listOutcomeTiers,
+    staleTime: FIVE_MINUTES,
+  });
+}
+
 export function usePredicateLeaves(): UseQueryResult<PredicateLeaf[]> {
   return useQuery({
     queryKey: missionKeys.predicateLeaves(),
@@ -215,6 +261,72 @@ export function usePredicateLeaves(): UseQueryResult<PredicateLeaf[]> {
 // ---------------------------------------------------------------------------
 // Mutations — invalidate the closest parent key on success.
 // ---------------------------------------------------------------------------
+
+/** Any graph edit can change what the graph check reports, so refresh all of it. */
+export function invalidateGraph(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: missionKeys.nodes() });
+  qc.invalidateQueries({ queryKey: missionKeys.options() });
+  qc.invalidateQueries({ queryKey: missionKeys.routes() });
+  qc.invalidateQueries({ queryKey: missionKeys.candidates() });
+  qc.invalidateQueries({ queryKey: missionKeys.graphChecks() });
+}
+
+export function useCreateMissionNode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createMissionNode,
+    onSuccess: () => invalidateGraph(qc),
+  });
+}
+
+export function useDeleteMissionNode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => deleteMissionNode(id),
+    onSuccess: () => invalidateGraph(qc),
+  });
+}
+
+export function useCreateMissionOption() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createMissionOption,
+    onSuccess: () => invalidateGraph(qc),
+  });
+}
+
+export function useDeleteMissionOption() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => deleteMissionOption(id),
+    onSuccess: () => invalidateGraph(qc),
+  });
+}
+
+export function useCreateMissionRoute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createMissionRoute,
+    onSuccess: () => invalidateGraph(qc),
+  });
+}
+
+export function usePatchMissionRoute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Partial<MissionOptionRoute> }) =>
+      patchMissionRoute(id, body),
+    onSuccess: () => invalidateGraph(qc),
+  });
+}
+
+export function useDeleteMissionRoute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => deleteMissionRoute(id),
+    onSuccess: () => invalidateGraph(qc),
+  });
+}
 
 export function usePatchMissionTemplate() {
   const qc = useQueryClient();
@@ -233,9 +345,7 @@ export function usePatchMissionNode() {
   return useMutation({
     mutationFn: ({ id, body }: { id: number; body: Partial<MissionNode> }) =>
       patchMissionNode(id, body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: missionKeys.nodes() });
-    },
+    onSuccess: () => invalidateGraph(qc),
   });
 }
 
@@ -252,7 +362,7 @@ export function useCopyNode() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, new_key }: { id: number; new_key: string }) => copyNode(id, { new_key }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.nodes() }),
+    onSuccess: () => invalidateGraph(qc),
   });
 }
 
@@ -261,7 +371,7 @@ export function useCopySubtree() {
   return useMutation({
     mutationFn: ({ id, new_key_prefix }: { id: number; new_key_prefix: string }) =>
       copySubtree(id, { new_key_prefix }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.nodes() }),
+    onSuccess: () => invalidateGraph(qc),
   });
 }
 

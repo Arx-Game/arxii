@@ -26,6 +26,7 @@ from world.missions.constants import (
     OptionSource,
 )
 from world.missions.factories import (
+    MissionDeedRecordFactory,
     MissionNodeFactory,
     MissionOptionFactory,
     MissionOptionRouteCandidateFactory,
@@ -218,6 +219,35 @@ class OptionViewSetCRUDTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(response.data["opposition_sheet"], sheet.pk)
         self.assertEqual(response.data["opposition_check_type"], self.check_type.pk)
+
+    def test_create_external_act_round_trips(self) -> None:
+        response = self.client.post(
+            self.URL,
+            {
+                "node": self.node.pk,
+                "order": 5,
+                "option_kind": OptionKind.EXTERNAL_ACT,
+                "source_kind": OptionSource.AUTHORED,
+                "required_act": "technique_cast",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["required_act"], "technique_cast")
+
+    def test_create_external_act_without_act_rejected(self) -> None:
+        response = self.client.post(
+            self.URL,
+            {
+                "node": self.node.pk,
+                "order": 6,
+                "option_kind": OptionKind.EXTERNAL_ACT,
+                "source_kind": OptionSource.AUTHORED,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("required_act", response.data)
 
     def test_list_filters_by_needs_rewrite(self) -> None:
         """E6 follow-up: option-level ``?needs_rewrite=true`` round-trip."""
@@ -462,3 +492,44 @@ class RewardViewSetCRUDTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class ProtectedDeleteTests(TestCase):
+    """A node or option a mission run recorded answers 409, not 500 (#4558)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(username="staff-protected-delete", is_staff=True)
+        cls.template = MissionTemplateFactory(name="protected-delete-tmpl")
+        cls.node = MissionNodeFactory(template=cls.template, key="recorded")
+        cls.option = MissionOptionFactory(node=cls.node, key="recorded-option")
+        MissionDeedRecordFactory(node=cls.node, option=cls.option)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(self.staff)
+
+    def test_recorded_node_delete_is_409_with_plain_message(self) -> None:
+        response = self.client.delete(f"/api/missions/nodes/{self.node.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(
+            response.data["detail"],
+            "This node can't be deleted: a mission run has already recorded it.",
+        )
+        self.assertTrue(type(self.node).objects.filter(pk=self.node.pk).exists())
+
+    def test_recorded_option_delete_is_409_with_plain_message(self) -> None:
+        other_node = MissionNodeFactory(template=self.template, key="other-node")
+        option = MissionOptionFactory(node=other_node, key="other-recorded")
+        MissionDeedRecordFactory(node=other_node, option=option)
+        response = self.client.delete(f"/api/missions/options/{option.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(
+            response.data["detail"],
+            "This option can't be deleted: a mission run has already recorded it.",
+        )
+
+    def test_clean_node_delete_is_204(self) -> None:
+        clean = MissionNodeFactory(template=self.template, key="clean")
+        response = self.client.delete(f"/api/missions/nodes/{clean.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)

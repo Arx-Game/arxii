@@ -972,14 +972,14 @@ class MissionOptionRoute(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     # MissionNode.clean()); route-set completeness is graph-level. This split
     # is intentional-on-record, not an oversight.
     #
-    # DESIGN (JOINT routing): JOINT nodes route by combined
-    # success/failure BUCKET (best success-tier route / worst failure-tier
-    # route via ``CheckOutcome.success_level``), NOT per rolled tier — see
-    # ``services.multiplayer._combined_route``. Authors of JOINT nodes must
-    # author route-sets accordingly: a JOINT contract-holder option needs at
-    # least one success-tier route AND at least one failure-tier route; the
-    # specific tier within each bucket selects the representative
-    # consequence/destination.
+    # DESIGN (JOINT routing): each participant's roll on a JOINT node still goes
+    # through ``_route_graded_outcome`` and raises when its own tier has no
+    # route, so a JOINT check option needs a route for every tier a result chart
+    # names, as on any node. The combined result (``services.multiplayer.
+    # _combined_route``) then picks the best success-tier route or the worst
+    # failure-tier route via ``CheckOutcome.success_level``; that route supplies
+    # the representative consequence/destination. A BRANCH or EXTERNAL_ACT option
+    # on a JOINT node cannot be combined and raises.
 
     option = models.ForeignKey(
         MissionOption,
