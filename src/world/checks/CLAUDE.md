@@ -216,6 +216,15 @@ penetration, flee, environmental, clash, **and defense** via `resolve_npc_attack
 through this seam with `scene=encounter.scene`, so fashion/covenant/conditions
 apply uniformly to attack and defense (#750/#512).
 
+**Level, size and the light taper (#4594, ADR-4594-A).** `ModifierContribution` carries `level`,
+`size` and `vow_part`; the breakdown the seam returns carries `tapers` (the check lane's
+`ModifierTaper` rows, `modifier_values.load_taper_rules`), so `.total` and
+`.extra_modifiers_total` count each tapered kind's bonus and penalty piles largest first, the k-th
+at `max(ratio**(k-1), floor)`, with `vow_part` and untapered kinds (own standing: rollmod, effort,
+fatigue, strain, soulfray, capability) at face value. No rows = a plain sum. A sized source reads
+the `ModifierValue` table (`modifier_values.load_value_table`) at its own level and size, never
+the bearer's level; technique buffs are the first (see `docs/systems/checks.md`).
+
 **Social/scene actions** funnel their plain (non-technique) check through the same
 seam in `world.scenes.action_services._resolve_action_against_persona`
 (`scene=request.scene`), so conditions / rollmod / scene / equipment / CHARACTER /

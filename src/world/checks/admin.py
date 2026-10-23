@@ -16,7 +16,11 @@ from world.checks.models import (
     CheckTypeTrait,
     Consequence,
     ConsequenceEffect,
+    ModifierLevelBaseline,
+    ModifierTaper,
+    ModifierValue,
 )
+from world.checks.modifier_values import level_baseline, rank_band_share
 from world.societies.admin_inlines import ConsequenceNamedOrganizationInline
 
 
@@ -211,3 +215,56 @@ class CheckTypeSpecializationAdmin(admin.ModelAdmin):
     search_fields = ["check_type__name", "specialization__name"]
     list_select_related = ["check_type", "specialization"]
     autocomplete_fields = ["check_type", "specialization"]
+
+
+@admin.register(ModifierValue)
+class ModifierValueAdmin(admin.ModelAdmin):
+    """The modifier value table (#4594): what each size is worth at each level.
+
+    The change form reads the row against the level baseline: its share of that total
+    and, on the check lane, the share of a rank band it spans there.
+    """
+
+    list_display = ["lane", "size", "level", "value"]
+    list_editable = ["value"]
+    list_filter = ["lane", "size"]
+    ordering = ["lane", "size", "level"]
+    readonly_fields = ["read_against_baseline"]
+
+    @admin.display(description="Read against the level baseline")
+    def read_against_baseline(self, obj: ModifierValue) -> str:
+        if obj.pk is None:
+            return "Save the row to read it against the level baseline."
+        baseline = level_baseline(obj.level, obj.lane)
+        if baseline is None:
+            return f"No level baseline row covers level {obj.level} yet."
+        share = rank_band_share(obj.value, baseline)
+        band = f"; {share} of a rank band at that total" if share is not None else ""
+        return (
+            f"A level-{obj.level} character's typical total is {baseline}: this value is "
+            f"{obj.value / baseline:.0%} of it{band}."
+        )
+
+
+@admin.register(ModifierLevelBaseline)
+class ModifierLevelBaselineAdmin(admin.ModelAdmin):
+    """The typical total a character of each level reaches in a lane (#4594)."""
+
+    list_display = ["lane", "level", "baseline"]
+    list_editable = ["baseline"]
+    list_filter = ["lane"]
+    ordering = ["lane", "level"]
+
+
+@admin.register(ModifierTaper)
+class ModifierTaperAdmin(admin.ModelAdmin):
+    """Which source kinds taper in a lane, and how lightly (#4594).
+
+    Leave the character's own standing (rollmod, effort, fatigue, strain, soulfray,
+    capability) without a row: it never tapers.
+    """
+
+    list_display = ["lane", "source_kind", "ratio", "floor"]
+    list_editable = ["ratio", "floor"]
+    list_filter = ["lane"]
+    ordering = ["lane", "source_kind"]

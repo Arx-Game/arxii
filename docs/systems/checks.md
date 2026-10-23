@@ -63,6 +63,35 @@ category makes those lookups raise `MultipleObjectsReturned` (or silently return
 wrong row for `get_or_create`) — treat every `CheckType.name` as globally unique in
 practice, even though the schema doesn't enforce it (#2501 content-pipeline audit).
 
+### Modifier value table, level baselines and the taper (#4594, ADR-4594-A)
+
+Staff-tuned rows, all keyed by a `ModifierLane` column (only `check` so far) so later lanes add
+rows, not models. Models live in `modifier_models.py`, readers in `modifier_values.py`, admin
+pages in `admin.py`. Example values are in `world/seeds/modifier_values.py` (cluster
+`modifier_values`); an empty table leaves behavior unchanged.
+
+| Model | Purpose | Key fields |
+|-------|---------|------------|
+| `ModifierValue` | The value table: what a modifier of `size` is worth at `level`, in the lane's units. Sparse rows read as steps (highest authored level at or below the modifier's). A magnitude; the authored modifier keeps its sign | `lane`, `level`, `size` (`ModifierSize`), `value`; unique (`lane`, `level`, `size`) |
+| `ModifierLevelBaseline` | The typical total at each level in a lane; the value admin and the tuning dashboard read a value as a share of it and of its rank band | `lane`, `level`, `baseline`; unique (`lane`, `level`) |
+| `ModifierTaper` | Which source kinds taper in a lane: each further modifier of the kind counts `ratio` of the one before, never below `floor` | `lane`, `source_kind` (`ModifierSourceKind`), `ratio`, `floor`; unique (`lane`, `source_kind`) |
+
+Readers (`modifier_values.py`): `load_value_table(lane) -> ValueTable` (one query;
+`ValueTable.value(level, size) -> int | None`), `load_taper_rules(lane) -> dict[str, TaperRule]`
+(one query), `level_baseline(level, lane) -> int | None`, `rank_band_share(points, at_total) ->
+Decimal | None` (points as a share of the `CheckRank` band `at_total` sits in).
+
+`ModifierContribution` carries `level`, `size` and `vow_part` (the untapered vow share, empty
+until #4551 slice d). `ModifierBreakdown(contributions, tapers)` counts each tapered kind's
+bonuses and penalties as separate piles, largest first, the k-th at `TaperRule.weight(k-1) =
+max(ratio**(k-1), floor)` of `value - vow_part`; `counted()` lists what each contribution counts
+for, and `total` / `extra_modifiers_total` round once, half up. `counted_values()` gives whole numbers
+summing exactly to `total` (largest remainder); `record_consequence_outcome` stores those as each
+`ConsequenceOutcomeModifier.value`, so the recorded rows add up to `modifier_total`. `collect_check_modifiers` loads
+the check lane's taper rules into every breakdown it returns, and
+`opponent_condition_opposition` tapers an opponent's own CONDITION pile the same way. The first
+sized source is a technique buff (see `docs/systems/conditions.md` and `docs/systems/magic.md`).
+
 ### Authoring guardrail: one channel per condition/check pair (#2505)
 
 A condition can reach the same check through **two independent channels**, and
@@ -295,6 +324,9 @@ term would double-count it. See ADR-0166.
 
 3. Total = trait_points + specialization_points + aspect_bonus + level_points + capability_points
    + extra_modifiers
+   (perform_check_with_modifiers' extra_modifiers is the breakdown's tapered
+   extra_modifiers_total, #4594: a pile of one kind counts each extra at 7/8 of the
+   previous, never below 2/3, when ModifierTaper rows exist)
 
 4. Total points -> CheckRank.get_rank_for_points()
    Target difficulty -> CheckRank.get_rank_for_points()

@@ -183,3 +183,48 @@
 {% else %}
 <p>{% translate "No result chart found for this matchup." %}</p>
 {% endif %}
+
+<h3>{% translate "Modifier pile" %}</h3>
+<p>
+  {% translate "Equal buffs valued by the modifier value table and tapered as condition modifiers, on a character whose own total is the level baseline, against a target at that same baseline. Odds use whole rank differences until the slide lands." %}
+</p>
+<form class="tuning-form" hx-get="{% url 'admin_tuning_checks' %}" hx-target="#panel-checks"
+      hx-include="#panel-checks .tuning-form" hx-trigger="input changed delay:300ms">
+  <div class="tuning-field">
+    <label for="pile-character-level">{% translate "Character level" %}: <span>{{ pile_character_level }}</span></label>
+    <input type="range" id="pile-character-level" name="pile_character_level"
+           min="1" max="30" step="1" value="{{ pile_character_level }}">
+  </div>
+  <div class="tuning-field">
+    <label for="pile-modifier-level">{% translate "Modifier level" %}: <span>{{ pile_modifier_level }}</span></label>
+    <input type="range" id="pile-modifier-level" name="pile_modifier_level"
+           min="1" max="30" step="1" value="{{ pile_modifier_level }}">
+  </div>
+  <div class="tuning-field">
+    <label for="pile-size">{% translate "Size" %}</label>
+    <select id="pile-size" name="pile_size">
+      {% for value, label in pile_sizes %}
+      <option value="{{ value }}" {% if value == pile_size %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="tuning-field">
+    <label for="pile-count">{% translate "Number of buffs" %}: <span>{{ pile_count }}</span></label>
+    <input type="range" id="pile-count" name="pile_count"
+           min="1" max="20" step="1" value="{{ pile_count }}">
+  </div>
+</form>
+{% if pile %}
+<table class="tuning-table modifier-pile">
+  <tbody>
+    <tr><th>{% translate "Own total (level baseline)" %}</th><td>{{ pile.baseline }}: {{ pile.rank_before }}</td></tr>
+    <tr><th>{% translate "One buff" %}</th><td>+{{ pile.modifier_value }}{% if pile.band_share is not None %} ({{ pile.band_share }} of a rank band at this total){% endif %}</td></tr>
+    <tr><th>{% translate "Pile, plain sum" %}</th><td>+{{ pile.plain_total }}</td></tr>
+    <tr><th>{% translate "Pile, tapered" %}</th><td>+{{ pile.tapered_total }}: {{ pile.rank_after }}</td></tr>
+    <tr><th>{% translate "Success or better, unbuffed" %}</th><td>{% if pile.unbuffed %}{% widthratio pile.unbuffed.success_probability 1 100 %}% ({{ pile.unbuffed.chart_name }}){% endif %}</td></tr>
+    <tr><th>{% translate "Success or better, buffed" %}</th><td>{% if pile.buffed %}{% widthratio pile.buffed.success_probability 1 100 %}% ({{ pile.buffed.chart_name }}){% endif %}</td></tr>
+  </tbody>
+</table>
+{% else %}
+<p>{% translate "No modifier value or level baseline row covers these inputs yet. Author them under Modifier value table and Modifier level baselines." %}</p>
+{% endif %}

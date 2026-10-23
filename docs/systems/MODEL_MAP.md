@@ -2065,6 +2065,12 @@
 **Foreign Keys:**
   - outcome -> checks.ConsequenceOutcome [FK]
 
+### ModifierLevelBaseline
+
+### ModifierTaper
+
+### ModifierValue
+
 ### Service Functions
 - `award_check_development(character_sheet: 'CharacterSheet', check_type: 'CheckType', effort_level: 'str | None', path_level: 'int', *, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> 'list[tuple[str, int, int]]' - Award dp to traits used in a check.`
 - `chart_has_success_outcomes(rank_difference: int) -> bool - Check if the ResultChart for this rank difference has any success outcomes.`
@@ -2074,6 +2080,7 @@
 - `get_character_path_level(character: 'ObjectDB') -> 'int' - Return the character's primary class level (or highest, or 1).`
 - `get_rollmod(character: 'ObjectDB') -> int - Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing entity of *level* adds to *check_type* (#2707).`
+- `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
 - `mirrored_outcome(outcome: 'CheckOutcome') -> 'CheckOutcome | None' - The outcome on the other side of a resisted roll (#4418).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Main check resolution function.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
@@ -3248,6 +3255,8 @@
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
 - `is_untargetable(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
 - `knockout_preventing_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).`
+- `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
+- `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
 - `loss_of_self_terms(template: world.conditions.models.ConditionTemplate) -> 'tuple[ExtraTraitTerm, ...]' - The skills a resist or break-free roll adds for ``template``, usually none.`
 - `opponent_condition_opposition(objectdb: 'ObjectDB', check_type: world.checks.models.CheckType) -> int - Difficulty delta an opposing entity's active conditions contribute (#3384).`
 - `passes_concealment_check(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Check concealment after the caller has established readable spatial scope.`
@@ -5567,6 +5576,10 @@
   - ritual -> magic.Ritual [FK]
 
 ### CapabilityPowerConfig
+
+### CastOutcomeLevelShift
+
+### CastPowerLevel
 
 ### CharacterAnima
 **Foreign Keys:**

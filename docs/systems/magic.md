@@ -1060,6 +1060,40 @@ technique damage in this codebase currently only ever resolves against
 `CombatOpponent` targets, not PC `CombatParticipant`s — ready for PC-vs-PC technique
 damage whenever that's wired.
 
+### Sized technique buffs: a buff's level and size (#4594, ADR-4594-A) [BUILT & WIRED]
+
+A technique's buff or debuff carries a **level** (from its cast) and a **size** (authored), and its
+check modifiers read the check lane's value table (`docs/systems/checks.md`, "Modifier value
+table"). Only the check lane is wired; cast power, damage and the other lanes in #4551's
+inventory join later.
+
+- **Size** — `TechniqueAppliedCondition.modifier_size` (nullable `ModifierSize`; blank keeps the
+  condition's flat check modifiers) and `narrow_use` (bool). `clean()` refuses Paramount (only a
+  vow's size step reaches it). The other applied-condition families (variants, drafts, signature
+  bonuses, vow added conditions) stay unsized.
+- **Level** — `CastPowerLevel(min_power unique, level)` and
+  `CastOutcomeLevelShift(success_level unique, level_shift)` (`models/modifier_level.py`, admin
+  pages beside the power configs). `services/modifier_sizing.py`: `load_cast_level_table()` (two
+  queries) returns a `CastLevelTable` whose `level_for(effective_power=, success_level=)` takes the
+  highest power row at or below the cast, adds the outcome shift, and never goes below 1; a cast
+  weaker than every row resolves no level. `sized_modifier_level(row, ...)` returns the (level,
+  size) for one row, (None, None) unless it is a sized `TechniqueAppliedCondition`.
+- **Stamping** — `apply_technique_conditions` loads the table only when a row is sized and
+  `_build_bulk_applications_for_row` puts `modifier_level` / `modifier_size` on each
+  `BulkConditionApplication`; `bulk_apply_conditions` stamps them on the `ConditionInstance`.
+  Passive techniques (`combat/services/damage/passive_techniques.py`) are not casts and stay
+  unsized. The target's level is never read.
+- **Admin size check** — `applied_condition_size_warnings(technique)` returns plain warnings, shown
+  by `TechniqueAdmin.save_related` as admin messages (never a refusal): a technique whose only
+  payload is the buff should size it Large; one with other payload rows (damage, other
+  conditions, capability grants, removals, treatments) at most Moderate; `narrow_use` allows one
+  step more, up to Exceptional; and a sized condition with no `ConditionCheckModifier` warns that
+  its size has nothing to act on yet.
+- **Tuning** — the Checks panel of the tuning dashboard has a modifier pile: N equal buffs of a
+  level and size on a character at the level baseline, plain and tapered, with ranks and
+  whole-rank odds (`web/admin/tuning/checks_analytics.py` `compute_modifier_pile`). Required
+  content lists the five tables as TUNING rows.
+
 ### Targeting Model (#1321) [BUILT & WIRED]
 
 Standalone casts now validate targets, resolve AoE expansion, apply conditions, and route

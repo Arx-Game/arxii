@@ -175,7 +175,7 @@ without being listed (with justification) in that test's `ACKNOWLEDGED_START_OF_
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionInstance` | Active condition on a target | `target` (FK to ObjectDB), `condition`, `current_stage`, `stacks`, `severity`, `applied_at`, `expires_at`, `rounds_remaining`, `stage_rounds_remaining`, `source_character` (FK to ObjectDB, a keeper per #4217: the body that applied it, and an ephemeral combat mook has no sheet yet is a real, death-permitting source), `source_technique`, `source_vow` (#2643: nullable FK → `covenants.CovenantRole`, `SET_NULL` — the applier's engaged-vow anchor at apply time; drives vow-keyed diminishing returns on the bounded team-damage-percent lane, see `docs/systems/magic.md`), `source_description` (#3554: rendered to the bearer in `ConditionDetailModal` and to every viewer of a visible condition in the `ConditionBadge` tooltip; `gm_apply_condition` broadcasts a GM's note as a Narrator OUTCOME line, target-only when the template is not `is_visible_to_others`; the WebSocket payload goes to the room, or to the target alone when hidden or when the GM has no location, and the text send is the telnet companion; a sheetless target is named by its key and a hidden condition on one records nothing), `is_suppressed`, `suppressed_until`, `resolved_at`, `abandoned_since_round` (#1479: round at which a downed bearer's acute peril was held/abandoned; cleared when a hostile party drives again), `last_settled_tick_at` (#4120: set when a ROUNDS row is settled, advanced by `settled_effects_tick`), `lapse_warned_at` (#4120: once-only fading warning stamp) |
+| `ConditionInstance` | Active condition on a target | `target` (FK to ObjectDB), `condition`, `current_stage`, `stacks`, `severity`, `applied_at`, `expires_at`, `rounds_remaining`, `stage_rounds_remaining`, `source_character` (FK to ObjectDB, a keeper per #4217: the body that applied it, and an ephemeral combat mook has no sheet yet is a real, death-permitting source), `source_technique`, `source_vow` (#2643: nullable FK → `covenants.CovenantRole`, `SET_NULL` — the applier's engaged-vow anchor at apply time; drives vow-keyed diminishing returns on the bounded team-damage-percent lane, see `docs/systems/magic.md`), `source_description` (#3554: rendered to the bearer in `ConditionDetailModal` and to every viewer of a visible condition in the `ConditionBadge` tooltip; `gm_apply_condition` broadcasts a GM's note as a Narrator OUTCOME line, target-only when the template is not `is_visible_to_others`; the WebSocket payload goes to the room, or to the target alone when hidden or when the GM has no location, and the text send is the telnet companion; a sheetless target is named by its key and a hidden condition on one records nothing), `is_suppressed`, `suppressed_until`, `resolved_at`, `abandoned_since_round` (#1479: round at which a downed bearer's acute peril was held/abandoned; cleared when a hostile party drives again), `last_settled_tick_at` (#4120: set when a ROUNDS row is settled, advanced by `settled_effects_tick`), `lapse_warned_at` (#4120: once-only fading warning stamp), `modifier_level` / `modifier_size` (#4594: nullable; stamped by a cast from a sized `TechniqueAppliedCondition` through `BulkConditionApplication`; with both set, the instance's check modifiers read the value table, see "Sized check modifiers" below) |
 | `HazardResponseState` | Player-response tracking for an environmental-hazard condition (#2846, ADR-0179) | `condition_instance` (O2O, CASCADE — lifecycle rides the instance), `prompted_at`, `last_health_snapshot`, `damage_observations`, `responded_at`, `endured_until`. Service layer: `world.conditions.hazard_prompt` — `ensure_hazard_prompt` (prompt once: `hazard_prompt` websocket message + telnet text), `observe_hazard` (count sweep-observed health drops; fire the per-hazard `flee` callback after the configured unanswered count — never the first), `mark_endured`/`mark_responded`. Hazard-generic: sunlight supplies its refuge logic from `world.species.sun_refuge`; player answers are the `hazard_endure`/`hazard_retreat` actions. |
 
 ---
@@ -557,6 +557,19 @@ value = get_capability_value(character, flight_capability)  # 0 = can't fly
 # Bulk: all capabilities at once (used by obstacle system)
 caps = get_all_capability_values(character)  # {"movement": 5, "flight": 0}
 ```
+
+**Sized check modifiers (#4594, ADR-4594-A).** `_check_modifier_for_target` (behind
+`get_check_modifier`, `condition_contributions` and `opponent_condition_opposition`) values a
+`ConditionCheckModifier` row on an instance carrying both `modifier_level` and `modifier_size`
+from the check lane's value table (`world.checks.modifier_values.load_value_table`, loaded once
+per call and only when some active instance is sized): the table's magnitude at that level and
+size, with the authored row's sign, and no severity or stage scaling. An unsized instance, a zero
+authored value, or a level below every value row keeps the flat authored path. Nothing about the
+bearer is read. `condition_contributions` puts the level and size on each CONDITION
+`ModifierContribution`. `bulk_apply_conditions` stamps them through `_stamp_modifier_sizing`
+(after apply, before `CONDITION_APPLIED`); a re-application keeps the higher level and takes the
+new size. `opponent_condition_opposition` applies the check lane's CONDITION `ModifierTaper` row
+to the opponent's own pile, so a debuff pile on an NPC tapers like a buff pile on a PC.
 
 **Batched reads for many sheets at once (#4090).** `active_condition_instances_by_sheet
 (sheet_ids)` is the pure-read sibling of `get_active_conditions`: the same canonical active

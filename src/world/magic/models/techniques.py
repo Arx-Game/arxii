@@ -22,6 +22,7 @@ from actions.constants import ActionCategory, ActionTargetType
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.models import DiscoverableContent
+from world.checks.constants import ModifierSize
 from world.contributors.models import CreditedContent
 from world.covenants.constants import RoleArchetype
 from world.magic.constants import (
@@ -1568,6 +1569,26 @@ class TechniqueAppliedCondition(NaturalKeyMixin, AbstractAppliedCondition):
         on_delete=models.CASCADE,
         related_name="condition_applications",
     )
+    modifier_size = models.PositiveSmallIntegerField(
+        choices=ModifierSize.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "How big this buff or debuff is for the level its cast resolves to (#4594). "
+            "A technique that only buffs is Large; one that also does something else is "
+            "Minor or Moderate; narrow use is one step higher, up to Exceptional. Blank "
+            "keeps the condition's flat authored check modifiers. Paramount is reached "
+            "only through a vow and cannot be authored here."
+        ),
+    )
+    narrow_use = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "The buff only applies in narrow circumstances or to a niche effect, which "
+            "pays for one size step more than the technique's focus allows (#4594)."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -1589,6 +1610,14 @@ class TechniqueAppliedCondition(NaturalKeyMixin, AbstractAppliedCondition):
 
     def __str__(self) -> str:
         return f"{self.technique.name} → {self.condition.name} ({self.target_kind})"
+
+    def clean(self) -> None:
+        """Refuse Paramount: only a vow's size step reaches it (#4551 section 5.3)."""
+        super().clean()
+        if self.modifier_size == ModifierSize.PARAMOUNT:
+            raise ValidationError(
+                {"modifier_size": "Paramount is reached only through a vow's size step."}
+            )
 
 
 def validate_inert_removal_knobs(row: AbstractAppliedCondition) -> None:

@@ -102,6 +102,35 @@ class ModifierSourceKind(models.TextChoices):
     FAVOR = "favor", "Favor"
 
 
+class ModifierLane(models.TextChoices):
+    """A kind of quantity a modifier can change (#4551 section 5.5, #4594).
+
+    Every lane values its modifiers from the same rows (``ModifierValue``,
+    ``ModifierLevelBaseline``, ``ModifierTaper``) keyed by this column, so a later
+    lane adds rows and a choice here, never a new model. Only the check lane is
+    wired so far; the other lanes in #4551's inventory join one at a time.
+    """
+
+    CHECK = "check", "Check points"
+
+
+class ModifierSize(models.IntegerChoices):
+    """How big a modifier is for its level (#4551 section 5.3, #4594).
+
+    Ordered, so a vow's size step is ``size + 1``. A technique that only buffs is
+    Large; one that also does something else is Minor or Moderate; narrow use is one
+    step higher, up to Exceptional. Paramount is reached only through a vow step and
+    is never authored on a technique. "Exceptional" and "Paramount" are placeholder
+    names for the owner to rename.
+    """
+
+    MINOR = 1, "Minor"
+    MODERATE = 2, "Moderate"
+    LARGE = 3, "Large"
+    EXCEPTIONAL = 4, "Exceptional"
+    PARAMOUNT = 5, "Paramount"
+
+
 class CheckCallTargetStatus(models.TextChoices):
     """A ``CheckCallTarget`` row's state (#3295).
 
