@@ -135,11 +135,11 @@ class BuildingAMissionInTheStudioJourneyTests(JourneyCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(self._check(client, template["id"]), [])
 
-        response = client.delete(f"/api/missions/nodes/{second['id']}/")
+        # The request commits in production, and a delete nulls its SET_NULL referrers in
+        # the identity map on commit (ADR-0327); run those callbacks as the commit would.
+        with self.captureOnCommitCallbacks(execute=True):
+            response = client.delete(f"/api/missions/nodes/{second['id']}/")
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        # Read the column itself: the identity map still holds the pre-delete instance.
-        target = MissionOptionRoute.objects.filter(pk=into_vault.pk).values_list(
-            "target_node", flat=True
-        )
-        self.assertEqual(list(target), [None])
+        route = client.get(f"/api/missions/routes/{into_vault.pk}/").data
+        self.assertIsNone(route["target_node"])
         self.assertEqual(self._check(client, template["id"]), [])

@@ -13,6 +13,11 @@ from django.test import TestCase
 from core.deletion import clear_set_null_referrers
 from world.character_creation.factories import CharacterDraftFactory, RealmFactory
 from world.character_creation.models import CharacterDraft
+from world.missions.factories import (
+    MissionNodeFactory,
+    MissionOptionFactory,
+    MissionOptionRouteFactory,
+)
 from world.societies.factories import OrganizationFactory, VacancyFactory
 from world.societies.houses.almanach import plant_rung
 from world.societies.houses.constants import TitleTier
@@ -52,6 +57,19 @@ class IdentityMapDeleteTests(TestCase):
             assert title.house_id == org_pk, "until the commit, the database may still say so"
         assert title.house_id is None
         assert title.house is None
+
+    def test_a_hidden_reverse_relation_is_cleared_too(self) -> None:
+        """A link declared ``related_name="+"`` has no entry in ``_meta.related_objects``
+        but is still nulled by the delete; its cached referrers must follow (#4558)."""
+        gone = MissionNodeFactory(key="hidden-rel-gone")
+        source = MissionNodeFactory(template=gone.template, key="hidden-rel-source")
+        route = MissionOptionRouteFactory(
+            option=MissionOptionFactory(node=source), outcome_tier=None, target_node=gone
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            gone.delete()
+        assert route.target_node_id is None
+        assert type(route).objects.get(pk=route.pk).target_node_id is None
 
     def test_a_chain_through_a_cached_row_reaches_the_corrected_title(self) -> None:
         """``claim.title`` comes from the claim's own field cache, not the identity
