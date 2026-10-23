@@ -63,6 +63,14 @@ vi.mock('../queries', () => ({
   useTitleDocument: () => ({ data: currentDoc }),
   useSearch: () => ({ data: undefined }),
   useHouses: () => ({ data: { results: [] } }),
+  useAllHouses: () => ({
+    data: {
+      results: [
+        { id: 9, name: 'House Katta' },
+        { id: 12, name: 'House Vampa' },
+      ],
+    },
+  }),
   useHoldingKinds: () => ({
     data: {
       results: [
@@ -122,4 +130,35 @@ test('a named rung offers Rename, enabled only once the name changes', async () 
   await userEvent.type(screen.getByLabelText('name', { selector: '#r-name' }), ' II');
   await userEvent.click(rename);
   expect(mutate).toHaveBeenCalledWith({ title_id: 3, name: 'Duchy of Katta II' });
+});
+
+test('a vacant rung seats an existing house from its page', async () => {
+  mutate.mockClear();
+  currentDoc = { ...doc, title: { ...doc.title, house_id: null, held_by: '', chain_top_id: 3 } };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    const seat = screen.getByRole('button', { name: 'Seat' });
+    expect(seat).toBeDisabled();
+    await userEvent.selectOptions(screen.getByLabelText('house'), 'House Vampa');
+    await userEvent.click(seat);
+    expect(mutate).toHaveBeenCalledWith({ title_id: 3, org_id: 12 });
+  } finally {
+    currentDoc = doc;
+  }
+});
+
+test('a held rung can change hands but leaves its own holder out of the list', () => {
+  renderWithProviders(<TitlePage titleId={3} />);
+  const options = within(screen.getByLabelText('house')).getAllByRole('option');
+  expect(options.map((o) => o.textContent)).toEqual(['pick a house', 'House Vampa']);
+});
+
+test("a rung inside a higher title's own chain offers no house picker", () => {
+  currentDoc = { ...doc, title: { ...doc.title, chain_top_id: 99 } };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    expect(screen.queryByLabelText('house')).toBeNull();
+  } finally {
+    currentDoc = doc;
+  }
 });

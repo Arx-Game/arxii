@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { useAlmanachMutation, useHoldingKinds, useTitleDocument } from '../queries';
+import { useAllHouses, useAlmanachMutation, useHoldingKinds, useTitleDocument } from '../queries';
 import { RecordRail, type RecordRailDoor, type RecordRailRow } from '../document/RecordRail';
 import { PlantRungDialog } from '../ladder/PlantRungDialog';
 import { BatchUnclaimedDialog } from '../ladder/BatchUnclaimedDialog';
@@ -24,9 +24,12 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const setHolder = useAlmanachMutation('almanach_set_holder');
   const describe = useAlmanachMutation('almanach_describe_demesne');
   const nameRung = useAlmanachMutation('almanach_name_rung');
+  const assignHolder = useAlmanachMutation('almanach_assign_holder');
+  const { data: housesPayload } = useAllHouses();
   const addHolding = useAlmanachMutation('almanach_add_holding');
   const { data: holdingKinds } = useHoldingKinds();
   const [rungName, setRungName] = useState('');
+  const [seatHouseId, setSeatHouseId] = useState('');
   const [description, setDescription] = useState('');
   const [holdingKindId, setHoldingKindId] = useState<number | null>(null);
   const [holdingName, setHoldingName] = useState('');
@@ -184,6 +187,36 @@ export function TitlePage({ titleId }: { titleId: number }) {
               <div className="val">{title.succession || <span className="meta">none</span>}</div>
             </div>
           </div>
+          {title.chain_top_id === title.title_id && (
+            <div className="field">
+              <label htmlFor="r-house">house</label>
+              <select
+                id="r-house"
+                value={seatHouseId}
+                onChange={(e) => setSeatHouseId(e.target.value)}
+              >
+                <option value="">pick a house</option>
+                {(housesPayload?.results ?? [])
+                  .filter((house) => house.id !== title.house_id)
+                  .map((house) => (
+                    <option key={house.id} value={house.id}>
+                      {house.name}
+                    </option>
+                  ))}
+              </select>{' '}
+              <button
+                type="button"
+                className="btn sm quiet"
+                disabled={seatHouseId === ''}
+                onClick={() => {
+                  assignHolder.mutate({ title_id: titleId, org_id: Number(seatHouseId) });
+                  setSeatHouseId('');
+                }}
+              >
+                Seat
+              </button>
+            </div>
+          )}
           {createFamily && (
             <CreateFamilyForm
               vacantTitle={{ title_id: title.title_id, name: title.name, realm_id: title.realm_id }}

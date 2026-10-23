@@ -812,10 +812,12 @@ itself.
 
 ### Actions (`actions/definitions/almanach.py`)
 
-Ten REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
+Eleven REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
 `StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`),
 `AlmanachBatchUnclaimedAction` (`almanach_batch_unclaimed`), `AlmanachNameRungAction`
-(`almanach_name_rung`), `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
+(`almanach_name_rung`), `AlmanachAssignHolderAction` (`almanach_assign_holder`, kwargs `title_id`,
+`org_id`: `almanach.assign_holder`, seating an existing house on a rung's whole chain, vacant or
+held, #4614), `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
 state, succession law default, and a wholesale `OrganizationFacet`/`OrganizationFeature`/
 `OrganizationObservance` replace; an `observances` row is `{ic_month, ic_day, name, lore}`,
 #4206), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneAction`
@@ -829,6 +831,10 @@ Rename (#4612). The realm ladder links every rung's name, and the `Undefined` ch
 one, to that page (`LadderTable`'s `rowHref`); selecting a row for the plant/batch savebar is the
 tier label's job there. The Founder Almanach passes no `rowHref`, so its names stay selection
 buttons.
+
+The same page seats an existing house: a "house" select and Seat button, offered only on a
+chain's top title (`assign_holder` refuses an inner chain member), over `almanach_assign_holder`
+(#4614). Create Family stays the way to seat a brand-new family.
 
 `AlmanachEditKinAction` mints a new family-tree/household node on create (`kinsperson_id`
 absent, via `almanach.record_kin` — see "Founder claims" above, the same engine founder finalize
