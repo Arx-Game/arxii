@@ -1,7 +1,8 @@
 """Authoring, query, and movement services for the positioning system.
 
-Phase 1: positions + edges are room-anchored; gated edges block crossing
-(full cross-via-approach resolution is deferred to Phase 2).
+Positions + edges are room-anchored. A walker crosses an edge unless
+``edge_blocks_crossing`` says no: an active gating challenge or a hard seal. A
+resolved gate opens a sealed wall (#4606).
 """
 
 from __future__ import annotations
@@ -117,6 +118,8 @@ def create_conjured_obstacle(  # noqa: PLR0913
     position_b: Position,
     *,
     caster_sheet: CharacterSheet | None,
+    integrity: int | None,
+    source_rampart: Rampart | None = None,
     duration_rounds: int | None = None,
     gating_challenge: ChallengeInstance | None = None,
     blocks_flight: bool = False,
@@ -127,10 +130,34 @@ def create_conjured_obstacle(  # noqa: PLR0913
     edge), updates it to impassable + sets duration/owner. At expiry/teardown,
     the edge is restored to passable (preserving the base edge).
 
-    Last-writer-wins for concurrent barricades on the same edge.
+    Last-writer-wins for concurrent barricades on the same edge: the later spell
+    takes the row, including its integrity and Rampart link (#4606), so a Rampart
+    collapse never opens an edge a later Barricade took over. A gating challenge
+    the overwrite displaces is released (deactivated once nothing gates on it).
+
+    ``integrity`` is the wall's strength. A Rampart's seal passes ``source_rampart``
+    instead and stores no integrity of its own (the Rampart holds it); every other
+    conjured wall passes an integer.
     """
+    if (source_rampart is None) == (integrity is None):
+        msg = "A conjured wall takes an integrity, or a Rampart that holds it, not both."
+        raise ValueError(msg)
+    if integrity is not None and integrity < 1:
+        msg = "A conjured wall's integrity must be at least 1."
+        raise ValueError(msg)
     if position_a.pk > position_b.pk:
         position_a, position_b = position_b, position_a
+    previous = (
+        PositionEdge.objects.filter(position_a=position_a, position_b=position_b)
+        .select_related("gating_challenge")
+        .first()
+    )
+    # Only a conjured wall's own gate is released; a staff-authored gate the spell
+    # covers (a chasm's crossing) may be a room challenge in its own right.
+    displaced_gate = (
+        previous.gating_challenge if previous is not None and _is_conjured(previous) else None
+    )
+    wall_integrity = integrity
     edge, _created = PositionEdge.objects.update_or_create(
         position_a=position_a,
         position_b=position_b,
@@ -140,13 +167,116 @@ def create_conjured_obstacle(  # noqa: PLR0913
             "created_by_sheet": caster_sheet,
             "gating_challenge": gating_challenge,
             "blocks_flight": blocks_flight,
+            "integrity": wall_integrity,
+            "max_integrity": wall_integrity,
+            "source_rampart": source_rampart,
         },
     )
+    if displaced_gate is not None and displaced_gate != gating_challenge:
+        _release_gate(displaced_gate)
     return edge
 
 
+def _is_conjured(edge: PositionEdge) -> bool:
+    """Whether ``edge`` currently holds a conjured wall (a caster, a duration, a
+    strength or a Rampart link), as opposed to its staff-authored state."""
+    return (
+        edge.created_by_sheet_id is not None
+        or edge.duration_rounds is not None
+        or edge.integrity is not None
+        or edge.source_rampart_id is not None
+    )
+
+
+def edge_blocks_crossing(edge: PositionEdge) -> bool:
+    """The walker rule (#4606): whether a mover on foot is stopped by ``edge``.
+
+    Reads only the edge row. An active gating challenge blocks. A sealed edge with
+    no gating challenge is a hard seal and blocks. A sealed edge whose challenge is
+    no longer active is open: a resolved climb or breach leaves ``is_passable=False``
+    on the row, and nothing flips it back. A deleted challenge (``SET_NULL``) reads
+    as a hard seal, so the wall fails closed; it still falls through integrity,
+    duration or a Rampart collapse. Reach (``position_reachable``) ignores gates.
+    """
+    if edge.gating_challenge_id is not None:
+        return edge.gating_challenge.is_active
+    return not edge.is_passable
+
+
+def _release_gate(challenge: ChallengeInstance) -> None:
+    """Deactivate a wall's gating challenge once no edge gates on it any more.
+
+    One Rampart's sealed edges share a single challenge, so it stays live while any
+    of them still points at it. Never a delete: a deleted challenge would turn the
+    edges still pointing at it into hard seals. Saved through the instance so the
+    identity-mapped row sees the change.
+    """
+    if not challenge.is_active:
+        return
+    if PositionEdge.objects.filter(gating_challenge=challenge).exists():
+        return
+    challenge.is_active = False
+    challenge.save(update_fields=["is_active"])
+
+
+def restore_edge(edge: PositionEdge) -> None:
+    """Open a conjured wall again: the one restore for every way a wall ends (#4606).
+
+    Sets the edge passable and clears its duration, caster, integrity, Rampart link
+    and gating challenge. The challenge is deactivated (never deleted) once no other
+    edge still gates on it, so a climb no longer shows for a wall that is gone.
+    """
+    gate = edge.gating_challenge
+    edge.is_passable = True
+    edge.duration_rounds = None
+    edge.created_by_sheet = None
+    edge.integrity = None
+    edge.max_integrity = None
+    edge.source_rampart = None
+    edge.gating_challenge = None
+    edge.save(
+        update_fields=[
+            "is_passable",
+            "duration_rounds",
+            "created_by_sheet",
+            "integrity",
+            "max_integrity",
+            "source_rampart",
+            "gating_challenge",
+        ]
+    )
+    if gate is not None:
+        _release_gate(gate)
+
+
+def damage_barrier(edge: PositionEdge, chip: int, *, damage_type: DamageType | None = None) -> bool:
+    """Chip the wall on ``edge`` by ``chip``. Returns True when the wall fell.
+
+    The one mutation seam for wall integrity (#4606). A Rampart's seal routes to
+    ``damage_rampart`` through the element resist the interception path uses (a
+    melee, single-target strike: the element's resist row for ``damage_type``),
+    floored at 1, so its collapse opens every edge it sealed. A plain conjured
+    wall has no resist and loses integrity, and is restored at 0. An
+    indestructible edge (no integrity) takes nothing. Integrity is shared, so
+    several strikers in one round add up when each calls this once per chip.
+    """
+    if edge.source_rampart_id is not None:
+        rampart = edge.source_rampart
+        resisted = max(1, chip - rampart.element_profile.base_resist(damage_type))
+        return damage_rampart(rampart, resisted)
+    if edge.integrity is None:
+        return False
+    remaining = edge.integrity - chip
+    if remaining <= 0:
+        restore_edge(edge)
+        return True
+    edge.integrity = remaining
+    edge.save(update_fields=["integrity"])
+    return False
+
+
 def teardown_conjured_obstacles(room: ObjectDB) -> None:
-    """Restore or delete all conjured obstacles in a room.
+    """Restore all conjured obstacles in a room (scene end).
 
     Edges that pre-existed (had an edge before the obstacle was created) are
     restored to passable. Staff-authored edges (null created_by_sheet) are
@@ -155,20 +285,9 @@ def teardown_conjured_obstacles(room: ObjectDB) -> None:
     conjured = PositionEdge.objects.filter(
         created_by_sheet__isnull=False,
         position_a__room=room,
-    )
+    ).select_related("gating_challenge")
     for edge in conjured:
-        edge.is_passable = True
-        edge.duration_rounds = None
-        edge.created_by_sheet = None
-        edge.gating_challenge = None
-        edge.save(
-            update_fields=[
-                "is_passable",
-                "duration_rounds",
-                "created_by_sheet",
-                "gating_challenge",
-            ]
-        )
+        restore_edge(edge)
 
 
 def expire_obstacle_rounds(room: ObjectDB) -> None:
@@ -180,22 +299,11 @@ def expire_obstacle_rounds(room: ObjectDB) -> None:
     expiring = PositionEdge.objects.filter(
         duration_rounds__isnull=False,
         position_a__room=room,
-    )
+    ).select_related("gating_challenge")
     for edge in expiring:
         edge.duration_rounds -= 1
         if edge.duration_rounds <= 0:
-            edge.is_passable = True
-            edge.duration_rounds = None
-            edge.created_by_sheet = None
-            edge.gating_challenge = None
-            edge.save(
-                update_fields=[
-                    "is_passable",
-                    "duration_rounds",
-                    "created_by_sheet",
-                    "gating_challenge",
-                ]
-            )
+            restore_edge(edge)
         else:
             edge.save(update_fields=["duration_rounds"])
 
@@ -233,7 +341,11 @@ def raise_rampart(  # noqa: PLR0913
             "duration_rounds": duration_rounds,
         },
     )
-    if element_profile.signature_behavior == RampartSignature.SEAL_EDGES:
+    if element_profile.signature_behavior != RampartSignature.SEAL_EDGES:
+        # A recast on the same position keeps the row: a Stone Rampart recast as
+        # Fire must not leave Stone's seals behind (#4606).
+        unseal_rampart_edges(rampart)
+    else:
         touching_edges = PositionEdge.objects.filter(
             Q(position_a=position) | Q(position_b=position)
         )
@@ -242,6 +354,8 @@ def raise_rampart(  # noqa: PLR0913
                 edge.position_a,
                 edge.position_b,
                 caster_sheet=caster_sheet,
+                integrity=None,
+                source_rampart=rampart,
                 duration_rounds=duration_rounds,
                 gating_challenge=gating_challenge,
             )
@@ -262,7 +376,7 @@ def damage_rampart(rampart: Rampart, chip: int) -> bool:
     """
     new_integrity = rampart.integrity - chip
     if new_integrity <= 0:
-        rampart.delete()
+        rampart.delete()  # Rampart.delete opens the edges it sealed (#4606)
         return True
     rampart.integrity = new_integrity
     rampart.save(update_fields=["integrity"])
@@ -279,14 +393,31 @@ def expire_rampart_rounds(room: ObjectDB) -> None:
     for rampart in expiring:
         rampart.duration_rounds -= 1
         if rampart.duration_rounds <= 0:
-            rampart.delete()
+            rampart.delete()  # opens the edges it sealed
         else:
             rampart.save(update_fields=["duration_rounds"])
 
 
 def teardown_ramparts(room: ObjectDB) -> None:
-    """Delete every Rampart in the room (scene end). Mirrors teardown_conjured_obstacles."""
-    Rampart.objects.filter(position__room=room).delete()
+    """Delete every Rampart in the room (scene end). Mirrors teardown_conjured_obstacles.
+
+    Loops the rows rather than a queryset delete, which would skip
+    ``Rampart.delete`` and so leave the edges it sealed shut.
+    """
+    for rampart in Rampart.objects.filter(position__room=room):
+        rampart.delete()
+
+
+def unseal_rampart_edges(rampart: Rampart) -> None:
+    """Open every edge ``rampart`` sealed (#4606). ``Rampart.delete`` runs it first,
+    and a recast with an element that does not seal runs it too.
+
+    Only edges still linked to this Rampart: a later spell that overwrote an edge
+    cleared the link and owns that wall now, so it stays sealed.
+    """
+    sealed = PositionEdge.objects.filter(source_rampart=rampart).select_related("gating_challenge")
+    for edge in sealed:
+        restore_edge(edge)
 
 
 # ---------------------------------------------------------------------------
@@ -632,7 +763,8 @@ class PositionEdgeInfo:
     """One edge in the tactical-map graph (#2006) — obstacle/gate visibility.
 
     Unlike PositionAdjacency (the ADJACENT-reach graph), this carries every
-    edge regardless of is_passable, plus the gating challenge's public name.
+    edge. ``is_passable`` is the walker rule (``edge_blocks_crossing``), and
+    ``gating_challenge_name`` names only a gate that is still active (#4606).
     """
 
     position_a_id: int
@@ -640,6 +772,8 @@ class PositionEdgeInfo:
     is_passable: bool
     blocks_flight: bool
     gating_challenge_name: str | None
+    integrity: int | None = None
+    max_integrity: int | None = None
 
 
 @dataclass(frozen=True)
@@ -666,13 +800,20 @@ def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
 
 
 def _position_edge_info(edge: PositionEdge) -> PositionEdgeInfo:
-    gating_name = edge.gating_challenge.template.name if edge.gating_challenge_id else None
+    # The map shows what a walker meets (#4606): a resolved gate is no longer named,
+    # and a climbed wall reads as passable even though its row stays sealed.
+    blocked = edge_blocks_crossing(edge)
+    gate = edge.gating_challenge if edge.gating_challenge_id else None
+    gating_name = gate.template.name if gate is not None and gate.is_active else None
+    barrier = edge.barrier_integrity
     return PositionEdgeInfo(
         position_a_id=edge.position_a_id,
         position_b_id=edge.position_b_id,
-        is_passable=edge.is_passable,
+        is_passable=not blocked,
         blocks_flight=edge.blocks_flight,
         gating_challenge_name=gating_name,
+        integrity=barrier[0] if barrier else None,
+        max_integrity=barrier[1] if barrier else None,
     )
 
 
@@ -706,32 +847,25 @@ def position_graph(room: ObjectDB) -> PositionGraph:
 
 
 def adjacent_open_positions(position: Position) -> list[PositionEdge]:
-    """Return edges to adjacent passable, unblocked positions.
+    """Return the edges a walker can cross from ``position`` (``edge_blocks_crossing``).
 
-    An edge is blocked only by an ACTIVE gating challenge; an edge whose gating
-    challenge is inactive (or absent) is freely crossable. Fetches all touching
-    edges in one query (no queries in loops).
+    An active gating challenge or a hard seal blocks; an edge whose gating
+    challenge is no longer active is open even when it is still marked sealed (a
+    climbed wall, #4606). Fetches all touching edges in one query (no queries in
+    loops).
     """
-    edges = (
-        PositionEdge.objects.filter(
-            Q(position_a=position) | Q(position_b=position),
-            is_passable=True,
-        )
-        .exclude(
-            gating_challenge__isnull=False,
-            gating_challenge__is_active=True,
-        )
-        .select_related("position_a", "position_b", "gating_challenge")
-    )
-    return list(edges)
+    edges = PositionEdge.objects.filter(
+        Q(position_a=position) | Q(position_b=position)
+    ).select_related("position_a", "position_b", "gating_challenge")
+    return [edge for edge in edges if not edge_blocks_crossing(edge)]
 
 
 def reachable_positions(objectdb: ObjectDB) -> set[Position]:
     """Return the set of positions reachable from objectdb's current position.
 
-    Multi-hop BFS over passable edges. Edges blocked by an ACTIVE gating
-    challenge are not crossed; edges with no gating challenge or an inactive
-    one are freely traversable. The starting position is not included.
+    Multi-hop BFS over the edges a walker can cross (``edge_blocks_crossing``):
+    an active gating challenge or a hard seal is not crossed. The starting
+    position is not included.
     """
     start = position_of(objectdb)
     if start is None:
@@ -856,9 +990,9 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     1. target is in the same room as objectdb
     2. objectdb is currently placed in a position
     3. an edge exists between current and target
-    4. the edge is passable
-    5. the edge has no active gating challenge
-    6. the actor's MOVEMENT capability > 0 (characters only)
+    4. the edge does not block a walker (``edge_blocks_crossing``): an active
+       gating challenge names itself; a hard seal is "The way is blocked."
+    5. the actor's MOVEMENT capability > 0 (characters only)
     """
     if target.room_id != objectdb.db_location_id:
         raise PositionTransitionError(_ERR_MOVE_CROSS_ROOM)
@@ -871,13 +1005,12 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     if edge is None:
         raise PositionTransitionError(_ERR_MOVE_NO_PATH)
 
-    if not edge.is_passable:
+    if edge_blocks_crossing(edge):
+        if edge.gating_challenge_id is not None:
+            challenge_name = edge.gating_challenge.template.name
+            msg = f"Crossing that requires getting past {challenge_name}."
+            raise PositionTransitionError(msg)
         raise PositionTransitionError(_ERR_MOVE_BLOCKED)
-
-    if edge.gating_challenge_id is not None and edge.gating_challenge.is_active:
-        challenge_name = edge.gating_challenge.template.name
-        msg = f"Crossing that requires getting past {challenge_name}."
-        raise PositionTransitionError(msg)
 
     if not _can_move(objectdb):
         raise PositionTransitionError(_ERR_MOVE_IMMOBILE)

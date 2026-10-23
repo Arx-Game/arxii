@@ -51,3 +51,5 @@ class PositionEdgeSerializer(serializers.Serializer):
     is_passable = serializers.BooleanField(read_only=True)
     blocks_flight = serializers.BooleanField(read_only=True)
     gating_challenge_name = serializers.CharField(read_only=True, allow_null=True)
+    integrity = serializers.IntegerField(read_only=True, allow_null=True)
+    max_integrity = serializers.IntegerField(read_only=True, allow_null=True)

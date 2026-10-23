@@ -7,10 +7,12 @@ from dataclasses import dataclass
 
 from django.test import TestCase
 
+from world.areas.positioning.constants import CONJURED_BARRIER_CHALLENGE_NAME
 from world.areas.positioning.factories import ObjectPositionFactory, PositionFactory
 from world.areas.positioning.models import PositionEdge
 from world.areas.positioning.services import edge_between, position_of
 from world.magic.services.effect_handlers import create_obstacle, move_position
+from world.mechanics.factories import ChallengeTemplateFactory
 
 
 @dataclass
@@ -45,6 +47,10 @@ class MovePositionHandlerTests(TestCase):
 
 class CreateObstacleHandlerTests(TestCase):
     """create_obstacle makes the edge between two positions impassable."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ChallengeTemplateFactory(name=CONJURED_BARRIER_CHALLENGE_NAME)
 
     def test_create_obstacle_marks_edge_impassable(self) -> None:
         a = PositionFactory()

@@ -111,7 +111,9 @@ class ObjectParent:
                 Prefetch("edges_as_b", queryset=passable, to_attr="passable_edges_as_b"),
                 Prefetch(
                     "edges_as_a",
-                    queryset=PositionEdge.objects.select_related("gating_challenge__template"),
+                    queryset=PositionEdge.objects.select_related(
+                        "gating_challenge__template", "source_rampart"
+                    ),
                     to_attr="all_edges_as_a",
                 ),
             )

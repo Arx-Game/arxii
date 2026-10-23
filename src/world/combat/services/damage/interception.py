@@ -963,11 +963,7 @@ def _rampart_resist(
     """The resist term for one intercepted strike: base row + MISSILE_WARD adjustment."""
     from world.areas.positioning.constants import RampartSignature  # noqa: PLC0415
 
-    resist = 0
-    if damage_type is not None:
-        resist = sum(
-            profile.resistances.filter(damage_type=damage_type).values_list("value", flat=True)
-        )
+    resist = profile.base_resist(damage_type)
     if profile.signature_behavior == RampartSignature.MISSILE_WARD:
         if delivery == StrikeDelivery.MISSILE:
             resist += profile.signature_value

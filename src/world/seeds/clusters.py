@@ -88,6 +88,14 @@ def _seed_reactive_challenges() -> None:
     ensure_redirect_content()
 
 
+def _seed_conjured_barrier() -> None:
+    from world.areas.positioning.barrier_content import (  # noqa: PLC0415
+        ensure_conjured_barrier_content,
+    )
+
+    ensure_conjured_barrier_content()
+
+
 def _seed_checks() -> None:
     from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
 
@@ -679,6 +687,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # CheckTypes (#2180). After "stealth" (reuses its Stealth skill for SNEAK)
     # and "investigation" (reuses its Investigation skill for Guard Detection).
     "security": _seed_security,
+    # Conjured Barrier (#4606): the challenge every spell wall gates its edge with
+    # (climb over / smash through). After "security", whose Athletics CheckType
+    # both approaches roll.
+    "conjured_barrier": _seed_conjured_barrier,
     # #2862 — after security: the criminal missions roll the Gather Evidence
     # CheckType that cluster composes; seeding earlier would skip 5 graphs on
     # the first press and break idempotency.
@@ -1063,6 +1075,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "stealth": [],
         # Security seeds skill/check rows counted under "checks" (#2180).
         "security": [],
+        # Conjured Barrier: the wall challenge every Barricade gates its edge with (#4606).
+        "conjured_barrier": [ChallengeTemplate],
         # Perception seeds the Concealed ConditionCategory + ConditionTemplate (#1225).
         "perception": [ConditionTemplate],
         # Civic hubs: the two reader RoomFeatureKinds + the crier NPCRole (#1450).

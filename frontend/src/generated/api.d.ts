@@ -47312,6 +47312,8 @@ export interface components {
       readonly is_passable: boolean;
       readonly blocks_flight: boolean;
       readonly gating_challenge_name: string | null;
+      readonly integrity: number | null;
+      readonly max_integrity: number | null;
     };
     /** @description Read-only serializer for one PositionNode — tactical-map node shape (#2006). */
     PositionNode: {

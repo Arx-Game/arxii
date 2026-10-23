@@ -34,7 +34,10 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
   when the line opens with the card's own name (the companion's for a companion pose); a row
   without a line renders its `content`. Used by `PoseUnit` and the game's `ExplorationReader`.
   Presentation only: the name is the one the server sent, never a second formatter.
-- **`ActionPanel.tsx`**: Scene action request panel
+- **`ActionPanel.tsx`**: Scene action request panel. A challenge approach (`ref.backend ===
+'challenge'`, a wall's climb, a door's lock) resolves through the dispatch endpoint
+  (`useDispatchPlayerAction`), never a scene action request: it has no one to ask (#4606; before
+  it, the request was keyed by the button text and could never resolve).
 - **`ActionResult.tsx`**: Action result display
 - **`ConsentPrompt.tsx`**: Consent prompt for scene actions
 - **`PersonaMenu.tsx`** (#4030): The one action menu for a persona — right-click

@@ -83316,10 +83316,20 @@ components:
           type: string
           readOnly: true
           nullable: true
+        integrity:
+          type: integer
+          readOnly: true
+          nullable: true
+        max_integrity:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - blocks_flight
       - gating_challenge_name
+      - integrity
       - is_passable
+      - max_integrity
       - position_a_id
       - position_b_id
     PositionNode:

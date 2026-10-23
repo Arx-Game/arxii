@@ -25,7 +25,7 @@ class ObstacleLifecycleTest(TestCase):
     def test_conjured_obstacle_has_duration_and_owner(self) -> None:
         """create_conjured_obstacle sets is_passable=False + duration + owner."""
         edge = create_conjured_obstacle(
-            self.pos_a, self.pos_b, caster_sheet=self.sheet, duration_rounds=3
+            self.pos_a, self.pos_b, caster_sheet=self.sheet, integrity=10, duration_rounds=3
         )
         self.assertFalse(edge.is_passable)
         self.assertEqual(edge.duration_rounds, 3)
@@ -35,14 +35,16 @@ class ObstacleLifecycleTest(TestCase):
         """Barricading an existing passable edge updates it to impassable."""
         original = connect_positions(self.pos_a, self.pos_b, is_passable=True)
         edge = create_conjured_obstacle(
-            self.pos_a, self.pos_b, caster_sheet=self.sheet, duration_rounds=3
+            self.pos_a, self.pos_b, caster_sheet=self.sheet, integrity=10, duration_rounds=3
         )
         self.assertEqual(edge.pk, original.pk)
         self.assertFalse(edge.is_passable)
 
     def test_teardown_restores_conjured_obstacles(self) -> None:
         """teardown_conjured_obstacles restores conjured edges to passable."""
-        create_conjured_obstacle(self.pos_a, self.pos_b, caster_sheet=self.sheet, duration_rounds=5)
+        create_conjured_obstacle(
+            self.pos_a, self.pos_b, caster_sheet=self.sheet, integrity=10, duration_rounds=5
+        )
         teardown_conjured_obstacles(self.room)
         edge = PositionEdge.objects.get(position_a=self.pos_a, position_b=self.pos_b)
         self.assertTrue(edge.is_passable)

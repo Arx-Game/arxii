@@ -1680,7 +1680,8 @@ consequence effects for graph mutation and flight), and Rampart living barriers
 - **Models:** `Position` (`PositionKind` discriminator; `elevation_anchor` self-FK —
   the ground node an AERIAL or CHASM node is anchored to; `layout_x`/`layout_y`
   nullable-small-integer cosmetic tactical-map coordinates, #2006), `PositionEdge` (optional
-  `gating_challenge` FK + `is_passable` + `blocks_flight`), `ObjectPosition` (OneToOne
+  `gating_challenge` FK + `is_passable` + `blocks_flight`; a conjured wall's nullable
+  `integrity`/`max_integrity` and `source_rampart` FK, #4606), `ObjectPosition` (OneToOne
   occupancy); **abstract bases** `PositionNodeBase` / `PositionEdgeBase` shared by live
   and blueprint layers; **blueprint models** `PositionBlueprint` (reusable GM-authored
   layout), `BlueprintPosition` (`layout_x`/`layout_y` too), `BlueprintEdge`;
@@ -1691,7 +1692,7 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   behavior each), `RampartElementResistance` (per-damage-type resist/vulnerability row).
 - **Key Services:** `create_position` / `remove_position` / `connect_positions` /
   `disconnect_positions` / `edge_between` / `place_in_position` /
-  `move_to_position` (adjacency + passability + MOVEMENT capability + active-gating) /
+  `move_to_position` (adjacency + the walker rule `edge_blocks_crossing` + MOVEMENT capability) /
   `force_move_to_position` / `position_of` / `reachable_positions` /
   `adjacent_open_positions` / `position_graph(room) -> PositionGraph` (full node+edge
   graph for the tactical map — keeps impassable/gated edges, unlike
@@ -1702,7 +1703,11 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   `enter_aerial(objectdb)` / `leave_aerial(objectdb)`;
   **fall seam** `maybe_emit_fall(objectdb, position)` — emits `EventName.FELL` when entering a CHASM;
   **ramparts** `raise_rampart` / `rampart_at` / `damage_rampart` (shared mutation seam — also
-  used by combat's WARD-Clash progress sync) / `expire_rampart_rounds` / `teardown_ramparts` (#2209)
+  used by combat's WARD-Clash progress sync) / `expire_rampart_rounds` / `teardown_ramparts` (#2209),
+  each opening the edges its Rampart sealed via `unseal_rampart_edges` (#4606);
+  **conjured walls** `create_conjured_obstacle` / `restore_edge` / `damage_barrier` /
+  `expire_obstacle_rounds` / `teardown_conjured_obstacles` (#2019, #4606; seed
+  `barrier_content.ensure_conjured_barrier_content`, the "Conjured Barrier" challenge)
 - **Enums:** `PositionKind` (PRIMARY / FEATURE / ELEVATED / AERIAL / BARRIER_SIDE / CHASM);
   `PositionDestination` in `world/checks/constants.py`
   (ACTOR_POSITION / GATING_FAR_SIDE / NAMED / AWAY_FROM_ACTOR) — governs `MOVE_TO_POSITION`

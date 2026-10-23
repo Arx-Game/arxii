@@ -1719,6 +1719,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
     from world.areas.positioning.constants import (  # noqa: PLC0415
         AERIAL_PROPERTY_NAME,
         CATCH_THE_FALLER_NAME,
+        CONJURED_BARRIER_CHALLENGE_NAME,
         PLUMMETING_CONDITION_NAME,
     )
     from world.clues.constants import SEARCH_CHECK_TYPE_NAME  # noqa: PLC0415
@@ -2232,6 +2233,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "ChallengeTemplate.DoesNotExist instead of opening the catch window."
             ),
             probe=NamedRowsProbe(label="ChallengeTemplate", names=(CATCH_THE_FALLER_NAME,)),
+        ),
+        ContentDependency(
+            key="conjured-barrier-challenge",
+            label="Conjured Barrier challenge template",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/effect_handlers.py:46 create_obstacle()",
+            consequence=(
+                "Casting a Barricade crashes with ChallengeTemplate.DoesNotExist, so no "
+                "spell wall can be raised and none can be climbed or smashed."
+            ),
+            probe=NamedRowsProbe(
+                label="ChallengeTemplate", names=(CONJURED_BARRIER_CHALLENGE_NAME,)
+            ),
         ),
         # --- RoomFeatureKind, Property, KudosSourceCategory, Ritual ---------------------
         ContentDependency(

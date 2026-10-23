@@ -331,6 +331,19 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   still has no position picker (telnet-only there). See
   [magic.md](../systems/magic.md) (Effect Palette) and [INDEX.md](../systems/INDEX.md)
   (Combat § "Cast-position targeting") for the full wiring.
+- **Walls have integrity, gated walls can be crossed, a fallen Rampart opens (#4606, slice 1
+  of #4576).** Every conjured wall now carries `PositionEdge.integrity`/`max_integrity`; a
+  Barricade's comes from `CONJURED_WALL_BASE_INTEGRITY` plus the cast's power term, and it is
+  gated by an authored "Conjured Barrier" challenge (climb over or smash through, seeded by the
+  `conjured_barrier` Big Button cluster). The walker rule (`edge_blocks_crossing`) reads a
+  sealed edge whose challenge is resolved as open, so ADR-0109's counterplay finally works:
+  before this a sealed, gated edge was blocked absolutely and its climb never listed. A
+  Rampart's seals link back to it (`source_rampart`), and its collapse (interception or ward
+  clash), expiry or scene-end teardown opens every edge it sealed, except one a later spell
+  took over. `damage_barrier` is the one seam for wall damage; its plain-wall caller is the
+  NPC bash step in slice 4. The tactical map labels a wall with its strength. Journeys:
+  `src/integration_tests/test_crossing_a_wall_journeys.py`. Slices 2-4 (movement and reach,
+  cover and the waiting strike, tactics) remain.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips

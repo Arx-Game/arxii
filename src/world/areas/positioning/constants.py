@@ -72,3 +72,13 @@ class RampartCrackState(models.TextChoices):
     INTACT = "intact", "Intact"
     CRACKED = "cracked", "Cracked"
     CRUMBLING = "crumbling", "Crumbling"
+
+
+# Conjured wall content and tuning (#4606). A spell-made wall (Barricade) gates its
+# edge with one shared challenge, minted from the authored ChallengeTemplate of this
+# name (climb over / smash through, ADR-0109); seeded by
+# ensure_conjured_barrier_content() and listed on the Required content dashboard.
+CONJURED_BARRIER_CHALLENGE_NAME: str = "Conjured Barrier"
+# A spell wall's integrity: this base plus the cast's severity (the power-scaled
+# term the cast already priced onto its marker condition). Playtest tuning.
+CONJURED_WALL_BASE_INTEGRITY: int = 10

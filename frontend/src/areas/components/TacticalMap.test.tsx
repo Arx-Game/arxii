@@ -143,6 +143,26 @@ describe('TacticalMap', () => {
     expect(screen.getByText('Cross the Chasm')).toBeInTheDocument();
   });
 
+  it("shows a conjured wall's strength beside its challenge (#4606)", () => {
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary'), node(2)]}
+        edges={[
+          edge(1, 2, {
+            is_passable: false,
+            gating_challenge_name: 'Conjured Barrier',
+            integrity: 7,
+            max_integrity: 12,
+          }),
+        ]}
+        occupantsByPosition={new Map()}
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+      />
+    );
+    expect(screen.getByText('Conjured Barrier 7/12')).toBeInTheDocument();
+  });
+
   it('renders a rampart ring with element + integrity tooltip on a covered node (#2209)', () => {
     render(
       <TacticalMap

@@ -1107,10 +1107,10 @@ def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
 
 
 def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
-    """Surface a move_to_position ``PlayerAction`` for each directly adjacent passable position.
+    """Surface a move_to_position ``PlayerAction`` for each directly adjacent open position.
 
-    "Directly adjacent" means a single-hop open edge (passable + no active gating
-    challenge) from the character's current position.  Multi-hop reachability is
+    "Directly adjacent" means a single-hop edge a walker can cross
+    (``edge_blocks_crossing``) from the character's current position.  Multi-hop reachability is
     handled by the service's ``reachable_positions`` function (BFS), but this
     action picker only offers single-hop moves so the player makes one step at a time.
 
@@ -1169,10 +1169,10 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
         )
 
     # Surface gated (locked) edges as non-actionable entries so the player
-    # can see that a path exists but is currently blocked by a challenge.
+    # can see that a path exists but is currently blocked by a challenge. A
+    # sealed wall with a challenge lists too (#4606): its climb is the way over.
     gated_edges = PositionEdge.objects.filter(
         Q(position_a=current) | Q(position_b=current),
-        is_passable=True,
         gating_challenge__isnull=False,
         gating_challenge__is_active=True,
     ).select_related("position_a", "position_b", "gating_challenge__template")

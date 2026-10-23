@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 
 from actions.errors import ActionDispatchError
+from world.areas.positioning.constants import CONJURED_BARRIER_CHALLENGE_NAME
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.models import PositionEdge
 from world.character_sheets.factories import CharacterSheetFactory
@@ -25,7 +26,7 @@ from world.fatigue.constants import EffortLevel
 from world.magic.effect_palette_content import OBSTACLE_TECHNIQUE_NAME, ensure_obstacle_content
 from world.magic.factories import CharacterAnimaFactory, TechniqueFactory
 from world.magic.models.techniques import Technique
-from world.mechanics.factories import CharacterEngagementFactory
+from world.mechanics.factories import ChallengeTemplateFactory, CharacterEngagementFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
@@ -74,6 +75,7 @@ class BarricadeCastPositionJourneyTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         ensure_obstacle_content()
+        ChallengeTemplateFactory(name=CONJURED_BARRIER_CHALLENGE_NAME)
         cls.technique = Technique.objects.get(name=OBSTACLE_TECHNIQUE_NAME)
 
         cls.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
