@@ -148,9 +148,10 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
 ) -> ParticipantDamageResult:
     """Apply damage to a PC via their CharacterVitals.
 
-    ignores_soak skips thread damage reduction and the complete equipped/resonant
-    armor stage, including armor wear. resistance_shift subtracts points from
-    signed typed resistance for this hit only; untyped hits ignore the shift.
+    ignores_soak skips the complete equipped/resonant armor stage, including
+    armor wear. Thread damage reduction always applies, regardless of attack type.
+    resistance_shift subtracts points from signed typed resistance for this hit
+    only; untyped hits ignore the shift.
 
     Does NOT roll for knockout/death/wounds — only reports eligibility.
     The caller is responsible for acting on the result.
@@ -250,17 +251,20 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
     from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
     from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
 
-    if not ignores_soak:
-        effective_damage = apply_damage_reduction_from_threads(character, effective_damage)
+    # Thread DR is an unconditional survivability baseline, never armor to pierce.
+    effective_damage = apply_damage_reduction_from_threads(character, effective_damage)
 
     # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
     # The species drawback's negative ConditionResistanceModifier (vulnerability) and
     # the species-gift thread's positive RESISTANCE pull-effect net here. None
     # damage_type is a no-op. Mirrors the three non-combat damage seams that now call
     # the same function.
-    effective_damage = resolve_damage_type_resistance(
-        character, effective_damage, damage_type, resistance_shift=resistance_shift
-    )
+    # A fully absorbed hit stays absorbed; vulnerability must not recreate damage
+    # after the thread survivability baseline has reduced it to zero.
+    if effective_damage > 0:
+        effective_damage = resolve_damage_type_resistance(
+            character, effective_damage, damage_type, resistance_shift=resistance_shift
+        )
 
     # Equipped-armor soak (issue #508). PCs have no authored soak field; worn
     # armor is their only soak source, and absorbing pieces take durability wear.

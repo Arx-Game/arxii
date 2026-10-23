@@ -8,8 +8,9 @@ first; evasion scales the amount, then barrier/DR/soak layer on top.
 
 Damage profiles carry three independent authoring controls:
 
-- `ignores_soak` skips NPC soak and PC worn armor, covenant/resonant soak and
-  generic thread damage reduction. Soak is removed down to zero; an unarmored
+- `ignores_soak` skips NPC soak and PC worn armor and covenant/resonant soak.
+  Generic thread damage reduction always applies and cannot be bypassed by any
+  attack type; it is the character survivability baseline. Soak is removed down to zero; an unarmored
   target takes no bonus damage. Armor skipped by the hit takes no absorption wear.
 - `resistance_shift` is a nonnegative point shift for this typed hit only:
   `effective_resistance = current_resistance - resistance_shift`. A shift of 5

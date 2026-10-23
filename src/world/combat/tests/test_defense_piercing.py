@@ -100,7 +100,7 @@ class DefensePiercingDamageTests(TestCase):
         )
         self.assertEqual(apply_damage_to_opponent(target, 20, resistance_shift=5).damage_dealt, 20)
 
-    def test_pc_armor_and_thread_soak_skipped_without_wear_or_typed_resistance_loss(self):
+    def test_pc_piercing_skips_armor_but_preserves_thread_dr_and_typed_resistance(self):
         participant = CombatParticipantFactory()
         sheet = participant.character_sheet
         character = sheet.character
@@ -142,11 +142,28 @@ class DefensePiercingDamageTests(TestCase):
         result = apply_damage_to_participant(
             participant, 20, damage_type=damage_type, ignores_soak=True
         )
-        self.assertEqual(result.damage_dealt, 16)
+        self.assertEqual(result.damage_dealt, 13)
         armor.refresh_from_db()
         self.assertEqual(armor.durability, 30)
         control = apply_damage_to_participant(participant, 20, damage_type=damage_type)
-        self.assertLess(control.damage_dealt, 16)
+        self.assertEqual(control.damage_dealt, 5)
+        armor.delete()
+        character.equipped_items.invalidate()
+        for piercing in (False, True):
+            with self.subTest(unarmored=True, piercing=piercing):
+                result = apply_damage_to_participant(
+                    participant, 20, damage_type=damage_type, ignores_soak=piercing
+                )
+                self.assertEqual(result.damage_dealt, 13)
+        # Shifting typed resistance can never remove the independent thread baseline.
+        shifted = apply_damage_to_participant(
+            participant, 20, damage_type=damage_type, ignores_soak=True, resistance_shift=5
+        )
+        self.assertEqual(shifted.damage_dealt, 18)
+        absorbed = apply_damage_to_participant(
+            participant, 3, damage_type=damage_type, ignores_soak=True, resistance_shift=99
+        )
+        self.assertEqual(absorbed.damage_dealt, 0)
 
 
 class DefensePiercingWardTests(TestCase):
