@@ -64,6 +64,7 @@ const GRADE_TONES: Record<string, string> = {
   moderate: 'text-amber-700 dark:text-amber-400',
   hard: 'text-red-700 dark:text-red-400',
   very_hard: 'text-red-700 dark:text-red-400',
+  impossible: 'text-red-700 dark:text-red-400',
 };
 const GRADE_FALLBACK_TONE = 'text-muted-foreground';
 

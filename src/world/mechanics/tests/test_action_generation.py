@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
 from world.mechanics.factories import (
@@ -17,6 +17,7 @@ from world.mechanics.models import ChallengeInstance
 from world.mechanics.services import get_available_actions
 from world.mechanics.types import CapabilitySource
 from world.scenes.action_constants import DIFFICULTY_BAND_STEP
+from world.seeds.checks import seed_check_resolution_tables
 
 
 def _make_source(  # noqa: PLR0913
@@ -142,15 +143,16 @@ class ActionGenerationTests(TestCase):
         "world.mechanics.services._get_difficulty_indicator_for_check",
         return_value=DifficultyIndicator.IMPOSSIBLE,
     )
-    def test_impossible_difficulty_filtered_out(self, _mock_diff: object) -> None:  # noqa: PT019
-        """Actions at IMPOSSIBLE difficulty are excluded from results."""
+    def test_impossible_difficulty_listed_and_labelled(self, _mock_diff: object) -> None:  # noqa: PT019
+        """Actions at IMPOSSIBLE difficulty stay listed, labelled Impossible (#4593)."""
         source = _make_source(
             capability_name="fire_control_ag",
             capability_id=self.capability.id,
             value=10,
         )
         actions = get_available_actions(self.character, self.location, capability_sources=[source])
-        assert len(actions) == 0
+        assert len(actions) == 1
+        assert actions[0].difficulty_indicator == DifficultyIndicator.IMPOSSIBLE
 
     @patch(
         "world.mechanics.services._get_difficulty_indicator_for_check",
@@ -293,12 +295,60 @@ class DifficultyIndicatorForCheckTests(TestCase):
         "world.mechanics.services._get_difficulty_indicator_for_check",
         return_value=DifficultyIndicator.IMPOSSIBLE,
     )
-    def test_impossible_excluded(self, _mock: object) -> None:  # noqa: PT019
-        """IMPOSSIBLE difficulty excludes the action from results."""
+    def test_impossible_listed(self, _mock: object) -> None:  # noqa: PT019
+        """IMPOSSIBLE difficulty keeps the action in the results, labelled (#4593)."""
         source = _make_source(
             capability_name="diff_check_cap",
             capability_id=self.capability.id,
             value=10,
         )
         actions = get_available_actions(self.character, self.location, capability_sources=[source])
-        assert len(actions) == 0
+        assert len(actions) == 1
+        assert actions[0].difficulty_indicator == DifficultyIndicator.IMPOSSIBLE
+
+
+class ImpossibleApproachListedTests(TestCase):
+    """A real seven-rank gap is listed labelled Impossible, not dropped (#4593)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_check_resolution_tables()
+        cls.character = CharacterFactory(db_key="GapChar")
+        cls.location = ObjectDBFactory(db_key="GapRoom")
+        cls.capability = CapabilityTypeFactory(name="gap_cap")
+        cls.sources = [
+            _make_source(
+                capability_name="gap_cap",
+                capability_id=cls.capability.id,
+                value=10,
+                source_type=CapabilitySourceType.TRAIT,
+            )
+        ]
+        # Severity is target difficulty points; the character carries none, so Legendary
+        # (200) is seven ranks up and Mythic (250) eight, Competent (25) two.
+        for severity in (25, 200, 250):
+            prop = PropertyFactory(name=f"gap_prop_{severity}")
+            app = ApplicationFactory(
+                name=f"Gap {severity}", capability=cls.capability, target_property=prop
+            )
+            template = ChallengeTemplateFactory(name=f"Gap door {severity}", severity=severity)
+            template.properties.add(prop)
+            ChallengeApproachFactory(challenge_template=template, application=app)
+            ChallengeInstance.objects.create(
+                template=template,
+                location=cls.location,
+                target_object=cls.location,
+                is_active=True,
+                is_revealed=True,
+            )
+
+    def test_deep_gaps_are_listed_labelled_impossible(self) -> None:
+        actions = get_available_actions(
+            self.character, self.location, capability_sources=self.sources
+        )
+        labels = {a.challenge_name: a.difficulty_indicator for a in actions}
+        assert labels == {
+            "Gap door 25": DifficultyIndicator.VERY_HARD,
+            "Gap door 200": DifficultyIndicator.IMPOSSIBLE,
+            "Gap door 250": DifficultyIndicator.IMPOSSIBLE,
+        }

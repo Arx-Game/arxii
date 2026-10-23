@@ -616,7 +616,7 @@ These need resolution before or during implementation of later phases:
 
 1. ~~**Consequence randomization**~~ — RESOLVED. Yes, weighted randomization. The generic consequence pipeline uses `select_weighted()` with per-consequence weights within each outcome tier; outcome-display data is built by callers via `build_outcome_display()` from the full resolved pool.
 2. **Equipment capability source** — exact model for how items grant Capabilities (dedicated model like TechniqueCapabilityGrant, or Properties on items matched via Applications?)
-3. ~~**Difficulty tuning**~~ — RESOLVED. Rank-based calculation via `preview_check_difficulty()`. Uses the same CheckRank pipeline as actual checks. IMPOSSIBLE filtering hides actions where the ResultChart has no success outcomes.
+3. ~~**Difficulty tuning**~~ — RESOLVED. Rank-based calculation via `preview_check_difficulty()`. Uses the same CheckRank pipeline as actual checks. Actions where the ResultChart has no Success outcome (rank difference -7 and below) are listed labelled IMPOSSIBLE rather than hidden (#4593, slice (a) of #4551).
 4. **Discovery mechanics** — how do characters discover hidden Challenges? Current ChallengeInstance.is_revealed flag exists but no discovery service
 5. **Situation lifecycle** — creation is resolved (GM-triggered via `SetSituationAction`/`CmdSetSituation`, #1895); activation/cleanup (when do instances deactivate or disappear?) is still open. (See Phase 5.7)
 6. **Cross-situation dependencies** — can Challenges in one Situation depend on outcomes in another? (e.g., mission stage 1 outcome affects stage 2 available approaches)

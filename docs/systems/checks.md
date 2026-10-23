@@ -334,6 +334,32 @@ beside `check_type`) through the same `perform_check` pipeline above:
 
 The flow around it (consent, resist-only, effort) is in `docs/systems/scenes.md`.
 
+## Result charts (#2707, #4593)
+
+`ResultChart` rows are keyed by rank difference (`roller_rank - target_rank`, ADR-0165).
+Fifteen are seeded, -8 to +6 (`world/seeds/checks.py`); the roll (1 to 100) lands on a
+`ResultChartOutcome` band. A difference with no row snaps to the closest chart, so
+anything below -8 resolves to chart -8 (there is no clamp).
+
+- **Monotonic.** Every "at least X" chance (Partial Success or better, Success or
+  better, and so on) is non-decreasing as the rank difference rises. Data migration
+  `0284` made the smallest repair to production, moving only the Failure / Partial
+  Success boundary on charts -4 and -2, so Partial Success or better is 55% on every
+  chart from -5 to -1.
+- **Chip charts.** -6 keeps 1% Success and -5 keeps 5% (#2707).
+- **Impossible zone.** Chart -7 (placeholder name "Failure -7"; Critical Failure, Failure
+  and a small Partial Success) and chart -8 ("Impossible"; failures only) have no Success
+  (1). The odds are example rows for the owner to tune. `chart_has_success_outcomes` is
+  False there, `difficulty_indicator_for_rank_difference` returns `IMPOSSIBLE`, and the
+  approach is listed to the player labelled Impossible, not dropped from the
+  available-actions lists (`world/mechanics/services.py`).
+- **Guard.** `world/checks/tests/test_chart_direction.py` (`ImpossibleChartTests`) fails
+  if any "at least X" chance falls between neighbouring charts, if an impossible chart sits
+  above a winnable one, or if a difference below -8 stops resolving to chart -8.
+
+Slices (b) to (d) of #4551 (the odds slide, the hopeless pin that keeps modifiers off an
+impossible chart, unified modifiers) build on these charts.
+
 ## Resolution theater
 
 `world/checks/theater.py` (#924, extended #3807 Part B) is the dramatic-reveal seam: a

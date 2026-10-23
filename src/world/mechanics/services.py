@@ -1568,8 +1568,8 @@ def _build_action_for_source(  # noqa: PLR0913
             ci.effective_severity,
             source,
         )
-        if difficulty == DifficultyIndicator.IMPOSSIBLE:
-            return None
+        # An IMPOSSIBLE grade stays in the list, labelled, rather than being dropped
+        # (#4593, #4551 decision 6): the player sees the approach and why it is hopeless.
 
     # Resolve check_type and action_template from the already-loaded approach.
     # If the approach has an action_template override, that template's check_type
@@ -1818,8 +1818,8 @@ def _build_bare_object_action(  # noqa: PLR0913
             template.severity,
             source,
         )
-        if difficulty == DifficultyIndicator.IMPOSSIBLE:
-            return None
+        # An IMPOSSIBLE grade stays in the list, labelled, rather than being dropped
+        # (#4593, #4551 decision 6): the player sees the approach and why it is hopeless.
 
     override_template = approach.action_template  # may be None (null FK)
     if override_template is not None:
@@ -1938,7 +1938,11 @@ _RANK_DIFF_HARD = -1
 
 
 def difficulty_indicator_for_rank_difference(rank_diff: int) -> DifficultyIndicator:
-    """Classify a check's rank difference. IMPOSSIBLE means the chart has no success outcomes."""
+    """Classify a check's rank difference.
+
+    IMPOSSIBLE means the chart has no Success (1) outcome (charts -7 and -8). The
+    approach is still listed to the player, labelled Impossible (#4593).
+    """
     if not chart_has_success_outcomes(rank_diff):
         return DifficultyIndicator.IMPOSSIBLE
     if rank_diff >= _RANK_DIFF_EASY:

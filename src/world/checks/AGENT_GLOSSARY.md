@@ -9,7 +9,7 @@ A lookup table mapping a point total to a discrete rank level via exponential th
 _Avoid_: tier, grade, rank band
 
 **ResultChart**:
-A 0–100 outcome table selected by the rank difference between roller and target. After the effective roll is taken it maps the roll to a `CheckOutcome`.
+A 0–100 outcome table selected by the rank difference between roller and target. After the effective roll is taken it maps the roll to a `CheckOutcome`. Fifteen charts run from -8 to +6; every "at least X" chance is non-decreasing as the difference rises, and charts -7 and -8 have no Success (1) (the impossible zone, listed to the player as Impossible). A difference below -8 resolves to chart -8.
 _Avoid_: difficulty table, roll table, success table
 
 **CheckOutcome**:
