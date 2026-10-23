@@ -311,6 +311,7 @@ function collectEdges(
 }
 
 const LABEL_SEPARATOR = ' · ';
+const COLUMN_GAP = 420;
 
 /**
  * One arrow per (source, target, style): a check option's five routes into the same
@@ -362,7 +363,8 @@ export function computeLayout(
   const hasEnd = specs.some((e) => e.target === END_NODE_ID);
 
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 100 });
+  // Columns sit far enough apart for an arrow label naming several tiers to fit between them.
+  g.setGraph({ rankdir: 'LR', nodesep: 60, ranksep: COLUMN_GAP });
   g.setDefaultEdgeLabel(() => ({}));
   for (const n of rawNodes) {
     g.setNode(String(n.id), { width: NODE_WIDTH, height: NODE_HEIGHT });
@@ -422,6 +424,8 @@ export function computeLayout(
     source: String(e.source),
     target: String(e.target),
     label: e.label,
+    labelBgPadding: [6, 3] as [number, number],
+    labelBgStyle: { fill: 'hsl(var(--background))' },
     style: e.dashed ? { strokeDasharray: '6 4' } : undefined,
     markerEnd: { type: MarkerType.ArrowClosed },
   }));
