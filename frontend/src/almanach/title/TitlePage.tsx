@@ -23,8 +23,10 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const batch = useAlmanachMutation('almanach_batch_unclaimed');
   const setHolder = useAlmanachMutation('almanach_set_holder');
   const describe = useAlmanachMutation('almanach_describe_demesne');
+  const nameRung = useAlmanachMutation('almanach_name_rung');
   const addHolding = useAlmanachMutation('almanach_add_holding');
   const { data: holdingKinds } = useHoldingKinds();
+  const [rungName, setRungName] = useState('');
   const [description, setDescription] = useState('');
   const [holdingKindId, setHoldingKindId] = useState<number | null>(null);
   const [holdingName, setHoldingName] = useState('');
@@ -35,6 +37,9 @@ export function TitlePage({ titleId }: { titleId: number }) {
   useEffect(() => {
     setDescription(doc?.demesne?.description ?? '');
   }, [doc]);
+  useEffect(() => {
+    setRungName(doc?.title.name ?? '');
+  }, [doc?.title.name]);
   useEffect(() => {
     const list = holdingKinds?.results ?? [];
     if (holdingKindId == null && list.length > 0) setHoldingKindId(list[0].id);
@@ -127,6 +132,23 @@ export function TitlePage({ titleId }: { titleId: number }) {
               {title.tier} · {title.realm}
             </span>
           </h3>
+          <div className="field">
+            <label htmlFor="r-name">name</label>
+            <input
+              id="r-name"
+              type="text"
+              value={rungName}
+              onChange={(e) => setRungName(e.target.value)}
+            />{' '}
+            <button
+              type="button"
+              className="btn sm quiet"
+              disabled={rungName.trim() === '' || rungName.trim() === title.name}
+              onClick={() => nameRung.mutate({ title_id: titleId, name: rungName.trim() })}
+            >
+              {title.name ? 'Rename' : 'Name'}
+            </button>
+          </div>
           <div className="row3">
             <div className="field">
               <span className="label">held by</span>

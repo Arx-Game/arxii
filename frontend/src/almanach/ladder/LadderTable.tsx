@@ -34,6 +34,7 @@
  * this staying the default).
  */
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 
 import { STATES } from '../copy';
 import type { LadderRow } from '../types';
@@ -47,6 +48,12 @@ export interface LadderTableProps {
   selectedTitleId?: number | null;
   /** Fires when a row's own name/title button is clicked (the plate's row-selection gesture). */
   onSelectRow?: (row: LadderRow) => void;
+  /**
+   * Where a rung's name (or its `Undefined` chip) leads. When given, the name is a
+   * link to that page and the row is selected from its tier label instead; omitted,
+   * the name itself is the selection button (the Founder Almanach's gesture).
+   */
+  rowHref?: (row: LadderRow) => string;
   /** An extra trailing column per row, rendered after `vassals` — see above. */
   trailingCell?: (row: LadderRow) => ReactNode;
 }
@@ -79,9 +86,40 @@ interface NameCellProps {
   expanded: boolean;
   onToggle: () => void;
   onSelect: () => void;
+  href?: string;
 }
 
-function NameCell({ row, hasChildren, expanded, onToggle, onSelect }: NameCellProps) {
+interface RungNameProps {
+  row: LadderRow;
+  label: string;
+  href?: string;
+  onSelect: () => void;
+}
+
+/** A rung's name, or its Undefined chip: a link to the rung page when `href` is
+ * given, otherwise the row's selection button. */
+function RungName({ row, label, href, onSelect }: RungNameProps) {
+  const className = row.is_defined ? 'rung-name' : 'chip undef';
+  const text = row.is_defined ? row.name : STATES.undefined;
+  if (href !== undefined) {
+    return (
+      <Link
+        className={className}
+        to={href}
+        aria-label={row.is_defined ? undefined : `Open ${label}`}
+      >
+        {text}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" className={className} aria-label={`Select ${label}`} onClick={onSelect}>
+      {text}
+    </button>
+  );
+}
+
+function NameCell({ row, hasChildren, expanded, onToggle, onSelect, href }: NameCellProps) {
   const label = row.is_defined ? row.name : `undefined ${row.tier}`;
   return (
     <td>
@@ -100,26 +138,14 @@ function NameCell({ row, hasChildren, expanded, onToggle, onSelect }: NameCellPr
           ▸
         </span>
       )}
-      <span className="tw">{row.tier}</span>
-      {row.is_defined ? (
-        <button
-          type="button"
-          className="rung-name"
-          aria-label={`Select ${label}`}
-          onClick={onSelect}
-        >
-          {row.name}
+      {href !== undefined ? (
+        <button type="button" className="tw" aria-label={`Select ${label}`} onClick={onSelect}>
+          {row.tier}
         </button>
       ) : (
-        <button
-          type="button"
-          className="chip undef"
-          aria-label={`Select ${label}`}
-          onClick={onSelect}
-        >
-          {STATES.undefined}
-        </button>
+        <span className="tw">{row.tier}</span>
       )}
+      <RungName row={row} label={label} href={href} onSelect={onSelect} />
       {row.tier === 'barony' && row.is_seat_of !== '' && (
         <span className="seat">seat of {row.is_seat_of}</span>
       )}
@@ -133,6 +159,7 @@ export function LadderTable({
   pressedTier,
   selectedTitleId,
   onSelectRow,
+  rowHref,
   trailingCell,
 }: LadderTableProps) {
   const tree = useMemo(() => buildLadderTree(rows), [rows]);
@@ -184,6 +211,7 @@ export function LadderTable({
             expanded={expanded}
             onToggle={() => toggle(node.row.title_id)}
             onSelect={() => onSelectRow?.(node.row)}
+            href={rowHref?.(node.row)}
           />
           <HeldByCell row={node.row} />
           <SwornToCell row={node.row} />
