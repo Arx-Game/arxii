@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
 
-from django.db.models import QuerySet
+from django.db.models import Exists, OuterRef, ProtectedError, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
     OpenApiParameter,
@@ -46,6 +46,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from world.combat.models import EncounterOutcomeMapping
 from world.missions.filters import (
     MissionGiverFilterSet,
     MissionNodeFilterSet,
@@ -54,6 +55,7 @@ from world.missions.filters import (
     MissionOptionRouteFilterSet,
     MissionOptionRouteRewardFilterSet,
     MissionTemplateFilterSet,
+    OutcomeTierFilterSet,
 )
 from world.missions.models import (
     MissionCategory,
@@ -76,6 +78,7 @@ from world.missions.serializers import (
     BeatViewSerializer,
     BoardPostingSerializer,
     BoardTakeRequestSerializer,
+    GraphCheckSerializer,
     GroupBeatResultSerializer,
     GroupPickRequestSerializer,
     GroupVoteRequestSerializer,
@@ -97,12 +100,14 @@ from world.missions.serializers import (
     MissionTemplateDetailSerializer,
     MissionTemplateSerializer,
     OpportunitiesSerializer,
+    OutcomeTierSerializer,
     PendingMissionInviteSerializer,
     ResolvedBeatSerializer,
     SupportDeclareRequestSerializer,
     TaleRequestSerializer,
 )
 from world.predicates.catalog import leaf_catalog
+from world.traits.models import CheckOutcome, ResultChartOutcome
 
 
 class MissionStudioPagination(PageNumberPagination):
@@ -175,6 +180,23 @@ class ScenarioOwnedChildMixin:
         serializer.save()
 
 
+class ProtectedDeleteMixin:
+    """``destroy`` answers 409 with a plain message instead of 500 when a run recorded the row.
+
+    A mission run's deed records PROTECT the node/option they were made on, so
+    deleting one raises ``ProtectedError``. ``protected_message`` names what the
+    author tried to delete (#4558).
+    """
+
+    protected_message: str = ""
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response({"detail": self.protected_message}, status=status.HTTP_409_CONFLICT)
+
+
 class MissionTemplateViewSet(ScenarioScopedQuerysetMixin, viewsets.ModelViewSet):
     """Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
 
@@ -227,6 +249,19 @@ class MissionTemplateViewSet(ScenarioScopedQuerysetMixin, viewsets.ModelViewSet)
         if self.action == "retrieve":
             return MissionTemplateDetailSerializer
         return MissionTemplateSerializer
+
+    @extend_schema(responses=GraphCheckSerializer)
+    @action(detail=True, methods=("GET",), url_path="graph-check")
+    def graph_check(self, request: Request, pk: int | None = None) -> Response:
+        """What is wrong with this mission's graph (#4558); warns, never blocks a save.
+
+        Scoped exactly like template retrieve: ``get_object`` applies the
+        caller's queryset scope and object permission.
+        """
+        from world.missions.services.graph_check import check_mission_graph  # noqa: PLC0415
+
+        problems = check_mission_graph(self.get_object())
+        return Response(GraphCheckSerializer({"problems": problems}).data)
 
     @action(detail=True, methods=("POST",), permission_classes=[IsAuthenticated, IsAdminUser])
     def copy(self, request: Request, pk: int | None = None) -> Response:
@@ -292,9 +327,14 @@ class MissionTemplateViewSet(ScenarioScopedQuerysetMixin, viewsets.ModelViewSet)
 
 
 class MissionNodeViewSet(
-    ScenarioOwnedChildMixin, ScenarioScopedQuerysetMixin, viewsets.ModelViewSet
+    ProtectedDeleteMixin,
+    ScenarioOwnedChildMixin,
+    ScenarioScopedQuerysetMixin,
+    viewsets.ModelViewSet,
 ):
     """Editor CRUD for MissionNode rows."""
+
+    protected_message = "This node can't be deleted: a mission run has already recorded it."
 
     queryset = MissionNode.objects.all().order_by("pk")
     serializer_class = MissionNodeSerializer
@@ -358,9 +398,14 @@ class MissionNodeViewSet(
 
 
 class MissionOptionViewSet(
-    ScenarioOwnedChildMixin, ScenarioScopedQuerysetMixin, viewsets.ModelViewSet
+    ProtectedDeleteMixin,
+    ScenarioOwnedChildMixin,
+    ScenarioScopedQuerysetMixin,
+    viewsets.ModelViewSet,
 ):
     """Editor CRUD for MissionOption rows (authored + challenge-sourced)."""
+
+    protected_message = "This option can't be deleted: a mission run has already recorded it."
 
     queryset = MissionOption.objects.all().order_by("pk")
     serializer_class = MissionOptionSerializer
@@ -518,6 +563,27 @@ class MissionCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     # No create endpoint on a ReadOnlyModelViewSet, but IsStaffOrScenarioOwner.
     # has_permission still reads this attribute for a would-be POST (DRF runs
     # permission checks before routing 405s) -- declared False, never reached.
+    scenario_owner_can_create = False
+
+
+class OutcomeTierViewSet(viewsets.ReadOnlyModelViewSet):
+    """The check outcome tiers a route can key on, worst to best (#4558).
+
+    Only tiers a result chart or an encounter outcome mapping actually names
+    are listed; a tier nothing can ever roll would be a route that never fires.
+    Same audience as the category browse: staff or any GM.
+    """
+
+    queryset = CheckOutcome.objects.filter(
+        Exists(ResultChartOutcome.objects.filter(outcome=OuterRef("pk")))
+        | Exists(EncounterOutcomeMapping.objects.filter(check_outcome=OuterRef("pk")))
+    ).order_by("success_level", "pk")
+    serializer_class = OutcomeTierSerializer
+    permission_classes = [IsAuthenticated, IsStaffOrScenarioOwner]
+    pagination_class = MissionStudioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = OutcomeTierFilterSet
+    # Read-only; declared False for the permission class's POST check (never reached).
     scenario_owner_can_create = False
 
 

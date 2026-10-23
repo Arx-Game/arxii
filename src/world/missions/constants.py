@@ -291,3 +291,21 @@ class DeedRewardSink(models.TextChoices):
 
 # #2047 — max length for a player-authored mission tale.
 TALE_MAX_LENGTH = 5000
+
+
+# A check outcome tier with ``success_level`` at or above this is a clear
+# success; below it is a partial result or failure. JOINT nodes combine
+# participant results on this line (``multiplayer._combined_route``) and the
+# Mission Studio graph check uses the same line to find a missing bucket.
+SUCCESS_TIER_LEVEL = 1
+
+
+class GraphProblemKind(models.TextChoices):
+    """What the Mission Studio graph check found wrong with a mission (#4558)."""
+
+    NO_ENTRY = "no_entry", "No entry node"
+    UNREACHABLE_NODE = "unreachable_node", "Unreachable node"
+    MISSING_TIERS = "missing_tiers", "Missing tiers"
+    JOINT_MISSING_BUCKET = "joint_missing_bucket", "Joint node missing a success or failure route"
+    NO_RISK_LEVEL = "no_risk_level", "Encounter without a risk level"
+    EMPTY_RANDOM_SET = "empty_random_set", "Random route without candidates"

@@ -22,6 +22,7 @@ from world.missions.models import (
     MissionOptionRouteReward,
     MissionTemplate,
 )
+from world.traits.models import CheckOutcome
 
 
 class MissionTemplateFilterSet(django_filters.FilterSet):
@@ -176,3 +177,11 @@ class MissionGiverFilterSet(django_filters.FilterSet):
     class Meta:
         model = MissionGiver
         fields: list[str] = []
+
+
+class OutcomeTierFilterSet(django_filters.FilterSet):
+    """Filters for the outcome-tier list (#4558): by exact tier name."""
+
+    class Meta:
+        model = CheckOutcome
+        fields = ["name"]

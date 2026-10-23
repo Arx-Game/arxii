@@ -11,7 +11,7 @@ This file now only carries types specific to mission deeds / rewards.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -487,3 +487,20 @@ class SupportDeclarationView:
     label: str
     outcome_name: str | None
     easing_banked: int
+
+
+@dataclass
+class GraphProblem:
+    """One thing the Mission Studio graph check found wrong (#4558).
+
+    ``node_id`` / ``option_id`` / ``route_id`` locate it on the canvas;
+    ``missing_tiers`` is set only for ``MISSING_TIERS`` (tier names, worst
+    first), so the page can offer to add them.
+    """
+
+    kind: str
+    message: str
+    node_id: int | None
+    option_id: int | None = None
+    route_id: int | None = None
+    missing_tiers: list[str] = field(default_factory=list)
