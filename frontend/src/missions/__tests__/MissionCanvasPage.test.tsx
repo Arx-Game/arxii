@@ -160,6 +160,7 @@ describe('MissionCanvasPage', () => {
         template: 1,
         key: 'gate',
         is_entry: true,
+        conflict_mode: 'group_vote',
       })
     );
   });

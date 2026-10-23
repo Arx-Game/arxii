@@ -303,6 +303,7 @@ export async function createMissionNode(body: {
   template: number;
   key: string;
   is_entry?: boolean;
+  conflict_mode: MissionNode['conflict_mode'];
 }): Promise<MissionNode> {
   const res = await apiFetch(`${BASE_URL}/nodes/`, {
     method: 'POST',

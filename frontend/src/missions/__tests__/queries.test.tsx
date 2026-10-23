@@ -226,7 +226,12 @@ describe('graph authoring hooks (#4558)', () => {
     );
     const { result } = renderHook(() => useCreateMissionNode(), { wrapper: w });
     await act(async () => {
-      await result.current.mutateAsync({ template: 3, key: 'start', is_entry: true });
+      await result.current.mutateAsync({
+        template: 3,
+        key: 'start',
+        is_entry: true,
+        conflict_mode: 'group_vote',
+      });
     });
     const keys = spy.mock.calls.map((c) => c[0]?.queryKey);
     expect(keys).toContainEqual(missionKeys.nodes());

@@ -48,7 +48,13 @@ export function AddNodeDialog({ open, onOpenChange, templateId, isFirstNode }: A
       return;
     }
     try {
-      await create.mutateAsync({ template: templateId, key: trimmed, is_entry: isFirstNode });
+      // The server requires a conflict mode; group vote is the usual one and the node page changes it.
+      await create.mutateAsync({
+        template: templateId,
+        key: trimmed,
+        is_entry: isFirstNode,
+        conflict_mode: 'group_vote',
+      });
       onOpenChange(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add node');
