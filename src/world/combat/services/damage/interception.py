@@ -184,6 +184,8 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     raw_damage: int,
     *,
     bypass_soak: bool = False,
+    ignores_soak: bool = False,
+    resistance_shift: int = 0,
     bypass_pre_apply: bool = False,
     damage_type: DamageType | None = None,
     source_sheet: CharacterSheet | None = None,
@@ -193,6 +195,10 @@ def apply_damage_to_opponent(  # noqa: PLR0913
 ) -> OpponentDamageResult:
     """Apply damage to an NPC opponent, accounting for soak, probing,
     and damage-type resistance.
+
+    ignores_soak skips soak without suppressing probing. resistance_shift moves
+    signed typed resistance toward vulnerability once for this hit, after any
+    break-bar override. Neither control mutates the target's defenses.
 
     ``skip_condition_interactions=True`` skips the condition-damage-interaction
     multiplier (#2018): the round tick's damage over time passes it so a tick never
@@ -232,6 +238,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     # DAMAGE_PRE_APPLY (cancellable, amount mutable). bypass_pre_apply=True skips
     # emit + mutation; the bounced-reflect path uses this to terminate re-emission
     # (loop guard).
+    dropped = False
     if not bypass_pre_apply:
         # DAMAGE_PRE_APPLY, then guardian-shields-a-summon (#2207) for
         # ALLY-allegiance opponents — see _resolve_opponent_pre_apply.
@@ -242,12 +249,12 @@ def apply_damage_to_opponent(  # noqa: PLR0913
             source_sheet,
             skip_guardian_shield=skip_guardian_shield,
         )
-        if dropped:
-            return _zero_opponent_damage_result(opponent)
+    if dropped or raw_damage <= 0:
+        return _zero_opponent_damage_result(opponent)
 
-    effective_soak = _effective_soak_for_opponent(opponent, bypass_soak)
+    effective_soak = _effective_soak_for_opponent(opponent, bypass_soak or ignores_soak)
 
-    resistance = _effective_resistance_for_opponent(opponent, damage_type)
+    resistance = _effective_resistance_for_opponent(opponent, damage_type, resistance_shift)
 
     damage_through = max(0, raw_damage - effective_soak - resistance)
 

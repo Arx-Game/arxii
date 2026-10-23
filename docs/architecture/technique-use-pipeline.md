@@ -242,3 +242,19 @@ costs the caster.
   reactive `MODIFY_PAYLOAD` path (see `power-derivation.md` §8).
 - **#769** rewrote this document to the as-built end-to-end lifecycle and added the
   overview mermaid diagram (the "How Magic Works" pass).
+
+
+## Defense piercing (#4575)
+
+Combat damage and ward resolution use the same effective damage-profile collection,
+including variant payloads, active signature bonus rows and eligible vow-added-effect rows. If any row authors
+`bypasses_wards`, the cast skips the `barrier_strength` contest and its power
+modifier/bounce; damage and associated conditions retain their normal offense and
+effect-success gates. This does not skip unrelated reactive defenses.
+
+Each damage row passes `ignores_soak` and `resistance_shift` into the existing
+opponent damage seam. The participant damage seam accepts the same optional controls
+without adding a new PC-targeting route. Soak piercing removes armor-like protection
+down to zero. The resistance shift subtracts points from signed typed resistance
+for that hit only, including an already vulnerable target. Lasting changes remain
+conditions. See [defense composition](../systems/COMBAT_DEFENSES.md#authored-defense-piercing-4575).

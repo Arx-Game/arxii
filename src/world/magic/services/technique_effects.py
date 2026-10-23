@@ -132,6 +132,25 @@ def _damage_phrase(damage: list[DamageEffectPayload]) -> str:
     return f"Deals {kind}."
 
 
+def _piercing_phrases(damage: list[DamageEffectPayload]) -> list[str]:
+    """Describe per-hit piercing separately from the cast-wide ward property."""
+    phrases = []
+    for row in damage:
+        changes = []
+        if row["ignores_soak"]:
+            changes.append("ignores armor-like protection")
+        if row["resistance_shift"] and row["damage_type"] is not None:
+            changes.append(
+                f"shifts resistance {row['resistance_shift']} points toward vulnerability"
+            )
+        if changes:
+            kind = f"{row['damage_type']} " if row["damage_type"] else ""
+            phrases.append(f"One {kind}hit {_join_phrases(changes)}.")
+    if any(row["bypasses_wards"] for row in damage):
+        phrases.append("The whole technique bypasses wards, including its conditions.")
+    return phrases
+
+
 def render_payload_clauses(
     *,
     applies: list[ConditionEffectPayload],
@@ -149,6 +168,7 @@ def render_payload_clauses(
     damage_clause = _damage_phrase(damage)
     if damage_clause:
         clauses.append(damage_clause)
+    clauses.extend(_piercing_phrases(damage))
     if applies:
         clauses.append(f"Applies {_join_phrases([row['name'] for row in applies])}.")
     if removes:
@@ -230,6 +250,9 @@ def damage_payload(row: AbstractDamageProfile) -> DamageEffectPayload:
         damage_type=row.damage_type.name if row.damage_type_id else None,
         base_damage=row.base_damage,
         uses_equipped_weapon=row.uses_equipped_weapon,
+        ignores_soak=row.ignores_soak,
+        resistance_shift=row.resistance_shift,
+        bypasses_wards=row.bypasses_wards,
         minimum_success_level=row.minimum_success_level,
     )
 

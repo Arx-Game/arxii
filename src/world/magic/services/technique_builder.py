@@ -386,6 +386,9 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
             damage_type_id=spec.damage_type_id,
             base_damage=spec.base_damage,
             damage_intensity_multiplier=spec.damage_intensity_multiplier,
+            ignores_soak=spec.ignores_soak,
+            resistance_shift=spec.resistance_shift,
+            bypasses_wards=spec.bypasses_wards,
         )
     for spec in design.applied_conditions:
         TechniqueAppliedCondition.objects.create(

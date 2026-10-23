@@ -393,6 +393,8 @@ class CombatTechniqueResolver:
                     target,
                     scaled,
                     damage_type=profile_damage_type,
+                    ignores_soak=profile.ignores_soak,
+                    resistance_shift=profile.resistance_shift,
                     source_sheet=self.participant.character_sheet,
                     # #2643: the profile IS in hand here — the cleanest seam to thread
                     # execute from (mirrors how damage_intensity_multiplier reaches
@@ -403,12 +405,32 @@ class CombatTechniqueResolver:
             weapon_landed = weapon_landed or (profile.uses_equipped_weapon and weapon is not None)
         return results, weapon_landed
 
+    def _effective_damage_profiles(self) -> list[AbstractDamageProfile]:
+        """Collect resolved technique and active signature rows for this cast."""
+        from world.magic.services.signature_effects import (  # noqa: PLC0415
+            signature_damage_profiles,
+        )
+        from world.magic.specialization.services import (  # noqa: PLC0415
+            resolve_specialized_variant,
+        )
+
+        attacker = self.participant.character_sheet.character
+        technique = resolve_specialized_variant(
+            entity=self.action.focused_action,
+            character=attacker,
+            _sheet=self.participant.character_sheet,
+        )
+        return [
+            *technique.cached_damage_profiles,
+            *signature_damage_profiles(attacker, technique),
+        ]
+
     def _apply_damage(
         self,
         check_result: CheckResult,
         *,
         eff_intensity: int,
-        vow_damage: Sequence[tuple[AbstractDamageProfile, int]] = (),
+        profiles: list[tuple[AbstractDamageProfile, int]] | None = None,
     ) -> list[OpponentDamageResult]:
         """Iterate technique.damage_profiles against all resolved opponent targets.
 
@@ -422,7 +444,7 @@ class CombatTechniqueResolver:
         ``AbstractDamageProfile`` subclasses, so weapon-augment, SL-multiplier,
         property-bonus, and multi-target all apply uniformly to both.
 
-        ``vow_damage`` is the fired vow added effects' damage profiles, each with
+        ``profiles`` includes the fired vow added effects' damage profiles, each with
         its row's ``damage_bonus`` (``vow_damage_profiles``, #4581). They follow
         the technique's and signature's profiles (which carry no bonus) through
         the same per-target loop, so a technique with no damage of its own still
@@ -437,22 +459,13 @@ class CombatTechniqueResolver:
         combination.
         """
         from world.conditions.services import get_damage_multiplier  # noqa: PLC0415
-        from world.magic.services.signature_effects import (  # noqa: PLC0415
-            signature_damage_profiles,
-        )
 
         targets = self._resolved_opponent_targets()
         if not targets:
             return []
-
-        technique = self.action.focused_action
         attacker = self.participant.character_sheet.character
-        own_profiles = list(technique.damage_profiles.select_related("damage_type").all())
-        own_profiles += signature_damage_profiles(attacker, technique)
-        profiles: list[tuple[AbstractDamageProfile, int]] = [
-            (profile, 0) for profile in own_profiles
-        ]
-        profiles += vow_damage
+        if profiles is None:
+            profiles = [(profile, 0) for profile in self._effective_damage_profiles()]
         if not profiles:
             return []
 
@@ -762,7 +775,8 @@ class CombatTechniqueResolver:
     def _fired_vow_effects(self, check_result: CheckResult) -> list[FiredVowEffect]:
         """The covenant vow added effects riding this cast (#4581).
 
-        Read after the ward check, so a bounced cast never computes them.
+        Read before the ward check so eligible vow profiles can bypass wards.
+        This read spends nothing; firings are recorded only after an unbounced cast.
         ``[]`` when the action carries no technique, and ``[]`` below success
         level 1: the same gate that spends a once-per-round or once-per-fight
         row, so a cast that could not spend a row cannot use it either (a
@@ -820,7 +834,17 @@ class CombatTechniqueResolver:
         # against the ward and the resulting factor SCALES power before it
         # enters the unchanged damage/condition path. Unwarded targets are
         # unopposed — no check, no ledger entry, behavior identical to pre-#639.
-        combat_ledger, bounced = self._apply_penetration(combat_ledger)
+        from world.covenants.added_effects import (  # noqa: PLC0415
+            record_vow_effect_firings,
+            vow_damage_profiles,
+        )
+
+        fired = self._fired_vow_effects(check_result)
+        profiles = [(profile, 0) for profile in self._effective_damage_profiles()]
+        profiles.extend(vow_damage_profiles(fired))
+        bounced = False
+        if not any(profile.bypasses_wards for profile, _ in profiles):
+            combat_ledger, bounced = self._apply_penetration(combat_ledger)
         eff_intensity = combat_ledger.total
 
         if bounced:
@@ -837,14 +861,8 @@ class CombatTechniqueResolver:
                 power_ledger=combat_ledger,
             )
 
-        fired = self._fired_vow_effects(check_result)
-        from world.covenants.added_effects import (  # noqa: PLC0415
-            record_vow_effect_firings,
-            vow_damage_profiles,
-        )
-
         damage_results = self._apply_damage(
-            check_result, eff_intensity=eff_intensity, vow_damage=vow_damage_profiles(fired)
+            check_result, eff_intensity=eff_intensity, profiles=profiles
         )
         applied_conditions, removed_conditions = self._apply_conditions(
             check_result, eff_intensity=eff_intensity, fired_vow_effects=fired

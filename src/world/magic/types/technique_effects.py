@@ -38,6 +38,9 @@ class DamageEffectPayload(TypedDict):
     damage_type: str | None
     base_damage: int
     uses_equipped_weapon: bool
+    ignores_soak: bool
+    resistance_shift: int
+    bypasses_wards: bool
     minimum_success_level: int
 
 

@@ -11,6 +11,12 @@
 
 ### Magic
 
+- **Defense piercing (#4575):** shared damage profiles author `ignores_soak`,
+  per-hit signed-point `resistance_shift`, and `bypasses_wards`. Soak stops at zero;
+  resistance can become more vulnerable; a ward-bypassing cast carries its
+  conditions through too. Builder/draft persistence and effect summaries retain
+  the controls. Details: [Combat Defense Composition](COMBAT_DEFENSES.md#authored-defense-piercing-4575).
+
 - **Magical skills (#4450, ADR-4450):** every magical roll adds skills staff choose in admin;
   no skill is named in code. `MagicActivity` (18 kinds of roll) plus `MagicActivitySkill`
   (`activity`, `skill`, `weight`) map a roll to skills; `Path.technique_skill` (Major Gift

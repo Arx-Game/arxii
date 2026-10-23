@@ -1117,6 +1117,18 @@ class AbstractDamageProfile(SharedMemoryModel):
         default=Decimal(0),
     )
     damage_per_extra_sl = models.PositiveIntegerField(default=0)
+    ignores_soak = models.BooleanField(
+        default=False,
+        help_text="Skip armor-like soak for this profile, without bonus against zero soak.",
+    )
+    resistance_shift = models.PositiveIntegerField(
+        default=0,
+        help_text="Per-hit shift toward vulnerability on the signed damage-type resistance scale.",
+    )
+    bypasses_wards = models.BooleanField(
+        default=False,
+        help_text="Bypass the ward contest for the whole technique, including conditions.",
+    )
     uses_equipped_weapon = models.BooleanField(
         default=False,
         help_text=(

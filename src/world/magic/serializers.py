@@ -319,6 +319,9 @@ class DamageEffectSerializer(serializers.Serializer):
     damage_type = serializers.CharField(read_only=True, allow_null=True)
     base_damage = serializers.IntegerField(read_only=True)
     uses_equipped_weapon = serializers.BooleanField(read_only=True)
+    ignores_soak = serializers.BooleanField(read_only=True)
+    resistance_shift = serializers.IntegerField(read_only=True)
+    bypasses_wards = serializers.BooleanField(read_only=True)
     minimum_success_level = serializers.IntegerField(read_only=True)
 
 
@@ -3597,6 +3600,9 @@ class _DamageProfileSpecSerializer(serializers.Serializer):
     )
     base_damage = serializers.IntegerField(default=0)
     damage_intensity_multiplier = serializers.FloatField(default=0.0)
+    ignores_soak = serializers.BooleanField(default=False)
+    resistance_shift = serializers.IntegerField(min_value=0, default=0)
+    bypasses_wards = serializers.BooleanField(default=False)
 
 
 class _AppliedConditionSpecSerializer(serializers.Serializer):
@@ -3727,6 +3733,9 @@ class TechniqueDesignSerializer(serializers.Serializer):
                     ),
                     base_damage=d["base_damage"],
                     damage_intensity_multiplier=d["damage_intensity_multiplier"],
+                    ignores_soak=d["ignores_soak"],
+                    resistance_shift=d["resistance_shift"],
+                    bypasses_wards=d["bypasses_wards"],
                 )
                 for d in attrs["damage_profiles"]
             ),

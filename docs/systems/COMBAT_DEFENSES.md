@@ -4,6 +4,30 @@ Three defense modes layer in the damage pipeline. They compose — they are not
 mutually exclusive. A character in plate with a force-field still rolls evasion
 first; evasion scales the amount, then barrier/DR/soak layer on top.
 
+## Authored defense piercing (#4575)
+
+Damage profiles carry three independent authoring controls:
+
+- `ignores_soak` skips NPC soak and PC worn armor and covenant/resonant soak.
+  Generic thread damage reduction always applies and cannot be bypassed by any
+  attack type; it is the character survivability baseline. Soak is removed down to zero; an unarmored
+  target takes no bonus damage. Armor skipped by the hit takes no absorption wear.
+- `resistance_shift` is a nonnegative point shift for this typed hit only:
+  `effective_resistance = current_resistance - resistance_shift`. A shift of 5
+  changes resistance 8 to 3, neutral 0 to vulnerability -5, and vulnerability -4
+  to -9. Untyped damage has no resistance to shift. The target's stored defenses
+  never change; lasting vulnerability is authored as a condition.
+- `bypasses_wards` on any effective profile bypasses the whole technique's
+  `barrier_strength` penetration contest, including its associated conditions and
+  other damage rows. Variant, active signature and eligible vow-added-effect profiles participate. The ward
+  is not consumed and ordinary offense/effect success gates still apply.
+
+Defaults are false/0/false, preserving existing content. These controls do not skip
+reactive damage events, ramparts, position cover or lethality rules. The PC damage
+service accepts the same hit controls as the NPC service; this adds no new PvP
+technique-targeting route. Authored soak piercing keeps ordinary probing; the
+existing combo-only `bypass_soak` flag still suppresses combo probing.
+
 ## Damage pipeline
 
 ```
