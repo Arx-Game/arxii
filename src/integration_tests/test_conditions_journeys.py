@@ -26,6 +26,7 @@ from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.magic.factories import (
     BerserkConditionTemplateFactory,
+    CharacterAnimaFactory,
     RestoreToSenseActionTemplateFactory,
 )
 from world.scenes.action_constants import ActionRequestStatus
@@ -34,6 +35,7 @@ from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction, Scene
 from world.traits.factories import CheckSystemSetupFactory
 from world.vitals.constants import SLEEPING_CONDITION_NAME
+from world.vitals.models import CharacterVitals, WoundDetails
 
 # A roll of 95 lands in the top band of every chart CheckSystemSetupFactory builds.
 ROLL_WELL = patch("world.checks.services.random.randint", return_value=95)
@@ -177,6 +179,77 @@ class TreatingAFeverAtTheClinic(JourneyCase):
         )
         self.assertEqual(panel.status_code, 200, panel.content)
         self.assertIn("Willow Poultice", panel.content.decode())
+
+
+class FirstAidOnAWound(JourneyCase):
+    """Hobb tends Ysmay's 20-damage wound through a scene ``treat`` offer (#4600).
+
+    Mundane first aid (a treatment that spends no anima or resonance and needs no
+    bond) has its own share of a wound it may heal, 0.50 of the damage: it stops at
+    10 of the 20 however much the bandage offers. A magical treatment offered the
+    same way costs anima and keeps the never-to-full ceiling, 0.75: it stops at 15.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        fresh_check_system()
+        self.room = self.make_room("The Roadside")
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.scene = SceneFactory(
+            room=self.room,
+            participants=[self.account_of(self.hobb), self.account_of(self.ysmay)],
+        )
+        self.gash = ConditionTemplateFactory(name="Deep Gash")
+        self.wound = ConditionInstanceFactory(target=self.ysmay, condition=self.gash, severity=1)
+        WoundDetails.objects.create(condition_instance=self.wound, damage_taken=20)
+        CharacterVitals.objects.create(
+            character_sheet=self.ysmay.sheet_data, health=30, max_health=100, base_max_health=100
+        )
+        CharacterAnimaFactory(character=self.hobb.sheet_data, current=20, maximum=30)
+
+    def tending(self, name: str, *, anima_cost: int) -> None:
+        """A treatment for the gash that offers far more than any share allows."""
+        TreatmentTemplateFactory(
+            name=name,
+            target_condition=self.gash,
+            target_kind=TreatmentTargetKind.PRIMARY,
+            anima_cost=anima_cost,
+            reduction_on_crit=0,
+            reduction_on_success=0,
+            reduction_on_partial=0,
+            mend_on_crit=50,
+            mend_on_success=50,
+            mend_on_partial=50,
+        )
+
+    def offer_and_accept(self, name: str) -> None:
+        self.assertIn("You offer to treat Ysmay for", self.telnet(self.hobb, "treat Ysmay 1"))
+        with ROLL_WELL:
+            self.telnet(self.ysmay, "accept")
+        self.assertIn(
+            f"Hobb applies {name} to Ysmay. The treatment takes hold.", feed_of(self.scene)
+        )
+
+    def mended(self) -> int:
+        details = WoundDetails.objects.filter(condition_instance=self.wound)
+        return details.values_list("health_mended_total", flat=True).get()
+
+    def ysmays_health(self) -> int:
+        vitals = CharacterVitals.objects.filter(character_sheet=self.ysmay.sheet_data)
+        return vitals.values_list("health", flat=True).get()
+
+    def test_first_aid_heals_half_the_wound_and_no_more(self) -> None:
+        self.tending("Linen Bandage", anima_cost=0)
+        self.offer_and_accept("Linen Bandage")
+        self.assertEqual(self.mended(), 10)
+        self.assertEqual(self.ysmays_health(), 40)
+
+    def test_a_magical_tending_through_treat_keeps_the_ceiling(self) -> None:
+        self.tending("Lifeward Laying On", anima_cost=5)
+        self.offer_and_accept("Lifeward Laying On")
+        self.assertEqual(self.mended(), 15)
+        self.assertEqual(self.ysmays_health(), 45)
 
 
 class TalkingABerserkerDown(JourneyCase):

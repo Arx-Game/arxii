@@ -217,6 +217,56 @@ class BuildTechniqueTests(TestCase):
         assert rows[0].target_kind == "self"
         assert rows[0].remove_all_stacks is False
 
+    def test_build_writes_the_treatment_fraction(self):
+        """build_technique writes each TreatmentSpec's mend fraction onto its row (#4600)."""
+        from decimal import Decimal
+
+        from world.conditions.factories import TreatmentTemplateFactory
+        from world.magic.models import TechniqueTreatment
+        from world.magic.types.technique_builder import TreatmentSpec
+
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory(creator=sheet)
+        template = TreatmentTemplateFactory()
+        d = _design(
+            gift_id=gift.id,
+            effect_type_id=EffectTypeFactory().id,
+            treatments=(
+                TreatmentSpec(treatment_template_id=template.id, mend_cap_fraction=Decimal("0.40")),
+            ),
+        )
+        tech = build_technique(d, creator=None)
+        row = TechniqueTreatment.objects.get(technique=tech)
+        assert row.mend_cap_fraction == Decimal("0.40")
+
+    def test_the_builder_refuses_a_fraction_above_the_ceiling(self):
+        """The builder API refuses a mend fraction above the never-to-full ceiling (#4600)."""
+        from world.conditions.factories import TreatmentTemplateFactory
+        from world.magic.serializers import TechniqueDesignSerializer
+
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory(creator=sheet)
+        template = TreatmentTemplateFactory()
+        payload = {
+            "name": "Deep Restoration",
+            "gift_id": gift.id,
+            "effect_type_id": EffectTypeFactory().id,
+            "action_category": "physical",
+            "tier": 1,
+            "intensity": 1,
+            "control": 1,
+            "anima_cost": 1,
+            "treatments": [{"treatment_template_id": template.id, "mend_cap_fraction": "0.80"}],
+        }
+        ser = TechniqueDesignSerializer(data=payload, context={"policy": StaffPolicy()})
+        assert not ser.is_valid()
+        assert "mend_cap_fraction" in ser.errors["treatments"][0]
+
+        payload["treatments"][0]["mend_cap_fraction"] = "0.70"
+        ser = TechniqueDesignSerializer(data=payload, context={"policy": StaffPolicy()})
+        assert ser.is_valid(), ser.errors
+        assert str(ser.validated_data["_design"].treatments[0].mend_cap_fraction) == "0.70"
+
 
 class WrapperTests(TestCase):
     def test_player_within_budget_binds_character(self):

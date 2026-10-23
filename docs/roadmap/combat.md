@@ -412,6 +412,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   ever. Condition cleansing (dispel/severity-decay) stays unrestricted — only the HP mend is
   double-bounded. Unit/service-tier proven (vitals/conditions suites); no combat journey test
   yet — a wound→treat→attrition journey is fair game for the journeys list.
+- **Healing depends on the technique (#4600, Part F of #4573; ADR-0156 addendum).** Each
+  healing technique authors how far it may heal a wound on its treatment row
+  (`TechniqueTreatment.mend_cap_fraction`, default 0.75). Staff set it in the Technique admin's
+  treatment inline; the builder API accepts it on treatment rows, but the web builder form has
+  no treatment editor yet. `NEVER_TO_FULL_FRACTION` is now the ceiling no fraction passes, and
+  a mundane treatment (first aid: no technique, no resonance or anima cost, no bond) through the
+  scene `treat` path heals at its own lower share, `FIRST_AID_MEND_FRACTION` (0.50, a tuning
+  value); a magical treatment through `treat` keeps the ceiling. A wound's total never passes
+  the highest fraction any healer used on it. Vow added-effect treatments carry the same field.
+  Journeys: `test_mending_a_wound_journeys.py` (two healers' casts, and the admin inline) and
+  `FirstAidOnAWound` (first aid and a magical tending through `treat`).
 - **Aftermath digest (#3551).** `complete_encounter`'s last step delivers a private,
   per-participant summary of what the fight changed: a Narrator OUTCOME interaction
   (PERCEIVED_ONLY, pushed only to that character) plus a telnet `character.msg`, built

@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils.functional import cached_property
@@ -40,6 +41,7 @@ from world.magic.skill_choices import (
     MAGIC_SKILL_ERROR_MESSAGES,
     MAGIC_SKILL_HELP,
 )
+from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
 if TYPE_CHECKING:
     from world.magic.models.power_config import CapabilityPowerConfig
@@ -1714,6 +1716,25 @@ class TechniqueRemovedCondition(NaturalKeyMixin, AbstractAppliedCondition):
         validate_inert_removal_knobs(self)
 
 
+#: Help text shared by every treatment payload row that carries a mend fraction (#4600).
+MEND_CAP_FRACTION_HELP = (
+    "How far this treatment may heal a wound, as a share of the damage the wound did "
+    "(0.40 heals at most 40%). Healing on one wound never passes the highest share any "
+    f"healer used on it. At most {NEVER_TO_FULL_FRACTION}, the ceiling no healing passes."
+)
+
+#: The database half of the mend-fraction rule: above 0 and below full (#4600).
+MEND_CAP_FRACTION_IN_RANGE = Q(mend_cap_fraction__gt=0) & Q(mend_cap_fraction__lt=1)
+
+
+#: The field half of the mend-fraction rule (#4600): at least 0.01 and at most the
+#: never-to-full ceiling, so an admin form names the field and the limit in plain words.
+MEND_CAP_FRACTION_VALIDATORS = [
+    MinValueValidator(Decimal("0.01")),
+    MaxValueValidator(NEVER_TO_FULL_FRACTION),
+]
+
+
 class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
     """Authored row binding a Technique to a TreatmentTemplate it performs on cast.
 
@@ -1721,7 +1742,13 @@ class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
     attempts to perform the linked TreatmentTemplate on each resolved target
     that carries the treatment's target condition. The treatment runs its own
     internal check roll and enforces all bounded-mend gates (per-healer-once,
-    never-to-full fraction, costs, TreatmentAttempt record) via perform_treatment.
+    the row's own mend fraction, costs, TreatmentAttempt record) via
+    perform_treatment.
+
+    ``mend_cap_fraction`` (#4600) is how far this technique may heal a wound, as
+    a share of the damage the wound did. It lives here, not on the
+    TreatmentTemplate: the template is a shared, named recipe that mundane first
+    aid uses too, so a fraction there would need a new template per fraction.
 
     The engagement gate is skipped for technique-cast treatments (magical
     treatment works in combat); the scene gate still applies.
@@ -1746,6 +1773,13 @@ class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
         default=1,
         help_text="Minimum success level required to perform this treatment.",
     )
+    mend_cap_fraction = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=NEVER_TO_FULL_FRACTION,
+        validators=MEND_CAP_FRACTION_VALIDATORS,
+        help_text=MEND_CAP_FRACTION_HELP,
+    )
 
     objects = NaturalKeyManager()
 
@@ -1758,6 +1792,10 @@ class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
             models.UniqueConstraint(
                 fields=["technique", "treatment_template"],
                 name="unique_treatment_per_technique",
+            ),
+            models.CheckConstraint(
+                condition=MEND_CAP_FRACTION_IN_RANGE,
+                name="technique_treatment_mend_cap_fraction_in_range",
             ),
         ]
         verbose_name = "Technique Treatment"

@@ -33,6 +33,8 @@ from world.magic.services.modifier_sizing import (
 )
 
 if TYPE_CHECKING:
+    from decimal import Decimal
+
     from evennia.objects.models import ObjectDB
 
     from world.checks.types import ExtraTraitTerm
@@ -427,7 +429,8 @@ def apply_technique_treatments(  # noqa: PLR0913 - cohesive condition-applicatio
     ``minimum_success_level`` exceeds *success_level*, and for each row attempts
     ``perform_treatment`` on each target in
     ``targets_by_kind.get(row.target_kind, [])`` that carries the treatment's
-    target condition.
+    target condition. The row's ``mend_cap_fraction`` (#4600) goes with it: how
+    far this technique (or vow row) may heal a wound, as a share of its damage.
 
     For each target:
       1. Finds the matching ``ConditionInstance`` / ``PendingAlteration`` via
@@ -452,8 +455,9 @@ def apply_technique_treatments(  # noqa: PLR0913 - cohesive condition-applicatio
         scene: The active ``Scene``.
         treatment_rows: Optional override for the rows to perform (#4581). ``None``
             reads ``technique.treatments`` as before; otherwise the given rows
-            (anything exposing ``treatment_template``, ``target_kind`` and
-            ``minimum_success_level``) are used. The caster stays the helper.
+            (anything exposing ``treatment_template``, ``target_kind``,
+            ``minimum_success_level`` and ``mend_cap_fraction``) are used. The
+            caster stays the helper.
 
     Returns:
         List of ``TreatmentOutcome`` for successful treatments. Empty when no
@@ -506,6 +510,7 @@ def apply_technique_treatments(  # noqa: PLR0913 - cohesive condition-applicatio
                 target_effect=target_effect,
                 bond_thread=bond_thread,
                 power_intensity=eff_intensity,
+                mend_cap_fraction=row.mend_cap_fraction,
             )
             if outcome is not None:
                 results.append(outcome)
@@ -598,6 +603,7 @@ def _perform_treatment_for_target(  # noqa: PLR0913
     target_effect: Any,
     bond_thread: Any,
     power_intensity: int = 0,
+    mend_cap_fraction: Decimal | None = None,
 ) -> Any:
     """Perform a single treatment on a target, catching ``TreatmentError``.
 
@@ -612,6 +618,9 @@ def _perform_treatment_for_target(  # noqa: PLR0913
         power_intensity: The caster's effective intensity, forwarded to
             ``perform_treatment`` to scale the mend amount via
             ``treatment.mend_intensity_multiplier`` (default 0 — no effect).
+        mend_cap_fraction: The payload row's share of a wound's damage this
+            treatment may heal it to (#4600), forwarded to ``perform_treatment``.
+            ``None`` means the never-to-full ceiling.
 
     Returns:
         The ``TreatmentOutcome`` on success, or ``None`` if the treatment
@@ -631,6 +640,7 @@ def _perform_treatment_for_target(  # noqa: PLR0913
             skip_engagement_gate=True,
             power_intensity=power_intensity,
             technique_driven=True,
+            mend_cap_fraction=mend_cap_fraction,
         )
     except TreatmentError as exc:
         logger.warning(

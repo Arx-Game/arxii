@@ -94,6 +94,48 @@ fraction clamp inside `mend_wound()`) are unchanged and remain authoritative ove
 `amount` is offered, however that amount was computed. Power scaling composes with the
 double-bound; it cannot bypass either half of it.
 
+## Addendum (#4600, 2026-10-23): the fraction comes from the technique
+
+Healing now depends on the technique (Part F of #4573). Bound 2 keeps its shape but its
+fraction is no longer one global number:
+
+- **The fraction is authored per technique.** `TechniqueTreatment.mend_cap_fraction`
+  (`DecimalField(3,2)`, default `0.75`, a `CheckConstraint` keeping it above 0 and below 1,
+  and field validators holding it between `0.01` and `NEVER_TO_FULL_FRACTION`, so an admin form
+  names the field and the limit) is how far that technique may
+  heal a wound, as a share of the damage the wound did. The same field sits on
+  `TechniqueDraftTreatment`, the builder's `TreatmentSpec`, and `VowAddedEffectTreatment` (a
+  vow's treatment rides a cast as its own tending, so it carries its own fraction). It lives on
+  the technique row, not on `TreatmentTemplate`: the template is a shared, named recipe that
+  mundane first aid uses too, and a fraction there would need a new template for every fraction.
+- **`NEVER_TO_FULL_FRACTION` is now the ceiling**, not the only value. `mend_wound(...,
+  cap_fraction=None)` caps the mend at `int(min(F, CEIL) x damage_taken) - health_mended_total`,
+  where `F` is `cap_fraction`, or `CEIL` when it is `None` (a 0 fraction mends nothing; it never
+  reads as "no fraction"). No fraction reaches full, so the attrition invariant holds.
+- **First aid means a mundane treatment, and it has its own lower fraction**,
+  `FIRST_AID_MEND_FRACTION` (`0.50`, a tuning value set beside the ceiling in
+  `world/vitals/constants.py`). A treatment is mundane when `is_magical_treatment`
+  (`world/conditions/services.py`, the same test that decides whether a roll adds the Magical
+  treatment skills, #4450) is False: no technique drives it, it costs no resonance or anima, and
+  it needs no bond. The scene `treat` path passes the first-aid fraction for a mundane treatment
+  only; a magical treatment offered through `treat` (a tending that costs anima, say) keeps the
+  `NEVER_TO_FULL_FRACTION` ceiling. So a healing technique authored at or above 0.50 is never
+  worse than a bandage.
+- **The highest-fraction rule.** Each mend reads the running `health_mended_total`, so after any
+  mend the total is at most that mend's own fraction of the damage. The total therefore never
+  passes the highest fraction any mend on the wound used: a 0.40 mend then a 0.70 mend on a
+  20-damage wound restore 8 then 6 (14); a later 0.40 mend restores nothing; the reverse order
+  also stops at 14. Nothing new is stored.
+
+Bound 1 (one tending per healer per wound) is unchanged. Where a template sets
+`once_per_wound_per_helper`, one healer's tendings never stack on the same wound and the fraction
+rule governs different healers. Where it does not, a healer may tend the same wound again, and the
+fraction rule alone keeps the total at or below the highest fraction used.
+
+Rejected: putting the fraction on `TreatmentTemplate` (a prose template per fraction, and first
+aid would share it); storing the highest fraction used on `WoundDetails` (derivable from the
+running total, so a stored copy could only drift).
+
 > Status: accepted · Source: issue #2644 (lore repo `design/covenant-vows-consolidated.md` §3.1)
 > · Related: ADR-0010 (FK direction specific→general), ADR-0007 (no JSON fields), ADR-0013 (no
 > data migrations pre-production)

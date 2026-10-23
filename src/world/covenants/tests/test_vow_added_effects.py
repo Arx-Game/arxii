@@ -544,6 +544,56 @@ class PayloadTests(VowAddedEffectsTestBase):
         attempt = TreatmentAttempt.objects.get()
         self.assertEqual((attempt.helper, attempt.target), (self.ysmay, self.hobb))
 
+    def test_a_vow_treatment_mends_at_its_own_fraction(self) -> None:
+        """A vow treatment row authored at 0.40 heals a 20-damage wound 8, not 15 (#4600)."""
+        from decimal import Decimal
+
+        from world.vitals.models import CharacterVitals, WoundDetails
+
+        wound = ConditionTemplateFactory()
+        template = TreatmentTemplateFactory(
+            target_kind=TreatmentTargetKind.PRIMARY,
+            target_condition=wound,
+            scene_required=False,
+            once_per_scene_per_helper=False,
+            check_type=CheckTypeFactory(),
+            reduction_on_crit=0,
+            reduction_on_success=0,
+            reduction_on_partial=0,
+            mend_on_crit=50,
+            mend_on_success=50,
+            mend_on_partial=50,
+        )
+        VowAddedEffectTreatmentFactory(
+            effect=VowAddedEffectFactory(covenant_role=self.role),
+            treatment_template=template,
+            target_kind=ConditionTargetKind.ALLY,
+            mend_cap_fraction=Decimal("0.40"),
+        )
+        CharacterAnimaFactory(character=self.ysmay)
+        CharacterVitals.objects.update_or_create(
+            character_sheet=self.hobb,
+            defaults={"health": 10, "max_health": 100, "base_max_health": 100},
+        )
+        instance = ConditionInstanceFactory(target=self.hobb.character, condition=wound)
+        WoundDetails.objects.create(condition_instance=instance, damage_taken=20)
+        fired = self._cast(self.ysmay)
+
+        with patch("world.checks.services.perform_check") as check:
+            check.return_value = _check_result(success_level=2)
+            apply_vow_effect_payloads(
+                fired,
+                technique=self.hold,
+                success_level=3,
+                eff_intensity=0,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.hobb.character]},
+                source_character=self.ysmay.character,
+                scene=SceneFactory(is_active=True),
+            )
+        self.assertEqual(TreatmentAttempt.objects.get().health_mended, 8)
+        details = WoundDetails.objects.get(condition_instance=instance)
+        self.assertEqual(details.health_mended_total, 8)
+
     def test_payloads_strip_a_removed_condition(self) -> None:
         # The real removal reads active conditions with PG-only DISTINCT ON, so the
         # lookup and the removal are mocked, as the technique removal tests do.

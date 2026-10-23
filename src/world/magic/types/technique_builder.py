@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
+
+from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
 
 @dataclass(frozen=True)
@@ -53,12 +56,15 @@ class TreatmentSpec:
 
     Points at a TreatmentTemplate; the technique-cast path calls perform_treatment
     with the caster as helper. target_kind defaults to ALLY (healing is
-    ally-directed); minimum_success_level defaults to 1.
+    ally-directed); minimum_success_level defaults to 1. mend_cap_fraction (#4600)
+    is how far the technique may heal a wound, as a share of its damage; it
+    defaults to the never-to-full ceiling.
     """
 
     treatment_template_id: int
     target_kind: str = "ally"
     minimum_success_level: int = 1
+    mend_cap_fraction: Decimal = NEVER_TO_FULL_FRACTION
 
 
 @dataclass(frozen=True)

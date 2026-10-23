@@ -5,8 +5,11 @@ and remove_technique_conditions that routes technique casts into
 perform_treatment's bounded-mend machinery.
 """
 
+from decimal import Decimal
 from unittest.mock import patch
 
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
@@ -32,6 +35,7 @@ from world.magic.models.techniques import (
 from world.magic.services.condition_application import apply_technique_treatments
 from world.scenes.factories import SceneFactory
 from world.traits.factories import CheckOutcomeFactory
+from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
 
 def _make_check_result(success_level: int):
@@ -328,3 +332,67 @@ class TreatmentRowOverrideTests(TestCase):
             scene=self.scene,
         )
         self.assertEqual(results, [])
+
+
+class MendCapFractionAuthoringTests(TestCase):
+    """How far one technique's treatment may heal a wound is authored on its row (#4600)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.technique = TechniqueFactory()
+        cls.template = TreatmentTemplateFactory()
+
+    def _row(self, fraction: str) -> TechniqueTreatment:
+        return TechniqueTreatment(
+            technique=self.technique,
+            treatment_template=self.template,
+            mend_cap_fraction=Decimal(fraction),
+        )
+
+    def test_a_new_row_defaults_to_the_ceiling(self) -> None:
+        row = TechniqueTreatment.objects.create(
+            technique=self.technique, treatment_template=self.template
+        )
+        self.assertEqual(row.mend_cap_fraction, NEVER_TO_FULL_FRACTION)
+
+    def test_the_database_refuses_full_and_none(self) -> None:
+        for fraction in ("1.00", "0.00"):
+            with self.subTest(fraction=fraction):
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    self._row(fraction).save()
+
+    def test_clean_refuses_a_fraction_above_the_ceiling(self) -> None:
+        with self.assertRaises(ValidationError) as caught:
+            self._row("0.80").full_clean()
+        self.assertIn("mend_cap_fraction", caught.exception.message_dict)
+
+    def test_clean_accepts_the_ceiling_and_below(self) -> None:
+        for fraction in ("0.75", "0.40"):
+            with self.subTest(fraction=fraction):
+                self._row(fraction).full_clean()
+
+    def test_the_draft_row_carries_the_same_rule_and_default(self) -> None:
+        from world.magic.models import TechniqueDraft, TechniqueDraftTreatment
+
+        draft = TechniqueDraft.objects.create(character=CharacterSheetFactory())
+        row = TechniqueDraftTreatment.objects.create(draft=draft, treatment_template=self.template)
+        self.assertEqual(row.mend_cap_fraction, NEVER_TO_FULL_FRACTION)
+        row.mend_cap_fraction = Decimal("0.80")
+        with self.assertRaises(ValidationError):
+            row.full_clean()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            TechniqueDraftTreatment.objects.create(
+                draft=draft, treatment_template=self.template, mend_cap_fraction=Decimal("1.00")
+            )
+
+    def test_the_vow_added_effect_row_carries_the_same_rule_and_default(self) -> None:
+        from world.covenants.factories import VowAddedEffectTreatmentFactory
+
+        row = VowAddedEffectTreatmentFactory(treatment_template=self.template)
+        self.assertEqual(row.mend_cap_fraction, NEVER_TO_FULL_FRACTION)
+        row.mend_cap_fraction = Decimal("0.80")
+        with self.assertRaises(ValidationError) as caught:
+            row.full_clean()
+        self.assertIn("mend_cap_fraction", caught.exception.message_dict)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            VowAddedEffectTreatmentFactory(mend_cap_fraction=Decimal("0.00"))

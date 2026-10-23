@@ -180,11 +180,21 @@ WOUND_LINGERING_ACHE_NAME: str = "Lingering Ache"
 WOUND_CRIPPLING_NAME: str = "Crippling Wound"
 WOUND_BLEEDING_NAME: str = "Bleeding Wound"
 
-# The fraction of a wound's causing damage (WoundDetails.damage_taken) that can
-# EVER be mended back across every healer who ever tends it — the remainder is
-# permanent attrition by design (heals are real but bounded; the party is
-# always net-weaker for having fought). Tunable; not wired to an admin config
-# field (mirrors PERMANENT_WOUND_THRESHOLD's plain-constant precedent above —
-# a game-balance dial, not a per-deploy setting). See mend_wound() in
-# world/vitals/services.py and ADR-0156.
+# The ceiling on the fraction of a wound's causing damage (WoundDetails.damage_taken)
+# that can EVER be mended back across every healer who ever tends it. The
+# remainder is permanent attrition by design (heals are real but bounded; the
+# party is always net-weaker for having fought). Each mend brings its own
+# fraction (a healing technique authors it on its treatment row,
+# ``TechniqueTreatment.mend_cap_fraction``, #4600); this constant is the highest
+# any of them may reach, and the default an authored row starts at. Tunable; not
+# wired to an admin config field (mirrors PERMANENT_WOUND_THRESHOLD's
+# plain-constant precedent above: a game-balance dial, not a per-deploy
+# setting). See mend_wound() in world/vitals/services.py and ADR-0156.
 NEVER_TO_FULL_FRACTION: Decimal = Decimal("0.75")
+
+# The fraction mundane first aid may mend a wound to (#4600): a mundane treatment
+# (``is_magical_treatment`` False: no technique, no resonance or anima cost, no bond)
+# offered through the scene ``treat`` path stops here; a magical one keeps the
+# ceiling. Lower than the ceiling, so a healing technique authored at or above it
+# is never worse than a bandage. A tuning value to be set after play.
+FIRST_AID_MEND_FRACTION: Decimal = Decimal("0.50")

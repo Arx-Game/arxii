@@ -4,6 +4,10 @@
 The damage-consequence chain (`process_damage_consequences`): permanent-wound check, death check (applies Bleeding Out, never instant death), knockout check (applies Unconscious). Each tier rolls an authored consequence pool; a missing pool no-ops the tier.
 _Avoid_: damage pipeline, death system (for the whole chain)
 
+**Mend fraction** (#4600, ADR-0156):
+How far one mend may heal a wound, as a share of the damage the wound did (`WoundDetails.damage_taken`). A healing technique authors it on its treatment row (`TechniqueTreatment.mend_cap_fraction`, likewise `VowAddedEffectTreatment`); mundane first aid (a treatment with no technique, no resonance or anima cost and no bond, per `is_magical_treatment`) uses `FIRST_AID_MEND_FRACTION` (0.50) through the scene `treat` path; a magical treatment there keeps the ceiling. `NEVER_TO_FULL_FRACTION` (0.75) is the ceiling no fraction passes. Each mend reads the wound's running total, so a wound never heals past the highest fraction any healer used on it.
+_Avoid_: heal cap, heal percentage, mend limit (for the per-technique share)
+
 **Wake arc** (#2287):
 An unconscious character's recovery loop: one Endurance check per round (`attempt_wake`), difficulty scaled to injury and easing per round and with healing, with a guaranteed-wake deadline (`ConditionInstance.expires_at`) as the ceiling. The benign mirror of Bleeding Out's staged resists.
 _Avoid_: recovery timer, KO timer

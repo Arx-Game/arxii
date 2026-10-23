@@ -9,6 +9,7 @@ Affinities and Resonances are proper domain models in the magic app.
 
 from collections import defaultdict
 from collections.abc import Iterable
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from drf_spectacular.utils import extend_schema_field
@@ -78,6 +79,7 @@ from world.magic.models.dramatic_moment import (
 from world.magic.models.sessions import RitualSession
 from world.magic.models.techniques import ConditionTargetKind
 from world.roster.models import RosterEntry
+from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
 _ERR_CHARACTER_SHEET_NOT_OWNED = "character_sheet_id does not belong to the requesting account."
@@ -3628,6 +3630,15 @@ class _TreatmentSpecSerializer(serializers.Serializer):
     )
     target_kind = serializers.ChoiceField(choices=ConditionTargetKind.choices, default="ally")
     minimum_success_level = serializers.IntegerField(min_value=0, default=1)
+    # How far the technique may heal a wound, as a share of its damage (#4600). Above
+    # 0 and at most the never-to-full ceiling, the same rule the model's field validators hold.
+    mend_cap_fraction = serializers.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        max_value=NEVER_TO_FULL_FRACTION,
+        default=NEVER_TO_FULL_FRACTION,
+    )
 
 
 class TechniqueDesignSerializer(serializers.Serializer):
@@ -3761,6 +3772,7 @@ class TechniqueDesignSerializer(serializers.Serializer):
                     treatment_template_id=t["treatment_template_id"].id,
                     target_kind=t["target_kind"],
                     minimum_success_level=t["minimum_success_level"],
+                    mend_cap_fraction=t["mend_cap_fraction"],
                 )
                 for t in attrs["treatments"]
             ),
