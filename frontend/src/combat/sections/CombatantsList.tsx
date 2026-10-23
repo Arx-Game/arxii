@@ -323,18 +323,6 @@ function OpponentRow({
               Locked: {lockedToName}
             </span>
           )}
-          {markedBy.map(({ id, name }) => (
-            <span
-              key={id}
-              data-testid="mark-badge"
-              className={cn(
-                'shrink-0 rounded bg-sky-500/15 px-1 py-0.5 text-[10px]',
-                'text-sky-700 dark:text-sky-300'
-              )}
-            >
-              Marked by {name}
-            </span>
-          ))}
           {(opponent.current_phase ?? 1) > 1 && (
             <span
               data-testid="phase-badge"
@@ -370,6 +358,24 @@ function OpponentRow({
             </span>
           )}
         </div>
+        {/* Mark badges (#4603) get their own wrapping row so a narrow rail never
+         * squeezes the opponent's name to nothing. */}
+        {markedBy.length > 0 && (
+          <div className="mt-0.5 flex flex-wrap gap-1" data-testid="mark-badges">
+            {markedBy.map(({ id, name }) => (
+              <span
+                key={id}
+                data-testid="mark-badge"
+                className={cn(
+                  'shrink-0 rounded bg-sky-500/15 px-1 py-0.5 text-[10px]',
+                  'text-sky-700 dark:text-sky-300'
+                )}
+              >
+                Marked by {name}
+              </span>
+            ))}
+          </div>
+        )}
         {/* HP mini-bar */}
         <HpBar health={opponent.health} maxHealth={opponent.max_health} className="mt-0.5" />
         {/* Condition badges — deep-link to the condition-detail modal on click. */}

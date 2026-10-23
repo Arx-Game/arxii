@@ -786,6 +786,10 @@ describe('mark badge (#4603)', () => {
 
     const badges = within(screen.getByTestId('opponent-row-10')).getAllByTestId('mark-badge');
     expect(badges.map((b) => b.textContent)).toEqual(['Marked by Mira', 'Marked by Tomas']);
+    // The badges sit in their own wrapping row, not beside the name.
+    const container = within(screen.getByTestId('opponent-row-10')).getByTestId('mark-badges');
+    expect(container).toHaveClass('flex-wrap');
+    expect(container).toContainElement(badges[0]);
   });
 
   it('shows the badge to a GM who has no menu', () => {
