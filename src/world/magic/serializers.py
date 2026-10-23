@@ -3631,7 +3631,7 @@ class _TreatmentSpecSerializer(serializers.Serializer):
     target_kind = serializers.ChoiceField(choices=ConditionTargetKind.choices, default="ally")
     minimum_success_level = serializers.IntegerField(min_value=0, default=1)
     # How far the technique may heal a wound, as a share of its damage (#4600). Above
-    # 0 and at most the never-to-full ceiling, the same rule the model's clean() holds.
+    # 0 and at most the never-to-full ceiling, the same rule the model's field validators hold.
     mend_cap_fraction = serializers.DecimalField(
         max_digits=3,
         decimal_places=2,
