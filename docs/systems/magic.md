@@ -716,7 +716,9 @@ inactive skill gives no term.
   condition in a marked category. A friend's
   Rally adds none; Reveal adds the `SENSING_MAGIC` terms for a marked category.
 - Treatment is magical, and adds `MAGICAL_TREATMENT`, when a technique drives it or the template
-  spends resonance or anima or requires a bond; zero-cost, bondless first aid is mundane.
+  spends resonance or anima or requires a bond; zero-cost, bondless first aid is mundane. The
+  one test is `conditions.services.is_magical_treatment`, which also decides whether the scene
+  `treat` path heals at first aid's own mend fraction (#4600).
 
 **Cast thread pulls.** `build_cast_applicable_threads` and `applicable_threads_for_cast` take the
 `CastCheck`; the paid pull inside `use_technique` and combat's `commit_combat_pull` do too, so the
@@ -3426,9 +3428,10 @@ UniqueConstraint on `(technique, treatment_template)`. Mirrors the
 **Healing depends on the technique (#4600, ADR-0156 addendum) [BUILT & WIRED]:**
 `TechniqueTreatment.mend_cap_fraction` (`DecimalField(3,2)`, default `0.75`) is how far this
 technique may heal a wound, as a share of the damage the wound did. A `CheckConstraint`
-(`technique_treatment_mend_cap_fraction_in_range`) keeps it above 0 and below 1, and
-`clean()` (the shared `validate_mend_cap_fraction`, `models/techniques.py`) refuses anything
-above `NEVER_TO_FULL_FRACTION`. Staff set it in the Technique admin's treatment inline; the
+(`technique_treatment_mend_cap_fraction_in_range`) keeps it above 0 and below 1, and the
+field's validators (the shared `MEND_CAP_FRACTION_VALIDATORS`, `models/techniques.py`) hold it
+between `0.01` and `NEVER_TO_FULL_FRACTION`, so the admin names the field and the limit. Staff
+set it in the Technique admin's treatment inline; the
 builder takes it on `TreatmentSpec` / the builder API's treatment rows (refused above the
 ceiling there too); the draft workbench carries it on `TechniqueDraftTreatment` and
 `add_draft_treatment(mend_cap_fraction=)`. `VowAddedEffectTreatment` carries the same field
@@ -3437,7 +3440,9 @@ and rule. `apply_technique_treatments` reads each row's fraction and threads it 
 `mend_wound(cap_fraction=)`. Because each mend reads the wound's running total, healing on one
 wound never passes the highest fraction any healer used on it. The fraction lives on the
 technique row, not on `TreatmentTemplate`, because the template is a shared, named recipe
-that mundane first aid uses too.
+that mundane first aid uses too. The scene `treat` path passes `FIRST_AID_MEND_FRACTION` (0.50)
+only for a mundane treatment (`conditions.services.is_magical_treatment` False); a magical
+template offered through `treat` keeps the 0.75 ceiling.
 
 **Service:** `apply_technique_treatments` (`services/condition_application.py`) —
 sibling to `apply_technique_conditions` / `remove_technique_conditions`. For each

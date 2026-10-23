@@ -1129,7 +1129,9 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `process_round_end()`, `process_damage_interactions()` (wired into combat #2018), `get_treatment_candidates()`,
   `perform_treatment()` (routes `mend_on_*` through `world.vitals.services.mend_wound()`
   alongside its existing severity-decay path, #2644; `mend_cap_fraction=` is the mend's own
-  share of the wound, #4600), `get_effective_capability_value()`
+  share of the wound, #4600), `is_magical_treatment(treatment, *, technique_driven=False)`
+  (#4450, #4600: the one test for magical versus mundane first aid, read by the Magical treatment
+  skills and the `treat` path's mend fraction), `get_effective_capability_value()`
   (the one-oracle agency/requirement answer — see "Capability magnitude curve" below),
   `condition_modifier_totals_by_sheet(sheet_ids, modifier_target)` (#4090, batched
   `get_condition_modifier_total` across many sheets in two queries regardless of sheet count; a
@@ -9756,7 +9758,8 @@ combat, poison, spells, exhaustion, and any damage source.
     wound_details.damage_taken) - health_mended_total`, so a wound's total never passes the
     highest fraction any mend on it used; clamps to `max_health`, returns the amount actually
     mended (0 is legal, not an error). A technique cast passes its treatment row's
-    `mend_cap_fraction`; the scene `treat` path passes `FIRST_AID_MEND_FRACTION`. Raises
+    `mend_cap_fraction`; the scene `treat` path passes `FIRST_AID_MEND_FRACTION` for a mundane
+    treatment (`conditions.services.is_magical_treatment` False) and nothing for a magical one. Raises
     `world.vitals.exceptions.NotAWoundError` when the instance has no `WoundDetails`. Never
     callable outside the treatment flow (`conditions.services.perform_treatment` is the sole
     caller) — the once-per-healer-per-wound bound lives one layer up, on
@@ -9859,7 +9862,7 @@ combat, poison, spells, exhaustion, and any damage source.
   invariant's ceiling: no mend fraction passes it, and it is the default a technique's
   `mend_cap_fraction` starts at; a plain constant, not an admin-config field, mirroring
   `PERMANENT_WOUND_THRESHOLD`'s precedent). #4600: `FIRST_AID_MEND_FRACTION` (Decimal, 0.50,
-  a tuning value): the share of a wound mundane first aid may heal.
+  a tuning value): the share of a wound a mundane treatment (first aid) may heal.
 - **Design invariants:** ADR-0049 (guarded pool, no unconditional death); ADR-0023 extended to the
   death layer (a PC source never produces death against a PvP-protected victim; a PC can kill a story NPC, ADR-4418); ADR-0004 extended to dying state (grace window
   counts round_number beats, not wall-clock); plummet exempt from hold/abandonment; ADR-0156

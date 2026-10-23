@@ -3246,6 +3246,7 @@
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool - Check if target has a specific condition.`
 - `has_death_deferred(character: 'ObjectDB') -> bool - Return True if the character has any active condition granting death_deferred.`
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
+- `is_magical_treatment(treatment: world.conditions.models.TreatmentTemplate, *, technique_driven: bool = False) -> bool - Whether ``treatment`` is magical; otherwise it is mundane first aid (#4450, #4600).`
 - `is_untargetable(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
 - `knockout_preventing_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).`
 - `loss_of_self_terms(template: world.conditions.models.ConditionTemplate) -> 'tuple[ExtraTraitTerm, ...]' - The skills a resist or break-free roll adds for ``template``, usually none.`

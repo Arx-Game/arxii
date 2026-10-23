@@ -981,7 +981,8 @@ vow board, vow page and spellbook vow section are #4565 and do not exist yet.
   reads off every row), `VowAddedEffectTreatment` (`treatment_template`, `target_kind`,
   `minimum_success_level`, `mend_cap_fraction`; mirrors `TechniqueTreatment`. The fraction,
   #4600, is how far the vow's treatment may heal a wound, as a share of its damage: default
-  0.75, above 0 and below 1 by constraint, never above `NEVER_TO_FULL_FRACTION` by `clean()`.
+  0.75, above 0 and below 1 by constraint, between 0.01 and `NEVER_TO_FULL_FRACTION` by its
+  field validators.
   A vow's treatment rides a cast as its own tending, so it carries its own fraction rather than
   borrowing the technique's), and `VowAddedEffectDamageProfile`
   (on `magic.AbstractDamageProfile`; one row per damage type plus at most one untyped).
