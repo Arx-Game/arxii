@@ -688,7 +688,8 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
 ## Design principles (condensed; ADRs hold the why)
 
 - Players vs. the Bad Guys — **no PvP killing** (ADR-0023); asymmetrical PvE, NPCs have no sheets (ADR-0038).
-- One round framework, three modes (ADR-0002); one focused + up to two secondary actions (ADR-0003);
+- One round framework, three modes (ADR-0002); one focused + up to two secondary actions, and a PC
+  never acts twice in a round: no haste, extra actions or follow-up hits (ADR-0003);
   tempo is action-driven, AFK-safe (ADR-0004).
 - **Enforced** impossible to solo — combos and covenant roles are fundamental; built for heroic team-up
   arcs that climax in Audere Majora. Enforced by the boss break bar (#2016, ADR-0102): a secondary
