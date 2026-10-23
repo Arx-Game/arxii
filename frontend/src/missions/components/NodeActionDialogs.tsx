@@ -58,6 +58,8 @@ const EXTERNAL_ACTS = [
   { value: 'covenant_sworn', label: 'Covenant Sworn' },
 ] as const;
 type ExternalActValue = (typeof EXTERNAL_ACTS)[number]['value'];
+/** Acts already true when a run begins: the server allows them on the entry node only (#1035). */
+const DURABLE_ACTS: readonly ExternalActValue[] = ['thread_woven', 'covenant_sworn'];
 
 function CheckTypeSelect({
   id,
@@ -150,6 +152,7 @@ export function AddOptionDialog({
 
   const isTrack = (node.track_successes ?? 0) > 0;
   const kinds = OPTION_KINDS.filter((k) => !isTrack || TRACK_KINDS.includes(k.value));
+  const acts = EXTERNAL_ACTS.filter((a) => node.is_entry || !DURABLE_ACTS.includes(a.value));
   const sheetNumber = Number(oppositionSheet);
   const sheetValid = oppositionSheet !== '' && Number.isInteger(sheetNumber) && sheetNumber > 0;
   const kindReady =
@@ -287,7 +290,7 @@ export function AddOptionDialog({
                   <SelectValue placeholder="Select an act" />
                 </SelectTrigger>
                 <SelectContent>
-                  {EXTERNAL_ACTS.map((a) => (
+                  {acts.map((a) => (
                     <SelectItem key={a.value} value={a.value}>
                       {a.label}
                     </SelectItem>

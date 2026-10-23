@@ -257,6 +257,22 @@ describe('NodePage graph controls', () => {
     await user.keyboard('{Escape}');
   });
 
+  it('offers only Technique Cast as the act off the entry node', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.getMissionNode).mockResolvedValue({ ...TRACK_NODE, is_entry: false });
+    render(<NodePage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5') });
+
+    await user.click(await screen.findByRole('button', { name: 'Add option' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByLabelText('Option kind'));
+    await user.click(screen.getByRole('option', { name: 'External act' }));
+    await user.click(within(dialog).getByLabelText('Act'));
+    const names = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(names).toEqual(['Technique Cast']);
+    await user.keyboard('{Escape}');
+    await user.keyboard('{Escape}');
+  });
+
   it('marks an option the graph check has a problem with', async () => {
     vi.mocked(api.listMissionOptions).mockResolvedValue(page([OPT({ id: 20 })]));
     vi.mocked(api.getGraphCheck).mockResolvedValue([
