@@ -102,8 +102,8 @@ const RESOLVED: ResolvedBeat = {
     check_type_name: 'Investigation',
     points_before_bonus: 48,
     total_points: 58,
-    roller_rank: 'Expert',
-    target_rank: 'Expert',
+    roller_rank: 'Expert (rank 3), 32% toward Master (rank 4)',
+    target_rank: 'Expert (rank 3)',
     rank_difference: 0,
     rank_difference_without_bonus: -1,
   },
@@ -198,8 +198,8 @@ describe('BeatCard Call on favor', () => {
     const breakdown = screen.getByTestId('invocation-breakdown');
     expect(breakdown).toHaveTextContent("Ombrin's favor (invocation: Success)");
     expect(breakdown).toHaveTextContent('+10');
-    expect(breakdown).toHaveTextContent('58, rank Expert');
-    expect(breakdown).toHaveTextContent('rank Expert');
+    expect(breakdown).toHaveTextContent('58, Expert (rank 3), 32% toward Master (rank 4)');
+    expect(breakdown).toHaveTextContent('Expert (rank 3)');
     expect(screen.getByTestId('invocation-rank-difference')).toHaveTextContent(
       '0 (would be -1 without the bonus)'
     );

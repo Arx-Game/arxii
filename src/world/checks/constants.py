@@ -102,6 +102,14 @@ class ModifierSourceKind(models.TextChoices):
     FAVOR = "favor", "Favor"
 
 
+# Contribution kinds that are the character's own standing, not modifiers (#4551
+# decision 7, #4601): the hopeless pin is decided without modifiers, and these stay in.
+# Effort reaches checks through ``effort_level``, never as a contribution.
+OWN_STANDING_SOURCE_KINDS: frozenset[str] = frozenset(
+    {ModifierSourceKind.FATIGUE, ModifierSourceKind.STRAIN, ModifierSourceKind.SOULFRAY}
+)
+
+
 class ModifierLane(models.TextChoices):
     """A kind of quantity a modifier can change (#4551 section 5.5, #4594).
 

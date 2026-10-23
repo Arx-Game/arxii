@@ -4071,7 +4071,7 @@ def attempt_break_free(
     """
     from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
     from world.checks.services import (  # noqa: PLC0415
-        level_opposition,
+        level_opposition_points,
         perform_check_with_modifiers,
     )
     from world.checks.types import ModifierContribution  # noqa: PLC0415
@@ -4106,10 +4106,14 @@ def attempt_break_free(
         )
 
     difficulty = template.break_free_difficulty
+    caster_modifiers = 0
     caster = instance.source_character
     if caster is not None:
         caster_level = get_character_path_level(caster)
-        difficulty += level_opposition(check_type, level=caster_level, character=caster)
+        opposition = level_opposition_points(check_type, level=caster_level, character=caster)
+        difficulty += opposition.total
+        # The caster's conditions are modifiers, not its standing (#4601).
+        caster_modifiers = opposition.modifiers
 
     rally_bonus = instance.pending_rally_bonus
     if rally_bonus > 0:
@@ -4145,6 +4149,7 @@ def attempt_break_free(
         level_override=level_override,
         extra_contributions=contributions or None,
         extra_traits=loss_of_self_terms(template),
+        target_modifiers=caster_modifiers,
     )
     return _resolve_break_free_outcome(instance, result.success_level)
 

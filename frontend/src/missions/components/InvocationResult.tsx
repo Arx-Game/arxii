@@ -46,12 +46,12 @@ export function InvocationResult({ invocation }: { invocation: BeatInvocation })
         <dt>Total</dt>
         <dd className="text-right">
           {invocation.total_points}
-          {invocation.roller_rank ? `, rank ${invocation.roller_rank}` : ''}
+          {invocation.roller_rank ? `, ${invocation.roller_rank}` : ''}
         </dd>
         {invocation.target_rank ? (
           <>
             <dt>Difficulty</dt>
-            <dd className="text-right">rank {invocation.target_rank}</dd>
+            <dd className="text-right">{invocation.target_rank}</dd>
             <dt>Rank difference</dt>
             <dd className="text-right" data-testid="invocation-rank-difference">
               {invocation.rank_difference}

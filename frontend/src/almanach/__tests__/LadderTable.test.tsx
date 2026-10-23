@@ -1,5 +1,6 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
 
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { buildLadderTree } from '../ladder/tree';
@@ -104,6 +105,29 @@ test(`a contested title gets the plate's cl row and "claimed by <name>" replaces
   expect(screen.getByText('claimed by Piropa')).toBeInTheDocument();
   expect(container.querySelector('tr.cl')).not.toBeNull();
   expect(container.querySelector('tr.cl')?.textContent).toContain('Brasa');
+});
+
+describe('with rowHref', () => {
+  const href = (row: LadderRow) => `/staff/almanach/titles/${row.title_id}`;
+
+  test('a defined name and the Undefined chip both link to the rung page', () => {
+    renderWithProviders(<LadderTable rows={rows} rowHref={href} />);
+    expect(screen.getByRole('link', { name: 'Fervor' })).toHaveAttribute(
+      'href',
+      '/staff/almanach/titles/1'
+    );
+    expect(screen.getByRole('link', { name: 'Open undefined county' })).toHaveAttribute(
+      'href',
+      '/staff/almanach/titles/2'
+    );
+  });
+
+  test('the tier label selects the row instead of the name', async () => {
+    const onSelectRow = vi.fn();
+    renderWithProviders(<LadderTable rows={rows} rowHref={href} onSelectRow={onSelectRow} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Select Fervor' }));
+    expect(onSelectRow).toHaveBeenCalledWith(expect.objectContaining({ title_id: 1 }));
+  });
 });
 
 describe('buildLadderTree', () => {

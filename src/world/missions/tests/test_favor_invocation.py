@@ -177,7 +177,10 @@ class SoloMissionInvocationTests(MissionInvocationBase):
         self.assertEqual(invocation.bonus, 10)
         self.assertEqual(invocation.bonus_label, "Ombrin's favor (invocation: Success)")
         self.assertEqual((invocation.points_before_bonus, invocation.total_points), (48, 58))
-        self.assertEqual((invocation.roller_rank, invocation.target_rank), ("Expert", "Expert"))
+        self.assertEqual(
+            (invocation.roller_rank, invocation.target_rank),
+            ("Expert (rank 3)", "Expert (rank 3)"),
+        )
         # 48 alone is Competent: the bonus moved the total across the Expert threshold.
         self.assertEqual(invocation.rank_difference_without_bonus, -1)
 
@@ -194,7 +197,7 @@ class SoloMissionInvocationTests(MissionInvocationBase):
         self.assertIn(
             f"{invocation.call_line}\n{invocation.outcome_line}\n"
             "Perception + Investigation: 48 + 10 Ombrin's favor (invocation: Success) = 58, "
-            "rank Expert against Expert (rank difference 0, -1 without the bonus).",
+            "Expert (rank 3) against Expert (rank 3) (rank difference 0, -1 without the bonus).",
             bodies,
         )
 

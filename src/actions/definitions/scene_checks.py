@@ -166,6 +166,9 @@ def _perform_and_broadcast_self_check(
     payload-persona name at all, so the label MUST be embedded in the content, and it
     must be the presenting face to honor the #981 alt-leak rule).
 
+    The roller's own message ends with their standing (#4601): "Your standing: Expert
+    (rank 3), 67% toward Master (rank 4) against Master (rank 4)." The broadcast does not.
+
     ``invocation`` (#4333): a Call on favor rolls first; its lines reach the room
     and its bonus is added to this check. The roller's result message carries
     their own line (for a secret faith the room line omits it) and the bonus.
@@ -225,7 +228,11 @@ def _perform_and_broadcast_self_check(
     )
     # On commit, after the invocation's own lines (also delivered on commit).
     transaction.on_commit(lambda: _echo_to_telnet_bystanders(actor, narration))
-    return ActionResult(success=True, message="\n".join([*favor_lines, narration]))
+    # The roller alone reads where they stood: ranks with their numbers and how far
+    # through the band each side sat (#4601). The room's narration stays number-free.
+    standing_line = f"Your standing: {result.standing_text}." if result.standing_text else ""
+    lines = [*favor_lines, narration, standing_line]
+    return ActionResult(success=True, message="\n".join(line for line in lines if line))
 
 
 @dataclass

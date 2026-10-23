@@ -14,6 +14,7 @@ from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.models import CheckType
+from world.checks.services import OppositionPoints
 from world.classes.factories import CharacterClassLevelFactory, PathFactory
 from world.magic.constants import DETECT_CAST_CHECK_NAME, TechniqueReach
 from world.magic.factories import GiftFactory, TechniqueFactory, TechniqueStyleFactory
@@ -217,11 +218,16 @@ class ResolveCastAudienceTests(TestCase):
         _observer_in_room_with(caster)
         with (
             patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled,
-            patch("world.magic.services.cast_observation.level_opposition", return_value=20),
+            patch(
+                "world.magic.services.cast_observation.level_opposition_points",
+                return_value=OppositionPoints(standing=24, modifiers=-4),
+            ),
         ):
             rolled.return_value = _check_result_with_success_level(0)
             resolve_cast_audience(caster=caster, technique=_ranged_technique())
         self.assertEqual(rolled.call_args.kwargs["target_difficulty"], 45)
+        # The caster's conditions are modifiers, not its standing (#4601).
+        self.assertEqual(rolled.call_args.kwargs["target_modifiers"], -4)
 
     def test_missing_detection_check_type_fails_closed_on_attribution_only(self) -> None:
         """ADR-0033: a misconfiguration must never leak *who cast it*.
@@ -258,7 +264,10 @@ class ResolveCastAudienceTests(TestCase):
         technique = TechniqueFactory(reach=TechniqueReach.ANY, gift=GiftFactory(style=gift_style))
         with (
             patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled,
-            patch("world.magic.services.cast_observation.level_opposition", return_value=0),
+            patch(
+                "world.magic.services.cast_observation.level_opposition_points",
+                return_value=OppositionPoints(standing=0, modifiers=0),
+            ),
         ):
             rolled.return_value = _check_result_with_success_level(0)
             resolve_cast_audience(caster=caster, technique=technique)
@@ -282,7 +291,10 @@ class ResolveCastAudienceTests(TestCase):
         technique = _ranged_technique()  # gift.style is unset (None) by default
         with (
             patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled,
-            patch("world.magic.services.cast_observation.level_opposition", return_value=0),
+            patch(
+                "world.magic.services.cast_observation.level_opposition_points",
+                return_value=OppositionPoints(standing=0, modifiers=0),
+            ),
         ):
             rolled.return_value = _check_result_with_success_level(0)
             resolve_cast_audience(caster=caster, technique=technique)
