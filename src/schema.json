@@ -52252,6 +52252,29 @@ components:
         * `win` - Win
         * `loss` - Loss
         * `withdrawal` - Withdrawal
+    CombatMark:
+      type: object
+      description: |-
+        Schema-only shape of get_marks rows on EncounterDetailSerializer (#4603).
+
+        Never instantiated for serialization - exists so drf-spectacular emits a
+        concrete component instead of {[key: string]: unknown}, mirroring
+        EngagementLockSerializer below. Field shape matches the dict ``get_marks``
+        builds verbatim.
+      properties:
+        id:
+          type: integer
+        participant_id:
+          type: integer
+        opponent_id:
+          type: integer
+        round_number:
+          type: integer
+      required:
+      - id
+      - opponent_id
+      - participant_id
+      - round_number
     ComboSlotFill:
       type: object
       description: |-
@@ -56370,6 +56393,11 @@ components:
           items:
             $ref: '#/components/schemas/EngagementLock'
           readOnly: true
+        marks:
+          type: array
+          items:
+            $ref: '#/components/schemas/CombatMark'
+          readOnly: true
         pending_attacks:
           type: array
           items:
@@ -56496,6 +56524,7 @@ components:
       - is_gm
       - is_lethal
       - is_participant
+      - marks
       - objective
       - opponents
       - outcome

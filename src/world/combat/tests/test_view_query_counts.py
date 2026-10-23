@@ -140,11 +140,12 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         #      in progress short-circuits on ``round_number`` with no query).
         #  10. Turn-order conditions for ``resolution_order`` (#4572) - one flat
         #      query over every combatant's active turn-order conditions.
+        #  11. CombatMark lookup for marks (#4603) - one flat query for this round's marks.
         # The participants/opponents prefetches do not fire on the warm
         # call — they ran during warm-up and the identity-mapped encounter
         # retains the attribute. The specialist-selection, sustained-action,
         # and protection-commitment surfaces add three bounded queries.
-        with self.assertNumQueries(13):
+        with self.assertNumQueries(14):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

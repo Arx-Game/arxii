@@ -2,6 +2,8 @@
 
 from django.db import IntegrityError
 from django.test import TestCase
+from drf_spectacular.drainage import get_override
+from rest_framework.serializers import ListSerializer
 
 from world.combat.constants import OpponentStatus, ParticipantStatus
 from world.combat.factories import (
@@ -10,6 +12,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.models import CombatMark
+from world.combat.serializers import CombatMarkSerializer, EncounterDetailSerializer
 from world.combat.services import declare_mark
 from world.scenes.constants import RoundStatus
 
@@ -124,3 +127,57 @@ class DeclareMarkServiceTest(TestCase):
         mark2 = declare_mark(self.participant, self.opponent)
         self.assertEqual(mark1.pk, mark2.pk)
         self.assertEqual(CombatMark.objects.count(), 1)
+
+
+def _serialize(encounter: object) -> dict:
+    if not hasattr(encounter, "participants_cached"):
+        encounter.participants_cached = list(encounter.participants.all())
+    if not hasattr(encounter, "opponents_cached"):
+        encounter.opponents_cached = list(encounter.opponents.all())
+    return EncounterDetailSerializer(encounter, context={}).data
+
+
+class EncounterMarksPayloadTest(TestCase):
+    """EncounterDetail ``marks``: this round's marks, public to every reader (#4603)."""
+
+    def setUp(self):
+        self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=2)
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        self.opponent = CombatOpponentFactory(encounter=self.encounter)
+
+    def _mark(self, round_number: int) -> CombatMark:
+        return CombatMark.objects.create(
+            encounter=self.encounter,
+            participant=self.participant,
+            opponent=self.opponent,
+            round_number=round_number,
+        )
+
+    def test_marks_lists_only_this_rounds_marks(self):
+        self._mark(1)
+        self._mark(2)
+        marks = _serialize(self.encounter)["marks"]
+        self.assertEqual([m["round_number"] for m in marks], [2])
+
+    def test_mark_rows_carry_marker_and_target(self):
+        mark = self._mark(2)
+        marks = _serialize(self.encounter)["marks"]
+        self.assertEqual(
+            marks,
+            [
+                {
+                    "id": mark.pk,
+                    "participant_id": self.participant.pk,
+                    "opponent_id": self.opponent.pk,
+                    "round_number": 2,
+                }
+            ],
+        )
+
+    def test_marks_is_empty_when_nobody_marked(self):
+        self.assertEqual(_serialize(self.encounter)["marks"], [])
+
+    def test_marks_is_typed_in_the_schema(self):
+        override = get_override(EncounterDetailSerializer.get_marks, "field")
+        self.assertIsInstance(override, ListSerializer)
+        self.assertIsInstance(override.child, CombatMarkSerializer)

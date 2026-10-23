@@ -31057,6 +31057,20 @@ export interface components {
      */
     ColumnEnum: 'win' | 'loss' | 'withdrawal';
     /**
+     * @description Schema-only shape of get_marks rows on EncounterDetailSerializer (#4603).
+     *
+     *     Never instantiated for serialization - exists so drf-spectacular emits a
+     *     concrete component instead of {[key: string]: unknown}, mirroring
+     *     EngagementLockSerializer below. Field shape matches the dict ``get_marks``
+     *     builds verbatim.
+     */
+    CombatMark: {
+      id: number;
+      participant_id: number;
+      opponent_id: number;
+      round_number: number;
+    };
+    /**
      * @description One slot of a combo taking shape this round (#3553): the ask, and who fills it.
      *
      *     Reads a ``ComboSlotFill``. The filler fields are null while the slot is open.
@@ -32955,6 +32969,7 @@ export interface components {
       readonly is_gm: boolean;
       readonly clashes: components['schemas']['ClashState'][];
       readonly engagement_locks: components['schemas']['EngagementLock'][];
+      readonly marks: components['schemas']['CombatMark'][];
       readonly pending_attacks: components['schemas']['PendingAttack'][];
       readonly companion_orders: components['schemas']['CompanionOrderSummary'][];
       /**
