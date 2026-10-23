@@ -164,12 +164,16 @@ function RouteRow({ route, tiers, nodes, trackDecides }: RouteRowProps) {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <Switch
-          id={`${rowId}-random`}
-          checked={draft.random}
-          onCheckedChange={(v) => setDraft({ ...draft, random: v })}
-        />
-        <Label htmlFor={`${rowId}-random`}>Random set</Label>
+        {trackDecides ? null : (
+          <>
+            <Switch
+              id={`${rowId}-random`}
+              checked={draft.random}
+              onCheckedChange={(v) => setDraft({ ...draft, random: v })}
+            />
+            <Label htmlFor={`${rowId}-random`}>Random set</Label>
+          </>
+        )}
         {route.outcome_text_needs_rewrite ? <Badge variant="secondary">needs rewrite</Badge> : null}
       </div>
       <div className="space-y-1">
