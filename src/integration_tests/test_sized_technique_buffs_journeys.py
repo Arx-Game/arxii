@@ -16,17 +16,30 @@ example seed, so these journeys also prove the seed is coherent.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from evennia.objects.models import ObjectDB
 
-from actions.factories import ActionTemplateFactory
+from actions.factories import ActionTemplateFactory, ConsequencePoolFactory
 from integration_tests.harness import JourneyCase
-from world.checks.constants import ModifierLane, ModifierSize
-from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
+from web.admin.tuning.checks_analytics import compute_chart_distributions
+from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKind
+from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory, ConsequenceFactory
 from world.checks.modifier_models import ModifierValue
-from world.checks.modifier_values import load_value_table, rank_band_share
-from world.checks.services import collect_check_modifiers, perform_check_with_modifiers
+from world.checks.modifier_values import (
+    level_baseline,
+    load_taper_rules,
+    load_value_table,
+    rank_band_share,
+)
+from world.checks.outcome_models import ConsequenceOutcomeModifier
+from world.checks.services import (
+    collect_check_modifiers,
+    perform_check_with_modifiers,
+    record_consequence_outcome,
+)
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
@@ -43,7 +56,7 @@ from world.magic.factories import (
 )
 from world.magic.models import Technique
 from world.magic.models.techniques import ConditionTargetKind
-from world.scenes.factories import SceneFactory
+from world.scenes.factories import InteractionFactory, SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
 from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.modifier_values import seed_modifier_value_tables
@@ -220,9 +233,26 @@ class SizedBuffsOnChecks(JourneyCase):
         self.assertEqual((ten.total_points, ten.roller_rank.name), (123, "Grandmaster"))
         self.assertEqual(ten.chart.rank_difference, 2)
 
+        odds = {d.rank_difference: d for d in compute_chart_distributions()}
+        # Success or better on the seeded charts: 40% at difference 0, 75% at +2.
+        self.assertEqual(round(odds[one.chart.rank_difference].success_probability, 2), 0.40)
+        self.assertEqual(round(odds[ten.chart.rank_difference].success_probability, 2), 0.75)
+
         breakdown = collect_check_modifiers(self.corin.sheet_data, self.ward_reading)
-        # The recorded provenance rows add up to the tapered total.
-        self.assertEqual(sum(breakdown.counted_values()), 73)
+        # The recorded provenance rows, read back, add up to the tapered total.
+        recorded = record_consequence_outcome(
+            character_sheet=self.corin.sheet_data,
+            check_type=self.ward_reading,
+            pool=ConsequencePoolFactory(),
+            selected_consequence=ConsequenceFactory(),
+            breakdown=breakdown,
+            action_interaction=InteractionFactory(),
+        )
+        rows = list(ConsequenceOutcomeModifier.objects.filter(outcome=recorded))
+        self.assertEqual(len(rows), 10)
+        self.assertEqual(recorded.modifier_total, 73)
+        self.assertEqual(sum(row.value for row in rows), 73)
+        self.assertEqual(max(row.value for row in rows), 10)
         # An opponent carrying the same pile presents the same tapered total.
         self.assertEqual(opponent_condition_opposition(self.corin, self.ward_reading), 73)
 
@@ -385,6 +415,28 @@ class StaffTuneTheValueTable(JourneyCase):
             "A level-7 character&#x27;s typical total is 58: this value is 26% of it; "
             "0.50 of a rank band at that total.",
         )
+
+    def test_staff_add_a_baseline_and_a_taper_row(self) -> None:
+        self.client.post(
+            reverse("admin:arxii_modifierlevelbaseline_add"),
+            {"lane": ModifierLane.CHECK, "level": "3", "baseline": "34"},
+        )
+        self.client.post(
+            reverse("admin:arxii_modifiertaper_add"),
+            {
+                "lane": ModifierLane.CHECK,
+                "source_kind": ModifierSourceKind.STRAIN,
+                "ratio": "0.5000",
+                "floor": "0.2500",
+            },
+        )
+
+        self.assertEqual(level_baseline(3), 34)
+        self.assertEqual(level_baseline(5), 34)
+        rule = load_taper_rules()[ModifierSourceKind.STRAIN]
+        self.assertEqual((rule.ratio, rule.floor), (Decimal("0.5000"), Decimal("0.2500")))
+        page = self.client.get(reverse("admin:arxii_modifiertaper_changelist"))
+        self.assertContains(page, "Strain")
 
     def test_the_dashboard_shows_a_tapered_pile(self) -> None:
         response = self.client.get(
