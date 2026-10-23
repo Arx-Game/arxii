@@ -11,6 +11,7 @@ class TestClusterRegistry(TestCase):
             set(CLUSTER_SEEDERS),
             {
                 "checks",
+                "modifier_values",
                 "combat_checks",
                 "social",
                 "investigation",

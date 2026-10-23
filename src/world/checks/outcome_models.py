@@ -203,7 +203,10 @@ class ConsequenceOutcomeModifier(SharedMemoryModel):
     """One modifier contribution snapshotted at consequence-resolution time.
 
     Together these rows reconstruct the full ModifierBreakdown that was in
-    effect when the outcome was created.  The roulette recompute (Task 4.4)
+    effect when the outcome was created. ``value`` is what the contribution counted
+    for after the light taper (#4594), so the rows sum exactly to the outcome's
+    ``modifier_total``; an untapered contribution is recorded at its full value.
+    The roulette recompute (Task 4.4)
     reads these rows rather than re-fetching live modifiers.
     """
 

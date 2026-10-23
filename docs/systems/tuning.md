@@ -51,12 +51,23 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
 - `OutcomeBand` (frozen dataclass): `name`, `success_level`, `probability` (0.0-1.0),
   `percent` (one decimal).
 
+- `compute_modifier_pile(*, character_level, modifier_level, size, count) -> ModifierPileReport | None`
+  (#4594) — the check lane's piece of the simulator: `count` equal buffs valued by the
+  `ModifierValue` table, tapered as CONDITION contributions by the `ModifierTaper` rows, laid on a
+  character whose own total is the `ModifierLevelBaseline` for `character_level`, against a target
+  at that same baseline. Reports the one-buff value (and its share of the rank band at that
+  total), the plain and tapered pile, the rank before and after, and the whole-rank Success odds
+  unbuffed and buffed (the slide, #4551 slice b, replaces whole ranks later). `None` when no value
+  or baseline row covers the inputs.
+
 The panel template (`_checks_panel.html`) hosts the `roll_modifier` / `roller_points` /
 `target_difficulty` / `modifier_points` / `target_modifier_points` slider form itself,
 since each slider re-renders this same fragment. The matchup shows own standing and the
 standing with modifiers ("Novice (rank 1), 67% toward Competent (rank 2) against Mythic
 (rank 8)"), the chart and how far it slides, and a Hopeless note (with "Pinned" when the
-rule held modifiers back). Below it, "The slide" table.
+rule held modifiers back). Below it, "The slide" table. A second form, for the modifier pile
+(`pile_character_level`, `pile_modifier_level`, `pile_size`, `pile_count`), sits under that and
+includes the first form's values.
 
 ### Consequences panel — `src/web/admin/tuning/consequence_analytics.py`
 

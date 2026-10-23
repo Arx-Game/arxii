@@ -17,6 +17,7 @@ from world.checks.services import (
     level_opposition_points,
     preview_check_difficulty,
 )
+from world.checks.types import ModifierBreakdown
 from world.combat.constants import CauseKind, ParticipantStatus
 from world.combat.morale import OpponentMoraleState, morale_state_for
 from world.magic.services.magic_skills import technique_paths
@@ -177,13 +178,14 @@ class _Grader:
     """Grades one viewer's checks for one build; its dicts live and die with that build.
 
     The roll's own modifier total feeds the preview, so the shown grade matches the roll.
-    ``base_totals`` holds the viewer's gathered modifiers per (check type, skill terms) and
+    ``base_breakdowns`` holds the viewer's gathered modifiers per (check type, skill terms) and
     ``graded`` the finished grade per (check type, skill terms, difficulty, modifiers). The
-    roll adds the social contributions on top of the gathered total as a plain sum.
+    roll passes the social contributions as ``extra_contributions``, so they join the same
+    tapered piles (#4594); the preview counts them the same way.
     """
 
     sheet: CharacterSheet
-    base_totals: dict[tuple[int, _TermsKey], int] = field(default_factory=dict)
+    base_breakdowns: dict[tuple[int, _TermsKey], ModifierBreakdown] = field(default_factory=dict)
     graded: dict[tuple[int, _TermsKey, int, int, int], str] = field(default_factory=dict)
 
     def grade(
@@ -197,11 +199,14 @@ class _Grader:
         """The shown grade. ``extra_traits`` are the roll's skill terms (a display cast's)."""
         terms_key = tuple((term.trait.pk, term.weight) for term in extra_traits)
         base_key = (check_type.pk, terms_key)
-        if base_key not in self.base_totals:
-            self.base_totals[base_key] = collect_check_modifiers(
+        if base_key not in self.base_breakdowns:
+            self.base_breakdowns[base_key] = collect_check_modifiers(
                 self.sheet, check_type, extra_traits=extra_traits
-            ).extra_modifiers_total
-        extra = self.base_totals[base_key] + sum(c.value for c in contributions)
+            )
+        base = self.base_breakdowns[base_key]
+        extra = ModifierBreakdown(
+            contributions=[*base.contributions, *contributions], tapers=base.tapers
+        ).extra_modifiers_total
         key = (*base_key, difficulty, extra, target_modifiers)
         if key not in self.graded:
             rank = preview_check_difficulty(

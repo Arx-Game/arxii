@@ -25,6 +25,12 @@ from world.conditions.types import (
 )
 from world.magic.constants import MagicActivity
 from world.magic.services.magic_skills import activity_skill_terms
+from world.magic.services.modifier_sizing import (
+    CastLevelTable,
+    is_sized_row,
+    load_cast_level_table,
+    sized_modifier_level,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -48,6 +54,7 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
     pos_b_id: int | None,
     severity_bonus: int,
     duration_bonus: int,
+    level_table: CastLevelTable | None = None,
 ) -> list[BulkConditionApplication]:
     """Build BulkConditionApplication objects for one applied-condition row.
 
@@ -71,12 +78,21 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
         duration_bonus: Flat rounds added to a row's duration when it has one (#4581).
             A team-lane row ignores both bonuses: its severity is priced against the
             landing target, and the lane is bounded.
+        level_table: The cast power-to-level rows (#4594). A row authoring a
+            ``modifier_size`` stamps the cast's resolved level and that size on every
+            application, so the condition's check modifiers read the value table.
 
     Returns:
         List of ``BulkConditionApplication`` objects, one per target.
     """
     from world.conditions.services import priced_percent_severity  # noqa: PLC0415
 
+    modifier_level, modifier_size = sized_modifier_level(
+        row,
+        effective_power=eff_intensity,
+        success_level=success_level,
+        table=level_table,
+    )
     applications: list[BulkConditionApplication] = []
     for target in targets:
         if is_team_lane_row:
@@ -105,6 +121,8 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
                 cast_destination_id=dest_id,
                 cast_position_a_id=pos_a_id,
                 cast_position_b_id=pos_b_id,
+                modifier_level=modifier_level,
+                modifier_size=modifier_size,
             )
         )
     return applications
@@ -194,6 +212,8 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
     from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
     from world.mechanics.constants import TEAM_DAMAGE_PERCENT_TARGET_NAME  # noqa: PLC0415
 
+    # #4594: loaded only when a row is sized, so an unsized technique pays no queries.
+    level_table = load_cast_level_table() if any(is_sized_row(row) for row in rows) else None
     bulk_applications: list[BulkConditionApplication] = []
     for row in rows:
         if success_level < row.minimum_success_level:
@@ -219,6 +239,7 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
                 pos_b_id=pos_b_id,
                 severity_bonus=severity_bonus,
                 duration_bonus=duration_bonus,
+                level_table=level_table,
             )
         )
 

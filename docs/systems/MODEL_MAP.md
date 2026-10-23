@@ -312,7 +312,9 @@
 ### Service Functions
 - `analyze_fixture(fixture_data: 'str') -> 'FixtureAnalysis' - Dry-run analysis comparing fixture JSON against the current database.`
 - `count_natural_key_args(model: 'type', _seen: 'set[type] | None' = None) -> 'int' - Recursively count how many args a model's natural key consumes.`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `execute_import(fixture_data: 'str', model_actions: 'dict[str, str]') -> 'ImportResult' - Execute an atomic import of fixture data.`
+- `field(*, default=<dataclasses._MISSING_TYPE object>, default_factory=<dataclasses._MISSING_TYPE object>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object>) - Return an object to identify dataclass fields.`
 - `resolve_model_by_name(model_key: 'str') -> 'type[models.Model]' - Resolve ``"<label>.<model_name>"`` (or a bare ``"<model_name>"``), mostly ignoring the label.`
 
 
@@ -643,6 +645,7 @@
 - `area_subtree_pks(area: 'Area') -> 'list[int]' - Return pks of ``area`` and all its descendants.`
 - `colored_area_path(room: 'ObjectDB') -> 'str' - Render a room's full area-hierarchy path with per-area colours (#1463).`
 - `containing_areas(area: 'Area | None') -> 'list[Area]' - The area itself, then each parent up to the root, by walking ``parent`` links.`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `get_ancestor_at_level(area: 'Area', target_level: 'AreaLevel') -> 'Area | None' - Walk the ancestry to find the ancestor at the given AreaLevel.`
 - `get_ancestry(area: 'Area') -> 'list[Area]' - Return the full ancestor chain from root down to this area.`
 - `get_descendant_areas(area: 'Area') -> 'list[Area]' - Return all areas in the subtree below this area.`
@@ -898,6 +901,7 @@
 - `add_place(*, battle: 'Battle', name: 'str', terrain_type: 'str' = TerrainType.OPEN, movement_cost: 'int' = 1, x: 'Decimal' = Decimal('0'), y: 'Decimal' = Decimal('0'), footprint_radius: 'Decimal' = Decimal('1')) -> 'BattlePlace' - Add a named front/zone to a battle.`
 - `add_side(*, battle: 'Battle', role: 'str', victory_threshold: 'int' = 100, covenant: 'Covenant | None' = None) -> 'BattleSide' - Add a side (attacker or defender) to a battle.`
 - `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', descriptor: 'str' = '', quality: 'str' = UnitQuality.TRAINED, commander: 'CharacterSheet | None' = None, summoned_by: 'CharacterSheet | None' = None, strength: 'int' = 100, morale: 'int' = 70, place: 'BattlePlace | None' = None, properties: 'Iterable[Property]' = (), capability_values: 'Iterable[tuple[CapabilityType, int]]' = (), individual_count: 'int | None' = None) -> 'BattleUnit' - Add an abstract typed unit to a battle side.`
+- `asdict(obj, *, dict_factory=<class 'dict'>) - Return the fields of a dataclass instance as a new dictionary mapping`
 - `assign_unit_commander(*, unit: 'BattleUnit', commander: 'CharacterSheet | None') -> 'BattleUnit' - Assign (or clear, with ``commander=None``) a unit's commander (#1711).`
 - `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' - Close any open round and open a new DECLARING round.`
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' - Check whether any side has reached its victory threshold.`
@@ -931,6 +935,7 @@
 - `check_beta_reset_enabled() -> 'None' - Guard 1: the hardcoded constant. Raises ``BetaResetDisabledError`` if flipped off.`
 - `check_confirmation_phrase(typed: 'str | None') -> 'None' - Guard 3: the typed confirmation phrase must match exactly.`
 - `check_release_latch() -> 'None' - Guard 2: the one-way DB latch. Raises ``ReleaseLatchedError`` if any row exists.`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `mark_released(*, released_by: 'AccountDB', note: 'str' = '') -> 'ReleaseLatch' - Write the one-way ``ReleaseLatch`` row. Refuses if one already exists.`
 - `preview_pristine_world_wipe() -> 'WipeReport' - Dry-run: count what ``wipe_pristine_world(execute=True)`` would delete.`
 - `refresh_legend_views() -> None - Refresh all legend materialized views concurrently.`
@@ -1216,6 +1221,7 @@
 - `contribution_value_for_construction(contribution: 'Contribution') -> 'int' - How much a single contribution is worth toward a BUILDING_CONSTRUCTION project.`
 - `crafted_decoration_amenity(kind: 'DecorationKind', quality_tier: 'QualityTier | None') -> 'int' - The amenity a crafted-furniture placement contributes (#2991 amendment, ADR-0192).`
 - `create_entry_room(building: 'Building', name: 'str') -> 'RoomProfile' - Create one Evennia Room ObjectDB + ``RoomProfile`` for *building*, named *name*.`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `issue_permit(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' - Real PERMIT effect handler — creates the BuildingPermit ItemInstance + details.`
 - `place_decoration(room_profile, kind: 'DecorationKind', *, buyer_persona: 'Persona | None' = None, item_instance: 'ItemInstance | None' = None) -> 'RoomDecoration' - Place a decoration in a room and materialize its comfort modifiers (#1514, priced #2991).`
 - `purchase_building(*, persona: 'Persona', listing: 'BuildingListing') -> 'BuildingListing' - Buy a listed ``Building`` with coin (#2991): deed transfer + treasury sink.`
@@ -1337,6 +1343,7 @@
 
 ### Service Functions
 - `abandon_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony - Decision 12: close the rite awarding nothing; frees the location + ghost window.`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `execute_will(character_sheet: 'CharacterSheet') -> None - Execute the deceased's estate — the funeral door of #1985.`
 - `favored_facets_by_item(being: 'WorshippedBeing', item_instances: 'list[ItemInstance]') -> 'dict[int, Facet]' - Each of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet),`
 - `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
@@ -1584,10 +1591,12 @@
 - `assign_route(draft: 'CharacterDraft') -> 'None' - Point the draft at its beginning's route, clearing what hung on the old one (#4395).`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `can_create_character(account: 'AbstractBaseUser | AnonymousUser') -> 'tuple[bool, str]' - Check if an account can create a new character.`
+- `cast(typ, val) - Cast a value to a type.`
 - `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' - Claim a submitted application for staff review.`
 - `clear_family_selection(draft: 'CharacterDraft') -> 'None' - Clear everything anchored to the family path/Upbringing (#3648 review fix).`
 - `clear_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot') -> 'None' - Delete a slot answer and recompute state.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Deny an application.`
 - `family_name_is_taken(name: 'str') -> 'bool' - Case-insensitive collision with any family or organisation name (#3617).`
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' - Create a Character from a completed CharacterDraft.`
@@ -2065,8 +2074,16 @@
 **Foreign Keys:**
   - outcome -> checks.ConsequenceOutcome [FK]
 
+### ModifierLevelBaseline
+
+### ModifierTaper
+
+### ModifierValue
+
 ### Service Functions
+- `NamedTuple(typename, fields=<sentinel>, /, **kwargs) - Typed version of namedtuple.`
 - `award_check_development(character_sheet: 'CharacterSheet', check_type: 'CheckType', effort_level: 'str | None', path_level: 'int', *, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> 'list[tuple[str, int, int]]' - Award dp to traits used in a check.`
+- `cast(typ, val) - Cast a value to a type.`
 - `chart_has_success_outcomes(rank_difference: int) -> bool - Check if the ResultChart for this rank difference has any success outcomes.`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
 - `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0, *, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
@@ -2075,6 +2092,7 @@
 - `get_rollmod(character: 'ObjectDB') -> int - Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing entity of *level* adds to *check_type* (#2707).`
 - `level_opposition_points(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> world.checks.services.OppositionPoints - :func:`level_opposition`, with the defender's condition modifiers kept apart.`
+- `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
 - `mirrored_outcome(outcome: 'CheckOutcome') -> 'CheckOutcome | None' - The outcome on the other side of a resisted roll (#4418).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = (), extra_standing: int = 0, target_modifiers: int = 0) -> world.checks.types.CheckResult - Main check resolution function.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = (), target_modifiers: int = 0) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
@@ -3215,6 +3233,7 @@
 - `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] - Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
 - `condition_modifier_totals_by_sheet(sheet_ids: collections.abc.Iterable[int], modifier_target: 'ModifierTarget') -> dict[int, int] - Batched ``get_condition_modifier_total`` across many sheets (#4090).`
 - `contributing_condition_ids(breakdown: world.checks.types.ModifierBreakdown) -> tuple[int, ...] - The condition instances whose nonzero term is in ``breakdown``, in pk order (#4584).`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary - Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult - Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `draws_aggro_target_ids(targets: collections.abc.Iterable['ObjectDB']) -> set[int] - ObjectDB pks among ``targets`` carrying an active draws_aggro condition (#4572).`
@@ -3223,6 +3242,7 @@
 - `ensure_poison_content() -> None - Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] - Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
 - `expire_scene_scoped_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] - Remove all SCENE-duration conditions from the given targets.`
+- `field(*, default=<dataclasses._MISSING_TYPE object>, default_factory=<dataclasses._MISSING_TYPE object>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object>) - Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet - Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int - Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] - Get all capability values for a character.`
@@ -3250,6 +3270,8 @@
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
 - `is_untargetable(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
 - `knockout_preventing_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).`
+- `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
+- `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
 - `loss_of_self_terms(template: world.conditions.models.ConditionTemplate) -> 'tuple[ExtraTraitTerm, ...]' - The skills a resist or break-free roll adds for ``template``, usually none.`
 - `opponent_condition_opposition(objectdb: 'ObjectDB', check_type: world.checks.models.CheckType) -> int - Difficulty delta an opposing entity's active conditions contribute (#3384).`
 - `passes_concealment_check(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Check concealment after the caller has established readable spatial scope.`
@@ -5422,6 +5444,7 @@
   - damage_type -> conditions.DamageType [FK] (nullable)
 
 ### Service Functions
+- `NamedTuple(typename, fields=<sentinel>, /, **kwargs) - Typed version of namedtuple.`
 - `ap_regen_multiplier_pct(level: 'int') -> 'int' - The AP-regen percentage adjustment for a comfort level (#1514) — 0 at neutral (5).`
 - `area_order_difficulty(area: 'Area | None') -> 'int' - Check difficulty implied by an area's order versus crime (#696 items 1 and 8).`
 - `area_stat_total(area: 'Area | None', stat_key: 'str') -> 'int' - Summed area-level modifier rows for *stat_key* on *area* + ancestors (#2862).`
@@ -5569,6 +5592,10 @@
   - ritual -> magic.Ritual [FK]
 
 ### CapabilityPowerConfig
+
+### CastOutcomeLevelShift
+
+### CastPowerLevel
 
 ### CharacterAnima
 **Foreign Keys:**
@@ -6955,6 +6982,7 @@
 - `begin_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'CharacterEngagement' - Ensure the character has an engagement; create one if none exists.`
 - `chart_has_success_outcomes(rank_difference: int) -> bool - Check if the ResultChart for this rank difference has any success outcomes.`
 - `coherence_cache_scope() - Context manager that memoizes ``motif_coherence_bonus`` per (sheet, resonance).`
+- `contextmanager(func) - @contextmanager decorator.`
 - `covenant_level_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum the authored covenant-level passive bonus across engaged PRIMARY`
 - `covenant_role_base_total(sheet: 'object', target: 'ModifierTarget') -> 'int' - Raw engaged-PRIMARY-covenant-role bonus for ``target`` — no per-gear marginal`
 - `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum covenant-role contributions across equipped items, gated on engagement.`
@@ -7585,11 +7613,14 @@
 
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' - Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
+- `asdict(obj, *, dict_factory=<class 'dict'>) - Return the fields of a dataclass instance as a new dictionary mapping`
 - `available_offers(session: 'InteractionSession', *, pool_count: 'int | None' = None) -> 'list[NPCServiceOffer]' - Return offers the PC can currently see/select, in stable order.`
 - `complete_recorded_profile(profile: 'RecordedProfile', text: 'str') -> 'RecordedProfile' - Finalize a COMMISSIONED sitting: the write-up arrives (#2632).`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' - Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' - Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' - Evaluate a predicate rule tree against an acting-character context.`
+- `field(*, default=<dataclasses._MISSING_TYPE object>, default_factory=<dataclasses._MISSING_TYPE object>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object>) - Return an object to identify dataclass fields.`
 - `format_offer_price(price: 'OfferPrice') -> 'str' - The trainer-menu line for ``price``, the same words on the web and in telnet (#4457).`
 - `incur_npc_debt(standing: 'NPCStanding', amount: 'int', *, current_affection: 'int', current_missions_completed: 'int') -> 'NPCStanding' - Add ``amount`` to ``standing.debt`` and re-stamp the repayment baseline.`
 - `mission_pool_count(*, role: 'NPCRole', persona: 'Persona', npc_persona: 'Persona | None') -> 'int' - POOL offer count to surface for ``persona`` at this NPC (#726, #1020).`
@@ -7648,6 +7679,7 @@
   - actor_persona -> scenes.Persona [FK] (nullable)
 
 ### Service Functions
+- `cast(typ, val) - Cast a value to a type.`
 - `kudos_total_for(account: 'AccountDB') -> 'int' - The sender's kudos total — the staff inbox's sort key (#2288).`
 - `record_resolution(account: 'AccountDB', status: 'str') -> 'SubmitterStanding' - Stamp the submitter's track record when staff resolve their submission.`
 - `report_error(exc: 'BaseException', *, label: 'str', actor: 'ObjectDB | None' = None) -> 'None' - Capture an exception as a deduplicated ``SystemErrorReport`` + a structured log.`
@@ -9163,6 +9195,7 @@
 ### Service Functions
 - `active_persona_for_sheet(sheet: 'CharacterSheet') -> 'Persona' - The face a character is currently presenting as (#981).`
 - `broadcast_scene_message(scene: 'Scene', action: 'ActionType') -> 'None' - Send scene information to all accounts in the scene's location.`
+- `cast(typ, val) - Cast a value to a type.`
 - `clear_unseen_observer(scene: 'Scene', observer: 'CharacterSheet') -> 'None' - Clear observer's unseen-observation grant on scene; broadcast if it changed`
 - `create_mask(sheet: 'CharacterSheet', *, name: 'str', disguise_form: 'CharacterForm | None' = None, disguise_kind: 'str | None' = None) -> 'Persona' - Create a TEMPORARY anonymous **mask** — the "put on a mask" path (#1127).`
 - `create_persona(sheet: 'CharacterSheet', *, name: 'str', persona_type: 'str', is_fake_name: 'bool' = False, bypass_cap: 'bool' = False) -> 'Persona' - Create a new ESTABLISHED or TEMPORARY persona for a character (#1127).`
@@ -9256,7 +9289,9 @@
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', subject_aware: 'bool' = True, author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None, hook: 'Secret | None' = None) -> 'Secret' - Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 - `author_truth(hook: 'Secret', *, content: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, category: 'SecretCategory | None' = None, consequences: 'str' = '') -> 'Secret' - Write the truth under a hook, unknown to its subject until revealed (#4397).`
 - `character_knows_secret(*, knower_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' - True if the character (by current tenure) holds knowledge of ``secret`` (#1680).`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `expose_secret(secret: 'Secret', *, societies: 'Iterable[Society]') -> 'SecretExposureResult' - Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).`
+- `field(*, default=<dataclasses._MISSING_TYPE object>, default_factory=<dataclasses._MISSING_TYPE object>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object>) - Return an object to identify dataclass fields.`
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' - Record that a character knows a secret, unlocking the given layers (idempotent).`
 - `has_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet') -> 'bool' - True if ``holder_sheet`` holds any standing leverage over ``subject_sheet`` (#1680).`
 - `hooks_for_subject(sheet: 'CharacterSheet') -> 'QuerySet[Secret]' - Every hook a character carries, for the GM at their table (#4397).`
@@ -9387,6 +9422,7 @@
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' - Apply weekly rust to all untrained skills.`
 - `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `get_relationship_tier(character_a: 'CharacterSheet | ObjectDB', character_b: 'CharacterSheet | ObjectDB') -> 'int' - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' - Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
@@ -10910,6 +10946,7 @@
 ## world.tidings
 
 ### Service Functions
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) - Add dunder methods based on the fields defined in the class.`
 - `format_ic_month_day(month: int, day: int) -> str - A yearless IC date such as a birthday or feast day: "Dreaming 14 (1/14)".`
 - `house_feed_for(organization, *, limit: 'int' = 30) -> 'list[PublicFeedItem]' - The house feed (#1884): what the household hears about its own people.`
 - `hub_feed_for_room(room: 'ObjectDB | None', *, limit: 'int' = 30) -> 'list[PublicFeedItem]' - The civic-hub scope (#1450): the local slice of awareness at ``room``.`

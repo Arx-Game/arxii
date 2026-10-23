@@ -147,6 +147,7 @@ from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.models.liturgy import RitualLiturgy
 from world.magic.models.magic_activity import MagicActivitySkill
 from world.magic.models.manifestation import CharacterManifestation, TechniqueManifestOption
+from world.magic.models.modifier_level import CastOutcomeLevelShift, CastPowerLevel
 from world.magic.models.motifs import (
     Facet,
     FacetAlias,
@@ -297,6 +298,8 @@ __all__ = [
     "BeginningsRitualGrant",
     # geometric capability power curve config (#2708)
     "CapabilityPowerConfig",
+    "CastOutcomeLevelShift",
+    "CastPowerLevel",
     "CharacterAnima",
     "CharacterAura",
     # prepared per-character Audere text (#4101)

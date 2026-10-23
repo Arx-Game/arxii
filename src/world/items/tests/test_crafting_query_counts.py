@@ -270,10 +270,12 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # #2886 added two bounded queries to the attach path: one Thread
             # count (shared by the roll contribution AND the quality ceiling —
             # deduped) and the thread-ceiling probe. Band 79-81 → 81-83.
+            # #4594: collect_check_modifiers reads the check lane's ModifierTaper rows once
+            # (one constant query, never per row). Band 81-83 → 82-84.
             self.assertTrue(
-                81 <= executed <= 83,
-                f"{executed} queries executed, expected 82 ±1 identity-map "
-                f"wobble (band 81-83). A jump of >=3 means a per-row N+1.",
+                82 <= executed <= 84,
+                f"{executed} queries executed, expected 83 ±1 identity-map "
+                f"wobble (band 82-84). A jump of >=3 means a per-row N+1.",
             )
 
         self.assertTrue(result.attached)

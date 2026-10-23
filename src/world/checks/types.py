@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
 from world.checks.constants import OWN_STANDING_SOURCE_KINDS, ModifierSourceKind
@@ -175,12 +175,49 @@ class ModifierContribution:
     ``condition_instance_id`` names the ConditionInstance a CONDITION contribution came
     from, so a real roll can spend a once-only (UNTIL_USED) condition that helped it
     (``spend_contributing_conditions``, #4584). None for every other source kind.
+
+    ``level`` and ``size`` (#4594) are the level the modifier counts at and its
+    ``ModifierSize``, when its source is sized; ``value`` is then the value table's
+    number for that pair, never anything read off the target. An unsized source leaves
+    both None and keeps its flat value. ``vow_part`` is the share of ``value`` a vow's
+    size step added; it is never tapered (#4551 section 5.4, empty until that slice).
     """
 
     source_kind: str
     source_label: str
     value: int
     condition_instance_id: int | None = None
+    level: int | None = None
+    size: int | None = None
+    vow_part: int = 0
+
+
+@dataclass(frozen=True)
+class TaperRule:
+    """How one source kind tapers in a lane (a ``ModifierTaper`` row, #4594).
+
+    In a pile, the k-th largest modifier counts ``max(ratio ** (k - 1), floor)`` of its
+    taperable value.
+    """
+
+    ratio: Decimal
+    floor: Decimal
+
+    def weight(self, position: int) -> Decimal:
+        """The share the modifier at 0-based ``position`` in its pile counts for."""
+        return max(self.ratio**position, self.floor)
+
+
+@dataclass(frozen=True)
+class CountedContribution:
+    """A contribution beside what it actually counts for after the taper (#4594)."""
+
+    contribution: ModifierContribution
+    counted: Decimal
+
+
+def _round_half_up(value: Decimal) -> int:
+    return int(value.to_integral_value(rounding=ROUND_HALF_UP))
 
 
 @dataclass
@@ -192,18 +229,78 @@ class ModifierBreakdown:
     ``perform_check``'s ``extra_modifiers``: it leaves out CAPABILITY contributions,
     because the roll path (``_compute_check_breakdown``) already adds the same points
     itself. Feeding ``total`` into ``extra_modifiers`` counts capability twice (#4453).
+
+    ``tapers`` (#4594) maps a source kind to its ``TaperRule``. The contributions of a
+    tapered kind form two piles, bonuses and penalties; each pile counts largest first,
+    the k-th at ``rule.weight(k - 1)`` of its value less its untapered ``vow_part``. A
+    kind with no rule (the character's own standing: rollmod, effort, fatigue, strain,
+    soulfray, capability) adds at face value. An empty mapping is a plain sum. Both
+    totals round once, half up, after the piles are summed.
     """
 
     contributions: list[ModifierContribution] = field(default_factory=list)
+    tapers: dict[str, TaperRule] = field(default_factory=dict)
+
+    def counted(self) -> list[CountedContribution]:
+        """Every contribution with what it counts for, in the original order."""
+        counted: dict[int, Decimal] = {}
+        piles: dict[tuple[str, bool], list[int]] = {}
+        for index, contribution in enumerate(self.contributions):
+            if contribution.source_kind in self.tapers:
+                taperable = contribution.value - contribution.vow_part
+                piles.setdefault((contribution.source_kind, taperable >= 0), []).append(index)
+            else:
+                counted[index] = Decimal(contribution.value)
+        for (kind, _is_bonus), indexes in piles.items():
+            rule = self.tapers[kind]
+            ordered = sorted(
+                indexes,
+                key=lambda i: -abs(self.contributions[i].value - self.contributions[i].vow_part),
+            )
+            for position, index in enumerate(ordered):
+                contribution = self.contributions[index]
+                taperable = contribution.value - contribution.vow_part
+                counted[index] = contribution.vow_part + taperable * rule.weight(position)
+        return [
+            CountedContribution(contribution=contribution, counted=counted[index])
+            for index, contribution in enumerate(self.contributions)
+        ]
+
+    def counted_values(self) -> list[int]:
+        """What each contribution counts for, as whole numbers summing exactly to ``total``.
+
+        Each counted share is floored toward zero and the leftover units go to the largest
+        remainders, so recorded provenance rows (``ConsequenceOutcomeModifier``) add up to the
+        tapered total the roll used. Untapered contributions keep their exact value.
+        """
+        counted = [c.counted for c in self.counted()]
+        floored = [int(value) for value in counted]  # int() truncates toward zero
+        leftover = self.total - sum(floored)
+        step = 1 if leftover > 0 else -1
+        order = sorted(
+            range(len(counted)),
+            key=lambda i: (counted[i] - floored[i]) * step,
+            reverse=True,
+        )
+        for index in order[: abs(leftover)]:
+            floored[index] += step
+        return floored
 
     @property
     def total(self) -> int:
-        return sum(c.value for c in self.contributions)
+        return _round_half_up(sum((c.counted for c in self.counted()), Decimal(0)))
 
     @property
     def extra_modifiers_total(self) -> int:
-        return sum(
-            c.value for c in self.contributions if c.source_kind != ModifierSourceKind.CAPABILITY
+        return _round_half_up(
+            sum(
+                (
+                    c.counted
+                    for c in self.counted()
+                    if c.contribution.source_kind != ModifierSourceKind.CAPABILITY
+                ),
+                Decimal(0),
+            )
         )
 
     @property

@@ -31,8 +31,9 @@ from flows.events.payloads import (
 )
 from flows.models.triggers import Trigger
 from world.achievements.constants import ConditionEventType
-from world.checks.constants import ModifierSourceKind
+from world.checks.constants import ModifierLane, ModifierSourceKind
 from world.checks.models import CheckType
+from world.checks.modifier_values import ValueTable, load_taper_rules, load_value_table
 from world.checks.services import perform_check_with_modifiers
 from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.conditions.constants import (
@@ -1176,6 +1177,7 @@ def _bulk_apply_one(  # noqa: PLR0913
         _make_just_installed_triggers_live(app.target)
         _register_unseen_observer_if_concealing(app.target, app.template)
         _stamp_cast_positions(result.instance, app)
+        _stamp_modifier_sizing(result.instance, app)
 
     if result.instance is not None and target_location is not None:
         emit_event(
@@ -1358,6 +1360,25 @@ def _stamp_cast_positions(instance: "ConditionInstance", app: BulkConditionAppli
         update_fields.append("cast_position_b_id")
     if update_fields:
         instance.save(update_fields=update_fields)
+
+
+def _stamp_modifier_sizing(instance: "ConditionInstance", app: BulkConditionApplication) -> None:
+    """Set ``app``'s modifier level and size on ``instance`` (#4594).
+
+    A re-application keeps the higher level, the way intensity stacking keeps the
+    higher severity; the size is the applying technique's own, so the latest wins.
+    No-op for an unsized application.
+    """
+    if app.modifier_level is None or app.modifier_size is None:
+        return
+    level = app.modifier_level
+    if instance.modifier_level is not None:
+        level = max(level, instance.modifier_level)
+    if instance.modifier_level == level and instance.modifier_size == app.modifier_size:
+        return
+    instance.modifier_level = level
+    instance.modifier_size = app.modifier_size
+    instance.save(update_fields=["modifier_level", "modifier_size"])
 
 
 def _make_just_installed_triggers_live(target: "ObjectDB") -> None:  # noqa: OBJECTDB_PARAM
@@ -2659,6 +2680,31 @@ def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, in
     return {cap_id: max(0, val) for cap_id, val in totals.items()}
 
 
+def _is_sized(instance: ConditionInstance) -> bool:
+    """Whether ``instance`` carries both a modifier level and a size (#4594)."""
+    return instance.modifier_level is not None and instance.modifier_size is not None
+
+
+def _sized_check_value(
+    instance: ConditionInstance,
+    authored_value: int,
+    value_table: ValueTable | None,
+) -> int | None:
+    """The value-table number for one of ``instance``'s check modifiers, or None (#4594).
+
+    The magnitude comes from the table at the instance's level and size; the authored
+    row's sign says bonus or penalty, so a debuff stays a penalty. None (keep the flat
+    authored value) when the instance is unsized, the authored value is 0, or no table
+    row covers its size and level. Nothing about the bearer is read.
+    """
+    if value_table is None or not _is_sized(instance) or authored_value == 0:
+        return None
+    magnitude = value_table.value(instance.modifier_level, instance.modifier_size)
+    if magnitude is None:
+        return None
+    return magnitude if authored_value > 0 else -magnitude
+
+
 def _check_modifier_for_target(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     check_type: CheckType,
@@ -2685,6 +2731,12 @@ def _check_modifier_for_target(
 
     active_instances = get_active_conditions(target)
 
+    # #4594: a sized instance (a technique buff with a resolved level) reads the value
+    # table instead of its flat authored values. Loaded once, only when needed.
+    value_table = None
+    if any(_is_sized(instance) for instance in active_instances):
+        value_table = load_value_table(ModifierLane.CHECK)
+
     for instance in active_instances:
         # Get modifiers: condition-level OR stage-specific (if at a stage)
         query = Q(condition=instance.condition)
@@ -2698,12 +2750,17 @@ def _check_modifier_for_target(
 
         for mod in modifiers:
             modifier_value = mod.modifier_value
+            sized_value = _sized_check_value(instance, mod.modifier_value, value_table)
 
             # effective_severity already folds in the stage multiplier, so scaling
             # by severity and by the stage are mutually exclusive — if/elif, not two
             # ifs, mirroring get_condition_modifier_total. (Two ifs double-applied
             # the stage multiplier for a staged, severity-scaled modifier.)
-            if mod.scales_with_severity:
+            if sized_value is not None:
+                # The level already carries the cast's power and outcome, so a sized
+                # value is never scaled again by severity or stage.
+                modifier_value = sized_value
+            elif mod.scales_with_severity:
                 modifier_value = int(modifier_value * instance.effective_severity)
             elif instance.current_stage:
                 modifier_value = int(modifier_value * instance.current_stage.severity_multiplier)
@@ -2745,7 +2802,23 @@ def opponent_condition_opposition(
     feeds level_opposition's additive difficulty -- a debuffed opponent presents lower
     difficulty to whoever is acting against it.
     """
-    return _check_modifier_for_target(objectdb, check_type).total_modifier
+    result = _check_modifier_for_target(objectdb, check_type)
+    rule = load_taper_rules(ModifierLane.CHECK).get(ModifierSourceKind.CONDITION)
+    if rule is None:
+        return result.total_modifier
+    # #4594: the opponent's own conditions are a CONDITION pile like a roller's, so the
+    # same light taper applies to them.
+    return ModifierBreakdown(
+        contributions=[
+            ModifierContribution(
+                source_kind=ModifierSourceKind.CONDITION,
+                source_label=instance.condition.name,
+                value=value,
+            )
+            for instance, value in result.breakdown
+        ],
+        tapers={ModifierSourceKind.CONDITION: rule},
+    ).total
 
 
 def condition_contributions(
@@ -2775,6 +2848,8 @@ def condition_contributions(
                 source_label=label,
                 value=modifier_value,
                 condition_instance_id=instance.pk,
+                level=instance.modifier_level if _is_sized(instance) else None,
+                size=instance.modifier_size if _is_sized(instance) else None,
             )
         )
     return contributions

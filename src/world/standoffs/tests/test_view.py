@@ -1,6 +1,6 @@
 """The per-viewer standoff payload: what each participant may see, and nothing more."""
 
-from types import SimpleNamespace
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.db import connection
@@ -9,8 +9,15 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.constants import ModifierLane, ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
-from world.checks.services import OppositionPoints
+from world.checks.modifier_models import ModifierTaper
+from world.checks.services import (
+    OppositionPoints,
+    collect_check_modifiers,
+    preview_check_difficulty,
+)
+from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.combat.constants import CauseKind, OpponentTier
 from world.combat.factories import (
     CombatOpponentFactory,
@@ -19,6 +26,11 @@ from world.combat.factories import (
     seed_scaling_defaults,
 )
 from world.combat.tests.test_views import CombatEncounterViewSetTestBase
+from world.conditions.factories import (
+    ConditionCheckModifierFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.factories import ApplicationFactory, ModifierTargetFactory
 from world.species.factories import SpeciesFactory
@@ -300,13 +312,44 @@ class GradeAndTermsTests(ViewBase):
             patch(CHART, return_value=True),
             patch(
                 "world.standoffs.services.view.collect_check_modifiers",
-                return_value=SimpleNamespace(extra_modifiers_total=7),
+                return_value=ModifierBreakdown(
+                    contributions=[
+                        ModifierContribution(
+                            source_kind=ModifierSourceKind.CONDITION,
+                            source_label="Steady",
+                            value=7,
+                        )
+                    ]
+                ),
             ),
         ):
             view = self.view_for(self.sheet_b)
         self.assertEqual(view.approaches[0].grade, DifficultyIndicator.EASY.value)
         self.assertEqual(preview.call_args.args[3], 7)  # the roll's own modifier total
         self.assertEqual(view.approaches[0].approach_id, approach.pk)
+
+    def test_the_preview_tapers_a_buff_pile_like_the_roll(self) -> None:
+        """#4594: ten +10 condition buffs on the viewer reach the preview tapered (73)."""
+        approach = StandoffApproachFactory()
+        ModifierTaper.objects.create(
+            lane=ModifierLane.CHECK,
+            source_kind=ModifierSourceKind.CONDITION,
+            ratio=Decimal("0.8750"),
+            floor=Decimal("0.6667"),
+        )
+        for index in range(10):
+            condition = ConditionTemplateFactory(name=f"Steeled Nerve {index}")
+            ConditionCheckModifierFactory(
+                condition=condition, check_type=approach.check_type, modifier_value=10
+            )
+            ConditionInstanceFactory(target=self.sheet_b.character, condition=condition)
+        rolled = collect_check_modifiers(self.sheet_b, approach.check_type)
+
+        with patch(PREVIEW, wraps=preview_check_difficulty) as preview:
+            self.view_for(self.sheet_b)
+
+        self.assertEqual(rolled.extra_modifiers_total, 73)
+        self.assertEqual(preview.call_args.args[3], 73)
 
     def test_terms_listed_only_when_their_required_drive_is_revealed(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template)

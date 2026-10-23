@@ -20,13 +20,22 @@ modifier.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from itertools import pairwise
 from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch
 
+from world.checks.constants import ModifierSourceKind
+from world.checks.modifier_values import (
+    level_baseline,
+    load_taper_rules,
+    load_value_table,
+    rank_band_share,
+)
 from world.checks.slide import load_ranks, resolve_standing, slide_chart
-from world.traits.models import ResultChart, ResultChartOutcome
+from world.checks.types import ModifierBreakdown, ModifierContribution
+from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
 
 if TYPE_CHECKING:
     from world.checks.slide import CheckStanding, SlidChart
@@ -325,4 +334,72 @@ def compute_chart_checks() -> ChartChecks:
         impossible_above_winnable=above_winnable,
         monotonic_failures=failures,
         lowest=label(charts[0]) if charts else "",
+    )
+
+
+@dataclass(frozen=True)
+class ModifierPileReport:
+    """What a pile of equal check modifiers does at one character level (#4594).
+
+    The check lane's piece of the simulator: ``count`` modifiers of one level and size,
+    each valued by the value table, tapered as CONDITION contributions, laid on a
+    character whose own total is the level baseline, against a target at that same
+    baseline. The odds use whole rank differences until the slide lands (#4551 slice b).
+    """
+
+    baseline: int
+    modifier_value: int
+    band_share: Decimal | None
+    plain_total: int
+    tapered_total: int
+    rank_before: str
+    rank_after: str
+    unbuffed: ChartDistribution | None
+    buffed: ChartDistribution | None
+
+
+def _rank_name(points: int) -> str:
+    rank = CheckRank.get_rank_for_points(points)
+    return f"{rank.name} (rank {rank.rank})" if rank else "below every rank"
+
+
+def compute_modifier_pile(
+    *, character_level: int, modifier_level: int, size: int, count: int
+) -> ModifierPileReport | None:
+    """Simulate ``count`` modifiers of (``modifier_level``, ``size``) on one character.
+
+    None when the value table or level baseline has no row covering the inputs; the
+    panel says which rows to author.
+    """
+    baseline = level_baseline(character_level)
+    value = load_value_table().value(modifier_level, size)
+    if baseline is None or value is None:
+        return None
+    tapers = load_taper_rules()
+    breakdown = ModifierBreakdown(
+        contributions=[
+            ModifierContribution(
+                source_kind=ModifierSourceKind.CONDITION,
+                source_label=f"Buff {index + 1}",
+                value=value,
+                level=modifier_level,
+                size=size,
+            )
+            for index in range(count)
+        ],
+        tapers={
+            kind: rule for kind, rule in tapers.items() if kind == ModifierSourceKind.CONDITION
+        },
+    )
+    tapered = breakdown.total
+    return ModifierPileReport(
+        baseline=baseline,
+        modifier_value=value,
+        band_share=rank_band_share(value, baseline),
+        plain_total=value * count,
+        tapered_total=tapered,
+        rank_before=_rank_name(baseline),
+        rank_after=_rank_name(baseline + tapered),
+        unbuffed=compute_matchup(roller_points=baseline, target_difficulty=baseline),
+        buffed=compute_matchup(roller_points=baseline + tapered, target_difficulty=baseline),
     )

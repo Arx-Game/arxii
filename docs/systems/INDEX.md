@@ -1059,6 +1059,15 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `CheckTypeTrait` row (a trait present twice scores twice), develops each trait once per roll,
   and adds the trait ids to the roll's `involved_traits` for capability and thread matching.
   Magic is the first user. See "extra_traits" in [checks.md](checks.md).
+- **Modifier level, size and taper (#4594, ADR-4594-A):** `ModifierValue` (the value table:
+  `lane`, `level`, `size`, `value`), `ModifierLevelBaseline`, `ModifierTaper` (`modifier_models.py`)
+  with readers `load_value_table`, `load_taper_rules`, `level_baseline`, `rank_band_share`
+  (`modifier_values.py`); enums `ModifierLane`, `ModifierSize`. `ModifierContribution` carries
+  `level`/`size`/`vow_part`; `ModifierBreakdown(contributions, tapers)` tapers each kind's bonus
+  and penalty piles (7/8, floor 2/3 in the example seed) and `counted()` shows the per-item count.
+  `collect_check_modifiers` loads the check lane's tapers. First sized source: technique buffs
+  (`TechniqueAppliedCondition.modifier_size`, `CastPowerLevel`, `CastOutcomeLevelShift`, see
+  Magic). Seed cluster `modifier_values`; tuning dashboard modifier pile (`compute_modifier_pile`).
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 

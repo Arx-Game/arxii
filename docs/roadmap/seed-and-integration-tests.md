@@ -161,6 +161,17 @@ outcome, result text with ranks, numbers and band positions, the slid chart on t
 wheel, and the tuning dashboard's matchup (modifiers on either side, the pin) and slide table.
 Journey: `integration_tests/test_every_point_counts_journeys.py`.
 
+✅ **Check math, slice c1 (#4594 of #4551, ADR-4594-A)** — the tuning-curve design pass 2F asked
+for is spec #4551. Built here: modifiers carry a level and a size (`ModifierSize`); the
+`ModifierValue` table, `ModifierLevelBaseline` and `ModifierTaper` rows (one lane column, check
+lane only so far) with admin pages and Required content entries; the light taper by kind in
+`ModifierBreakdown` (7/8, floor 2/3, own standing and the vow part outside it); technique buffs as
+the first sized source (`TechniqueAppliedCondition.modifier_size`, `CastPowerLevel`,
+`CastOutcomeLevelShift`, the admin size check); a modifier pile on the tuning dashboard; example
+rows in the `modifier_values` seed cluster. Still open in #4551: result-chart repair and the
+impossible charts (slice a), the slide and hopeless rule (slice b), items, distinctions, scene
+modifiers and every other lane (rest of slice c), the vow size shift (slice d).
+
 ✅ **Phase B (#1221)** — "makes them tunable," referenced at 3.9 above, has shipped: admin-hosted
 Game Tuning (`/admin/_tuning/`) and Game Ops (`/admin/_ops/`) dashboards, plus a superuser
 content-repo load surface (#1220). See [docs/systems/tuning.md](../systems/tuning.md) and
