@@ -355,12 +355,12 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
     """
     sheet = character.character_sheet
     if sheet is None:
-        contribution_sum = sum(c.value for c in (extra_contributions or []))
+        sheetless = ModifierBreakdown(contributions=list(extra_contributions or []))
         return perform_check(
             character,
             check_type,
             target_difficulty=target_difficulty,
-            extra_modifiers=extra_modifiers + contribution_sum,
+            extra_modifiers=extra_modifiers + sum(c.value for c in sheetless.contributions),
             effort_level=effort_level,
             fatigue_penalty=fatigue_penalty,
             specialization=specialization,
@@ -368,6 +368,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
             level_override=level_override,
             stat_override=stat_override,
             extra_traits=extra_traits,
+            extra_standing=sheetless.standing_total,
             target_modifiers=target_modifiers,
         )
     breakdown = collect_check_modifiers(

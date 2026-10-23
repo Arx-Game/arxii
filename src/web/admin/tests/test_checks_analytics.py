@@ -291,3 +291,27 @@ class SlideAnalyticsTests(TestCase):
         assert "Pinned" in body
         assert 'name="modifier_points"' in body
         assert "The slide" in body
+        assert "Impossible zone" in body
+        assert "Open result charts" in body
+
+    def test_chart_checks_list_the_impossible_zone_and_catch_a_dip(self) -> None:
+        from web.admin.tuning.checks_analytics import compute_chart_checks
+        from world.traits.models import ResultChartOutcome
+
+        checks = compute_chart_checks()
+        assert checks.impossible == ["Impossible (-8)", "Failure -7 (-7)"]
+        assert checks.impossible_above_winnable == []
+        assert checks.monotonic_failures == []
+        assert checks.lowest == "Impossible (-8)"
+        # Break the invariant: chart -2's Success band shrinks below chart -3's.
+        row = ResultChartOutcome.objects.get(chart__rank_difference=-2, outcome__name="Success")
+        row.min_roll = 95
+        row.save()
+        partial = ResultChartOutcome.objects.get(
+            chart__rank_difference=-2, outcome__name="Partial Success"
+        )
+        partial.max_roll = 94
+        partial.save()
+        assert any(
+            "Difficulty -2" in failure for failure in compute_chart_checks().monotonic_failures
+        )

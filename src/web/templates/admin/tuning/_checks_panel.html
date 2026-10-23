@@ -229,6 +229,19 @@
 <p>
   {% translate "Each chart's odds at 0%, 25%, 50%, 75% and 100% of the way through its band, sliding toward the next chart over the chart's own outcomes only. A chart with no Success (1) is impossible: a check whose own standing lands there is held on it." %}
 </p>
+<ul class="chart-checks">
+  <li>
+    {% translate "Monotonic check" %}:
+    {% if chart_checks.monotonic_failures %}{{ chart_checks.monotonic_failures|length }} {% translate "failures" %}: {{ chart_checks.monotonic_failures|join:"; " }}{% else %}{% translate "no \"at least\" chance falls from one chart to the next." %}{% endif %}
+  </li>
+  <li>
+    {% translate "Impossible zone" %}:
+    {% if chart_checks.impossible %}{{ chart_checks.impossible|join:", " }}{% else %}{% translate "empty: every chart has a Success (1) outcome." %}{% endif %}
+    {% if chart_checks.impossible_above_winnable %}<strong>{% translate "Above a winnable chart" %}: {{ chart_checks.impossible_above_winnable|join:", " }}</strong>{% endif %}
+  </li>
+  <li>{% translate "Range" %}: {% translate "the lowest chart is" %} {{ chart_checks.lowest }}; {% translate "a difference below it lands at 0% of its band." %}</li>
+  <li><a href="{% url 'admin:arxii_resultchart_changelist' %}">{% translate "Open result charts" %}</a></li>
+</ul>
 <p class="rank-ladder">{% translate "Ranks" %}: {{ rank_ladder|join:", " }}</p>
 <table class="tuning-table slide-table">
   <thead>

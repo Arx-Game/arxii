@@ -33,6 +33,7 @@ from web.admin.tuning import (
     technique_analytics,
 )
 from web.admin.tuning.checks_analytics import (
+    compute_chart_checks,
     compute_chart_distributions,
     compute_matchup,
     compute_slide_table,
@@ -125,6 +126,7 @@ def tuning_checks_fragment(request: HttpRequest) -> HttpResponse:
             target_modifier_points=target_modifier_points,
         ),
         "slide_table": compute_slide_table(roll_modifier=roll_modifier),
+        "chart_checks": compute_chart_checks(),
         "rank_ladder": rank_ladder(),
         "roll_modifier": roll_modifier,
         "roller_points": roller_points,

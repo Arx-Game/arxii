@@ -269,3 +269,60 @@ def compute_slide_table(*, roll_modifier: int = 0) -> list[SlideRow]:
 def rank_ladder() -> list[str]:
     """Every check rank with its number and threshold, for the panel's key."""
     return [f"{rank.name} (rank {rank.rank}): {rank.min_points}+" for rank in load_ranks()]
+
+
+@dataclass(frozen=True)
+class ChartChecks:
+    """The chart guard, as the panel shows it (#4601; the test guard is
+    ``world/checks/tests/test_slide.py`` and ``test_chart_direction.py``).
+
+    ``impossible`` names the charts with no Success (1); ``impossible_above_winnable``
+    any of them sitting above a winnable chart; ``monotonic_failures`` every "at least X"
+    chance that falls from one chart to the next; ``lowest`` the lowest chart, where every
+    difference below it lands at 0% of its band.
+    """
+
+    impossible: list[str]
+    impossible_above_winnable: list[str]
+    monotonic_failures: list[str]
+    lowest: str
+
+
+def compute_chart_checks() -> ChartChecks:
+    """Run the monotonic and impossible-zone checks over the authored chart rows."""
+    charts = list(ResultChart.objects.order_by("rank_difference"))
+    rows = list(ResultChartOutcome.objects.select_related("outcome"))
+    levels = sorted({row.outcome.success_level for row in rows})
+
+    def at_least(chart: ResultChart, level: int) -> int:
+        return sum(
+            row.max_roll - row.min_roll + 1
+            for row in rows
+            if row.chart_id == chart.pk and row.outcome.success_level >= level
+        )
+
+    def label(chart: ResultChart) -> str:
+        return f"{chart.name} ({chart.rank_difference})"
+
+    impossible = [chart for chart in charts if at_least(chart, 1) == 0]
+    seen_winnable = False
+    above_winnable: list[str] = []
+    for chart in charts:
+        if chart in impossible:
+            if seen_winnable:
+                above_winnable.append(label(chart))
+        else:
+            seen_winnable = True
+    failures = [
+        f"at least success level {level} falls from {label(lower)} ({at_least(lower, level)}%)"
+        f" to {label(higher)} ({at_least(higher, level)}%)"
+        for lower, higher in pairwise(charts)
+        for level in levels[1:]
+        if at_least(higher, level) < at_least(lower, level)
+    ]
+    return ChartChecks(
+        impossible=[label(chart) for chart in impossible],
+        impossible_above_winnable=above_winnable,
+        monotonic_failures=failures,
+        lowest=label(charts[0]) if charts else "",
+    )
