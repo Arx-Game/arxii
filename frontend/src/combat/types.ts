@@ -30,11 +30,19 @@ export type PositionAdjacencyItem = components['schemas']['PositionAdjacencyItem
 export type PositionNode = components['schemas']['PositionNode'];
 export type PositionEdgeInfo = components['schemas']['PositionEdge'];
 
-/** Cached encounter fixtures may predate the companion-order projection. */
+/** One participant's mark on an opponent this round (#4603). */
+export type CombatMark = components['schemas']['CombatMark'];
+
+/** Cached encounter fixtures may predate the companion-order and mark projections. */
 export type EncounterDetail = Omit<
   components['schemas']['EncounterDetail'],
-  'companion_orders' | 'pending_selections' | 'sustained_actions' | 'protection_commitments'
+  | 'companion_orders'
+  | 'pending_selections'
+  | 'sustained_actions'
+  | 'protection_commitments'
+  | 'marks'
 > & {
+  marks?: components['schemas']['EncounterDetail']['marks'];
   pending_selections?: components['schemas']['EncounterDetail']['pending_selections'];
   sustained_actions?: components['schemas']['EncounterDetail']['sustained_actions'];
   protection_commitments?: components['schemas']['EncounterDetail']['protection_commitments'];

@@ -1146,6 +1146,21 @@ class VolatileObjectSerializer(serializers.Serializer):
     position_name = serializers.CharField(read_only=True, allow_null=True)
 
 
+class CombatMarkSerializer(serializers.Serializer):
+    """Schema-only shape of get_marks rows on EncounterDetailSerializer (#4603).
+
+    Never instantiated for serialization - exists so drf-spectacular emits a
+    concrete component instead of {[key: string]: unknown}, mirroring
+    EngagementLockSerializer below. Field shape matches the dict ``get_marks``
+    builds verbatim.
+    """
+
+    id = serializers.IntegerField()
+    participant_id = serializers.IntegerField()
+    opponent_id = serializers.IntegerField()
+    round_number = serializers.IntegerField()
+
+
 class EngagementLockSerializer(serializers.Serializer):
     """Schema-only shape of get_engagement_locks rows on EncounterDetailSerializer (#3386).
 
@@ -1262,6 +1277,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     is_gm = serializers.SerializerMethodField()
     clashes = serializers.SerializerMethodField()
     engagement_locks = serializers.SerializerMethodField()
+    marks = serializers.SerializerMethodField()
     pending_attacks = serializers.SerializerMethodField()
     companion_orders = serializers.SerializerMethodField()
     resolution_order = serializers.SerializerMethodField()
@@ -1328,6 +1344,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "is_gm",
             "clashes",
             "engagement_locks",
+            "marks",
             "pending_attacks",
             "companion_orders",
             "resolution_order",
@@ -1704,6 +1721,29 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 "started_round": lock.started_round,
             }
             for lock in locks
+        ]
+
+    @extend_schema_field(CombatMarkSerializer(many=True))
+    def get_marks(self, obj: CombatEncounter) -> list[dict[str, Any]]:
+        """Return this round's marks (#4603): who marked which foe.
+
+        Marks are public to every reader of the encounter (participants, the GM,
+        staff). One flat query, scoped to the current round so an earlier round's
+        mark never shows.
+        """
+        from world.combat.models import CombatMark  # noqa: PLC0415
+
+        marks = CombatMark.objects.filter(encounter=obj, round_number=obj.round_number).order_by(
+            "pk"
+        )
+        return [
+            {
+                "id": mark.pk,
+                "participant_id": mark.participant_id,
+                "opponent_id": mark.opponent_id,
+                "round_number": mark.round_number,
+            }
+            for mark in marks
         ]
 
     @extend_schema_field(PendingAttackSerializer(many=True))

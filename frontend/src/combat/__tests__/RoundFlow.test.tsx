@@ -79,6 +79,7 @@ function makeEncounter(
     surge_beats: [],
     clashes: [],
     engagement_locks: [],
+    marks: [],
     pending_attacks: [],
     created_at: '2026-01-01T00:00:00Z',
     outcome: '',

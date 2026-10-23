@@ -48,6 +48,10 @@ _Avoid_: mock, aggro (colloquial). Not **Provoke** (below): Taunt biases an NPC'
 A condition with `ConditionTemplate.forces_attack_on_source` on an NPC opponent: it attacks only the condition's source (`source_character`), from the round after the condition lands (the hard form of Taunt's soft threat bias). An active engagement lock wins; a source who is down, untargetable or out of the fight leaves the opponent choosing as normal; charmed, turned and summoned opponents ignore it. Read by `select_npc_actions` through `provoking_source_by_target`.
 _Avoid_: taunt (the soft, threat-based maneuver), aggro, lock (an engagement lock is a different, duel-style hold)
 
+**Mark** (`CombatMark`, #2664, player surface #4603):
+A participant's pointer at one opponent for this round, laid with `combat mark <opp>` or the opponent menu's "Mark". It gives no bonus by itself; it pays off only for covenant-mates whose vow perks read `TARGET_IS_MARKED_BY_ALLY`. A free act: it uses none of the marker's round action. One per participant per round; marking again moves it.
+_Avoid_: target lock, tag, focus. Not an **EngagementLock** (a duel-style hold that narrows an NPC's targeting).
+
 **Parley**:
 The social-combat maneuver by which a PC talks a foe down mid-fight — rolling charm + Persuasion + Seduction against the target's Composure to apply a disposition delta (via `apply_social_disposition_delta`), calm the opponent on a decisive success, or yield a broken foe on a critical success. Gated: the opponent must be faltering/broken or the PC must hold sufficient standing. Even mindless targets can be parleyed with — a breakthrough grants a fleeting mind (Sharlotte charming a lake).
 _Avoid_: negotiate, bargain, persuade (that name is the CheckType)
