@@ -1426,6 +1426,7 @@ def _resolve_action_against_persona(
             fury_commitment=action_request.fury_commitment,
             fury_anchor=action_request.fury_anchor,
             extra_traits=technique_terms,
+            extra_standing=fatigue_penalty,
         )
         # Spend when the main check rolled; a resolution that paused before it carries
         # the ids and its resume spends them, one a failed gate aborted spends nothing (#4584).
@@ -1472,6 +1473,8 @@ def _resolve_action_against_persona(
             context=context,
             extra_modifiers=fatigue_penalty + breakdown.extra_modifiers_total + pull_flat_bonus,
             effort_level=effort_level,
+            # Fatigue is her own standing, not a modifier (#4601).
+            extra_standing=fatigue_penalty,
         )
         # Same rule as the technique branch.
         spend_or_defer_condition_uses(action_resolution, breakdown)
@@ -1830,6 +1833,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
     extra_traits: Sequence[ExtraTraitTerm] = (),
+    extra_standing: int = 0,
 ) -> EnhancedSceneActionResult:
     """Resolve a technique-enhanced social action via use_technique().
 
@@ -1849,6 +1853,8 @@ def _resolve_enhanced_action(  # noqa: PLR0913
             applied as extra_modifiers on the inner start_action_resolution —
             parity with the plain/area branches (#1293). Effort itself is NOT
             folded in here (#3066) — see effort_level.
+        extra_standing: The part of ``effort_modifier`` that is the roller's own standing
+            (the fatigue penalty), so the hopeless pin reads it as standing (#4601).
         effort_level: The caller's EffortLevel string value, threaded straight
             into start_action_resolution's own effort_level parameter so
             perform_check applies EFFORT_CHECK_MODIFIER exactly once and
@@ -1895,6 +1901,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
             context=context,
             extra_modifiers=effort_modifier + extra_modifiers,
             effort_level=effort_level,
+            extra_standing=extra_standing,
             extra_traits=extra_traits,
         ),
         confirm_soulfray_risk=True,
