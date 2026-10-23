@@ -148,6 +148,14 @@ class WallRowTests(_Yard):
         self.assertEqual(edge.gating_challenge, new_gate)
         self.assertEqual(edge.integrity, 20)
 
+    def test_a_wall_over_a_staff_gate_leaves_that_challenge_live(self) -> None:
+        chasm = self.gate()
+        self.west_middle.gating_challenge = chasm
+        self.west_middle.save()
+        self.wall(self.west, self.middle, gate=self.gate())
+        chasm.refresh_from_db()
+        self.assertTrue(chasm.is_active)
+
     def test_the_map_shows_a_walls_integrity(self) -> None:
         self.wall(self.west, self.middle, integrity=12)
         damage_barrier(PositionEdge.objects.get(pk=self.west_middle.pk), 5)

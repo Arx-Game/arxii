@@ -152,7 +152,11 @@ def create_conjured_obstacle(  # noqa: PLR0913
         .select_related("gating_challenge")
         .first()
     )
-    displaced_gate = previous.gating_challenge if previous is not None else None
+    # Only a conjured wall's own gate is released; a staff-authored gate the spell
+    # covers (a chasm's crossing) may be a room challenge in its own right.
+    displaced_gate = (
+        previous.gating_challenge if previous is not None and _is_conjured(previous) else None
+    )
     wall_integrity = integrity
     edge, _created = PositionEdge.objects.update_or_create(
         position_a=position_a,
@@ -171,6 +175,17 @@ def create_conjured_obstacle(  # noqa: PLR0913
     if displaced_gate is not None and displaced_gate != gating_challenge:
         _release_gate(displaced_gate)
     return edge
+
+
+def _is_conjured(edge: PositionEdge) -> bool:
+    """Whether ``edge`` currently holds a conjured wall (a caster, a duration, a
+    strength or a Rampart link), as opposed to its staff-authored state."""
+    return (
+        edge.created_by_sheet_id is not None
+        or edge.duration_rounds is not None
+        or edge.integrity is not None
+        or edge.source_rampart_id is not None
+    )
 
 
 def edge_blocks_crossing(edge: PositionEdge) -> bool:
