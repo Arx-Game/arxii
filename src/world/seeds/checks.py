@@ -76,28 +76,42 @@ _OUTCOMES: tuple[tuple[str, int], ...] = tuple(CANONICAL_OUTCOME_LEVELS.items())
 # stronger and must get the easier bands (#2707 — this mapping was inverted, making
 # better characters fail more; world/checks/tests/test_chart_direction.py guards it).
 #
-# 13 unique charts — one per rank_difference. Each gap has its own outcome
+# 15 unique charts — one per rank_difference. Each gap has its own outcome
 # distribution; no two rank_differences share a chart (#2760). Previously 7
 # shared templates were reused across 13 slots via closest-match fallback.
 #
 # Botch (Critical Failure, success_level -2) appears at rank_diff <= -1 and
 # vanishes at EVEN — you can only botch when you're behind in rank, never on
-# even footing or better. Botch gradient: 10% at worst (-6) → 0% at EVEN.
+# even footing or better. Botch gradient: 20% at worst (-8) → 0% at EVEN.
 #
-# Partial Success is a smooth gradient present from -6 through +5, absent only
-# at +6 (pure win). The old design where Partial vanished entirely on EASY+ was
-# a mistake — it should be a smooth gradient.
+# Every "at least X" chance (Partial Success or better, Success or better, ...) is
+# non-decreasing as the rank difference rises, from -8 to +6 (#4593, #4551 section
+# 5.6; guarded by world/checks/tests/test_chart_direction.py). The old note that
+# deep-gap odds were "intentionally non-monotonic" is retired: a better matchup
+# never offers a worse chance at a given tier. The repair moved only the Failure /
+# Partial Success boundary on -4 and -2, so "Partial Success or better" is 55% on
+# every chart from -5 to -1.
 #
-# The -6 chart keeps a 1/100 success, preserving the "chip, don't whiff" design
-# (#2707) and keeping chart_has_success_outcomes True at every rank_difference
-# (so actions at the worst gap are still offered to the player, not dropped from
-# available-actions lists as IMPOSSIBLE).
+# Partial Success is a smooth gradient present from -7 through +5, absent at -8
+# (varieties of failure only) and +6 (pure win).
 #
-# Deep-gap non-monotonicity (total negative outcomes peak at ~58% at -2/Hard,
-# then decline as Partial absorbs more at wider gaps) is intended — a party
-# attacking something far above its level chips away (partial success) instead
-# of whiffing round after round. The -6 "Crushing" chart is intentionally brutal
-# (89% negative); the non-monotonicity holds from -5 onward.
+# The -6 chart keeps a 1/100 success and -5 keeps 5/100, preserving the "chip,
+# don't whiff" design (#2707). Charts -7 and -8 go below that: -7 has no Success
+# (1) but keeps Partial Success (0); -8 has only varieties of failure. They carry
+# placeholder names ("Failure -7", "Impossible") for the owner to author, and their
+# odds are example rows. A check on either is listed to the player labelled
+# Impossible (chart_has_success_outcomes is False), not dropped. Modifiers never
+# lift a check off them (slice b of #4551).
+#
+_IMPOSSIBLE_BANDS: tuple[tuple[str, int, int], ...] = (
+    (_CRITICAL_FAILURE, 1, 20),
+    ("Failure", 21, 100),
+)
+_FAILURE_SEVEN_BANDS: tuple[tuple[str, int, int], ...] = (
+    (_CRITICAL_FAILURE, 1, 15),
+    ("Failure", 16, 95),
+    (_OUTCOME_PARTIAL_SUCCESS, 96, 100),
+)
 _CRUSHING_BANDS: tuple[tuple[str, int, int], ...] = (
     (_CRITICAL_FAILURE, 1, 10),
     ("Failure", 11, 89),
@@ -112,8 +126,8 @@ _HOPELESS_BANDS: tuple[tuple[str, int, int], ...] = (
 )
 _DIRE_BANDS: tuple[tuple[str, int, int], ...] = (
     (_CRITICAL_FAILURE, 1, 5),
-    ("Failure", 6, 48),
-    (_OUTCOME_PARTIAL_SUCCESS, 49, 92),
+    ("Failure", 6, 45),
+    (_OUTCOME_PARTIAL_SUCCESS, 46, 92),
     ("Success", 93, 100),
 )
 _VERY_HARD_BANDS: tuple[tuple[str, int, int], ...] = (
@@ -124,8 +138,8 @@ _VERY_HARD_BANDS: tuple[tuple[str, int, int], ...] = (
 )
 _HARD_BANDS: tuple[tuple[str, int, int], ...] = (
     (_CRITICAL_FAILURE, 1, 2),
-    ("Failure", 3, 58),
-    (_OUTCOME_PARTIAL_SUCCESS, 59, 85),
+    ("Failure", 3, 45),
+    (_OUTCOME_PARTIAL_SUCCESS, 46, 85),
     ("Success", 86, 100),
 )
 _STEEP_BANDS: tuple[tuple[str, int, int], ...] = (
@@ -173,7 +187,11 @@ _INEVITABLE_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Success", 1, 50),
     (_CRITICAL_SUCCESS, 51, 100),
 )
+# Placeholder names for the two deepest charts, for the owner to author (#4593).
+_CHART_NAMES: dict[int, str] = {-7: "Failure -7", -8: "Impossible"}
 _CHARTS: tuple[tuple[int, tuple[tuple[str, int, int], ...]], ...] = (
+    (-8, _IMPOSSIBLE_BANDS),
+    (-7, _FAILURE_SEVEN_BANDS),
     (-6, _CRUSHING_BANDS),
     (-5, _HOPELESS_BANDS),
     (-4, _DIRE_BANDS),
@@ -220,7 +238,9 @@ def seed_check_resolution_tables() -> None:
     for rank_difference, bands in _CHARTS:
         chart, _ = ResultChart.objects.get_or_create(
             rank_difference=rank_difference,
-            defaults={"name": f"Difficulty {rank_difference:+d}"},
+            defaults={
+                "name": _CHART_NAMES.get(rank_difference, f"Difficulty {rank_difference:+d}")
+            },
         )
         for outcome_name, min_roll, max_roll in bands:
             ResultChartOutcome.objects.get_or_create(

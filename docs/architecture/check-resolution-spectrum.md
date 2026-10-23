@@ -69,7 +69,7 @@ something would be for a character right now — including all active modifiers.
 
 This powers:
 - Available action difficulty indicators (the "consider" display)
-- IMPOSSIBLE filtering (ResultChart has no success outcomes → action hidden)
+- IMPOSSIBLE label (ResultChart has no Success outcome, charts -7 and -8 → action listed, labelled Impossible, not hidden; #4593)
 - Dynamic updates when buffs/debuffs change (a teammate's buff can make new actions appear)
 
 ---
