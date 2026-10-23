@@ -174,6 +174,27 @@ describe('computeLayout', () => {
     expect(result.layoutedNodes.find((n) => n.id === 'end')).toBeUndefined();
   });
 
+  it('sends a random route with no candidates to Mission ends', () => {
+    const result = layout(
+      [node(1, 'src')],
+      [option(10, 1, { key: 'roll' })],
+      [route(100, 10, null, { is_random_set: true, outcome_tier: 7 })]
+    );
+    expect(result.layoutedEdges.map((e) => [e.target, e.label])).toEqual([
+      ['end', 'roll · Failure'],
+    ]);
+  });
+
+  it('lets a branch target win over a random tier-less route', () => {
+    const result = layout(
+      [node(1, 'src'), node(2, 'dst'), node(3, 'other')],
+      [option(10, 1, { option_kind: 'branch', key: 'go', branch_target: 2 })],
+      [route(100, 10, null, { is_random_set: true, outcome_tier: null })],
+      { candidates: [candidate(1, 100, 3)] }
+    );
+    expect(result.layoutedEdges.map((e) => e.target)).toEqual(['2']);
+  });
+
   it('labels regular routes with the option label and tier name', () => {
     const result = layout(
       [node(1, 'src'), node(2, 'dst')],

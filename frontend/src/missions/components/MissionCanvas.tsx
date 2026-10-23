@@ -231,30 +231,40 @@ function collectEdges(
     const label = optionLabel(opt);
     const tierless = route.outcome_tier === null || route.outcome_tier === undefined;
     if (tierless) tierlessByOption.add(opt.id);
-    // A branch option's own target wins over its tier-less route.
-    if (tierless && !route.is_random_set && opt.branch_target) continue;
+    // A branch option's own target wins over its tier-less route, random or not.
+    if (tierless && opt.branch_target) continue;
+    const tierName = tierless
+      ? null
+      : (tierNames.get(route.outcome_tier as number) ?? `tier ${route.outcome_tier}`);
+    const routeLabel = tierName ? `${label} · ${tierName}` : label;
 
     if (route.is_random_set) {
-      for (const c of candidates) {
-        if (c.route !== route.id) continue;
+      const drawn = candidates.filter((c) => c.route === route.id);
+      for (const c of drawn) {
         specs.push({
           id: `c${c.id}`,
           source: opt.node,
           target: c.target_node,
-          label: `${label} · random`,
+          label: `${routeLabel} · random`,
           dashed: true,
+        });
+      }
+      // A random route with no candidates ends the mission (the graph check flags it too).
+      if (drawn.length === 0) {
+        specs.push({
+          id: `r${route.id}`,
+          source: opt.node,
+          target: END_NODE_ID,
+          label: routeLabel,
         });
       }
       continue;
     }
-    const tierName = tierless
-      ? null
-      : (tierNames.get(route.outcome_tier as number) ?? `tier ${route.outcome_tier}`);
     specs.push({
       id: `r${route.id}`,
       source: opt.node,
       target: route.target_node ?? END_NODE_ID,
-      label: tierName ? `${label} · ${tierName}` : label,
+      label: routeLabel,
     });
   }
 
