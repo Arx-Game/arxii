@@ -297,6 +297,7 @@ TALE_MAX_LENGTH = 5000
 # success; below it is a partial result or failure. JOINT nodes combine
 # participant results on this line (``multiplayer._combined_route``) and the
 # Mission Studio graph check uses the same line to find a missing bucket.
+# A BRANCH attempt (no dice, deed outcome None) is never a dice success.
 SUCCESS_TIER_LEVEL = 1
 
 

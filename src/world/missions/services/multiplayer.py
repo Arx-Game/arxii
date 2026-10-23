@@ -67,15 +67,6 @@ if TYPE_CHECKING:
     )
     from world.missions.types import PresentedOption
 
-# Established success-tier threshold (``SUCCESS_TIER_LEVEL`` in constants, shared
-# with the graph check). The codebase classifies a check
-# outcome's tier by ``CheckOutcome.success_level`` (see
-# ``world.conditions.services._SUCCESS_LEVEL`` = 1, mirrored by
-# ``vitals``/``combat``): success_level >= 1 is a clear success, 0 is
-# partial, < 0 is failure. A JOINT attempt "succeeded" iff its deed's
-# resolved outcome is at this success tier. A BRANCH attempt (deed.outcome
-# is None — no dice) is NOT a dice success.
-
 
 def _banked_easing_for_node(instance: MissionInstance, node: MissionNode) -> int:
     """Sum all banked easing declarations for this node entry (#2046)."""
