@@ -1,6 +1,5 @@
 """The per-viewer standoff payload: what each participant may see, and nothing more."""
 
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.db import connection
@@ -9,7 +8,9 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
+from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.combat.constants import CauseKind, OpponentTier
 from world.combat.factories import (
     CombatOpponentFactory,
@@ -294,7 +295,15 @@ class GradeAndTermsTests(ViewBase):
             patch(CHART, return_value=True),
             patch(
                 "world.standoffs.services.view.collect_check_modifiers",
-                return_value=SimpleNamespace(extra_modifiers_total=7),
+                return_value=ModifierBreakdown(
+                    contributions=[
+                        ModifierContribution(
+                            source_kind=ModifierSourceKind.CONDITION,
+                            source_label="Steady",
+                            value=7,
+                        )
+                    ]
+                ),
             ),
         ):
             view = self.view_for(self.sheet_b)

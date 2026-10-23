@@ -116,3 +116,21 @@ class ModifierBreakdownTaperTests(SimpleTestCase):
 
         self.assertEqual(breakdown.total, 26)
         self.assertEqual(breakdown.extra_modifiers_total, 19)
+
+    def test_counted_values_are_whole_and_sum_to_the_total(self) -> None:
+        breakdown = ModifierBreakdown(
+            contributions=[
+                *(_buff(10) for _ in range(10)),
+                _buff(-7),
+                _buff(-7),
+                _buff(3, kind=ModifierSourceKind.EFFORT),
+            ],
+            tapers={CONDITION: LIGHT},
+        )
+
+        values = breakdown.counted_values()
+
+        self.assertEqual(sum(values), breakdown.total)
+        self.assertEqual(values[0], 10)  # the first buff counts whole
+        self.assertEqual(values[-1], 3)  # own standing untouched
+        self.assertTrue(all(isinstance(v, int) for v in values))

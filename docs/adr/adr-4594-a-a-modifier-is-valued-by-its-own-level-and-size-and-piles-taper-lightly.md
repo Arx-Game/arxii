@@ -34,7 +34,9 @@ The first source to be sized is a technique's buff or debuff. `TechniqueAppliedC
 effective power picks a level from `CastPowerLevel` rows, its outcome shifts it by a
 `CastOutcomeLevelShift` row, and the resulting `ConditionInstance` keeps `modifier_level` and
 `modifier_size`. Its `ConditionCheckModifier` rows then read the value table instead of their flat
-value, with no further severity or stage scaling. Items, distinctions and scene modifiers keep
+value, with no further severity or stage scaling. The size on the instance is a deliberate snapshot
+of the authored row at cast time: a staff edit to the technique changes later casts, never buffs
+already standing, and one technique can carry the same condition on more than one row. Items, distinctions and scene modifiers keep
 their flat values until their own slices, and still taper with their kind.
 
 All of this is database rows with admin pages; the seed carries example values only, and an empty

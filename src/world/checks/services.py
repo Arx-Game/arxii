@@ -1536,15 +1536,19 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
     )
 
     if breakdown.contributions:
+        # #4594: each row records what its contribution counted for after the light taper,
+        # so the rows sum exactly to modifier_total (an untapered row is its full value).
         ConsequenceOutcomeModifier.objects.bulk_create(
             [
                 ConsequenceOutcomeModifier(
                     outcome=outcome,
                     source_kind=contribution.source_kind,
                     source_label=contribution.source_label,
-                    value=contribution.value,
+                    value=counted,
                 )
-                for contribution in breakdown.contributions
+                for contribution, counted in zip(
+                    breakdown.contributions, breakdown.counted_values(), strict=True
+                )
             ]
         )
 

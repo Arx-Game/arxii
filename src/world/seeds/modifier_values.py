@@ -27,7 +27,8 @@ _LEVEL_BASELINES: tuple[tuple[int, int], ...] = (
     (26, 218),
 )
 
-# A Large modifier's value at each level; the other sizes are shares of it.
+# A Large modifier's value at each level; the other sizes are shares of it. Paramount rows
+# exist because a vow's size step (#4551 section 5.4) reaches them; no technique authors it.
 _LARGE_VALUES: tuple[tuple[int, int], ...] = (
     (1, 3),
     (6, 10),

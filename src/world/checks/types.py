@@ -234,6 +234,26 @@ class ModifierBreakdown:
             for index, contribution in enumerate(self.contributions)
         ]
 
+    def counted_values(self) -> list[int]:
+        """What each contribution counts for, as whole numbers summing exactly to ``total``.
+
+        Each counted share is floored toward zero and the leftover units go to the largest
+        remainders, so recorded provenance rows (``ConsequenceOutcomeModifier``) add up to the
+        tapered total the roll used. Untapered contributions keep their exact value.
+        """
+        counted = [c.counted for c in self.counted()]
+        floored = [int(value) for value in counted]  # int() truncates toward zero
+        leftover = self.total - sum(floored)
+        step = 1 if leftover > 0 else -1
+        order = sorted(
+            range(len(counted)),
+            key=lambda i: (counted[i] - floored[i]) * step,
+            reverse=True,
+        )
+        for index in order[: abs(leftover)]:
+            floored[index] += step
+        return floored
+
     @property
     def total(self) -> int:
         return _round_half_up(sum((c.counted for c in self.counted()), Decimal(0)))
