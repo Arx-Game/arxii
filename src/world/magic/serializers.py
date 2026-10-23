@@ -3622,6 +3622,15 @@ class _RemovedConditionSpecSerializer(serializers.Serializer):
     remove_all_stacks = serializers.BooleanField(default=True)
 
 
+class _MoraleEffectSpecSerializer(serializers.Serializer):
+    """The morale payload row for technique authoring (#4619)."""
+
+    minimum_success_level = serializers.IntegerField(min_value=0, default=1)
+    base_morale = serializers.IntegerField(min_value=0, default=0)
+    morale_intensity_multiplier = serializers.FloatField(min_value=0, default=0.0)
+    morale_per_extra_sl = serializers.IntegerField(min_value=0, default=0)
+
+
 class _TreatmentSpecSerializer(serializers.Serializer):
     """A treatment payload row for technique authoring (#2668)."""
 
@@ -3671,6 +3680,7 @@ class TechniqueDesignSerializer(serializers.Serializer):
     applied_conditions = _AppliedConditionSpecSerializer(many=True, required=False, default=list)
     removed_conditions = _RemovedConditionSpecSerializer(many=True, required=False, default=list)
     treatments = _TreatmentSpecSerializer(many=True, required=False, default=list)
+    morale_effect = _MoraleEffectSpecSerializer(required=False, allow_null=True, default=None)
     consequence_pool_id = serializers.IntegerField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs):
@@ -3710,6 +3720,7 @@ class TechniqueDesignSerializer(serializers.Serializer):
             AppliedConditionSpec,
             CapabilityGrantSpec,
             DamageProfileSpec,
+            MoraleEffectSpec,
             RemovedConditionSpec,
             TechniqueDesignInput,
             TreatmentSpec,
@@ -3775,6 +3786,11 @@ class TechniqueDesignSerializer(serializers.Serializer):
                     mend_cap_fraction=t["mend_cap_fraction"],
                 )
                 for t in attrs["treatments"]
+            ),
+            morale_effect=(
+                MoraleEffectSpec(**attrs["morale_effect"])
+                if attrs.get("morale_effect") is not None
+                else None
             ),
             consequence_pool_id=attrs.get("consequence_pool_id"),
         )

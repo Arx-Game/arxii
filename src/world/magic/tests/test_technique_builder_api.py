@@ -28,7 +28,12 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueStyleFactory,
 )
-from world.magic.models import CharacterTechnique, Technique, TechniqueTierBudget
+from world.magic.models import (
+    CharacterTechnique,
+    Technique,
+    TechniqueMoraleEffect,
+    TechniqueTierBudget,
+)
 from world.magic.services.technique_builder import get_technique_budget_config
 from world.roster.factories import RosterTenureFactory
 
@@ -121,6 +126,27 @@ class TechniqueBuilderAPITests(APITestCase):
         assert profile.ignores_soak is True
         assert profile.resistance_shift == 5
         assert profile.bypasses_wards is True
+
+    def test_a_design_with_a_morale_effect_builds_the_row(self) -> None:
+        self.client.force_authenticate(user=self.staff_account)
+        response = self.client.post(
+            reverse("magic:technique-author"),
+            self._payload(gift_id=self.staff_gift.pk, morale_effect={"base_morale": 30}),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        row = TechniqueMoraleEffect.objects.get(technique__name="Spark")
+        assert row.base_morale == 30
+
+    def test_a_negative_morale_amount_is_refused(self) -> None:
+        self.client.force_authenticate(user=self.staff_account)
+        response = self.client.post(
+            reverse("magic:technique-author"),
+            self._payload(gift_id=self.staff_gift.pk, morale_effect={"base_morale": -5}),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert "morale_effect" in response.data
 
     def test_author_rejects_negative_resistance_shift(self) -> None:
         self.client.force_authenticate(user=self.staff_account)

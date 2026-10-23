@@ -649,6 +649,49 @@ def _capability_grant_valuations(technique: Technique) -> list[PayloadValuation]
     ]
 
 
+def _morale_valuation(
+    technique: Technique,
+    *,
+    power: int,
+    bands: list[_MatchupBand],
+    reference: ReferenceFrame,
+) -> PayloadValuation | None:
+    """Value the technique's morale row, or None without one (#4619). ESTIMATE.
+
+    A fresh opponent at the default morale breaks after ``DEFAULT_OPPONENT_MORALE -
+    BREAK_MORALE_THRESHOLD`` points, and a broken opponent stops attacking. So the
+    share of one break the cast delivers (capped at one break) is priced as that
+    share of one opponent's round of damage (``reference.incoming_dpr``). This is an
+    estimate, not a derived formula: it is flagged for a human to confirm.
+    """
+    from world.combat.constants import (  # noqa: PLC0415
+        BREAK_MORALE_THRESHOLD,
+        DEFAULT_OPPONENT_MORALE,
+    )
+
+    row = technique.cached_morale_effect
+    if row is None:
+        return None
+    expected = sum(
+        band.probability
+        * row.compute_morale(effective_power=power, success_level=band.success_level)
+        for band in bands
+        if band.success_level >= row.minimum_success_level
+    )
+    break_distance = DEFAULT_OPPONENT_MORALE - BREAK_MORALE_THRESHOLD
+    value = min(expected, break_distance) / break_distance * reference.incoming_dpr
+    return PayloadValuation(
+        kind="control",
+        label="morale",
+        value=value,
+        provenance=ValuationProvenance.ESTIMATE,
+        detail=(
+            f"E[morale]={expected:.2f} of {break_distance} to break x "
+            f"incoming_dpr={reference.incoming_dpr:.2f}"
+        ),
+    )
+
+
 def _all_payload_valuations(  # noqa: PLR0913 - cohesive per-technique valuation params
     technique: Technique,
     *,
@@ -687,6 +730,9 @@ def _all_payload_valuations(  # noqa: PLR0913 - cohesive per-technique valuation
     dispel = _dispel_valuation(technique)
     if dispel is not None:
         valuations.append(dispel)
+    morale = _morale_valuation(technique, power=power, bands=bands, reference=reference)
+    if morale is not None:
+        valuations.append(morale)
     valuations.extend(_capability_grant_valuations(technique))
     return valuations
 

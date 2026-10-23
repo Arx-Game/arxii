@@ -23,6 +23,7 @@ from world.magic.models import (
     TechniqueBudgetConfig,
     TechniqueCapabilityGrant,
     TechniqueDamageProfile,
+    TechniqueMoraleEffect,
     TechniqueRemovedCondition,
     TechniqueTierBudget,
     TechniqueTreatment,
@@ -271,6 +272,8 @@ def price_design(
         )
         for _spec in design.treatments
     )
+    if design.morale_effect is not None:
+        lines.append(TechniqueCostLine("morale", "Morale effect", config.payload_base_cost))
 
     gross = sum(line.power_cost for line in lines)
     refund = 0
@@ -417,6 +420,14 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
             target_kind=spec.target_kind,
             minimum_success_level=spec.minimum_success_level,
             mend_cap_fraction=spec.mend_cap_fraction,
+        )
+    if design.morale_effect is not None:
+        TechniqueMoraleEffect.objects.create(
+            technique=tech,
+            minimum_success_level=design.morale_effect.minimum_success_level,
+            base_morale=design.morale_effect.base_morale,
+            morale_intensity_multiplier=design.morale_effect.morale_intensity_multiplier,
+            morale_per_extra_sl=design.morale_effect.morale_per_extra_sl,
         )
     # The payload rows above are what every display and resolution surface reads
     # off the technique; drop the per-instance caches so the first read after this

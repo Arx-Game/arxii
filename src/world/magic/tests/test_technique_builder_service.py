@@ -32,6 +32,7 @@ from world.magic.types.technique_builder import (
     AppliedConditionSpec,
     CapabilityGrantSpec,
     DamageProfileSpec,
+    MoraleEffectSpec,
     RemovedConditionSpec,
     TechniqueDesignInput,
 )
@@ -146,6 +147,16 @@ class PriceDesignTests(TestCase):
         assert bd.gross_cost == 27
         assert bd.within_budget is False
 
+    def test_morale_effect_charges_one_payload_line(self):
+        """A morale effect pays the flat payload base, like a treatment or dispel (#4619)."""
+        cfg = get_technique_budget_config()
+        d = _design(morale_effect=MoraleEffectSpec(base_morale=30))
+        bd = price_design(d, config=cfg, budget=99)
+        lines = [line for line in bd.lines if line.dimension == "morale"]
+        assert [(line.label, line.power_cost) for line in lines] == [
+            ("Morale effect", cfg.payload_base_cost)
+        ]
+
     def test_removed_condition_priced_at_payload_base(self):
         """A removal (dispel) payload costs the flat payload base, no scaling (#1585)."""
         cfg = get_technique_budget_config()
@@ -216,6 +227,20 @@ class BuildTechniqueTests(TestCase):
         assert rows[0].condition_id == cond.id
         assert rows[0].target_kind == "self"
         assert rows[0].remove_all_stacks is False
+
+    def test_build_technique_writes_the_morale_effect(self):
+        """build_technique writes the MoraleEffectSpec onto a one-to-one row (#4619)."""
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory(creator=sheet)
+        d = _design(
+            gift_id=gift.id,
+            effect_type_id=EffectTypeFactory().id,
+            morale_effect=MoraleEffectSpec(base_morale=30, morale_per_extra_sl=10),
+        )
+        tech = build_technique(d, creator=None)
+        row = tech.morale_effect
+        assert (row.base_morale, row.morale_per_extra_sl, row.minimum_success_level) == (30, 10, 1)
+        assert "Shakes morale." in tech.cached_effect_summary["summary"]
 
     def test_build_writes_the_treatment_fraction(self):
         """build_technique writes each TreatmentSpec's mend fraction onto its row (#4600)."""
