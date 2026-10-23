@@ -139,8 +139,11 @@ def create_conjured_obstacle(  # noqa: PLR0913
     instead and stores no integrity of its own (the Rampart holds it); every other
     conjured wall passes an integer.
     """
-    if source_rampart is None and integrity is None:
-        msg = "A conjured wall needs an integrity unless a Rampart seals it."
+    if (source_rampart is None) == (integrity is None):
+        msg = "A conjured wall takes an integrity, or a Rampart that holds it, not both."
+        raise ValueError(msg)
+    if integrity is not None and integrity < 1:
+        msg = "A conjured wall's integrity must be at least 1."
         raise ValueError(msg)
     if position_a.pk > position_b.pk:
         position_a, position_b = position_b, position_a
@@ -150,7 +153,7 @@ def create_conjured_obstacle(  # noqa: PLR0913
         .first()
     )
     displaced_gate = previous.gating_challenge if previous is not None else None
-    wall_integrity = None if source_rampart is not None else integrity
+    wall_integrity = integrity
     edge, _created = PositionEdge.objects.update_or_create(
         position_a=position_a,
         position_b=position_b,
@@ -323,7 +326,11 @@ def raise_rampart(  # noqa: PLR0913
             "duration_rounds": duration_rounds,
         },
     )
-    if element_profile.signature_behavior == RampartSignature.SEAL_EDGES:
+    if element_profile.signature_behavior != RampartSignature.SEAL_EDGES:
+        # A recast on the same position keeps the row: a Stone Rampart recast as
+        # Fire must not leave Stone's seals behind (#4606).
+        unseal_rampart_edges(rampart)
+    else:
         touching_edges = PositionEdge.objects.filter(
             Q(position_a=position) | Q(position_b=position)
         )
@@ -354,8 +361,7 @@ def damage_rampart(rampart: Rampart, chip: int) -> bool:
     """
     new_integrity = rampart.integrity - chip
     if new_integrity <= 0:
-        unseal_rampart_edges(rampart)
-        rampart.delete()
+        rampart.delete()  # Rampart.delete opens the edges it sealed (#4606)
         return True
     rampart.integrity = new_integrity
     rampart.save(update_fields=["integrity"])
@@ -372,8 +378,7 @@ def expire_rampart_rounds(room: ObjectDB) -> None:
     for rampart in expiring:
         rampart.duration_rounds -= 1
         if rampart.duration_rounds <= 0:
-            unseal_rampart_edges(rampart)
-            rampart.delete()
+            rampart.delete()  # opens the edges it sealed
         else:
             rampart.save(update_fields=["duration_rounds"])
 
@@ -381,15 +386,16 @@ def expire_rampart_rounds(room: ObjectDB) -> None:
 def teardown_ramparts(room: ObjectDB) -> None:
     """Delete every Rampart in the room (scene end). Mirrors teardown_conjured_obstacles.
 
-    Loops the rows rather than a queryset delete, which would bypass the unseal.
+    Loops the rows rather than a queryset delete, which would skip
+    ``Rampart.delete`` and so leave the edges it sealed shut.
     """
     for rampart in Rampart.objects.filter(position__room=room):
-        unseal_rampart_edges(rampart)
         rampart.delete()
 
 
 def unseal_rampart_edges(rampart: Rampart) -> None:
-    """Open every edge ``rampart`` sealed (#4606). Runs before each Rampart delete.
+    """Open every edge ``rampart`` sealed (#4606). ``Rampart.delete`` runs it first,
+    and a recast with an element that does not seal runs it too.
 
     Only edges still linked to this Rampart: a later spell that overwrote an edge
     cleared the link and owns that wall now, so it stays sealed.

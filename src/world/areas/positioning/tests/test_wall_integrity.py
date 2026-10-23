@@ -10,6 +10,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
+from world.areas.positioning.constants import RampartSignature
 from world.areas.positioning.factories import (
     PositionFactory,
     RampartElementProfileFactory,
@@ -96,6 +97,15 @@ class WallRowTests(_Yard):
             create_conjured_obstacle(
                 self.west, self.middle, caster_sheet=self.sheet, integrity=None
             )
+
+    def test_a_wall_with_both_its_own_integrity_and_a_rampart_is_refused(self) -> None:
+        rampart = RampartFactory(position=self.middle)
+        with self.assertRaises(ValueError):
+            create_conjured_obstacle(
+                self.west, self.middle, caster_sheet=self.sheet, integrity=5, source_rampart=rampart
+            )
+        with self.assertRaises(ValueError):
+            create_conjured_obstacle(self.west, self.middle, caster_sheet=self.sheet, integrity=0)
 
     def test_a_wall_carries_its_integrity(self) -> None:
         edge = self.wall(self.west, self.middle, integrity=12)
@@ -265,6 +275,24 @@ class RampartUnsealTests(_Yard):
         damage_rampart(rampart, 10)
         gate.refresh_from_db()
         self.assertFalse(gate.is_active)
+
+    def test_a_staff_delete_of_the_rampart_opens_the_seal(self) -> None:
+        self.raise_stone().delete()
+        self.assertOpen(self.west_middle)
+        self.assertOpen(self.middle_east)
+
+    def test_recasting_as_an_element_that_does_not_seal_opens_the_old_seal(self) -> None:
+        self.raise_stone()
+        raise_rampart(
+            self.middle,
+            caster_sheet=self.sheet,
+            element_profile=RampartElementProfileFactory(
+                signature_behavior=RampartSignature.MISSILE_WARD
+            ),
+            integrity=10,
+        )
+        self.assertOpen(self.west_middle)
+        self.assertOpen(self.middle_east)
 
     def test_an_edge_a_later_barricade_took_stays_sealed(self) -> None:
         rampart = self.raise_stone()

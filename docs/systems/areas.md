@@ -541,7 +541,7 @@ challenge's approaches beside it.
 | `damage_rampart(rampart, chip) -> bool` | The single mutation seam for rampart integrity — chips `integrity` down by `chip`; at 0 opens every edge the Rampart sealed (`unseal_rampart_edges`), deletes the row (collapse) and returns `True`. Both combat interception and WARD-Clash progress sync funnel through here so the two paths never drift apart. |
 | `expire_rampart_rounds(room)` | Per-round duration tick (mirrors `expire_obstacle_rounds`) — decrements `duration_rounds` on the room's ramparts, unsealing and deleting at 0; staff-authored (`duration_rounds=None`) ramparts are never decremented |
 | `teardown_ramparts(room)` | Unseal and delete every `Rampart` in the room (scene end; mirrors `teardown_conjured_obstacles`). Loops the rows, since a queryset delete would skip the unseal. |
-| `unseal_rampart_edges(rampart)` | `restore_edge` on every edge whose `source_rampart` is this Rampart (#4606). Called before each of the three Rampart deletes above, so no path leaves a seal behind; an edge a later spell took over has no link and stays sealed. |
+| `unseal_rampart_edges(rampart)` | `restore_edge` on every edge whose `source_rampart` is this Rampart (#4606). `Rampart.delete()` runs it first, so a collapse, an expiry, a teardown and a staff delete in the admin all open the seal; `raise_rampart` runs it when a recast picks an element that does not seal. An edge a later spell took over has no link and stays sealed. `source_rampart` is `SET_NULL` only so a bulk queryset delete does not fail; an edge orphaned that way stays a hard seal, so code that deletes Ramparts loops the rows. |
 
 *Placement + movement:*
 

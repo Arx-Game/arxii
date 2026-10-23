@@ -720,3 +720,16 @@ class Rampart(SharedMemoryModel):
             f"Rampart({self.element_profile_id}) "
             f"{self.integrity}/{self.max_integrity} @ {self.position_id}"
         )
+
+    def delete(self, *args, **kwargs):
+        """Open every edge this Rampart sealed, then delete it (#4606).
+
+        On the instance, so a collapse, an expiry, a teardown and a staff delete in
+        the admin all open the seal. ``sealed_edges`` is ``SET_NULL`` only so a bulk
+        queryset delete does not fail on the FK; an edge orphaned that way stays a
+        hard seal, so bulk deletes of Ramparts loop the rows instead.
+        """
+        from world.areas.positioning.services import unseal_rampart_edges  # noqa: PLC0415
+
+        unseal_rampart_edges(self)
+        return super().delete(*args, **kwargs)
