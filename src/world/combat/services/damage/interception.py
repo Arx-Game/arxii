@@ -238,6 +238,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     # DAMAGE_PRE_APPLY (cancellable, amount mutable). bypass_pre_apply=True skips
     # emit + mutation; the bounced-reflect path uses this to terminate re-emission
     # (loop guard).
+    dropped = False
     if not bypass_pre_apply:
         # DAMAGE_PRE_APPLY, then guardian-shields-a-summon (#2207) for
         # ALLY-allegiance opponents — see _resolve_opponent_pre_apply.
@@ -248,10 +249,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
             source_sheet,
             skip_guardian_shield=skip_guardian_shield,
         )
-        if dropped:
-            return _zero_opponent_damage_result(opponent)
-
-    if raw_damage <= 0:
+    if dropped or raw_damage <= 0:
         return _zero_opponent_damage_result(opponent)
 
     effective_soak = _effective_soak_for_opponent(opponent, bypass_soak or ignores_soak)
