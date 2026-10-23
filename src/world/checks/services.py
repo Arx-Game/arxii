@@ -185,7 +185,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     effective_roll = max(1, min(100, roll + rollmod))
     # One roll: the face, plus where inside it the roll fell, so a slid chart's
     # fractional band edges count exactly (#4601). An unslid chart reads only the face.
-    check_roll = CheckRoll(face=effective_roll, fraction=random.random())  # noqa: S311
+    check_roll = CheckRoll(face=effective_roll, fraction=random.random())  # noqa: S311 # NOSONAR game RNG
     outcome = breakdown.standing.slid.outcome_for(check_roll.position) if breakdown.chart else None
     outcome = _apply_outcome_guarantees(character, outcome, breakdown.chart, situation_ctx)
 
