@@ -8,6 +8,21 @@ from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import _CheckBreakdown, perform_check
+from world.checks.slide import BandPosition, CheckStanding, SlidChart
+
+_NO_RANK = BandPosition(points=0, rank=None, next_rank=None, share=0.0)
+_NO_STANDING = CheckStanding(
+    roller=_NO_RANK,
+    target=_NO_RANK,
+    own_roller=_NO_RANK,
+    own_target=_NO_RANK,
+    difference=0.0,
+    own_difference=0.0,
+    chart_difference=0,
+    hopeless=False,
+    pinned=False,
+    slid=SlidChart(chart=None, toward=None, share=0.0, bands=()),
+)
 
 _MOCK_BREAKDOWN = _CheckBreakdown(
     trait_points=0,
@@ -20,6 +35,7 @@ _MOCK_BREAKDOWN = _CheckBreakdown(
     target_rank=None,
     rank_difference=0,
     chart=None,
+    standing=_NO_STANDING,
 )
 
 

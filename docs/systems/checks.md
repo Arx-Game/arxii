@@ -24,12 +24,13 @@ from world.checks.types import (
 | `chart` | `ResultChart \| None` | The result chart used |
 | `roller_rank` | `CheckRank \| None` | Roller's rank |
 | `target_rank` | `CheckRank \| None` | Target's rank |
-| `rank_difference` | `int` | roller_rank - target_rank |
+| `rank_difference` | `int` | Whole rank difference of the chart the roll used (#4601: the floor of the fractional difference, or the pinned chart) |
 | `trait_points` | `int` | Points from weighted traits |
 | `aspect_bonus` | `int` | Bonus from path aspects |
 | `specialization_points` | `int` | Points from owned specializations (default 0, #1688) |
 | `capability_points` | `int` | Weighted authored `CheckTypeCapabilityModifier` points (default 0, #2505) |
 | `total_points` | `int` | trait_points + specialization_points + aspect_bonus + capability_points + extra_modifiers |
+| `standing` | `CheckStanding \| None` | #4601: both sides' band positions, own standing, the slid chart, `hopeless` and `pinned`. None on hand-built results |
 
 ### CheckResult Properties
 
@@ -37,6 +38,9 @@ from world.checks.types import (
 result.outcome_name   # str: outcome name or "Unknown"
 result.success_level  # int: outcome success_level or 0
 result.chart_name     # str: chart name or "No Chart Found"
+result.rank_text      # str: "Expert (rank 3), 67% toward Master (rank 4)" (#4601)
+result.target_rank_text  # str: the target's rank with number and band position
+result.standing_text  # str: "<roller> against <target>", each with band position
 ```
 
 ---
@@ -143,6 +147,8 @@ result = perform_check(
     check_type=check_type,         # CheckType instance
     target_difficulty=0,           # Target points to beat (default 0)
     extra_modifiers=0,             # Bonus/penalty from caller (goals, magic, combat, conditions)
+    extra_standing=0,              # #4601: the part of extra_modifiers that is own standing
+    target_modifiers=0,            # #4601: the part of target_difficulty that is modifiers
 )
 
 # Use the result
@@ -328,17 +334,25 @@ term would double-count it. See ADR-0166.
    extra_modifiers_total, #4594: a pile of one kind counts each extra at 7/8 of the
    previous, never below 2/3, when ModifierTaper rows exist)
 
-4. Total points -> CheckRank.get_rank_for_points()
-   Target difficulty -> CheckRank.get_rank_for_points()
-   rank_difference = roller_rank - target_rank
+4. Band positions and the slide (#4601, world/checks/slide.py resolve_standing):
+   each total -> its CheckRank and band position (rank number + share of the band)
+   difference = roller position - target position (fractional)
+   own standing = total - extra_modifiers + extra_standing, against
+                  target_difficulty - target_modifiers
+   if own standing lands on a chart with no Success (1): the hopeless pin holds the
+     roll on that chart, sliding it at most 100% of its band
+   else: chart = floor(difference), slid by the remainder toward the next chart
 
-5. ResultChart.get_chart_for_difference(rank_difference)
+5. The slid chart: each "at least X" chance of the chart's own outcomes moves toward the
+   next chart's (its extra outcomes counted as the nearest outcome this chart has)
 
-6. Roll 1-100 (random.randint)
+6. Roll 1-100 (random.randint), plus a fraction inside the face (random.random)
    rollmod = get_rollmod(character)
    effective_roll = clamp(roll + rollmod, 1, 100)
+   position = effective_roll - fraction  (an unslid chart reads only the face)
 
-7. Query ResultChartOutcome for matching range -> CheckOutcome
+7. The slid chart's band at that position -> CheckOutcome; outcome guarantees after,
+   capped at the chart's best outcome
 
 8. Return CheckResult dataclass
 ```
@@ -389,8 +403,56 @@ anything below -8 resolves to chart -8 (there is no clamp).
   if any "at least X" chance falls between neighbouring charts, if an impossible chart sits
   above a winnable one, or if a difference below -8 stops resolving to chart -8.
 
-Slices (b) to (d) of #4551 (the odds slide, the hopeless pin that keeps modifiers off an
-impossible chart, unified modifiers) build on these charts.
+## The slide and the hopeless pin (#4601, ADR-4601-A)
+
+`world/checks/slide.py` is the one implementation; `perform_check`,
+`preview_check_difficulty`, the outcome wheel and the tuning dashboard all read it.
+
+- **Band position** (`band_position(points)`): the rank a total reaches and how far it is
+  through that rank's band, from the `CheckRank` rows. 40 points is "Competent (rank 2),
+  60% toward Expert (rank 3)". The top rank has no next rank (share 0); a total below
+  every threshold has no rank and counts as rank number 0, as before.
+- **Fractional difference.** Roller position minus target position. The whole part picks
+  the chart; the remainder is how far it slides toward the next.
+- **The slide** (`slide_chart`): each "at least X" chance of the chart's own outcomes moves
+  in a straight line toward the next chart's. An outcome the next chart has and this one
+  lacks counts as this chart's nearest outcome by success level (the lower on a tie), so
+  no outcome appears early: on chart -1 at 50%, Success or better is 31% (22% sliding
+  toward 40%) and Critical Success stays 0% until difference 0. A difference below the
+  lowest chart sits at 0% of it; one at or above the highest chart is unslid.
+- **One roll.** The d100 face (with rollmod, clamped 1 to 100 as before) plus a fraction
+  inside the face. Unslid, every face lands where it always did; slid, every point of a
+  modifier moves the odds.
+- **Own standing** is each side without modifiers. `perform_check(..., extra_standing=,
+  target_modifiers=)` carries the split; `perform_check_with_modifiers` passes the gathered
+  fatigue, strain and soulfray contributions (`ModifierBreakdown.standing_total`,
+  `OWN_STANDING_SOURCE_KINDS`) as `extra_standing`. `level_opposition_points` splits the
+  defender's condition modifiers out of `level_opposition`, and every roll against a
+  `level_opposition` difficulty passes them as `target_modifiers`: combat offense,
+  penetration and NPC attack, consider, the standoff read (roll and preview grade),
+  reveal, rally, break-free, cast detection, mission contests and the allegiance break.
+  Social scene actions fold the fatigue penalty into `extra_modifiers` and pass it as
+  `extra_standing` too (`start_action_resolution(..., extra_standing=)`, kept on
+  `PendingActionResolution`). `force_check_outcome`'s capture records
+  `target_modifiers`.
+- **The hopeless pin.** When own standing lands on a chart with no Success (1) (the
+  `chart_has_success_outcomes` test), the roll stays on that chart; modifiers slide it at
+  most to 100% of its band (`CheckStanding.pinned` says they would have lifted it).
+  Net penalties resolve normally onto a lower chart. Because `preview_check_difficulty`
+  returns the pinned chart's difference, a buffed preview of a hopeless check still grades
+  Impossible.
+- **Guarantees capped.** `_lowest_outcome_at_or_above` returns the chart's best outcome when
+  the chart has nothing at the floor (a Success floor on chart -7 gives Partial Success);
+  the global outcome table is only the fallback when there is no chart.
+- **Result text.** `CheckResult.rank_text` / `standing_text`. The roller's scene check
+  message ends "Your standing: ... against ..."; the mission invocation breakdown shows
+  both ranks the same way. The room's narration stays number-free.
+- **Guard.** `world/checks/tests/test_slide.py` checks that, across every chart in quarter
+  steps, no "at least X" chance falls, and that a slide at 0% reproduces the authored chart.
+  The journey is `integration_tests/test_every_point_counts_journeys.py`.
+
+Slices (c) and (d) of #4551 (unified modifiers with a taper, the vow size shift) build on
+this.
 
 ## Resolution theater
 
@@ -420,7 +482,13 @@ faces straight off the check's own `ResultChart` bands, one unsaved `Consequence
 `ResultChartOutcome` row, weighted by that row's roll-range width, selecting whichever
 face matches the check's actual resolved outcome.
 
-**HARD RULE:** faces are read only from the chart's authored bands. `check_outcome_faces`
+**The slide (#4601):** when the roll used a slid chart (`check_result.standing.share >
+0`), the faces are the slid chart's bands, weighted in tenths of a face. The slid chart is
+built only from the two authored charts and the band positions, so it is the chart the dice
+actually faced; the rule below still holds.
+
+**HARD RULE:** faces are read only from the chart's authored bands (or the slid chart built
+from them). `check_outcome_faces`
 never reads `get_rollmod()`, `effective_roll`, or any outcome-guarantee logic
 (`perform_check` step 7 above, ADR-0152): the wheel always shows the raw chart and lands
 on whatever actually resolved, never a rollmod-shaped or guarantee-shaped view of the

@@ -470,6 +470,10 @@ class PendingActionResolution:
     # Skill terms the main check adds at call time (#4450), carried like
     # extra_modifiers so a paused GATED pipeline's resume rolls the same terms.
     extra_traits: tuple[ExtraTraitTerm, ...] = ()
+    # The part of ``extra_modifiers`` that is the roller's own standing (social fatigue),
+    # carried like extra_modifiers so a resumed main check decides the hopeless pin on own
+    # standing too (#4601). In memory only, like the rest of this record.
+    extra_standing: int = 0
     # Once-only condition instances whose terms are folded into ``extra_modifiers`` but
     # whose roll has not happened yet (#4584). Set by the scene sites when the resolution
     # paused before its main check; the resume spends them right after that check rolls.

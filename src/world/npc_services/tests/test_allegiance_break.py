@@ -208,6 +208,23 @@ class AttemptAllegianceBreakTests(TestCase):
             attempt_allegiance_break(striker=self.pc_sheet, opponent=self.opp, damage_dealt=1)
         self.assertEqual(capture.target_difficulty, 60)
 
+    def test_casters_conditions_reach_the_roll_as_target_modifiers(self):
+        """The hold's caster's conditions are modifiers, not its standing (#4601)."""
+        caster_sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(character=caster_sheet, level=12, is_primary=True)
+        self.instance.source_character = caster_sheet.character
+        self.instance.save(update_fields=["source_character"])
+        self.opp.level = 12
+        self.opp.save(update_fields=["level"])
+
+        with (
+            patch("world.conditions.services.opponent_condition_opposition", return_value=7),
+            force_check_outcome(self.outcomes["failure"]) as capture,
+        ):
+            attempt_allegiance_break(striker=self.pc_sheet, opponent=self.opp, damage_dealt=1)
+        self.assertEqual(capture.target_difficulty, 67)
+        self.assertEqual(capture.target_modifiers, 7)
+
     def test_higher_level_caster_makes_the_hold_harder_to_break(self):
         """Review item 2, test 2: a higher-level caster raises strength (and
         thus difficulty) more than a lower-level caster does, everything else

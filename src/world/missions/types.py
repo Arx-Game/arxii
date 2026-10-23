@@ -241,6 +241,8 @@ class BeatInvocation:
     check_type_name: str
     points_before_bonus: int
     total_points: int
+    #: Ranks with their number and band position, for example "Expert (rank 3), 32%
+    #: toward Master (rank 4)" (#4601).
     roller_rank: str | None
     target_rank: str | None
     rank_difference: int

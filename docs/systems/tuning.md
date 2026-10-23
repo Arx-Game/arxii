@@ -34,16 +34,22 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
 
 - `compute_chart_distributions(*, roll_modifier: int = 0) -> list[ChartDistribution]` —
   probability breakdown for every seeded `ResultChart`, ordered by `rank_difference`.
-- `compute_matchup(*, roller_points: int, target_difficulty: int, roll_modifier: int = 0) -> ChartDistribution | None` —
-  single-chart distribution for one roller-points/target-difficulty pairing. Derives
-  `rank_difference` the same way `_compute_check_breakdown` does (via
-  `CheckRank.get_rank_for_points`) and always reports that *derived* value in the
-  result, even when `ResultChart.get_chart_for_difference` falls back to the nearest
-  seeded chart — the fallback chart's own `rank_difference` field never leaks through.
-  Returns `None` only when no `ResultChart` exists at all.
+- `compute_matchup(*, roller_points, target_difficulty, roll_modifier=0, modifier_points=0, target_modifier_points=0) -> ChartDistribution | None` —
+  one matchup exactly as `perform_check` rolls it (#4601): `roller_points` and
+  `target_difficulty` are own standing, the two modifier arguments are added on top, and
+  `world.checks.slide.resolve_standing` decides band positions, the slide and the hopeless
+  pin. The odds are tallied over the slid chart under the roll modifier, face by face, the
+  way the engine reads a face plus a fraction. `rank_difference` is the whole difference of
+  the chart used (the pinned chart when hopeless); `standing` carries both sides' rank
+  text. Returns `None` only when no `ResultChart` exists at all.
+- `compute_slide_table(*, roll_modifier=0) -> list[SlideRow]` (#4601) — every authored
+  chart's odds at 0%, 25%, 50%, 75% and 100% of the way through its band, built with the
+  engine's `slide_chart`, each row flagged `impossible` when the chart has no Success (1).
+- `rank_ladder()` — every `CheckRank` with its number and threshold, for the panel key.
 - `ChartDistribution` (frozen dataclass): `rank_difference`, `chart_name`,
-  `bands: list[OutcomeBand]`, `success_probability`, `expected_success_level`.
-- `OutcomeBand` (frozen dataclass): `name`, `success_level`, `probability` (0.0-1.0).
+  `bands: list[OutcomeBand]`, `success_probability`, `expected_success_level`, `standing`.
+- `OutcomeBand` (frozen dataclass): `name`, `success_level`, `probability` (0.0-1.0),
+  `percent` (one decimal).
 
 - `compute_modifier_pile(*, character_level, modifier_level, size, count) -> ModifierPileReport | None`
   (#4594) — the check lane's piece of the simulator: `count` equal buffs valued by the
@@ -55,9 +61,13 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
   or baseline row covers the inputs.
 
 The panel template (`_checks_panel.html`) hosts the `roll_modifier` / `roller_points` /
-`target_difficulty` slider form itself, since each slider re-renders this same fragment, and a
-second form for the modifier pile (`pile_character_level`, `pile_modifier_level`, `pile_size`,
-`pile_count`) that includes the first form's values.
+`target_difficulty` / `modifier_points` / `target_modifier_points` slider form itself,
+since each slider re-renders this same fragment. The matchup shows own standing and the
+standing with modifiers ("Novice (rank 1), 67% toward Competent (rank 2) against Mythic
+(rank 8)"), the chart and how far it slides, and a Hopeless note (with "Pinned" when the
+rule held modifiers back). Below it, "The slide" table. A second form, for the modifier pile
+(`pile_character_level`, `pile_modifier_level`, `pile_size`, `pile_count`), sits under that and
+includes the first form's values.
 
 ### Consequences panel — `src/web/admin/tuning/consequence_analytics.py`
 

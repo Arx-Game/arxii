@@ -33,6 +33,7 @@ class CheckCapture:
     check_type: CheckType | None = None
     target_difficulty: int | None = None
     extra_traits: tuple[ExtraTraitTerm, ...] = ()
+    target_modifiers: int = 0  # #4601: the part of target_difficulty that is modifiers
 
 
 def _consume_forced_outcome() -> CheckOutcome | None:
@@ -48,6 +49,7 @@ def _record_capture(
     check_type: CheckType,
     target_difficulty: int | None,
     extra_traits: Sequence[ExtraTraitTerm] = (),
+    target_modifiers: int = 0,
 ) -> None:
     """Write into the active CheckCapture, if any. No-op outside a force context."""
     # Suppression justified: threading.local attr absent until a force context sets it.
@@ -56,6 +58,7 @@ def _record_capture(
         capture.check_type = check_type
         capture.target_difficulty = target_difficulty
         capture.extra_traits = tuple(extra_traits)
+        capture.target_modifiers = target_modifiers
 
 
 @contextmanager

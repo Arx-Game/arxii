@@ -25,6 +25,8 @@ from world.checks.models import Consequence
 
 logger = logging.getLogger(__name__)
 MIN_CONSEQUENCE_FACES = 2
+# A slid chart's faces are weighted in tenths of a d100 face (#4601).
+_SLID_FACE_SCALE = 1000
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -129,6 +131,12 @@ def check_outcome_faces(
     chart and lands on whatever the backend actually resolved, never a
     rollmod-shaped or guarantee-shaped view of it.
 
+    **The slide (#4601).** When the roll used a slid chart (``check_result.standing``
+    with a share above 0), the faces are the slid chart's bands instead, one per outcome,
+    weighted by their share in tenths of a face. The slid chart IS the chart the roll was
+    read from (it is built only from the two authored charts and the band positions, never
+    from rollmod or guarantees), so the wheel still shows exactly what the dice faced.
+
     When ``check_result.outcome`` is not one of the chart's own bands (an outcome
     guarantee lifted the result off this chart), the guaranteed outcome is
     appended as its own weight-1 face and selected — the wheel still shows where
@@ -143,6 +151,23 @@ def check_outcome_faces(
 
     faces: list[Consequence] = []
     selected: Consequence | None = None
+    standing = check_result.standing
+    if standing is not None and standing.share > 0:
+        for band in standing.slid.bands:
+            weight = round(band.probability * _SLID_FACE_SCALE)
+            if weight <= 0:
+                continue
+            face = Consequence(
+                outcome_tier=band.outcome,
+                label=band.outcome.name,
+                weight=weight,
+                character_loss=False,
+            )
+            faces.append(face)
+            if band.outcome.pk == outcome.pk:
+                selected = face
+        return _with_selected(faces, selected, outcome)
+
     for row in chart.outcomes.order_by("min_roll"):
         face = Consequence(
             outcome_tier=row.outcome,
@@ -153,17 +178,21 @@ def check_outcome_faces(
         faces.append(face)
         if row.outcome_id == outcome.pk:
             selected = face
+    return _with_selected(faces, selected, outcome)
 
+
+def _with_selected(
+    faces: list[Consequence], selected: Consequence | None, outcome: CheckOutcome
+) -> tuple[list[Consequence], Consequence]:
+    """Append the resolved outcome as its own weight-1 face when no band holds it."""
     if selected is None:
-        face = Consequence(
+        selected = Consequence(
             outcome_tier=outcome,
             label=outcome.name,
             weight=1,
             character_loss=False,
         )
-        faces.append(face)
-        selected = face
-
+        faces.append(selected)
     return faces, selected
 
 
