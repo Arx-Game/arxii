@@ -49,7 +49,9 @@ They do not use the command system, dispatchers, or handlers.
   `RallyAction`/`DemoralizeAction`/`TauntAction`/`ParleyAction` (social maneuvers, #1590/#1591)/
   `ChargeAction`/`JoustAction` (mounted, #1843)/`EngageAction`/`DisengageAction`
   (engagement locks, #2020; telnet `combat engage`/`combat disengage` since #3396;
-  the web affordance #3396 deferred to #3381 never landed there — tracked in #3447) (keys
+  the web affordance #3396 deferred to #3381 never landed there — tracked in #3447)/
+  `MarkAction` (#4603: a free act that writes only a `CombatMark`, never a
+  `CombatRoundAction`; telnet `combat mark <opp>`, web opponent menu "Mark") (keys
   prefixed `combat_`). `SuccorAction` (key `combat_succor`) wraps `declare_succor` — always
   names a specific ally (no "any ally" path, unlike Interpose). `UseItemManeuverAction`
   (key `combat_use`, #2120) wraps `declare_use_item` — a primary maneuver (consumes the

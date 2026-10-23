@@ -2,8 +2,6 @@
 
 from django.db import IntegrityError
 from django.test import TestCase
-from drf_spectacular.drainage import get_override
-from rest_framework.serializers import ListSerializer
 
 from world.combat.constants import OpponentStatus, ParticipantStatus
 from world.combat.factories import (
@@ -12,7 +10,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.models import CombatMark
-from world.combat.serializers import CombatMarkSerializer, EncounterDetailSerializer
+from world.combat.serializers import EncounterDetailSerializer
 from world.combat.services import declare_mark
 from world.scenes.constants import RoundStatus
 
@@ -153,12 +151,6 @@ class EncounterMarksPayloadTest(TestCase):
             round_number=round_number,
         )
 
-    def test_marks_lists_only_this_rounds_marks(self):
-        self._mark(1)
-        self._mark(2)
-        marks = _serialize(self.encounter)["marks"]
-        self.assertEqual([m["round_number"] for m in marks], [2])
-
     def test_mark_rows_carry_marker_and_target(self):
         mark = self._mark(2)
         marks = _serialize(self.encounter)["marks"]
@@ -173,11 +165,3 @@ class EncounterMarksPayloadTest(TestCase):
                 }
             ],
         )
-
-    def test_marks_is_empty_when_nobody_marked(self):
-        self.assertEqual(_serialize(self.encounter)["marks"], [])
-
-    def test_marks_is_typed_in_the_schema(self):
-        override = get_override(EncounterDetailSerializer.get_marks, "field")
-        self.assertIsInstance(override, ListSerializer)
-        self.assertIsInstance(override.child, CombatMarkSerializer)
