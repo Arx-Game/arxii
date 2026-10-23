@@ -169,6 +169,25 @@ export async function listMissionCategories(): Promise<PaginatedResponse<Mission
 // MissionNode (D2)
 // ---------------------------------------------------------------------------
 
+/**
+ * Every row of one mission-graph list, across pages (#4558). The graph page,
+ * the delete confirmation and the problem marks all reason about the WHOLE
+ * graph; page 1 alone (25 rows) silently dropped arrows from any mission with
+ * more routes than that. Returned in the paginated shape callers already read.
+ */
+async function listWholeGraph<T>(
+  path: string,
+  filters: object,
+  errorMessage: string
+): Promise<PaginatedResponse<T>> {
+  const query = buildQueryString({ ...filters, page_size: GRAPH_PAGE_SIZE });
+  const results = await fetchAllPages<T>(`${BASE_URL}/${path}/${query}`, errorMessage);
+  return { count: results.length, next: null, previous: null, results };
+}
+
+/** The Studio API's max_page_size, so a whole graph takes as few requests as possible. */
+const GRAPH_PAGE_SIZE = 100;
+
 export async function listMissionNodes(
   filters: {
     template?: number;
@@ -178,6 +197,9 @@ export async function listMissionNodes(
     page_size?: number;
   } = {}
 ): Promise<PaginatedResponse<MissionNode>> {
+  if (filters.page === undefined) {
+    return listWholeGraph<MissionNode>('nodes', filters, 'Failed to load nodes');
+  }
   const res = await apiFetch(`${BASE_URL}/nodes/${buildQueryString(filters)}`);
   if (!res.ok) throw new Error('Failed to load nodes');
   return res.json();
@@ -232,9 +254,7 @@ export async function listMissionOptions(
     needs_rewrite?: boolean;
   } = {}
 ): Promise<PaginatedResponse<MissionOption>> {
-  const res = await apiFetch(`${BASE_URL}/options/${buildQueryString(filters)}`);
-  if (!res.ok) throw new Error('Failed to load options');
-  return res.json();
+  return listWholeGraph<MissionOption>('options', filters, 'Failed to load options');
 }
 
 export async function listMissionRoutes(
@@ -244,9 +264,7 @@ export async function listMissionRoutes(
     needs_rewrite?: boolean;
   } = {}
 ): Promise<PaginatedResponse<MissionOptionRoute>> {
-  const res = await apiFetch(`${BASE_URL}/routes/${buildQueryString(filters)}`);
-  if (!res.ok) throw new Error('Failed to load routes');
-  return res.json();
+  return listWholeGraph<MissionOptionRoute>('routes', filters, 'Failed to load routes');
 }
 
 export async function listRouteCandidates(
@@ -255,9 +273,11 @@ export async function listRouteCandidates(
     template?: number;
   } = {}
 ): Promise<PaginatedResponse<MissionOptionRouteCandidate>> {
-  const res = await apiFetch(`${BASE_URL}/route-candidates/${buildQueryString(filters)}`);
-  if (!res.ok) throw new Error('Failed to load candidates');
-  return res.json();
+  return listWholeGraph<MissionOptionRouteCandidate>(
+    'route-candidates',
+    filters,
+    'Failed to load candidates'
+  );
 }
 
 export async function listRouteRewards(
@@ -392,7 +412,7 @@ export async function copyNode(id: number, body: { new_key: string }): Promise<M
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to copy node');
+  if (!res.ok) await throwServerError(res, 'Failed to copy node');
   return res.json();
 }
 
@@ -405,7 +425,7 @@ export async function copySubtree(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to copy subtree');
+  if (!res.ok) await throwServerError(res, 'Failed to copy subtree');
   return res.json();
 }
 

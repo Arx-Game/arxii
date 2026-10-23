@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
 
+from django.db import IntegrityError
 from django.db.models import Exists, OuterRef, ProtectedError, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
@@ -326,6 +327,14 @@ class MissionTemplateViewSet(ScenarioScopedQuerysetMixin, viewsets.ModelViewSet)
 # ---------------------------------------------------------------------------
 
 
+# A copy whose key is already used in the mission hits the template-key unique
+# constraint; the copy service is atomic, so nothing is left half-copied.
+_COPY_KEY_TAKEN = "Another node in this mission already uses that key."
+_COPY_PREFIX_TAKEN = (
+    "A copied node's key would match one already in this mission. Choose another prefix."
+)
+
+
 class MissionNodeViewSet(
     ProtectedDeleteMixin,
     ScenarioOwnedChildMixin,
@@ -371,7 +380,10 @@ class MissionNodeViewSet(
                 {"detail": "new_key is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        new_node = copy_node(source, new_key=new_key)
+        try:
+            new_node = copy_node(source, new_key=new_key)
+        except IntegrityError:
+            return Response({"detail": _COPY_KEY_TAKEN}, status=status.HTTP_400_BAD_REQUEST)
         serializer = MissionNodeSerializer(new_node, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -392,7 +404,10 @@ class MissionNodeViewSet(
                 {"detail": "new_key_prefix is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        new_node = copy_subtree(source, new_key_prefix=new_key_prefix)
+        try:
+            new_node = copy_subtree(source, new_key_prefix=new_key_prefix)
+        except IntegrityError:
+            return Response({"detail": _COPY_PREFIX_TAKEN}, status=status.HTTP_400_BAD_REQUEST)
         serializer = MissionNodeSerializer(new_node, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 

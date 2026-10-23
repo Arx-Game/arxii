@@ -178,6 +178,18 @@ class CopyNodeActionTests(TestCase):
         self.assertEqual(response.data["key"], "cn-source-copy")
         self.assertFalse(response.data["is_entry"])  # copies never inherit entry flag
 
+    def test_copy_node_onto_a_key_in_use_is_refused_plainly(self) -> None:
+        response = self.client.post(
+            f"/api/missions/nodes/{self.source.pk}/copy/",
+            {"new_key": "cn-target"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["detail"], "Another node in this mission already uses that key."
+        )
+        self.assertEqual(MissionNode.objects.filter(template=self.template).count(), 2)
+
     def test_copy_node_route_target_unchanged(self) -> None:
         self.client.post(
             f"/api/missions/nodes/{self.source.pk}/copy/",
@@ -239,6 +251,20 @@ class CopySubtreeActionTests(TestCase):
             )
         )
         self.assertEqual(copied_keys, {"x-cs-a", "x-cs-b", "x-cs-c"})
+
+    def test_copy_subtree_onto_keys_in_use_is_refused_and_copies_nothing(self) -> None:
+        MissionNodeFactory(template=self.template, key="z-cs-b")
+        before = MissionNode.objects.filter(template=self.template).count()
+
+        response = self.client.post(
+            f"/api/missions/nodes/{self.a.pk}/copy-subtree/",
+            {"new_key_prefix": "z"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Choose another prefix", response.data["detail"])
+        self.assertEqual(MissionNode.objects.filter(template=self.template).count(), before)
 
     def test_copy_subtree_repoints_internal_routes(self) -> None:
         self.client.post(
