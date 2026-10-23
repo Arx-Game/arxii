@@ -484,6 +484,12 @@ For each such follow-up, call
 `scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before
 opening the PR) and collect the issue numbers.
 
+**A follow-up that adds a new capability, one nothing in the game promises
+yet, is asked of the maintainer before it is filed** (CLAUDE.md "Ask before
+filing a new capability"; `verify-against-code` step 0). Put it to them as one
+plain sentence phrased as the feature and file only on a yes. A bug in
+something built is filed without asking.
+
 **Before filing each follow-up, run the `verify-against-code` pass on its
 premise** (skill at `tools/skills/verify-against-code/`). A deferral is a
 proposed future surface, not exempt from the anti-reinvention pass just because
