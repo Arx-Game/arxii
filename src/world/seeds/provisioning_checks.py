@@ -58,6 +58,24 @@ _QUALITY_TIERS = (
     ("Transcendent", 120, 149, "2.00", 11, "#FF8A65"),
     ("Legendary", 150, 9999, "2.30", 12, "#FF5252"),
 )
+#: Example item levels per tier (#4628): the level a worn item's sized check modifier
+#: counts at, read against the modifier value table's level rows (1, 6, 11, 16, 21, 26).
+#: Examples only, for staff to tune; filled only where a tier has none, so staff edits
+#: survive a re-seed.
+_QUALITY_TIER_MODIFIER_LEVELS = {
+    "Poor": 1,
+    "Mediocre": 2,
+    "Average": 4,
+    "Above Average": 6,
+    "Well-Crafted": 8,
+    "Fine": 11,
+    "Exceptional": 13,
+    "Superb": 16,
+    "Perfect": 19,
+    "Divine": 21,
+    "Transcendent": 24,
+    "Legendary": 26,
+}
 #: The 3-row placeholder ladder this 12-rung ladder replaces; deleted on seed.
 _LEGACY_TIER_NAMES = ("Common", "Masterwork")
 
@@ -190,6 +208,10 @@ def _ensure_quality_tiers() -> dict[str, object]:
                 "color_hex": color,
             },
         )
+        example_level = _QUALITY_TIER_MODIFIER_LEVELS.get(name)
+        if tier.modifier_level is None and example_level is not None:
+            tier.modifier_level = example_level
+            tier.save(update_fields=["modifier_level"])
         tiers[name] = tier
     QualityTier.objects.filter(name__in=_LEGACY_TIER_NAMES).delete()
     for level, name in _ACCENT_LEVELS:

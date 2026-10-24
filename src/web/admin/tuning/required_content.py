@@ -2934,6 +2934,24 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
         ),
         ContentDependency(
+            key="quality-tier-modifier-level",
+            label="Quality tier modifier levels (item level rows)",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/checks/services.py collect_check_modifiers() EQUIPMENT block, via "
+                "QualityTier.modifier_level"
+            ),
+            consequence=(
+                "A worn item whose check modifier has a size resolves no level, so it keeps "
+                "its flat authored check modifier instead of the value table's number."
+            ),
+            probe=FilteredRowProbe(
+                label="QualityTier",
+                filters=(("modifier_level__isnull", False),),
+                absent_detail="No QualityTier has a modifier level.",
+            ),
+        ),
+        ContentDependency(
             key="cast-power-level",
             label="Cast power to modifier level",
             tier=DependencyTier.TUNING,
