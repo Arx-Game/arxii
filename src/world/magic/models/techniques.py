@@ -1155,6 +1155,13 @@ class AbstractMoraleEffect(SharedMemoryModel):
         help_text="Morale added for each success level above the minimum.",
     )
 
+    @property
+    def removes_morale(self) -> bool:
+        """False for a row whose base, power multiplier and per-level step are all zero."""
+        return bool(
+            self.base_morale or self.morale_intensity_multiplier or self.morale_per_extra_sl
+        )
+
     def compute_morale(self, *, effective_power: int, success_level: int) -> int:
         """Morale removed from one opponent by a cast at this power and success level."""
         return _scale_by_power_and_sl(
@@ -1947,11 +1954,7 @@ class TechniqueMoraleEffect(NaturalKeyMixin, AbstractMoraleEffect):
 
     def clean(self) -> None:
         super().clean()
-        if (
-            not self.base_morale
-            and not self.morale_intensity_multiplier
-            and not self.morale_per_extra_sl
-        ):
+        if not self.removes_morale:
             msg = (
                 "This row removes no morale. Set a base amount, a power multiplier "
                 "or an amount per extra success level."

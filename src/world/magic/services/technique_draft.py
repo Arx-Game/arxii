@@ -16,7 +16,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from world.magic.exceptions import NoActiveTechniqueDraft, TechniqueDraftIncomplete
+from world.magic.exceptions import (
+    NoActiveTechniqueDraft,
+    TechniqueDraftIncomplete,
+    TechniqueDraftMoraleRemovesNothing,
+)
 from world.magic.models import (
     TechniqueDraft,
     TechniqueDraftAppliedCondition,
@@ -280,6 +284,8 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
     Raises:
         TechniqueDraftIncomplete: when one or more required knobs are unset,
             listing every missing field name in ``exc.missing_fields``.
+        TechniqueDraftMoraleRemovesNothing: when the draft's morale row removes no
+            morale (a ``TechniqueDraftIncomplete``).
     """
     missing: list[str] = []
     if not draft.name:
@@ -298,6 +304,8 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
     level = get_technique_tier_budget(draft.tier).representative_level  # type: ignore[arg-type]
 
     morale_row = TechniqueDraftMoraleEffect.objects.filter(draft=draft).first()
+    if morale_row is not None and not morale_row.removes_morale:
+        raise TechniqueDraftMoraleRemovesNothing
     morale_effect = (
         MoraleEffectSpec(
             minimum_success_level=morale_row.minimum_success_level,

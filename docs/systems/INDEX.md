@@ -692,7 +692,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `InvalidCastTarget` (`world/magic/services/targeting.py`; raised by `validate_cast_target`
   on cardinality/relationship violations),
   `NoActiveTechniqueDraft` (no draft to work with),
-  `TechniqueDraftIncomplete` (required fields missing at `draft_to_design` time),
+  `TechniqueDraftIncomplete` (required fields missing at `draft_to_design` time; its subclass
+  `TechniqueDraftMoraleRemovesNothing` refuses a draft morale row that removes no morale, #4619),
   `UnknownTechniqueVocab` / `UnknownGift` (unknown vocab/gift name in telnet parser),
   `GiftNotOwned` (character doesn't own the design's gift; `validate_design_for_character`),
   `TechniqueRequirementsNotMet` (#4097; `charge_and_learn` raises this when an active

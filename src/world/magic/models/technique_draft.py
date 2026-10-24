@@ -266,7 +266,8 @@ class TechniqueDraftMoraleEffect(AbstractMoraleEffect):
     """The morale payload row of a TechniqueDraft (#4619).
 
     Mirrors ``TechniqueMoraleEffect`` for the draft workbench. A draft may be
-    incomplete, so there is no "removes no morale" rule here.
+    incomplete, so the row itself has no "removes no morale" rule; ``draft_to_design``
+    refuses a row that removes none with ``TechniqueDraftMoraleRemovesNothing``.
     """
 
     draft = models.OneToOneField(

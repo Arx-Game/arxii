@@ -183,7 +183,8 @@ rows. Key service functions:
 - `add_draft_capability_grant` / `add_draft_damage_profile` / `add_draft_applied_condition`
   and their `remove_*` counterparts — payload row management.
 - `draft_to_design(draft) -> TechniqueDesignInput` — validates completeness and converts to the
-  design input type; raises `TechniqueDraftIncomplete` on missing required fields.
+  design input type; raises `TechniqueDraftIncomplete` on missing required fields, and its
+  subclass `TechniqueDraftMoraleRemovesNothing` for a morale row that removes no morale (#4619).
 
 `validate_design_for_character(design, policy, character)` in `services/technique_builder.py` is
 the shared player-facing gift-ownership gate — the single source of truth for the gate. Call it
@@ -191,7 +192,7 @@ after `draft_to_design` when finalising from telnet or web. Raises
 `GiftNotOwned` if the character doesn't own the design's gift.
 
 Draft-specific exceptions (in `exceptions.py`): `NoActiveTechniqueDraft`,
-`TechniqueDraftIncomplete`, `UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
+`TechniqueDraftIncomplete` (+ `TechniqueDraftMoraleRemovesNothing`), `UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
 
 **Action seam** — `AuthorTechniqueAction` (`actions/definitions/technique_authoring.py`,
 key `"author_technique"`, category `"magic"`) is the single commit seam that both the web view
