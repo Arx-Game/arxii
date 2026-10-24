@@ -45,7 +45,7 @@ from world.combat.services.npc.npc_targeting import (
 )
 
 if TYPE_CHECKING:
-    from world.areas.positioning.models import Position
+    from world.areas.positioning.models import Position, PositionEdge
     from world.combat.types import MovementProfile
 
     # Called after each hop with where the mover now stands and a callable that says so
@@ -186,17 +186,29 @@ def nearest_hostile_position(
     return path[-1] if path else None
 
 
-def write_move_plan(
+def write_move_plan(  # noqa: PLR0913 - one keyword per plan column
     opponent: CombatOpponent,
     round_number: int,
     *,
+    kind: str = OpponentMoveKind.ADVANCE,
     goal_position: Position | None = None,
+    barrier_edge: PositionEdge | None = None,
+    threat_entry: ThreatPoolEntry | None = None,
 ) -> CombatOpponentMove:
-    """Write the opponent's one ADVANCE plan for the round (never a second row)."""
+    """Write the opponent's one move plan for the round (never a second row).
+
+    ``kind`` is an ``OpponentMoveKind``; a BASH plan names its wall and the entry that
+    chips it, a WAIT plan the strike it holds (the table's check constraints).
+    """
     move, _ = CombatOpponentMove.objects.get_or_create(
         opponent=opponent,
         round_number=round_number,
-        defaults={"kind": OpponentMoveKind.ADVANCE, "goal_position": goal_position},
+        defaults={
+            "kind": kind,
+            "goal_position": goal_position,
+            "barrier_edge": barrier_edge,
+            "threat_entry": threat_entry,
+        },
     )
     return move
 
@@ -268,11 +280,29 @@ def _goal_pairs(
     if pairs:
         return pairs
     hostiles, _ = _live_target_pool(opponent)
+    deliveries = strike_deliveries(opponent)
     return [
-        (pos, StrikeDelivery.MELEE)
+        (pos, delivery)
         for pos in (target_position(t) for t in hostiles)
         if pos is not None
+        for delivery in deliveries
     ]
+
+
+def strike_deliveries(opponent: CombatOpponent) -> set[str]:
+    """The deliveries of the opponent's threat entries (MELEE when it has none).
+
+    An opponent with no attack row this round heads for anywhere one of its strikes
+    would land from: an archer for a line of sight, a biter for arm's reach (#4609).
+    """
+    if opponent.threat_pool_id is None:
+        return {StrikeDelivery.MELEE}
+    deliveries = set(
+        ThreatPoolEntry.objects.filter(pool_id=opponent.threat_pool_id).values_list(
+            "delivery", flat=True
+        )
+    )
+    return deliveries or {StrikeDelivery.MELEE}
 
 
 def _truncate_to_budget(path: list[Position], profile: MovementProfile) -> list[Position]:
@@ -396,17 +426,32 @@ def advance_opponent(
         path = _advance_route(opponent, origin, _goal_pairs(opponent, attack_rows), profile)
         if path is None:
             return None
-        walked = _truncate_to_budget(path, profile)
-        if len(walked) <= 1:
-            return None
-        announced: list[Position] = []
+        return walk_and_announce(opponent, path, profile, on_hop=on_hop)
 
-        def announce(here: Position) -> None:
-            _broadcast_moves_to(opponent, here)
-            announced.append(here)
 
-        final = _walk(opponent, walked, on_hop=on_hop, announce=announce)
+def walk_and_announce(
+    opponent: CombatOpponent,
+    path: list[Position],
+    profile: MovementProfile,
+    *,
+    on_hop: HopHook | None = None,
+) -> Position | None:
+    """Walk as much of ``path`` as the hop budget allows and tell the room where it went.
 
+    Returns where the opponent ended, or None when it took no step. Says
+    ``"{name} moves to {position}."`` once for where it stopped, and before any waiting
+    strike its arrival draws (``on_hop``). Call inside ``mover_origin`` for a flier.
+    """
+    walked = _truncate_to_budget(path, profile)
+    if len(walked) <= 1:
+        return None
+    announced: list[Position] = []
+
+    def announce(here: Position) -> None:
+        _broadcast_moves_to(opponent, here)
+        announced.append(here)
+
+    final = _walk(opponent, walked, on_hop=on_hop, announce=announce)
     if not announced or announced[-1].pk != final.pk:
         _broadcast_moves_to(opponent, final)
     return final

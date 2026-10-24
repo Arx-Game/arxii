@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from world.combat.constants import (
     EngagementLockStatus,
+    OpponentMoveKind,
     OpponentStatus,
     OpponentTier,
 )
@@ -34,6 +35,17 @@ from world.combat.services.npc.npc_movement import (
     strike_pool_key,
     write_move_plan,
 )
+from world.combat.services.npc.npc_tactics import (
+    build_tactics_inputs,
+    grounding_strike,
+    plan_approach,
+    plan_retreat,
+    shelter_goal,
+    unanswerable_attackers,
+    usable_entries,
+    write_grounding_attack,
+    write_plan,
+)
 from world.combat.services.npc.npc_targeting import (
     _get_eligible_entries,
     _npc_action_target_pool,
@@ -44,6 +56,7 @@ from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
+    from world.combat.types import TacticsInputs
 
 
 @dataclass
@@ -66,6 +79,7 @@ class NpcRoundContext:
     shield_participant_ids: set[int]
     provokers: dict[int, int]
     unmatured_windup_opponent_ids: set[int]
+    tactics: TacticsInputs
     reach_memo: ReachMemo = field(default_factory=ReachMemo)
 
 
@@ -157,6 +171,7 @@ def _build_npc_round_context(
         shield_participant_ids=shield_participant_ids,
         provokers=_provoking_participant_ids(opponents, active_participants),
         unmatured_windup_opponent_ids=_unmatured_windup_opponent_ids(encounter, opponents),
+        tactics=build_tactics_inputs(encounter, opponents, all_active, entries_by_pool),
     )
 
 
@@ -345,22 +360,26 @@ def plan_opponent_round(
     opponent: CombatOpponent,
     ctx: NpcRoundContext,
 ) -> list[CombatOpponentAction]:
-    """Plan one opponent's round: its attack rows and its one move plan (#4607).
+    """Plan one opponent's round: its attack rows and its one move plan (#4607, #4609).
 
-    Returns the created attack rows. Writes no row at all when the opponent flees
-    (morale BREAK sets FLED, #2015), is calmed (NEUTRAL holds by design, #1590), or holds
-    on a companion HOLD order (#1921). Otherwise it always writes one ADVANCE
-    ``CombatOpponentMove``, except when it is winding up after selection, including a
-    wind-up that lands this round (the telegraph is its action and standing still is the
-    tell).
+    Returns the created attack rows. The move plan comes from the tactics ladder
+    (``npc_tactics``, see its module docstring): a broken opponent retreats over the
+    map (RETREAT) unless it is cornered; one hit by an attacker it cannot answer makes
+    for cover (SHELTER) and still strikes what it reaches there; one with nobody in reach
+    advances, bashes a wall in its way, or waits once for an opening. Writes no row at
+    all when the opponent is calmed (NEUTRAL holds by design, #1590) or holds on a
+    companion HOLD order (#1921), and no move row while it is winding up, including a
+    wind-up that lands this round (the telegraph is its action and standing still is
+    the tell).
 
     Attack rows go only at targets the opponent can strike THIS round: reachable from
     its position within ``speed_hops`` for the chosen entry's delivery, and from where it
     stands for a wind-up entry (``reachable_pools``); unplaced combatants count as
-    reachable. With no
-    eligible entry (all on cooldown) or nobody in reach it writes the ADVANCE row only,
+    reachable. With no eligible entry (all on cooldown) it writes the ADVANCE row only,
     hinting the nearest hostile's position. A summon with no live hostile left gets the
-    ADVANCE row and no attack.
+    ADVANCE row and no attack. A cunning or tactical opponent spends its first attack on
+    a grounding entry at a flier hitting it that nothing else it has can reach (a mindless
+    one never uses grounding entries).
 
     ``ctx.provokers`` maps an opponent to the participant whose forces_attack_on_source
     condition sits on it (#4584). It narrows the pool to that participant after the lock
@@ -374,46 +393,31 @@ def plan_opponent_round(
         morale_state_for,
     )
 
-    encounter = ctx.encounter
-    # Break: a broken opponent flees — set FLED and skip the round (#2015).
-    if morale_state_for(opponent) == OpponentMoraleState.BREAK:
-        opponent.status = OpponentStatus.FLED
-        opponent.save(update_fields=["status"])
+    # Break: a broken opponent backs away over the map and leaves (#2015, #4609).
+    if morale_state_for(opponent) == OpponentMoraleState.BREAK and plan_retreat(opponent, ctx):
         return []
 
     if ctx.allegiances.get(opponent.pk, Allegiance.ENEMY) == Allegiance.NEUTRAL:
         return []
 
-    target_pool, targeting_participants = _npc_action_target_pool(
-        opponent,
-        ctx.active_participants,
-        encounter,
-        allegiances=ctx.allegiances,
-        active_opponents=ctx.all_active,
-    )
+    resolved = _round_target_pool(opponent, ctx)
+    if resolved is None:
+        return []  # a companion HOLD order
+    target_pool, targeting_participants = resolved
 
-    # Lock narrowing: if an active EngagementLock exists, narrow to the locked PC (#2020).
-    if targeting_participants:
-        target_pool = _narrow_to_locked_or_provoker(
-            target_pool,
-            ctx.active_locks_by_opponent.get(opponent.pk),
-            ctx.provokers.get(opponent.pk),
-        )
-
-    # --- Companion order integration (#1921) ---
-    # An ALLY summon with a CompanionOrder may override its target or skip.
-    companion_result = _apply_companion_order(opponent, encounter.round_number, target_pool)
-    if companion_result is _COMPANION_HOLD:
-        return []
-    if isinstance(companion_result, list):
-        target_pool = companion_result
-
-    eligible = _get_eligible_entries(
-        opponent,
-        ctx.entries_by_pool.get(opponent.threat_pool_id, []),
-        ctx.recently_used_by_opponent.get(opponent.pk, set()),
-    )
     profile = opponent.movement_profile
+    grounding = ctx.tactics.grounding_entry_ids
+    pool_entries = ctx.entries_by_pool.get(opponent.threat_pool_id, [])
+    usable = usable_entries(pool_entries, profile, grounding)
+    eligible = usable_entries(
+        _get_eligible_entries(
+            opponent,
+            pool_entries,
+            ctx.recently_used_by_opponent.get(opponent.pk, set()),
+        ),
+        profile,
+        grounding,
+    )
     with mover_origin(opponent, profile) as origin:
         pools = reachable_pools(
             origin,
@@ -423,29 +427,45 @@ def plan_opponent_round(
             memo=ctx.reach_memo,
         )
         strikeable = [e for e in eligible if pools[strike_pool_key(e)]]
-        # A hostile's own position, never an aerial node a route search put up alone.
-        goal = None if strikeable else nearest_hostile_position(origin, target_pool, profile)
-    if not strikeable:
-        _write_advance_unless_winding_up(opponent, ctx, goal_position=goal)
-        return []
+        attackers = unanswerable_attackers(
+            opponent, origin, usable, profile=profile, inputs=ctx.tactics, memo=ctx.reach_memo
+        )
+        shelter = shelter_goal(
+            opponent,
+            origin,
+            attackers,
+            profile=profile,
+            allies=ctx.all_active,
+            memo=ctx.reach_memo,
+        )
+        if not strikeable:
+            _plan_with_no_one_in_reach(
+                opponent, ctx, origin, target_pool, eligible, usable, shelter=shelter
+            )
+            return []
+        grounder = grounding_strike(
+            origin,
+            ctx.tactics.aimed_at.get(opponent.pk, []),
+            eligible,
+            usable,
+            profile=profile,
+            inputs=ctx.tactics,
+            memo=ctx.reach_memo,
+        )
 
     in_reach = list({t.pk: t for pool in pools.values() for t in pool}.values())
-    if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
-        n_attacks = swarm_attack_count(
-            opponent.swarm_count,
-            opponent.bodies_per_attack or 1,
-            len(in_reach),
-        )
-    else:
-        n_attacks = opponent.actions_per_round
-
     actions: list[CombatOpponentAction] = []
+    first_attack = 0
+    if grounder is not None:
+        entry, flier = grounder
+        actions.append(write_grounding_attack(opponent, ctx.encounter, entry, flier))
+        first_attack = 1
     declared_windup = False
-    for attack_index in range(n_attacks):
+    for attack_index in range(first_attack, _attack_count(opponent, len(in_reach))):
         declared_windup |= _execute_npc_attack(
             opponent=opponent,
             eligible=strikeable,
-            encounter=encounter,
+            encounter=ctx.encounter,
             target_pool=in_reach,
             targeting_participants=targeting_participants,
             rotation=attack_index,
@@ -456,8 +476,69 @@ def plan_opponent_round(
         )
 
     if not declared_windup:
-        _write_advance_unless_winding_up(opponent, ctx)
+        if shelter is not None:
+            write_plan(opponent, ctx, kind=OpponentMoveKind.SHELTER, goal_position=shelter)
+        else:
+            _write_advance_unless_winding_up(opponent, ctx)
     return actions
+
+
+def _round_target_pool(opponent: CombatOpponent, ctx: NpcRoundContext) -> tuple[list, bool] | None:
+    """The opponent's hostiles this round, narrowed by a lock, a provoke or a companion
+    order; None when a companion HOLD order keeps it out of the round."""
+    target_pool, targeting_participants = _npc_action_target_pool(
+        opponent,
+        ctx.active_participants,
+        ctx.encounter,
+        allegiances=ctx.allegiances,
+        active_opponents=ctx.all_active,
+    )
+    # Lock narrowing: if an active EngagementLock exists, narrow to the locked PC (#2020).
+    if targeting_participants:
+        target_pool = _narrow_to_locked_or_provoker(
+            target_pool,
+            ctx.active_locks_by_opponent.get(opponent.pk),
+            ctx.provokers.get(opponent.pk),
+        )
+    # --- Companion order integration (#1921) ---
+    # An ALLY summon with a CompanionOrder may override its target or skip.
+    companion_result = _apply_companion_order(opponent, ctx.encounter.round_number, target_pool)
+    if companion_result is _COMPANION_HOLD:
+        return None
+    if isinstance(companion_result, list):
+        target_pool = companion_result
+    return target_pool, targeting_participants
+
+
+def _attack_count(opponent: CombatOpponent, targets_in_reach: int) -> int:
+    """How many attack rows the opponent writes: a swarm's by its bodies, else its actions."""
+    if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
+        return swarm_attack_count(
+            opponent.swarm_count, opponent.bodies_per_attack or 1, targets_in_reach
+        )
+    return opponent.actions_per_round
+
+
+def _plan_with_no_one_in_reach(  # noqa: PLR0913 - the ladder's per-opponent inputs
+    opponent: CombatOpponent,
+    ctx: NpcRoundContext,
+    origin: Position | None,
+    target_pool: list,
+    eligible: list[ThreatPoolEntry],
+    usable: list[ThreatPoolEntry],
+    *,
+    shelter: Position | None,
+) -> None:
+    """The move plan of an opponent no hostile is in reach of this round."""
+    profile = opponent.movement_profile
+    if shelter is not None:
+        write_plan(opponent, ctx, kind=OpponentMoveKind.SHELTER, goal_position=shelter)
+    elif eligible:
+        plan_approach(opponent, ctx, origin, target_pool, eligible, usable, profile=profile)
+    else:
+        # All on cooldown: close in on the nearest hostile's own position.
+        goal = nearest_hostile_position(origin, target_pool, profile)
+        _write_advance_unless_winding_up(opponent, ctx, goal_position=goal)
 
 
 def _write_advance_unless_winding_up(
