@@ -997,7 +997,9 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   rank, max rank, player line, description, effects as `+Target; -Target;
   immune:Target`, offered under as `rules|devotions|fears|reason:<name>|
   degree:ruined|degree:destroy|appearance:<section>|glimpse:<tag>|
-  lineage:<answer>|schooling:<line>`, first look for as Beginning names),
+  lineage:<answer>|schooling:<line>|beat:<stage>/<beat name>`, first look for
+  as Beginning names; a `beat:` token (#4655) looks up an existing Life beat by
+  life stage and name and creates the Backgrounds answer on it, never the beat),
   resolves every name against existing rows (`_one`: unknown or ambiguous is
   an error), marks a row `create`, `skip` (slug exists, or the slug repeats
   in the table) or `error`; `table_digest` hashes exactly what the preview
