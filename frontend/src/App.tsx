@@ -15,6 +15,10 @@ import { LoginPage } from './evennia_replacements/LoginPage';
 import { RegisterPage } from './evennia_replacements/RegisterPage';
 import { EmailVerificationPendingPage } from './evennia_replacements/EmailVerificationPendingPage';
 import { EmailVerifyPage } from './evennia_replacements/EmailVerifyPage';
+import {
+  PasswordResetRequestPage,
+  PasswordResetPage,
+} from './evennia_replacements/PasswordResetPage';
 import { AuthCallbackPage } from './evennia_replacements/AuthCallbackPage';
 import { UnverifiedAccountPage } from './pages/UnverifiedAccountPage';
 import { HowToStartPage } from './pages/HowToStartPage';
@@ -426,6 +430,8 @@ function App() {
           />
           <Route path="/register/verify-email" element={<EmailVerificationPendingPage />} />
           <Route path="/verify-email/:key" element={<EmailVerifyPage />} />
+          <Route path="/reset-password" element={<PasswordResetRequestPage />} />
+          <Route path="/reset-password/:key" element={<PasswordResetPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/account/unverified" element={<UnverifiedAccountPage />} />
           <Route path="/how-to-start" element={<HowToStartPage />} />

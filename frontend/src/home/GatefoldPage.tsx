@@ -66,7 +66,11 @@ export function GatefoldPage() {
   }, [setForcedRealm, isLoading, account]);
 
   if (isLoading) {
-    return <div className="min-h-screen bg-background" aria-busy="true" />;
+    return (
+      <div className="min-h-screen bg-background p-6 text-foreground" aria-busy="true">
+        <p role="status">Loading Arx...</p>
+      </div>
+    );
   }
 
   if (account && isLiveInWorld) {
