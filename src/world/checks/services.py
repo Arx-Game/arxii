@@ -1919,7 +1919,7 @@ def _character_and_equipment_contributions(
 
     contributions: list[ModifierContribution] = []
 
-    # CHARACTER — eager CharacterModifier rows. #4638: a distinction effect with a size
+    # CHARACTER: eager CharacterModifier rows. #4638: a distinction effect with a size
     # is valued from the check lane's table at its holder's level (scaled by rank); the
     # other rows on this path (achievement rewards, form profiles, unsized distinctions)
     # keep their flat values. All taper together in the CHARACTER pile.

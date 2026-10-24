@@ -1005,6 +1005,10 @@ rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
   the Glimpse-provenance state, mirroring `.secret`; set via
   `world.magic.services.glimpse.link_distinction_to_glimpse`/`unlink_distinction_from_glimpse`)
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
+- **Check lane (#4638):** `DistinctionEffect.modifier_size` (Paramount refused): on a check-scoped
+  target the effect reads the check value table at its holder's level and this size, scaled by
+  rank like the authored value; blank keeps the flat value. The list serializer's generated
+  effect line names the size ("+Large <target>") for such an effect. See [checks.md](checks.md).
 - **Enums:** `DistinctionOrigin` (`CHARACTER_CREATION`, `GAMEPLAY` vestigial, `GM_AWARD`,
   `ACHIEVEMENT_AUTO_GRANT`, `CONSEQUENCE_POOL`, `ENDORSEMENT_THRESHOLD`), `OtherStatus`
 - **Key Services:** `grant_distinction(character, distinction, *, origin, rank=None,
@@ -1081,6 +1085,11 @@ Check resolution engine — converts trait values to ranks and rolls against res
   worn instance's `QualityTier.modifier_level` (the item level rows), valued through
   `ValueTable.signed_value`; crafted modifiers are one EQUIPMENT contribution per worn piece; the
   equipment walk's vow terms (`equipment_walk_parts(...).vow_part`) ride untapered.
+  Third and fourth, distinctions and scene surroundings (#4638, ADR-4638-A):
+  `DistinctionEffect.modifier_size` at the holder's `CharacterSheet.current_level`, scaled by
+  rank, through `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)` (kept in the
+  CHARACTER kind); `SceneCheckModifier.modifier_level`/`modifier_size` authored together,
+  valued in `_scene_check_contributions`.
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
@@ -3890,6 +3899,9 @@ Who is in a scene is read off its log
 (`participation.py`, #3867, ADR-0300): the first room-heard line is the entrance, a present character
 without one stands at the threshold (marked in the Here panel, not addressable room-heard).
 
+- **Surroundings on checks (#4638):** `SceneCheckModifier.modifier_level`/`modifier_size`,
+  authored together on the scene admin's `SceneCheckModifierInline`, value a surroundings
+  modifier from the check value table at its own level; blank keeps the flat value.
 - **Played NPCs (#4418, ADR-4418):** a story NPC is auto-accepted as a target whoever plays
   it. When one acts on a PC with a contested social template (social, single target) the PC
   rolls `ActionTemplate.resist_check_type` (`start_resisted_action_resolution`, difficulty
