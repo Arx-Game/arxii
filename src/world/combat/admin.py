@@ -33,6 +33,7 @@ from world.combat.models import (
     EscalationCurve,
     FleeConfig,
     FleeTierModifier,
+    NpcTacticsConfig,
     OpponentTierTemplate,
     PendingSelection,
     RiskScalingModifier,
@@ -639,6 +640,25 @@ class SpectacleConfigAdmin(admin.ModelAdmin):
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""
         return not SpectacleConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """The singleton cannot be deleted."""
+        return False
+
+
+@admin.register(NpcTacticsConfig)
+class NpcTacticsConfigAdmin(admin.ModelAdmin):
+    """The singleton NPC tactics tuning row (#4609)."""
+
+    fields = ("bash_rounds_limit", "retreat_rounds_limit", "unanswered_hit_morale")
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not NpcTacticsConfig.objects.exists()
 
     def has_delete_permission(
         self,

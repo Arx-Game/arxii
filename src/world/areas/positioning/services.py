@@ -1052,11 +1052,43 @@ def _room_graph(origin: Position) -> _RoomGraph:
     return _RoomGraph(nodes=nodes, edges=edges, neighbours=neighbours)
 
 
+def is_breakable_barrier(edge: PositionEdge) -> bool:
+    """Whether ``edge`` holds a wall that damage can bring down (#4609).
+
+    A plain conjured wall with integrity, or a Rampart's seal (the Rampart holds the
+    integrity). A staff-authored seal, which has neither, is indestructible.
+    """
+    return edge.integrity is not None or edge.source_rampart_id is not None
+
+
+def barrier_integrity(edge: PositionEdge) -> int | None:
+    """The live strength of the wall on ``edge``: its Rampart's integrity for a Rampart's
+    seal, else the edge's own. None for an indestructible edge (#4609)."""
+    if edge.source_rampart_id is not None:
+        return edge.source_rampart.integrity
+    return edge.integrity
+
+
+def _hop_cost(
+    graph: _RoomGraph, edge: PositionEdge, traversal: str, *, through_barriers: bool
+) -> int | None:
+    """``graph.cost``, except that ``through_barriers`` lets a ground mover cross a wall
+    damage can bring down at 1 hop, as though it were already down."""
+    hop = graph.cost(edge, traversal)
+    if hop is not None or not through_barriers or not is_breakable_barrier(edge):
+        return hop
+    ends = (graph.nodes.get(edge.position_a_id), graph.nodes.get(edge.position_b_id))
+    if any(end is None or end.kind == PositionKind.AERIAL for end in ends):
+        return None
+    return 1
+
+
 def find_path(
     origin: Position,
     goal_test: Callable[[Position], bool],
     *,
     traversal: str,
+    through_barriers: bool = False,
 ) -> list[Position] | None:
     """The cheapest route from ``origin`` to the first position ``goal_test`` accepts.
 
@@ -1067,6 +1099,10 @@ def find_path(
     AERIAL position, and only through the aerial layer already in the room (this
     never materializes it). Positions have no capacity: several movers may share one.
     The room graph is read once from ``room.positions_cached``.
+
+    ``through_barriers`` (#4609) is the barrier-ignoring route an NPC weighs before it
+    bashes: a ground wall that damage can bring down (``is_breakable_barrier``) counts
+    as open at 1 hop. An indestructible seal stays closed.
     """
     graph = _room_graph(origin)
     best: dict[int, tuple[int, int]] = {origin.pk: (0, 0)}
@@ -1081,7 +1117,7 @@ def find_path(
         if goal_test(graph.nodes[pk]):
             return _walk_back(graph, parent, pk)
         for other, edge in graph.neighbours[pk]:
-            hop = graph.cost(edge, traversal)
+            hop = _hop_cost(graph, edge, traversal, through_barriers=through_barriers)
             if hop is None or other in done:
                 continue
             candidate = (cost + hop, steps + 1)
@@ -1092,6 +1128,48 @@ def find_path(
     return None
 
 
+def path_costs_from(origin: Position, *, traversal: str) -> dict[int, int]:
+    """Hops from ``origin`` to every position a mover of ``traversal`` can reach, by pk.
+
+    The same costs ``find_path`` routes over (``edge_crossing_cost``); the origin costs
+    0, and a position the mover cannot reach is absent. Used to measure path distance
+    (an NPC retreating from its enemies, #4609).
+    """
+    graph = _room_graph(origin)
+    best: dict[int, int] = {origin.pk: 0}
+    frontier: list[tuple[int, int]] = [(0, origin.pk)]
+    done: set[int] = set()
+    while frontier:
+        cost, pk = heapq.heappop(frontier)
+        if pk in done:
+            continue
+        done.add(pk)
+        for other, edge in graph.neighbours[pk]:
+            hop = graph.cost(edge, traversal)
+            if hop is None or other in done:
+                continue
+            if other not in best or cost + hop < best[other]:
+                best[other] = cost + hop
+                heapq.heappush(frontier, (cost + hop, other))
+    return best
+
+
+def first_closed_edge(path: list[Position], *, traversal: str) -> PositionEdge | None:
+    """The first edge along ``path`` closed to a mover of ``traversal``, or None.
+
+    A barrier-ignoring route (``find_path(..., through_barriers=True)``) crosses the
+    walls it found in the way; this names the first of them (#4609).
+    """
+    if len(path) <= 1:
+        return None
+    graph = _room_graph(path[0])
+    for here, there in pairwise(path):
+        edge = graph.edges.get(tuple(sorted((here.pk, there.pk))))
+        if edge is None or graph.cost(edge, traversal) is None:
+            return edge
+    return None
+
+
 def _walk_back(graph: _RoomGraph, parent: dict[int, int], goal_pk: int) -> list[Position]:
     chain = [goal_pk]
     while chain[-1] in parent:
@@ -1099,11 +1177,14 @@ def _walk_back(graph: _RoomGraph, parent: dict[int, int], goal_pk: int) -> list[
     return [graph.nodes[pk] for pk in reversed(chain)]
 
 
-def step_costs(path: list[Position], *, traversal: str) -> list[int]:
+def step_costs(
+    path: list[Position], *, traversal: str, through_barriers: bool = False
+) -> list[int]:
     """The hop cost of each step of ``path`` for ``traversal`` (``len(path) - 1`` items).
 
     Lets a caller cut a ``find_path`` route to a hop budget. Raises PositionError
     when two consecutive positions share no edge, or the edge is closed to the mover.
+    ``through_barriers`` prices a barrier-ignoring route as ``find_path`` does.
     """
     if len(path) <= 1:  # a path of one position takes no step
         return []
@@ -1112,7 +1193,11 @@ def step_costs(path: list[Position], *, traversal: str) -> list[int]:
     for here, there in pairwise(path):
         lo, hi = sorted((here.pk, there.pk))
         edge = graph.edges.get((lo, hi))
-        hop = graph.cost(edge, traversal) if edge is not None else None
+        hop = (
+            _hop_cost(graph, edge, traversal, through_barriers=through_barriers)
+            if edge is not None
+            else None
+        )
         if hop is None:
             msg = f"No crossing from {here.name} to {there.name} for {traversal}."
             raise PositionError(msg)

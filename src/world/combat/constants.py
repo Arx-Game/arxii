@@ -192,6 +192,15 @@ class OpponentMoveKind(models.TextChoices):
     WAIT = "wait", "Wait for an opening"
 
 
+# NPC tactics (#4609, slice 4 of #4576). Starting values for the staff tuning row
+# (NpcTacticsConfig); the row, not these, is what the game reads.
+# A group of opponents bashes a wall it can bring down within this many rounds.
+BASH_ROUNDS_LIMIT: int = 3
+# A broken opponent that has retreated this many rounds in a row leaves the fight.
+RETREAT_ROUNDS_LIMIT: int = 2
+# Morale an opponent loses each time an attacker it cannot answer hits it.
+UNANSWERED_HIT_MORALE: int = 10
+
 # Movement profile for an opponent with no CreatureTemplate.
 NPC_DEFAULT_TACTICS: str = CreatureTactics.CUNNING
 NPC_DEFAULT_HOPS: int = 1
@@ -891,3 +900,10 @@ WAITING_STRIKE_NEVER_CAME_NARRATION = "{name} waited for an opening that never c
 STOPPED_BEFORE_STRIKING_NARRATION = "{name} is stopped before striking."
 # Label tag on the ActionOutcome of a waiting strike in the round's outcome list.
 WAITING_STRIKE_LABEL_TAG = "(waiting strike)"
+
+# NPC tactics round-log lines (#4609). ``{barrier}`` is ``barrier_label(edge)``.
+STRAINS_AGAINST_NARRATION = "{name} strains against {barrier}."
+BATTERS_BARRIER_NARRATION = "{name} batters {barrier}."
+BARRIER_GIVES_WAY_NARRATION = "{barrier} gives way."
+NPC_WAITS_NARRATION = "{name} waits for an opening."
+NPC_FLEES_NARRATION = "{name} flees the fight."
