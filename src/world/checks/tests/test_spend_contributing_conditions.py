@@ -273,8 +273,9 @@ class BatchForgetsAMarkerItsFlowSpentTests(TestCase):
 _NOT_A_ROLL = {
     # preview grading: previews never spend
     "world/standoffs/services/view.py::_Grader.grade",
-    # records provenance; the roll it records carries no condition terms
-    "world/mechanics/challenge_resolution.py::_record_challenge_outcome",
+    # gathers for its two callers, which spend: resolve_challenge
+    # (spend_contributing_conditions) and _resolve_via_template (spend_or_defer_condition_uses)
+    "world/mechanics/challenge_resolution.py::_gather_challenge_modifiers",
 }
 # Calls that settle a breakdown's once-only terms (the second defers to the resume).
 _SPENDERS = {"spend_contributing_conditions", "spend_or_defer_condition_uses"}
