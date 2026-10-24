@@ -20,6 +20,8 @@ telnet ``position`` and ``combat await``.
   the wall anyway; a mindless brute batters it at once.
 - Shut away behind a wall nothing can break, a cunning wolf waits for an opening once,
   then strains against the wall; a mindless construct never waits.
+- A wolf shut in a pen it cannot climb out of waits for an opening, and meets Hobb's
+  mounted charge with its own waiting strike before his blow lands.
 - Hobb holds a screened gate (Scenario 7). Archers who cannot see him walk out into the
   open within two rounds, and the first to arrive takes his waiting strike.
 - A broken bandit backs away over the map, a hop a round, and leaves after two rounds of
@@ -90,7 +92,10 @@ from world.combat.models import (
 )
 from world.combat.services import begin_declaration_phase, resolve_round
 from world.combat.services.boss.creature_spawn import spawn_from_creature_template
+from world.companions.mount_content import MOUNTED_CONDITION_NAME, ensure_mount_conditions
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.conditions.models import ConditionTemplate
+from world.conditions.services import apply_condition
 from world.magic.constants import TechniqueReach
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -536,6 +541,49 @@ class ShutAwayBehindAWall(_TheField):
         self.assertEqual(self.plan(construct).kind, OpponentMoveKind.ADVANCE)
         self.assertFalse(self.rows_with(self.hobb, "waits for an opening"))
         self.assertShownRow(self.hobb, STRAINS.format(name="Iron Construct", barrier="the wall"))
+
+
+class AWaitingWolfMeetsACharge(_TheField):
+    """Yard - Ledge - Pen. The Pen's edge has a climb on it: a rider can charge across,
+    a walking wolf cannot climb out."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.yard, self.ledge = self.places("Yard", "Ledge")
+        self.pen = PositionFactory(room=self.room, name="Pen")
+        climb = ChallengeInstanceFactory(
+            template=ChallengeTemplateFactory(name="Sheer Rock"),
+            location=self.room,
+            target_object=self.room,
+        )
+        connect_positions(self.ledge, self.pen, gating_challenge=climb)
+        self.hobb = self.fighter("Hobb", at=self.yard)
+        self.lunge = self.technique(self.hobb, "Lunge")
+        ensure_mount_conditions()
+        apply_condition(self.hobb, ConditionTemplate.get_by_name(MOUNTED_CONDITION_NAME))
+
+    def test_the_wolf_holds_its_bite_and_meets_hobbs_charge_first(self) -> None:
+        wolf = self.creature("Grey Wolf", at=self.pen)
+        told = self.telnet(self.hobb, "combat charge Grey Wolf with Lunge")
+        self.assertIn("You spur your mount into a charge!", told)
+
+        self.resolve()
+
+        # No one in its reach and no way out of the Pen: it waited for an opening, and
+        # Hobb's charge brought him into it.
+        plan = self.plan(wolf)
+        self.assertEqual(plan.kind, OpponentMoveKind.WAIT)
+        self.assertTrue(plan.fired)
+        self.assertEqual(position_of(self.hobb), self.pen)
+        met = WAITING_STRIKE.format(name="Grey Wolf", mover="Hobb")
+        self.assertShownRow(self.hobb, met)
+        # The wolf's strike comes before the charge's own blow ("Hobb's Lunge strikes Grey
+        # Wolf for ...").
+        self.assertLess(
+            self.row_index(self.hobb, met), self.row_index(self.hobb, "strikes Grey Wolf for")
+        )
+        self.assertEqual(self.health(self.hobb), FULL_HEALTH - 10)
+        self.assertLess(self.fresh(wolf).health, self.fresh(wolf).max_health)
 
 
 class AStandoffAtTheScreenedGate(_TheField):
