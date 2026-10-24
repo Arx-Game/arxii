@@ -51,7 +51,10 @@ def _hit(*args, **kwargs):
 
 
 class PcLiveReachTests(TestCase):
-    """Uses setUp: factories create Evennia objects, which setUpTestData cannot deepcopy."""
+    """Area casts and unplaced pairs; no journey casts an area technique.
+
+    The single-target fizzle and in-reach cases are journeys now (``HobbsStrikeFindsNoOne``).
+    Uses setUp: factories create Evennia objects, which setUpTestData cannot deepcopy."""
 
     def setUp(self) -> None:
         DamageSuccessLevelMultiplierFactory(min_success_level=0, multiplier=1)
@@ -108,53 +111,6 @@ class PcLiveReachTests(TestCase):
         from world.scenes.services import active_persona_for_sheet
 
         return active_persona_for_sheet(self.sheet).name
-
-    def test_single_target_that_moved_out_of_reach_fizzles_free(self) -> None:
-        technique = self._technique(reach=TechniqueReach.SAME)
-        opponent, opponent_od = self._opponent()
-        place_in_position(self.caster, self.pos_a)
-        place_in_position(opponent_od, self.pos_a)
-        declare_action(
-            self.participant,
-            focused_action=technique,
-            focused_category=ActionCategory.PHYSICAL,
-            effort_level=EffortLevel.MEDIUM,
-            focused_opponent_target=opponent,
-        )
-        place_in_position(opponent_od, self.pos_b)  # stepped away before the PC's slot
-        health_before = opponent.health
-        anima_before, fatigue_before = self._anima(), self._fatigue()
-
-        result = resolve_round(self.encounter, offense_check_fn=_hit)
-
-        pc_outcome = next(
-            o for o in result.action_outcomes if o.participant_id == self.participant.pk
-        )
-        self.assertEqual(pc_outcome.damage_results, [])
-        opponent.refresh_from_db()
-        self.assertEqual(opponent.health, health_before)
-        self.assertEqual(self._anima(), anima_before)
-        self.assertEqual(self._fatigue(), fatigue_before)
-        self.assertEqual(self._lines(), [f"{self._persona_name()}{FIZZLE_SUFFIX}"])
-
-    def test_single_target_still_in_reach_resolves_and_charges(self) -> None:
-        technique = self._technique(reach=TechniqueReach.SAME)
-        opponent, opponent_od = self._opponent()
-        place_in_position(self.caster, self.pos_a)
-        place_in_position(opponent_od, self.pos_a)
-        declare_action(
-            self.participant,
-            focused_action=technique,
-            focused_category=ActionCategory.PHYSICAL,
-            effort_level=EffortLevel.MEDIUM,
-            focused_opponent_target=opponent,
-        )
-        anima_before = self._anima()
-
-        resolve_round(self.encounter, offense_check_fn=_hit)
-
-        self.assertLess(self._anima(), anima_before)
-        self.assertEqual(self._lines(), [])
 
     def test_unplaced_pair_stays_lenient(self) -> None:
         technique = self._technique(reach=TechniqueReach.SAME)

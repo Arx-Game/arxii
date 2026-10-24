@@ -85,6 +85,26 @@ class PathServiceHoldsItsContract(HypothesisTestCase):
             )
         return positions
 
+    def assert_walk_matches_the_generated_edges(
+        self,
+        path: list[Position],
+        ground: list[Position],
+        edges: list[tuple[int, int, str, bool]],
+    ) -> None:
+        """A walker's route, judged against the edge states the generator drew.
+
+        Independent of ``edge_crossing_cost``: a walker stays on the ground positions the
+        generator made and never crosses an edge the generator sealed (a hard seal, or a wall
+        whose way past is still active). Open edges and walls already climbed are fine.
+        """
+        index = {position.pk: i for i, position in enumerate(ground)}
+        state_of = {frozenset((a, b)): state for a, b, state, _ in edges}
+        for here, there in pairwise(path):
+            self.assertIn(here.pk, index, "a walker stood off the ground")
+            self.assertIn(there.pk, index, "a walker stood off the ground")
+            state = state_of[frozenset((index[here.pk], index[there.pk]))]
+            self.assertNotIn(state, (HARD_SEAL, GATED), f"a walker crossed a {state} edge")
+
     @given(rooms(), traversals, st.booleans())
     def test_every_route_crosses_only_open_edges(
         self,
@@ -112,6 +132,8 @@ class PathServiceHoldsItsContract(HypothesisTestCase):
                 self.assertEqual(step_costs(path, traversal=traversal), expected)
                 if traversal != CreatureTraversal.FLIES:
                     self.assertFalse(any(p.kind == PositionKind.AERIAL for p in path))
+                if traversal == CreatureTraversal.WALKS:
+                    self.assert_walk_matches_the_generated_edges(path, ground, room[1])
 
     @given(rooms())
     def test_a_walker_routes_to_exactly_what_the_walker_rule_reaches(

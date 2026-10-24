@@ -14,8 +14,6 @@ from world.combat.factories import CombatEncounterFactory, CombatParticipantFact
 from world.combat.services.movement_budget import (
     active_combat_participant,
     hops_for,
-    hops_left,
-    spend_combat_hop,
 )
 from world.conditions.constants import FoundationalCapability
 from world.conditions.factories import CapabilityTypeFactory
@@ -25,6 +23,12 @@ _VALUE_PATH = "world.conditions.services.get_effective_capability_value"
 
 
 class HopsForTests(TestCase):
+    """A pure mapping, so kept as a unit: movement // MOVEMENT_PER_HOP, clamped to 1..MAX_HOPS.
+
+    The values (5 -> 1, 12 -> 2, 30 -> 5, 0 -> 0) follow the spec's
+    ``clamp(movement // MOVEMENT_PER_HOP, 1, MAX_HOPS_PER_ROUND)``; the journeys cover 1 and 2.
+    """
+
     @classmethod
     def setUpTestData(cls) -> None:
         CapabilityTypeFactory(name=FoundationalCapability.MOVEMENT)
@@ -64,36 +68,12 @@ class ActiveCombatParticipantTests(TestCase):
     def test_found_in_the_encounter_room(self) -> None:
         self.assertEqual(active_combat_participant(self.character), self.participant)
 
-    def test_resolving_and_between_rounds_still_count(self) -> None:
-        for status in (RoundStatus.RESOLVING, RoundStatus.BETWEEN_ROUNDS):
-            self.encounter.status = status
-            self.encounter.save(update_fields=["status"])
-            self.assertEqual(active_combat_participant(self.character), self.participant)
-
     def test_other_room_is_none(self) -> None:
         elsewhere = create_object("typeclasses.rooms.Room", key="Elsewhere", nohome=True)
         self.character.location = elsewhere
-        self.assertIsNone(active_combat_participant(self.character))
-
-    def test_completed_encounter_is_none(self) -> None:
-        self.encounter.status = RoundStatus.COMPLETED
-        self.encounter.save(update_fields=["status"])
         self.assertIsNone(active_combat_participant(self.character))
 
     def test_removed_participant_is_none(self) -> None:
         self.participant.status = ParticipantStatus.REMOVED
         self.participant.save(update_fields=["status"])
         self.assertIsNone(active_combat_participant(self.character))
-
-
-class SpendHopTests(TestCase):
-    def test_spending_reduces_hops_left(self) -> None:
-        CapabilityTypeFactory(name=FoundationalCapability.MOVEMENT)
-        participant = CombatParticipantFactory()
-        with patch(_VALUE_PATH, return_value=10):
-            self.assertEqual(hops_left(participant), 2)
-            spend_combat_hop(participant)
-            self.assertEqual(hops_left(participant), 1)
-            spend_combat_hop(participant)
-            spend_combat_hop(participant)
-            self.assertEqual(hops_left(participant), 0)

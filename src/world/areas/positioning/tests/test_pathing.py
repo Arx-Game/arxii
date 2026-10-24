@@ -8,21 +8,16 @@ Uses setUp (not setUpTestData): Evennia ObjectDB instances are not deepcopyable.
 
 from __future__ import annotations
 
-from itertools import pairwise
-
 from django.test import TestCase
 from evennia import create_object
 
 from world.areas.positioning.constants import CreatureTraversal, PositionKind
-from world.areas.positioning.exceptions import PositionTransitionError
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
     connect_positions,
     create_conjured_obstacle,
     disconnect_positions,
-    edge_between,
-    edge_crossing_cost,
     enter_aerial,
     find_path,
     force_move_to_position,
@@ -74,18 +69,15 @@ class _Yard(TestCase):
 
 
 class FindPathTests(_Yard):
-    def test_walker_routes_around_hard_seal(self) -> None:
-        self.hard_seal()
-        self.assertEqual(self.path(CreatureTraversal.WALKS), [self.a, self.d, self.c])
+    """The pure branchy search: tie-break, equal-cost detour, climber step costs, origin goal.
+
+    The wall journeys cover each traversal against a wall; these pin the choices a journey
+    cannot see, which route is picked when several cost the same.
+    """
 
     def test_walker_takes_the_lower_pk_route_on_a_tie(self) -> None:
         # A-B-C and A-D-C both cost 2 hops in 2 steps; B has the lower pk.
         self.assertEqual(self.path(CreatureTraversal.WALKS), [self.a, self.b, self.c])
-
-    def test_walker_blocked_when_no_detour(self) -> None:
-        self.drop_detour()
-        self.hard_seal()
-        self.assertIsNone(self.path(CreatureTraversal.WALKS))
 
     def test_climber_crosses_gated_edge_at_two(self) -> None:
         self.drop_detour()
@@ -94,67 +86,18 @@ class FindPathTests(_Yard):
         self.assertEqual(path, [self.a, self.b, self.c])
         self.assertEqual(step_costs(path, traversal=CreatureTraversal.CLIMBS), [1, 2])
 
-    def test_walker_stopped_by_a_gated_wall(self) -> None:
-        self.drop_detour()
-        self.gate()
-        self.assertIsNone(self.path(CreatureTraversal.WALKS))
-
     def test_climber_prefers_an_open_detour_of_equal_cost(self) -> None:
         # Through the gate costs 1 + 2 = 3; the detour costs 2.
         self.gate()
         self.assertEqual(self.path(CreatureTraversal.LEAPS), [self.a, self.d, self.c])
 
-    def test_climber_blocked_by_hard_seal(self) -> None:
-        self.drop_detour()
-        self.hard_seal()
-        self.assertIsNone(self.path(CreatureTraversal.CLIMBS))
-
-    def test_flier_crosses_hard_seal_overhead(self) -> None:
-        self.drop_detour()
-        self.hard_seal()
-        materialize_aerial_layer(self.room)
-        path = self.path(CreatureTraversal.FLIES)
-        self.assertIsNotNone(path)
-        self.assertEqual((path[0], path[-1]), (self.a, self.c))
-        self.assertTrue(any(p.kind == PositionKind.AERIAL for p in path))
-        for here, there in pairwise(path):
-            self.assertIsNotNone(edge_between(here, there), f"{here.name} to {there.name}")
-        # Up 1, along the aerial layer 1 each, down 1.
-        self.assertTrue(all(c == 1 for c in step_costs(path, traversal=CreatureTraversal.FLIES)))
-
-    def test_flier_stopped_by_blocks_flight(self) -> None:
-        self.drop_detour()
-        self.hard_seal(blocks_flight=True)
-        materialize_aerial_layer(self.room)
-        self.assertIsNone(self.path(CreatureTraversal.FLIES))
-
-    def test_walker_never_enters_aerial(self) -> None:
-        materialize_aerial_layer(self.room)
-        path = find_path(
-            self.a, lambda p: p.kind == PositionKind.AERIAL, traversal=CreatureTraversal.WALKS
-        )
-        self.assertIsNone(path)
-
     def test_origin_satisfies_goal(self) -> None:
         self.assertEqual(self.path(CreatureTraversal.WALKS, goal=self.a), [self.a])
 
 
-class EdgeCrossingCostTests(_Yard):
-    def test_open_ground_edge_costs_one_for_everyone(self) -> None:
-        edge = edge_between(self.a, self.b)
-        for traversal in CreatureTraversal.values:
-            self.assertEqual(edge_crossing_cost(edge, traversal), 1, traversal)
-
-    def test_aerial_edge_is_for_fliers_only(self) -> None:
-        materialize_aerial_layer(self.room)
-        above_a = Position.objects.get(room=self.room, elevation_anchor=self.a)
-        vertical = edge_between(self.a, above_a)
-        self.assertEqual(edge_crossing_cost(vertical, CreatureTraversal.FLIES), 1)
-        for traversal in (CreatureTraversal.WALKS, CreatureTraversal.CLIMBS):
-            self.assertIsNone(edge_crossing_cost(vertical, traversal))
-
-
 class StrikeReachesTests(_Yard):
+    """A pure function: the unplaced (None) and unknown-delivery branches no journey takes."""
+
     def test_strike_reaches(self) -> None:
         self.drop_detour()
         melee, missile = StrikeDelivery.MELEE, StrikeDelivery.MISSILE
@@ -171,6 +114,8 @@ class StrikeReachesTests(_Yard):
 
 
 class AerialGateTests(_Yard):
+    """Moving between aerial nodes once in flight; the refusal is ``HobbCannotFly``."""
+
     def setUp(self) -> None:
         super().setUp()
         AerialPropertyFactory()
@@ -182,10 +127,6 @@ class AerialGateTests(_Yard):
         self.above_a = Position.objects.get(room=self.room, elevation_anchor=self.a)
         self.above_b = Position.objects.get(room=self.room, elevation_anchor=self.b)
 
-    def test_move_to_aerial_refused_without_property(self) -> None:
-        with self.assertRaisesMessage(PositionTransitionError, "You cannot fly."):
-            move_to_position(self.mover, self.above_a)
-
     def test_move_between_aerial_nodes_after_taking_flight(self) -> None:
         enter_aerial(self.mover)
         move_to_position(self.mover, self.above_b)
@@ -193,6 +134,8 @@ class AerialGateTests(_Yard):
 
 
 class CommitPositionTests(_Yard):
+    """The cached ``current_position`` is popped on a move; journeys read ``position_of``."""
+
     def test_commit_position_pops_opponent_cache(self) -> None:
         encounter = CombatEncounterFactory(room=self.room)
         opponent = CombatOpponentFactory(encounter=encounter)
