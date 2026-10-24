@@ -853,7 +853,8 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         A technique whose only authored effect is shaking morale still has an
         effect; the summary and the hostility test read this row.
 
-        To invalidate: ``del instance.cached_morale_effect``.
+        To invalidate: ``instance.forget_morale_effect()``, which also clears the
+        reverse one-to-one's relation cache.
         """
         # The reverse one-to-one descriptor: the payload prefetch fills its cache.
         try:
