@@ -11,7 +11,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 
 | Registry | Surfaces | Named by no test |
 |---|---|---|
-| Actions (`actions.registry`) | 576 | 0 |
+| Actions (`actions.registry`) | 577 | 0 |
 | Commands (character + account cmdsets) | 272 | 58 |
 | API routes (`urls.py` under `src/`) | 567 | 83 |
 | Frontend routes (`App.tsx`) | 132 | 60 |
@@ -65,6 +65,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `almanach_set_holder` | `actions.definitions.almanach.AlmanachSetHolderAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_set_status` | `actions.definitions.almanach.AlmanachSetStatusAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_swear` | `actions.definitions.almanach.AlmanachSwearAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
+| `almanach_vacate_holder` | `actions.definitions.almanach.AlmanachVacateHolderAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `answer_check_call` | `actions.definitions.scene_checks.AnswerCheckCallAction` | checks / self | `src/actions/tests/test_base.py` |
 | `answer_npc_loan` | `actions.definitions.npc_lending.AnswerNPCLoanAction` | gm / self | `frontend/src/game/GamePage.test.tsx`, `frontend/src/gm/npcs/__tests__/npcPlayUi.test.tsx`, `src/actions/tests/test_base.py`, `src/integration_tests/test_cast_panel_actions_journeys.py` (+3) |
 | `apply_outfit` | `actions.definitions.outfits.ApplyOutfitAction` | items / single | `frontend/src/inventory/pages/__tests__/WardrobePage.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_outfit_actions.py`, `src/web/tests/test_execute_action_inputfunc.py` |
@@ -1093,7 +1094,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `drafts/<int:draft_id>/distinctions/<int:pk>/` | `DraftDistinctionViewSet` | `world.distinctions.urls` | `src/world/distinctions/tests/test_views.py` |
 | `drafts/<int:draft_id>/distinctions/swap/` | `DraftDistinctionViewSet` | `world.distinctions.urls` | `src/world/distinctions/tests/test_views.py` |
 | `drafts/<int:draft_id>/distinctions/sync/` | `DraftDistinctionViewSet` | `world.distinctions.urls` | `src/world/distinctions/tests/test_views.py` |
-| `next/` | `NextDowntimeView` | `world.downtime.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts` (+569) |
+| `next/` | `NextDowntimeView` | `world.downtime.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts` (+570) |
 | `<int:character_id>/` | `CharacterDreamStateView` | `world.dreams.urls` | `src/world/dreams/tests/test_dream_api.py` |
 | `wills/` | `WillViewSet` | `world.estates.urls` | `src/world/estates/tests/test_api.py` |
 | `bequests/` | `BequestViewSet` | `world.estates.urls` | `frontend/src/estates/__tests__/AgreementsPanel.test.tsx`, `src/world/estates/tests/test_api.py`, `src/world/estates/tests/test_settlement.py`, `src/world/items/tests/test_held_by_nobody.py` |
