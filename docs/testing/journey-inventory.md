@@ -11,7 +11,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 
 | Registry | Surfaces | Named by no test |
 |---|---|---|
-| Actions (`actions.registry`) | 577 | 0 |
+| Actions (`actions.registry`) | 579 | 0 |
 | Commands (character + account cmdsets) | 272 | 57 |
 | API routes (`urls.py` under `src/`) | 567 | 83 |
 | Frontend routes (`App.tsx`) | 132 | 60 |
@@ -49,12 +49,14 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `almanach_correct_kin` | `actions.definitions.almanach.AlmanachCorrectKinAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_create_family` | `actions.definitions.almanach.AlmanachCreateFamilyAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_create_kin` | `actions.definitions.almanach.AlmanachCreateKinAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
+| `almanach_delete_rung` | `actions.definitions.almanach.AlmanachDeleteRungAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_describe_demesne` | `actions.definitions.almanach.AlmanachDescribeDemesneAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_edit_house` | `actions.definitions.almanach.AlmanachEditHouseAction` | almanach / self | `frontend/e2e/evidence/house-observances-4206.spec.ts`, `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_edit_kin` | `actions.definitions.almanach.AlmanachEditKinAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_edit_person` | `actions.definitions.almanach.AlmanachEditPersonAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_found_organization` | `actions.definitions.almanach.AlmanachFoundOrganizationAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_link_kin` | `actions.definitions.almanach.AlmanachLinkKinAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
+| `almanach_move_rung` | `actions.definitions.almanach.AlmanachMoveRungAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_name_rung` | `actions.definitions.almanach.AlmanachNameRungAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_open_crew_slot` | `actions.definitions.almanach.AlmanachOpenCrewSlotAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_plan_estate` | `actions.definitions.almanach.AlmanachPlanEstateAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
@@ -1138,7 +1140,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `dashboard/` | `GMDashboardView` | `world.gm.urls` | `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/e2e/evidence/standoff-named-npc-4373.spec.ts`, `frontend/e2e/pantheon.spec.ts`, `frontend/e2e/stories-gm.spec.ts` (+38) |
 | `attention/` | `GMAttentionView` | `world.gm.urls` | `frontend/e2e/evidence/character-slots-3996.spec.ts`, `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/e2e/selected-character-chip.spec.ts`, `frontend/src/components/__tests__/Header.test.tsx` (+30) |
 | `looking-for-table/` | `LookingForTableBrowseView` | `world.gm.urls` | `src/world/gm/tests/test_looking_for_table_services.py`, `src/world/gm/tests/test_looking_for_table_views.py` |
-| `domains/` | `GoalDomainViewSet` | `world.goals.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts` (+56) |
+| `domains/` | `GoalDomainViewSet` | `world.goals.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts` (+57) |
 | `my-goals/` | `CharacterGoalViewSet` | `world.goals.urls` | `src/web/tests/test_url_imports.py`, `src/world/goals/tests/test_offscreen_gate_web.py`, `src/world/goals/tests/test_views.py`, `src/world/scenes/tests/test_offscreen_gate_persona.py` |
 | `my-goals/update/` | `CharacterGoalViewSet` | `world.goals.urls` | `src/web/tests/test_url_imports.py`, `src/world/goals/tests/test_offscreen_gate_web.py`, `src/world/goals/tests/test_views.py`, `src/world/scenes/tests/test_offscreen_gate_persona.py` |
 | `journals/` | `GoalJournalViewSet` | `world.goals.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts` (+46) |
