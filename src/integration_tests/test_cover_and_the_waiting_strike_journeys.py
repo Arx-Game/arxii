@@ -526,8 +526,11 @@ class HobbWaitsForAnOpening(_TheSteading):
         self.assertTrue(self.was_struck(archer))
 
     def test_a_strike_he_can_no_longer_pay_for_lapses_and_costs_nothing(self) -> None:
-        from world.conditions.factories import ConditionStageFactory, SoulfrayTemplateFactory
-        from world.conditions.services import apply_condition
+        from world.conditions.factories import (
+            ConditionInstanceFactory,
+            ConditionStageFactory,
+            SoulfrayTemplateFactory,
+        )
         from world.magic.factories import ensure_soulfray_config
 
         self.wait_on_telnet()  # declared without consenting to Soulfray
@@ -541,9 +544,11 @@ class HobbWaitsForAnOpening(_TheSteading):
             severity_threshold=1,
             consequence_pool=None,
         )
-        held = apply_condition(self.hobb, soulfray).instance
-        held.current_stage = strain
-        held.save(update_fields=["current_stage"])
+        # The Soulfray row a stage-one Soulfray leaves on him. Written as the row itself:
+        # apply_condition's stage lookup uses DISTINCT ON, which the SQLite tier cannot run.
+        ConditionInstanceFactory(
+            target=self.hobb, condition=soulfray, current_stage=strain, rounds_remaining=None
+        )
         wolf = self.creature("Grey Wolf", at=self.yard)
 
         self.resolve()
