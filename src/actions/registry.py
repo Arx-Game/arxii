@@ -32,9 +32,12 @@ from actions.definitions.almanach import (
     AlmanachPlantRungAction,
     AlmanachPromoteKinAction,
     AlmanachPublishAction,
+    AlmanachRemoveHoldingAction,
+    AlmanachRenameHoldingAction,
     AlmanachSetAppableAction,
     AlmanachSetHolderAction,
     AlmanachSetStatusAction,
+    AlmanachSiteHoldingAction,
     AlmanachSwearAction,
 )
 from actions.definitions.alterations import ResolveAlterationAction
@@ -1288,6 +1291,9 @@ _ALL_ACTIONS: list[Action] = [
     AlmanachBatchUnclaimedAction(),
     AlmanachNameRungAction(),
     AlmanachAssignHolderAction(),
+    AlmanachSiteHoldingAction(),
+    AlmanachRenameHoldingAction(),
+    AlmanachRemoveHoldingAction(),
     AlmanachEditHouseAction(),
     AlmanachSwearAction(),
     AlmanachDescribeDemesneAction(),
