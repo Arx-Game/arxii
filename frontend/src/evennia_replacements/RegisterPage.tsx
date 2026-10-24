@@ -103,7 +103,9 @@ export function RegisterPage() {
               validate: async (value) => (await checkUsername(value)) || 'Username already taken',
             })}
           />
-          {errors.username && <p className="text-sm text-red-600">{errors.username.message}</p>}
+          {errors.username && (
+            <p className="text-sm text-red-700 dark:text-red-400">{errors.username.message}</p>
+          )}
         </div>
         <div className="space-y-1">
           <Label htmlFor="email">Email</Label>
@@ -116,7 +118,9 @@ export function RegisterPage() {
               validate: async (value) => (await checkEmail(value)) || 'Email already taken',
             })}
           />
-          {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
+          {errors.email && (
+            <p className="text-sm text-red-700 dark:text-red-400">{errors.email.message}</p>
+          )}
         </div>
         <div className="space-y-1">
           <Label htmlFor="invite_token">Invite Code</Label>
@@ -133,7 +137,9 @@ export function RegisterPage() {
               deps: ['password2'],
             })}
           />
-          {errors.password1 && <p className="text-sm text-red-600">{errors.password1.message}</p>}
+          {errors.password1 && (
+            <p className="text-sm text-red-700 dark:text-red-400">{errors.password1.message}</p>
+          )}
           <p className="text-xs text-muted-foreground">
             At least 8 characters, not entirely numeric, and not a commonly used password.
           </p>
@@ -150,7 +156,9 @@ export function RegisterPage() {
                 value === formValues.password1 || 'Passwords must match',
             })}
           />
-          {errors.password2 && <p className="text-sm text-red-600">{errors.password2.message}</p>}
+          {errors.password2 && (
+            <p className="text-sm text-red-700 dark:text-red-400">{errors.password2.message}</p>
+          )}
         </div>
         {isValidating && (
           <p role="status" className="text-sm text-muted-foreground">
@@ -162,7 +170,7 @@ export function RegisterPage() {
         </SubmitButton>
       </form>
       {mutation.isError && (
-        <p className="mt-4 text-red-600">
+        <p className="mt-4 text-red-700 dark:text-red-400">
           {mutation.error instanceof Error && mutation.error.message
             ? mutation.error.message
             : 'Registration failed. Please try again.'}

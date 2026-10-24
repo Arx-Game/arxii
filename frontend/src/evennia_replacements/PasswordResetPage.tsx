@@ -57,7 +57,7 @@ export function PasswordResetRequestPage() {
             />
           </div>
           {error && (
-            <p role="alert" className="text-destructive">
+            <p role="alert" className="text-red-700 dark:text-red-400">
               {error}
             </p>
           )}
@@ -150,7 +150,7 @@ export function PasswordResetPage() {
         <>
           {keyState === 'checking' && <p role="status">Checking your reset link...</p>}
           {error && (
-            <p role="alert" className="text-destructive">
+            <p role="alert" className="text-red-700 dark:text-red-400">
               {error}
             </p>
           )}

@@ -120,7 +120,7 @@ export function LoginPage() {
         </SubmitButton>
       </form>
       {mutation.isError && (
-        <p role="alert" className="mt-4 text-destructive">
+        <p role="alert" className="mt-4 text-red-700 dark:text-red-400">
           {mutation.error.message}
         </p>
       )}

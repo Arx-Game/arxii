@@ -103,7 +103,7 @@ export function EmailVerificationPendingPage() {
         </div>
 
         <div className="pt-4">
-          <Link to="/login" className="text-sm text-blue-600 hover:text-blue-500">
+          <Link to="/login" className="text-sm text-blue-700 hover:underline dark:text-blue-400">
             Already verified? Sign in to {SITE_NAME}
           </Link>
         </div>
