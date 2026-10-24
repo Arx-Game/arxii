@@ -27,6 +27,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 
 from django.contrib.admin import ModelAdmin
+from django.db import router, transaction
 from django.db.models import Model
 from django.forms import BaseModelForm, BaseModelFormSet
 from django.template.response import TemplateResponse
@@ -49,6 +50,30 @@ def flush_refused_instances(*bound: BaseModelForm | BaseModelFormSet | SharedMem
         for instance in instances:
             if instance.pk is not None:
                 instance.flush_from_cache(force=True)
+
+
+#: SharedMemoryModel.delete() marks the Python object deleted; a typeclassed row then
+#: refuses its own attributes. A rolled-back delete must clear it.
+_DELETED_FLAG = "_is_deleted"
+
+
+def _unlink_one_to_one_targets(row: Model, kept_relations: dict[str, object]) -> None:
+    """Clear the reverse cache a form wrote onto a one-to-one target it picked.
+
+    Assigning ``row.<o2o> = target`` also caches ``row`` as ``target``'s reverse
+    accessor, on a shared row nobody kept. Before ``row`` gets its kept relations back,
+    drop that back-pointer from any target it now caches but did not when kept.
+    """
+    cached = row._state.fields_cache  # noqa: SLF001
+    for field in row._meta.concrete_fields:  # noqa: SLF001
+        if not field.one_to_one or not field.is_cached(row):
+            continue
+        target = cached.get(field.cache_name)
+        if target is None or target is kept_relations.get(field.cache_name):
+            continue
+        reverse = field.remote_field
+        if reverse.is_cached(target) and reverse.get_cached_value(target) is row:
+            reverse.delete_cached_value(target)
 
 
 class CacheGuard:
@@ -85,10 +110,15 @@ class CacheGuard:
                 for f in row._meta.concrete_fields  # noqa: SLF001
                 if f.attname in row.__dict__
             }
+            if _DELETED_FLAG in row.__dict__:
+                values[_DELETED_FLAG] = row.__dict__[_DELETED_FLAG]
             self._kept[id(row)] = (row, values, dict(row._state.fields_cache))  # noqa: SLF001
 
     def restore(self) -> None:
         for row, values, relations in self._kept.values():
+            _unlink_one_to_one_targets(row, relations)
+            if _DELETED_FLAG not in values:
+                row.__dict__.pop(_DELETED_FLAG, None)
             row.__dict__.update(values)
             row._state.fields_cache = dict(relations)  # noqa: SLF001
         for row in self._unsaved.values():
@@ -198,7 +228,13 @@ class RefusedSaveRestoreMixin:
     def changelist_view(self, request, extra_context=None):
         if request.method != "POST" or "_save" not in request.POST:
             return super().changelist_view(request, extra_context)
-        with _guarding_admin_post() as guard:
+        # One transaction for the whole POST, as Django gives the change form: its own
+        # covers only the save loop, so a raise after it (the message, the redirect)
+        # would otherwise leave the rows written and the guard putting them back.
+        with (
+            _guarding_admin_post() as guard,
+            transaction.atomic(using=router.db_for_write(self.model)),
+        ):
             response = super().changelist_view(request, extra_context)
             if isinstance(response, TemplateResponse):
                 try:

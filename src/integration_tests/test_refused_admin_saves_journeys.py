@@ -15,7 +15,9 @@ the game would: through the identity map, never with ``values_list``.
   stored technique after a refused save.
 - A Path save that fails part way leaves the Path as stored.
 - A list edit on the Tradition list with one bad row changes no row, in the list or the
-  game.
+  game; a list edit that fails after its rows were written leaves the game and the
+  database agreeing.
+- Evennia's own object page refuses a blank name and keeps the stored locks.
 """
 
 from __future__ import annotations
@@ -26,7 +28,9 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.db import DatabaseError
 from django.urls import reverse
+from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from integration_tests.harness import JourneyCase
 from world.classes.factories import PathFactory
 from world.classes.models import Path
@@ -201,3 +205,46 @@ class ARefusedListEditChangesNoRow(RefusedAdminSaveCase):
         self.assertContains(response, "Enter a whole number.")
         self.assertEqual(Tradition.objects.get(pk=second.pk).sort_order, 2)
         self.assertEqual(Tradition.objects.get(pk=first.pk).sort_order, 1)
+
+    def test_a_list_edit_that_fails_after_writing_leaves_the_game_and_database_agreeing(
+        self,
+    ) -> None:
+        row = TraditionFactory(name="Cinder Wake", sort_order=4)
+        url = reverse("admin:arxii_tradition_changelist")
+        formset = self.client.get(url).context["cl"].formset
+        data = _filled(formset.management_form)
+        for form in formset.forms:
+            data.update(_filled(form))
+        prefix = next(form.prefix for form in formset.forms if form.instance.pk == row.pk)
+        data[f"{prefix}-sort_order"] = "7"
+        data["_save"] = "Save"
+        model_admin = admin.site._registry[Tradition]
+
+        with (
+            patch.object(model_admin, "message_user", side_effect=DatabaseError("lost")),
+            self.assertRaises(DatabaseError),
+        ):
+            self.client.post(url, data)
+
+        stored = Tradition.objects.filter(pk=row.pk).values_list("sort_order", flat=True).get()
+        self.assertEqual(Tradition.objects.get(pk=row.pk).sort_order, stored)
+        self.assertEqual(stored, 4)
+
+
+class EvenniasObjectPageKeepsTheStoredObject(RefusedAdminSaveCase):
+    """Evennia's own admin for game objects is covered too."""
+
+    def test_a_refused_rename_keeps_the_stored_locks(self) -> None:
+        vestry = ObjectDBFactory(db_key="The Vestry", db_typeclass_path="typeclasses.rooms.Room")
+        url = reverse("admin:objects_objectdb_change", args=[vestry.pk])
+        data = self.change_post(url)
+        stored_locks = vestry.db_lock_storage
+        data["db_key"] = ""
+        data["db_lock_storage"] = "get:false()"
+
+        response = self.client.post(url, data)
+
+        self.assertContains(response, "This field is required.")
+        refetched = ObjectDB.objects.get(pk=vestry.pk)
+        self.assertEqual(refetched.db_key, "The Vestry")
+        self.assertEqual(refetched.db_lock_storage, stored_locks)
