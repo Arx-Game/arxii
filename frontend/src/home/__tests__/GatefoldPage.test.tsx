@@ -317,6 +317,7 @@ describe('GatefoldPage', () => {
     );
 
     expect(screen.queryByTestId('game-page-stub')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading Arx...');
     expect(screen.queryByTestId('hall-page-stub')).not.toBeInTheDocument();
   });
 

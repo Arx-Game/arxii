@@ -113,7 +113,7 @@ export function CombatTurnPanel({
     isError: encounterError,
   } = useCombatEncounter(encounterId);
 
-  // Available COMBAT-backend actions for the character (includes clash refs).
+  // Available COMBAT-backend actions for the character (includes clash refs) and its moves.
   const { data: combatActions } = useAvailableActions(characterId);
 
   // Most recent consequence outcome for this character scoped to the current encounter.

@@ -812,7 +812,7 @@ itself.
 
 ### Actions (`actions/definitions/almanach.py`)
 
-Fifteen REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
+Seventeen REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
 `StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`),
 `AlmanachBatchUnclaimedAction` (`almanach_batch_unclaimed`), `AlmanachNameRungAction`
 (`almanach_name_rung`), `AlmanachAssignHolderAction` (`almanach_assign_holder`, kwargs `title_id`,
@@ -823,6 +823,11 @@ held, #4614), `AlmanachVacateHolderAction` (`almanach_vacate_holder`, kwarg `tit
 `AlmanachRenameHoldingAction` (`almanach_rename_holding`) and `AlmanachRemoveHoldingAction`
 (`almanach_remove_holding`: `almanach.remove_holding` drops the holding and its income stream,
 refused while the stream has uncollected income or is still referenced) (#4616),
+`AlmanachDeleteRungAction` (`almanach_delete_rung`: `almanach.delete_rung` removes a
+chain's Titles, Domains and Areas, refused while held, with rungs, holdings or rooms beneath, or
+when something else still points at the land) and `AlmanachMoveRungAction` (`almanach_move_rung`,
+`title_id` + `parent_title_id`: `almanach.move_rung` reparents the rung's Area, refused for another
+realm, a parent that is the rung or beneath it, a wrong tier, or a held subtree) (#4617),
 `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
 state, succession law default, and a wholesale `OrganizationFacet`/`OrganizationFeature`/
 `OrganizationObservance` replace; an `observances` row is `{ic_month, ic_day, name, lore}`,
@@ -846,7 +851,9 @@ their owner, and a house sworn to the old holder by the land it holds beneath is
 nearest remaining liege, or released when none is left (#4615). Each holding row on the page (`title/
 HoldingRow.tsx`) renames, removes (second press) and, for land holdings, places itself on a room
 found by name. A farm's field and a building holding's building have no finder yet, so those two
-site kinds are placed through the action only (#4616).
+site kinds are placed through the action only (#4616). A chain-top rung's page also offers Move
+under (a select of the realm's rungs) and, while unheld, Delete rung (second press; lands on the
+realm ladder after) (#4617).
 
 `AlmanachEditKinAction` mints a new family-tree/household node on create (`kinsperson_id`
 absent, via `almanach.record_kin` — see "Founder claims" above, the same engine founder finalize

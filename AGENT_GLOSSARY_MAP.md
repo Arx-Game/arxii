@@ -20,7 +20,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   (_Avoid_: vow rider, vow switch)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
   Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
-- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms
+- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms, and hop budget, tactics level and move plan (#4607), the waiting strike (#4608), unanswerable attacker, progress guarantee and bash (#4609), and the encounter state ping (#4644)
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
   Settled round; (ADR-4147) Spectacle, Spectacle kind; and (#4581, ADR-4581-A) Added-effect firing
   (the once-per-round / once-per-fight vow effect ledger)
@@ -45,7 +45,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   ease
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
-- [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide, own standing and the hopeless pin (#4601); and modifier level, size, value table, level baseline, taper and lane (#4594), with worn items' level from quality (#4628)
+- [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide, own standing and the hopeless pin (#4601); and modifier level, size, value table, level baseline, taper and lane (#4594), with worn items' level from quality (#4628) and distinctions' from their holder (#4638)
 - [mechanics](src/world/mechanics/AGENT_GLOSSARY.md) - also holds the favor categories and
   `ModifierTarget.target_being` (#4333)
 - [progression](src/world/progression/AGENT_GLOSSARY.md)
@@ -96,7 +96,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to,
   plus Ward (#3983 Plan B, `AreaLevel.WARD` vs. the unrelated household Ward position) and a
   Capital stub pointing to societies' canonical entry
-- [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md) - also holds wall integrity and the walker rule (#4606)
+- [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md) - also holds wall integrity and the walker rule (#4606), and traversal, hop and strike reach (#4607), and roofed position, screened position and grounding (#4608)
 - [buildings](src/world/buildings/AGENT_GLOSSARY.md)
 - [locations](src/world/locations/AGENT_GLOSSARY.md)
 - [forms](src/world/forms/AGENT_GLOSSARY.md)

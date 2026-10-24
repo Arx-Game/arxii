@@ -15,6 +15,7 @@ from world.combat.models import (
     CombatEncounter,
     CombatOpponent,
     CombatOpponentAction,
+    CombatOpponentMove,
     CombatParticipant,
     CombatPull,
     CombatPullResolvedEffect,
@@ -32,6 +33,7 @@ from world.combat.models import (
     EscalationCurve,
     FleeConfig,
     FleeTierModifier,
+    NpcTacticsConfig,
     OpponentTierTemplate,
     PendingSelection,
     RiskScalingModifier,
@@ -187,6 +189,13 @@ class CombatRoundActionAdmin(admin.ModelAdmin):
 @admin.register(CombatOpponentAction)
 class CombatOpponentActionAdmin(admin.ModelAdmin):
     list_display = ["opponent", "round_number", "threat_entry"]
+
+
+@admin.register(CombatOpponentMove)
+class CombatOpponentMoveAdmin(admin.ModelAdmin):
+    list_display = ["opponent", "round_number", "kind", "goal_position", "fired"]
+    list_filter = ["kind"]
+    raw_id_fields = ["opponent", "goal_position", "barrier_edge", "threat_entry"]
 
 
 class ComboSlotInline(admin.TabularInline):
@@ -442,8 +451,8 @@ class CreaturePhaseTemplateInline(admin.TabularInline):
 
 @admin.register(CreatureTemplate)
 class CreatureTemplateAdmin(admin.ModelAdmin):
-    list_display = ("name", "tier", "threat_pool")
-    list_filter = ("tier",)
+    list_display = ("name", "tier", "threat_pool", "tactics", "speed_hops", "traversal")
+    list_filter = ("tier", "tactics", "traversal")
     search_fields = ("name",)
     # Drives, cause and faction rules are authored on the Standoff Profile Builder
     # (#4354), opened from this page's "Open the Standoff Profile Builder" tool.
@@ -631,6 +640,25 @@ class SpectacleConfigAdmin(admin.ModelAdmin):
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""
         return not SpectacleConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """The singleton cannot be deleted."""
+        return False
+
+
+@admin.register(NpcTacticsConfig)
+class NpcTacticsConfigAdmin(admin.ModelAdmin):
+    """The singleton NPC tactics tuning row (#4609)."""
+
+    fields = ("bash_rounds_limit", "retreat_rounds_limit", "unanswered_hit_morale")
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not NpcTacticsConfig.objects.exists()
 
     def has_delete_permission(
         self,

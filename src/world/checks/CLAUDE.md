@@ -228,6 +228,13 @@ are the second (#4628, ADR-4628-A): a sized `ItemCheckModifier` counts at the be
 instance's `QualityTier.modifier_level`, valued through `ValueTable.signed_value` (the one
 valuation helper; never re-derive the sign/None rule). The equipment walk's vow terms ride as
 `vow_part`, and crafted modifiers are one contribution per worn piece.
+Distinctions and scene surroundings are the third and fourth (#4638, ADR-4638-A): the CHARACTER
+block calls `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)`, which prices a sized
+`DistinctionEffect` at the holder's `CharacterSheet.current_level`, scaled by rank, before
+amplification and immunity; the rows stay in the CHARACTER kind (achievement rewards and form
+profiles on the same path stay flat). `_scene_check_contributions` prices a sized
+`SceneCheckModifier` at its authored `modifier_level`. Only this seam passes a lane: every other
+`get_modifier_breakdown` caller reads flat values.
 
 **Social/scene actions** funnel their plain (non-technique) check through the same
 seam in `world.scenes.action_services._resolve_action_against_persona`
@@ -252,8 +259,11 @@ seeds the conditions.
 - **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` is the sole
   agency-oracle source `_calculate_capability_points`/CAPABILITY contributions read; lazily
   imported (`world.conditions.services` already imports `world.checks.services` at module scope)
-- **Mechanics app**: `resolve_challenge()` uses `apply_resolution()` for effect dispatch, and
-  folds its `capability_source.value` into `extra_modifiers` before calling `perform_check()`
+- **Mechanics app**: `resolve_challenge()` uses `apply_resolution()` for effect dispatch. Since
+  #4629 it gathers the character's modifiers once (`_gather_challenge_modifiers`), adds its
+  `capability_source.value` exactly once, rolls with them, spends the once-only conditions the
+  roll used, and records that same breakdown on the `ConsequenceOutcome`, never one rebuilt
+  after the roll
 - **Any system**: Can call `select_consequence()` + `apply_resolution()` for standalone consequence resolution (magic mishaps, reactive checks, etc.)
 - **Callers**: Goals, magic, combat, conditions compute extra_modifiers before calling perform_check
 

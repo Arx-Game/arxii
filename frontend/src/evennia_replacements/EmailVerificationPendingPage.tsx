@@ -52,8 +52,8 @@ export function EmailVerificationPendingPage() {
             />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Check Your Email</h1>
-        <p className="mt-2 text-gray-600">
+        <h1 className="text-2xl font-bold text-foreground">Check Your Email</h1>
+        <p className="mt-2 text-muted-foreground">
           We've sent a verification email to your address. Please click the link in the email to
           verify your account.
         </p>
@@ -103,7 +103,7 @@ export function EmailVerificationPendingPage() {
         </div>
 
         <div className="pt-4">
-          <Link to="/login" className="text-sm text-blue-600 hover:text-blue-500">
+          <Link to="/login" className="text-sm text-blue-700 hover:underline dark:text-blue-400">
             Already verified? Sign in to {SITE_NAME}
           </Link>
         </div>

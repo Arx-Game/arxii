@@ -15,9 +15,11 @@ from actions.definitions.almanach import (
     AlmanachAddHoldingAction,
     AlmanachAssignHolderAction,
     AlmanachBatchUnclaimedAction,
+    AlmanachDeleteRungAction,
     AlmanachDescribeDemesneAction,
     AlmanachEditHouseAction,
     AlmanachEditKinAction,
+    AlmanachMoveRungAction,
     AlmanachNameRungAction,
     AlmanachPlanEstateAction,
     AlmanachPlantRungAction,
@@ -344,6 +346,90 @@ class AlmanachActionTests(TestCase):
             held_by=house,
         )
         return house, duchy
+
+    def _vacant(self, tier, name, parent):
+        return plant_rung(realm=self.realm, tier=tier, name=name, parent_title=parent)
+
+    def test_delete_rung_removes_its_chain_titles_domains_and_areas(self) -> None:
+        from world.areas.models import Area
+
+        duchy = self._vacant(TitleTier.DUCHY, "Fervor", self.kingdom)
+        chain_pks = list(
+            Title.objects.filter(seat_domain=duchy.seat_domain).values_list("pk", flat=True)
+        )
+        areas_before = Area.objects.count()
+
+        result = AlmanachDeleteRungAction().run(self.staff, title_id=duchy.pk)
+
+        assert result.success, result.message
+        assert not Title.objects.filter(pk__in=chain_pks).exists()
+        assert Area.objects.count() < areas_before
+
+    def test_delete_rung_refuses_held_parented_and_inner_rungs(self) -> None:
+        _, held = self._duchy_held_by("Katta")
+        assert not AlmanachDeleteRungAction().run(self.staff, title_id=held.pk).success
+
+        parent = self._vacant(TitleTier.DUCHY, "Fervor", self.kingdom)
+        self._vacant(TitleTier.COUNTY, "County of Fervor", parent)
+        refused = AlmanachDeleteRungAction().run(self.staff, title_id=parent.pk)
+        assert not refused.success
+        assert Title.objects.filter(pk=parent.pk).exists()
+
+        inner = Title.objects.filter(seat_domain=parent.seat_domain).exclude(pk=parent.pk).first()
+        assert inner is not None
+        assert not AlmanachDeleteRungAction().run(self.staff, title_id=inner.pk).success
+        assert not AlmanachDeleteRungAction().run(self.staff, title_id=0).success
+
+    def test_move_rung_reparents_the_rung_and_everything_beneath_it(self) -> None:
+        from world.areas.services import area_subtree_pks
+        from world.societies.houses.almanach import rung_area_for_title
+
+        left = self._vacant(TitleTier.DUCHY, "Left", self.kingdom)
+        right = self._vacant(TitleTier.DUCHY, "Right", self.kingdom)
+        county = self._vacant(TitleTier.COUNTY, "County of Left", left)
+
+        result = AlmanachMoveRungAction().run(
+            self.staff, title_id=county.pk, parent_title_id=right.pk
+        )
+
+        assert result.success, result.message
+        county_area = rung_area_for_title(county)
+        assert county_area.parent_id == rung_area_for_title(right).pk
+        assert county_area.pk in area_subtree_pks(rung_area_for_title(right))
+        assert county_area.pk not in area_subtree_pks(rung_area_for_title(left))
+
+    def test_move_rung_refuses_itself_its_own_subtree_wrong_tier_and_held_rungs(self) -> None:
+        left = self._vacant(TitleTier.DUCHY, "Left", self.kingdom)
+        county = self._vacant(TitleTier.COUNTY, "County of Left", left)
+        right = self._vacant(TitleTier.DUCHY, "Right", self.kingdom)
+
+        beneath = AlmanachMoveRungAction().run(
+            self.staff, title_id=left.pk, parent_title_id=county.pk
+        )
+        assert not beneath.success
+        wrong_tier = AlmanachMoveRungAction().run(
+            self.staff, title_id=right.pk, parent_title_id=county.pk
+        )
+        assert not wrong_tier.success
+        missing = AlmanachMoveRungAction().run(self.staff, title_id=county.pk, parent_title_id=0)
+        assert not missing.success
+
+        owner = OrganizationFactory(name="Vampa", family=FamilyFactory(name="Vampa"))
+        held_county = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.COUNTY,
+            name="County of Vampa",
+            parent_title=left,
+            held_by=owner,
+        )
+        held_move = AlmanachMoveRungAction().run(
+            self.staff, title_id=held_county.pk, parent_title_id=right.pk
+        )
+        assert not held_move.success
+
+    def test_player_is_refused_delete_and_move_rung(self) -> None:
+        assert not AlmanachDeleteRungAction().run(self.player, title_id=1).success
+        assert not AlmanachMoveRungAction().run(self.player, title_id=1, parent_title_id=2).success
 
     def test_vacate_holder_returns_the_chain_to_unheld_and_claimable(self) -> None:
         _, duchy = self._duchy_held_by("Katta")

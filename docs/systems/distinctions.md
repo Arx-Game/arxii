@@ -44,7 +44,7 @@ from world.distinctions.types import (
 | `DistinctionCategory` | Categories like Physical, Mental, Social | `name`, `slug`, `description`, `display_order` |
 | `DistinctionTag` | Searchable tags | `name`, `slug` |
 | `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `secret_by_default`, `default_secret_level` |
-| `DistinctionEffect` | Mechanical effects | `distinction`, `target` (FK `mechanics.ModifierTarget`), `value_per_rank`, `scaling_values`, `amplifies_sources_by`, `grants_immunity_to_negative`, `description` |
+| `DistinctionEffect` | Mechanical effects | `distinction`, `target` (FK `mechanics.ModifierTarget`), `value_per_rank`, `scaling_values`, `amplifies_sources_by`, `grants_immunity_to_negative`, `modifier_size` (#4638, check lane: on a check-scoped target the effect counts as the check value table's number at the holder's level and this size, scaled by rank like the authored value; blank keeps the flat value; Paramount refused; see `docs/systems/checks.md` and ADR-4638-A), `description` |
 
 **Mutual exclusion is not a separate model.** `Distinction.mutually_exclusive_with` is a
 symmetrical self-referential `ManyToManyField` — adding `a.mutually_exclusive_with.add(b)`

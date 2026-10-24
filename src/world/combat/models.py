@@ -18,22 +18,31 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.achievements.models import DiscoverableContent
+from world.areas.positioning.constants import CreatureTraversal
 
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
     from world.combat.handlers import EncounterCombatHandler
+    from world.combat.types import MovementProfile
     from world.companions.models import CompanionOrder
 
 from world.combat.constants import (
+    BASH_ROUNDS_LIMIT,
     COMBO_MIN_SLOTS,
     DEFAULT_OPPONENT_MORALE,
     DEFAULT_PACE_TIMER_MINUTES,
     FLEE_BASE_DIFFICULTY,
     FLEE_COVER_BONUS,
+    MAX_HOPS_PER_ROUND,
     MAX_OPPONENT_MORALE,
+    NPC_DEFAULT_HOPS,
+    NPC_DEFAULT_TACTICS,
+    NPC_DEFAULT_TRAVERSAL,
+    RETREAT_ROUNDS_LIMIT,
     SCALING_CONFIG_BASELINE_PARTY_SIZE,
     SCALING_CONFIG_PER_AVG_LEVEL_PCT,
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
+    UNANSWERED_HIT_MORALE,
     ActionCategory,
     BreakContributionKind,
     CauseKind,
@@ -44,6 +53,7 @@ from world.combat.constants import (
     CombatAllegiance,
     CombatManeuver,
     ComboLearningMethod,
+    CreatureTactics,
     DuelChallengeStatus,
     EncounterOutcome,
     EncounterType,
@@ -51,6 +61,7 @@ from world.combat.constants import (
     LockBreakReason,
     LockInitiator,
     LockPcRole,
+    OpponentMoveKind,
     OpponentStatus,
     OpponentTier,
     PaceMode,
@@ -1004,6 +1015,28 @@ class CombatOpponent(SharedMemoryModel):
             return None
         return position_of(self.objectdb)
 
+    @property
+    def movement_profile(self) -> "MovementProfile":
+        """How this opponent moves and thinks, read live from its CreatureTemplate (#4607).
+
+        An opponent with no template uses the NPC defaults (NPC_DEFAULT_TACTICS,
+        NPC_DEFAULT_HOPS, NPC_DEFAULT_TRAVERSAL). Nothing is copied onto the opponent.
+        """
+        from world.combat.types import MovementProfile  # noqa: PLC0415
+
+        template = self.creature_template
+        if template is None:
+            return MovementProfile(
+                tactics=NPC_DEFAULT_TACTICS,
+                speed_hops=NPC_DEFAULT_HOPS,
+                traversal=NPC_DEFAULT_TRAVERSAL,
+            )
+        return MovementProfile(
+            tactics=template.tactics,
+            speed_hops=template.speed_hops,
+            traversal=template.traversal,
+        )
+
     def __str__(self) -> str:
         return f"{self.name} ({self.get_tier_display()})"
 
@@ -1355,6 +1388,15 @@ class CombatParticipant(SharedMemoryModel):
             "(#2639). Reset to 0 in begin_declaration_phase. Gated against "
             "combat.constants.REACTIONS_PER_ROUND at the reaction fire seam "
             "(_dispatch_interpose_action)."
+        ),
+    )
+    hops_used = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Hops this participant has moved on the battle map this round (#4607). "
+            "Reset to 0 in begin_declaration_phase. A move during declaration is "
+            "allowed while this is below the character's hop budget "
+            "(world.combat.services.movement_budget.hops_for)."
         ),
     )
     insight_used = models.BooleanField(
@@ -1793,7 +1835,7 @@ class CombatOpponentAction(SharedMemoryModel):
 class PendingOpponentAttack(SharedMemoryModel):
     """A telegraphed NPC attack winding up before it lands (#2637).
 
-    Created by ``world.combat.services._build_opponent_round_actions`` at NPC
+    Created by ``world.combat.services.plan_opponent_round`` at NPC
     declaration when the chosen ``ThreatPoolEntry.windup_rounds > 0``, INSTEAD
     of a same-round ``CombatOpponentAction``. Matured by
     ``world.combat.services._mature_pending_opponent_attacks`` at the top of
@@ -1870,6 +1912,87 @@ class PendingOpponentAttack(SharedMemoryModel):
             f"PendingOpponentAttack({self.opponent.name}: {self.threat_entry.name}, "
             f"resolves round {self.resolves_round})"
         )
+
+
+class CombatOpponentMove(SharedMemoryModel):
+    """One opponent's movement plan for one round (#4607, slice 2 of #4576).
+
+    Written at NPC selection beside the opponent's attack rows (CombatOpponentAction),
+    and read in the opponent's resolution slot, where it moves before its first attack.
+    The plan is advisory: the path is re-planned against live positions when it runs,
+    so ``goal_position`` is only a hint. A separate table from CombatOpponentAction
+    because an attack row always has a threat entry and an opponent can have several;
+    a move plan is one per opponent per round and usually has no entry.
+    """
+
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="round_moves",
+    )
+    round_number = models.PositiveIntegerField()
+    kind = models.CharField(
+        max_length=20,
+        choices=OpponentMoveKind.choices,
+    )
+    goal_position = models.ForeignKey(
+        POSITION_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Where the opponent was heading when the plan was made. A hint only: "
+            "the move is re-planned from live positions in its resolution slot."
+        ),
+    )
+    # CASCADE, not SET_NULL: a Bash plan must name its wall (check constraint below), so
+    # nulling it on an edge delete would make the database refuse the delete. A plan
+    # for a wall that no longer exists is meaningless; it goes with the wall.
+    barrier_edge = models.ForeignKey(
+        "arxii.PositionEdge",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The wall this opponent attacks. Required for Bash a barrier.",
+    )
+    threat_entry = models.ForeignKey(
+        ThreatPoolEntry,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The attack used to bash the wall, or the strike held for Wait for an "
+            "opening. Required for both."
+        ),
+    )
+    fired = models.BooleanField(
+        default=False,
+        help_text="For Wait for an opening: True once the held strike has gone off this round.",
+    )
+
+    class Meta:
+        ordering = ["round_number", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["opponent", "round_number"],
+                name="combatopponentmove_one_per_opponent_round",
+            ),
+            models.CheckConstraint(
+                check=~Q(kind=OpponentMoveKind.BASH)
+                | Q(barrier_edge__isnull=False, threat_entry__isnull=False),
+                name="combatopponentmove_bash_needs_edge_and_entry",
+            ),
+            models.CheckConstraint(
+                check=~Q(kind=OpponentMoveKind.WAIT) | Q(threat_entry__isnull=False),
+                name="combatopponentmove_wait_needs_entry",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.opponent.name} Round {self.round_number}: {self.get_kind_display()}"
 
 
 class SustainedAction(SharedMemoryModel):
@@ -2852,6 +2975,33 @@ class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text=(
             "The language these creatures understand (#4373). Blank means no language: "
             "verbal approaches never work on them."
+        ),
+    )
+    tactics = models.CharField(
+        max_length=20,
+        choices=CreatureTactics.choices,
+        default=NPC_DEFAULT_TACTICS,
+        help_text=(
+            "How cleverly these creatures fight: Mindless, Cunning or Tactical. Every "
+            "opponent spawned from this template uses it."
+        ),
+    )
+    speed_hops = models.PositiveSmallIntegerField(
+        default=NPC_DEFAULT_HOPS,
+        validators=[MinValueValidator(1), MaxValueValidator(MAX_HOPS_PER_ROUND)],
+        help_text=(
+            "How many positions these creatures can move in one combat round, "
+            f"from 1 to {MAX_HOPS_PER_ROUND}."
+        ),
+    )
+    traversal = models.CharField(
+        max_length=20,
+        choices=CreatureTraversal.choices,
+        default=NPC_DEFAULT_TRAVERSAL,
+        help_text=(
+            "How these creatures get past walls. Walks: open ways only. Climbs or "
+            "Leaps: also over a wall that can be climbed, at one extra move. Flies: "
+            "through the air, over any wall that does not block flight."
         ),
     )
 
@@ -4319,6 +4469,57 @@ class SpectacleConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return "Spectacle settings"
+
+
+class NpcTacticsConfig(SharedMemoryModel):
+    """Staff tuning for how opponents fight on the battle map (#4609). One row.
+
+    Read by the NPC tactics ladder (``combat/services/npc/npc_tactics.py``): when a
+    group of opponents bashes a wall instead of going around, how long a broken
+    opponent backs away before it leaves, and how much an attacker it cannot answer
+    shakes it.
+    """
+
+    bash_rounds_limit = models.PositiveSmallIntegerField(
+        default=BASH_ROUNDS_LIMIT,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Opponents bash a wall when, together, they can bring it down in this many "
+            "rounds. A sturdier wall sends a cunning or tactical opponent around it."
+        ),
+    )
+    retreat_rounds_limit = models.PositiveSmallIntegerField(
+        default=RETREAT_ROUNDS_LIMIT,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "A broken opponent leaves the fight after backing away this many rounds in "
+            "a row, even when an enemy can still reach it."
+        ),
+    )
+    unanswered_hit_morale = models.PositiveSmallIntegerField(
+        default=UNANSWERED_HIT_MORALE,
+        help_text=(
+            "Morale an opponent loses each time it is hit by an attacker it cannot hit "
+            "back. 0 switches this off. A tier without morale takes the mindless percent "
+            "share of it set in the spectacle settings, never less than 1."
+        ),
+    )
+
+    objects = ArxSharedMemoryManager()
+
+    class Meta:
+        verbose_name = "NPC tactics config"
+
+    @classmethod
+    def load(cls) -> "NpcTacticsConfig":
+        """Fetch (or lazily create) the singleton row."""
+        obj = cls.objects.cached_singleton()
+        if obj is None:
+            obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        return "NPC tactics settings"
 
 
 class SpectacleRecord(SharedMemoryModel):

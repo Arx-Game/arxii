@@ -28,5 +28,29 @@ A projected living barrier — a `Rampart` model row one-to-one on the `Position
 _Avoid_: ward, barrier, bulwark, shield wall (all already claimed by other systems)
 
 **Wall integrity** (#4606, slice 1 of #4576):
-How much damage a conjured wall on a `PositionEdge` can still take before it falls and the edge opens (`integrity`/`max_integrity`; both null = indestructible, as staff-authored edges are). A spell wall is raised with integrity from its cast; a Rampart's seal has none of its own and reads the Rampart's pool through `source_rampart`, so the Rampart's collapse, expiry or teardown opens every edge it sealed. `damage_barrier` is the one seam that lowers it. Distinct from getting past a wall through its gating challenge (the climb or smash, ADR-0109), which opens the edge without touching integrity: the **walker rule** (`edge_blocks_crossing`) reads a sealed edge whose challenge is resolved as open.
+How much damage a conjured wall on a `PositionEdge` can still take before it falls and the edge opens (`integrity`/`max_integrity`; both null = indestructible, as staff-authored edges are). A spell wall is raised with integrity from its cast; a Rampart's seal has none of its own and reads the Rampart's pool through `source_rampart`, so the Rampart's collapse, expiry or teardown opens every edge it sealed. `damage_barrier` is the one seam that lowers it; its caller for a plain wall is an NPC's bash (#4609, see the combat glossary), and `is_breakable_barrier` / `barrier_integrity` read it for the bash test. Distinct from getting past a wall through its gating challenge (the climb or smash, ADR-0109), which opens the edge without touching integrity: the **walker rule** (`edge_blocks_crossing`) reads a sealed edge whose challenge is resolved as open.
 _Avoid_: wall HP, barrier health, hardness
+
+**Traversal** (#4607, slice 2 of #4576):
+How a mover crosses the position graph (`CreatureTraversal`: WALKS, CLIMBS, LEAPS, FLIES). A walker crosses only what the walker rule leaves open. A climber or leaper also crosses a wall that has a way past it (an active gating challenge) for one extra hop, and the two differ in narration only. A flier also uses the aerial layer, so it passes over any wall that does not block flight. A hard seal stops everyone on the ground. `edge_crossing_cost` turns an edge and a traversal into hops, and `find_path` routes over it. Staff set it on a creature template; it is not derived from tier.
+_Avoid_: movement mode, locomotion, move type
+
+**Hop** (#4607):
+One step along a `PositionEdge`, the unit of movement on the battle map. Crossing a wall with a way past it costs a climber or leaper two hops, and taking off into the aerial layer or landing costs one.
+_Avoid_: square, tile, step (in code)
+
+**Strike reach** (#4607):
+Whether a strike lands from one position on another, by its delivery (`strike_reaches`): melee needs the same or an adjacent position, and a missile reaches anywhere in the room. A combatant with no position is always in reach. PC techniques keep their own reach value through `technique_can_reach`; both read `position_reachable`.
+_Avoid_: range, line of attack
+
+**Roofed position** (#4608, slice 3 of #4576):
+A position with overhead cover (`is_roofed`). No strike of any reach or delivery passes between it and any AERIAL position (`roof_between`), even its own aerial twin across the vertical edge, and no mover flies straight down into it or up out of it: a flier lands beside it and walks in. A forced landing ignores the roof. A position fact, not a shelter row (ADR-4608-A).
+_Avoid_: covered position (cover means shelter rows and the cover maneuver), indoors
+
+**Screened position** (#4608):
+A position that breaks line of sight (`screens_ranged`). A missile or room-wide strike at someone there must come from that position or one beside it (`screen_blocks`); melee is unaffected. Walls and Ramparts do not block line of sight.
+_Avoid_: concealed, hidden (concealment is a casting term), blind
+
+**Grounding** (#4608):
+Knocking a flier out of the air (`REMOVE_FLIGHT`, `ground_flier`). It is a fall through the plummet rules, not the soft landing `leave_aerial` gives: a character gets the catch window and lands at the end-of-round tick; a combat opponent lands at once with the fall damage on its health. The fall has no source, so it never kills.
+_Avoid_: landing, knockdown

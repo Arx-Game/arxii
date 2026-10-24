@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from world.combat.constants import (
     EngagementLockStatus,
+    OpponentMoveKind,
     OpponentStatus,
     OpponentTier,
-    ParticipantStatus,
 )
 from world.combat.models import (
     CombatEncounter,
     CombatOpponent,
     CombatOpponentAction,
+    CombatOpponentMove,
     CombatParticipant,
     EngagementLock,
+    PendingOpponentAttack,
     ThreatPoolEntry,
     ThreatRecord,
 )
@@ -23,51 +27,77 @@ from world.combat.services.damage.swarm import swarm_attack_count
 from world.combat.services.npc.companion_orders import _COMPANION_HOLD, _apply_companion_order
 from world.combat.services.npc.npc_attack import _execute_npc_attack
 from world.combat.services.npc.npc_cooldowns import _batch_fetch_cooldown_data
-from world.combat.services.npc.npc_targeting import _get_eligible_entries, _npc_action_target_pool
+from world.combat.services.npc.npc_movement import (
+    ReachMemo,
+    mover_origin,
+    nearest_hostile_position,
+    reachable_pools,
+    strike_pool_key,
+    write_move_plan,
+)
+from world.combat.services.npc.npc_tactics import (
+    build_tactics_inputs,
+    grounding_strike,
+    plan_approach,
+    plan_retreat,
+    plannable_opponents,
+    shelter_goal,
+    unanswerable_attackers,
+    usable_entries,
+    write_grounding_attack,
+    write_plan,
+)
+from world.combat.services.npc.npc_targeting import (
+    _get_eligible_entries,
+    _npc_action_target_pool,
+    _targetable_participants,
+)
 from world.conditions.constants import Allegiance
 from world.scenes.constants import RoundStatus
 
+if TYPE_CHECKING:
+    from world.areas.positioning.models import Position
+    from world.combat.types import TacticsInputs
 
-def select_npc_actions(
-    encounter: CombatEncounter,
-) -> list[CombatOpponentAction]:
-    """Select and create NPC actions for the current round.
 
-    For each active opponent with a threat pool, picks a weighted-random
-    entry from eligible threat pool entries and assigns targets. Targeting is
-    allegiance-aware (#1590, #4091, ADR-0058 as amended by ADR-4091): a charmed
-    opponent (``ALLY_OF_CASTER``) targets ENEMY/TURNED opponents, a turned
-    opponent (``TURNED``) targets its own former (stored-ENEMY) side, and a
-    calmed opponent (``NEUTRAL``) holds and takes no action; an opponent left
-    with no valid targets skips the round.
+@dataclass
+class NpcRoundContext:
+    """Everything NPC planning reads for one round, batch-fetched once (#4607).
 
-    Raises ValueError if the encounter is not in DECLARING status.
+    Built by ``_build_npc_round_context`` and shared by ``select_npc_actions`` and
+    ``ensure_opponent_plans`` so neither duplicates the batch prefetches.
     """
-    if encounter.status != RoundStatus.DECLARING:
-        msg = (
-            f"Cannot select NPC actions: encounter status is "
-            f"'{encounter.get_status_display()}', expected 'Declaring'."
+
+    encounter: CombatEncounter
+    opponents: list[CombatOpponent]
+    all_active: list[CombatOpponent]
+    allegiances: dict[int, Allegiance]
+    entries_by_pool: dict[int, list[ThreatPoolEntry]]
+    recently_used_by_opponent: dict[int, set[int]]
+    active_participants: list[CombatParticipant]
+    threat_maps: dict[int, dict[int, int]]
+    active_locks_by_opponent: dict[int, int]
+    shield_participant_ids: set[int]
+    provokers: dict[int, int]
+    unmatured_windup_opponent_ids: set[int]
+    tactics: TacticsInputs
+    reach_memo: ReachMemo = field(default_factory=ReachMemo)
+
+
+def _plannable_opponents(encounter: CombatEncounter) -> list[CombatOpponent]:
+    """ACTIVE opponents with a threat pool that are not duel mirrors (``plannable_opponents``)."""
+    return list(
+        plannable_opponents(CombatOpponent.objects.filter(encounter=encounter)).select_related(
+            "threat_pool", "objectdb"
         )
-        raise ValueError(msg)
-
-    # Auto-lock formation: check threat thresholds before NPC targeting (#2020).
-    from world.combat.engagement_locks import check_auto_lock_formation  # noqa: PLC0415
-
-    check_auto_lock_formation(encounter)
-
-    opponents = list(
-        CombatOpponent.objects.filter(
-            encounter=encounter,
-            status=OpponentStatus.ACTIVE,
-        )
-        .exclude(threat_pool__isnull=True)
-        .exclude(mirrors_participant_id__isnull=False)
-        .select_related("threat_pool", "objectdb")
     )
 
-    if not opponents:
-        return []
 
+def _build_npc_round_context(
+    encounter: CombatEncounter,
+    opponents: list[CombatOpponent],
+) -> NpcRoundContext:
+    """Batch-fetch the round's NPC planning inputs for ``opponents``."""
     # Effective allegiance for every active opponent, computed once per round
     # (#4091) — includes opponents with no threat pool (e.g. mirrored bosses)
     # so a charmed/turned attacker's hostile pool sees the whole encounter.
@@ -92,25 +122,7 @@ def select_npc_actions(
         encounter.round_number,
     )
 
-    # Design: NPCs target PCs who can still act (not dead, not incapacitated).
-    # Unconscious PCs (awareness 0) are "down" and not picked as targets; a
-    # dying-but-conscious PC remains in the fight and is targetable. can_act is
-    # the same coarse agency gate used for declaration eligibility.
-    # Intangible PCs (incorporeal, sunk, phased) are also excluded (#1584 Task 8).
-    from world.conditions.services import is_untargetable  # noqa: PLC0415
-    from world.vitals.services import can_act  # noqa: PLC0415
-
-    candidate_participants = list(
-        CombatParticipant.objects.filter(
-            encounter=encounter,
-            status=ParticipantStatus.ACTIVE,
-        ).select_related("character_sheet__character")
-    )
-    active_participants = [
-        p
-        for p in candidate_participants
-        if can_act(p.character_sheet) and not is_untargetable(p.character_sheet.character)
-    ]
+    active_participants = _targetable_participants(encounter)
 
     # Batch-prefetch ThreatRecord data for HIGHEST_THREAT/SPECIFIC_ROLE (#2020)
     active_participant_ids = [p.pk for p in active_participants]
@@ -142,30 +154,121 @@ def select_npc_actions(
             shield_participant_ids.add(p.pk)
 
     _apply_aggro_conditions(opponents, active_participants, threat_maps, shield_participant_ids)
-    provokers = _provoking_participant_ids(opponents, active_participants)
 
-    actions: list[CombatOpponentAction] = []
+    return NpcRoundContext(
+        encounter=encounter,
+        opponents=opponents,
+        all_active=all_active,
+        allegiances=allegiances,
+        entries_by_pool=entries_by_pool,
+        recently_used_by_opponent=recently_used_by_opponent,
+        active_participants=active_participants,
+        threat_maps=threat_maps,
+        active_locks_by_opponent=active_locks_by_opponent,
+        shield_participant_ids=shield_participant_ids,
+        provokers=_provoking_participant_ids(opponents, active_participants),
+        unmatured_windup_opponent_ids=_unmatured_windup_opponent_ids(encounter, opponents),
+        tactics=build_tactics_inputs(encounter, opponents, all_active, entries_by_pool),
+    )
 
-    for opponent in opponents:
-        pool_entries = entries_by_pool.get(opponent.threat_pool_id, [])
-        cooldown_used = recently_used_by_opponent.get(opponent.pk, set())
-        actions.extend(
-            _build_opponent_round_actions(
-                opponent,
-                pool_entries,
-                cooldown_used,
-                active_participants,
-                encounter,
-                threat_map=threat_maps.get(opponent.pk),
-                shield_participant_ids=shield_participant_ids,
-                locked_participant_id=active_locks_by_opponent.get(opponent.pk),
-                provoker_participant_id=provokers.get(opponent.pk),
-                allegiances=allegiances,
-                active_opponents=all_active,
-            )
+
+def _unmatured_windup_opponent_ids(
+    encounter: CombatEncounter, opponents: list[CombatOpponent]
+) -> set[int]:
+    """Opponents still winding up when the round is planned (the telegraph is their action).
+
+    Includes a wind-up that lands this round: maturation runs after planning, and the blow
+    comes from where the opponent stands, so a fighter who stepped out of reach makes it
+    miss instead of being chased down (#4607).
+    """
+    return set(
+        PendingOpponentAttack.objects.filter(
+            opponent__in=opponents,
+            resolves_round__gte=encounter.round_number,
+        ).values_list("opponent_id", flat=True)
+    )
+
+
+def select_npc_actions(
+    encounter: CombatEncounter,
+) -> list[CombatOpponentAction]:
+    """Select and create NPC actions for the current round.
+
+    For each active opponent with a threat pool, picks a weighted-random
+    entry from eligible threat pool entries and assigns targets. Targeting is
+    allegiance-aware (#1590, #4091, ADR-0058 as amended by ADR-4091): a charmed
+    opponent (``ALLY_OF_CASTER``) targets ENEMY/TURNED opponents, a turned
+    opponent (``TURNED``) targets its own former (stored-ENEMY) side, and a
+    calmed opponent (``NEUTRAL``) holds and takes no action; an opponent left
+    with no valid targets skips the round.
+
+    Every planned opponent also gets its one ``CombatOpponentMove`` plan for the
+    round (#4607, ``plan_opponent_round``). Returns the attack rows only.
+
+    Raises ValueError if the encounter is not in DECLARING status.
+    """
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot select NPC actions: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
         )
+        raise ValueError(msg)
 
+    # Auto-lock formation: check threat thresholds before NPC targeting (#2020).
+    from world.combat.engagement_locks import check_auto_lock_formation  # noqa: PLC0415
+
+    check_auto_lock_formation(encounter)
+
+    opponents = _plannable_opponents(encounter)
+    if not opponents:
+        return []
+
+    ctx = _build_npc_round_context(encounter, opponents)
+    actions: list[CombatOpponentAction] = []
+    for opponent in opponents:
+        actions.extend(plan_opponent_round(opponent, ctx))
     return actions
+
+
+def ensure_opponent_plans(encounter: CombatEncounter) -> None:
+    """Give every plannable opponent still without a plan this round its plan (#4607).
+
+    An ACTIVE, non-mirror opponent with a threat pool that has no attack row, no move
+    row and no unmatured wind-up this round is planned in full (``plan_opponent_round``).
+    One that already has attack rows (staff or a simulation selected them) but no move
+    row gets only its ADVANCE row. An opponent with an unmatured wind-up is left alone:
+    the telegraph is its action. Idempotent; a partial prior selection never leaves an
+    opponent idle. Calmed opponents and companion HOLD orders still write nothing, as
+    in ``plan_opponent_round``.
+    """
+    opponents = _plannable_opponents(encounter)
+    if not opponents:
+        return
+    round_number = encounter.round_number
+    with_attacks = set(
+        CombatOpponentAction.objects.filter(
+            opponent__in=opponents, round_number=round_number
+        ).values_list("opponent_id", flat=True)
+    )
+    with_moves = set(
+        CombatOpponentMove.objects.filter(
+            opponent__in=opponents, round_number=round_number
+        ).values_list("opponent_id", flat=True)
+    )
+    winding_up = _unmatured_windup_opponent_ids(encounter, opponents)
+    unplanned: list[CombatOpponent] = []
+    for opponent in opponents:
+        if opponent.pk in with_moves or opponent.pk in winding_up:
+            continue
+        if opponent.pk in with_attacks:
+            write_move_plan(opponent, round_number)
+        else:
+            unplanned.append(opponent)
+    if not unplanned:
+        return
+    ctx = _build_npc_round_context(encounter, unplanned)
+    for opponent in unplanned:
+        plan_opponent_round(opponent, ctx)
 
 
 def _apply_aggro_conditions(
@@ -250,29 +353,33 @@ def _narrow_to_locked_or_provoker(
     return target_pool
 
 
-def _build_opponent_round_actions(  # noqa: PLR0913
+def plan_opponent_round(
     opponent: CombatOpponent,
-    pool_entries: list[ThreatPoolEntry],
-    cooldown_used: set[int],
-    active_participants: list[CombatParticipant],
-    encounter: CombatEncounter,
-    *,
-    threat_map: dict[int, int] | None = None,
-    shield_participant_ids: set[int] | None = None,
-    locked_participant_id: int | None = None,
-    provoker_participant_id: int | None = None,
-    allegiances: dict[int, Allegiance],
-    active_opponents: list[CombatOpponent],
+    ctx: NpcRoundContext,
 ) -> list[CombatOpponentAction]:
-    """Create one opponent's NPC action rows for the current round.
+    """Plan one opponent's round: its attack rows and its one move plan (#4607, #4609).
 
-    Returns the created actions, or an empty list when the opponent skips the
-    round — no eligible (off-cooldown) threat entry, or the empty-pool guard:
-    no valid target (a #1584 ALLY summon or #4091 charmed/turned NPC with no
-    live hostile, or a #1590 calmed/neutral opponent).
+    Returns the created attack rows. The move plan comes from the tactics ladder
+    (``npc_tactics``, see its module docstring): a broken opponent retreats over the
+    map (RETREAT) unless it is cornered; one hit by an attacker it cannot answer makes
+    for cover (SHELTER) and still strikes what it reaches there; one with nobody in reach
+    advances, bashes a wall in its way, or waits once for an opening. Writes no row at
+    all when the opponent is calmed (NEUTRAL holds by design, #1590) or holds on a
+    companion HOLD order (#1921), and no move row while it is winding up, including a
+    wind-up that lands this round (the telegraph is its action and standing still is
+    the tell).
 
-    ``provoker_participant_id`` is the participant whose forces_attack_on_source condition
-    sits on this opponent (#4584). It narrows the pool to that participant after the lock
+    Attack rows go only at targets the opponent can strike THIS round: reachable from
+    its position within ``speed_hops`` for the chosen entry's delivery, and from where it
+    stands for a wind-up entry (``reachable_pools``); unplaced combatants count as
+    reachable. With no eligible entry (all on cooldown) it writes the ADVANCE row only,
+    hinting the nearest hostile's position. A summon with no live hostile left gets the
+    ADVANCE row and no attack. A cunning or tactical opponent spends its first attack on
+    a grounding entry at a flier hitting it that nothing else it has can reach (a mindless
+    one never uses grounding entries).
+
+    ``ctx.provokers`` maps an opponent to the participant whose forces_attack_on_source
+    condition sits on it (#4584). It narrows the pool to that participant after the lock
     check: an engagement lock that narrowed the pool wins, and a provoker outside the pool
     leaves it as it was. Player characters ignore the flag because PCs choose their own
     targets; charmed, turned and summoned opponents ignore it because they do not target the
@@ -283,61 +390,160 @@ def _build_opponent_round_actions(  # noqa: PLR0913
         morale_state_for,
     )
 
-    # Break: a broken opponent flees — set FLED and skip the round (#2015).
-    if morale_state_for(opponent) == OpponentMoraleState.BREAK:
-        opponent.status = OpponentStatus.FLED
-        opponent.save(update_fields=["status"])
+    # Break: a broken opponent backs away over the map and leaves (#2015, #4609).
+    if morale_state_for(opponent) == OpponentMoraleState.BREAK and plan_retreat(opponent, ctx):
         return []
 
-    eligible = _get_eligible_entries(opponent, pool_entries, cooldown_used)
-    if not eligible:
+    if ctx.allegiances.get(opponent.pk, Allegiance.ENEMY) == Allegiance.NEUTRAL:
         return []
 
+    resolved = _round_target_pool(opponent, ctx)
+    if resolved is None:
+        return []  # a companion HOLD order
+    target_pool, targeting_participants = resolved
+
+    profile = opponent.movement_profile
+    grounding = ctx.tactics.grounding_entry_ids
+    pool_entries = ctx.entries_by_pool.get(opponent.threat_pool_id, [])
+    usable = usable_entries(pool_entries, profile, grounding)
+    eligible = usable_entries(
+        _get_eligible_entries(
+            opponent,
+            pool_entries,
+            ctx.recently_used_by_opponent.get(opponent.pk, set()),
+        ),
+        profile,
+        grounding,
+    )
+    with mover_origin(opponent, profile) as origin:
+        pools = reachable_pools(
+            origin,
+            target_pool,
+            {strike_pool_key(e) for e in eligible},
+            profile=profile,
+            memo=ctx.reach_memo,
+        )
+        strikeable = [e for e in eligible if pools[strike_pool_key(e)]]
+        attackers = unanswerable_attackers(
+            opponent, origin, usable, profile=profile, inputs=ctx.tactics, memo=ctx.reach_memo
+        )
+        shelter = shelter_goal(
+            opponent,
+            origin,
+            attackers,
+            profile=profile,
+            allies=ctx.all_active,
+            memo=ctx.reach_memo,
+        )
+        if not strikeable:
+            _plan_with_no_one_in_reach(
+                opponent, ctx, origin, target_pool, eligible, usable, shelter=shelter
+            )
+            return []
+        grounder = grounding_strike(
+            origin,
+            ctx.tactics.aimed_at.get(opponent.pk, []),
+            eligible,
+            usable,
+            profile=profile,
+            inputs=ctx.tactics,
+            memo=ctx.reach_memo,
+        )
+
+    in_reach = list({t.pk: t for pool in pools.values() for t in pool}.values())
+    actions: list[CombatOpponentAction] = []
+    first_attack = 0
+    if grounder is not None:
+        entry, flier = grounder
+        actions.append(write_grounding_attack(opponent, ctx.encounter, entry, flier))
+        first_attack = 1
+    declared_windup = False
+    for attack_index in range(first_attack, _attack_count(opponent, len(in_reach))):
+        declared_windup |= _execute_npc_attack(
+            opponent=opponent,
+            eligible=strikeable,
+            encounter=ctx.encounter,
+            target_pool=in_reach,
+            targeting_participants=targeting_participants,
+            rotation=attack_index,
+            threat_map=ctx.threat_maps.get(opponent.pk),
+            shield_participant_ids=ctx.shield_participant_ids,
+            actions=actions,
+            pools=pools,
+        )
+
+    if not declared_windup:
+        if shelter is not None:
+            write_plan(opponent, ctx, kind=OpponentMoveKind.SHELTER, goal_position=shelter)
+        else:
+            _write_advance_unless_winding_up(opponent, ctx)
+    return actions
+
+
+def _round_target_pool(opponent: CombatOpponent, ctx: NpcRoundContext) -> tuple[list, bool] | None:
+    """The opponent's hostiles this round, narrowed by a lock, a provoke or a companion
+    order; None when a companion HOLD order keeps it out of the round."""
     target_pool, targeting_participants = _npc_action_target_pool(
         opponent,
-        active_participants,
-        encounter,
-        allegiances=allegiances,
-        active_opponents=active_opponents,
+        ctx.active_participants,
+        ctx.encounter,
+        allegiances=ctx.allegiances,
+        active_opponents=ctx.all_active,
     )
-    if not target_pool:
-        return []
-
     # Lock narrowing: if an active EngagementLock exists, narrow to the locked PC (#2020).
     if targeting_participants:
         target_pool = _narrow_to_locked_or_provoker(
-            target_pool, locked_participant_id, provoker_participant_id
+            target_pool,
+            ctx.active_locks_by_opponent.get(opponent.pk),
+            ctx.provokers.get(opponent.pk),
         )
-
     # --- Companion order integration (#1921) ---
     # An ALLY summon with a CompanionOrder may override its target or skip.
-    companion_result = _apply_companion_order(opponent, encounter.round_number, target_pool)
+    companion_result = _apply_companion_order(opponent, ctx.encounter.round_number, target_pool)
     if companion_result is _COMPANION_HOLD:
-        return []
+        return None
     if isinstance(companion_result, list):
         target_pool = companion_result
+    return target_pool, targeting_participants
 
+
+def _attack_count(opponent: CombatOpponent, targets_in_reach: int) -> int:
+    """How many attack rows the opponent writes: a swarm's by its bodies, else its actions."""
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
-        n_attacks = swarm_attack_count(
-            opponent.swarm_count,
-            opponent.bodies_per_attack or 1,
-            len(target_pool),
+        return swarm_attack_count(
+            opponent.swarm_count, opponent.bodies_per_attack or 1, targets_in_reach
         )
+    return opponent.actions_per_round
+
+
+def _plan_with_no_one_in_reach(  # noqa: PLR0913 - the ladder's per-opponent inputs
+    opponent: CombatOpponent,
+    ctx: NpcRoundContext,
+    origin: Position | None,
+    target_pool: list,
+    eligible: list[ThreatPoolEntry],
+    usable: list[ThreatPoolEntry],
+    *,
+    shelter: Position | None,
+) -> None:
+    """The move plan of an opponent no hostile is in reach of this round."""
+    profile = opponent.movement_profile
+    if shelter is not None:
+        write_plan(opponent, ctx, kind=OpponentMoveKind.SHELTER, goal_position=shelter)
+    elif eligible:
+        plan_approach(opponent, ctx, origin, target_pool, eligible, usable, profile=profile)
     else:
-        n_attacks = opponent.actions_per_round
+        # All on cooldown: close in on the nearest hostile's own position.
+        goal = nearest_hostile_position(origin, target_pool, profile)
+        _write_advance_unless_winding_up(opponent, ctx, goal_position=goal)
 
-    actions: list[CombatOpponentAction] = []
-    for attack_index in range(n_attacks):
-        _execute_npc_attack(
-            opponent=opponent,
-            eligible=eligible,
-            encounter=encounter,
-            target_pool=target_pool,
-            targeting_participants=targeting_participants,
-            rotation=attack_index,
-            threat_map=threat_map,
-            shield_participant_ids=shield_participant_ids,
-            actions=actions,
-        )
 
-    return actions
+def _write_advance_unless_winding_up(
+    opponent: CombatOpponent,
+    ctx: NpcRoundContext,
+    *,
+    goal_position: Position | None = None,
+) -> None:
+    """Write the opponent's ADVANCE plan, unless it is winding up (then it stands still)."""
+    if opponent.pk not in ctx.unmatured_windup_opponent_ids:
+        write_move_plan(opponent, ctx.encounter.round_number, goal_position=goal_position)

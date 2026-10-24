@@ -2492,6 +2492,7 @@
   - round_actions <- combat.CombatOpponentAction
   - incoming_opponent_attacks <- combat.CombatOpponentAction
   - pending_attacks <- combat.PendingOpponentAttack
+  - round_moves <- combat.CombatOpponentMove
   - clashes <- combat.Clash
   - break_contributions <- combat.BreakBarContribution
   - threat_records <- combat.ThreatRecord
@@ -2509,6 +2510,13 @@
   - opponent_targets -> combat.CombatOpponent [M2M]
 **Pointed to by:**
   - npc_regard_events <- npc_services.NpcRegardEvent
+
+### CombatOpponentMove
+**Foreign Keys:**
+  - opponent -> combat.CombatOpponent [FK]
+  - goal_position -> areas.Position [FK] (nullable)
+  - barrier_edge -> areas.PositionEdge [FK] (nullable)
+  - threat_entry -> combat.ThreatPoolEntry [FK] (nullable)
 
 ### CombatParticipant
 **Foreign Keys:**
@@ -2691,6 +2699,8 @@
 
 ### FleeTierModifier
 
+### NpcTacticsConfig
+
 ### OpponentTierTemplate
 
 ### PendingOpponentAttack
@@ -2791,6 +2801,7 @@
 - `active_combat_engagement_for(character: 'ObjectDB') -> 'CharacterEngagement | None' - The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None, level: 'int | None' = None) -> 'CombatOpponent' - Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' - Create a CombatParticipant linking a PC to an encounter.`
+- `advance_opponent(opponent: 'CombatOpponent', move_row: 'CombatOpponentMove | None', attack_rows: 'list[CombatOpponentAction] | None' = None, *, on_hop: 'HopHook | None' = None) -> 'Position | None' - Run an opponent's ADVANCE plan in its resolution slot; returns where it moved, or None.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0'), skip_condition_interactions: 'bool' = False) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' - Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
@@ -2806,6 +2817,7 @@
 - `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' - Single completion seam for round resolution and the GM end endpoint (#876).`
 - `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' - Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.`
 - `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, strain_commitment: 'int' = 0, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
+- `declare_await_opening(participant: 'CombatParticipant', technique: 'Technique', *, confirm_soulfray_risk: 'bool' = False) -> 'CombatRoundAction' - Declare a waiting strike with ``technique`` for the current round.`
 - `declare_charge(participant: 'CombatParticipant', technique: 'Technique', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a mounted charge — closes distance to *opponent*, then attacks (#1843).`
 - `declare_clash_contribution(*, participant: 'CombatParticipant', clash: 'Clash', action_slot: 'str', technique: 'Technique', strain_commitment: 'int') -> 'ClashContributionDeclaration' - Write (or overwrite) a PC's clash contribution declaration for the current round.`
 - `declare_cover(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a covering maneuver for an ally -- passives-only, auto-ready.`
@@ -2829,6 +2841,7 @@
 - `elevation_bonus(attacker_sheet: 'CharacterSheet', attacker_pos: 'Position', target_pos: 'Position') -> 'int' - Flat to-hit bonus when attacker is elevated/aerial and target is not.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `end_encounter(encounter: 'CombatEncounter') -> 'CombatEncounter' - GM force-end: completes as ABANDONED (#876 §8).`
+- `ensure_opponent_plans(encounter: 'CombatEncounter') -> 'None' - Give every plannable opponent still without a plan this round its plan (#4607).`
 - `expire_pulls_for_round(encounter: 'CombatEncounter') -> 'None' - Delete all CombatPull rows from prior rounds and recompute affected max_health.`
 - `finalize_new_encounter(encounter: 'CombatEncounter') -> 'None' - Apply the post-creation defaults every "scene-anchored, no explicit room" creation`
 - `get_clash_config() -> 'ClashConfig' - Get-or-create the ClashConfig singleton (pk=1).`
@@ -2847,6 +2860,8 @@
 - `maybe_resolve_on_ready(encounter: 'CombatEncounter') -> 'RoundResolutionResult | None' - Resolve the round early when every ACTIVE participant is ready (#2120).`
 - `minimum_break_bar_threshold() -> 'int' - Pacing floor for a boss's break-bar threshold (#2642, batch-3 F-7a).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = (), extra_standing: int = 0, target_modifiers: int = 0) -> world.checks.types.CheckResult - Main check resolution function.`
+- `plan_opponent_round(opponent: 'CombatOpponent', ctx: 'NpcRoundContext') -> 'list[CombatOpponentAction]' - Plan one opponent's round: its attack rows and its one move plan (#4607, #4609).`
+- `refit_targets(npc_action: 'CombatOpponentAction') -> 'bool' - Drop the stored targets this action's strike no longer reaches; False when none is left.`
 - `remove_opponent(opponent: 'CombatOpponent') -> 'None' - Pull an opponent out of a live encounter (GM action, #3382).`
 - `remove_participant(participant: 'CombatParticipant') -> 'None' - Remove a participant: status write + combat engagement teardown (#872).`
 - `resolve_cast_position_params(participant: 'CombatParticipant', technique: 'Technique', position_params: 'dict[str, int]') -> 'dict[str, Position | None]' - Validate declared cast positions against the encounter's room + technique reach.`
@@ -6998,9 +7013,10 @@
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] - Get all capability values for a character.`
 - `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' - Generate available Actions for a character at a location.`
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' - Collect all Capability sources for a character (per-source, not aggregated).`
-- `get_modifier_breakdown(character, modifier_target: 'ModifierTarget') -> 'ModifierBreakdown' - Get detailed breakdown of all modifiers for a target.`
+- `get_modifier_breakdown(character, modifier_target: 'ModifierTarget', *, value_lane: 'str | None' = None) -> 'ModifierBreakdown' - Get detailed breakdown of all modifiers for a target.`
 - `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None, level_override: 'int | None' = None) -> 'int' - Get total modifier value for a target.`
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' - Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
+- `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
 - `motif_coherence_bonus(sheet: 'object', resonance_id: 'int') -> 'int' - Per-resonance fashion-coherence bonus from worn styles bound to the character's Motif.`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_facet_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum ConditionModifierEffect from FACET thread crossing choices (wear-gated).`

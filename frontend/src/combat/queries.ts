@@ -251,12 +251,19 @@ export function useUpgradeCombo(encounterId: number) {
 // ---------------------------------------------------------------------------
 // Available actions hook (combat-scoped)
 //
-// Fetches all PlayerActions for the character and filters to COMBAT backend.
+// Fetches all PlayerActions for the character and filters to COMBAT backend,
+// plus the move_to_position moves YourTurn lists (#4607).
 // Clash-contribution actions appear here too with ref.clash_id !== null.
 // ---------------------------------------------------------------------------
 
+/** A registry move a fighter makes during declaration, at a hop a move (#4607). */
+function isMoveAction(a: PlayerAction): boolean {
+  return a.ref.backend === 'registry' && a.ref.registry_key === 'move_to_position';
+}
+
 /**
- * COMBAT-backend PlayerActions for the character. Thin filter over the shared
+ * COMBAT-backend PlayerActions for the character, plus its moves, which carry the
+ * hops left or the reason a move is refused. Thin filter over the shared
  * useAvailableActionsQuery; polls at 10s to match useCombatEncounter's
  * declaration-phase contract (#2423 finding 6) so round advances and clash
  * spawns reach the technique list within one poll period.
@@ -268,7 +275,7 @@ export function useAvailableActions(characterId: number): {
 } {
   const result = useAvailableActionsQuery(characterId, { refetchInterval: 10_000 });
   const combatActions = (result.data?.results ?? []).filter(
-    (a: PlayerAction) => a.ref.backend === 'combat'
+    (a: PlayerAction) => a.ref.backend === 'combat' || isMoveAction(a)
   );
   return { data: combatActions, isLoading: result.isLoading, isError: result.isError };
 }

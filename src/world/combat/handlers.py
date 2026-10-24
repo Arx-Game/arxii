@@ -220,21 +220,18 @@ class EncounterCombatHandler:
                 "interaction",
             )
         )
-        # to_attr matches the existing `cached_targets` consumer convention in
-        # combat/services.py (e.g. _resolve_npc_action reads npc_action.cached_targets).
+        # Targets ride the `cached_targets` names _resolve_npc_action reads, set from the
+        # join rows rather than a Prefetch (shared instances, see attach_npc_action_targets).
         npc_actions = list(
             CombatOpponentAction.objects.filter(
                 opponent__encounter=self.encounter,
-            )
-            .select_related("opponent", "threat_entry")
-            .prefetch_related(
-                Prefetch(
-                    "targets",
-                    queryset=CombatParticipant.objects.select_related("character_sheet"),
-                    to_attr="cached_targets",
-                ),
-            )
+            ).select_related("opponent", "threat_entry")
         )
+        from world.combat.services.npc.npc_targeting import (  # noqa: PLC0415
+            attach_npc_action_targets,
+        )
+
+        attach_npc_action_targets(npc_actions)
         clash_declarations = list(
             ClashContributionDeclaration.objects.filter(
                 encounter=self.encounter,

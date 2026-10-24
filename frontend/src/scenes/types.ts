@@ -78,6 +78,9 @@ export interface PositionNode {
   rampart_integrity: number | null;
   rampart_max_integrity: number | null;
   rampart_crack_state: string | null;
+  /** Cover facts (#4608): overhead cover, and a line-of-sight break. */
+  is_roofed: boolean;
+  screens_ranged: boolean;
 }
 
 /** A position-graph edge — passability/gating state for obstacle visibility (#2006). */

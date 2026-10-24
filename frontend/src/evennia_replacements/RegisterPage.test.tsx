@@ -13,6 +13,38 @@ describe('RegisterPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     store.dispatch(setAccount(null));
+    vi.mocked(api.fetchSocialProviders).mockResolvedValue([]);
+    vi.mocked(api.fetchRegistrationStatus).mockResolvedValue({ open: true });
+  });
+
+  it('can register while confirmation is still focused and rechecks a changed password', async () => {
+    vi.mocked(api.checkUsername).mockResolvedValue(true);
+    vi.mocked(api.checkEmail).mockResolvedValue(true);
+    vi.mocked(api.postRegister).mockResolvedValue({
+      success: true,
+      emailVerificationRequired: true,
+    });
+    renderWithProviders(<RegisterPage />);
+    await userEvent.type(screen.getByLabelText('Username'), 'tester');
+    await userEvent.type(screen.getByLabelText('Email'), 'test@example.com');
+    await userEvent.type(screen.getByLabelText('Password'), 'original-password');
+    const confirmation = screen.getByLabelText('Confirm Password');
+    await userEvent.type(confirmation, 'original-password');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Register' })).toBeEnabled());
+    expect(confirmation).toHaveFocus();
+    await userEvent.type(screen.getByLabelText('Password'), '-changed');
+    expect(await screen.findByText('Passwords must match')).toBeInTheDocument();
+    await userEvent.type(confirmation, '-changed');
+    await waitFor(() => expect(screen.queryByText('Passwords must match')).not.toBeInTheDocument());
+    expect(confirmation).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(api.postRegister).toHaveBeenCalledWith({
+        username: 'tester',
+        email: 'test@example.com',
+        password: 'original-password-changed',
+      })
+    );
   });
 
   it('registers and stores account data', async () => {

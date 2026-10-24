@@ -1344,14 +1344,54 @@ def _remove_flight(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
 ) -> AppliedEffect:
-    """Return the resolved target from the aerial layer back to the ground."""
-    from world.areas.positioning.services import leave_aerial  # noqa: PLC0415
+    """Knock the resolved target out of the air: it falls (#4608, slice 3 of #4576).
+
+    Grounding is not a landing (``leave_aerial`` stays the voluntary, soft one): the
+    target falls through the plummet rules from where it is (``ground_flier``). A
+    character gets a catch window when someone is there to catch and lands at the
+    end-of-round tick. A combat opponent has no catch window: it lands now and the
+    impact comes off its health, with the fall damage type and no source. A target
+    that is not in the air is skipped.
+    """
+    from world.areas.positioning.constants import (  # noqa: PLC0415
+        FALL_DAMAGE_TYPE_NAME,
+        PositionKind,
+    )
+    from world.areas.positioning.plummet import ground_flier  # noqa: PLC0415
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
+    from world.combat.constants import OpponentStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
 
     target = _resolve_target(effect, context)
-    leave_aerial(target)
+    position = position_of(target)
+    if position is None or position.kind != PositionKind.AERIAL:
+        return AppliedEffect(
+            effect_type=EffectType.REMOVE_FLIGHT,
+            description=f"{target.db_key} is not in the air",
+            applied=False,
+            skip_reason="Target is not in the air",
+        )
+    opponent = (
+        CombatOpponent.objects.filter(objectdb=target, status=OpponentStatus.ACTIVE)
+        .order_by("-pk")
+        .first()
+    )
+    allow_catch = opponent is None and target.character_sheet is not None
+    damage = ground_flier(target, allow_catch=allow_catch)
+    if opponent is not None and damage:
+        from world.combat.services import apply_damage_to_opponent  # noqa: PLC0415
+        from world.conditions.models import DamageType  # noqa: PLC0415
+
+        apply_damage_to_opponent(
+            opponent,
+            damage,
+            damage_type=DamageType.objects.filter(name=FALL_DAMAGE_TYPE_NAME).first(),
+            bypass_soak=True,
+            skip_condition_interactions=True,
+        )
     return AppliedEffect(
         effect_type=EffectType.REMOVE_FLIGHT,
-        description=f"{target.db_key} returned to the ground",
+        description=f"{target.db_key} falls out of the air",
         applied=True,
     )
 

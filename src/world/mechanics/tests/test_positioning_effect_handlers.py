@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings, tag
 
 from evennia_extensions.factories import CharacterFactory
 from world.areas.positioning.constants import PositionKind
@@ -441,14 +441,21 @@ class GrantFlightHandlerTests(TestCase):
         )
 
 
+@tag("postgres")  # apply_condition (the fall's Plummeting marker) uses DISTINCT ON
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_fall_content seeds sample rows
 class RemoveFlightHandlerTests(TestCase):
-    """Tests for the REMOVE_FLIGHT effect handler."""
+    """Tests for the REMOVE_FLIGHT effect handler.
+
+    Grounding is a fall (#4608): with nobody there to catch, it resolves at once.
+    """
 
     def setUp(self) -> None:
         from evennia import create_object
 
+        from world.areas.positioning.plummet_content import ensure_fall_content
         from world.areas.positioning.services import enter_aerial
 
+        ensure_fall_content()
         AerialPropertyFactory()
         self.room = create_object("typeclasses.rooms.Room", key="RFHandlerRoom", nohome=True)
         self.char = CharacterSheetFactory().character

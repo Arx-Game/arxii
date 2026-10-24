@@ -2009,7 +2009,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="plummeting-condition",
             label="Plummeting condition template",
             tier=DependencyTier.REQUIRED,
-            consumer="world/areas/positioning/plummet.py:129 begin_plummet()",
+            consumer="world/areas/positioning/plummet.py:141 begin_plummet()",
             consequence=(
                 "A character who starts falling raises ConditionTemplate.DoesNotExist "
                 "instead of beginning to plummet, crashing movement resolution."
@@ -2887,12 +2887,17 @@ def _declarations() -> tuple[ContentDependency, ...]:
             label="Modifier value table (check lane)",
             tier=DependencyTier.TUNING,
             consumer=(
-                "world/conditions/services.py _check_modifier_for_target() via "
-                "world/checks/modifier_values.py load_value_table()"
+                "world/checks/modifier_values.py load_value_table(), read by "
+                "world/conditions/services.py _check_modifier_for_target() (technique buffs), "
+                "world/checks/services.py _equipment_check_contributions() (worn items, "
+                "#4628) and _scene_check_contributions() (scene surroundings, #4638), and "
+                "world/mechanics/services.py get_modifier_breakdown(value_lane=) "
+                "(distinctions, #4638)"
             ),
             consequence=(
-                "A sized technique buff or debuff keeps its condition's flat authored "
-                "check modifier instead of the value its level and size are worth."
+                "A sized technique buff or debuff, worn item, distinction effect or scene "
+                "surroundings modifier keeps its flat authored check modifier instead of "
+                "the value its level and size are worth."
             ),
             probe=FilteredRowProbe(
                 label="ModifierValue",

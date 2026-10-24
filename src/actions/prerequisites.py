@@ -1278,3 +1278,32 @@ def _seance_container_open(actor: Any, sheet: Any) -> bool:
         ceremony_honoree__ceremony__status=CeremonyStatus.OPEN,
         ceremony_honoree__ceremony__location__objectdb=actor.location,
     ).exists()
+
+
+@dataclass
+class CombatMovementPrerequisite(Prerequisite):
+    """A character in a live combat encounter may move only on a round they can still spend (#4607).
+
+    No active participant row: free, as outside combat. While the round is being
+    declared a move costs one hop and needs one left. While it resolves, or between
+    rounds, the character waits.
+    """
+
+    def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
+        from world.combat.services.movement_budget import (  # noqa: PLC0415
+            active_combat_participant,
+            hops_left,
+        )
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = active_combat_participant(actor)
+        if participant is None:
+            return True, ""
+        status = participant.encounter.status
+        if status == RoundStatus.RESOLVING:
+            return False, "Wait for the round to resolve."
+        if status == RoundStatus.BETWEEN_ROUNDS:
+            return False, "You can move when the next round opens."
+        if hops_left(participant) <= 0:
+            return False, "You have no movement left this round."
+        return True, ""

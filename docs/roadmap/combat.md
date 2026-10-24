@@ -342,8 +342,51 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   clash), expiry or scene-end teardown opens every edge it sealed, except one a later spell
   took over. `damage_barrier` is the one seam for wall damage; its plain-wall caller is the
   NPC bash step in slice 4. The tactical map labels a wall with its strength. Journeys:
-  `src/integration_tests/test_crossing_a_wall_journeys.py`. Slices 2-4 (movement and reach,
-  cover and the waiting strike, tactics) remain.
+  `src/integration_tests/test_crossing_a_wall_journeys.py`.
+- **NPCs move on the battle map, melee reach is real, PCs and NPCs share a hop budget (#4607,
+  slice 2 of #4576, ADR-4607-A).** Selection writes a `CombatOpponentMove` plan for every
+  active opponent every round, even one with nothing in reach; in its slot the opponent walks
+  a real route (`find_path` over `edge_crossing_cost`, by its creature template's
+  `traversal`) up to `speed_hops`, then strikes. Its targets are re-fit to live reach before
+  each attack (`strike_reaches`: melee adjacent, missile room-wide), re-picked by the entry's
+  mode when the target left, and the row says "{name} cannot reach anyone." when nobody is in
+  reach. Walkers route around walls, climbers and leapers cross a wall with a way past it for
+  one extra hop, fliers go over through the aerial layer and stop at `blocks_flight`. A PC in an
+  active encounter moves only while declaring, one hop per `MOVEMENT_PER_HOP` of movement
+  capability (one for a mortal), and the web move list shows the hops left or the refusal; a PC
+  strike whose target left reach before its slot fizzles for free. `CreatureTemplate` gained
+  `tactics`, `speed_hops` and `traversal` (staff-authored, exported with the content).
+  Journeys: `src/integration_tests/test_npcs_close_in_journeys.py`. Slice 4 (#4609) reads
+  `tactics` and writes the other move kinds.
+- **Roofs and screens stop strikes, the waiting strike, and grounded fliers fall (#4608, slice
+  3 of #4576, ADR-4608-A).** Positions and blueprint positions carry `is_roofed` and
+  `screens_ranged`. No strike passes between the air and a roofed position, both ways, and a
+  flier cannot fly straight down into it, so an NPC flier lands beside it to strike; a missile
+  or room-wide strike at a screened position comes only from it or the position beside it.
+  The tactical map badges both and shows the viewer's hops left. A PC can wait for an opening
+  (`combat await <technique>`, the web Wait for an Opening control) with a melee technique as
+  the round's one action: the strike fires at most once, first, when an enemy ends a hop in
+  reach or attacks the waiter, and a strike that drops the enemy cancels its attack; when
+  nothing comes it says so and costs nothing. `REMOVE_FLIGHT` now drops a flier through the
+  plummet rules: a PC gets the catch window, an NPC lands at once with the fall damage on its
+  health. NPC waiting strikes fire through the same path from the WAIT plans slice 4 writes.
+  Journeys: `src/integration_tests/test_cover_and_the_waiting_strike_journeys.py`.
+- **Enemies fight by their wits, and none idles (#4609, slice 4 of #4576, ADR-4609-A).** The
+  tactics ladder (`combat/services/npc/npc_tactics.py`) reads each creature template's
+  `tactics`. A broken enemy backs away over real hops toward the position farthest from the
+  party and leaves once nobody can strike it there by their real reach (an archer's shot
+  counts), or after two rounds of it; cornered, it fights. An
+  enemy hit by an attacker it cannot answer runs for a roofed or screened position (every
+  level: cover is instinct; a tactical one keeps an ally beside it) and fights from there. With
+  nobody in reach it walks toward a position its strikes land from; a wall in the way is
+  battered when the group can bring it down in three rounds, or always by a mindless creature,
+  and otherwise gone around. With nothing nearer to reach a cunning or tactical enemy waits
+  once for an opening and then bashes the wall anyway (a mindless one bashes at once), and an enemy with nothing left to do says it strains
+  against the wall. A cunning or tactical enemy spends a net or other grounding entry on a
+  flier it cannot otherwise reach; a mindless one never does. Every unanswered hit costs the
+  struck enemy morale. The three numbers live in the `NpcTacticsConfig` staff row. Journeys:
+  `src/integration_tests/test_npc_tactics_journeys.py`; the progress guarantee is fuzzed in
+  `src/integration_tests/fuzz/test_npc_progress_fuzz.py`. This completes #4576.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips

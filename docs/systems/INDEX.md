@@ -1005,6 +1005,10 @@ rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
   the Glimpse-provenance state, mirroring `.secret`; set via
   `world.magic.services.glimpse.link_distinction_to_glimpse`/`unlink_distinction_from_glimpse`)
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
+- **Check lane (#4638):** `DistinctionEffect.modifier_size` (Paramount refused): on a check-scoped
+  target the effect reads the check value table at its holder's level and this size, scaled by
+  rank like the authored value; blank keeps the flat value. The list serializer's generated
+  effect line names the size ("+Large <target>") for such an effect. See [checks.md](checks.md).
 - **Enums:** `DistinctionOrigin` (`CHARACTER_CREATION`, `GAMEPLAY` vestigial, `GM_AWARD`,
   `ACHIEVEMENT_AUTO_GRANT`, `CONSEQUENCE_POOL`, `ENDORSEMENT_THRESHOLD`), `OtherStatus`
 - **Key Services:** `grant_distinction(character, distinction, *, origin, rank=None,
@@ -1043,7 +1047,7 @@ Check resolution engine — converts trait values to ranks and rolls against res
   a story NPC uses the template on them; `mirrored_outcome(outcome)` reads that outcome from
   the NPC's side. Required content sentinel `npc-resist-checks`. See [checks.md](checks.md).
 - **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`, `CheckTypeCapabilityModifier` (#2505 — curated authored `(check_type, capability)` weight, `related_name="capability_modifiers"`), `CheckCall`/`CheckCallTarget` (#3295 — a GM's room-visible request that named targets roll a catalog check; one `CheckCallTarget` row per target, `status` PENDING/ANSWERED/DECLINED)
-- **Scene check invocation (#3295, ADR-restating #2118's firewall):** every check anyone rolls in a scene is an authored `CheckType` at a `DifficultyChoice` band — never a freeform stat/skill/difficulty invention. `world.checks.catalog_invocation` is the shared resolve/find/band-validation core, consumed by the SENIOR ad-hoc `InvokeCatalogCheckAction` (#2118) and three new REGISTRY actions in `actions/definitions/scene_checks.py`: `SceneSelfCheckAction` (key `scene_self_check`, any player, SELF-only, broadcasts to the room via `record_interaction`/`render_challenge_outcome_narration`), `CallForCheckAction` (key `call_for_check`, JUNIOR+ GM, creates a `CheckCall` + `CheckCallTarget` rows), `AnswerCheckCallAction`/`DeclineCheckCallAction` (keys `answer_check_call`/`decline_check_call` — a target's one-tap response; answering dispatches the same self-check core bound to the call's own check/band). None of these select, compose, or fire a `ConsequenceOutcome`/consequence pool. Telnet: `check`/`callcheck` (`commands/scene_checks.py`). Web: `SelfCheckPanel`/`CheckCallPromptCard` (`frontend/src/scenes/components/`) + a `CallForCheckTab` on `GMAdjudicationPanel`. When the catalog lacks a fitting check, `ProposeCheckAction` (key `propose_check_type`) routes a structured `CheckProposal` (`world.player_submissions.models`, `SubmissionCategory.CHECK_PROPOSAL`) to the staff inbox via `submit_check_proposal` — it never creates a live `CheckType` row; adoption is a separate manual staff act.
+- **Scene check invocation (#3295, ADR-restating #2118's firewall):** every check anyone rolls in a scene is an authored `CheckType` at a `DifficultyChoice` band — never a freeform stat/skill/difficulty invention. `world.checks.catalog_invocation` is the shared resolve/find/band-validation core, consumed by the SENIOR ad-hoc `InvokeCatalogCheckAction` (#2118) and three new REGISTRY actions in `actions/definitions/scene_checks.py`: `SceneSelfCheckAction` (key `scene_self_check`, any player, SELF-only, rolls through `perform_check_with_modifiers` with the room's active scene so worn items, buffs, conditions and distinctions count (#4629), broadcasts to the room via `record_interaction`/`render_challenge_outcome_narration`), `CallForCheckAction` (key `call_for_check`, JUNIOR+ GM, creates a `CheckCall` + `CheckCallTarget` rows), `AnswerCheckCallAction`/`DeclineCheckCallAction` (keys `answer_check_call`/`decline_check_call` — a target's one-tap response; answering dispatches the same self-check core bound to the call's own check/band). None of these select, compose, or fire a `ConsequenceOutcome`/consequence pool. Telnet: `check`/`callcheck` (`commands/scene_checks.py`). Web: `SelfCheckPanel`/`CheckCallPromptCard` (`frontend/src/scenes/components/`) + a `CallForCheckTab` on `GMAdjudicationPanel`. When the catalog lacks a fitting check, `ProposeCheckAction` (key `propose_check_type`) routes a structured `CheckProposal` (`world.player_submissions.models`, `SubmissionCategory.CHECK_PROPOSAL`) to the staff inbox via `submit_check_proposal` — it never creates a live `CheckType` row; adoption is a separate manual staff act.
 - **Seeded check types:** `Composure` (willpower-weighted; resistance-specific — seeded via `create_resistance_check_types()` in `checks/factories.py`; used by `compute_resist_increment`)
 - **Key Functions:** `perform_check(character, check_type, target_difficulty, extra_modifiers) -> CheckResult`, `get_rollmod(character) -> int`, `compute_check_rating(character, check_type, extra_modifiers=0) -> int` (pre-roll total points, no dice roll — the one answer for "what does this character bring to this check"), `compute_resist_increment(defender_character, resist_effort_level, *, level_override=None, award_development=False) -> int` (#2707, ADR-0166: routes through `compute_check_rating` on the Composure CheckType, so it now carries the defender's full rating — trait, specialization, aspect, and capability points, but NOT perk points, since `compute_check_rating` takes no `situation_ctx` and `_situational_perk_check_bonus` short-circuits to 0 without one — plus the effort modifier, clamped ≥ 0; the ACTIVE half of an opposed check. `level_override` SUBSTITUTES for the defender's resolved level so a `CombatOpponent`'s authored `level` reaches the resist path. `award_development=True` (#3066, opt-in, scene call sites only) awards the defender check-based dp for a player-declared resist effort via the same chokepoint `perform_check` uses internally), `level_opposition(check_type, *, level, character=None) -> int` (#2707, ADR-0166: the PASSIVE half — `LEVEL_POINTS_PER_LEVEL * level` plus, when `character` is given, the acting check's aspects scored against the defender's Path; deliberately exclusive with `compute_resist_increment` — a call site uses one or the other, never both, since an active rating already contains level points; combat's clash roll is the deliberate exception that opposes neither, staying at `target_difficulty=0` since a clash grades two rolls against each other instead)
 - **Result-chart shape (#4593, slice (a) of #4551):** fifteen charts, rank difference -8 to +6; every "at least X" chance is non-decreasing across differences (data migration `0284` repaired charts -4 and -2 of production), charts -6 and -5 keep 1% and 5% Success, chart -7 ("Failure -7": no Success, small Partial Success) and chart -8 ("Impossible": failures only) are the impossible zone, and a check graded there is listed to the player labelled Impossible instead of dropped from the available-actions lists. See `docs/systems/checks.md`, "Result charts".
@@ -1051,7 +1055,7 @@ Check resolution engine — converts trait values to ranks and rolls against res
 - **The slide and the hopeless pin (#4601, slice (b) of #4551, ADR-4601-A):** `world/checks/slide.py` (`band_position`, `slide_chart`, `resolve_standing` -> `CheckStanding`, `CheckRoll`). Each total has a band position; the fractional difference picks chart `lo` and slides it toward `lo + 1` over its own outcomes only; one d100 face plus a fraction. Own standing (no modifiers either side: `perform_check(..., extra_standing=, target_modifiers=)`, `ModifierBreakdown.standing_total`, `OWN_STANDING_SOURCE_KINDS`, `level_opposition_points` -> `OppositionPoints`) on an impossible chart pins the roll there. Guarantees capped at the chart's best outcome. `CheckResult.standing` / `rank_text` / `standing_text`; tuning dashboard `compute_slide_table`. See `docs/systems/checks.md`, "The slide and the hopeless pin".
 - **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, rank_difference, trait_points, aspect_bonus, level_points, specialization_points, capability_points, standing)
 - **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + level points (`LEVEL_POINTS_PER_LEVEL * class level`, guaranteed on EVERY check — #2707, ADR-0166) + capability points (weighted via authored `CheckTypeCapabilityModifier` as `weight x (effective value − innate_baseline)`, curated gate — #2505, deviation-scored per #2704/ADR-0164) + modifiers → CheckRank + band position (both sides) → the slid ResultChart, pinned on own standing when hopeless (#4601) → roll+rollmod plus a fraction inside the face → outcome
-- **Integrates with:** traits (lookup tables), skills (check bonuses), progression (`get_character_path_level` — sole source of a character's class level, #2707), conditions (check modifiers + `get_effective_capability_value` agency oracle for authored capability points), goals (bonuses), scenes (active resistance via `compute_resist_increment`), combat (opposed difficulty on offense/penetration/NPC-attack defense, and `CombatOpponent.level` fed into the resist path for social verbs), mechanics (`resolve_challenge()` folds its `capability_source.value` into `extra_modifiers`)
+- **Integrates with:** traits (lookup tables), skills (check bonuses), progression (`get_character_path_level` — sole source of a character's class level, #2707), conditions (check modifiers + `get_effective_capability_value` agency oracle for authored capability points), goals (bonuses), scenes (active resistance via `compute_resist_increment`), combat (opposed difficulty on offense/penetration/NPC-attack defense, and `CombatOpponent.level` fed into the resist path for social verbs), mechanics (`resolve_challenge()` gathers `collect_check_modifiers` once before the roll, adds `capability_source.value` and the gathered `extra_modifiers_total` to `extra_modifiers`, and stores that same breakdown on the `ConsequenceOutcome`, #4629)
 - **Resolution theater (#924, extended #3807 Part B):** `check_outcome_faces(check_result)` /
   `maybe_emit_resolution_theater` (`world/checks/theater.py`) push a dramatic-reveal wheel to a
   player's client. A social check schedules one for roller + target via
@@ -1081,6 +1085,11 @@ Check resolution engine — converts trait values to ranks and rolls against res
   worn instance's `QualityTier.modifier_level` (the item level rows), valued through
   `ValueTable.signed_value`; crafted modifiers are one EQUIPMENT contribution per worn piece; the
   equipment walk's vow terms (`equipment_walk_parts(...).vow_part`) ride untapered.
+  Third and fourth, distinctions and scene surroundings (#4638, ADR-4638-A):
+  `DistinctionEffect.modifier_size` at the holder's `CharacterSheet.current_level`, scaled by
+  rank, through `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)` (kept in the
+  CHARACTER kind); `SceneCheckModifier.modifier_level`/`modifier_size` authored together,
+  valued in `_scene_check_contributions`.
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
@@ -1695,8 +1704,10 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   nullable-small-integer cosmetic tactical-map coordinates, #2006), `PositionEdge` (optional
   `gating_challenge` FK + `is_passable` + `blocks_flight`; a conjured wall's nullable
   `integrity`/`max_integrity` and `source_rampart` FK, #4606), `ObjectPosition` (OneToOne
-  occupancy); **abstract bases** `PositionNodeBase` / `PositionEdgeBase` shared by live
-  and blueprint layers; **blueprint models** `PositionBlueprint` (reusable GM-authored
+  occupancy); **abstract bases** `PositionNodeBase` (with the cover facts `is_roofed` /
+  `screens_ranged`, #4608, ADR-4608-A: no strike between the air and a roofed position, a
+  missile at a screened one only from beside it; `roof_between` / `screen_blocks` /
+  `set_position_cover`) / `PositionEdgeBase` shared by live and blueprint layers; **blueprint models** `PositionBlueprint` (reusable GM-authored
   layout), `BlueprintPosition` (`layout_x`/`layout_y` too), `BlueprintEdge`;
   `RoomProfile.default_blueprint` FK (`evennia_extensions`) links a room to its
   preferred layout. **Rampart trio (#2209):** `Rampart` (`OneToOneField` → `Position`,
@@ -3475,7 +3486,8 @@ GM at a given level may author (#2000, ADR-0097).
   — staff bypass, else `Scene.is_gm(actor.active_account)` on the actor's active scene) gates
   three catalog-only Actions in `actions/definitions/gm_adjudication.py`:
   `InvokeCatalogCheckAction` (key `gm_invoke_check` — invokes an authored `CheckType` at a
-  `DifficultyChoice` band via `perform_check`, plus a `find`/list catalog-search mode; never an
+  `DifficultyChoice` band via `perform_check_with_modifiers` (the target's own modifiers count,
+  #4629), plus a `find`/list catalog-search mode; never an
   integer difficulty or a consequence-pool reference; #2857: gated on
   `MinimumGMLevelPrerequisite(GMLevel.SENIOR)` — a staff/senior stopgap; JUNIOR/STARTING
   player GMs are funneled to `SetSituationAction`), `GMAwardAction` (key
@@ -3844,7 +3856,7 @@ GM at a given level may author (#2000, ADR-0097).
   level), combat (`StakesLevelRequirement
   .minimum_gm_level`), roster (`GMRosterInvite` → `RosterApplication`), scenes
   (`GMTableMembership` pinned to `Persona`, `Scene.is_gm` for the adjudication
-  toolkit's gate), checks (`InvokeCatalogCheckAction` → `perform_check`;
+  toolkit's gate), checks (`InvokeCatalogCheckAction` → `perform_check_with_modifiers`;
   `CheckTypeSituationFit` → `checks.CheckType`), progression (`GMAwardAction` →
   `award_xp`/`award_development_points`;
   `award_gm_story_reward` → `award_xp(reason=ProgressionReason.GM_STORY_REWARD)`, #2123),
@@ -3890,6 +3902,9 @@ Who is in a scene is read off its log
 (`participation.py`, #3867, ADR-0300): the first room-heard line is the entrance, a present character
 without one stands at the threshold (marked in the Here panel, not addressable room-heard).
 
+- **Surroundings on checks (#4638):** `SceneCheckModifier.modifier_level`/`modifier_size`,
+  authored together on the scene admin's `SceneCheckModifierInline`, value a surroundings
+  modifier from the check value table at its own level; blank keeps the flat value.
 - **Played NPCs (#4418, ADR-4418):** a story NPC is auto-accepted as a target whoever plays
   it. When one acts on a PC with a contested social template (social, single target) the PC
   rolls `ActionTemplate.resist_check_type` (`start_resisted_action_resolution`, difficulty
@@ -6857,7 +6872,7 @@ Unified modifier system — categories, types, sources, and per-character modifi
     (stacks on combat's gear read); incompatible slot adds `max(0, role_bonus -
     gear_stat)`; 0 when no roles engaged. `role_base_bonus_for_target` and
     `item_mundane_stat_for_target` now wired (#985)
-  - `resolve_challenge(character, challenge_instance, approach, capability_source) -> ChallengeResolutionResult` — resolve a character's action against a challenge. `ResolutionContext.target` is now populated from `challenge_instance.target_object` (#2503, was always `None`), so an `EffectTarget.TARGET` consequence lands on the actual object.
+  - `resolve_challenge(character, challenge_instance, approach, capability_source, *, extra_modifiers=0) -> ChallengeResolutionResult` — resolve a character's action against a challenge. The roll gathers the character's modifiers (worn items, buffs, conditions, distinctions, the active scene's modifiers) once, before it, and the stored `ConsequenceOutcome` breakdown is that same one, with the capability source as a CAPABILITY row (#4629). `ResolutionContext.target` is now populated from `challenge_instance.target_object` (#2503, was always `None`), so an `EffectTarget.TARGET` consequence lands on the actual object.
   - `select_consequence(character, check_type, difficulty, consequences) -> PendingResolution` — generic: perform check + select weighted consequence (in `checks/consequence_resolution.py`)
   - `apply_resolution(pending, context) -> list[AppliedEffect]` — generic: dispatch ConsequenceEffects (in `checks/consequence_resolution.py`)
   - **Bare-object affordances (#2503, ADR-0147):** `Application.default_template` (nullable FK
@@ -6889,7 +6904,9 @@ Unified modifier system — categories, types, sources, and per-character modifi
     `DEAL_DAMAGE`, `LAUNCH_ATTACK`, `LAUNCH_FLOW`, `GRANT_CODEX`, `MAGICAL_SCARS`,
     `LEGEND_AWARD`, `CAPTURE`, `ESCAPE_CAPTIVITY`, `RESCUE_CAPTIVE`
   - Added in #1018: `CREATE_POSITION`, `MOVE_TO_POSITION`, `SEVER_EDGE`,
-    `CONNECT_EDGE`, `GRANT_FLIGHT`, `REMOVE_FLIGHT`
+    `CONNECT_EDGE`, `GRANT_FLIGHT`, `REMOVE_FLIGHT` (since #4608 a fall, not a landing:
+    `ground_flier` hands an airborne target to the plummet rules; a combat opponent lands at
+    once with the fall damage on its health)
   - Added in #1697: `SET_RELATIONSHIP_CONDITION`, `SHIFT_AFFECTION`
   - Added in #2037: `GRANT_DISTINCTION` — `ConsequenceEffect.distinction` FK (CASCADE, mirrors
     `property`) + `distinction_rank` (nullable, mirrors `property_value`; null = advance one
@@ -8092,7 +8109,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `redirect_opponent_target` (FK `CombatOpponent`, SET_NULL) / `redirect_object_target`
   (FK `objects.ObjectDB`, SET_NULL) — mutually exclusive declared REDIRECT-flavor
   destinations, #2210, see the Redirect section above),
-  `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
+  `CombatOpponentAction`, `CombatOpponentMove` (#4607 - one opponent's movement plan for
+  one round: `kind` `OpponentMoveKind` ADVANCE/SHELTER/BASH/RETREAT/WAIT, `goal_position`
+  hint (SET_NULL), `barrier_edge` (CASCADE, required for BASH), `threat_entry` (required for
+  BASH/WAIT), `fired`; unique per opponent and round; every kind is written since #4609),
+  `NpcTacticsConfig` (#4609, singleton, `load()` creates it: `bash_rounds_limit`,
+  `retreat_rounds_limit`, `unanswered_hit_morale`; read by the NPC tactics ladder),
+  `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `ComboSlot` (`requirement_label` names what a slot asks for, #3553),
   `ComboLearning` (use_count tracks repeat
   use; written by `fire_combo_discovery` on first combat trigger, #2017),
@@ -8203,7 +8226,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `CombatOpponent.morale` / `max_morale` (PositiveSmallIntegerField, #2015) — first-class
     depletable resolve pool mirroring war-scale `BattleUnit.morale`. Derived state via
     `morale_state_for` (STEADY/FALTER/BREAK) drives `select_npc_actions` (falter weakens,
-    break → FLED). `OpponentTierTemplate.has_morale` flags mindless tiers (resist, not immune).
+    break → a RETREAT over the map that ends FLED, or FLED at once off the map, #4609). `OpponentTierTemplate.has_morale` flags mindless tiers (resist, not immune).
   - **Boss state on the opponent payload (#3552):** `OpponentSerializer` serves GM-only
     (`_is_gm_or_staff`, `null` otherwise) `phase_count` (BOSS tier), `damage_multiplier`,
     `break_bar_current` / `break_bar_threshold` / `vulnerability_rounds_remaining`,
@@ -8667,7 +8690,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `target` (nullable FK → `CombatParticipant`, v1 single-target — null when the entry is
     room-targeting), `declared_round`/`resolves_round` (CheckConstraint `resolves_round >
     declared_round`), `called_out` (bool), `downgrades` (PositiveSmallInt).
-  - **Declaration:** `_build_opponent_round_actions` (`world/combat/services/`) creates a
+  - **Declaration:** `plan_opponent_round` (`world/combat/services/npc/npc_selection.py`) creates a
     `PendingOpponentAttack` INSTEAD OF a same-round `CombatOpponentAction` when the chosen
     entry's `windup_rounds > 0`; `_batch_fetch_cooldown_data` also reads
     `PendingOpponentAttack.declared_round` so a wind-up commits to its entry's cooldown
@@ -8726,7 +8749,75 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     auto-selects (while status is still DECLARING, since `select_npc_actions` requires it)
     when the round has no NPC selection of EITHER shape yet — no `CombatOpponentAction` AND
     no `PendingOpponentAttack` declared this round — a conservative, idempotent fallback;
-    any explicit prior selection (staff, simulation, tests) is left alone.
+    any explicit prior selection (staff, simulation, tests) is left alone. Since #4607 a
+    `CombatOpponentMove` row also counts as a selection, and `ensure_opponent_plans` then
+    always plans any opponent still lacking a plan.
+- **Movement and reach (#4607, slice 2 of #4576, ADR-4607-A) [BUILT & WIRED]:**
+  - Planning: `plan_opponent_round(opponent, ctx)` / `ensure_opponent_plans(encounter)`
+    (`world/combat/services/npc/npc_selection.py`, one context builder
+    `_build_npc_round_context`) write the attack rows plus one ADVANCE `CombatOpponentMove`
+    per active opponent; targets are narrowed to those strikeable this round after moving
+    (`can_strike_this_round` / `reachable_pools`, `npc_movement.py`); a wind-up entry aims
+    only at someone in reach from where the opponent stands, since it will not move. No
+    move row for a wind-up that has not matured.
+  - Resolution: `_resolve_actions(..., npc_moves=)` runs `advance_opponent` once before an
+    opponent's first attack row (live re-plan, walk cut to `speed_hops`, narrated
+    "{name} moves to {position}."), then `refit_targets` before each row (live
+    `strike_reaches`, re-pick by the entry's mode, "{name} cannot reach anyone." when none).
+  - Creature fields: `CreatureTemplate.tactics` (`CreatureTactics`), `speed_hops`,
+    `traversal` (`CreatureTraversal`, defined in `world.areas.positioning.constants`), read
+    live through `CombatOpponent.movement_profile` (`MovementProfile`; template-less =
+    `NPC_DEFAULT_TACTICS`/`NPC_DEFAULT_HOPS`/`NPC_DEFAULT_TRAVERSAL`).
+  - Live battle maps (#4644): `world/combat/services/encounter/state_ping.py`
+    (`notify_encounter_changed`, `notify_encounter_changed_on_commit`,
+    `notify_room_encounters_on_commit`) sends the slim `combat_encounter_state` WS ping
+    (`CombatEncounterStatePayload`) after `resolve_round` and after any move commits; the
+    client (`hooks/handleCombatEncounterStatePayload.ts`) refetches that encounter.
+  - PC hop budget: `world/combat/services/movement_budget.py` (`active_combat_participant`,
+    `hops_for`, `hops_left`, `spend_combat_hop`), `CombatParticipant.hops_used` reset in
+    `begin_declaration_phase`, gated by `CombatMovementPrerequisite` on
+    `MoveToPositionAction`; `_positioning_actions` marks refused moves and the hops left.
+  - PC live reach: `_resolve_pc_action` fizzles a strike whose target left reach
+    ("{name}'s strike finds no one in reach.", no anima or fatigue); AREA/FILTERED_GROUP keep
+    only `opponents_in_reach` (`techniques/technique_targets.py`).
+  - Path service and reach rule live in positioning (`find_path`, `step_costs`,
+    `edge_crossing_cost`, `strike_reaches`); see `docs/systems/areas.md`.
+- **The waiting strike (#4608, slice 3 of #4576) [BUILT & WIRED]:**
+  - Declaration: `declare_await_opening(participant, technique, *, confirm_soulfray_risk)`
+    (`world/combat/services/declarations/await_opening.py`) writes the round action with
+    `maneuver=AWAIT_OPENING`, the held technique (known, combat-ready, SINGLE target, reach
+    SAME or ADJACENT) and no target. REGISTRY `AwaitOpeningAction` (`combat_await_opening`),
+    telnet `combat await <technique> [soulfray]`, web `WaitingStrikeControl`. Its own slot
+    is a no-op (`_STANDALONE_MANEUVER_RESOLVERS`).
+  - Firing: `fire_waiting_strikes(encounter, mover, *, reason, defenders, ...) -> StrikeResult`
+    (`world/combat/services/rounds/waiting_strikes.py`, `WaitingStrikeReason` ARRIVED /
+    ATTACKING), called by `_resolve_actions` after each NPC hop (`advance_opponent(...,
+    on_hop=)`) and before each attack (NPC attack rows after the re-fit; a PC attack, after a
+    charge's move). A PC waiter's strike runs `resolve_pc_technique` (the attack half of
+    `_resolve_pc_action`) with `focused_opponent_target` set to the mover, which is what
+    "fired" means; an NPC waiter (a WAIT `CombatOpponentMove`) writes and resolves a real
+    `CombatOpponentAction` and sets `fired`. Unconsented Soulfray at firing lapses it for
+    free. A mover the strike stops loses its move and attacks ("{name} is stopped before
+    striking."). `narrate_unanswered_waits` names unfired waiters after the loop.
+- **NPC tactics and the progress guarantee (#4609, slice 4 of #4576, ADR-4609-A) [BUILT & WIRED]:**
+  - The ladder: `world/combat/services/npc/npc_tactics.py`. Selection
+    (`plan_opponent_round`) uses `build_tactics_inputs` (in `NpcRoundContext.tactics`:
+    `TacticsInputs`, the tuning row, prior move kinds, who is aimed at whom this round, the
+    grounding entry ids), `plan_retreat` (RETREAT; off the map = FLED at once; cornered =
+    fights), `unanswerable_attackers` + `shelter_goal` (SHELTER, every tactics level),
+    `grounding_strike` / `write_grounding_attack` (CUNNING/TACTICAL only), and
+    `plan_approach` (ADVANCE, BASH by `can_break_in_time` / `group_chip`, WAIT once).
+    A MINDLESS opponent never uses a grounding entry (`usable_entries`,
+    `npc_movement.entry_grounds_fliers`), always bashes a wall in its way, never waits.
+  - The slot: `run_move_plan(opponent, move, attack_rows, *, on_hop) -> SlotMoveResult`
+    (`world/combat/types.py`) carries the plan out ("{name} batters {barrier}.",
+    "{barrier} gives way.", "{name} waits for an opening.", "{name} flees the fight."); an
+    opponent that did nothing at all says "{name} strains against {barrier}."
+    (`narrate_strain`). `apply_unanswered_hit_morale(attacker, outcome)` runs after each PC
+    action and NPC attack row.
+  - Path service helpers (positioning): `find_path(..., through_barriers=True)`,
+    `step_costs(..., through_barriers=True)`, `path_costs_from`, `first_closed_edge`,
+    `is_breakable_barrier`, `barrier_integrity`; see `docs/systems/areas.md`.
 - **Conditions reach the fight for both sides (#4572) [BUILT & WIRED]:**
   - `select_npc_actions` -> `_apply_aggro_conditions` (`world/combat/services/npc/npc_selection.py`)
     adds each PC's summed `aggro_priority` (`world.conditions.services.aggro_priority_by_target`,
@@ -9060,7 +9151,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   fixtures. Driven end-to-end by `src/integration_tests/test_boss_fight_journey.py`.
 - **Engagement locks — foil duels (#2020, player surface #3386):** `EngagementLock`
   (`world/combat/models.py`) pairs one PC to one opponent; while ACTIVE the locked
-  opponent's targeting narrows to just that PC (`_build_opponent_round_actions`,
+  opponent's targeting narrows to just that PC (`plan_opponent_round`,
   `world/combat/services/`). #2020 shipped the whole mechanic (threat tracking,
   autonomous lock formation past `auto_lock_threshold`, boss-suppression consumer —
   see the break-bar entry above) but left its two player entry points unreachable

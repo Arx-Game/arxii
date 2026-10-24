@@ -373,6 +373,8 @@ export type AlmanachActionKey =
   | 'almanach_site_holding'
   | 'almanach_rename_holding'
   | 'almanach_remove_holding'
+  | 'almanach_delete_rung'
+  | 'almanach_move_rung'
   | 'almanach_vacate_holder'
   | 'almanach_edit_house'
   | 'almanach_swear'

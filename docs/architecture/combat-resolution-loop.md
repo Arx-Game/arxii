@@ -1402,7 +1402,7 @@ declaration itself, not an action to resolve.
 ### Wind-up declare → telegraph → wreck → mature flow
 
 ```
-_build_opponent_round_actions (NPC declaration, still DECLARING)
+plan_opponent_round (NPC declaration, still DECLARING)
   chosen = weighted-random ThreatPoolEntry
   chosen.windup_rounds > 0?
     yes → _declare_windup_attack
@@ -1714,3 +1714,224 @@ Django compiles `field__in=[x, None]` to a bare `IN (x)`, dropping the `None` en
 rather than adding an `OR field IS NULL` branch. Both queries now use
 `Q(focused_ally_target=participant) | Q(focused_ally_target__isnull=True)`. See
 ADR-0162.
+
+## Implementation addendum — movement and reach (#4607, slice 2 of #4576)
+
+NPCs move on the battle map and then strike; melee reach is real for them; PCs and NPCs
+share a per-round hop budget. ADR-4607-A records why: in an automated encounter no
+position trick may make an enemy passive.
+
+### `resolve_round` ordering change
+
+```
+resolve_round (status DECLARING)
+  already_selected = any CombatOpponentAction | PendingOpponentAttack | CombatOpponentMove this round
+  not already_selected → select_npc_actions(enc)
+  ensure_opponent_plans(enc)          # NEW: always; plans every opponent still lacking a plan
+  ... RESOLVING, round start, wind-up + sustained maturation (unchanged) ...
+  npc_actions = this round's CombatOpponentAction rows (Prefetch cached_targets, unchanged)
+  npc_moves   = this round's CombatOpponentMove rows, keyed by opponent   # NEW
+  _resolve_actions(order, pc_actions, npc_actions, ..., npc_moves=npc_moves)
+```
+
+`select_npc_actions` and `ensure_opponent_plans` share one per-round context builder
+(`_build_npc_round_context`) and the same exclusions as before: no threat pool, a duel
+mirror, a calmed (NEUTRAL) opponent, a companion on HOLD. A BREAK retreats over the map since #4609 (see the slice 4 addendum).
+`plan_opponent_round` writes the attack rows and exactly one ADVANCE `CombatOpponentMove`,
+even when no entry is off cooldown or nobody is in reach. An opponent that declared a
+wind-up, or holds one that has not matured, writes no move row: the telegraph is its
+action. `ensure_opponent_plans` is idempotent; an opponent staff pre-selected (attack rows,
+no move row) gets only its move row.
+
+Selection narrows targets by reach after the move: for the chosen entry's delivery, only a
+target the opponent can strike from some position within its `speed_hops`
+(`can_strike_this_round`, over `find_path` and `strike_reaches`). With nobody in reach it
+writes no attack rows, and the ADVANCE row's `goal_position` hints at the nearest hostile.
+
+### The NPC slot: advance, re-fit, strike, stay
+
+```
+_resolve_actions, NPC entity
+  advance_opponent(opponent, npc_moves[pk], attack_rows)   # once, before any attack row
+    re-plan on live positions (PCs moved at declaration)
+    goal = a node from which a live target of this round's rows is struck (else any hostile, MELEE)
+    already there → stay; no route → walk toward the nearest hostile; none → stay
+    walk the route cut to speed_hops (enter_aerial / leave_aerial / force_move_to_position)
+    narrate "{name} moves to {position}."
+  for each attack row:
+    _resolve_npc_action → refit_targets(row)          # live strike_reaches per target
+      none left (single target) → re-pick among reachable hostiles by the entry's mode
+      still none → "{name} cannot reach anyone." and the row deals nothing
+      writes .targets/.opponent_targets AND cached_targets / cached_opponent_targets
+  (never moves again this round: strike then stay)
+```
+
+### The PC slot: live reach
+
+`_resolve_pc_action` re-checks reach with `technique_can_reach` after a CHARGE moves and
+before the pipeline, so a target that left reach since declaration fizzles the action with
+"{name}'s strike finds no one in reach." and no anima or fatigue is charged. AREA and
+FILTERED_GROUP casts keep only the opponents in reach (`opponents_in_reach`) and fizzle only
+when none is left. Unplaced combatants stay lenient throughout.
+
+### PC moves during a round
+
+`MoveToPositionAction` carries `CombatMovementPrerequisite`: with an ACTIVE participant in a
+non-COMPLETED encounter in this room, a move is allowed only in DECLARING and only while
+`hops_left` > 0, and `execute()` spends the hop after the move succeeds. RESOLVING and
+BETWEEN_ROUNDS refuse it. `begin_declaration_phase` resets `hops_used` beside
+`reactions_used`.
+
+### Battle maps follow moves live (#4644)
+
+The outcome lines a round pushes go out while `resolve_round` is still open, so a battle map
+that refetched the encounter on one of them could read positions from before the commit and
+then wait for its 10-second poll. Two writers now send a slim `combat_encounter_state` ping
+(`{encounter_id, round_number}`, `CombatEncounterStatePayload`) on commit, the battles'
+ping-plus-refetch shape from ADR-0095, and the client refetches that encounter:
+
+- `resolve_round` sends one per round, as its last step (`notify_encounter_changed_on_commit`).
+- `_commit_position`, the one position writer, pings each open encounter in the room after a
+  move commits (`notify_room_encounters_on_commit`). A RESOLVING encounter is skipped, so the
+  moves inside a round add no pings of their own.
+
+The audience is everything in the encounter's room plus its ACTIVE player participants
+(`world/combat/services/encounter/state_ping.py`).
+
+## Implementation addendum — cover, the waiting strike and grounding (#4608, slice 3 of #4576)
+
+### Cover in the reach rules
+
+`position_reachable` (PC techniques) and `strike_reaches` (NPC entries) apply two cover
+rules before any edge test (ADR-4608-A). A roof between an AERIAL position and a roofed
+ground position refuses every reach and delivery (`roof_between`), even across the passable
+vertical edge. A missile or ANY strike at a screened position must come from it or from a
+position joined to it by a passable edge (`screen_blocks`). The route search closes the
+vertical edge under a roof, so an NPC flier heads for a ground position beside a roofed
+target, lands there and strikes, paying the hops. NPC selection, the advance and the re-fit
+all go through `strike_reaches`, and declaration and the PC live-reach fizzle through
+`technique_can_reach`, so neither side strikes across a roof.
+
+### The waiting strike in the slots
+
+```
+_resolve_actions
+  PC entity (any declared attack, not a standalone maneuver)
+    CHARGE → move first
+    fire_waiting_strikes(mover=PC, reason=ATTACKING, defenders=its opponent targets)
+      mover stopped → skip the action
+    _resolve_pc_action (an AWAIT_OPENING row's own slot is a no-op)
+  NPC entity
+    advance_opponent(..., on_hop=)                       # after each hop:
+      fire_waiting_strikes(mover=NPC, reason=ARRIVED)    # says "{name} moves to {here}." first
+        mover stopped → walk ends, no attack rows
+    for each attack row:
+      refit_targets (none left → "{name} cannot reach anyone.")
+      fire_waiting_strikes(mover=NPC, reason=ATTACKING, defenders=the row's targets)
+        mover stopped → "{name} is stopped before striking.", no further rows
+      _resolve_npc_action
+narrate_unanswered_waits(enc)      # after _narrate_held_back
+```
+
+A waiter fires at most once a round, when it is ACTIVE and can act, hostile to the mover
+(effective allegiance), not yet fired, and its strike reaches the mover from where both stand
+at that moment. A PC waiter (`CombatRoundAction` with `maneuver=AWAIT_OPENING`) fires through
+`resolve_pc_technique`, the attack half of `_resolve_pc_action`, after its
+`focused_opponent_target` is set to the mover: that column being set is what "fired" means.
+Before that it checks the Soulfray checkpoint; unconsented, the strike lapses with a line and
+costs nothing. An NPC waiter (a WAIT `CombatOpponentMove`) writes a real `CombatOpponentAction`
+at the mover and resolves it with `_resolve_npc_action`, then sets `fired`. Arrival comes
+before attack in time, so a walker that ends in reach and attacks draws the strike once. A
+blink-strike-blink attacker is answered because the attack trigger fires before the attack
+resolves, while the attacker is still in reach.
+
+### Grounding
+
+`REMOVE_FLIGHT` is a fall (`ground_flier`), not `leave_aerial`'s landing. A character falls
+through the plummet rules from the aerial position: with someone present the catch window
+opens and the descent lands at the round's end tick (`advance_plummet`); alone, it lands at
+once. A combat opponent never gets a catch window (`begin_plummet(..., allow_catch=False)`):
+it lands in the call and the handler applies the returned impact to its health with the fall
+damage type, no source and soak bypassed. Neither fall has a source, so neither can kill
+(`death_is_permitted`). Taking off again costs a hop like any vertical step.
+
+## Implementation addendum: NPC tactics and the progress guarantee (#4609, slice 4 of #4576)
+
+All NPC planning decisions sit in `combat/services/npc/npc_tactics.py`. Selection
+(`plan_opponent_round`) asks the ladder for the opponent's move plan and attack rows; the
+resolve loop asks `run_move_plan` to carry the plan out in the opponent's slot, re-planned
+against live positions. ADR-4609-A records what the ladder reads and where its numbers live
+(`NpcTacticsConfig`: `bash_rounds_limit` 3, `retreat_rounds_limit` 2,
+`unanswered_hit_morale` 10).
+
+### The ladder at selection
+
+```
+plan_opponent_round(opponent, ctx)                # ctx.tactics = build_tactics_inputs(...)
+  BREAK morale → plan_retreat
+    off the map, or no enemy on it → FLED at once (as before the map mattered)
+    nowhere farther from every enemy (path distance) and an enemy in melee reach → cornered: go on
+    else RETREAT plan (goal = the farthest position), no attack rows
+  NEUTRAL / companion HOLD → nothing (unchanged)
+  usable / eligible entries   (a MINDLESS opponent drops every grounding entry)
+  strikeable this round? (reachable_pools, unchanged)
+  attackers = unanswerable_attackers   # aimed at it this round (PC declarations, attack rows)
+                                       # and not answerable by any usable entry within its hops
+  shelter = shelter_goal               # nearest roofed/screened position out of their reach;
+                                       # TACTICAL prefers one in reach this round beside an ally
+  nobody strikeable:
+    shelter → SHELTER plan
+    else plan_approach:
+      free = find_path(origin, approach set)                      # walls respected
+      wall = find_path(..., through_barriers=True)                # breakable walls cost 1
+      blocking = first_closed_edge(wall), unless going round costs no more
+      blocking and a melee bash entry and (MINDLESS or can_break_in_time)
+        → BASH plan (barrier_edge, threat_entry)
+      can advance (round the wall, or toward another enemy) → ADVANCE plan
+      zero-hop, CUNNING/TACTICAL with a melee entry, last round's plan not WAIT → WAIT plan
+      zero-hop otherwise: the wall in the way (or an unaffordable breakable first step) → BASH
+      else ADVANCE plan (nothing will move: the slot narrates the strain)
+  somebody strikeable:
+    CUNNING/TACTICAL: grounding_strike → first attack row is a grounding entry at a flier hitting it
+    the attack rows (unchanged), then SHELTER if shelter applies, else ADVANCE
+```
+
+`can_break_in_time` is the bash test: the wall's live integrity (the Rampart's for a Rampart's
+seal) is at most `bash_rounds_limit` times the group chip. The group chip is the summed best
+melee chip (`base_damage * damage_multiplier`, no defence roll) of every active opponent on the
+same side within one hop of either end of the wall, memoized per wall per round.
+
+### The plan in the slot
+
+```
+_resolve_npc_slot
+  run_move_plan(opponent, move, attack_rows, on_hop=arrival trigger) → SlotMoveResult
+    ADVANCE → advance_opponent (unchanged; with no attack row it heads for any position one of
+              its entries' deliveries would strike from)
+    SHELTER → walk for the planned cover (or the nearest covered position)
+    BASH    → wall already down: advance, then strike whoever is in reach with the bash entry
+              else walk to the near end, "{name} batters {barrier}.", damage_barrier(chip);
+              a fall says "{barrier} gives way."
+    RETREAT → walk toward the farthest position; then FLED ("{name} flees the fight.") when no
+              enemy can strike it there (a PC's best technique reach, an opponent's entry
+              deliveries) or this is the retreat_rounds_limit-th round in a row
+    WAIT    → "{name} waits for an opening."; the row fires through fire_waiting_strikes
+  attack rows (+ any the plan made): refit, ATTACKING waiting strikes, resolve,
+    apply_unanswered_hit_morale(attacker, outcome)
+  nothing at all happened (no move, bash, wait, flight or attack) → narrate_strain:
+    "{name} strains against {barrier}." naming the closed edge nearest it
+```
+
+A PC slot also calls `apply_unanswered_hit_morale` after the PC's action: each damage result
+on an opponent that cannot answer the PC (no usable entry reaches the PC within its hops)
+takes `unanswered_hit_morale` through `apply_morale_damage`, or the `SpectacleConfig`
+mindless share for a tier without morale. A waiting strike is always answerable (it comes
+from the waiter's melee reach), so it takes none.
+
+### The progress guarantee
+
+In every resolved round every active opponent that is not winding up, calmed or a duel mirror
+attacks, moves, batters a wall, holds a waiting strike or leaves. The only exception is the
+physically stuck (no route, no breakable wall, no hostile in reach, and a wait already spent
+or not available), whose slot says it strains against the wall. The property test is
+`src/integration_tests/fuzz/test_npc_progress_fuzz.py`.

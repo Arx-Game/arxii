@@ -438,7 +438,7 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 
 | Base | Purpose |
 |------|---------|
-| `PositionNodeBase` | `name`, `kind` (`PositionKind`), `description` — shared by `Position` and `BlueprintPosition` |
+| `PositionNodeBase` | `name`, `kind` (`PositionKind`), `description`, and the cover facts `is_roofed` / `screens_ranged` (#4608, ADR-4608-A) — shared by `Position` and `BlueprintPosition`; `instantiate_blueprint` copies all of them, and the blueprint admin lists and filters both flags |
 | `PositionEdgeBase` | `is_passable`; `_validate_canonical()` helper (self-loop + pk-ascending canonical-order) — shared by `PositionEdge` and `BlueprintEdge` |
 
 **Live room graph** (room-anchored):
@@ -501,13 +501,24 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 
 | Function | Summary |
 |----------|---------|
-| `position_reachable(origin, target, reach)` | Reach-semantics check (SAME / ADJACENT / ANY) |
+| `position_reachable(origin, target, reach)` | Reach-semantics check (SAME / ADJACENT / REACH_N / ANY). The cover rules come first (#4608): `roof_between` refuses every reach, and ANY at a screened target needs the same or an adjacent position (`screen_blocks`) |
+| `roof_between(a, b) -> bool` | True when exactly one of the two is AERIAL and the other is a roofed ground position (#4608). No strike crosses it, whatever the reach or delivery, even across the passable vertical edge; the route search and `move_to_position` close that edge too |
+| `screen_blocks(origin, target) -> bool` | True when `target.screens_ranged` and `origin` is neither the target nor joined to it by a passable edge (#4608): a missile or ANY strike cannot come in from further away |
+| `set_position_cover(position, *, roofed, screens_ranged)` | Set a live position's cover facts and drop the room's cached graph (#4608). The aerial layer is not touched: the reach and route rules read the flags directly |
 | `edge_between(a, b)` | Single edge lookup, order-independent |
 | `position_of(objectdb)` | Current `Position` for an object or `None` |
 | `room_position_adjacency(room)` | Full ADJACENT-reach adjacency map for a room. Reads `room.positions_cached` — the Prefetch/query shared interface (`ObjectParent.positions_cached`, a `cached_property` a viewset's `Prefetch(to_attr=...)` may pre-fill); no probing, no fallback branch. |
 | `edge_blocks_crossing(edge) -> bool` | The walker rule (#4606), read off the edge row alone: an active gating challenge blocks; a sealed edge with no challenge is a hard seal and blocks; a sealed edge whose challenge is no longer active is open (a climbed wall keeps `is_passable=False`); a deleted challenge (`SET_NULL`) leaves a hard seal. Reach (`position_reachable`) ignores gates. |
 | `adjacent_open_positions(position)` | Edges a walker can cross from `position` (`edge_blocks_crossing`) |
 | `reachable_positions(objectdb)` | Multi-hop BFS over the edges a walker can cross |
+| `edge_crossing_cost(edge, traversal) -> int \| None` | The traversal rule (#4607): hops a mover of `CreatureTraversal` pays to cross an edge, None when closed. The vertical edge between a roofed position and the air above it is closed to everyone (#4608). An edge touching an AERIAL node is open to FLIES only; an open ground edge costs 1; a wall with an active gating challenge costs CLIMBS/LEAPS `GATED_CROSSING_HOPS` (2) and is closed to WALKS/FLIES; a hard seal is closed to all. |
+| `find_path(origin, goal_test, *, traversal, through_barriers=False) -> list[Position] \| None` | Cheapest route (Dijkstra over `edge_crossing_cost`, ties to fewer steps then lower pk) from `origin` to the first position `goal_test` accepts, origin included (`[origin]` when it already passes). Reads the room's positions and edges from the database (two queries), never the prefetched `positions_cached`/`all_edges_as_a` lists, which a long-running server can hold from before the aerial layer was built. Only a FLIES mover enters AERIAL nodes, and only through a layer already materialized (it never builds one). No capacity limit. `through_barriers` (#4609) treats a ground wall damage can bring down (`is_breakable_barrier`) as open at 1 hop: the route an NPC weighs before it bashes. |
+| `step_costs(path, *, traversal, through_barriers=False) -> list[int]` | Hop cost of each step of a route, so a caller can cut it to a hop budget; `PositionError` on a step with no open edge. `through_barriers` prices a barrier-ignoring route as `find_path` does. |
+| `path_costs_from(origin, *, traversal) -> dict[int, int]` | Hops from `origin` to every position a mover of `traversal` can reach, keyed by pk (#4609; the same costs `find_path` routes over). An NPC retreating measures path distance from its enemies with it. |
+| `first_closed_edge(path, *, traversal) -> PositionEdge \| None` | The first edge along a route that is closed to the mover: on a barrier-ignoring route, the wall an NPC would bash (#4609). |
+| `is_breakable_barrier(edge) -> bool` / `barrier_integrity(edge) -> int \| None` | Whether damage can bring the wall on an edge down (a plain conjured wall with integrity, or a Rampart's seal), and its live strength (the Rampart's integrity for a seal). A staff-authored seal is indestructible (#4609). |
+| `strike_reaches(attacker_pos, target_pos, delivery) -> bool` | The reach rule by `StrikeDelivery` (#4607): MELEE = `position_reachable` ADJACENT, MISSILE = ANY, both after the cover rules (#4608: no strike across a roof, and a MISSILE at a screened target only from the same or an adjacent position); either position None = reachable (lenient); an unknown delivery is MELEE. Reads the edge from the same database-built room graph as `find_path`; callers memoize it per pass (`ReachMemo`). Used by NPC selection, advance and re-fit. |
+| `aerial_layer_for_route(room)` | Context manager (#4607): builds the room's aerial layer for a flier's route search and walk when none exists, and tears it down on exit unless someone ended up airborne, so planning never leaves "Above" positions on the map. |
 | `position_graph(room) -> PositionGraph` | Full node+edge graph for the tactical map (#2006) — every position and every edge (unlike `room_position_adjacency`, keeps impassable/gated edges so the UI can render them). `PositionGraph` is `{nodes: list[PositionNode], edges: list[PositionEdgeInfo]}`; `PositionNode` is `{id, name, kind, elevation_anchor_id, layout_x, layout_y, rampart_element, rampart_integrity, rampart_max_integrity, rampart_crack_state}` (the last four, #2209, are `None` on an uncovered position), `PositionEdgeInfo` is `{position_a_id, position_b_id, is_passable, blocks_flight, gating_challenge_name, integrity, max_integrity}` (the last two, #4606, read through `PositionEdge.barrier_integrity`, so a Rampart's seal shows the Rampart's pool; `None` on an indestructible edge). Since #4606 the edge shows what a walker meets: `is_passable` is the walker rule (`not edge_blocks_crossing(edge)`, so a climbed wall reads passable though its row stays sealed) and `gating_challenge_name` names only a gate that is still active. Reads `room.positions_cached` (shared interface): zero extra queries when the caller's queryset pre-filled it via `Prefetch(to_attr=...)` with edges on `all_edges_as_a` + `select_related("rampart__element_profile")` (the combat viewset does both); otherwise the lazy `ObjectParent.positions_cached` runs the same shape in 4 bounded queries (positions+rampart join, plus the three edge prefetches). Cache invalidation is targeted: `Position`/`PositionEdge` `save()`/`delete()` pop only the graph caches, and bulk mutation paths call `invalidate_position_graph_caches(room)` explicitly (never a blanket cached-property clear — the identity-mapped Room also caches live state like `scene_data`). |
 
 *Conjured walls (#2019, #4606):*
@@ -516,7 +527,7 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 |----------|---------|
 | `create_conjured_obstacle(a, b, *, caster_sheet, integrity, source_rampart=None, duration_rounds=None, gating_challenge=None, blocks_flight=False)` | Seal the edge (`update_or_create`, last writer wins). A caster wall passes an integer `integrity` (written to both `integrity` and `max_integrity`); a Rampart's seal passes `source_rampart` and stores no integrity; neither is a `ValueError`. Overwriting an edge takes it over (integrity, Rampart link, gate) and releases the gate it displaced. |
 | `restore_edge(edge)` | The one way a wall ends: passable again, duration/caster/integrity/Rampart link/gate cleared. The gate is deactivated (never deleted) once no other edge gates on it, so a Rampart's shared challenge goes quiet with its last edge. |
-| `damage_barrier(edge, chip, *, damage_type=None) -> bool` | The one mutation seam for wall integrity; True when the wall fell. A Rampart's seal routes to `damage_rampart` after the element's resist row for `damage_type` (`RampartElementProfile.base_resist`, the same term interception reads), floored at 1. A plain wall loses `chip` and is restored at 0; an indestructible edge takes nothing. First plain-edge caller is the NPC bash step (#4576 slice 4); until then a PC beats a conjured wall through its challenge. |
+| `damage_barrier(edge, chip, *, damage_type=None) -> bool` | The one mutation seam for wall integrity; True when the wall fell. A Rampart's seal routes to `damage_rampart` after the element's resist row for `damage_type` (`RampartElementProfile.base_resist`, the same term interception reads), floored at 1. A plain wall loses `chip` and is restored at 0; an indestructible edge takes nothing. Its plain-edge caller is the NPC bash step (`npc_tactics._run_bash`, #4609); a PC beats a conjured wall through its challenge. |
 | `expire_obstacle_rounds(room)` / `teardown_conjured_obstacles(room)` | Per-round duration tick and scene-end teardown; both end a wall through `restore_edge`. |
 
 **Spell walls.** `world.magic.services.effect_handlers.create_obstacle` (reached from the
@@ -549,7 +560,7 @@ challenge's approaches beside it.
 |----------|---------|
 | `place_in_position(objectdb, position)` | Idempotent unconditional placement (staff / setup); the UNCHECKED primitive — bypasses entry-kind + mobility (#2005) |
 | `take_position(objectdb, position)` | Voluntary entry onto the position graph for an UNPLACED actor — restricted to PRIMARY/FEATURE entry kinds + MOVEMENT capability (#2005) |
-| `move_to_position(objectdb, target)` | Voluntary move — validates same room, current placement, adjacency, the walker rule (`edge_blocks_crossing`: an active gate answers "Crossing that requires getting past <challenge>.", a hard seal "The way is blocked."), MOVEMENT capability |
+| `move_to_position(objectdb, target)` | Voluntary move — validates same room, current placement, adjacency, the walker rule (`edge_blocks_crossing`: an active gate answers "Crossing that requires getting past <challenge>.", a hard seal "The way is blocked."), an AERIAL target needs the `aerial` property ("You cannot fly.", #4607), no roof between the two positions ("A roof is in the way.", #4608), MOVEMENT capability. Like `place_in_position` and `force_move_to_position` it writes through `_commit_position`, the one position writer, which also drops the identity-mapped `current_position` cache of the object's `CombatOpponent`/`CombatParticipant` rows (#4607) and, once the move commits, pings each open combat encounter in the room so its battle maps refetch (`notify_room_encounters_on_commit`, #4644) |
 | `force_move_to_position(objectdb, target)` | Bypass capability + edge checks (staff/consequence) |
 
 ### Actions [BUILT & WIRED]
@@ -558,7 +569,7 @@ challenge's approaches beside it.
 
 | Action | Registry Key | Prerequisite | Notes |
 |--------|-------------|--------------|-------|
-| `MoveToPositionAction` | `move_to_position` | none | Dispatched with `ActionRef(registry_key="move_to_position", position_id=<pk>)`; surfaced via `get_player_actions` |
+| `MoveToPositionAction` | `move_to_position` | `CombatMovementPrerequisite` (#4607: in an active encounter, only while DECLARING and with a hop left; the move spends one) | Dispatched with `ActionRef(registry_key="move_to_position", position_id=<pk>)`; surfaced via `get_player_actions` |
 | `TakePositionAction` | `take_position` | none | Voluntary entry for an UNPLACED actor; dispatched with `ActionRef(registry_key="take_position", position_id=<pk>)`; surfaced via `get_player_actions` for PRIMARY/FEATURE positions only (#2005) |
 | `GMPlaceInPositionAction` | `gm_place_in_position` | none (gate is in-body, not a `Prerequisite`) | Staff OR active-scene GM (mirrors `_actor_may_gm_battle`; no active scene means staff-only) — wraps the unchecked `place_in_position`. `ActionRef(registry_key="gm_place_in_position", position_id=<pk>, target_object_id=<ObjectDB pk co-located with actor>)` (#2005) |
 | `SetTheStageAction` | `set_the_stage` | `MinimumGMLevelPrerequisite(GMLevel.STARTING)` (staff bypass preserved, #2117) | Dispatched with `ActionRef(registry_key="set_the_stage", blueprint_id=<pk>, replace=False)`; surfaced via `get_player_actions` when the room's `RoomProfile.default_blueprint` is set. `ActionRef` carries a `blueprint_id` field for this. |
@@ -711,10 +722,11 @@ edges that would block ground movement.
 
 | Function | Summary |
 |----------|---------|
-| `materialize_aerial_layer(room)` | Build the full AERIAL twin graph over every ground position (idempotent; no-op when already present) |
+| `materialize_aerial_layer(room)` | Build the full AERIAL twin graph over every ground position (idempotent; no-op when already present). Ends by dropping every in-room position's cached edge lists (`invalidate_position_graph_caches`), so a map or route read after it sees the new edges (#4607) |
 | `teardown_aerial_layer(room)` | Delete all AERIAL positions in the room (cascades edges + occupancy); called when the last airborne occupant lands |
 | `enter_aerial(objectdb)` | Move `objectdb` to the AERIAL twin above its current ground position; materializes the layer if needed; sets the `"aerial"` `ObjectProperty` on the object |
-| `leave_aerial(objectdb)` | Return `objectdb` to its `elevation_anchor` ground position; clears the `"aerial"` property; tears down the layer when no AERIAL node retains occupants |
+| `leave_aerial(objectdb)` | Return `objectdb` to its `elevation_anchor` ground position; clears the `"aerial"` property; tears down the layer when no AERIAL node retains occupants. The voluntary, soft landing |
+| `ground_flier(objectdb, *, allow_catch=True) -> int \| None` | `plummet.py`, #4608. Knock a flier out of the air: no-op unless it stands on an AERIAL position; clears the `"aerial"` property and hands it to `begin_plummet` from there, so it falls (catch window for a character with someone present; `allow_catch=False`, a combat opponent, lands at once). Returns the impact damage when the fall resolved in the call. `REMOVE_FLIGHT` calls it; for an opponent the handler applies the returned damage to its health (`apply_damage_to_opponent`, fall damage type, no source, soak bypassed) |
 
 The `"aerial"` `Property` (value=1) is the runtime tag: while present, `objectdb` is
 airborne.  `AerialPropertyFactory` in `src/world/mechanics/factories.py` provides the
@@ -734,9 +746,11 @@ direct `force_move_to_position` — calls `maybe_emit_fall`, which emits `EventN
 **FELL consumer (`world/areas/positioning/plummet.py`, #1228).** A room-owned system
 trigger (`fall_to_plummet`, `source_condition=None`) dispatches `EventName.FELL` to
 `begin_plummet_handler` via a CALL_SERVICE_FUNCTION flow step. `begin_plummet(faller,
-position)` applies the seeded `Plummeting` condition, then branches on whether anyone is
-present who could catch the faller (`_potential_catcher_present` — a non-faller in the room
-who `can_act`):
+position, *, allow_catch=True) -> int | None` applies the seeded `Plummeting` condition, then
+branches on whether anyone is present who could catch the faller (`_potential_catcher_present`
+— a non-faller in the room who `can_act`; `allow_catch=False` skips the catch window, #4608).
+It returns the impact damage when the fall resolved in the call, and a faller that drops out
+of the air takes the empty aerial layer down as a landing does (`_settle_aerial_layer`):
 
 - **a potential catcher is present** → instantiate the seeded **"Catch the Faller"**
   `ChallengeInstance` bound to the faller via `target_object` and ensure an AFK-safe STRICT

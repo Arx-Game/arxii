@@ -83403,9 +83403,16 @@ components:
           type: string
           readOnly: true
           nullable: true
+        is_roofed:
+          type: boolean
+          readOnly: true
+        screens_ranged:
+          type: boolean
+          readOnly: true
       required:
       - elevation_anchor_id
       - id
+      - is_roofed
       - kind
       - layout_x
       - layout_y
@@ -83414,6 +83421,7 @@ components:
       - rampart_element
       - rampart_integrity
       - rampart_max_integrity
+      - screens_ranged
     PositionSummary:
       type: object
       description: Compact public representation of a Position (id + name).

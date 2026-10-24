@@ -25,6 +25,7 @@ from world.combat.services.techniques.insight import _maybe_produce_insight_for_
 from world.combat.services.techniques.npc_regard import _maybe_record_npc_regard_on_defeat
 from world.combat.services.techniques.pc_broadcast import _record_and_broadcast_pc_action
 from world.combat.services.techniques.spectacle import _maybe_apply_spectacle_for_action
+from world.combat.services.techniques.technique_targets import finds_no_one_in_reach
 from world.combat.services.techniques.weakness_selection import (
     _maybe_create_weakness_selection_for_cast,
 )
@@ -67,6 +68,35 @@ def _run_combat_technique_pipeline(
         fatigue_category=fatigue_category,
         cast_check=cast_check,
         offense_check_fn=offense_check_fn,
+    )
+
+
+def _broadcast_fizzle_no_one_in_reach(
+    participant: CombatParticipant, action: CombatRoundAction
+) -> None:
+    """Narrate a strike whose target left reach before the PC's slot (costs nothing).
+
+    A concealed caster stays concealed: the line goes through the cast's own audience,
+    and a strike that touched no one leaves nothing for the lower tiers to perceive.
+    """
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        target_persona_for_round_action,
+    )
+    from world.combat.services.techniques.cast_audience import (  # noqa: PLC0415
+        _resolve_combat_cast_audience,
+    )
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    target_persona = target_persona_for_round_action(action)
+    broadcast_action_outcome(
+        encounter=participant.encounter,
+        narration=f"{active_persona_for_sheet(participant.character_sheet).name}'s strike "
+        "finds no one in reach.",
+        audience=_resolve_combat_cast_audience(participant, action.focused_action),
+        unattributed_narration="",
+        target_personas=[target_persona] if target_persona is not None else None,
+        deliver_telnet=True,
     )
 
 
@@ -113,6 +143,21 @@ def _resolve_pc_action(
         yield_duel(participant)
         return ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
+    return resolve_pc_technique(participant, action, offense_check_fn)
+
+
+def resolve_pc_technique(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    offense_check_fn: PerformCheckFn | None = None,
+) -> ActionOutcome:
+    """Resolve a PC's declared technique at its declared target (the attack half).
+
+    ``_resolve_pc_action`` reaches it after the maneuver dispatch; a waiting strike
+    (#4608) calls it directly when it fires, so defenses, ramparts, fatigue, anima and
+    the log line behave exactly as for any attack. Reach is re-checked live first: a
+    target out of reach fizzles for free.
+    """
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
     outcome.participant_id = participant.pk
 
@@ -122,6 +167,13 @@ def _resolve_pc_action(
         return outcome
 
     outcome.effect_type_id = technique.effect_type_id
+
+    # #4607: positions moved since the declaration (NPCs step in their own slots), so
+    # reach is re-checked live, after any CHARGE movement and before the pipeline,
+    # fatigue or anima. The player chose the target, so the action does not retarget.
+    if finds_no_one_in_reach(participant, action, technique):
+        _broadcast_fizzle_no_one_in_reach(participant, action)
+        return outcome
 
     target = action.focused_opponent_target
     fatigue_category = action.focused_category or ActionCategory.PHYSICAL

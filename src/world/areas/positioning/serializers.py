@@ -41,6 +41,8 @@ class PositionNodeSerializer(serializers.Serializer):
     rampart_integrity = serializers.IntegerField(read_only=True, allow_null=True)
     rampart_max_integrity = serializers.IntegerField(read_only=True, allow_null=True)
     rampart_crack_state = serializers.CharField(read_only=True, allow_null=True)
+    is_roofed = serializers.BooleanField(read_only=True)
+    screens_ranged = serializers.BooleanField(read_only=True)
 
 
 class PositionEdgeSerializer(serializers.Serializer):

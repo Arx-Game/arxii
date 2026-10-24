@@ -14,6 +14,7 @@ from django.db import models
 from actions.constants import (
     ActionCategory as ActionCategory,  # noqa: PLC0414
 )
+from world.areas.positioning.constants import CreatureTraversal
 from world.gm.constants import GMLevel
 
 # #2051 — the combo invariant: combos are never solo. A combo definition must
@@ -138,6 +139,9 @@ class CombatManeuver(models.TextChoices):
     USE_ITEM = "use_item", "Use Item"
     CHARGE = "charge", "Charge"
     JOUST = "joust", "Joust"
+    # The waiting strike (#4608): a melee strike held for an enemy that comes into
+    # reach or attacks. It is the PC's one action for the round and fires at most once.
+    AWAIT_OPENING = "await_opening", "Wait for an opening"
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +160,51 @@ LANCE_UNMOUNTED_PENALTY: int = -10
 # Max hops a CHARGE may cover — generous but bounded (mirrors technique
 # REACH_N's reach_hops parameter).
 CHARGE_MAX_HOPS: int = 5
+
+# ---------------------------------------------------------------------------
+# Movement on the battle map (#4607, slice 2 of #4576)
+# ---------------------------------------------------------------------------
+
+# A PC's hops per round are its effective movement capability divided by this,
+# clamped to [1, MAX_HOPS_PER_ROUND] when the capability is above 0 (an
+# unimpaired mortal's 5 gives 1 hop; a rooted 0 gives none).
+MOVEMENT_PER_HOP: int = 5
+
+# Most hops anyone (PC or NPC) may take in one round. Same cap as a CHARGE.
+MAX_HOPS_PER_ROUND: int = 5
+
+
+class CreatureTactics(models.TextChoices):
+    """How cleverly a creature fights, authored on its CreatureTemplate (#4607)."""
+
+    MINDLESS = "mindless", "Mindless"
+    CUNNING = "cunning", "Cunning"
+    TACTICAL = "tactical", "Tactical"
+
+
+class OpponentMoveKind(models.TextChoices):
+    """What an opponent's movement plan for a round is (CombatOpponentMove.kind)."""
+
+    ADVANCE = "advance", "Advance"
+    SHELTER = "shelter", "Shelter"
+    BASH = "bash", "Bash a barrier"
+    RETREAT = "retreat", "Retreat"
+    WAIT = "wait", "Wait for an opening"
+
+
+# NPC tactics (#4609, slice 4 of #4576). Starting values for the staff tuning row
+# (NpcTacticsConfig); the row, not these, is what the game reads.
+# A group of opponents bashes a wall it can bring down within this many rounds.
+BASH_ROUNDS_LIMIT: int = 3
+# A broken opponent that has retreated this many rounds in a row leaves the fight.
+RETREAT_ROUNDS_LIMIT: int = 2
+# Morale an opponent loses each time an attacker it cannot answer hits it.
+UNANSWERED_HIT_MORALE: int = 10
+
+# Movement profile for an opponent with no CreatureTemplate.
+NPC_DEFAULT_TACTICS: str = CreatureTactics.CUNNING
+NPC_DEFAULT_HOPS: int = 1
+NPC_DEFAULT_TRAVERSAL: str = CreatureTraversal.WALKS
 
 # success_level gap bands for a JOUST's opposed pass. A gap >= DECISIVE is a
 # clean unhorsing; a gap >= NARROW (but < DECISIVE) lands a lesser hit; a gap
@@ -830,3 +879,31 @@ BOSS_PARLEY_RESISTANCE_STEP: int = 1
 PHASE_SHIFT_NARRATION = "{name} shifts - the fight changes."
 ENRAGE_NARRATION = "{name} is enraged."
 HELD_BACK_NARRATION = "{name} holds back."
+
+
+class WaitingStrikeReason(models.TextChoices):
+    """Why a waiting strike is asked to fire (#4608, slice 3 of #4576).
+
+    ARRIVED: the mover just ended a hop in the waiter's reach. ATTACKING: the mover is
+    about to attack the waiter. Arrival comes first in time, so an enemy that walks in
+    and then attacks draws the strike on arrival and the spent strike does not fire
+    again on its attack.
+    """
+
+    ARRIVED = "arrived", "Arrived in reach"
+    ATTACKING = "attacking", "Attacking"
+
+
+WAITING_STRIKE_NARRATION = "{name} meets {mover} with a waiting strike."
+WAITING_STRIKE_LAPSED_NARRATION = "{name} sees the opening, but cannot pay for the strike."
+WAITING_STRIKE_NEVER_CAME_NARRATION = "{name} waited for an opening that never came."
+STOPPED_BEFORE_STRIKING_NARRATION = "{name} is stopped before striking."
+# Label tag on the ActionOutcome of a waiting strike in the round's outcome list.
+WAITING_STRIKE_LABEL_TAG = "(waiting strike)"
+
+# NPC tactics round-log lines (#4609). ``{barrier}`` is ``barrier_label(edge)``.
+STRAINS_AGAINST_NARRATION = "{name} strains against {barrier}."
+BATTERS_BARRIER_NARRATION = "{name} batters {barrier}."
+BARRIER_GIVES_WAY_NARRATION = "{barrier} gives way."
+NPC_WAITS_NARRATION = "{name} waits for an opening."
+NPC_FLEES_NARRATION = "{name} flees the fight."

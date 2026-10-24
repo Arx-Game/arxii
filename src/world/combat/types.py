@@ -20,10 +20,13 @@ if TYPE_CHECKING:
         ClashContribution,
         ClashRound,
         CombatOpponent,
+        CombatOpponentAction,
         CombatParticipant,
         CombatRoundAction,
         ComboDefinition,
         ComboSlot,
+        NpcTacticsConfig,
+        ThreatPoolEntry,
     )
     from world.conditions.models import ConditionInstance, DamageType
     from world.conditions.types import (
@@ -179,6 +182,19 @@ class ActionOutcome:
     damage_consequences: list[DamageConsequenceResult] = field(default_factory=list)
     participant_id: int | None = None
     effect_type_id: int | None = None
+
+
+@dataclass
+class StrikeResult:
+    """What one ``fire_waiting_strikes`` call did (#4608).
+
+    ``outcomes`` are the waiting strikes that fired, for the round's outcome list.
+    ``mover_stopped`` is True when a strike left the mover unable to go on (defeated,
+    downed, fled): its attack and the rest of its move are cancelled this round.
+    """
+
+    outcomes: list[ActionOutcome] = field(default_factory=list)
+    mover_stopped: bool = False
 
 
 @dataclass
@@ -583,3 +599,59 @@ class SpectacleResult:
     def lines(self) -> list[str]:
         lines = (self.credit_line, self.flavour_line, self.heartened_line)
         return [line for line in lines if line]
+
+
+@dataclass(frozen=True)
+class MovementProfile:
+    """How an opponent moves and thinks this fight (#4607).
+
+    Read from its CreatureTemplate, or the NPC defaults when it has none
+    (``CombatOpponent.movement_profile``). Values are ``CreatureTactics`` and
+    ``CreatureTraversal`` members.
+    """
+
+    tactics: str
+    speed_hops: int
+    traversal: str
+
+
+@dataclass
+class TacticsInputs:
+    """What the NPC tactics ladder reads for one round, batch-fetched once (#4609).
+
+    Part of ``NpcRoundContext``. ``prior_move_kinds`` maps an opponent to its move kind
+    by round for the rounds just before this one (the waiting cap). ``aimed_at`` maps an
+    opponent to the hostiles whose action this round is aimed at it (PC declarations and
+    opponents' attack rows): who is hitting it, the unanswerable-attacker test's input.
+    ``grounding_entry_ids`` are the threat entries whose on-hit pool grounds a flier.
+    ``ally_entries_by_pool`` covers every active opponent's pool, for the bash test's
+    group chip; ``wall_chips`` memoizes that chip per wall for the round.
+    """
+
+    config: NpcTacticsConfig
+    prior_move_kinds: dict[int, dict[int, str]]
+    aimed_at: dict[int, list[CombatParticipant | CombatOpponent]]
+    grounding_entry_ids: set[int]
+    ally_entries_by_pool: dict[int, list[ThreatPoolEntry]]
+    wall_chips: dict[int, int] = field(default_factory=dict)
+
+
+@dataclass
+class SlotMoveResult:
+    """What an opponent's move plan did in its resolution slot (#4609).
+
+    Each flag is one of the progress guarantee's observable results. ``stopped`` is True
+    when a waiting strike stopped the mover. ``attack_rows`` are attacks the move itself
+    made (an opponent whose wall fell before it could bash strikes instead).
+    """
+
+    moved: bool = False
+    bashed: bool = False
+    fled: bool = False
+    waited: bool = False
+    stopped: bool = False
+    attack_rows: list[CombatOpponentAction] = field(default_factory=list)
+
+    @property
+    def progressed(self) -> bool:
+        return self.moved or self.bashed or self.fled or self.waited
