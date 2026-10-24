@@ -1,6 +1,6 @@
 """Staff Almanach de Catenys actions (#3983): the feudal ladder + house record.
 
-Ten REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
+Eleven REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
 by ``StaffOnlyPrerequisite`` — the shared ``action.run()`` seam a future web
 staff console and telnet alike will dispatch through, mirroring the shape of
 the world-builder canvas (``world_builder.py``). Each is a thin wrapper over
@@ -205,6 +205,47 @@ class AlmanachNameRungAction(_AlmanachAction):
             success=True,
             message=f"{title.name} named.",
             data={"title_id": title.pk},
+        )
+
+
+@dataclass
+class AlmanachAssignHolderAction(_AlmanachAction):
+    """Seat an existing house on a rung. Kwargs: ``title_id``, ``org_id``.
+
+    Wraps ``almanach.assign_holder``: the house takes the rung's whole chain, swears
+    to its nearest liege, and vassals beneath that now owe it fealty are re-homed.
+    Works on a vacant rung and on one already held (the rung changes hands).
+    """
+
+    key: str = "almanach_assign_holder"
+    name: str = "Assign Holder"
+    icon: str = "crown"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import assign_holder  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        title = Title.objects.filter(pk=kwargs.get("title_id")).first()
+        if title is None:
+            return ActionResult(success=False, message="No such title.")
+        org = Organization.objects.filter(pk=kwargs.get("org_id")).first()
+        if org is None:
+            return ActionResult(success=False, message=_NO_SUCH_HOUSE)
+        try:
+            title = assign_holder(title, org)
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"{org.name} holds {title.name or 'the rung'}.",
+            data={"title_id": title.pk, "org_id": org.pk},
         )
 
 

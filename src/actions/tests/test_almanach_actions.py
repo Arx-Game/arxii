@@ -13,6 +13,7 @@ from evennia.objects.models import ObjectDB
 
 from actions.definitions.almanach import (
     AlmanachAddHoldingAction,
+    AlmanachAssignHolderAction,
     AlmanachBatchUnclaimedAction,
     AlmanachDescribeDemesneAction,
     AlmanachEditHouseAction,
@@ -182,6 +183,61 @@ class AlmanachActionTests(TestCase):
             "Seawatch",
         }
         assert doc.lands["seat"] == "Perdition"
+
+    def test_assign_holder_seats_an_existing_house_on_a_vacant_rung(self) -> None:
+        rung = plant_rung(
+            realm=self.realm, tier=TitleTier.DUCHY, name="Fervor", parent_title=self.kingdom
+        )
+        assert rung.house_id is None
+        house = OrganizationFactory(name="Katta", family=FamilyFactory(name="Katta"))
+
+        result = AlmanachAssignHolderAction().run(self.staff, title_id=rung.pk, org_id=house.pk)
+
+        assert result.success, result.message
+        rung.refresh_from_db()
+        assert rung.house_id == house.pk
+        assert not rung.is_claimable
+
+    def test_assign_holder_hands_a_held_rung_to_another_house(self) -> None:
+        first = OrganizationFactory(name="Vampa", family=FamilyFactory(name="Vampa"))
+        second = OrganizationFactory(name="Katta", family=FamilyFactory(name="Katta"))
+        rung = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.DUCHY,
+            name="Fervor",
+            parent_title=self.kingdom,
+            held_by=first,
+        )
+
+        result = AlmanachAssignHolderAction().run(self.staff, title_id=rung.pk, org_id=second.pk)
+
+        assert result.success, result.message
+        rung.refresh_from_db()
+        assert rung.house_id == second.pk
+
+    def test_assign_holder_refuses_an_unknown_title_or_house(self) -> None:
+        house = OrganizationFactory(name="Katta", family=FamilyFactory(name="Katta"))
+        no_title = AlmanachAssignHolderAction().run(self.staff, title_id=0, org_id=house.pk)
+        assert not no_title.success
+        no_house = AlmanachAssignHolderAction().run(self.staff, title_id=self.kingdom.pk, org_id=0)
+        assert not no_house.success
+
+    def test_assign_holder_refuses_a_title_inside_a_higher_titles_chain(self) -> None:
+        house = OrganizationFactory(name="Katta", family=FamilyFactory(name="Katta"))
+        inner = Title.objects.filter(seat_domain=self.kingdom.seat_domain).exclude(
+            pk=self.kingdom.pk
+        )
+        member = inner.first()
+        assert member is not None
+        result = AlmanachAssignHolderAction().run(self.staff, title_id=member.pk, org_id=house.pk)
+        assert not result.success
+
+    def test_player_is_refused_assign_holder(self) -> None:
+        house = OrganizationFactory(name="Katta", family=FamilyFactory(name="Katta"))
+        result = AlmanachAssignHolderAction().run(
+            self.player, title_id=self.kingdom.pk, org_id=house.pk
+        )
+        assert not result.success
 
     def test_plant_rung_refuses_parent_title_with_no_seat_domain(self) -> None:
         orphan = Title.objects.create(name="Orphan", tier=TitleTier.BARONY, realm=self.realm)
