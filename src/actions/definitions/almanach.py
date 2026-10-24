@@ -1,6 +1,6 @@
 """Staff Almanach de Catenys actions (#3983): the feudal ladder + house record.
 
-Fourteen REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
+Seventeen REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
 by ``StaffOnlyPrerequisite`` — the shared ``action.run()`` seam a future web
 staff console and telnet alike will dispatch through, mirroring the shape of
 the world-builder canvas (``world_builder.py``). Each is a thin wrapper over
