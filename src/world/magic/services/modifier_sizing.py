@@ -92,6 +92,7 @@ def _technique_effect_count(technique: Technique) -> int:
         + len(technique.cached_capability_grants)
         + len(technique.cached_removed_conditions)
         + len(technique.cached_treatments)
+        + (1 if technique.cached_morale_effect is not None else 0)
     )
 
 

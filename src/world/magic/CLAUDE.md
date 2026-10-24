@@ -142,6 +142,7 @@ The magic system for Arx II. Power flows from identity and connection.
   `discard_draft`. No JSON; every field is a proper column.
 - `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` / `TechniqueDraftAppliedCondition`
   — payload child rows for `TechniqueDraft`; inherit the abstract bases above.
+- `TechniqueMoraleEffect` / `TechniqueDraftMoraleEffect` - one-to-one morale payload row (#4619). Enemy-only: it makes the technique hostile and enemy-aimed, and combat skips allies and charmed enemies. Writers call `invalidate_technique_payload_caches`.
 - `TechniqueRemovedCondition` / `TechniqueDraftRemovedCondition` — dispel/cleanse payload rows
   (#1585). Subclass of `AbstractAppliedCondition` (sibling to `TechniqueAppliedCondition`); adds
   `remove_all_stacks` (bool, default True). The inherited severity/duration/stack knobs are inert
@@ -182,7 +183,8 @@ rows. Key service functions:
 - `add_draft_capability_grant` / `add_draft_damage_profile` / `add_draft_applied_condition`
   and their `remove_*` counterparts — payload row management.
 - `draft_to_design(draft) -> TechniqueDesignInput` — validates completeness and converts to the
-  design input type; raises `TechniqueDraftIncomplete` on missing required fields.
+  design input type; raises `TechniqueDraftIncomplete` on missing required fields, and its
+  subclass `TechniqueDraftMoraleRemovesNothing` for a morale row that removes no morale (#4619).
 
 `validate_design_for_character(design, policy, character)` in `services/technique_builder.py` is
 the shared player-facing gift-ownership gate — the single source of truth for the gate. Call it
@@ -190,7 +192,7 @@ after `draft_to_design` when finalising from telnet or web. Raises
 `GiftNotOwned` if the character doesn't own the design's gift.
 
 Draft-specific exceptions (in `exceptions.py`): `NoActiveTechniqueDraft`,
-`TechniqueDraftIncomplete`, `UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
+`TechniqueDraftIncomplete` (+ `TechniqueDraftMoraleRemovesNothing`), `UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
 
 **Action seam** — `AuthorTechniqueAction` (`actions/definitions/technique_authoring.py`,
 key `"author_technique"`, category `"magic"`) is the single commit seam that both the web view

@@ -309,14 +309,15 @@ so that web case calls `author_staff_technique()` directly.)
 - `add_draft_capability_grant` / `add_draft_damage_profile` / `add_draft_applied_condition`
   and `remove_*` counterparts — payload row management.
 - `draft_to_design(draft) -> TechniqueDesignInput` — validates completeness; raises
-  `TechniqueDraftIncomplete` on missing required fields.
+  `TechniqueDraftIncomplete` on missing required fields, and its subclass
+  `TechniqueDraftMoraleRemovesNothing` when the draft's morale row removes no morale (#4619).
 
 **Shared validation gate** (`services/technique_builder.py`):
 - `validate_design_for_character(design, policy, character)` — gift-ownership check; the single
   source of truth for the gate (telnet + web call it); raises `GiftNotOwned`.
 
 **Exceptions** (in `exceptions.py`): `NoActiveTechniqueDraft`, `TechniqueDraftIncomplete`,
-`UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
+`TechniqueDraftMoraleRemovesNothing`, `UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
 
 **Telnet workbench** — `CmdTechnique` (`commands/technique.py`, key `"technique"`,
 `cmd:perm(Builder)` — staff/GM only). Subcommands: `draft`, `show`, `set`, `restrict`,
@@ -1109,7 +1110,7 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 
 | Function | Purpose |
 |----------|---------|
-| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any applied, removed or **treatment** row has `target_kind=ALLY`; ENEMY if a treatment row targets an enemy (stabilising a downed foe is aimed at an adversary without being hostile); else SELF. Treatments joined in #3682 — a technique whose only payload was an ALLY treatment derived SELF, and the SELF branch of `_check_relationship` then refused to let the authored heal name its ally. Reads the technique's `cached_*` payload lists rather than its own `.filter().exists()` queries (#2898). Exactly one relationship comes back, so a technique whose payload rows disagree gets a guess — see `technique_relationship_is_ambiguous` below. |
+| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile (damage, an ENEMY condition or removal, or a morale row, #4619; it only lands on opposing combatants); ALLY if any applied, removed or **treatment** row has `target_kind=ALLY`; ENEMY if a treatment row targets an enemy (stabilising a downed foe is aimed at an adversary without being hostile); else SELF. Treatments joined in #3682 - a technique whose only payload was an ALLY treatment derived SELF, and the SELF branch of `_check_relationship` then refused to let the authored heal name its ally. Reads the technique's `cached_*` payload lists rather than its own `.filter().exists()` queries (#2898). Exactly one relationship comes back, so a technique whose payload rows disagree gets a guess - see `technique_relationship_is_ambiguous` below. |
 | `technique_alters_behavior(technique) -> bool` | True if any applied condition's `category.alters_behavior` is True |
 | `cast_requires_consent(technique) -> bool` | True iff `technique_alters_behavior` — **behavior only**, not blanket benign |
 | `validate_cast_target(*, technique, initiator_persona, target_personas)` | Raises `InvalidCastTarget` on cardinality or relationship violations |
@@ -1216,7 +1217,7 @@ differentiation lives, since the authored catalog is near-uniform on `level`,
 (`world/magic/services/technique_effects.py`; wire shapes in
 `world/magic/types/technique_effects.py`). It reads `cached_capability_grants` /
 `cached_condition_applications` / `cached_damage_profiles` / `cached_removed_conditions` /
-`cached_treatments` (the fifth joined in #3682 — see below)
+`cached_treatments` (the fifth joined in #3682 - see below) and `cached_morale_effect` (#4619)
 and **composes the two derivations that already existed** — `is_technique_hostile`
 (`services/hostility.py`) and `derive_target_relationship` (`services/targeting.py`) —
 rather than restating them. No model field is added: `Technique.target_type`'s own help
@@ -3519,6 +3520,58 @@ power_intensity)` — strictly before `mend_wound()`, whose never-to-full fracti
 field's default 0 (every pre-#3391 row), the added term is exactly 0 — byte-identical to
 before. Dispel's sibling power leg is `TechniqueRemovedCondition.cure_power_multiplier` — see
 "Dispel / Cleanse" in `world/magic/CLAUDE.md`.
+
+### Technique morale effect (#4619, ADR-4619-A) [BUILT & WIRED]
+
+A technique can shake the morale of the enemies it lands on, by its own authored amount.
+
+**Model:** `TechniqueMoraleEffect` (`models/techniques.py`) is a one-to-one payload row on
+`Technique` (`related_name="morale_effect"`, read through `Technique.cached_morale_effect`).
+Its columns live on `AbstractMoraleEffect`, shared with the draft copy
+`TechniqueDraftMoraleEffect`: `minimum_success_level`, `base_morale`,
+`morale_intensity_multiplier` and `morale_per_extra_sl`. `clean()` refuses a row whose three
+amounts are all zero. There is no prose on the row.
+
+**Formula:** `AbstractMoraleEffect.compute_morale(effective_power, success_level)` scales the
+way a damage profile does (`_scale_by_power_and_sl`): the base, plus the power multiplier
+times the cast's effective power (rounded down), plus the per-extra-level step for each
+success level above the minimum. A cast below `minimum_success_level` shakes nobody.
+
+**Who is shaken:** enemies only. `CombatTechniqueResolver._apply_morale` runs after damage
+and conditions, reads the cast's existing check result (no new roll), and skips an opponent
+that is not active, is not an `ENEMY` by `CombatOpponent.allegiance`, or is charmed
+(effective allegiance `ALLY_OF_CASTER`). A mindless tier takes the `SpectacleConfig`
+`mindless_percent` share (`combat.morale.mindless_share`; an amount of 0 stays 0, a positive
+amount never rounds to 0). A ward bounce returns before this step, so a bounced cast shakes
+nobody. The resolution carries the result as `CombatTechniqueResolution.morale_shifts`
+(one `SpectacleShift` per opponent whose morale state changed).
+
+**Enemy-only targeting:** a morale row makes a technique hostile (`is_technique_hostile`),
+counts as specified (`technique_is_underspecified`), and derives an ENEMY relationship
+(`derive_target_relationship`, `technique_relationship_is_ambiguous`), so a morale-only
+technique is aimed at an opponent. The effect sentence adds "Shakes morale."
+
+**Authoring:** the Technique admin has a `TechniqueMoraleEffectInline` (one row at most).
+The builder takes `MoraleEffectSpec` on `TechniqueDesignInput.morale_effect`, priced per point like
+damage: `payload_base_cost + (base_morale + morale_intensity_multiplier * intensity) *
+damage_unit_cost` on the "Morale effect" line (no new budget column);
+`build_technique` writes the row before the payload caches are cleared. The draft workbench
+carries `TechniqueDraftMoraleEffect` through `set_draft_morale_effect` /
+`clear_draft_morale_effect` and `draft_to_design`.
+
+**Power valuation:** `_morale_valuation` (`services/technique_power_eval.py`) values the row
+as an ESTIMATE: the expected morale over the matchup bands, capped at one break (the distance
+from the default 70 to the break threshold 25, 45 points), as that share of one opponent's
+round of reference incoming damage. It is a control-kind payload valuation. Both this
+formula and the builder price (per point, like damage) are tuning values.
+
+**Cache:** writers of the row call `invalidate_technique_payload_caches`; the prefetch is in
+`technique_payload_prefetches` and `_PAYLOAD_CACHE_ATTRS`.
+
+**Known gaps:** no narrated line for a technique's morale shift (players see only the
+opponent's state chip); no vow added effect can carry morale.
+
+Proven by `src/integration_tests/test_shaking_morale_journeys.py`.
 
 ### Vow added effects: the payload seams (#4581, ADR-4581-A) [BUILT & WIRED]
 

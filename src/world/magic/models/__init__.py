@@ -215,6 +215,7 @@ from world.magic.models.technique_draft import (
     TechniqueDraftAppliedCondition,
     TechniqueDraftCapabilityGrant,
     TechniqueDraftDamageProfile,
+    TechniqueDraftMoraleEffect,
     TechniqueDraftRemovedCondition,
     TechniqueDraftTreatment,
 )
@@ -239,6 +240,7 @@ from world.magic.models.techniques import (
     TechniqueDamageProfile,
     TechniqueFunctionTag,
     TechniqueFunctionTagManager,
+    TechniqueMoraleEffect,
     TechniqueOutcomeModifier,
     TechniqueRemovedCondition,
     TechniqueStyle,
@@ -468,6 +470,7 @@ __all__ = [
     "TechniqueDraftAppliedCondition",
     "TechniqueDraftCapabilityGrant",
     "TechniqueDraftDamageProfile",
+    "TechniqueDraftMoraleEffect",
     "TechniqueDraftRemovedCondition",
     "TechniqueDraftTreatment",
     # fine-grained technique function tags (#2443)
@@ -475,6 +478,7 @@ __all__ = [
     "TechniqueFunctionTagManager",
     "TechniqueGrant",
     "TechniqueManifestOption",
+    "TechniqueMoraleEffect",
     "TechniqueOutcomeModifier",
     "TechniqueProgress",
     "TechniqueProgressWeekly",

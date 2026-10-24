@@ -474,6 +474,13 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `world/companions/tests/test_combat_bridge_e2e.py`, and
   `world/companions/tests/test_deployment.py`.
 
+- **Players can mark a target (#4603, first half of Part E of #4573):** `combat mark <opp>` and
+  the web opponent menu's "Mark" lay a `CombatMark` for the round without using the round's
+  action; every reader of the encounter sees "Marked by `<name>`" on the opponent, and a
+  covenant-mate's vow perk that reads `TARGET_IS_MARKED_BY_ALLY` now applies to rolls against
+  it. Proven by `src/integration_tests/test_leading_the_fight_journeys.py`. **Known gaps:** no
+  technique places a mark (out of scope by spec); a technique's own morale effect is #4619.
+
 - **Conditions that react when someone is struck (#4584, ADR-4584-A):** a condition can now
   be a provoke (`forces_attack_on_source`: the NPC attacks only the condition's source, from the
   round after it lands, an engagement lock wins), a standing guard (`source_guards_bearer`: the
@@ -490,6 +497,19 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   and provoke read PC bearers/wards and NPC attackers only (no strike-back ward on an NPC or
   summon, no standing guard of an ALLY summon); staff author strike-back as a plain condition,
   there is no seeded strike-back content to load.
+
+- **A technique shakes enemy morale by its own amount (#4619, ADR-4619-A; slice 5 of #4573,
+  the mark half is #4603):** a technique can carry one morale row (`TechniqueMoraleEffect`:
+  a base, a share of the cast's power, a step per extra success level, and a minimum success
+  level). After the cast's damage and conditions, each enemy it resolves on loses that much
+  morale; allies, summons on the party's side, charmed enemies, fled and defeated opponents
+  are skipped, a mindless tier takes its configured share, and a cast a ward bounces shakes
+  nobody. A broken enemy flees on the next round. Staff author it inline on the Technique
+  admin page; the builder and draft workbench carry it, and a morale-only technique is
+  aimed at an enemy. Proven by `src/integration_tests/test_shaking_morale_journeys.py`.
+  **Known gaps:** no narrated line for a technique's morale shift (players see only the
+  opponent's state chip); no vow added effect can carry morale; the power valuation formula
+  and the builder price (per point, like damage) are estimates awaiting tuning.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 

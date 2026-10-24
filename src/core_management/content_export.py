@@ -250,6 +250,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.techniquecapabilityrequirement",
         "magic.techniquedamageprofile",
         "magic.techniquefunctiontag",
+        "magic.techniquemoraleeffect",
         "magic.techniqueoutcomemodifier",
         "magic.techniqueremovedcondition",
         "magic.techniquestyle",

@@ -10,6 +10,7 @@ instead of a Technique FK:
 - TechniqueDraftCapabilityGrant  (inherits AbstractCapabilityGrant)
 - TechniqueDraftDamageProfile    (inherits AbstractDamageProfile)
 - TechniqueDraftAppliedCondition (inherits AbstractAppliedCondition)
+- TechniqueDraftMoraleEffect     (inherits AbstractMoraleEffect)
 """
 
 from django.db import models
@@ -22,6 +23,7 @@ from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractCapabilityGrant,
     AbstractDamageProfile,
+    AbstractMoraleEffect,
     ConditionTargetKind,
 )
 from world.vitals.constants import NEVER_TO_FULL_FRACTION
@@ -258,3 +260,25 @@ class TechniqueDraftTreatment(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.draft} → treats {self.treatment_template.name} ({self.target_kind})"
+
+
+class TechniqueDraftMoraleEffect(AbstractMoraleEffect):
+    """The morale payload row of a TechniqueDraft (#4619).
+
+    Mirrors ``TechniqueMoraleEffect`` for the draft workbench. A draft may be
+    incomplete, so the row itself has no "removes no morale" rule; ``draft_to_design``
+    refuses a row that removes none with ``TechniqueDraftMoraleRemovesNothing``.
+    """
+
+    draft = models.OneToOneField(
+        TechniqueDraft,
+        on_delete=models.CASCADE,
+        related_name="morale_effect",
+    )
+
+    class Meta:
+        verbose_name = "Technique Draft Morale Effect"
+        verbose_name_plural = "Technique Draft Morale Effects"
+
+    def __str__(self) -> str:
+        return f"{self.draft} -> shakes {self.base_morale} morale"

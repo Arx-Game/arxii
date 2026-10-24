@@ -53,7 +53,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { CombatantsList } from '../sections/CombatantsList';
-import type { EncounterDetail, Participant, Opponent } from '../types';
+import type { CombatMark, EncounterDetail, Participant, Opponent } from '../types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -161,6 +161,7 @@ function makeEncounter(
     current_round_actions: [],
     clashes: [],
     engagement_locks: [],
+    marks: [],
     pending_attacks: [],
     created_at: '2026-01-01T00:00:00Z',
     outcome: '',
@@ -546,6 +547,7 @@ describe('CombatantsList', () => {
       ['combat_taunt', 'Taunt'],
       ['combat_demoralize', 'Demoralize'],
       ['combat_parley', 'Parley'],
+      ['combat_mark', 'Mark'],
     ] as const)('%s dispatches with the opponent_id kwarg', async (registryKey, label) => {
       const user = userEvent.setup();
       const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
@@ -732,6 +734,121 @@ describe('CombatantsList', () => {
     expect(within(row).queryByTestId('engagement-lock-badge')).not.toBeInTheDocument();
     const pcRow = screen.getByTestId('participant-row-1');
     expect(within(pcRow).queryByTestId('engagement-lock-badge')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mark badge (#4603)
+// ---------------------------------------------------------------------------
+
+describe('mark badge (#4603)', () => {
+  const mira = makeParticipant({ id: 1, character_name: 'Mira' });
+  const tomas = makeParticipant({ id: 2, character_name: 'Tomas' });
+  const captain = makeOpponent({ id: 10, name: 'Captain' });
+  const sergeant = makeOpponent({ id: 11, name: 'Sergeant' });
+
+  function withMarks(
+    participants: Participant[],
+    opponents: Opponent[],
+    marks: CombatMark[]
+  ): EncounterDetail {
+    return { ...makeEncounter(participants, opponents), marks };
+  }
+
+  it('shows "Marked by <name>" on the marked opponent row', () => {
+    const encounter = withMarks(
+      [mira],
+      [captain, sergeant],
+      [{ id: 5, participant_id: 1, opponent_id: 10, round_number: 1 }]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(
+      within(screen.getByTestId('opponent-row-10')).getByTestId('mark-badge')
+    ).toHaveTextContent('Marked by Mira');
+    expect(
+      within(screen.getByTestId('opponent-row-11')).queryByTestId('mark-badge')
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows one badge per marker', () => {
+    const encounter = withMarks(
+      [mira, tomas],
+      [captain],
+      [
+        { id: 5, participant_id: 1, opponent_id: 10, round_number: 1 },
+        { id: 6, participant_id: 2, opponent_id: 10, round_number: 1 },
+      ]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const badges = within(screen.getByTestId('opponent-row-10')).getAllByTestId('mark-badge');
+    expect(badges.map((b) => b.textContent)).toEqual(['Marked by Mira', 'Marked by Tomas']);
+    // The badges sit in their own wrapping row, not beside the name.
+    const container = within(screen.getByTestId('opponent-row-10')).getByTestId('mark-badges');
+    expect(container).toContainElement(badges[0]);
+  });
+
+  it('shows the badge to a GM who has no menu', () => {
+    const encounter = withMarks(
+      [mira],
+      [captain],
+      [{ id: 5, participant_id: 1, opponent_id: 10, round_number: 1 }]
+    );
+
+    render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={false} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByTestId('mark-badge')).toHaveTextContent('Marked by Mira');
+    expect(screen.queryByTestId('opponent-menu-trigger-10')).not.toBeInTheDocument();
+  });
+
+  it('moves the badge when the mark moves', () => {
+    const first = withMarks(
+      [mira],
+      [captain, sergeant],
+      [{ id: 5, participant_id: 1, opponent_id: 10, round_number: 1 }]
+    );
+    const moved = withMarks(
+      [mira],
+      [captain, sergeant],
+      [{ id: 5, participant_id: 1, opponent_id: 11, round_number: 1 }]
+    );
+
+    const { rerender } = render(<CombatantsList encounter={first} />, {
+      wrapper: createWrapper(),
+    });
+    rerender(<CombatantsList encounter={moved} />);
+
+    expect(
+      within(screen.getByTestId('opponent-row-10')).queryByTestId('mark-badge')
+    ).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('opponent-row-11')).getAllByTestId('mark-badge')).toHaveLength(
+      1
+    );
+  });
+
+  it('renders no badge for a marker it cannot name', () => {
+    const encounter = withMarks(
+      [mira],
+      [captain],
+      [{ id: 5, participant_id: 99, opponent_id: 10, round_number: 1 }]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('mark-badge')).toBeNull();
+  });
+
+  it('renders no badge when the payload has no marks field', () => {
+    const { marks: _marks, ...withoutMarks } = makeEncounter([mira], [captain]);
+
+    render(<CombatantsList encounter={withoutMarks} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('mark-badge')).toBeNull();
   });
 });
 

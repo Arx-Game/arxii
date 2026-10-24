@@ -135,6 +135,7 @@ class CmdCombatRoutingTests(TestCase):
         with (
             patch.object(cmd, "_combat_participant_or_none", return_value=participant),
             patch.object(cmd, "_render_resource_state", return_value=[]),
+            patch.object(cmd, "_render_mark_lines", return_value=[]),
             patch("world.combat.models.CombatRoundAction.objects") as actions,
             patch.object(cmd, "_pending_windups", return_value=[pending]),
         ):

@@ -16,12 +16,17 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from world.magic.exceptions import NoActiveTechniqueDraft, TechniqueDraftIncomplete
+from world.magic.exceptions import (
+    NoActiveTechniqueDraft,
+    TechniqueDraftIncomplete,
+    TechniqueDraftMoraleRemovesNothing,
+)
 from world.magic.models import (
     TechniqueDraft,
     TechniqueDraftAppliedCondition,
     TechniqueDraftCapabilityGrant,
     TechniqueDraftDamageProfile,
+    TechniqueDraftMoraleEffect,
     TechniqueDraftRemovedCondition,
     TechniqueDraftTreatment,
 )
@@ -30,6 +35,7 @@ from world.magic.types.technique_builder import (
     AppliedConditionSpec,
     CapabilityGrantSpec,
     DamageProfileSpec,
+    MoraleEffectSpec,
     RemovedConditionSpec,
     TechniqueDesignInput,
     TreatmentSpec,
@@ -238,6 +244,32 @@ def remove_draft_treatment(row_id: int) -> None:
     TechniqueDraftTreatment.objects.filter(pk=row_id).delete()
 
 
+def set_draft_morale_effect(
+    draft: TechniqueDraft,
+    *,
+    base_morale: int,
+    morale_intensity_multiplier: Decimal = Decimal(0),
+    morale_per_extra_sl: int = 0,
+    minimum_success_level: int = 1,
+) -> TechniqueDraftMoraleEffect:
+    """Set the draft's one morale row (#4619), replacing any earlier one."""
+    row, _created = TechniqueDraftMoraleEffect.objects.update_or_create(
+        draft=draft,
+        defaults={
+            "base_morale": base_morale,
+            "morale_intensity_multiplier": morale_intensity_multiplier,
+            "morale_per_extra_sl": morale_per_extra_sl,
+            "minimum_success_level": minimum_success_level,
+        },
+    )
+    return row
+
+
+def clear_draft_morale_effect(draft: TechniqueDraft) -> None:
+    """Remove the draft's morale row, if it has one (#4619)."""
+    TechniqueDraftMoraleEffect.objects.filter(draft=draft).delete()
+
+
 # =============================================================================
 # draft → design conversion
 # =============================================================================
@@ -252,6 +284,8 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
     Raises:
         TechniqueDraftIncomplete: when one or more required knobs are unset,
             listing every missing field name in ``exc.missing_fields``.
+        TechniqueDraftMoraleRemovesNothing: when the draft's morale row removes no
+            morale (a ``TechniqueDraftIncomplete``).
     """
     missing: list[str] = []
     if not draft.name:
@@ -268,6 +302,20 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
         raise TechniqueDraftIncomplete(missing)
 
     level = get_technique_tier_budget(draft.tier).representative_level  # type: ignore[arg-type]
+
+    morale_row = TechniqueDraftMoraleEffect.objects.filter(draft=draft).first()
+    if morale_row is not None and not morale_row.removes_morale:
+        raise TechniqueDraftMoraleRemovesNothing
+    morale_effect = (
+        MoraleEffectSpec(
+            minimum_success_level=morale_row.minimum_success_level,
+            base_morale=morale_row.base_morale,
+            morale_intensity_multiplier=float(morale_row.morale_intensity_multiplier),
+            morale_per_extra_sl=morale_row.morale_per_extra_sl,
+        )
+        if morale_row is not None
+        else None
+    )
 
     return TechniqueDesignInput(
         name=draft.name,
@@ -326,5 +374,6 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
             )
             for row in draft.treatments.all()
         ),
+        morale_effect=morale_effect,
         consequence_pool_id=draft.consequence_pool_id,
     )

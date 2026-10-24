@@ -590,6 +590,21 @@ class TechniqueDraftIncomplete(MagicError):
         super().__init__(msg)
 
 
+class TechniqueDraftMoraleRemovesNothing(TechniqueDraftIncomplete):
+    """Raised at draft_to_design time when the draft's morale row removes no morale (#4619).
+
+    A subclass of ``TechniqueDraftIncomplete`` so every surface that already refuses an
+    incomplete draft (the telnet workbench, ``AuthorTechniqueAction``) refuses this too.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(["morale amount"])
+        self.user_message = (
+            "The draft's morale effect removes no morale. Set a base amount, a power "
+            "multiplier or an amount per extra success level."
+        )
+
+
 class UnknownTechniqueVocab(MagicError):
     user_message = "Unknown technique vocabulary term (gift, style, effect type, or restriction)."
 

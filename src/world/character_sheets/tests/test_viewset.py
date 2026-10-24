@@ -2789,11 +2789,11 @@ class TestCharacterSheetQueryCount(TestCase):
                 select_related onto the catalog tag)
          32.   origin_slots prefetch (#2478 — origin-story slot answers for
                 the guided-flow "finish your origin story" affordance)
-        33-37. technique payload prefetches (#2898, #3682 — applied conditions,
-                removed conditions, damage profiles, capability grants and
-                treatments, each landing on the cached_property name the effect
-                summary reads). Five fixed queries for the whole spellbook, not
-                five per technique: the alternative was showing the player a
+        33-37. technique payload prefetches (#2898, #3682, #4619 — applied
+                conditions, removed conditions, damage profiles, capability grants,
+                treatments and the morale row, each landing on the cached_property name the effect
+                summary reads). Six fixed queries for the whole spellbook, not
+                six per technique: the alternative was showing the player a
                 technique list that says nothing about what any of the techniques
                 do. Treatments joined in #3682 — without the prefetch the summary
                 would fall back to the cached_property and pay one query per
@@ -2880,7 +2880,11 @@ class TestCharacterSheetQueryCount(TestCase):
         # ultimates, so AudereThreshold.cached_singleton() is never reached (the
         # sub-builder skips it entirely when the list comes back empty) -- the
         # honest cost here is +1, not +2.
-        with self.assertNumQueries(56):
+        # +1 (#4619): the technique payload prefetches gained the morale row
+        # (TechniqueMoraleEffect), one fixed query for the whole spellbook, folded into
+        # 33-37 above. Prefetched without a to_attr so Django's nested-prefetch re-walk
+        # finds it in the one-to-one cache instead of querying once per technique.
+        with self.assertNumQueries(57):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
