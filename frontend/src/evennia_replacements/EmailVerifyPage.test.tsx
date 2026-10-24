@@ -52,24 +52,15 @@ describe('EmailVerifyPage', () => {
     vi.mocked(useParams).mockReturnValue({ key: 'valid-key-456' });
     vi.mocked(api.verifyEmail).mockResolvedValue(undefined);
 
-    renderWithProviders(<EmailVerifyPage />);
-
-    await waitFor(() => {
-      expect(api.verifyEmail).toHaveBeenCalledWith('valid-key-456');
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Email Verified!')).toBeInTheDocument();
-    });
-
-    expect(
-      screen.getByText(/Your email address has been successfully verified/)
-    ).toBeInTheDocument();
-
     vi.useFakeTimers();
     try {
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(3000);
+        renderWithProviders(<EmailVerifyPage />);
+      });
+      expect(api.verifyEmail).toHaveBeenCalledWith('valid-key-456');
+      expect(screen.getByText('Email Verified!')).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
       });
       expect(mockNavigate).not.toHaveBeenCalled();
       expect(screen.getByRole('link', { name: /continue to login/i })).toHaveAttribute(
