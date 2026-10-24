@@ -26,11 +26,13 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const describe = useAlmanachMutation('almanach_describe_demesne');
   const nameRung = useAlmanachMutation('almanach_name_rung');
   const assignHolder = useAlmanachMutation('almanach_assign_holder');
+  const vacateHolder = useAlmanachMutation('almanach_vacate_holder');
   const { data: housesPayload } = useAllHouses();
   const addHolding = useAlmanachMutation('almanach_add_holding');
   const { data: holdingKinds } = useHoldingKinds();
   const [rungName, setRungName] = useState('');
   const [seatHouseId, setSeatHouseId] = useState('');
+  const [confirmVacate, setConfirmVacate] = useState(false);
   const [description, setDescription] = useState('');
   const [holdingKindId, setHoldingKindId] = useState<number | null>(null);
   const [holdingName, setHoldingName] = useState('');
@@ -216,6 +218,39 @@ export function TitlePage({ titleId }: { titleId: number }) {
               >
                 Seat
               </button>
+            </div>
+          )}
+          {title.chain_top_id === title.title_id && title.house_id != null && (
+            <div className="field">
+              {confirmVacate ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn sm quiet"
+                    onClick={() => {
+                      vacateHolder.mutate({ title_id: titleId });
+                      setConfirmVacate(false);
+                    }}
+                  >
+                    Confirm vacate {title.held_by}
+                  </button>{' '}
+                  <button
+                    type="button"
+                    className="btn sm ghost"
+                    onClick={() => setConfirmVacate(false)}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn sm quiet"
+                  onClick={() => setConfirmVacate(true)}
+                >
+                  Vacate
+                </button>
+              )}
             </div>
           )}
           {createFamily && (

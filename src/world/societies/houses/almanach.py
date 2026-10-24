@@ -55,6 +55,7 @@ from world.societies.houses.services import (
     acknowledge_into_family,
     liege_chain_of,
     recognize_birth,
+    release_fealty,
     swear_fealty,
     sync_house_channel,
 )
@@ -366,6 +367,65 @@ def assign_holder(title: Title, house: Organization) -> Title:
         swear_fealty(vassal=house, liege=liege)
     rehome_vassals(title)
     return title
+
+
+@transaction.atomic
+def vacate_holder(title: Title) -> Title:
+    """Unseat ``title``'s holder from the whole chain, the inverse of ``assign_holder``.
+
+    The chain's titles go back to unheld and claimable and its Domains lose their
+    owner. A house that was sworn to the old holder because its land lies beneath
+    this rung is re-sworn to the nearest remaining liege, or released when none is
+    left. The old holder's own oath upward stays: it is still a house. Raises when
+    ``title`` is already vacant or is only an internal member of its own chain.
+    """
+    family = _require_chain_top(title)
+    former = title.house
+    if former is None:
+        msg = f"title {title.pk} is already vacant"
+        raise HousesServiceError(msg, user_message="That title is already vacant.")
+    own_area = _rung_area(title)
+    family_areas = [_rung_area(t) for t in family]
+    for member in family:
+        member.house = None
+        member.is_claimable = True
+        member.save(update_fields=["house", "is_claimable"])
+    for area in family_areas:
+        domain = Domain.objects.get(pk=area.pk)
+        domain.owner_org = None
+        domain.save(update_fields=["owner_org"])
+    title.refresh_from_db()
+    _resettle_vassals_of(former, own_area)
+    return title
+
+
+def _resettle_vassals_of(former: Organization, own_area: Area) -> None:
+    """Re-swear the houses beneath ``own_area`` that answered to ``former`` (see
+    ``vacate_holder``): to their new nearest holder, or free when there is none."""
+    descendant_ids = [a.pk for a in _descendant_areas(own_area)]
+    if not descendant_ids:
+        return
+    candidate_org_ids = (
+        Domain.objects.filter(pk__in=descendant_ids, owner_org__isnull=False)
+        .exclude(owner_org=former)
+        .values_list("owner_org_id", flat=True)
+        .distinct()
+    )
+    for org_id in candidate_org_ids:
+        edge = FealtyEdge.objects.filter(vassal_id=org_id, liege=former).first()
+        if edge is None:
+            continue
+        beneath = list(
+            Title.objects.filter(house_id=org_id, seat_domain__area_id__in=descendant_ids)
+        )
+        if not beneath:
+            continue
+        family_top = _family_top(beneath)
+        new_liege = liege_for_title(family_top)
+        if new_liege is None:
+            release_fealty(edge)
+        elif new_liege.pk != former.pk:
+            swear_fealty(vassal=family_top.house, liege=new_liege)
 
 
 def _may_rehome_to(
