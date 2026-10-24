@@ -6,7 +6,10 @@ from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
-from world.checks.constants import OWN_STANDING_SOURCE_KINDS, ModifierSourceKind
+from world.checks.constants import (
+    OWN_STANDING_SOURCE_KINDS,
+    ROLL_COUNTED_SOURCE_KINDS,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -228,9 +231,9 @@ class ModifierBreakdown:
 
     ``total`` is the full recorded shift (what provenance and ``ConsequenceOutcome``
     store). ``extra_modifiers_total`` is the part a caller adds into
-    ``perform_check``'s ``extra_modifiers``: it leaves out CAPABILITY contributions,
-    because the roll path (``_compute_check_breakdown``) already adds the same points
-    itself. Feeding ``total`` into ``extra_modifiers`` counts capability twice (#4453).
+    ``perform_check``'s ``extra_modifiers``: it leaves out the kinds in
+    ``ROLL_COUNTED_SOURCE_KINDS``, because ``perform_check`` already counts them itself.
+    Feeding ``total`` into ``extra_modifiers`` counts those twice (#4453).
 
     ``tapers`` (#4594) maps a source kind to its ``TaperRule``. The contributions of a
     tapered kind form two piles, bonuses and penalties; each pile counts largest first,
@@ -299,7 +302,7 @@ class ModifierBreakdown:
                 (
                     c.counted
                     for c in self.counted()
-                    if c.contribution.source_kind != ModifierSourceKind.CAPABILITY
+                    if c.contribution.source_kind not in ROLL_COUNTED_SOURCE_KINDS
                 ),
                 Decimal(0),
             )

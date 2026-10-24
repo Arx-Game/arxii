@@ -241,12 +241,18 @@ def seed_social_check_content() -> None:
 def ensure_menace_target() -> None:
     """Look up the ``menace`` ModifierTarget — allure's fear-facing sibling (#2632).
 
-    Named by ApostateCD 2026-07-23. Clothing/cosmetics/distinctions grant it
-    exactly like allure (any recognized ModifierSource; facets ride the
-    equipment walk). Scoping it to the Intimidation CheckType
-    (``target_check_type`` OneToOne) makes character menace + equipment +
-    fashion flow into Intimidation checks through the existing #767/#512
-    check-contribution seam — no new code.
+    Named by ApostateCD 2026-07-23. Scoping it to the Intimidation CheckType
+    (``target_check_type`` OneToOne) lets menace reach Intimidation checks through
+    the existing #767/#512 check-contribution seam (``collect_check_modifiers``):
+    eager ``CharacterModifier`` rows (a distinction or any other recognized
+    ModifierSource), crafted per-piece modifiers on worn items, and the
+    perception-relative fashion bonus when the check has a scene.
+
+    Facets do NOT reach it: the equipment walk (``equipment_walk_total``: facet,
+    covenant-role and mantle bonuses) only runs for a target whose category is in
+    ``EQUIPMENT_RELEVANT_CATEGORIES``, and ``roll_modifier`` is not in that set.
+    A facet granting menace needs ``roll_modifier`` added there first (#4629
+    corrected this docstring, which said facets rode the walk).
 
     ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
     (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is

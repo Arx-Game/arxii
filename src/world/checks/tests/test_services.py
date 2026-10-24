@@ -953,12 +953,12 @@ class CapabilityCountedOnceTests(TestCase):
         assert bare.total_points == LEVEL_POINTS_PER_LEVEL - 10
         assert wrapped.total_points == LEVEL_POINTS_PER_LEVEL - 10
 
-    def test_wrapper_adds_only_non_capability_contributions(self):
+    def test_wrapper_adds_only_kinds_the_roll_does_not_count(self):
         self.sheet.rollmod = 3
         self.sheet.save(update_fields=["rollmod"])
         bare = perform_check(self.character, self.check_type)
         wrapped = perform_check_with_modifiers(self.character, self.check_type)
-        assert wrapped.total_points == bare.total_points + 3
+        assert wrapped.total_points == bare.total_points
 
     def test_breakdown_records_capability_but_does_not_feed_it(self):
         from world.checks.constants import ModifierSourceKind
@@ -972,4 +972,4 @@ class CapabilityCountedOnceTests(TestCase):
         ]
         assert [c.value for c in capability] == [10]
         assert breakdown.total == 13
-        assert breakdown.extra_modifiers_total == 3
+        assert breakdown.extra_modifiers_total == 0
