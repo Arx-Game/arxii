@@ -237,7 +237,7 @@ class CraftedModifierInChecksTests(TestCase):
         crafted_contribs = [
             c
             for c in breakdown.contributions
-            if c.source_kind == "equipment" and c.source_label == "Crafted modifiers"
+            if c.source_kind == "equipment" and c.source_label == f"Crafted: {item.display_name}"
         ]
         self.assertEqual(len(crafted_contribs), 1)
         self.assertEqual(crafted_contribs[0].value, 9)

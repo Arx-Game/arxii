@@ -6,7 +6,7 @@ import random
 from typing import TYPE_CHECKING, NamedTuple, cast
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import Q
+from django.db.models import Max, Q
 
 from world.checks.constants import (
     BOTCH_SUCCESS_LEVEL_MAX,
@@ -14,7 +14,7 @@ from world.checks.constants import (
     ModifierLane,
     ModifierSourceKind,
 )
-from world.checks.modifier_values import load_taper_rules
+from world.checks.modifier_values import load_taper_rules, load_value_table
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.slide import CheckRoll, CheckStanding, resolve_standing
 from world.checks.types import CheckResult, ModifierBreakdown, ModifierContribution
@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from world.checks.types import ExtraTraitTerm
     from world.covenants.models import VowSituationalPerk
     from world.covenants.perks.context import SituationContext
+    from world.items.models import ItemCheckModifier
     from world.mechanics.models import CharacterChallengeRecord
     from world.scenes.models import Interaction, Scene
     from world.skills.models import Specialization
@@ -1752,7 +1753,12 @@ def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror
         # help_text); an unflagged template only needs the equipped leg. .distinct()
         # still collapses multiple equipped/attuned instances of the same template
         # to one contribution.
-        item_mods = (
+        #
+        # #4628: the annotation runs over the same filtered instance join, so a row's
+        # ``item_level`` is the best quality-tier level among the instances that let it
+        # count (equipped, and attuned when required), never a carried spare's. The
+        # GROUP BY the aggregate adds is what used to be ``.distinct()``.
+        item_mods = list(
             ItemCheckModifier.objects.filter(
                 Q(
                     template__requires_attunement=False,
@@ -1766,16 +1772,9 @@ def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror
                 check_type=check_type,
             )
             .select_related("template")
-            .distinct()
+            .annotate(item_level=Max("template__instances__quality_tier__modifier_level"))
         )
-        contributions.extend(
-            ModifierContribution(
-                source_kind=ModifierSourceKind.EQUIPMENT,
-                source_label=f"Equipped: {mod.template.name}",
-                value=mod.modifier_value,
-            )
-            for mod in item_mods
-        )
+        contributions.extend(_equipment_check_contributions(item_mods))
 
     # --- CHARACTER + EQUIPMENT-WALK + FASHION contributions (#767, #512) ---
     # All keyed off the same scoped ModifierTarget (the check's reverse
@@ -1812,6 +1811,40 @@ def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror
     )
 
 
+def _equipment_check_contributions(
+    item_mods: "list[ItemCheckModifier]",
+) -> list[ModifierContribution]:
+    """EQUIPMENT contributions for a worn item's authored check modifiers (#4628).
+
+    Each row carries the ``item_level`` its query annotated: the quality-tier level of
+    the best worn instance of its template. A row with a size and a level reads the
+    check lane's value table (``ValueTable.signed_value``), signed like its flat value;
+    any other row keeps its flat value. Both kinds still taper with the EQUIPMENT pile.
+    Nothing about the wearer is read. The table loads only when a row is sized.
+    """
+    value_table = None
+    if any(mod.modifier_size is not None and mod.item_level is not None for mod in item_mods):
+        value_table = load_value_table(ModifierLane.CHECK)
+    contributions: list[ModifierContribution] = []
+    for mod in item_mods:
+        level = mod.item_level if mod.modifier_size is not None else None
+        sized = (
+            value_table.signed_value(mod.modifier_value, level, mod.modifier_size)
+            if value_table is not None
+            else None
+        )
+        contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.EQUIPMENT,
+                source_label=f"Equipped: {mod.template.name}",
+                value=mod.modifier_value if sized is None else sized,
+                level=level,
+                size=mod.modifier_size if level is not None else None,
+            )
+        )
+    return contributions
+
+
 def _character_and_equipment_contributions(
     character_sheet: "CharacterSheet",
     check_type: "CheckType",
@@ -1841,7 +1874,7 @@ def _character_and_equipment_contributions(
     # Mechanics' get_modifier_breakdown / ModifierBreakdown are distinct from
     # this module's checks ModifierBreakdown — import aliased.
     from world.mechanics.services import (  # noqa: PLC0415
-        equipment_walk_total,
+        equipment_walk_parts,
         fashion_outfit_bonus,
         get_modifier_breakdown as get_character_modifier_breakdown,
     )
@@ -1867,30 +1900,35 @@ def _character_and_equipment_contributions(
         if not detail.blocked_by_immunity and detail.final_value != 0
     )
 
-    # EQUIPMENT-INSTANCE — per-instance crafted mods (#1567)
+    # EQUIPMENT-INSTANCE — per-instance crafted mods (#1567). One contribution per worn
+    # piece (#4628), so several crafted pieces taper against each other like any other
+    # pile of worn items instead of counting as one.
     character = character_sheet.character
     if character is not None:
         try:
-            crafted_value = character.equipped_items.crafted_modifier_total(scoped_target)
+            crafted_pieces = character.equipped_items.crafted_modifier_by_piece(scoped_target)
         except AttributeError:
-            crafted_value = 0
-        if crafted_value != 0:
-            contributions.append(
-                ModifierContribution(
-                    source_kind=ModifierSourceKind.EQUIPMENT,
-                    source_label="Crafted modifiers",
-                    value=crafted_value,
-                )
+            crafted_pieces = []
+        contributions.extend(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.EQUIPMENT,
+                source_label=f"Crafted: {piece.display_name}",
+                value=value,
             )
+            for piece, value in crafted_pieces
+        )
 
-    # EQUIPMENT walk — facet + covenant-role + mantle passive bonuses.
-    walk = equipment_walk_total(character_sheet, scoped_target)
-    if walk:
+    # EQUIPMENT walk — facet + covenant-role + mantle passive bonuses. The covenant
+    # role, covenant level and vow stat scaling terms are the character's vow, so they
+    # ride as the untapered ``vow_part`` (#4628, #4551 decision 1).
+    walk = equipment_walk_parts(character_sheet, scoped_target)
+    if walk.total:
         contributions.append(
             ModifierContribution(
                 source_kind=ModifierSourceKind.EQUIPMENT,
                 source_label="Equipment & attunement",
-                value=walk,
+                value=walk.total,
+                vow_part=walk.vow_part,
             )
         )
 

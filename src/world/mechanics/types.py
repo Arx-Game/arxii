@@ -181,3 +181,22 @@ class ChallengeResolutionResult:
     resolution_type: str
     challenge_deactivated: bool
     display_consequences: list[OutcomeDisplay]
+
+
+@dataclass(frozen=True)
+class EquipmentWalkParts:
+    """The equipment walk split by who supplies it (#4628).
+
+    ``item_part`` is what the worn pieces carry through the character's threads (facet,
+    facet crossing, mantle, mantle crossing and motif style passives): a worn-item
+    modifier that tapers with the EQUIPMENT pile. ``vow_part`` is the covenant role,
+    covenant level and vow stat scaling bonuses: the character's vow, never tapered
+    (#4551 decision 1).
+    """
+
+    item_part: int = 0
+    vow_part: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.item_part + self.vow_part

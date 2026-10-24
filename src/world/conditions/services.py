@@ -2697,12 +2697,9 @@ def _sized_check_value(
     authored value) when the instance is unsized, the authored value is 0, or no table
     row covers its size and level. Nothing about the bearer is read.
     """
-    if value_table is None or not _is_sized(instance) or authored_value == 0:
+    if value_table is None or not _is_sized(instance):
         return None
-    magnitude = value_table.value(instance.modifier_level, instance.modifier_size)
-    if magnitude is None:
-        return None
-    return magnitude if authored_value > 0 else -magnitude
+    return value_table.signed_value(authored_value, instance.modifier_level, instance.modifier_size)
 
 
 def _check_modifier_for_target(
