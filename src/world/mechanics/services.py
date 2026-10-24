@@ -58,6 +58,7 @@ from world.mechanics.models import (
 from world.mechanics.types import (
     AvailableAction,
     CapabilitySource,
+    EquipmentWalkParts,
     ModifierBreakdown,
     ModifierSourceDetail,
     PrerequisiteEvaluation,
@@ -413,8 +414,20 @@ def equipment_walk_total(
     of ``character.current_level``. Only the combat path supplies this (bond-adjusted
     level for mentor/sidekick pairs, #1165). All other components are unaffected.
     """
+    return equipment_walk_parts(character, target, level_override=level_override).total
+
+
+def equipment_walk_parts(
+    character: object, target: ModifierTarget, level_override: int | None = None
+) -> EquipmentWalkParts:
+    """``equipment_walk_total``'s terms, split into the worn-item part and the vow part.
+
+    The check seam (#4628) tapers the item part with the EQUIPMENT pile and counts the
+    vow part (covenant role, covenant level, vow stat scaling) whole. Same terms, same
+    gates and the same ``level_override`` as ``equipment_walk_total``, which sums this.
+    """
     if target.category.name not in EQUIPMENT_RELEVANT_CATEGORIES:
-        return 0
+        return EquipmentWalkParts()
     # #4333: a favor target has no gear stat to blend against, so the per-item
     # covenant_role_bonus would count the role once per equipped item. Count the
     # role's bonus once instead.
@@ -422,15 +435,19 @@ def equipment_walk_total(
         role_total = covenant_role_base_total(character, target)
     else:
         role_total = covenant_role_bonus(character, target, level_override=level_override)
-    return (
-        passive_facet_bonuses(character, target)
-        + passive_facet_crossing_bonuses(character, target)
-        + role_total
-        + covenant_level_bonus(character, target)
-        + vow_stat_scaling_bonus(character, target)
-        + passive_mantle_bonuses(character, target)
-        + passive_mantle_crossing_bonuses(character, target)
-        + passive_motif_style_bonuses(character, target)
+    return EquipmentWalkParts(
+        item_part=(
+            passive_facet_bonuses(character, target)
+            + passive_facet_crossing_bonuses(character, target)
+            + passive_mantle_bonuses(character, target)
+            + passive_mantle_crossing_bonuses(character, target)
+            + passive_motif_style_bonuses(character, target)
+        ),
+        vow_part=(
+            role_total
+            + covenant_level_bonus(character, target)
+            + vow_stat_scaling_bonus(character, target)
+        ),
     )
 
 

@@ -36,7 +36,7 @@ A Style's ordinal daring tier (Understated/Expressive/Bold/Outrageous, `StyleAud
 _Avoid_: boldness, daring level, flashiness
 
 **QualityTier**:
-A discrete, color-coded quality level (Common=white, Fine=green, Masterwork=purple) spanning an internal numeric range and carrying a stat multiplier, reused across systems to give consistent visual language for quality and difficulty.
+A discrete, color-coded quality level (Common=white, Fine=green, Masterwork=purple) spanning an internal numeric range and carrying a stat multiplier, reused across systems to give consistent visual language for quality and difficulty. Its `modifier_level` (#4628) is the **item level row**: the modifier level a worn item of this quality counts at when its check modifier has a size (see "Modifier level" in the checks glossary).
 _Avoid_: grade, rarity, quality level
 
 **GearArchetype**:

@@ -172,6 +172,18 @@ rows in the `modifier_values` seed cluster. Still open in #4551: result-chart re
 impossible charts (slice a), the slide and hopeless rule (slice b), items, distinctions, scene
 modifiers and every other lane (rest of slice c), the vow size shift (slice d).
 
+✅ **Check math, slice c, worn items (#4628 of #4551, ADR-4628-A)** — worn items are the second
+sized source on the check lane. Built: the item level rows (`QualityTier.modifier_level`, editable
+in the tier list, example levels in the provisioning seed, a Required content entry) and an
+authored size on `ItemCheckModifier` (Paramount refused). A worn item's sized check modifier counts
+at the quality-tier level of the best worn instance of its template and reads the shared value
+table through `ValueTable.signed_value`; unsized rows stay flat and still taper. Crafted modifiers
+are one EQUIPMENT contribution per worn piece, so they taper as a pile; the equipment walk's
+covenant role, covenant level and vow stat scaling terms ride untapered as `vow_part`. Deferred,
+with reasons in the ADR: sizing crafted recipe modifiers and accents (generic-target sources read
+by every lane), the walk's thread passives, and fashion. Journey:
+`integration_tests/test_worn_items_on_checks_journeys.py`.
+
 ✅ **Phase B (#1221)** — "makes them tunable," referenced at 3.9 above, has shipped: admin-hosted
 Game Tuning (`/admin/_tuning/`) and Game Ops (`/admin/_ops/`) dashboards, plus a superuser
 content-repo load surface (#1220). See [docs/systems/tuning.md](../systems/tuning.md) and

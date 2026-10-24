@@ -28,6 +28,7 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
+from world.checks.constants import ModifierSize
 from world.contributors.models import CreditedContent
 from world.forms.models import ConcealmentLevel, DisguiseKind
 from world.items.constants import (
@@ -97,6 +98,16 @@ class QualityTier(NaturalKeyMixin, SharedMemoryModel):
     sort_order = models.PositiveIntegerField(
         default=0,
         help_text="Display ordering (lower = worse quality).",
+    )
+    modifier_level = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "The level a worn item of this quality counts at when its check modifier "
+            "has a size (#4628). With the size it reads the modifier value table. "
+            "Blank keeps such items at their flat authored check modifiers."
+        ),
     )
 
     objects = NaturalKeyManager()
@@ -2187,6 +2198,18 @@ class ItemCheckModifier(SharedMemoryModel):
             "(positive = bonus, negative = penalty)."
         ),
     )
+    modifier_size = models.PositiveSmallIntegerField(
+        choices=ModifierSize.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "How big this bonus or penalty is for the item's level (#4628). The level "
+            "comes from the worn item's quality tier, and the pair reads the modifier "
+            "value table; the flat value's sign says bonus or penalty. Blank keeps the "
+            "flat value. Paramount is reached only through a vow and cannot be authored "
+            "here."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -2199,6 +2222,14 @@ class ItemCheckModifier(SharedMemoryModel):
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
         return f"{self.template.name}: {sign}{self.modifier_value} to {self.check_type.name}"
+
+    def clean(self) -> None:
+        """Refuse Paramount: only a vow's size step reaches it (#4551 section 5.3)."""
+        super().clean()
+        if self.modifier_size == ModifierSize.PARAMOUNT:
+            raise ValidationError(
+                {"modifier_size": "Paramount is reached only through a vow's size step."}
+            )
 
 
 class FashionStyle(NaturalKeyMixin, SharedMemoryModel):

@@ -175,8 +175,12 @@ class QualityTierAdmin(admin.ModelAdmin):
         "numeric_min",
         "numeric_max",
         "stat_multiplier",
+        "modifier_level",
         "sort_order",
     ]
+    # #4628: the item level rows. A worn item's sized check modifier counts at its
+    # quality tier's level; staff tune the ladder here.
+    list_editable = ["modifier_level"]
     ordering = ["sort_order"]
 
 

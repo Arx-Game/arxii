@@ -166,8 +166,16 @@ class CharacterEquipmentHandler:
         scales with the canvas it commands. Fully concealed pieces contribute
         nothing here (social-facing); a Reveal restores them.
         """
+        return sum(value for _piece, value in self.crafted_modifier_by_piece(target))
+
+    def crafted_modifier_by_piece(self, target: ModifierTarget) -> list[tuple[ItemInstance, int]]:
+        """Each worn piece's crafted modifier value for ``target``, nonzero only (#4628).
+
+        The terms of ``crafted_modifier_total``, kept per piece so the check seam can
+        emit one contribution per worn item and taper them as a pile.
+        """
         visibility = self._worn_visibility()
-        total = 0
+        pieces: list[tuple[ItemInstance, int]] = []
         seen: set[int] = set()
         for equipped in self._equipped:
             instance = equipped.item_instance
@@ -177,9 +185,11 @@ class CharacterEquipmentHandler:
             visible_slots = visibility.visible_slot_counts.get(instance.pk, 0)
             if visible_slots == 0:
                 continue
-            total += instance.crafted_recipe_modifier_value(target)
-            total += instance.accent_modifier_value(target) * visible_slots
-        return total
+            value = instance.crafted_recipe_modifier_value(target)
+            value += instance.accent_modifier_value(target) * visible_slots
+            if value:
+                pieces.append((instance, value))
+        return pieces
 
     def _worn_visibility(self) -> WornVisibility:
         """Memoized visibility over the current equipment snapshot (#2965)."""

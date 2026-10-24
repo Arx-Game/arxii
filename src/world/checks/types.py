@@ -179,8 +179,10 @@ class ModifierContribution:
     ``level`` and ``size`` (#4594) are the level the modifier counts at and its
     ``ModifierSize``, when its source is sized; ``value`` is then the value table's
     number for that pair, never anything read off the target. An unsized source leaves
-    both None and keeps its flat value. ``vow_part`` is the share of ``value`` a vow's
-    size step added; it is never tapered (#4551 section 5.4, empty until that slice).
+    both None and keeps its flat value. ``vow_part`` is the share of ``value`` the
+    character's vow supplies; it is never tapered. Today that is the equipment walk's
+    covenant role, covenant level and vow stat scaling terms (#4628); a vow's size step
+    on a buff joins it with #4551 section 5.4.
     """
 
     source_kind: str
