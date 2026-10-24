@@ -5,6 +5,7 @@ import json
 import logging
 
 from allauth.account.adapter import DefaultAccountAdapter
+from allauth.account.models import EmailAddress
 from django.conf import settings
 from evennia.utils.utils import class_from_module
 
@@ -17,6 +18,19 @@ logger = logging.getLogger(__name__)
 
 class ArxAccountAdapter(DefaultAccountAdapter):
     """Custom account adapter for Arx II that creates PlayerData on signup."""
+
+    def pre_login(self, request, user, **kwargs):
+        """Refresh allauth's email cache before evaluating login stages.
+
+        Allauth caches signup EmailAddress objects on the user. Evennia's
+        identity map keeps that user across requests, so a confirmation in
+        another request or worker can leave login seeing an unverified address.
+        Refresh at each login rather than only in the worker that confirms it.
+        """
+        EmailAddress.objects.fill_cache_for_user(
+            user, list(EmailAddress.objects.filter(user_id=user.pk))
+        )
+        return super().pre_login(request, user, **kwargs)
 
     def send_mail(self, template_prefix, email, context):
         """Account mail is best-effort: a failed send never fails the request (#3193).

@@ -25,8 +25,11 @@ export function RegisterPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
-  } = useForm<FormValues>({ mode: 'onBlur', defaultValues: { invite_token: inviteFromLink } });
+    formState: { errors, isValidating },
+  } = useForm<FormValues>({
+    mode: 'onChange',
+    defaultValues: { invite_token: inviteFromLink },
+  });
 
   // Registration is closed by default (#3054) — the notice below only shows on an
   // explicit `open: false` with no invite link, never while this is still loading.
@@ -86,6 +89,10 @@ export function RegisterPage() {
     <div className="mx-auto max-w-sm">
       <h1 className="mb-6 text-2xl font-bold">Register for {SITE_NAME}</h1>
       <form onSubmit={onSubmit} className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Enter your username, email and password, then confirm your password. Any fields that need
+          attention will be explained below.
+        </p>
         <div className="space-y-1">
           <Label htmlFor="username">Username</Label>
           <Input
@@ -123,6 +130,7 @@ export function RegisterPage() {
             placeholder="Password"
             {...register('password1', {
               required: 'Password is required',
+              deps: ['password2'],
             })}
           />
           {errors.password1 && <p className="text-sm text-red-600">{errors.password1.message}</p>}
@@ -144,7 +152,12 @@ export function RegisterPage() {
           />
           {errors.password2 && <p className="text-sm text-red-600">{errors.password2.message}</p>}
         </div>
-        <SubmitButton className="w-full" isLoading={mutation.isPending} disabled={!isValid}>
+        {isValidating && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Checking your details...
+          </p>
+        )}
+        <SubmitButton className="w-full" isLoading={mutation.isPending} disabled={isValidating}>
           Register
         </SubmitButton>
       </form>

@@ -119,7 +119,16 @@ export function LoginPage() {
           Log In
         </SubmitButton>
       </form>
-      {mutation.isError && <p className="mt-4 text-red-600">Login failed. Please try again.</p>}
+      {mutation.isError && (
+        <p role="alert" className="mt-4 text-destructive">
+          {mutation.error.message}
+        </p>
+      )}
+      <p className="mt-4 text-sm">
+        <Link to="/reset-password" className="text-primary underline">
+          Forgot password?
+        </Link>
+      </p>
       {providers.length > 0 && (
         <div className="mt-6 space-y-2">
           <div className="relative">

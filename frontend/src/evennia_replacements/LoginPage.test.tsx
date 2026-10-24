@@ -39,7 +39,7 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /log in/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Login failed. Please try again.')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('Email verification required');
     });
   });
 
@@ -47,6 +47,10 @@ describe('LoginPage', () => {
     renderWithProviders(<LoginPage />);
     const link = screen.getByRole('link', { name: /register/i });
     expect(link).toHaveAttribute('href', '/register');
+    expect(screen.getByRole('link', { name: /forgot password/i })).toHaveAttribute(
+      'href',
+      '/reset-password'
+    );
   });
 
   it('asks for a code when login needs a second factor, then completes', async () => {

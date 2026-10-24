@@ -280,15 +280,53 @@ export async function checkEmail(email: string): Promise<boolean> {
 }
 
 // Password reset functionality
+async function passwordResetResponse(
+  res: Response,
+  fallback: string,
+  allowLoggedOut = false
+): Promise<void> {
+  const data = (await res.json().catch(() => null)) ?? {};
+  // allauth returns the logged-out authentication state after a successful
+  // reset. That 401 is a success only when it offers login without errors.
+  const resetCompleted =
+    allowLoggedOut &&
+    res.status === 401 &&
+    !data.errors?.length &&
+    data.data?.flows?.some((flow: { id: string }) => flow.id === 'login');
+  if (!res.ok && !resetCompleted) {
+    throw new Error(
+      getErrorMessages(data) ||
+        data.detail ||
+        (res.status === 429 ? 'Too many attempts. Please wait before trying again.' : fallback)
+    );
+  }
+}
+
 export async function requestPasswordReset(email: string): Promise<void> {
   const res = await apiFetch('/api/auth/browser/v1/auth/password/request', {
     method: 'POST',
     body: JSON.stringify({ email }),
   });
   if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(errorData.detail || 'Password reset request failed');
+    // Requesting a link must not be mistaken for the post-reset auth response.
+    const data = (await res.json().catch(() => null)) ?? {};
+    throw new Error(
+      getErrorMessages(data) ||
+        (res.status === 429
+          ? 'Too many attempts. Please wait before requesting another link.'
+          : 'Could not request a reset link. Please try again.')
+    );
   }
+}
+
+export async function validatePasswordResetKey(key: string): Promise<void> {
+  const res = await apiFetch('/api/auth/browser/v1/auth/password/reset', {
+    headers: { 'X-Password-Reset-Key': key },
+  });
+  await passwordResetResponse(
+    res,
+    'This reset link is invalid or has expired. Request a new link.'
+  );
 }
 
 export async function confirmPasswordReset(data: { key: string; password: string }): Promise<void> {
@@ -296,10 +334,7 @@ export async function confirmPasswordReset(data: { key: string; password: string
     method: 'POST',
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(errorData.detail || 'Password reset confirmation failed');
-  }
+  await passwordResetResponse(res, 'Could not reset your password. Please try again.', true);
 }
 
 // Email verification functionality
