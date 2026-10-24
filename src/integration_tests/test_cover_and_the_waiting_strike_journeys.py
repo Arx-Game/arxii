@@ -525,6 +525,38 @@ class HobbWaitsForAnOpening(_TheSteading):
         self.assertLess(strike, self.row_index(self.hobb, "strikes Hobb for"))
         self.assertTrue(self.was_struck(archer))
 
+    def test_a_strike_he_can_no_longer_pay_for_lapses_and_costs_nothing(self) -> None:
+        from world.conditions.factories import ConditionStageFactory, SoulfrayTemplateFactory
+        from world.conditions.services import apply_condition
+        from world.magic.factories import ensure_soulfray_config
+
+        self.wait_on_telnet()  # declared without consenting to Soulfray
+        # Then his anima runs dry: Soulfray takes hold at its first stage, which warns.
+        soulfray = SoulfrayTemplateFactory(has_progression=True, is_stackable=False)
+        ensure_soulfray_config()
+        strain = ConditionStageFactory(
+            condition=soulfray,
+            stage_order=1,
+            name="Strain",
+            severity_threshold=1,
+            consequence_pool=None,
+        )
+        held = apply_condition(self.hobb, soulfray).instance
+        held.current_stage = strain
+        held.save(update_fields=["current_stage"])
+        wolf = self.creature("Grey Wolf", at=self.yard)
+
+        self.resolve()
+
+        self.assertShownRow(self.hobb, "Hobb sees the opening, but cannot pay for the strike.")
+        self.assertFalse(self.rows_with(self.hobb, "with a waiting strike"))
+        self.assertFalse(self.was_struck(wolf))
+        # The wolf's bite still lands, and the lapsed strike cost him nothing.
+        self.assertEqual(self.health(self.hobb), FULL_HEALTH - BITE)
+        self.assertEqual(self.anima(), 20)  # the anima he was set up with
+        self.assertEqual(self.fatigue(), 0)  # no fatigue before the round
+        self.assertFalse(self.rows_with(self.hobb, "never came"))
+
     def test_when_nothing_comes_it_says_so_and_costs_nothing(self) -> None:
         self.wait_on_telnet()
         self.creature("Grey Wolf", at=self.tower)  # one hop a round: two short of the Barn
