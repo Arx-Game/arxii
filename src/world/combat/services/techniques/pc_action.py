@@ -25,6 +25,7 @@ from world.combat.services.techniques.insight import _maybe_produce_insight_for_
 from world.combat.services.techniques.npc_regard import _maybe_record_npc_regard_on_defeat
 from world.combat.services.techniques.pc_broadcast import _record_and_broadcast_pc_action
 from world.combat.services.techniques.spectacle import _maybe_apply_spectacle_for_action
+from world.combat.services.techniques.technique_targets import finds_no_one_in_reach
 from world.combat.services.techniques.weakness_selection import (
     _maybe_create_weakness_selection_for_cast,
 )
@@ -67,6 +68,25 @@ def _run_combat_technique_pipeline(
         fatigue_category=fatigue_category,
         cast_check=cast_check,
         offense_check_fn=offense_check_fn,
+    )
+
+
+def _broadcast_fizzle_no_one_in_reach(
+    participant: CombatParticipant, action: CombatRoundAction
+) -> None:
+    """Narrate a strike whose target left reach before the PC's slot (costs nothing)."""
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        target_persona_for_round_action,
+    )
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    target_persona = target_persona_for_round_action(action)
+    broadcast_action_outcome(
+        encounter=participant.encounter,
+        narration=f"{active_persona_for_sheet(participant.character_sheet).name}'s strike "
+        "finds no one in reach.",
+        target_personas=[target_persona] if target_persona is not None else None,
     )
 
 
@@ -122,6 +142,13 @@ def _resolve_pc_action(
         return outcome
 
     outcome.effect_type_id = technique.effect_type_id
+
+    # #4607: positions moved since the declaration (NPCs step in their own slots), so
+    # reach is re-checked live, after any CHARGE movement and before the pipeline,
+    # fatigue or anima. The player chose the target, so the action does not retarget.
+    if finds_no_one_in_reach(participant, action, technique):
+        _broadcast_fizzle_no_one_in_reach(participant, action)
+        return outcome
 
     target = action.focused_opponent_target
     fatigue_category = action.focused_category or ActionCategory.PHYSICAL

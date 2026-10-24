@@ -23,7 +23,6 @@ from world.combat.models import (
     CombatOpponent,
     CombatParticipant,
     CombatRoundAction,
-    CombatRoundActionTarget,
     SpectacleConfig,
 )
 from world.combat.morale import (
@@ -43,6 +42,8 @@ from world.combat.services.techniques.technique_targets import (
     _resolve_condition_target,
     _resolve_enemy_condition_targets,
     _resolve_primary_target_sheet,
+    aoe_opponent_candidates,
+    opponents_in_reach,
 )
 from world.combat.types import CombatTechniqueResolution, OpponentDamageResult, SpectacleShift
 from world.conditions.constants import Allegiance
@@ -59,7 +60,6 @@ if TYPE_CHECKING:
     from world.conditions.models import DamageType
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
     from world.covenants.types import FiredVowEffect
-    from world.magic.models import Technique
     from world.magic.models.techniques import AbstractDamageProfile
     from world.magic.types.power_ledger import PowerLedger
 
@@ -256,36 +256,6 @@ class CombatTechniqueResolver:
                     pull_bonus += eff.scaled_value
         return pull_bonus
 
-    def _filter_by_target_prerequisites(
-        self, technique: Technique, opponents: list[CombatOpponent]
-    ) -> list[CombatOpponent]:
-        """Silently drop opponents that fail technique.target_prerequisites.
-
-        AREA/FILTERED_GROUP only — these are enumerated independently of
-        _build_affected_targets/_check_combat_target_prerequisites (which now
-        skips AREA/FILTERED_GROUP entirely, deferring to this method, #1793
-        second-pass fix), so a target_prerequisites-gated technique would
-        otherwise land on every opponent regardless of eligibility. Mirrors
-        resolve_targets' silent AREA/FILTERED_GROUP filter
-        (world/magic/services/targeting.py) rather than raising — an AoE cast
-        is expected to skip ineligible targets, not block the whole cast
-        (ADR-0045).
-        """
-        from world.mechanics.services import prerequisites_met  # noqa: PLC0415
-
-        prereqs = technique.cached_target_prerequisites
-        if not prereqs:
-            return opponents
-        caster_od = self.participant.character_sheet.character
-        eligible = []
-        for opp in opponents:
-            target_od = opp.objectdb
-            if target_od is None:
-                continue  # can't evaluate a Property-based prerequisite without an ObjectDB
-            if prerequisites_met(prereqs, caster_od, target_od):
-                eligible.append(opp)
-        return eligible
-
     def _resolved_opponent_targets(self) -> list[CombatOpponent]:
         """Return the ordered list of CombatOpponents to act on for this action.
 
@@ -307,7 +277,7 @@ class CombatTechniqueResolver:
         full list.
 
         AREA and FILTERED_GROUP additionally run technique.target_prerequisites
-        through ``_filter_by_target_prerequisites`` (silent filter, #1793) — the
+        through ``aoe_opponent_candidates`` (silent filter, #1793) — the
         SINGLE/SELF branch does not, since that case is hard-gated pre-flight by
         ``_check_combat_target_prerequisites`` in ``resolve_combat_technique``
         before this method is ever reached for an AoE-independent enumeration.
@@ -316,6 +286,10 @@ class CombatTechniqueResolver:
         ALLY_OF_CASTER (a summon, or a charmed NPC) — a PC's AoE spares the party's
         own side (Decision 4, #4091); a TURNED or calmed opponent stays in the AoE
         set, since neither fights for the party.
+
+        AREA and FILTERED_GROUP finally keep only the opponents ``technique_can_reach``
+        allows from the caster's live position (#4607); an opponent with no game object
+        or either side unplaced stays (lenient).
         """
         from actions.constants import ActionTargetType  # noqa: PLC0415
 
@@ -325,39 +299,14 @@ class CombatTechniqueResolver:
             return [primary] if primary is not None else []
 
         target_type = technique.target_type
-        if target_type == ActionTargetType.AREA:
-            # Enumerate ALL active (non-DEFEATED) opponents in the encounter.
-            # One query; no join-table rows required.
-            opponents = list(
-                CombatOpponent.objects.filter(
-                    encounter=self.participant.encounter,
-                )
-                .exclude(status=OpponentStatus.DEFEATED)
-                .order_by("pk")
+        if target_type in (ActionTargetType.AREA, ActionTargetType.FILTERED_GROUP):
+            # Reach is checked live (#4607): a target that moved out of reach since
+            # the declaration drops out of the area, silently, like a failed prerequisite.
+            return opponents_in_reach(
+                self.participant.character_sheet.character,
+                technique,
+                aoe_opponent_candidates(self.participant, self.action, technique),
             )
-
-            from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
-
-            allegiances = effective_allegiances(opponents)
-            opponents = [o for o in opponents if allegiances[o.pk] != Allegiance.ALLY_OF_CASTER]
-            return self._filter_by_target_prerequisites(technique, opponents)
-
-        if target_type == ActionTargetType.FILTERED_GROUP:
-            join_opponents = list(
-                CombatRoundActionTarget.objects.filter(
-                    action=self.action,
-                    opponent__isnull=False,
-                )
-                .select_related("opponent")
-                .order_by("pk")
-            )
-            if join_opponents:
-                opponents = [row.opponent for row in join_opponents]
-            else:
-                # Fallback: a direct caller that didn't write join rows
-                primary = self.action.focused_opponent_target
-                opponents = [primary] if primary is not None else []
-            return self._filter_by_target_prerequisites(technique, opponents)
 
         # SINGLE / SELF: single target only
         primary = self.action.focused_opponent_target
