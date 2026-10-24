@@ -703,3 +703,10 @@ class HobbCannotFly(_TheCauseway):
 
         self.assertEqual(position_of(hobb), self.gate)
         self.assertEqual(self.participant(hobb).hops_used, 0)
+        # His move list offers the ground on either side and never the air above him.
+        moves = {
+            action.display_name
+            for action in get_player_actions(hobb)
+            if action.ref.registry_key == "move_to_position"
+        }
+        self.assertEqual(moves, {"Move to Lane", "Move to Yard"})

@@ -1141,6 +1141,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     from world.areas.positioning.models import Position, PositionEdge  # noqa: PLC0415
     from world.areas.positioning.services import (  # noqa: PLC0415
         adjacent_open_positions,
+        is_aerial,
         position_of,
     )
 
@@ -1170,10 +1171,14 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     move_met, move_reason = CombatMovementPrerequisite().is_met(character)
     move_note = _hops_left_note(character) if move_met else ""
 
+    # Only an airborne mover steps onto an AERIAL position; nobody else is offered one.
+    airborne = is_aerial(character)
     result: list[PlayerAction] = []
     for edge in adjacent_open_positions(current):
         # Determine which side of the edge is the destination (not current).
         neighbor = edge.position_b if edge.position_a_id == current.pk else edge.position_a
+        if neighbor.kind == PositionKind.AERIAL and not airborne:
+            continue
         ref = ActionRef(
             backend=ActionBackend.REGISTRY,
             registry_key="move_to_position",

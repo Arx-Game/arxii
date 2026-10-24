@@ -1216,7 +1216,7 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
             raise PositionTransitionError(msg)
         raise PositionTransitionError(_ERR_MOVE_BLOCKED)
 
-    if target.kind == PositionKind.AERIAL and not _is_aerial(objectdb):
+    if target.kind == PositionKind.AERIAL and not is_aerial(objectdb):
         raise PositionTransitionError(_ERR_MOVE_CANNOT_FLY)
 
     if not _can_move(objectdb):
@@ -1225,8 +1225,12 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     return _commit_position(objectdb, target)
 
 
-def _is_aerial(objectdb: ObjectDB) -> bool:
-    """Whether objectdb holds the ``aerial`` property (it has taken flight)."""
+def is_aerial(objectdb: ObjectDB) -> bool:
+    """Whether objectdb holds the ``aerial`` property (it has taken flight).
+
+    Only an airborne mover may step onto an AERIAL position (``move_to_position``), so
+    the move list offers those positions to it alone.
+    """
     from world.mechanics.models import ObjectProperty
 
     return ObjectProperty.objects.filter(
