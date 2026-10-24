@@ -91,6 +91,7 @@ from world.combat.models import (
     CombatOpponentMove,
     CombatParticipant,
     NpcTacticsConfig,
+    PendingOpponentAttack,
 )
 from world.combat.services import begin_declaration_phase, resolve_round
 from world.combat.services.boss.creature_spawn import spawn_from_creature_template
@@ -205,6 +206,7 @@ class _TheField(JourneyCase):
         traversal: str = CreatureTraversal.WALKS,
         bite: int = 10,
         delivery: str = StrikeDelivery.MELEE,
+        windup_rounds: int = 0,
         extra_entry: dict | None = None,
     ) -> CombatOpponent:
         """An enemy spawned from its bestiary entry at ``at``, with one attack of ``bite``."""
@@ -217,6 +219,7 @@ class _TheField(JourneyCase):
             targeting_mode=TargetingMode.SINGLE,
             target_selection=TargetSelection.HIGHEST_THREAT,
             weight=1,
+            windup_rounds=windup_rounds,
         )
         if extra_entry is not None:
             ThreatPoolEntryFactory(
@@ -717,6 +720,33 @@ class ABrokenBandit(_TheField):
         self.assertShownRow(hobb, MOVES_TO.format(name="Bandit", position="Hall"))
         self.assertEqual(self.fresh(bandit).status, OpponentStatus.FLED)
         self.assertShownRow(hobb, FLEES.format(name="Bandit"))
+
+    def test_a_bandit_that_breaks_mid_wind_up_lands_the_blow_then_backs_away(self) -> None:
+        # Its one attack takes a round to wind up. The telegraph is its action: a broken
+        # opponent winding up stands still and writes no plan until the blow lands.
+        hobb = self.fighter("Hobb", at=self.gate)
+        bandit = self.creature("Bandit", at=self.yard, windup_rounds=1)
+        self.resolve()  # round 1: beside Hobb, it winds up
+        self.assertTrue(PendingOpponentAttack.objects.filter(opponent=bandit).exists())
+        bandit = self.fresh(bandit)
+        bandit.morale = 20  # it breaks before the blow lands
+        bandit.save(update_fields=["morale"])
+
+        self.next_round()
+        self.resolve()  # round 2: the blow lands; no retreat plan, no move, still here
+
+        self.assertEqual(self.health(hobb), FULL_HEALTH - 10)
+        self.assertFalse(CombatOpponentMove.objects.filter(opponent=bandit, round_number=2))
+        self.assertEqual(self.where(bandit), self.yard)
+        self.assertEqual(self.fresh(bandit).status, OpponentStatus.ACTIVE)
+
+        self.next_round()
+        self.resolve()  # round 3: the telegraph is spent, so it backs away and is gone
+
+        self.assertEqual(self.plan(bandit, 3).kind, OpponentMoveKind.RETREAT)
+        self.assertShownRow(hobb, MOVES_TO.format(name="Bandit", position="Hall"))
+        self.assertEqual(self.fresh(bandit).status, OpponentStatus.FLED)
+        self.assertEqual(self.health(hobb), FULL_HEALTH - 10)
 
     def test_a_cornered_bandit_fights(self) -> None:
         # Hobb at the Gate and Wren at the Tower: nowhere on the line is farther from both
