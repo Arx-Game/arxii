@@ -147,11 +147,7 @@ describe('MovementActions', () => {
     };
 
     render(
-      <MovementActions
-        actions={[refused]}
-        isLocked={false}
-        dispatchAction={vi.fn(okDispatch)}
-      />
+      <MovementActions actions={[refused]} isLocked={false} dispatchAction={vi.fn(okDispatch)} />
     );
 
     expect(screen.getByTestId('move-btn-7')).toBeDisabled();
@@ -166,11 +162,7 @@ describe('MovementActions', () => {
     ];
 
     render(
-      <MovementActions
-        actions={actions}
-        isLocked={false}
-        dispatchAction={vi.fn(okDispatch)}
-      />
+      <MovementActions actions={actions} isLocked={false} dispatchAction={vi.fn(okDispatch)} />
     );
 
     expect(screen.getAllByText('2 hops left this round.')).toHaveLength(1);
