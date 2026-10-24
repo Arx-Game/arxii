@@ -731,6 +731,7 @@ class ActionRegistryTests(TestCase):
             "almanach_batch_unclaimed",
             "almanach_name_rung",
             "almanach_assign_holder",
+            "almanach_vacate_holder",
             "almanach_edit_house",
             "almanach_swear",
             "almanach_describe_demesne",

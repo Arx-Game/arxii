@@ -162,3 +162,31 @@ test("a rung inside a higher title's own chain offers no house picker", () => {
     currentDoc = doc;
   }
 });
+
+test('a held rung is vacated only after a second press', async () => {
+  mutate.mockClear();
+  renderWithProviders(<TitlePage titleId={3} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Vacate' }));
+  expect(mutate).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Confirm vacate House Katta' }));
+  expect(mutate).toHaveBeenCalledWith({ title_id: 3 });
+});
+
+test('cancelling the vacate confirm dispatches nothing', async () => {
+  mutate.mockClear();
+  renderWithProviders(<TitlePage titleId={3} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Vacate' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(mutate).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Vacate' })).toBeInTheDocument();
+});
+
+test('a vacant rung offers no Vacate', () => {
+  currentDoc = { ...doc, title: { ...doc.title, house_id: null, held_by: '', chain_top_id: 3 } };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    expect(screen.queryByRole('button', { name: 'Vacate' })).toBeNull();
+  } finally {
+    currentDoc = doc;
+  }
+});
