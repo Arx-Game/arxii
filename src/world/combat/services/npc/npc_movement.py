@@ -295,14 +295,33 @@ def strike_deliveries(opponent: CombatOpponent) -> set[str]:
     An opponent with no attack row this round heads for anywhere one of its strikes
     would land from: an archer for a line of sight, a biter for arm's reach (#4609).
     """
+    from world.combat.constants import CreatureTactics  # noqa: PLC0415
+
     if opponent.threat_pool_id is None:
         return {StrikeDelivery.MELEE}
-    deliveries = set(
-        ThreatPoolEntry.objects.filter(pool_id=opponent.threat_pool_id).values_list(
-            "delivery", flat=True
-        )
+    entries = ThreatPoolEntry.objects.filter(pool_id=opponent.threat_pool_id).select_related(
+        "on_hit_consequence_pool"
     )
+    mindless = opponent.movement_profile.tactics == CreatureTactics.MINDLESS
+    deliveries = {e.delivery for e in entries if not (mindless and entry_grounds_fliers(e))}
     return deliveries or {StrikeDelivery.MELEE}
+
+
+def entry_grounds_fliers(entry: ThreatPoolEntry) -> bool:
+    """Whether ``entry``'s on-hit pool knocks a flier out of the air (REMOVE_FLIGHT).
+
+    A mindless opponent never uses such an entry (#4609).
+    """
+    from world.checks.constants import EffectType  # noqa: PLC0415
+
+    pool = entry.on_hit_consequence_pool
+    if pool is None:
+        return False
+    return any(
+        effect.effect_type == EffectType.REMOVE_FLIGHT
+        for wc in pool.cached_consequences
+        for effect in wc.consequence.effects.all()
+    )
 
 
 def _truncate_to_budget(path: list[Position], profile: MovementProfile) -> list[Position]:

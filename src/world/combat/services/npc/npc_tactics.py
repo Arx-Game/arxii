@@ -75,6 +75,7 @@ from world.combat.services.npc.npc_movement import (
     _truncate_to_budget,
     advance_opponent,
     can_strike_this_round,
+    entry_grounds_fliers,
     mover_origin,
     target_position,
     walk_and_announce,
@@ -365,7 +366,7 @@ def _answers_from_its_place(
     """Whether ``opponent`` can hit ``attacker_pos`` with an entry it would use."""
     profile = opponent.movement_profile
     if is_mindless(profile):
-        entries = [e for e in entries if not _grounds_fliers(e)]
+        entries = [e for e in entries if not entry_grounds_fliers(e)]
     with mover_origin(opponent, profile) as origin:
         return can_answer(origin, attacker_pos, entries, profile=profile, memo=ReachMemo())
 
@@ -380,17 +381,6 @@ def _unanswered_morale(opponent: CombatOpponent, hits: int) -> int:
     if tier_has_morale(opponent):
         return amount
     return mindless_share(amount, mindless_percent=SpectacleConfig.load().mindless_percent)
-
-
-def _grounds_fliers(entry: ThreatPoolEntry) -> bool:
-    pool = entry.on_hit_consequence_pool
-    if pool is None:
-        return False
-    return any(
-        effect.effect_type == EffectType.REMOVE_FLIGHT
-        for wc in pool.cached_consequences
-        for effect in wc.consequence.effects.all()
-    )
 
 
 # ---------------------------------------------------------------------------
