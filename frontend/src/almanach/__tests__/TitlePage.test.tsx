@@ -59,6 +59,13 @@ const doc: RungDocument = {
 const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
 let currentDoc: RungDocument = doc;
 
+vi.mock('@/world-builder/queries', () => ({
+  useRoomSearchQuery: (term: string) => ({
+    data:
+      term.trim().length >= 2 ? [{ id: 77, name: 'Katta Fields', area_name: 'Fervor' }] : undefined,
+  }),
+}));
+
 vi.mock('../queries', () => ({
   useTitleDocument: () => ({ data: currentDoc }),
   useSearch: () => ({ data: undefined }),
@@ -74,7 +81,7 @@ vi.mock('../queries', () => ({
   useHoldingKinds: () => ({
     data: {
       results: [
-        { id: 1, name: 'Quarry', description: '', site_kind: 'LAND', requires_field: false },
+        { id: 1, name: 'Quarry', description: '', site_kind: 'land', requires_field: false },
       ],
     },
   }),
@@ -161,6 +168,35 @@ test("a rung inside a higher title's own chain offers no house picker", () => {
   } finally {
     currentDoc = doc;
   }
+});
+
+test('a holding is renamed from its row', async () => {
+  mutate.mockClear();
+  renderWithProviders(<TitlePage titleId={3} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Rename a quarry' }));
+  const input = screen.getByLabelText('name of a quarry');
+  await userEvent.clear(input);
+  await userEvent.type(input, 'North quarry');
+  await userEvent.click(screen.getByRole('button', { name: 'Save name of a quarry' }));
+  expect(mutate).toHaveBeenCalledWith({ holding_id: 1, name: 'North quarry' });
+});
+
+test('a land holding is placed on a room found by name', async () => {
+  mutate.mockClear();
+  renderWithProviders(<TitlePage titleId={3} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Site a quarry' }));
+  await userEvent.type(screen.getByLabelText('room for a quarry'), 'Katta');
+  await userEvent.click(screen.getByRole('button', { name: /Katta Fields/ }));
+  expect(mutate).toHaveBeenCalledWith({ holding_id: 1, room_id: 77 });
+});
+
+test('a holding is removed only after a second press', async () => {
+  mutate.mockClear();
+  renderWithProviders(<TitlePage titleId={3} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Remove a quarry' }));
+  expect(mutate).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Confirm remove a quarry' }));
+  expect(mutate).toHaveBeenCalledWith({ holding_id: 1 });
 });
 
 test('a held rung is vacated only after a second press', async () => {

@@ -11,7 +11,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 
 | Registry | Surfaces | Named by no test |
 |---|---|---|
-| Actions (`actions.registry`) | 577 | 0 |
+| Actions (`actions.registry`) | 580 | 0 |
 | Commands (character + account cmdsets) | 272 | 57 |
 | API routes (`urls.py` under `src/`) | 567 | 83 |
 | Frontend routes (`App.tsx`) | 132 | 60 |
@@ -61,9 +61,12 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `almanach_plant_rung` | `actions.definitions.almanach.AlmanachPlantRungAction` | almanach / self | `frontend/src/almanach/__tests__/queries.test.tsx`, `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_promote_kin` | `actions.definitions.almanach.AlmanachPromoteKinAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_publish` | `actions.definitions.almanach.AlmanachPublishAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
+| `almanach_remove_holding` | `actions.definitions.almanach.AlmanachRemoveHoldingAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
+| `almanach_rename_holding` | `actions.definitions.almanach.AlmanachRenameHoldingAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_set_appable` | `actions.definitions.almanach.AlmanachSetAppableAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_set_holder` | `actions.definitions.almanach.AlmanachSetHolderAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_set_status` | `actions.definitions.almanach.AlmanachSetStatusAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
+| `almanach_site_holding` | `actions.definitions.almanach.AlmanachSiteHoldingAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_swear` | `actions.definitions.almanach.AlmanachSwearAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_vacate_holder` | `actions.definitions.almanach.AlmanachVacateHolderAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `answer_check_call` | `actions.definitions.scene_checks.AnswerCheckCallAction` | checks / self | `src/actions/tests/test_base.py` |
@@ -784,7 +787,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `retreat` |  | `commands.hazard.CmdRetreat` | none |
 | `reveal` | show | `commands.showcase.CmdReveal` | `src/actions/tests/test_base.py`, `src/integration_tests/pipeline/test_audere_ultimates_e2e.py`, `src/integration_tests/test_earning_your_keep_journeys.py`, `src/world/journals/tests/test_views.py` (+1) |
 | `ritual` |  | `commands.ritual.CmdRitual` | `src/commands/tests/test_consent_commands.py`, `src/commands/tests/test_durance_command.py`, `src/commands/tests/test_ritual_durance.py`, `src/commands/tests/test_ritual_session_kwargs.py` (+16) |
-| `room` | build, manageroom | `commands.locations.CmdRoom` | `frontend/e2e/target-menu-worn-row.spec.ts`, `frontend/src/game/components/SidebarTabPanel.test.tsx`, `frontend/src/scenes/hooks/__tests__/useThreading.test.ts`, `frontend/src/store/__tests__/gameSlice.test.ts` (+42) |
+| `room` | build, manageroom | `commands.locations.CmdRoom` | `frontend/e2e/target-menu-worn-row.spec.ts`, `frontend/src/almanach/__tests__/TitlePage.test.tsx`, `frontend/src/game/components/SidebarTabPanel.test.tsx`, `frontend/src/scenes/hooks/__tests__/useThreading.test.ts` (+43) |
 | `sacrifice` |  | `commands.worship.CmdSacrifice` | `src/actions/tests/test_base.py`, `src/integration_tests/pipeline/test_pledge_telnet_e2e.py`, `src/integration_tests/test_commissioning_a_piece_journeys.py`, `src/integration_tests/test_item_that_fed_resonance_journeys.py` (+3) |
 | `sanctum` |  | `commands.sanctum.CmdSanctum` | `src/commands/tests/test_sanctum_command.py`, `src/world/magic/tests/test_crossing.py`, `src/world/magic/tests/test_sanctification_touchstone_e2e.py`, `src/world/magic/tests/test_sanctum_install_action_components.py` (+1) |
 | `say` |  | `commands.evennia_overrides.communication.CmdSay` | `frontend/e2e/narrative-play-delivery.spec.ts`, `frontend/src/game/components/CommandInput.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_enhancements.py` (+8) |
@@ -1106,7 +1109,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `societies/` | `SocietySearchViewSet` | `world.events.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/src/home/hall/__tests__/AttentionBand.test.tsx` (+397) |
 | `/` | `EventViewSet` | `world.events.urls` | none |
 | `rest/` | `RestView` | `world.fatigue.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts` (+850) |
-| `traits/` | `FormTraitViewSet` | `world.forms.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/e2e/evidence/sheet-goals-and-favor-4106.spec.ts` (+545) |
+| `traits/` | `FormTraitViewSet` | `world.forms.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/e2e/evidence/sheet-goals-and-favor-4106.spec.ts` (+544) |
 | `character-forms/` | `CharacterFormViewSet` | `world.forms.urls` | `src/integration_tests/test_npc_lending_journeys.py` |
 | `height-bands/` | `HeightBandViewSet` | `world.forms.urls` | none |
 | `builds/` | `BuildViewSet` | `world.forms.urls` | `frontend/e2e/evidence/codex-companion-4198.spec.ts`, `frontend/e2e/stories-author.spec.ts`, `frontend/e2e/stories-player.spec.ts`, `frontend/src/combat/components/CombatTacticalMap.test.tsx` (+86) |
@@ -1114,7 +1117,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `` | `clock_state` | `world.game_clock.urls` | none |
 | `convert/` | `clock_convert` | `world.game_clock.urls` | `frontend/e2e/feed-notes.spec.ts`, `frontend/src/flows-builder/__tests__/filterTree.test.ts`, `frontend/src/hooks/__tests__/parseGameMessage.test.ts`, `frontend/src/missions/__tests__/computeLayout.test.ts` (+38) |
 | `adjust/` | `clock_adjust` | `world.game_clock.urls` | `src/integration_tests/test_faces_silences_and_the_floor_journeys.py`, `src/integration_tests/test_staging_a_situation_journeys.py`, `src/world/combat/tests/test_begin_declaration_bond_dissolution.py`, `src/world/combat/tests/test_combat_effective_level_bonus.py` (+23) |
-| `ratio/` | `clock_ratio` | `world.game_clock.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/era-admin.spec.ts`, `frontend/e2e/evidence/combat-mark-4603.spec.ts` (+886) |
+| `ratio/` | `clock_ratio` | `world.game_clock.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/era-admin.spec.ts`, `frontend/e2e/evidence/combat-mark-4603.spec.ts` (+885) |
 | `pause/` | `clock_pause` | `world.game_clock.urls` | `frontend/e2e/evidence/combat-mark-4603.spec.ts`, `frontend/src/battles/components/BattleActionPanel.test.tsx`, `frontend/src/battles/components/StagingPanel.test.tsx`, `frontend/src/battles/components/__tests__/BattleMapCanvas.test.tsx` (+59) |
 | `unpause/` | `clock_unpause` | `world.game_clock.urls` | `src/actions/tests/test_gm_combat_actions.py`, `src/world/game_clock/tests/test_scripts.py`, `src/world/game_clock/tests/test_services.py`, `src/world/game_clock/tests/test_views.py` (+3) |
 | `applications/` | `GMApplicationViewSet` | `world.gm.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+87) |

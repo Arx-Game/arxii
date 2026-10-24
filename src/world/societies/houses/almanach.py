@@ -49,7 +49,7 @@ from world.societies.houses.constants import (
     LifeStatus,
     TitleTier,
 )
-from world.societies.houses.models import Domain, FealtyEdge, LandShape, Title
+from world.societies.houses.models import Domain, DomainHolding, FealtyEdge, LandShape, Title
 from world.societies.houses.services import (
     HousesServiceError,
     acknowledge_into_family,
@@ -525,6 +525,47 @@ def unpublish_house(house: Organization) -> Organization:
 
 
 @transaction.atomic
+@transaction.atomic
+def rename_holding(holding: DomainHolding, name: str) -> DomainHolding:
+    """Rename a holding (the income stream keeps the name it was minted with, since a
+    stream's name is unique per organization and a rename must never collide)."""
+    name = name.strip()
+    if not name:
+        msg = f"holding {holding.pk} renamed to nothing"
+        raise HousesServiceError(msg, user_message="Name the holding.")
+    holding.name = name
+    holding.save(update_fields=["name"])
+    return holding
+
+
+@transaction.atomic
+def remove_holding(holding: DomainHolding) -> None:
+    """Remove a holding and the income stream minted for it.
+
+    Refused while the stream still has income waiting to be collected, or when
+    something else on the books still points at the stream: the money is not this
+    call's to discard.
+    """
+    from django.db.models import ProtectedError  # noqa: PLC0415
+
+    stream = holding.income_stream
+    if stream is not None and stream.uncollected_pool > 0:
+        msg = f"holding {holding.pk} has uncollected income"
+        raise HousesServiceError(
+            msg, user_message="That holding has income waiting to be collected."
+        )
+    holding.delete()
+    if stream is not None:
+        try:
+            with transaction.atomic():
+                stream.delete()
+        except ProtectedError as exc:
+            msg = f"stream {stream.pk} is still referenced"
+            raise HousesServiceError(
+                msg, user_message="That holding's income is still on the books."
+            ) from exc
+
+
 def describe_demesne(
     *, domain: Domain, description: str, hall_name: str, land_shape_names: list[str]
 ) -> Domain:

@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 
 import { useAllHouses, useAlmanachMutation, useHoldingKinds, useTitleDocument } from '../queries';
 import { RecordRail, type RecordRailDoor, type RecordRailRow } from '../document/RecordRail';
+import { HoldingRow } from './HoldingRow';
 import { PlantRungDialog } from '../ladder/PlantRungDialog';
 import { BatchUnclaimedDialog } from '../ladder/BatchUnclaimedDialog';
 import { CreateFamilyForm } from '../front/CreateFamilyForm';
@@ -312,27 +313,29 @@ export function TitlePage({ titleId }: { titleId: number }) {
                   <th scope="col">type</th>
                   <th scope="col">site</th>
                   <th scope="col">state</th>
+                  <th scope="col">
+                    <span className="sr-only">actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {holdings.map((h) => (
-                  <tr key={h.holding_id}>
-                    <td>{h.name || h.kind}</td>
-                    <td>{h.kind}</td>
-                    <td>{h.site || <span className="meta">none</span>}</td>
-                    <td>{h.unsited ? <span className="chip undef">unsited</span> : 'working'}</td>
-                  </tr>
+                  <HoldingRow
+                    key={h.holding_id}
+                    holding={h}
+                    kind={(holdingKinds?.results ?? []).find((k) => k.name === h.kind)}
+                  />
                 ))}
                 {holdings.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="meta">
+                    <td colSpan={5} className="meta">
                       none
                     </td>
                   </tr>
                 )}
                 {demesne && (
                   <tr>
-                    <td colSpan={4}>
+                    <td colSpan={5}>
                       <div className="row3">
                         <div className="field">
                           <label htmlFor="h-kind">Add holding</label>
