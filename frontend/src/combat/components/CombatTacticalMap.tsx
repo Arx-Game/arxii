@@ -25,6 +25,7 @@ import type { OccupantLink } from '@/areas/components/TacticalMap';
 import type { OccupantMark, OccupantSummary } from '@/areas/components/PositionMapNode';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import type { PositionTargetShape } from '@/actions/types';
+import { hopsLeftLine } from '../roundActionHelpers';
 
 export interface CombatTacticalMapProps {
   /**
@@ -265,11 +266,22 @@ export function CombatTacticalMap({
       .map((o) => ({ id: o.objectdb_id as number, name: o.name })),
   ];
 
+  // The viewer's hops left this round (#4608), off the moves the server offers.
+  const hopsLine = hopsLeftLine(moveActions);
+
   return (
     <div
-      className="h-[480px] rounded-lg border border-border bg-card"
+      className="relative h-[480px] rounded-lg border border-border bg-card"
       data-testid="combat-tactical-map"
     >
+      {hopsLine !== null && (
+        <p
+          className="absolute right-2 top-2 z-10 rounded bg-background/80 px-2 py-0.5 text-xs text-muted-foreground"
+          data-testid="map-hops-left"
+        >
+          {hopsLine}
+        </p>
+      )}
       <GMPlacementControls
         gmPlaceActions={gmPlaceActions}
         targets={placeTargets}
