@@ -15,6 +15,9 @@ Middle - East, joined by open edges.
 - The same Rampart drained to nothing by a ward clash, expired after its one round, or torn
   down when the scene finishes opens its edges each time.
 
+A mortal moves one hop a round and only while a round is open (#4607), so Brenna's walk across
+the yard takes three rounds.
+
 Expected values are the rows built here: the Rampart's integrity 10, the swing 12, the clash
 pressure 5 against 3 integrity, the Rampart's duration of 1 round, and the challenge name
 "Conjured Barrier" the spell wall's gate is minted from (``CONJURED_BARRIER_CHALLENGE_NAME``).
@@ -57,7 +60,7 @@ from world.combat.factories import (
     ThreatPoolFactory,
     WardClashFactory,
 )
-from world.combat.services import resolve_round
+from world.combat.services import begin_declaration_phase, resolve_round
 from world.conditions.models import CapabilityType
 from world.magic.effect_palette_content import OBSTACLE_TECHNIQUE_NAME, ensure_obstacle_content
 from world.magic.factories import (
@@ -126,6 +129,10 @@ class _TheYard(JourneyCase):
         )
         place_in_position(character, at)
         return character
+
+    def next_round(self) -> None:
+        """Open the next declaration phase. A mortal moves one hop a round, and only then."""
+        begin_declaration_phase(self.encounter)
 
     def edge(self, a, b) -> PositionEdge:
         lo, hi = (a, b) if a.pk < b.pk else (b, a)
@@ -254,9 +261,12 @@ class ARampartFalls(_TheYard):
         self.brute_swings_at_brenna()
 
         self.assertFalse(Rampart.objects.filter(pk=rampart.pk).exists())
+        self.next_round()
         self.telnet(self.brenna, "position West")
         self.assertEqual(position_of(self.brenna), self.west)
+        self.next_round()
         self.telnet(self.brenna, "position Middle")
+        self.next_round()
         self.telnet(self.brenna, "position East")
         self.assertEqual(position_of(self.brenna), self.east)
 
@@ -267,6 +277,7 @@ class ARampartFalls(_TheYard):
         )
 
         self.brute_swings_at_brenna()
+        self.next_round()
 
         self.assertIn(BLOCKED, self.telnet(self.brenna, "position East"))
         self.assertEqual(position_of(self.brenna), self.middle)
