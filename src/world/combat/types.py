@@ -20,10 +20,13 @@ if TYPE_CHECKING:
         ClashContribution,
         ClashRound,
         CombatOpponent,
+        CombatOpponentAction,
         CombatParticipant,
         CombatRoundAction,
         ComboDefinition,
         ComboSlot,
+        NpcTacticsConfig,
+        ThreatPoolEntry,
     )
     from world.conditions.models import ConditionInstance, DamageType
     from world.conditions.types import (
@@ -610,3 +613,45 @@ class MovementProfile:
     tactics: str
     speed_hops: int
     traversal: str
+
+
+@dataclass
+class TacticsInputs:
+    """What the NPC tactics ladder reads for one round, batch-fetched once (#4609).
+
+    Part of ``NpcRoundContext``. ``prior_move_kinds`` maps an opponent to its move kind
+    by round for the rounds just before this one (the waiting cap). ``aimed_at`` maps an
+    opponent to the hostiles whose action this round is aimed at it (PC declarations and
+    opponents' attack rows): who is hitting it, the unanswerable-attacker test's input.
+    ``grounding_entry_ids`` are the threat entries whose on-hit pool grounds a flier.
+    ``ally_entries_by_pool`` covers every active opponent's pool, for the bash test's
+    group chip; ``wall_chips`` memoizes that chip per wall for the round.
+    """
+
+    config: NpcTacticsConfig
+    prior_move_kinds: dict[int, dict[int, str]]
+    aimed_at: dict[int, list[CombatParticipant | CombatOpponent]]
+    grounding_entry_ids: set[int]
+    ally_entries_by_pool: dict[int, list[ThreatPoolEntry]]
+    wall_chips: dict[int, int] = field(default_factory=dict)
+
+
+@dataclass
+class SlotMoveResult:
+    """What an opponent's move plan did in its resolution slot (#4609).
+
+    Each flag is one of the progress guarantee's observable results. ``stopped`` is True
+    when a waiting strike stopped the mover. ``attack_rows`` are attacks the move itself
+    made (an opponent whose wall fell before it could bash strikes instead).
+    """
+
+    moved: bool = False
+    bashed: bool = False
+    fled: bool = False
+    waited: bool = False
+    stopped: bool = False
+    attack_rows: list[CombatOpponentAction] = field(default_factory=list)
+
+    @property
+    def progressed(self) -> bool:
+        return self.moved or self.bashed or self.fled or self.waited

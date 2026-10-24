@@ -8112,7 +8112,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `CombatOpponentAction`, `CombatOpponentMove` (#4607 - one opponent's movement plan for
   one round: `kind` `OpponentMoveKind` ADVANCE/SHELTER/BASH/RETREAT/WAIT, `goal_position`
   hint (SET_NULL), `barrier_edge` (CASCADE, required for BASH), `threat_entry` (required for
-  BASH/WAIT), `fired`; unique per opponent and round; slice 2 writes only ADVANCE),
+  BASH/WAIT), `fired`; unique per opponent and round; every kind is written since #4609),
+  `NpcTacticsConfig` (#4609, singleton, `load()` creates it: `bash_rounds_limit`,
+  `retreat_rounds_limit`, `unanswered_hit_morale`; read by the NPC tactics ladder),
   `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `ComboSlot` (`requirement_label` names what a slot asks for, #3553),
   `ComboLearning` (use_count tracks repeat
@@ -8224,7 +8226,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `CombatOpponent.morale` / `max_morale` (PositiveSmallIntegerField, #2015) — first-class
     depletable resolve pool mirroring war-scale `BattleUnit.morale`. Derived state via
     `morale_state_for` (STEADY/FALTER/BREAK) drives `select_npc_actions` (falter weakens,
-    break → FLED). `OpponentTierTemplate.has_morale` flags mindless tiers (resist, not immune).
+    break → a RETREAT over the map that ends FLED, or FLED at once off the map, #4609). `OpponentTierTemplate.has_morale` flags mindless tiers (resist, not immune).
   - **Boss state on the opponent payload (#3552):** `OpponentSerializer` serves GM-only
     (`_is_gm_or_staff`, `null` otherwise) `phase_count` (BOSS tier), `damage_multiplier`,
     `break_bar_current` / `break_bar_threshold` / `vulnerability_rounds_remaining`,
@@ -8797,6 +8799,25 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `CombatOpponentAction` and sets `fired`. Unconsented Soulfray at firing lapses it for
     free. A mover the strike stops loses its move and attacks ("{name} is stopped before
     striking."). `narrate_unanswered_waits` names unfired waiters after the loop.
+- **NPC tactics and the progress guarantee (#4609, slice 4 of #4576, ADR-4609-A) [BUILT & WIRED]:**
+  - The ladder: `world/combat/services/npc/npc_tactics.py`. Selection
+    (`plan_opponent_round`) uses `build_tactics_inputs` (in `NpcRoundContext.tactics`:
+    `TacticsInputs`, the tuning row, prior move kinds, who is aimed at whom this round, the
+    grounding entry ids), `plan_retreat` (RETREAT; off the map = FLED at once; cornered =
+    fights), `unanswerable_attackers` + `shelter_goal` (SHELTER, every tactics level),
+    `grounding_strike` / `write_grounding_attack` (CUNNING/TACTICAL only), and
+    `plan_approach` (ADVANCE, BASH by `can_break_in_time` / `group_chip`, WAIT once).
+    A MINDLESS opponent never uses a grounding entry (`usable_entries`,
+    `npc_movement.entry_grounds_fliers`), always bashes a wall in its way, never waits.
+  - The slot: `run_move_plan(opponent, move, attack_rows, *, on_hop) -> SlotMoveResult`
+    (`world/combat/types.py`) carries the plan out ("{name} batters {barrier}.",
+    "{barrier} gives way.", "{name} waits for an opening.", "{name} flees the fight."); an
+    opponent that did nothing at all says "{name} strains against {barrier}."
+    (`narrate_strain`). `apply_unanswered_hit_morale(attacker, outcome)` runs after each PC
+    action and NPC attack row.
+  - Path service helpers (positioning): `find_path(..., through_barriers=True)`,
+    `step_costs(..., through_barriers=True)`, `path_costs_from`, `first_closed_edge`,
+    `is_breakable_barrier`, `barrier_integrity`; see `docs/systems/areas.md`.
 - **Conditions reach the fight for both sides (#4572) [BUILT & WIRED]:**
   - `select_npc_actions` -> `_apply_aggro_conditions` (`world/combat/services/npc/npc_selection.py`)
     adds each PC's summed `aggro_priority` (`world.conditions.services.aggro_priority_by_target`,

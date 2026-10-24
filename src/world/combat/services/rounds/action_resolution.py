@@ -8,6 +8,7 @@ from world.combat.constants import (
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
     CombatManeuver,
+    OpponentStatus,
     WaitingStrikeReason,
 )
 from world.combat.models import (
@@ -22,9 +23,13 @@ from world.combat.services.npc.npc_action import _resolve_npc_action
 from world.combat.services.npc.npc_movement import (
     _cached_opponent_targets,
     _cached_targets,
-    advance_opponent,
     broadcast_cannot_reach,
     refit_targets,
+)
+from world.combat.services.npc.npc_tactics import (
+    apply_unanswered_hit_morale,
+    narrate_strain,
+    run_move_plan,
 )
 from world.combat.services.rounds.maneuvers import _STANDALONE_MANEUVER_RESOLVERS
 from world.combat.services.rounds.waiting_strikes import fire_waiting_strikes
@@ -78,7 +83,9 @@ def _resolve_pc_slot(
         outcomes.extend(strike.outcomes)
         if strike.mover_stopped:
             return outcomes
-    outcomes.append(_resolve_pc_action(entity, action, offense_check_fn))
+    outcome = _resolve_pc_action(entity, action, offense_check_fn)
+    apply_unanswered_hit_morale(entity, outcome)
+    outcomes.append(outcome)
     return outcomes
 
 
@@ -90,17 +97,19 @@ def _resolve_npc_slot(  # noqa: PLR0913 - the slot carries the loop's check seam
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
 ) -> list[ActionOutcome]:
-    """An NPC's slot: advance (arrivals draw waiting strikes), then each attack row.
+    """An NPC's slot: its move plan (arrivals draw waiting strikes), then each attack row.
 
-    Each attack row first draws the waiting strikes of its defenders (#4608). A strike
-    that stops the opponent cancels the rest of its move and every attack still to come.
+    The plan (``run_move_plan``, #4609) advances, takes cover, bashes a wall, backs away
+    or holds a waiting strike. Each attack row first draws the waiting strikes of its
+    defenders (#4608). A strike that stops the opponent cancels the rest of its move and
+    every attack still to come. A hit on an opponent that cannot answer the attacker
+    shakes its morale. An opponent whose plan and attacks did nothing at all strains
+    against the wall that holds it ("{name} strains against {barrier}.").
     """
     encounter = entity.encounter
     outcomes: list[ActionOutcome] = []
-    stopped = False
 
     def on_hop(_here: Position, announce: Callable[[], None]) -> bool:
-        nonlocal stopped
         strike = fire_waiting_strikes(
             encounter,
             entity,
@@ -111,12 +120,40 @@ def _resolve_npc_slot(  # noqa: PLR0913 - the slot carries the loop's check seam
             before_fire=announce,
         )
         outcomes.extend(strike.outcomes)
-        stopped = strike.mover_stopped
-        return stopped
+        return strike.mover_stopped
 
-    advance_opponent(entity, move, attack_rows, on_hop=on_hop)
-    if stopped:
+    moved = run_move_plan(entity, move, attack_rows, on_hop=on_hop)
+    if moved.stopped:
         return outcomes
+    attacked = _resolve_npc_attacks(
+        entity,
+        [*attack_rows, *moved.attack_rows],
+        outcomes,
+        offense_check_fn,
+        defense_check_type,
+        defense_check_fn,
+    )
+    if (
+        move is not None
+        and not moved.progressed
+        and not attacked
+        and entity.status == OpponentStatus.ACTIVE
+    ):
+        narrate_strain(entity)
+    return outcomes
+
+
+def _resolve_npc_attacks(  # noqa: PLR0913 - the slot carries the loop's check seams
+    entity: CombatOpponent,
+    attack_rows: list[CombatOpponentAction],
+    outcomes: list[ActionOutcome],
+    offense_check_fn: PerformCheckFn | None,
+    defense_check_type: CheckType | None,
+    defense_check_fn: PerformCheckFn | None,
+) -> bool:
+    """Resolve the opponent's attack rows into ``outcomes``; True when one was resolved."""
+    encounter = entity.encounter
+    attacked = False
     for npc_action in attack_rows:
         # Re-fit first, so the defenders are the targets this strike will land on. The
         # resolver's own re-fit then finds nothing to change.
@@ -138,10 +175,11 @@ def _resolve_npc_slot(  # noqa: PLR0913 - the slot carries the loop's check seam
             outcomes.extend(strike.outcomes)
             if strike.mover_stopped:
                 break
-        outcomes.append(
-            _resolve_npc_action(entity, npc_action, defense_check_type, defense_check_fn)
-        )
-    return outcomes
+        outcome = _resolve_npc_action(entity, npc_action, defense_check_type, defense_check_fn)
+        apply_unanswered_hit_morale(entity, outcome)
+        outcomes.append(outcome)
+        attacked = True
+    return attacked
 
 
 def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params

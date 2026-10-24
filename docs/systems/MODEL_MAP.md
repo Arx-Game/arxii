@@ -2699,6 +2699,8 @@
 
 ### FleeTierModifier
 
+### NpcTacticsConfig
+
 ### OpponentTierTemplate
 
 ### PendingOpponentAttack
@@ -2858,7 +2860,7 @@
 - `maybe_resolve_on_ready(encounter: 'CombatEncounter') -> 'RoundResolutionResult | None' - Resolve the round early when every ACTIVE participant is ready (#2120).`
 - `minimum_break_bar_threshold() -> 'int' - Pacing floor for a boss's break-bar threshold (#2642, batch-3 F-7a).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = (), extra_standing: int = 0, target_modifiers: int = 0) -> world.checks.types.CheckResult - Main check resolution function.`
-- `plan_opponent_round(opponent: 'CombatOpponent', ctx: 'NpcRoundContext') -> 'list[CombatOpponentAction]' - Plan one opponent's round: its attack rows and its one move plan (#4607).`
+- `plan_opponent_round(opponent: 'CombatOpponent', ctx: 'NpcRoundContext') -> 'list[CombatOpponentAction]' - Plan one opponent's round: its attack rows and its one move plan (#4607, #4609).`
 - `refit_targets(npc_action: 'CombatOpponentAction') -> 'bool' - Drop the stored targets this action's strike no longer reaches; False when none is left.`
 - `remove_opponent(opponent: 'CombatOpponent') -> 'None' - Pull an opponent out of a live encounter (GM action, #3382).`
 - `remove_participant(participant: 'CombatParticipant') -> 'None' - Remove a participant: status write + combat engagement teardown (#872).`

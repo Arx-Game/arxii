@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from world.companions.models import CompanionOrder
 
 from world.combat.constants import (
+    BASH_ROUNDS_LIMIT,
     COMBO_MIN_SLOTS,
     DEFAULT_OPPONENT_MORALE,
     DEFAULT_PACE_TIMER_MINUTES,
@@ -37,9 +38,11 @@ from world.combat.constants import (
     NPC_DEFAULT_HOPS,
     NPC_DEFAULT_TACTICS,
     NPC_DEFAULT_TRAVERSAL,
+    RETREAT_ROUNDS_LIMIT,
     SCALING_CONFIG_BASELINE_PARTY_SIZE,
     SCALING_CONFIG_PER_AVG_LEVEL_PCT,
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
+    UNANSWERED_HIT_MORALE,
     ActionCategory,
     BreakContributionKind,
     CauseKind,
@@ -4466,6 +4469,57 @@ class SpectacleConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return "Spectacle settings"
+
+
+class NpcTacticsConfig(SharedMemoryModel):
+    """Staff tuning for how opponents fight on the battle map (#4609). One row.
+
+    Read by the NPC tactics ladder (``combat/services/npc/npc_tactics.py``): when a
+    group of opponents bashes a wall instead of going around, how long a broken
+    opponent backs away before it leaves, and how much an attacker it cannot answer
+    shakes it.
+    """
+
+    bash_rounds_limit = models.PositiveSmallIntegerField(
+        default=BASH_ROUNDS_LIMIT,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Opponents bash a wall when, together, they can bring it down in this many "
+            "rounds. A sturdier wall sends a cunning or tactical opponent around it."
+        ),
+    )
+    retreat_rounds_limit = models.PositiveSmallIntegerField(
+        default=RETREAT_ROUNDS_LIMIT,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "A broken opponent leaves the fight after backing away this many rounds in "
+            "a row, even when an enemy can still reach it."
+        ),
+    )
+    unanswered_hit_morale = models.PositiveSmallIntegerField(
+        default=UNANSWERED_HIT_MORALE,
+        help_text=(
+            "Morale an opponent loses each time it is hit by an attacker it cannot hit "
+            "back. 0 switches this off. A tier without morale takes the mindless percent "
+            "share of it set in the spectacle settings, never less than 1."
+        ),
+    )
+
+    objects = ArxSharedMemoryManager()
+
+    class Meta:
+        verbose_name = "NPC tactics config"
+
+    @classmethod
+    def load(cls) -> "NpcTacticsConfig":
+        """Fetch (or lazily create) the singleton row."""
+        obj = cls.objects.cached_singleton()
+        if obj is None:
+            obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        return "NPC tactics settings"
 
 
 class SpectacleRecord(SharedMemoryModel):

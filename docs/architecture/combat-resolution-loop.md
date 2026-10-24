@@ -1736,7 +1736,7 @@ resolve_round (status DECLARING)
 
 `select_npc_actions` and `ensure_opponent_plans` share one per-round context builder
 (`_build_npc_round_context`) and the same exclusions as before: no threat pool, a duel
-mirror, a calmed (NEUTRAL) opponent, a companion on HOLD, a BREAK (which still flees).
+mirror, a calmed (NEUTRAL) opponent, a companion on HOLD. A BREAK retreats over the map since #4609 (see the slice 4 addendum).
 `plan_opponent_round` writes the attack rows and exactly one ADVANCE `CombatOpponentMove`,
 even when no entry is off cooldown or nobody is in reach. An opponent that declared a
 wind-up, or holds one that has not matured, writes no move row: the telegraph is its
@@ -1854,3 +1854,84 @@ once. A combat opponent never gets a catch window (`begin_plummet(..., allow_cat
 it lands in the call and the handler applies the returned impact to its health with the fall
 damage type, no source and soak bypassed. Neither fall has a source, so neither can kill
 (`death_is_permitted`). Taking off again costs a hop like any vertical step.
+
+## Implementation addendum: NPC tactics and the progress guarantee (#4609, slice 4 of #4576)
+
+All NPC planning decisions sit in `combat/services/npc/npc_tactics.py`. Selection
+(`plan_opponent_round`) asks the ladder for the opponent's move plan and attack rows; the
+resolve loop asks `run_move_plan` to carry the plan out in the opponent's slot, re-planned
+against live positions. ADR-4609-A records what the ladder reads and where its numbers live
+(`NpcTacticsConfig`: `bash_rounds_limit` 3, `retreat_rounds_limit` 2,
+`unanswered_hit_morale` 10).
+
+### The ladder at selection
+
+```
+plan_opponent_round(opponent, ctx)                # ctx.tactics = build_tactics_inputs(...)
+  BREAK morale → plan_retreat
+    off the map, or no enemy on it → FLED at once (as before the map mattered)
+    nowhere farther from every enemy (path distance) and an enemy in melee reach → cornered: go on
+    else RETREAT plan (goal = the farthest position), no attack rows
+  NEUTRAL / companion HOLD → nothing (unchanged)
+  usable / eligible entries   (a MINDLESS opponent drops every grounding entry)
+  strikeable this round? (reachable_pools, unchanged)
+  attackers = unanswerable_attackers   # aimed at it this round (PC declarations, attack rows)
+                                       # and not answerable by any usable entry within its hops
+  shelter = shelter_goal               # nearest roofed/screened position out of their reach;
+                                       # TACTICAL prefers one in reach this round beside an ally
+  nobody strikeable:
+    shelter → SHELTER plan
+    else plan_approach:
+      free = find_path(origin, approach set)                      # walls respected
+      wall = find_path(..., through_barriers=True)                # breakable walls cost 1
+      blocking = first_closed_edge(wall), unless going round costs no more
+      blocking and a melee bash entry and (MINDLESS or can_break_in_time)
+        → BASH plan (barrier_edge, threat_entry)
+      can advance (round the wall, or toward another enemy) → ADVANCE plan
+      zero-hop, CUNNING/TACTICAL with a melee entry, last round's plan not WAIT → WAIT plan
+      zero-hop otherwise: the wall in the way (or an unaffordable breakable first step) → BASH
+      else ADVANCE plan (nothing will move: the slot narrates the strain)
+  somebody strikeable:
+    CUNNING/TACTICAL: grounding_strike → first attack row is a grounding entry at a flier hitting it
+    the attack rows (unchanged), then SHELTER if shelter applies, else ADVANCE
+```
+
+`can_break_in_time` is the bash test: the wall's live integrity (the Rampart's for a Rampart's
+seal) is at most `bash_rounds_limit` times the group chip. The group chip is the summed best
+melee chip (`base_damage * damage_multiplier`, no defence roll) of every active opponent on the
+same side within one hop of either end of the wall, memoized per wall per round.
+
+### The plan in the slot
+
+```
+_resolve_npc_slot
+  run_move_plan(opponent, move, attack_rows, on_hop=arrival trigger) → SlotMoveResult
+    ADVANCE → advance_opponent (unchanged; with no attack row it heads for any position one of
+              its entries' deliveries would strike from)
+    SHELTER → walk for the planned cover (or the nearest covered position)
+    BASH    → wall already down: advance, then strike whoever is in reach with the bash entry
+              else walk to the near end, "{name} batters {barrier}.", damage_barrier(chip);
+              a fall says "{barrier} gives way."
+    RETREAT → walk toward the farthest position; then FLED ("{name} flees the fight.") when no
+              enemy can strike it there (a PC's best technique reach, an opponent's entry
+              deliveries) or this is the retreat_rounds_limit-th round in a row
+    WAIT    → "{name} waits for an opening."; the row fires through fire_waiting_strikes
+  attack rows (+ any the plan made): refit, ATTACKING waiting strikes, resolve,
+    apply_unanswered_hit_morale(attacker, outcome)
+  nothing at all happened (no move, bash, wait, flight or attack) → narrate_strain:
+    "{name} strains against {barrier}." naming the closed edge nearest it
+```
+
+A PC slot also calls `apply_unanswered_hit_morale` after the PC's action: each damage result
+on an opponent that cannot answer the PC (no usable entry reaches the PC within its hops)
+takes `unanswered_hit_morale` through `apply_morale_damage`, or the `SpectacleConfig`
+mindless share for a tier without morale. A waiting strike is always answerable (it comes
+from the waiter's melee reach), so it takes none.
+
+### The progress guarantee
+
+In every resolved round every active opponent that is not winding up, calmed or a duel mirror
+attacks, moves, batters a wall, holds a waiting strike or leaves. The only exception is the
+physically stuck (no route, no breakable wall, no hostile in reach, and a wait already spent
+or not available), whose slot says it strains against the wall. The property test is
+`src/integration_tests/fuzz/test_npc_progress_fuzz.py`.
