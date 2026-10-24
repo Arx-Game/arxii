@@ -7,7 +7,6 @@ from django.forms.models import BaseInlineFormSet
 from django.template.response import TemplateResponse
 from django.utils.html import format_html
 
-from web.admin.authoring.identity_map import RefusedSaveFlushMixin
 from web.admin.authoring.offers import DistinctionOfferFormSetMixin
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
 from world.character_creation.constants import OfferChapter
@@ -537,7 +536,7 @@ def wire_technique_cast_templates(modeladmin, request, queryset):  # type: ignor
 
 
 @admin.register(Technique)
-class TechniqueAdmin(RefusedSaveFlushMixin, admin.ModelAdmin):
+class TechniqueAdmin(admin.ModelAdmin):
     actions = [wire_technique_cast_templates]
     list_display = [
         "name",

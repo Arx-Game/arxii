@@ -35,11 +35,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from django.db import transaction
-from django.db.models import Model
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.models import ConsequencePool, ConsequencePoolEntry
 from web.admin.authoring.credit import stamp_written
+from web.admin.authoring.identity_map import CacheGuard
 from web.admin.soulfray_builder.forms import BuilderForms, PoolForm, TableRow
 from world.checks.models import Consequence, ConsequenceEffect
 from world.conditions.models import (
@@ -76,46 +75,6 @@ _CREATED_MODELS = (
 class _RowsSaved:
     credited: list[CreditedContent] = field(default_factory=list)
     entries_changed: bool = False
-
-
-class CacheGuard:
-    """Puts identity-mapped rows back as they were when this POST does not commit.
-
-    ``keep`` records a row's column values and its cached relations before
-    anything changes them; ``restore`` writes those back onto the same Python
-    objects, so every holder of the cached instance sees the committed state
-    again. Keeping a row twice keeps the first (pre-change) state.
-    """
-
-    def __init__(self) -> None:
-        self._kept: dict[int, tuple[Model, dict[str, object], dict[str, object]]] = {}
-        self._cached_before: dict[type[SharedMemoryModel], set[object]] = {}
-
-    def watch_created(self, *models: type[SharedMemoryModel]) -> None:
-        """Note which pks of ``models`` the identity map holds now, so ``restore`` can
-        evict the rows a rolled-back transaction created. Eviction, never a refetch."""
-        for model in models:
-            self._cached_before[model] = {row.pk for row in model.get_all_cached_instances()}
-
-    def keep(self, *rows: Model | None) -> None:
-        for row in rows:
-            if row is None or row.pk is None or id(row) in self._kept:
-                continue
-            values = {
-                f.attname: row.__dict__[f.attname]
-                for f in row._meta.concrete_fields  # noqa: SLF001
-                if f.attname in row.__dict__
-            }
-            self._kept[id(row)] = (row, values, dict(row._state.fields_cache))  # noqa: SLF001
-
-    def restore(self) -> None:
-        for row, values, relations in self._kept.values():
-            row.__dict__.update(values)
-            row._state.fields_cache = dict(relations)  # noqa: SLF001
-        for model, before in self._cached_before.items():
-            for row in model.get_all_cached_instances():
-                if row.pk not in before:
-                    model.flush_cached_instance(row, force=True)
 
 
 def cache_guard_for(forms: BuilderForms) -> CacheGuard:
