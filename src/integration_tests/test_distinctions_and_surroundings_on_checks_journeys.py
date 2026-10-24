@@ -22,9 +22,8 @@ the example seed, so these journeys also prove the seed is coherent.
 - Staff set an effect's size and a scene's level and size on the admin pages; Paramount
   and a half-sized surroundings row are refused.
 
-The player's own ``check <name>`` command rolls through ``perform_check`` without gathering
-modifiers, so these journeys read the check through ``perform_check_with_modifiers``, the
-seam challenges, social actions and casts roll through.
+These journeys read the check through ``perform_check_with_modifiers``, the seam every roll
+uses since #4629, including the player's own ``check <name>``.
 """
 
 from __future__ import annotations
