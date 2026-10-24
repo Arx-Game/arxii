@@ -14,6 +14,7 @@ from world.combat.constants import (
     CHARGE_CHECK_BONUS,
     CHARGE_DAMAGE_BONUS,
     LANCE_UNMOUNTED_PENALTY,
+    CombatAllegiance,
     CombatManeuver,
     OpponentStatus,
     wind_penalty,
@@ -23,6 +24,13 @@ from world.combat.models import (
     CombatParticipant,
     CombatRoundAction,
     CombatRoundActionTarget,
+    SpectacleConfig,
+)
+from world.combat.morale import (
+    apply_morale_damage,
+    mindless_share,
+    morale_state_for,
+    tier_morale_map,
 )
 from world.combat.services.encounter.check_types import get_penetration_check_type
 from world.combat.services.equipment.equipped_weapon import (
@@ -36,7 +44,7 @@ from world.combat.services.techniques.technique_targets import (
     _resolve_enemy_condition_targets,
     _resolve_primary_target_sheet,
 )
-from world.combat.types import CombatTechniqueResolution, OpponentDamageResult
+from world.combat.types import CombatTechniqueResolution, OpponentDamageResult, SpectacleShift
 from world.conditions.constants import Allegiance
 from world.conditions.services import spend_contributing_conditions
 from world.fatigue.services import get_fatigue_penalty
@@ -682,6 +690,59 @@ class CombatTechniqueResolver:
         removed.extend(vow_removed)
         return applied, removed
 
+    def _apply_morale(
+        self, check_result: CheckResult, *, eff_intensity: int
+    ) -> list[SpectacleShift]:
+        """Shake each enemy the cast resolved on by the technique's own morale row (#4619).
+
+        Reads the cast's existing ``check_result``; it adds no roll. Nothing
+        happens below the row's ``minimum_success_level`` or when the row scales
+        to no morale. Runs after damage, so an opponent this cast defeated (or
+        one already fled or removed) is skipped by its status. AREA keeps
+        TURNED and NEUTRAL opponents and ally-side summons in the resolved set,
+        so the side is filtered here: only a combat ENEMY whose effective
+        allegiance is not ALLY_OF_CASTER is shaken. A mindless tier takes
+        ``SpectacleConfig.mindless_percent`` of the hit. A ward bounce never
+        reaches here (``__call__`` returns first), so it shakes nothing.
+
+        Returns:
+            One ``SpectacleShift`` per opponent whose morale state changed, its
+            state before and after. An opponent already past the floor (or one
+            the hit leaves in the same state) records none.
+        """
+        from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
+
+        row = self.action.focused_action.cached_morale_effect
+        success_level = check_result.success_level
+        if row is None or success_level < row.minimum_success_level:
+            return []
+        amount = row.compute_morale(effective_power=eff_intensity, success_level=success_level)
+        if amount <= 0:
+            return []
+        targets = self._resolved_opponent_targets()
+        if not targets:
+            return []
+        allegiances = effective_allegiances(targets)
+        has_morale = tier_morale_map()
+        mindless_percent = SpectacleConfig.load().mindless_percent
+        shifts: list[SpectacleShift] = []
+        for opponent in targets:
+            if (
+                opponent.status != OpponentStatus.ACTIVE
+                or opponent.allegiance != CombatAllegiance.ENEMY
+                or allegiances[opponent.pk] == Allegiance.ALLY_OF_CASTER
+            ):
+                continue
+            hit = amount
+            if not has_morale.get(opponent.tier, True):
+                hit = mindless_share(amount, mindless_percent=mindless_percent)
+            before = morale_state_for(opponent)
+            apply_morale_damage(opponent, hit)
+            after = morale_state_for(opponent)
+            if after != before:
+                shifts.append(SpectacleShift(opponent.pk, before.value, after.value))
+        return shifts
+
     def _apply_penetration(self, combat_ledger: PowerLedger) -> tuple[PowerLedger, bool]:
         """Run the penetration-vs-resistance contest (#639) against the ward.
 
@@ -874,6 +935,7 @@ class CombatTechniqueResolver:
         applied_conditions, removed_conditions = self._apply_conditions(
             check_result, eff_intensity=eff_intensity, fired_vow_effects=fired
         )
+        morale_shifts = self._apply_morale(check_result, eff_intensity=eff_intensity)
         # A manifesting technique brings the caster's bound entity into the fight (#4118),
         # but only on a successful, unbounced cast: a failed roll manifests nothing.
         if (check_result.success_level or 0) >= 1:
@@ -897,4 +959,5 @@ class CombatTechniqueResolver:
             scaled_damage=sum(r.damage_dealt for r in damage_results),
             power_ledger=combat_ledger,
             removed_conditions=removed_conditions,
+            morale_shifts=morale_shifts,
         )

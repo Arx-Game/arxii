@@ -22,7 +22,8 @@ def is_technique_hostile(technique: Technique) -> bool:
     Hostile means the technique targets an adversary in some mechanical sense:
     - It has at least one damage profile with base_damage > 0, OR
     - It applies a condition whose target_kind is ENEMY, OR
-    - It strips a condition off a target whose target_kind is ENEMY.
+    - It strips a condition off a target whose target_kind is ENEMY, OR
+    - It carries a morale effect row (morale lives only on enemy opponents).
 
     ``effect_type.base_power`` is deliberately NOT consulted (#3682, ADR-0281).
     It is the magnitude knob for a power-*scaled* effect, not a statement of
@@ -47,6 +48,9 @@ def is_technique_hostile(technique: Technique) -> bool:
     technique row was already holding.
     """
     if any(profile.base_damage > 0 for profile in technique.cached_damage_profiles):
+        return True
+    # A morale row only ever lands on enemy opponents (#4619).
+    if technique.cached_morale_effect is not None:
         return True
     if any(
         row.target_kind == ConditionTargetKind.ENEMY

@@ -226,3 +226,18 @@ class IsTechniqueHostileTests(EvenniaTestCase):
             target_kind=ConditionTargetKind.SELF,
         )
         self.assertFalse(is_technique_hostile(technique))
+
+    def test_morale_only_technique_is_hostile_and_targets_an_enemy(self):
+        """A technique whose only payload is a morale row aims at an enemy (#4619)."""
+        from world.magic.factories import TechniqueFactory, TechniqueMoraleEffectFactory
+        from world.magic.models.techniques import ConditionTargetKind
+        from world.magic.services.hostility import is_technique_hostile
+        from world.magic.services.targeting import derive_target_relationship
+        from world.magic.services.technique_effects import invalidate_technique_payload_caches
+
+        tech = TechniqueFactory(damage_profile=False)
+        TechniqueMoraleEffectFactory(technique=tech)
+        invalidate_technique_payload_caches(tech)
+
+        self.assertIs(is_technique_hostile(tech), True)
+        self.assertEqual(derive_target_relationship(tech), ConditionTargetKind.ENEMY)

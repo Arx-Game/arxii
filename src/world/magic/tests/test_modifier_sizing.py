@@ -23,12 +23,14 @@ from world.magic.factories import (
     TechniqueAppliedConditionFactory,
     TechniqueDamageProfileFactory,
     TechniqueFactory,
+    TechniqueMoraleEffectFactory,
 )
 from world.magic.models.modifier_level import CastOutcomeLevelShift, CastPowerLevel
 from world.magic.models.techniques import ConditionTargetKind
 from world.magic.services.condition_application import apply_technique_conditions
 from world.magic.services.modifier_sizing import (
     CastLevelTable,
+    _technique_effect_count,
     applied_condition_size_warnings,
     load_cast_level_table,
 )
@@ -181,6 +183,15 @@ class SizeCheckTests(TestCase):
             TechniqueDamageProfileFactory(technique=technique)
         invalidate_technique_payload_caches(technique)
         return technique
+
+    def test_a_morale_row_counts_as_one_effect(self) -> None:
+        technique = self.technique_with(size=ModifierSize.LARGE, damage=False)
+        self.assertEqual(_technique_effect_count(technique), 1)
+
+        TechniqueMoraleEffectFactory(technique=technique, base_morale=20)
+        invalidate_technique_payload_caches(technique)
+
+        self.assertEqual(_technique_effect_count(technique), 2)
 
     def test_a_two_effect_technique_sized_large_warns(self) -> None:
         technique = self.technique_with(size=ModifierSize.LARGE, damage=True)

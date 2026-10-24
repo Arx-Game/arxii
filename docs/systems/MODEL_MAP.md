@@ -6349,6 +6349,7 @@
   - removed_conditions <- magic.TechniqueRemovedCondition
   - treatments <- magic.TechniqueTreatment
   - damage_profiles <- magic.TechniqueDamageProfile
+  - morale_effect <- magic.TechniqueMoraleEffect
   - traitrequirement_requirements <- progression.TraitRequirement
   - levelrequirement_requirements <- progression.LevelRequirement
   - classlevelrequirement_requirements <- progression.ClassLevelRequirement
@@ -6422,6 +6423,7 @@
   - applied_conditions <- magic.TechniqueDraftAppliedCondition
   - removed_conditions <- magic.TechniqueDraftRemovedCondition
   - treatments <- magic.TechniqueDraftTreatment
+  - morale_effect <- magic.TechniqueDraftMoraleEffect
 
 ### TechniqueDraftAppliedCondition
 **Foreign Keys:**
@@ -6437,6 +6439,10 @@
 **Foreign Keys:**
   - damage_type -> conditions.DamageType [FK] (nullable)
   - draft -> magic.TechniqueDraft [FK]
+
+### TechniqueDraftMoraleEffect
+**Foreign Keys:**
+  - draft -> magic.TechniqueDraft [OneToOne]
 
 ### TechniqueDraftRemovedCondition
 **Foreign Keys:**
@@ -6466,6 +6472,10 @@
   - threat_pool -> combat.ThreatPool [FK] (nullable)
 **Pointed to by:**
   - character_choices <- magic.CharacterManifestation
+
+### TechniqueMoraleEffect
+**Foreign Keys:**
+  - technique -> magic.Technique [OneToOne]
 
 ### TechniqueOutcomeModifier
 **Foreign Keys:**

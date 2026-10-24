@@ -68,6 +68,21 @@ class TreatmentSpec:
 
 
 @dataclass(frozen=True)
+class MoraleEffectSpec:
+    """A morale payload row for technique authoring (#4619).
+
+    How hard the technique shakes the enemies it lands on: a flat amount, plus an
+    amount per point of the technique's effective power, plus an amount per success
+    level above the minimum. The row is one-to-one with the technique.
+    """
+
+    minimum_success_level: int = 1
+    base_morale: int = 0
+    morale_intensity_multiplier: float = 0.0
+    morale_per_extra_sl: int = 0
+
+
+@dataclass(frozen=True)
 class TechniqueDesignInput:
     name: str
     description: str
@@ -85,6 +100,7 @@ class TechniqueDesignInput:
     applied_conditions: tuple[AppliedConditionSpec, ...] = ()
     removed_conditions: tuple[RemovedConditionSpec, ...] = ()
     treatments: tuple[TreatmentSpec, ...] = ()
+    morale_effect: MoraleEffectSpec | None = None
     consequence_pool_id: int | None = None
 
 

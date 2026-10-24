@@ -78,8 +78,10 @@ class ThreatPoolEntryRequiresSteadyTests(TestCase):
 from world.combat.morale import (  # noqa: E402
     OpponentMoraleState,
     apply_morale_damage,
+    mindless_share,
     morale_state_for,
     tier_has_morale,
+    tier_morale_map,
 )
 
 
@@ -149,6 +151,31 @@ class ApplyMoraleDamageTests(TestCase):
         apply_morale_damage(opp, 15)
         opp.refresh_from_db()
         self.assertEqual(opp.morale, 55)
+
+
+class MindlessShareTests(TestCase):
+    """The share of a morale hit a mindless opponent takes (#4619)."""
+
+    def test_mindless_share_takes_the_configured_percent(self) -> None:
+        self.assertEqual(mindless_share(40, mindless_percent=50), 20)
+
+    def test_mindless_share_never_rounds_a_hit_to_nothing(self) -> None:
+        self.assertEqual(mindless_share(1, mindless_percent=50), 1)
+
+    def test_mindless_share_keeps_zero_at_zero(self) -> None:
+        self.assertEqual(mindless_share(0, mindless_percent=50), 0)
+
+
+class TierMoraleMapTests(TestCase):
+    def test_tier_morale_map_reads_each_tier_template(self) -> None:
+        from world.combat.constants import OpponentTier
+
+        OpponentTierTemplateFactory(tier=OpponentTier.ELITE, has_morale=False)
+        OpponentTierTemplateFactory(tier=OpponentTier.MOOK, has_morale=True)
+        with self.assertNumQueries(1):
+            by_tier = tier_morale_map()
+        self.assertIs(by_tier[OpponentTier.ELITE], False)
+        self.assertIs(by_tier[OpponentTier.MOOK], True)
 
 
 # ---------------------------------------------------------------------------

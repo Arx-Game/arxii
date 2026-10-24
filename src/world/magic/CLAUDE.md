@@ -142,6 +142,7 @@ The magic system for Arx II. Power flows from identity and connection.
   `discard_draft`. No JSON; every field is a proper column.
 - `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` / `TechniqueDraftAppliedCondition`
   — payload child rows for `TechniqueDraft`; inherit the abstract bases above.
+- `TechniqueMoraleEffect` / `TechniqueDraftMoraleEffect` - one-to-one morale payload row (#4619). Enemy-only: it makes the technique hostile and enemy-aimed, and combat skips allies and charmed enemies. Writers call `invalidate_technique_payload_caches`.
 - `TechniqueRemovedCondition` / `TechniqueDraftRemovedCondition` — dispel/cleanse payload rows
   (#1585). Subclass of `AbstractAppliedCondition` (sibling to `TechniqueAppliedCondition`); adds
   `remove_all_stacks` (bool, default True). The inherited severity/duration/stack knobs are inert

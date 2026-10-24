@@ -165,7 +165,8 @@ def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
     """Derive the targeting relationship encoded in a technique's authored data.
 
     Resolution order:
-    1. ENEMY — if the technique is hostile (deals damage or applies ENEMY conditions).
+    1. ENEMY - if the technique is hostile (deals damage, applies or removes ENEMY
+       conditions, or carries a morale row).
     2. ALLY — if any applied, removed or treatment row has target_kind=ALLY.
     3. ENEMY — if a treatment row targets an ENEMY (stabilising a downed foe is
        aimed at an adversary without being hostile, so it cannot be folded into

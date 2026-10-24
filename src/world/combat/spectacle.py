@@ -19,7 +19,6 @@ from world.combat.constants import (
     SpectacleReaction,
 )
 from world.combat.models import (
-    OpponentTierTemplate,
     SpectacleConfig,
     SpectacleReactionLine,
     SpectacleRecord,
@@ -27,7 +26,9 @@ from world.combat.models import (
 from world.combat.morale import (
     OpponentMoraleState,
     apply_morale_damage,
+    mindless_share,
     morale_state_for,
+    tier_morale_map,
 )
 from world.combat.types import SpectacleResult, SpectacleShift
 from world.gm.prompt_services import scene_gm_accounts
@@ -74,7 +75,9 @@ def spectacle_hit(  # noqa: PLR0913 - the brief fixes this keyword-only signatur
     factor = max(config.minimum_percent, 100 + config.percent_per_step * steps)
     hit = raw * factor // 100
     if not has_morale:
-        hit = max(1, hit * config.mindless_percent // 100)
+        # An earned display costs a mindless witness at least one even when the level
+        # gap scaled it to nothing; ``mindless_share`` alone keeps a 0 at 0.
+        hit = max(1, mindless_share(hit, mindless_percent=config.mindless_percent))
     return hit
 
 
@@ -277,11 +280,6 @@ def _enemy_reaction(
     return SpectacleReaction.SHAKEN, held
 
 
-def _tier_morale_map() -> dict[str, bool]:
-    """``{tier: has_morale}`` in one query; a tier with no template keeps its morale."""
-    return dict(OpponentTierTemplate.objects.values_list("tier", "has_morale"))
-
-
 def apply_spectacle(  # noqa: PLR0913 - keyword-only public contract
     *,
     encounter: CombatEncounter,
@@ -308,7 +306,7 @@ def apply_spectacle(  # noqa: PLR0913 - keyword-only public contract
         )
     witnesses = [w for w in witnesses if w.status == OpponentStatus.ACTIVE]
     already = _already_shaken_ids(caster_sheet, kind, technique, [w.pk for w in witnesses])
-    has_morale = _tier_morale_map()
+    has_morale = tier_morale_map()
     shifts: list[SpectacleShift] = []
     records: list[SpectacleRecord] = []
     for opponent in witnesses:

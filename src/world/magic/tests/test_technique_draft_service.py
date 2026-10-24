@@ -9,6 +9,8 @@ Covers:
 - validate_design_for_character: gift ownership gate (PlayerPolicy) + StaffPolicy no-op
 """
 
+from decimal import Decimal
+
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -34,6 +36,7 @@ from world.magic.models import (
     TechniqueDraftAppliedCondition,
     TechniqueDraftCapabilityGrant,
     TechniqueDraftDamageProfile,
+    TechniqueDraftMoraleEffect,
 )
 from world.magic.services.technique_builder import (
     PlayerPolicy,
@@ -49,6 +52,7 @@ from world.magic.services.technique_draft import (
     add_draft_removed_condition,
     add_draft_restriction,
     add_draft_treatment,
+    clear_draft_morale_effect,
     discard_draft,
     draft_to_design,
     get_active_draft,
@@ -59,9 +63,14 @@ from world.magic.services.technique_draft import (
     remove_draft_removed_condition,
     remove_draft_restriction,
     set_draft_fields,
+    set_draft_morale_effect,
     start_technique_draft,
 )
-from world.magic.types.technique_builder import RemovedConditionSpec, TechniqueDesignInput
+from world.magic.types.technique_builder import (
+    MoraleEffectSpec,
+    RemovedConditionSpec,
+    TechniqueDesignInput,
+)
 
 
 def _minimal_design(**override) -> TechniqueDesignInput:
@@ -308,6 +317,64 @@ class DraftToDesignTests(TestCase):
                 mend_cap_fraction=Decimal("0.40"),
             ),
         )
+
+    def test_set_draft_morale_effect_keeps_one_row(self) -> None:
+        draft = self._make_complete_draft()
+        set_draft_morale_effect(draft, base_morale=20)
+        set_draft_morale_effect(draft, base_morale=35)
+        assert TechniqueDraftMoraleEffect.objects.filter(draft=draft).count() == 1
+        assert TechniqueDraftMoraleEffect.objects.get(draft=draft).base_morale == 35
+
+    def test_draft_to_design_carries_the_morale_effect(self) -> None:
+        draft = self._make_complete_draft()
+        set_draft_morale_effect(
+            draft,
+            base_morale=20,
+            morale_per_extra_sl=5,
+            minimum_success_level=2,
+            morale_intensity_multiplier=Decimal("0.5"),
+        )
+        assert draft_to_design(draft).morale_effect == MoraleEffectSpec(
+            base_morale=20,
+            morale_per_extra_sl=5,
+            minimum_success_level=2,
+            morale_intensity_multiplier=0.5,
+        )
+
+    def test_a_drafted_morale_row_builds_onto_the_technique(self) -> None:
+        draft = self._make_complete_draft()
+        set_draft_morale_effect(draft, base_morale=25, minimum_success_level=2)
+
+        built = build_technique(draft_to_design(draft), creator=self.sheet)
+
+        assert built.morale_effect.base_morale == 25
+        assert built.morale_effect.minimum_success_level == 2
+
+    def test_a_drafted_fractional_morale_multiplier_builds(self) -> None:
+        draft = self._make_complete_draft()
+        set_draft_morale_effect(draft, base_morale=5, morale_intensity_multiplier=Decimal("0.10"))
+
+        built = build_technique(draft_to_design(draft), creator=self.sheet)
+
+        assert built.morale_effect.morale_intensity_multiplier == Decimal("0.10")
+
+    def test_a_drafted_all_zero_morale_row_is_refused_at_build(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        draft = self._make_complete_draft()
+        set_draft_morale_effect(draft, base_morale=0)
+
+        with self.assertRaises(ValidationError):
+            build_technique(draft_to_design(draft), creator=self.sheet)
+
+    def test_draft_without_a_morale_row_designs_none(self) -> None:
+        assert draft_to_design(self._make_complete_draft()).morale_effect is None
+
+    def test_clear_draft_morale_effect_removes_it(self) -> None:
+        draft = self._make_complete_draft()
+        set_draft_morale_effect(draft, base_morale=20)
+        clear_draft_morale_effect(draft)
+        assert draft_to_design(draft).morale_effect is None
 
     def test_remove_draft_removed_condition_deletes_row(self) -> None:
         """remove_draft_removed_condition deletes the row by pk."""

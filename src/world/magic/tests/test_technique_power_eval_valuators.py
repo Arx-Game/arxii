@@ -37,11 +37,16 @@ from world.magic.factories import (
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
     TechniqueFunctionTagFactory,
+    TechniqueMoraleEffectFactory,
     TechniqueRemovedConditionFactory,
 )
 from world.magic.models.techniques import ConditionTargetKind, Technique, TechniqueTreatment
 from world.magic.services.targeting import protective_magnitude
-from world.magic.services.technique_power_eval import evaluate_technique
+from world.magic.services.technique_power_eval import (
+    _MatchupBand,
+    _morale_valuation,
+    evaluate_technique,
+)
 from world.magic.types.technique_power import (
     FLAG_NOT_COMBAT_POWER,
     EvalContext,
@@ -325,6 +330,54 @@ class TreatmentHealingTests(TechniquePowerEvalValuatorTestCase):
         heal_rows = [v for v in report.valuations if v.kind == _KIND_HEAL]
         self.assertEqual(len(heal_rows), 1)
         self.assertAlmostEqual(heal_rows[0].value, 6.0, places=6)
+
+
+class MoraleValuationTests(TechniquePowerEvalValuatorTestCase):
+    """ESTIMATE: the share of one break, priced as that share of incoming_dpr (#4619)."""
+
+    def _bands(self) -> list[_MatchupBand]:
+        return [
+            _MatchupBand(success_level=1, probability=0.5),
+            _MatchupBand(success_level=2, probability=0.5),
+        ]
+
+    def _reference(self) -> ReferenceFrame:
+        return ReferenceFrame(outgoing_dpr=9.0, incoming_dpr=9.0, source_label="t")
+
+    def _valuation(self, **row):
+        technique = self._technique()
+        TechniqueMoraleEffectFactory(technique=technique, **row)
+        return _morale_valuation(
+            technique, power=5, bands=self._bands(), reference=self._reference()
+        )
+
+    def test_prices_the_share_of_one_break(self) -> None:
+        v = self._valuation(base_morale=30, morale_per_extra_sl=10)
+        # 0.5 * 30 + 0.5 * 40 = 35 of the 45 to break.
+        self.assertEqual(v.kind, "control")
+        self.assertEqual(v.provenance, ValuationProvenance.ESTIMATE)
+        self.assertAlmostEqual(v.value, 35 / 45 * 9.0)
+
+    def test_caps_at_one_break(self) -> None:
+        v = self._valuation(base_morale=90)
+        self.assertAlmostEqual(v.value, 9.0)
+
+    def test_skips_bands_below_the_minimum(self) -> None:
+        v = self._valuation(base_morale=30, morale_per_extra_sl=10, minimum_success_level=2)
+        # per-extra-SL counts from the minimum, so the SL2 band is 30, not 40: 0.5 * 30.
+        self.assertAlmostEqual(v.value, 15 / 45 * 9.0)
+
+    def test_no_morale_row_no_valuation(self) -> None:
+        technique = self._technique()
+        self.assertIsNone(
+            _morale_valuation(technique, power=5, bands=self._bands(), reference=self._reference())
+        )
+
+    def test_evaluate_technique_includes_the_morale_row(self) -> None:
+        technique = self._technique()
+        TechniqueMoraleEffectFactory(technique=technique, base_morale=30)
+        report = evaluate_technique(technique, EvalContext(), self._reference())
+        self.assertEqual(len([v for v in report.valuations if v.label == "morale"]), 1)
 
 
 class LanguageEffectExclusionTests(TechniquePowerEvalValuatorTestCase):
