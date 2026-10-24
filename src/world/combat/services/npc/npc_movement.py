@@ -10,16 +10,17 @@ true and nothing moves.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from world.areas.positioning.constants import CreatureTraversal, PositionKind
 from world.areas.positioning.services import (
+    aerial_layer_for_route,
     enter_aerial,
     find_path,
     force_move_to_position,
     leave_aerial,
-    materialize_aerial_layer,
     step_costs,
     strike_reaches,
 )
@@ -82,18 +83,20 @@ def target_position(target: CombatParticipant | CombatOpponent) -> Position | No
     return target.current_position
 
 
-def prepare_mover(opponent: CombatOpponent, profile: MovementProfile) -> Position | None:
-    """The opponent's live position, with the aerial layer built first for a flier.
+@contextmanager
+def mover_origin(opponent: CombatOpponent, profile: MovementProfile) -> Iterator[Position | None]:
+    """The opponent's live position, with the aerial layer held up for a flier meanwhile.
 
     A FLIES mover searches the union of ground and aerial positions; ``find_path`` never
-    builds the layer itself.
+    builds the layer itself. ``aerial_layer_for_route`` takes a layer it built down again
+    when nobody ended up airborne, so planning leaves the map as it found it.
     """
     origin = target_position(opponent)
-    if origin is None:
-        return None
-    if profile.traversal == CreatureTraversal.FLIES and origin.room is not None:
-        materialize_aerial_layer(origin.room)
-    return origin
+    if origin is None or profile.traversal != CreatureTraversal.FLIES or origin.room is None:
+        yield origin
+        return
+    with aerial_layer_for_route(origin.room):
+        yield origin
 
 
 def _cheapest_route(
@@ -329,23 +332,23 @@ def advance_opponent(
         return None
     if opponent.status != OpponentStatus.ACTIVE or opponent.objectdb is None:
         return None
-    profile = opponent.movement_profile
-    origin = prepare_mover(opponent, profile)
-    if origin is None:
-        return None
     if attack_rows is None:
         attack_rows = list(
             CombatOpponentAction.objects.filter(
                 opponent=opponent, round_number=move_row.round_number
             ).select_related("threat_entry")
         )
-    path = _advance_route(opponent, origin, _goal_pairs(opponent, attack_rows), profile)
-    if path is None:
-        return None
-    walked = _truncate_to_budget(path, profile)
-    if len(walked) <= 1:
-        return None
-    final = _walk(opponent, walked)
+    profile = opponent.movement_profile
+    with mover_origin(opponent, profile) as origin:
+        if origin is None:
+            return None
+        path = _advance_route(opponent, origin, _goal_pairs(opponent, attack_rows), profile)
+        if path is None:
+            return None
+        walked = _truncate_to_budget(path, profile)
+        if len(walked) <= 1:
+            return None
+        final = _walk(opponent, walked)
 
     from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 

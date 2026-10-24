@@ -27,8 +27,8 @@ from world.combat.services.npc.npc_attack import _execute_npc_attack
 from world.combat.services.npc.npc_cooldowns import _batch_fetch_cooldown_data
 from world.combat.services.npc.npc_movement import (
     ReachMemo,
+    mover_origin,
     nearest_hostile_position,
-    prepare_mover,
     reachable_pools_by_delivery,
     write_move_plan,
 )
@@ -402,21 +402,19 @@ def plan_opponent_round(
         ctx.recently_used_by_opponent.get(opponent.pk, set()),
     )
     profile = opponent.movement_profile
-    origin = prepare_mover(opponent, profile)
-    pool_by_delivery = reachable_pools_by_delivery(
-        origin,
-        target_pool,
-        {e.delivery for e in eligible},
-        profile=profile,
-        memo=ctx.reach_memo,
-    )
-    strikeable = [e for e in eligible if pool_by_delivery[e.delivery]]
-    if not strikeable:
-        write_move_plan(
-            opponent,
-            encounter.round_number,
-            goal_position=nearest_hostile_position(origin, target_pool, profile),
+    with mover_origin(opponent, profile) as origin:
+        pool_by_delivery = reachable_pools_by_delivery(
+            origin,
+            target_pool,
+            {e.delivery for e in eligible},
+            profile=profile,
+            memo=ctx.reach_memo,
         )
+        strikeable = [e for e in eligible if pool_by_delivery[e.delivery]]
+        # A hostile's own position, never an aerial node a route search put up alone.
+        goal = None if strikeable else nearest_hostile_position(origin, target_pool, profile)
+    if not strikeable:
+        write_move_plan(opponent, encounter.round_number, goal_position=goal)
         return []
 
     in_reach = list({t.pk: t for pool in pool_by_delivery.values() for t in pool}.values())

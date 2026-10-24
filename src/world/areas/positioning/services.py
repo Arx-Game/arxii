@@ -11,7 +11,8 @@ position write goes through ``_commit_position``.
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 import heapq
@@ -1047,18 +1048,22 @@ def strike_reaches(
 ) -> bool:
     """Whether a strike of ``delivery`` (a ``StrikeDelivery``) lands from one position on another.
 
-    MELEE needs the same or an adjacent position (``TechniqueReach.ADJACENT``); MISSILE
-    reaches anywhere in the room (``TechniqueReach.ANY``). An unknown delivery is
-    treated as MELEE. Either position missing is reachable (an unplaced combatant
-    stays lenient).
+    MELEE needs the same or an adjacent position (``position_reachable``'s ADJACENT rule:
+    a passable edge, gates ignored); MISSILE reaches anywhere in the room (ANY). An
+    unknown delivery is treated as MELEE. Either position missing is reachable (an
+    unplaced combatant stays lenient). The edge is read from the room's cached graph,
+    so a path search can ask this of every node it visits without a query each time.
     """
     from world.combat.constants import StrikeDelivery
-    from world.magic.constants import TechniqueReach
 
     if attacker_pos is None or target_pos is None:
         return True
-    reach = TechniqueReach.ANY if delivery == StrikeDelivery.MISSILE else TechniqueReach.ADJACENT
-    return position_reachable(attacker_pos, target_pos, reach)
+    if delivery == StrikeDelivery.MISSILE:
+        return attacker_pos.room_id == target_pos.room_id
+    if attacker_pos.pk == target_pos.pk:
+        return True
+    edge = _room_graph(attacker_pos).edges.get(tuple(sorted((attacker_pos.pk, target_pos.pk))))
+    return edge is not None and edge.is_passable
 
 
 # ---------------------------------------------------------------------------
@@ -1284,6 +1289,28 @@ def materialize_aerial_layer(room: ObjectDB) -> None:
         a, b = twin.get(edge.position_a_id), twin.get(edge.position_b_id)
         if a is not None and b is not None:
             connect_positions(a, b)
+
+
+@contextmanager
+def aerial_layer_for_route(room: ObjectDB) -> Iterator[None]:
+    """Hold the room's aerial layer up while a flier searches and walks a route (#4607).
+
+    ``find_path`` only routes a flier through a layer that exists, so this builds one
+    when the room has none, and takes it down again on the way out unless someone ended
+    up airborne. A route search alone therefore never leaves "Above" positions on the
+    map. A layer that already existed is left as it was.
+    """
+    existed = Position.objects.filter(room=room, kind=PositionKind.AERIAL).exists()
+    if not existed:
+        materialize_aerial_layer(room)
+    try:
+        yield
+    finally:
+        airborne = ObjectPosition.objects.filter(
+            position__room=room, position__kind=PositionKind.AERIAL
+        ).exists()
+        if not existed and not airborne:
+            teardown_aerial_layer(room)
 
 
 def teardown_aerial_layer(room: ObjectDB) -> None:
