@@ -20,6 +20,7 @@ from django.views.decorators.http import require_POST
 
 from web.admin.authoring.contributors import current_contributor
 from web.admin.authoring.credit import stamp_reviewed
+from web.admin.authoring.identity_map import CacheGuard
 from web.admin.soulfray_builder import live
 from web.admin.soulfray_builder.forms import (
     BUILDER_EFFECT_TYPES,
@@ -30,7 +31,6 @@ from web.admin.soulfray_builder.forms import (
     build_forms,
 )
 from web.admin.soulfray_builder.save import (
-    CacheGuard,
     cache_guard_for,
     live_new_rows,
     pool_switch_conflict,

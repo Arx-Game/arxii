@@ -547,6 +547,9 @@ mutated is correct (it is not the "flush after save" anti-pattern); use
 A view that assigns posted values onto a saved row by hand (`setattr` then `full_clean()`, no
 form) has the same hazard on every exit after the first assignment, an early refusal included;
 pass the row itself to the same helper (the Authoring Workbench row editor, #4543).
+The stock Django admin needs none of this by hand: `ArxAdminSite.register` gives every admin
+over shared rows `RefusedSaveRestoreMixin`, which puts the bound rows back in place on a
+refusal or a failed save (#4626, ADR-4626).
 `refresh_from_db()` does not undo it: its query goes through the identity map, gets the same
 polluted instance back and copies the refused values onto themselves.
 

@@ -84,6 +84,47 @@ services, the inline tickbox, the bulk action) is still refused.
   HTTP views, the refusals, the inline link, the two pages). Decision record:
   ADR-0326.
 
+### A refused stock admin save is put back in place (#4626)
+
+Validating an admin form writes the posted values onto the identity-mapped row it edits, the
+one object every reader in the process shares (ADR-0008). `ArxAdminSite.register`
+(`web/admin/__init__.py`) therefore builds every admin whose model, or a declared inline's
+model, is a `SharedMemoryModel` as `RefusedSaveRestoreMixin` + the admin's own class
+(`web.admin.authoring.identity_map.with_refused_save_restore`); the mixin is first in the MRO,
+so an admin's own `changeform_view`/`render_change_form`/`changelist_view` runs inside it. No
+admin lists the mixin itself. It covers Evennia's admins too (they register on our site); the
+only admins left without it are plain-model ones (Django's `Group`, allauth's, `Site`,
+`FlatPage`, the requirement tables), which have no identity map.
+
+- **Keep** - a `CacheGuard` (same module; also the Soulfray Stage Builder's) is set for the
+  length of each admin POST in a `ContextVar`, since Django calls the binding hooks from
+  inside its own view. `_create_formsets` keeps the change form's row and every inline row
+  once bound and before any validates; the list edit's formset (`get_changelist_formset`)
+  keeps its rows in `full_clean` before validating. A kept row's column values and
+  `_state.fields_cache` are copied; a row kept while unsaved is only remembered.
+- **Restore** - on the same objects, so a row that already held the instance reads the stored
+  values too: after a refused change form renders (`render_change_form` on a POST is reached
+  only on a refusal; the page shows the posted values first), after a refused list edit
+  renders (a `TemplateResponse` instead of the redirect), and after any exception out of the
+  POST (Django's `transaction.atomic` has rolled the database back; a list-edit POST gets
+  one transaction of its own around the whole view, since Django's covers only the save
+  loop). A row the failed save had created and cached is evicted, a one-to-one target a
+  form picked loses the back-pointer the pick cached on it, and a row the failed save
+  deleted loses its `_is_deleted` mark. `restore` is idempotent.
+- **Not covered** - a shared row an admin's own `save_model`/`save_related`/`save_formset`
+  override writes that no form is bound to (`ItemInstanceAdmin`'s game-object key sync, the
+  character sheet admin's profile writes, the roster admin's person and union services), on
+  the exception path only (nothing writes on a refusal); a row a failed save deleted is
+  usable again but out of the cache, so the next read loads a second object for it.
+- **Guard** - `web/admin/tests/test_refused_save_restore.py` walks the live registry and fails
+  for any admin over shared rows without the mixin (so an admin put in the registry around
+  `register` is caught). Journeys: `integration_tests/test_refused_admin_saves_journeys.py`
+  (an inline refusal on the codex entry page, a blank name on the Path page then the
+  corrected save, a held known-technique row after a refused Technique save, a save that
+  raises part way, a refused Tradition list edit, a list edit that raises after writing,
+  a refused rename on Evennia's object page). Decision record: ADR-4626. Reviewer:
+  `tools/agents/idmapper-form-binding-reviewer.md`.
+
 ### Save as new on every change form (#4094)
 
 `web/admin/apps.py:_enable_save_as_new` sets `save_as = True` on every registered
@@ -878,10 +919,8 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   reporting success (#4457 real-testing). Guard:
   `SchoolingFloorTest.test_a_correction_after_a_refused_save_is_written_to_the_database`.
   Reviewer: `tools/agents/idmapper-form-binding-reviewer.md`.
-- **Stock admin change pages** get the same protection from
-  `web.admin.authoring.identity_map.RefusedSaveFlushMixin` (its `render_change_form` flushes the
-  change form and every inline formset after rendering a refused POST); `TechniqueAdmin` uses
-  it (#4619, guard: `AuthoringAMoraleEffect.test_a_refused_save_leaves_the_game_reading_the_stored_row`).
+- **Stock admin pages** are covered site-wide; see "A refused stock admin save is put back
+  in place" below.
 - **Save-time side effect (`views._sync_schooling_offers`)** - a POST that
   validates saves all three formsets in one `transaction.atomic()` block,
   then keeps every `SchoolingLine`'s TRADITION_STEP `DistinctionOffer` in
@@ -1240,8 +1279,8 @@ page in one transaction. Pattern mirrors the Distinction and Upbringing Builders
   `EffectForm`/`EffectFormSet` via `inlineformset_factory`, served either from an own
   saved row's `e<consequence pk>` prefix or an added row's unsaved `new<row index>`
   prefix (a shared row gets none); `BuilderForms` bundles every layer), `save.py`
-  (`CacheGuard`/`cache_guard_for`/`save_stage`, `require_pool_for_new_rows`,
-  `pool_switch_conflict`, `live_new_rows`), `live.py` (pure reads over
+  (`cache_guard_for` over the shared `authoring.identity_map.CacheGuard`, `save_stage`,
+  `require_pool_for_new_rows`, `pool_switch_conflict`, `live_new_rows`), `live.py` (pure reads over
   `world.magic.services.soulfray.soulfray_ladder_summary()`: `ladder_rows`, `danger`,
   `stage_counts`, `checks`, `table_line`, `kill_odds`, `effect_line` - the same helper
   the Required-content probes and the game's non-lethal cap read, so the page, the

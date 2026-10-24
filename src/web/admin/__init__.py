@@ -72,6 +72,31 @@ class ArxAdminSite(admin.AdminSite):
 
         return redirect_anonymous_to_site_login
 
+    def register(self, model_or_iterable, admin_class=None, **options):
+        """Register as Django does, with every admin over shared rows protected (#4626).
+
+        Every model here is an identity-mapped ``SharedMemoryModel`` (ADR-0008), and
+        validating an admin form writes the posted values onto the one cached object
+        every reader shares. ``with_refused_save_restore`` puts
+        ``RefusedSaveRestoreMixin`` first in the admin's MRO, so a refused or failed
+        save on its change page or list edit leaves the rows as stored. Done here, the
+        one door every registration (ours, Evennia's, ``@admin.register``) comes
+        through, so no admin has to remember it; ADR-4626.
+
+        The import is deferred for the same reason as ``login``'s: this module loads
+        from settings, before the app registry is ready.
+        """
+        from django.db.models.base import ModelBase  # noqa: PLC0415
+
+        from web.admin.authoring.identity_map import with_refused_save_restore  # noqa: PLC0415
+
+        admin_class = admin_class or admin.ModelAdmin
+        models = (
+            [model_or_iterable] if isinstance(model_or_iterable, ModelBase) else model_or_iterable
+        )
+        for model in models:
+            super().register(model, with_refused_save_restore(model, admin_class), **options)
+
     # The single Django app_label the #2906 collapse merged every first-party
     # model onto (see ``world/apps.py``'s ``ArxiiConfig.label``). This is the
     # only app_label ``_split_by_domain``/``_domain_key`` ever need to treat
