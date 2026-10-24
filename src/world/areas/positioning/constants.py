@@ -10,6 +10,20 @@ class PositionKind(models.TextChoices):
     CHASM = "chasm", "Chasm"  # below-ground level; entering it emits FELL (#1018)
 
 
+class CreatureTraversal(models.TextChoices):
+    """How a mover crosses the position graph (#4607, slice 2 of #4576).
+
+    WALKS crosses open edges only. CLIMBS and LEAPS also cross a wall that has a way
+    past it (an active gating challenge) at one extra hop; they differ in narration only.
+    FLIES also uses the aerial layer, so it passes over walls that do not block flight.
+    """
+
+    WALKS = "walks", "Walks"
+    CLIMBS = "climbs", "Climbs"
+    LEAPS = "leaps", "Leaps"
+    FLIES = "flies", "Flies"
+
+
 AERIAL_PROPERTY_NAME = "aerial"
 
 
