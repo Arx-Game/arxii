@@ -81,6 +81,7 @@ from actions.definitions.charm_asset import CharmAssetAction
 from actions.definitions.coercion import coerce, reveal_secret
 from actions.definitions.collect_food import CollectFoodAction
 from actions.definitions.combat_maneuvers import (
+    AwaitOpeningAction,
     ChargeAction,
     CoverAction,
     DemoralizeAction,
@@ -846,6 +847,7 @@ _ALL_ACTIONS: list[Action] = [
     InterposeAction(),
     SuccorAction(),
     ChargeAction(),
+    AwaitOpeningAction(),
     JoustAction(),
     UseItemManeuverAction(),
     EngageAction(),

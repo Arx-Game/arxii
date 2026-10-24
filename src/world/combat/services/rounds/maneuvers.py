@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from world.combat.constants import CombatManeuver
 from world.combat.models import CombatParticipant, CombatRoundAction
+from world.combat.services.declarations.await_opening import _resolve_await_opening
 from world.combat.services.declarations.demoralize import _resolve_demoralize
 from world.combat.services.declarations.flee import _resolve_flee
 from world.combat.services.declarations.joust import _resolve_joust
@@ -37,4 +38,7 @@ _STANDALONE_MANEUVER_RESOLVERS: dict[
     # not through the normal per-target technique pipeline (there is no single
     # "attacker vs one opponent" shape here).
     CombatManeuver.JOUST: _resolve_joust,
+    # The waiting strike (#4608) fires from fire_waiting_strikes when an enemy
+    # arrives in reach or attacks; its own slot is a no-op.
+    CombatManeuver.AWAIT_OPENING: _resolve_await_opening,
 }
