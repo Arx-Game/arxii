@@ -72,7 +72,13 @@ class ReachMemo:
 
 
 def target_position(target: CombatParticipant | CombatOpponent) -> Position | None:
-    """A target's live position (the cached property ``_commit_position`` clears on a move)."""
+    """A target's live position (the cached property ``_commit_position`` clears on a move).
+
+    An opponent whose game object is gone (cleaned up, or nulled under a cached row) has
+    no position.
+    """
+    if isinstance(target, CombatOpponent) and target.objectdb is None:
+        return None
     return target.current_position
 
 
@@ -82,7 +88,7 @@ def prepare_mover(opponent: CombatOpponent, profile: MovementProfile) -> Positio
     A FLIES mover searches the union of ground and aerial positions; ``find_path`` never
     builds the layer itself.
     """
-    origin = opponent.current_position
+    origin = target_position(opponent)
     if origin is None:
         return None
     if profile.traversal == CreatureTraversal.FLIES and origin.room is not None:
@@ -321,7 +327,7 @@ def advance_opponent(
     """
     if move_row is None or move_row.kind != OpponentMoveKind.ADVANCE:
         return None
-    if opponent.status != OpponentStatus.ACTIVE or opponent.objectdb_id is None:
+    if opponent.status != OpponentStatus.ACTIVE or opponent.objectdb is None:
         return None
     profile = opponent.movement_profile
     origin = prepare_mover(opponent, profile)
@@ -385,7 +391,7 @@ def refit_targets(npc_action: CombatOpponentAction) -> bool:
     attacker, or an action with no stored target, is left alone (True).
     """
     opponent = npc_action.opponent
-    origin = opponent.current_position
+    origin = target_position(opponent)
     targets = _cached_targets(npc_action)
     opponent_targets = _cached_opponent_targets(npc_action)
     if origin is None or not (targets or opponent_targets):
