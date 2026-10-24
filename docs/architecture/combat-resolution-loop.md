@@ -1797,3 +1797,60 @@ ping-plus-refetch shape from ADR-0095, and the client refetches that encounter:
 
 The audience is everything in the encounter's room plus its ACTIVE player participants
 (`world/combat/services/encounter/state_ping.py`).
+
+## Implementation addendum — cover, the waiting strike and grounding (#4608, slice 3 of #4576)
+
+### Cover in the reach rules
+
+`position_reachable` (PC techniques) and `strike_reaches` (NPC entries) apply two cover
+rules before any edge test (ADR-4608-A). A roof between an AERIAL position and a roofed
+ground position refuses every reach and delivery (`roof_between`), even across the passable
+vertical edge. A missile or ANY strike at a screened position must come from it or from a
+position joined to it by a passable edge (`screen_blocks`). The route search closes the
+vertical edge under a roof, so an NPC flier heads for a ground position beside a roofed
+target, lands there and strikes, paying the hops. NPC selection, the advance and the re-fit
+all go through `strike_reaches`, and declaration and the PC live-reach fizzle through
+`technique_can_reach`, so neither side strikes across a roof.
+
+### The waiting strike in the slots
+
+```
+_resolve_actions
+  PC entity (any declared attack, not a standalone maneuver)
+    CHARGE → move first
+    fire_waiting_strikes(mover=PC, reason=ATTACKING, defenders=its opponent targets)
+      mover stopped → skip the action
+    _resolve_pc_action (an AWAIT_OPENING row's own slot is a no-op)
+  NPC entity
+    advance_opponent(..., on_hop=)                       # after each hop:
+      fire_waiting_strikes(mover=NPC, reason=ARRIVED)    # says "{name} moves to {here}." first
+        mover stopped → walk ends, no attack rows
+    for each attack row:
+      refit_targets (none left → "{name} cannot reach anyone.")
+      fire_waiting_strikes(mover=NPC, reason=ATTACKING, defenders=the row's targets)
+        mover stopped → "{name} is stopped before striking.", no further rows
+      _resolve_npc_action
+narrate_unanswered_waits(enc)      # after _narrate_held_back
+```
+
+A waiter fires at most once a round, when it is ACTIVE and can act, hostile to the mover
+(effective allegiance), not yet fired, and its strike reaches the mover from where both stand
+at that moment. A PC waiter (`CombatRoundAction` with `maneuver=AWAIT_OPENING`) fires through
+`resolve_pc_technique`, the attack half of `_resolve_pc_action`, after its
+`focused_opponent_target` is set to the mover: that column being set is what "fired" means.
+Before that it checks the Soulfray checkpoint; unconsented, the strike lapses with a line and
+costs nothing. An NPC waiter (a WAIT `CombatOpponentMove`) writes a real `CombatOpponentAction`
+at the mover and resolves it with `_resolve_npc_action`, then sets `fired`. Arrival comes
+before attack in time, so a walker that ends in reach and attacks draws the strike once. A
+blink-strike-blink attacker is answered because the attack trigger fires before the attack
+resolves, while the attacker is still in reach.
+
+### Grounding
+
+`REMOVE_FLIGHT` is a fall (`ground_flier`), not `leave_aerial`'s landing. A character falls
+through the plummet rules from the aerial position: with someone present the catch window
+opens and the descent lands at the round's end tick (`advance_plummet`); alone, it lands at
+once. A combat opponent never gets a catch window (`begin_plummet(..., allow_catch=False)`):
+it lands in the call and the handler applies the returned impact to its health with the fall
+damage type, no source and soak bypassed. Neither fall has a source, so neither can kill
+(`death_is_permitted`). Taking off again costs a hop like any vertical step.

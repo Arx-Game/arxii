@@ -47,6 +47,8 @@ const node = (
   rampart_integrity: null,
   rampart_max_integrity: null,
   rampart_crack_state: null,
+  is_roofed: false,
+  screens_ranged: false,
   ...overrides,
 });
 
@@ -183,6 +185,35 @@ describe('TacticalMap', () => {
     const nodeEl = screen.getByTestId('tactical-map-node-1');
     expect(nodeEl).toHaveAttribute('title', 'Stone Rampart 18/24');
     expect(nodeEl.querySelector('[data-testid="rampart-ring"]')).toBeInTheDocument();
+  });
+
+  it('badges a roofed and a screened position, and leaves an open one bare (#4608)', () => {
+    render(
+      <TacticalMap
+        nodes={[
+          node(1, 'primary', 'Barn', { is_roofed: true }),
+          node(2, 'feature', 'Hedge', { screens_ranged: true }),
+          node(3, 'feature', 'Yard'),
+        ]}
+        edges={[edge(1, 2), edge(2, 3)]}
+        occupantsByPosition={new Map()}
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+      />
+    );
+    const barn = screen.getByTestId('tactical-map-node-1');
+    const hedge = screen.getByTestId('tactical-map-node-2');
+    const yard = screen.getByTestId('tactical-map-node-3');
+    expect(barn.querySelector('[data-testid="position-roof-badge"]')).toHaveAttribute(
+      'aria-label',
+      'Roofed'
+    );
+    expect(barn.querySelector('[data-testid="position-screen-badge"]')).toBeNull();
+    expect(hedge.querySelector('[data-testid="position-screen-badge"]')).toHaveAttribute(
+      'aria-label',
+      'Screened'
+    );
+    expect(yard.querySelector('[data-testid^="position-"]')).toBeNull();
   });
 
   it('consumes the click via onGMPlace (#3385) instead of dispatching a move', () => {

@@ -2009,7 +2009,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="plummeting-condition",
             label="Plummeting condition template",
             tier=DependencyTier.REQUIRED,
-            consumer="world/areas/positioning/plummet.py:129 begin_plummet()",
+            consumer="world/areas/positioning/plummet.py:141 begin_plummet()",
             consequence=(
                 "A character who starts falling raises ConditionTemplate.DoesNotExist "
                 "instead of beginning to plummet, crashing movement resolution."

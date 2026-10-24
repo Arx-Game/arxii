@@ -44,6 +44,7 @@ from world.combat.services.rounds.clash import _resolve_clashes
 from world.combat.services.rounds.declared_challenges import _resolve_declared_challenges
 from world.combat.services.rounds.held_back import _narrate_held_back
 from world.combat.services.rounds.round_start import _fire_round_start
+from world.combat.services.rounds.waiting_strikes import narrate_unanswered_waits
 from world.combat.services.sent_flying.sent_flying import _resolve_sent_flying_markers
 from world.combat.services.techniques.audere import _block_if_participant_mid_audere_majora_crossing
 from world.combat.types import RoundResolutionResult
@@ -280,6 +281,8 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     # --- Held-back line (#3552): a PC in the order with nothing declared was
     # skipped silently under TIMED/MANUAL. Say so, with the other OUTCOME lines.
     _narrate_held_back(enc, resolution_order, pc_actions, sustaining_participant_ids)
+    # --- Waiting strikes that never fired (#4608): said once, at no cost.
+    narrate_unanswered_waits(enc)
 
     # --- Combo post-resolution: joint narration + discovery + use-count (#2017) ---
     result.action_outcomes = _process_combo_outcomes(

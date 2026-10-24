@@ -203,6 +203,8 @@ export function TacticalMap({
             rampartIntegrity: position.rampart_integrity,
             rampartMaxIntegrity: position.rampart_max_integrity,
             rampartCrackState: position.rampart_crack_state,
+            isRoofed: position.is_roofed,
+            screensRanged: position.screens_ranged,
           },
         })
       ),

@@ -20,7 +20,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   (_Avoid_: vow rider, vow switch)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
   Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
-- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms, and hop budget, tactics level and move plan (#4607), and the encounter state ping (#4644)
+- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms, and hop budget, tactics level and move plan (#4607), the waiting strike (#4608), and the encounter state ping (#4644)
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
   Settled round; (ADR-4147) Spectacle, Spectacle kind; and (#4581, ADR-4581-A) Added-effect firing
   (the once-per-round / once-per-fight vow effect ledger)
@@ -96,7 +96,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to,
   plus Ward (#3983 Plan B, `AreaLevel.WARD` vs. the unrelated household Ward position) and a
   Capital stub pointing to societies' canonical entry
-- [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md) - also holds wall integrity and the walker rule (#4606), and traversal, hop and strike reach (#4607)
+- [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md) - also holds wall integrity and the walker rule (#4606), and traversal, hop and strike reach (#4607), and roofed position, screened position and grounding (#4608)
 - [buildings](src/world/buildings/AGENT_GLOSSARY.md)
 - [locations](src/world/locations/AGENT_GLOSSARY.md)
 - [forms](src/world/forms/AGENT_GLOSSARY.md)

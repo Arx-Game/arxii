@@ -48,6 +48,10 @@ if TYPE_CHECKING:
     from world.areas.positioning.models import Position
     from world.combat.types import MovementProfile
 
+    # Called after each hop with where the mover now stands and a callable that says so
+    # to the room; returns True to stop the walk (a waiting strike stopped it, #4608).
+    HopHook = Callable[[Position, Callable[[], None]], bool]
+
 CANNOT_REACH_LINE = "{name} cannot reach anyone."
 MOVES_TO_LINE = "{name} moves to {position}."
 
@@ -283,8 +287,18 @@ def _truncate_to_budget(path: list[Position], profile: MovementProfile) -> list[
     return walked
 
 
-def _walk(opponent: CombatOpponent, path: list[Position]) -> Position:
+def _walk(
+    opponent: CombatOpponent,
+    path: list[Position],
+    *,
+    on_hop: HopHook | None = None,
+    announce: Callable[[Position], None] | None = None,
+) -> Position:
     """Step the opponent's object along ``path``; returns where it ended.
+
+    ``on_hop`` runs after every hop (the waiting strike's arrival trigger, #4608); when
+    it returns True the walk stops where it is. ``announce`` is what ``on_hop`` may call
+    to tell the room where the mover stepped before a strike lands.
 
     Ground to its own aerial twin takes flight (``enter_aerial``); aerial to its ground
     anchor lands (``leave_aerial``, which may tear the aerial layer down, so the walk
@@ -306,7 +320,17 @@ def _walk(opponent: CombatOpponent, path: list[Position]) -> Position:
         else:
             force_move_to_position(objectdb, there)
         here = there
+        if on_hop is not None and on_hop(here, _bind(announce, here)):
+            break
     return here
+
+
+def _bind(announce: Callable[[Position], None] | None, here: Position) -> Callable[[], None]:
+    def say() -> None:
+        if announce is not None:
+            announce(here)
+
+    return say
 
 
 def _advance_route(
@@ -340,6 +364,8 @@ def advance_opponent(
     opponent: CombatOpponent,
     move_row: CombatOpponentMove | None,
     attack_rows: list[CombatOpponentAction] | None = None,
+    *,
+    on_hop: HopHook | None = None,
 ) -> Position | None:
     """Run an opponent's ADVANCE plan in its resolution slot; returns where it moved, or None.
 
@@ -348,6 +374,10 @@ def advance_opponent(
     route to that, it walks toward the nearest live hostile. With no route at all it
     stays (physically blocked). The walk is cut to ``speed_hops``. A swarm is one row, so
     it moves as one body. Narrates ``"{name} moves to {position}."`` when it moved.
+
+    ``on_hop`` (#4608) runs after each hop: the resolve loop fires waiting strikes on
+    arrival there, saying first where the mover stepped. A hook that stops the mover
+    ends the walk where it stands.
     """
     if move_row is None or move_row.kind != OpponentMoveKind.ADVANCE:
         return None
@@ -369,17 +399,28 @@ def advance_opponent(
         walked = _truncate_to_budget(path, profile)
         if len(walked) <= 1:
             return None
-        final = _walk(opponent, walked)
+        announced: list[Position] = []
 
+        def announce(here: Position) -> None:
+            _broadcast_moves_to(opponent, here)
+            announced.append(here)
+
+        final = _walk(opponent, walked, on_hop=on_hop, announce=announce)
+
+    if not announced or announced[-1].pk != final.pk:
+        _broadcast_moves_to(opponent, final)
+    return final
+
+
+def _broadcast_moves_to(opponent: CombatOpponent, position: Position) -> None:
     from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 
     broadcast_action_outcome(
         encounter=opponent.encounter,
-        narration=MOVES_TO_LINE.format(name=opponent.name, position=final.name),
+        narration=MOVES_TO_LINE.format(name=opponent.name, position=position.name),
         target_personas=[],
         deliver_telnet=True,
     )
-    return final
 
 
 # ---------------------------------------------------------------------------

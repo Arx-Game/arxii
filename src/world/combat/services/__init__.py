@@ -168,6 +168,7 @@ from world.combat.services.damage.vulnerability import (
     _is_vulnerable,
     _vulnerability_intensity_bonus,
 )
+from world.combat.services.declarations.await_opening import declare_await_opening
 from world.combat.services.declarations.cast_position import (
     resolve_cast_position_params,
 )
@@ -788,6 +789,7 @@ __all__ = [
     "complete_encounter",
     "compute_intensity_for_clash",
     "declare_action",
+    "declare_await_opening",
     "declare_charge",
     "declare_clash_contribution",
     "declare_cover",
