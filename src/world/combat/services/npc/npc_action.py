@@ -364,7 +364,7 @@ def _resolve_npc_action(
     # re-running persona_names_for_sheets for the identical list.
     npc_target_label = npc_action_label
     npc_narration = render_action_outcome_narration(
-        actor_label=str(opponent),
+        actor_label=opponent.name,
         technique_name=npc_action.threat_entry.name,
         target_label=npc_target_label,
         outcome=outcome,

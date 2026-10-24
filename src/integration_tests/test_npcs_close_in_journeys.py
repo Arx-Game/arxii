@@ -235,6 +235,10 @@ class AnEnemyClosesIn(_TheCauseway):
         self.assertEqual(self.where(wolf), self.yard)
         self.assertEqual(self.health(self.hobb), FULL_HEALTH - BITE)
         self.assertShownRow(self.hobb, MOVES_TO.format(name="Grey Wolf", position="Yard"))
+        # The bite names the wolf as the room knows it, never its tier.
+        bite = [row for row in self.mailbox(self.hobb).rows if "strikes" in row]
+        self.assertTrue(bite)
+        self.assertTrue(all(row.startswith("Grey Wolf\u2019s ") for row in bite), bite)
 
     def test_a_wolf_whose_bite_is_on_cooldown_still_closes_in(self) -> None:
         wolf = self.creature("Grey Wolf", at=self.yard, cooldown_rounds=2)
