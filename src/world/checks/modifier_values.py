@@ -40,6 +40,22 @@ class ValueTable:
             return None
         return _step_lookup(rows, level)
 
+    def signed_value(self, authored_value: int, level: int | None, size: int | None) -> int | None:
+        """The table's number for a sized modifier, signed like its authored row, or None.
+
+        The magnitude comes from the row at ``level`` and ``size``; the authored value's
+        sign says bonus or penalty, so a debuff or a heavy-armour penalty stays a penalty.
+        None (keep the flat authored value) when the source has no level or no size, its
+        authored value is 0, or no row covers the pair. Shared by every sized source on a
+        lane: technique buffs (#4594) and worn items (#4628).
+        """
+        if level is None or size is None or authored_value == 0:
+            return None
+        magnitude = self.value(level, size)
+        if magnitude is None:
+            return None
+        return magnitude if authored_value > 0 else -magnitude
+
 
 def load_value_table(lane: str = ModifierLane.CHECK) -> ValueTable:
     """Load ``lane``'s ``ModifierValue`` rows in one query."""

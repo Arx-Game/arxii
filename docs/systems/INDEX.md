@@ -1077,6 +1077,10 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `collect_check_modifiers` loads the check lane's tapers. First sized source: technique buffs
   (`TechniqueAppliedCondition.modifier_size`, `CastPowerLevel`, `CastOutcomeLevelShift`, see
   Magic). Seed cluster `modifier_values`; tuning dashboard modifier pile (`compute_modifier_pile`).
+  Second sized source, worn items (#4628, ADR-4628-A): `ItemCheckModifier.modifier_size` at the
+  worn instance's `QualityTier.modifier_level` (the item level rows), valued through
+  `ValueTable.signed_value`; crafted modifiers are one EQUIPMENT contribution per worn piece; the
+  equipment walk's vow terms (`equipment_walk_parts(...).vow_part`) ride untapered.
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
@@ -6948,6 +6952,9 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   call (apply-once stacking — two equipped instances, one attuned, contributes
   once, never doubled); attunement writers are unchanged (touchstone ritual +
   admin). See docs/systems/items.md ("Enchantment authoring").
+  #4628: `ItemCheckModifier.modifier_size` + `QualityTier.modifier_level` put a worn
+  item's check bonus on the check lane's value table (level from the best worn
+  instance's quality tier); `CharacterEquipmentHandler.crafted_modifier_by_piece`.
 
 - **Fashion vocabulary (#2907):** `Silhouette` (the wearable FORM — umbrella
   hierarchy, `WearFamily`, prose skins via `silhouette_prose_noun`: cut/garments,

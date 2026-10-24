@@ -30,7 +30,7 @@ from world.items.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `QualityTier` | Color-coded quality levels with stat scaling | `name`, `color_hex`, `numeric_min`, `numeric_max`, `stat_multiplier`, `sort_order` |
+| `QualityTier` | Color-coded quality levels with stat scaling | `name`, `color_hex`, `numeric_min`, `numeric_max`, `stat_multiplier`, `sort_order`, `modifier_level` (#4628: the level a worn item of this tier counts at when its check modifier is sized; blank keeps flat values; editable in the tier list) |
 | `InteractionType` | Extensible item actions (eat, wield, study, etc.) | `name` (internal), `label` (player-facing), `description` |
 | `WeaponClass` (#2879) | Weighted strength/agility blend for a weapon archetype — replaces the #2858 small/medium/heavy override so an off-stat weapon still contributes a proportional slice of offense instead of being all-or-nothing | `name` (unique), `strength_tenths` (0-10; strength's share of the blend, agility gets the remainder), `gear_archetype` (advisory only — `ItemTemplate.gear_archetype` stays authoritative for physics gates), `default_damage` |
 
@@ -709,6 +709,15 @@ flagged template's mechanics are live for a given holder:
   template with `ItemNotAttuned` ("The item does not answer to you.") when the acting
   character (resolved from the `user` ObjectDB via `character_sheet`) doesn't match the
   locked instance's `attuned_to_character_sheet`.
+- **Level and size (#4628, ADR-4628-A).** `ItemCheckModifier.modifier_size` (Minor to
+  Exceptional; Paramount refused by `clean()`, vow-only) puts the row on the check lane's
+  value table: it counts at the `QualityTier.modifier_level` of the best worn instance of
+  its template that lets it count (equipped, and attuned when flagged; a carried spare
+  never raises it), and the flat `modifier_value` supplies only the sign. A blank size, an
+  instance with no tier, or a tier with no level keeps the flat value. Every worn item
+  contribution tapers with the EQUIPMENT pile (`ModifierTaper` rows, #4594). Crafted
+  recipe and accent modifiers stay flat (they target a generic `ModifierTarget` read by
+  every lane) but are one contribution per worn piece, so they taper as a pile.
 - **Stacking.** With multiple equipped instances of the same flagged template, the
   modifier applies once iff at least one is attuned to the holder — attunement never
   multiplies a bonus (two rings, one attuned, is the same as one ring attuned).
