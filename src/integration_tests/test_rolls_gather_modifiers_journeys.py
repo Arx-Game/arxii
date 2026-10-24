@@ -32,9 +32,11 @@ from world.checks.models import CheckCall
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.conditions.constants import DurationType
 from world.conditions.factories import (
     CapabilityTypeFactory,
     ConditionCheckModifierFactory,
+    ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
 from world.conditions.models import ConditionInstance
@@ -298,8 +300,11 @@ class AChallengeCountsHerGear(_TheOldQuarry):
         return outcome
 
     @staticmethod
-    def rows(outcome: dict) -> set[tuple[str, str, int]]:
-        return {(m["source_kind"], m["source_label"], m["value"]) for m in outcome["modifiers"]}
+    def rows(outcome: dict) -> list[tuple[str, str, int]]:
+        """Every stored row, sorted; a row stored twice shows up twice."""
+        return sorted(
+            (m["source_kind"], m["source_label"], m["value"]) for m in outcome["modifiers"]
+        )
 
     def test_the_roll_and_the_stored_breakdown_count_the_gloves_and_the_buff(self) -> None:
         self.gear_up()
@@ -308,10 +313,15 @@ class AChallengeCountsHerGear(_TheOldQuarry):
 
         # Her own 5, the gloves' 5, the buff's 5 and her capability's 5, each once.
         self.assertEqual(roll.total_points, GEARED + CAPABILITY)
+        # 20 points: Novice (rank 1), two thirds of its band.
+        self.assertEqual(
+            roll.standing_text,
+            "Novice (rank 1), 67% toward Competent (rank 2) " + AGAINST_TRIVIAL,
+        )
         outcome = self.stored()
         self.assertEqual(
             self.rows(outcome),
-            {GLOVES, BUFF, ("capability", "Scaling: Spider Step", CAPABILITY)},
+            sorted([GLOVES, BUFF, ("capability", "Scaling: Spider Step", CAPABILITY)]),
         )
         self.assertEqual(outcome["modifier_total"], 15)
 
@@ -320,7 +330,7 @@ class AChallengeCountsHerGear(_TheOldQuarry):
 
         self.assertEqual(roll.total_points, OWN + CAPABILITY)
         outcome = self.stored()
-        self.assertEqual(self.rows(outcome), {("capability", "Scaling: Spider Step", CAPABILITY)})
+        self.assertEqual(self.rows(outcome), [("capability", "Scaling: Spider Step", CAPABILITY)])
         self.assertEqual(outcome["modifier_total"], CAPABILITY)
 
     def test_a_capability_staff_linked_to_the_check_counts_once(self) -> None:
@@ -335,12 +345,14 @@ class AChallengeCountsHerGear(_TheOldQuarry):
         outcome = self.stored()
         self.assertEqual(
             self.rows(outcome),
-            {
-                GLOVES,
-                BUFF,
-                ("capability", "Scaling: Spider Step", CAPABILITY),
-                ("capability", "Capability: Scaling", CAPABILITY),
-            },
+            sorted(
+                [
+                    GLOVES,
+                    BUFF,
+                    ("capability", "Scaling: Spider Step", CAPABILITY),
+                    ("capability", "Capability: Scaling", CAPABILITY),
+                ]
+            ),
         )
         self.assertEqual(outcome["modifier_total"], 20)
 
@@ -354,7 +366,34 @@ class AChallengeCountsHerGear(_TheOldQuarry):
         roll = self.climb()
 
         self.assertEqual(roll.total_points, GEARED + CAPABILITY)
+        outcome = self.stored()
+        self.assertEqual(
+            self.rows(outcome),
+            sorted([GLOVES, BUFF, ("capability", "Scaling: Spider Step", CAPABILITY)]),
+        )
+        self.assertEqual(outcome["modifier_total"], 15)
+
+    def test_a_once_only_blessing_helps_one_climb_and_is_spent(self) -> None:
+        word = ConditionTemplateFactory(
+            name="Steadying Word", default_duration_type=DurationType.UNTIL_USED
+        )
+        ConditionCheckModifierFactory(
+            condition=word, check_type=self.climbing, check_category=None, modifier_value=3
+        )
+        ConditionInstanceFactory(target=self.ysmay, condition=word)
+
+        roll = self.climb()
+
+        self.assertEqual(roll.total_points, OWN + CAPABILITY + 3)
+        self.assertFalse(
+            ConditionInstance.objects.filter(target=self.ysmay, condition=word).exists()
+        )
         self.assertEqual(
             self.rows(self.stored()),
-            {GLOVES, BUFF, ("capability", "Scaling: Spider Step", CAPABILITY)},
+            sorted(
+                [
+                    ("capability", "Scaling: Spider Step", CAPABILITY),
+                    ("condition", "Steadying Word", 3),
+                ]
+            ),
         )
