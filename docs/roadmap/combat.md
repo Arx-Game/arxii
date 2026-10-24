@@ -356,8 +356,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   capability (one for a mortal), and the web move list shows the hops left or the refusal; a PC
   strike whose target left reach before its slot fizzles for free. `CreatureTemplate` gained
   `tactics`, `speed_hops` and `traversal` (staff-authored, exported with the content).
-  Journeys: `src/integration_tests/test_npcs_close_in_journeys.py`. Slice 4 (tactics) reads
-  `tactics` and fills the other move kinds.
+  Journeys: `src/integration_tests/test_npcs_close_in_journeys.py`. Slice 4 (#4609) reads
+  `tactics` and writes the other move kinds.
 - **Roofs and screens stop strikes, the waiting strike, and grounded fliers fall (#4608, slice
   3 of #4576, ADR-4608-A).** Positions and blueprint positions carry `is_roofed` and
   `screens_ranged`. No strike passes between the air and a roofed position, both ways, and a
@@ -369,8 +369,23 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   reach or attacks the waiter, and a strike that drops the enemy cancels its attack; when
   nothing comes it says so and costs nothing. `REMOVE_FLIGHT` now drops a flier through the
   plummet rules: a PC gets the catch window, an NPC lands at once with the fall damage on its
-  health. NPC waiting strikes fire through the same path once slice 4 writes WAIT plans.
+  health. NPC waiting strikes fire through the same path from the WAIT plans slice 4 writes.
   Journeys: `src/integration_tests/test_cover_and_the_waiting_strike_journeys.py`.
+- **Enemies fight by their wits, and none idles (#4609, slice 4 of #4576, ADR-4609-A).** The
+  tactics ladder (`combat/services/npc/npc_tactics.py`) reads each creature template's
+  `tactics`. A broken enemy backs away over real hops toward the position farthest from the
+  party and leaves once nobody can reach it, or after two rounds of it; cornered, it fights. An
+  enemy hit by an attacker it cannot answer runs for a roofed or screened position (every
+  level: cover is instinct; a tactical one keeps an ally beside it) and fights from there. With
+  nobody in reach it walks toward a position its strikes land from; a wall in the way is
+  battered when the group can bring it down in three rounds, or always by a mindless creature,
+  and otherwise gone around. With nothing nearer to reach it bashes anyway, or waits once for
+  an opening (never a mindless one), and an enemy with nothing left to do says it strains
+  against the wall. A cunning or tactical enemy spends a net or other grounding entry on a
+  flier it cannot otherwise reach; a mindless one never does. Every unanswered hit costs the
+  struck enemy morale. The three numbers live in the `NpcTacticsConfig` staff row. Journeys:
+  `src/integration_tests/test_npc_tactics_journeys.py`; the progress guarantee is fuzzed in
+  `src/integration_tests/fuzz/test_npc_progress_fuzz.py`. This completes #4576.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips

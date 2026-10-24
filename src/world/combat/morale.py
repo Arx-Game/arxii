@@ -4,7 +4,9 @@ Mirrors war-scale ``BattleUnit.morale`` (world.battles) at party scale.
 Morale is a first-class depletable resource on ``CombatOpponent``; the
 derived state (STEADY/FALTER/BREAK) is read via ``morale_state_for`` —
 never stored. ``select_npc_actions`` consults the state to weaken
-(falter) or flee (break) faltering/broken opponents.
+(falter) faltering opponents; a broken one retreats over the map and then
+flees, or flees at once when it is off the map (``npc_tactics.plan_retreat``,
+#4609). An attacker it cannot answer also shakes it (``unanswered_hit_morale``).
 
 Mindless opponents (``OpponentTierTemplate.has_morale == False``) are NOT
 immune — a powerful enough morale check breaks through and imposes morale
