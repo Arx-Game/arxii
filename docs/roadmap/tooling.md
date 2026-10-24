@@ -372,6 +372,23 @@ line of the eleven source files behind them is reached by the old modules alone.
 in the browser sends the ship or portal actions (recorded as a gap). No production code
 changed; the ledger marks the five rows R (55 of 172 ruled).
 
+Tranche 23 removed `test_mood_actions` and `test_language_actions` and trimmed
+`test_ooc_say` and `test_language_speech` to the one test each that a typed line cannot
+show (the absent unpuppeting `ooc`, the comprehension query count): 78 tests became 3,
+after `integration_tests/test_voice_and_feeling_journeys.py` (41 tests) took what they
+reached. Feeling is typed and sent (`feel`, `set_mood`, `sense` on a Sense Mood check
+forced each way, `sense_mood` by persona id), speaking out of character is typed (the
+room's line, the mutes, an unconscious listener, a sheet with no roster entry), and the
+tongues are typed (`say (Khatic)`, `speak`, whisper and mutter keeping the tongue on the
+full text, a condition lifting comprehension, `train_language` alone, taught, at a lock
+and for a restricted tongue). Under coverage on Postgres the journeys and the kept tests
+reach every line of the source the old modules reached except two: a Language with no
+trait row in the comprehension read (a speaker cannot reach it, fluency is read first) and
+the singleton manager's missing-row fallback. Nothing in the browser sends the mood or
+language keys, and a bare tag on `say (Khatic)` says the tag (both recorded as gaps). No
+production code changed; the ledger marks the two removed rows R and the two trimmed rows
+U-keep (59 of 172 ruled).
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,
