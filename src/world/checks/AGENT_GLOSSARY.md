@@ -171,14 +171,18 @@ _Avoid_: bonus skill, injected trait, synthetic check type (the rejected alterna
 The level a modifier counts at. A technique's buff or debuff takes it from its cast: the
 effective power picks a `CastPowerLevel` row and the outcome shifts it by a
 `CastOutcomeLevelShift` row; the `ConditionInstance` keeps it as `modifier_level`. It is the
-buff's own level, never the bearer's or the target's.
-_Avoid_: buff tier, power level (power is the cast's number; the level is what it resolves to)
+buff's own level, never the bearer's or the target's. A worn item takes it from its quality
+(#4628): the `QualityTier.modifier_level` of the best worn instance of its template (the **item
+level rows**).
+_Avoid_: buff tier, power level (power is the cast's number; the level is what it resolves to),
+item tier (the tier is the quality; the level is what it counts at)
 
 **Modifier size** (#4594, ADR-4594-A):
 How big a modifier is for its level, from the `ModifierSize` ladder: Minor, Moderate, Large,
 Exceptional (placeholder name), Paramount (placeholder name, reached only through a vow's size
 step). Authored on `TechniqueAppliedCondition.modifier_size`: a technique that only buffs is
 Large, one that also does something else is Minor or Moderate, narrow use is one step higher.
+Also authored on `ItemCheckModifier.modifier_size` for a worn item's check bonus (#4628).
 _Avoid_: magnitude, strength, small/big buff
 
 **Value table** (#4594, ADR-4594-A):
@@ -197,7 +201,9 @@ _Avoid_: expected total, par
 In one roll, each further modifier of the same source kind on the same lane counts less: largest
 first, the k-th at `max(ratio^(k-1), floor)` of its value (the owner's light taper: 7/8, never
 below 2/3), bonuses and penalties in separate piles. Set by `ModifierTaper` rows; a kind with no
-row never tapers. The character's own standing and a vow's step are never tapered.
+row never tapers. The character's own standing and a vow's step are never tapered, nor the
+equipment walk's vow terms (covenant role, covenant level, vow stat scaling), which ride as the
+walk contribution's `vow_part` (#4628).
 _Avoid_: diminishing returns (too broad; ADR-0158's vow-keyed grouping is a different rule),
 stacking penalty, soft cap
 

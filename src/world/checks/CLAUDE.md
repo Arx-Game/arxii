@@ -223,7 +223,11 @@ apply uniformly to attack and defense (#750/#512).
 at `max(ratio**(k-1), floor)`, with `vow_part` and untapered kinds (own standing: rollmod, effort,
 fatigue, strain, soulfray, capability) at face value. No rows = a plain sum. A sized source reads
 the `ModifierValue` table (`modifier_values.load_value_table`) at its own level and size, never
-the bearer's level; technique buffs are the first (see `docs/systems/checks.md`).
+the bearer's level; technique buffs are the first (see `docs/systems/checks.md`). Worn items
+are the second (#4628, ADR-4628-A): a sized `ItemCheckModifier` counts at the best worn
+instance's `QualityTier.modifier_level`, valued through `ValueTable.signed_value` (the one
+valuation helper; never re-derive the sign/None rule). The equipment walk's vow terms ride as
+`vow_part`, and crafted modifiers are one contribution per worn piece.
 
 **Social/scene actions** funnel their plain (non-technique) check through the same
 seam in `world.scenes.action_services._resolve_action_against_persona`

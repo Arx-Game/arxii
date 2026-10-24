@@ -95,6 +95,29 @@ summing exactly to `total` (largest remainder); `record_consequence_outcome` sto
 the check lane's taper rules into every breakdown it returns, and
 `opponent_condition_opposition` tapers an opponent's own CONDITION pile the same way. The first
 sized source is a technique buff (see `docs/systems/conditions.md` and `docs/systems/magic.md`).
+`ValueTable.signed_value(authored_value, level, size) -> int | None` is the shared valuation every
+sized source calls: the row's magnitude with the authored value's sign, or None (keep the flat
+value) when the level, the size, the authored value or the row is missing.
+
+**Worn items (#4628, ADR-4628-A).** The EQUIPMENT block is the second sized source. Each worn
+`ItemCheckModifier` row is annotated with `item_level`, the highest `QualityTier.modifier_level`
+among the instances of its template that let it count (equipped, and attuned when the template
+requires it; the annotation shares the filter's join, so a carried spare never counts). A row with
+a `modifier_size` and a level reads the value table; any other row keeps its flat value. Either
+way the contribution carries `level`/`size` when sized and tapers with the EQUIPMENT pile. What the
+EQUIPMENT kind covers on the check lane:
+
+| Item path | Contribution | This slice |
+|---|---|---|
+| `ItemCheckModifier` (template check bonus) | `Equipped: <template>`, one per template | Sized: level from quality, value table, tapers |
+| Crafted recipe modifiers and accents (`crafted_modifier_by_piece`) | `Crafted: <piece>`, one per worn piece | Flat (deferred: a generic `ModifierTarget` source, read by every lane through `get_modifier_total`), tapers per piece |
+| Equipment walk (`equipment_walk_parts`): facet, facet crossing, mantle, mantle crossing, motif style | `Equipment & attunement` | Flat (deferred: thread passives scaled by thread level), tapers |
+| Equipment walk: covenant role, covenant level, vow stat scaling | same contribution, as its `vow_part` | Never tapered (the character's vow) |
+| Fashion (`fashion_outfit_bonus`) | `Fashion`, its own FASHION kind | Unchanged (flat, its own pile) |
+
+The walk only reaches a check whose scoped `ModifierTarget` is in an
+`EQUIPMENT_RELEVANT_CATEGORIES` category; the check-scoped targets authored today (category
+`check` or `roll_modifier`) are not, so on those checks the walk adds nothing.
 
 ### Authoring guardrail: one channel per condition/check pair (#2505)
 
