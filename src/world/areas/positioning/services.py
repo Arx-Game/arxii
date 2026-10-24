@@ -952,24 +952,29 @@ class _RoomGraph:
 
 
 def _room_graph(origin: Position) -> _RoomGraph:
-    """Build the routing graph for ``origin``'s room from the cached position graph.
+    """Build the routing graph for ``origin``'s room from the database (two queries).
 
-    Edges are canonical (position_a.pk < position_b.pk), so each position's
-    ``all_edges_as_a`` across the room yields every edge exactly once.
+    Not from ``room.positions_cached``: in a running server the per-position edge
+    caches a page load prefetched can outlive the aerial layer a flier's planning just
+    built, and Django's prefetch never refills a cache that is already set, so a route
+    search read from them missed the new vertical edges (#4607, found in a live run).
+    Edges are canonical (position_a.pk < position_b.pk), so each is read once.
     """
-    positions = list(origin.room.positions_cached)
+    positions = list(Position.objects.filter(room_id=origin.room_id))
     nodes = {p.pk: p for p in positions}
     nodes.setdefault(origin.pk, origin)
     edges: dict[tuple[int, int], PositionEdge] = {}
     neighbours: dict[int, list[tuple[int, PositionEdge]]] = {pk: [] for pk in nodes}
-    for position in positions:
-        for edge in position.all_edges_as_a:
-            a_id, b_id = edge.position_a_id, edge.position_b_id
-            if a_id not in nodes or b_id not in nodes:
-                continue
-            edges[(a_id, b_id)] = edge
-            neighbours[a_id].append((b_id, edge))
-            neighbours[b_id].append((a_id, edge))
+    room_edges = PositionEdge.objects.filter(position_a__room_id=origin.room_id).select_related(
+        "gating_challenge__template", "source_rampart"
+    )
+    for edge in room_edges:
+        a_id, b_id = edge.position_a_id, edge.position_b_id
+        if a_id not in nodes or b_id not in nodes:
+            continue
+        edges[(a_id, b_id)] = edge
+        neighbours[a_id].append((b_id, edge))
+        neighbours[b_id].append((a_id, edge))
     return _RoomGraph(nodes=nodes, edges=edges, neighbours=neighbours)
 
 
@@ -1293,6 +1298,9 @@ def materialize_aerial_layer(room: ObjectDB) -> None:
         a, b = twin.get(edge.position_a_id), twin.get(edge.position_b_id)
         if a is not None and b is not None:
             connect_positions(a, b)
+    # A page load may have prefetched the ground positions' edge lists; drop them all so
+    # the tactical map and every later reader see the new vertical edges (#4607).
+    invalidate_position_graph_caches(room)
 
 
 @contextmanager

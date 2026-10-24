@@ -95,6 +95,29 @@ class FindPathTests(_Yard):
         self.assertEqual(self.path(CreatureTraversal.WALKS, goal=self.a), [self.a])
 
 
+class StaleEdgeCacheTests(_Yard):
+    """A long-running server keeps each position's prefetched edge list (#4607).
+
+    A journey runs in a fresh process and never holds a stale list, so this pins the
+    route search to the database: a flier routes over a hard seal through an aerial
+    layer built after the ground positions' edge lists were cached.
+    """
+
+    def test_flier_routes_over_a_new_aerial_layer_despite_stale_edge_caches(self) -> None:
+        self.drop_detour()
+        self.hard_seal()
+        stale = {p.pk: list(p.all_edges_as_a) for p in (self.a, self.b, self.c)}
+        materialize_aerial_layer(self.room)
+        for position in (self.a, self.b, self.c):
+            # What a page load's prefetch leaves behind: the edges before the layer existed.
+            position.__dict__["all_edges_as_a"] = stale[position.pk]
+
+        route = self.path(CreatureTraversal.FLIES)
+
+        self.assertIsNotNone(route)
+        self.assertIn(PositionKind.AERIAL, {p.kind for p in route})
+
+
 class StrikeReachesTests(_Yard):
     """A pure function: the unplaced (None) and unknown-delivery branches no journey takes."""
 
