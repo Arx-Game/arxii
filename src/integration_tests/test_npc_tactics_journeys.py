@@ -27,7 +27,9 @@ telnet ``position`` and ``combat await``.
 - Hobb holds a screened gate (Scenario 7). Archers who cannot see him walk out into the
   open within two rounds, and the first to arrive takes his waiting strike.
 - A broken bandit backs away over the map, a hop a round, and leaves after two rounds of
-  it; a broken bandit with nowhere farther to go is cornered and fights.
+  it while someone can still strike it there (a swordsman who follows, or an archer whose
+  shot reaches the whole room); it leaves at once when a hop takes it out of a swordsman's
+  reach; a broken bandit with nowhere farther to go is cornered and fights.
 
 Expected values come from the rows built here and the spec (#4576 slice 4): a mortal
 has 1 hop a round; MELEE reaches the same or an adjacent position over an open edge and
@@ -740,8 +742,14 @@ class ABrokenBandit(_TheField):
         bandit.save(update_fields=["morale"])
         return bandit
 
+    def swordsman(self, name: str, *, at: Position):
+        """A fighter whose only strike is a Lunge: the same or an adjacent position."""
+        character = self.fighter(name, at=at)
+        self.technique(character, "Lunge")
+        return character
+
     def test_it_backs_away_a_hop_a_round_and_leaves_after_two_rounds(self) -> None:
-        hobb = self.fighter("Hobb", at=self.lane)
+        hobb = self.swordsman("Hobb", at=self.lane)
         bandit = self.broken("Bandit", at=self.gate)
         # Hobb steps up to it as the round is declared.
         self.telnet(hobb, "position Gate")
@@ -765,15 +773,41 @@ class ABrokenBandit(_TheField):
         self.assertEqual(self.health(hobb), FULL_HEALTH)  # it never struck while backing off
 
     def test_it_leaves_at_once_when_one_hop_takes_it_out_of_reach(self) -> None:
-        hobb = self.fighter("Hobb", at=self.gate)
+        # Hobb has only his Lunge and stays at the Gate.
+        hobb = self.swordsman("Hobb", at=self.gate)
         bandit = self.broken("Bandit", at=self.yard)
 
         self.resolve()
 
-        # One hop, to the Hall, puts it out of Hobb's reach at the Gate: it is gone.
+        # One hop, to the Hall, puts it out of the Lunge's reach from the Gate: it is gone.
         self.assertShownRow(hobb, MOVES_TO.format(name="Bandit", position="Hall"))
         self.assertEqual(self.fresh(bandit).status, OpponentStatus.FLED)
         self.assertShownRow(hobb, FLEES.format(name="Bandit"))
+
+    def test_an_archer_in_range_keeps_it_backing_away_until_the_limit(self) -> None:
+        # Wren's Longshot reaches anywhere in the room (ANY reach, nothing screened), so no
+        # hop gets the bandit out of her reach. It leaves only at the retreat limit, 2 rounds.
+        wren = self.fighter("Wren", at=self.lane)
+        self.technique(wren, "Longshot", reach=TechniqueReach.ANY)
+        bandit = self.broken("Bandit", at=self.gate)
+
+        self.resolve()
+
+        # Away from Wren toward the Moor, one hop: the Yard. Still in her sight, it stays.
+        self.assertEqual(self.plan(bandit).kind, OpponentMoveKind.RETREAT)
+        self.assertEqual(self.where(bandit), self.yard)
+        self.assertShownRow(wren, MOVES_TO.format(name="Bandit", position="Yard"))
+        self.assertEqual(self.fresh(bandit).status, OpponentStatus.ACTIVE)
+        self.assertFalse(self.rows_with(wren, "Bandit flees"))
+
+        self.next_round()
+        self.resolve()
+
+        # The second round of backing away: it reaches the Hall and leaves the fight.
+        self.assertEqual(self.plan(bandit, 2).kind, OpponentMoveKind.RETREAT)
+        self.assertShownRow(wren, MOVES_TO.format(name="Bandit", position="Hall"))
+        self.assertEqual(self.fresh(bandit).status, OpponentStatus.FLED)
+        self.assertShownRow(wren, FLEES.format(name="Bandit"))
 
     def test_a_bandit_that_breaks_mid_wind_up_lands_the_blow_then_backs_away(self) -> None:
         # Its one attack takes a round to wind up. The telegraph is its action: a broken

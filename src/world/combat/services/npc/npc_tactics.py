@@ -78,6 +78,7 @@ from world.combat.services.npc.npc_movement import (
     can_strike_this_round,
     entry_grounds_fliers,
     mover_origin,
+    strike_deliveries,
     target_position,
     walk_and_announce,
     write_move_plan,
@@ -922,7 +923,9 @@ def _run_retreat(
     on_hop: HopHook | None,
     result: SlotMoveResult,
 ) -> None:
-    """Back away, then leave the fight when no enemy reaches it or the limit is hit."""
+    """Back away, then leave the fight when no enemy can strike it where it ends
+    (``_can_strike_at``: a player's best technique reach, an opponent's deliveries) or
+    the retreat limit is hit."""
     profile = opponent.movement_profile
     hostiles, _ = _live_target_pool(opponent)
     memo = ReachMemo()
@@ -936,13 +939,39 @@ def _run_retreat(
             result.moved = walk_and_announce(opponent, route, profile, on_hop=on_hop) is not None
     if result.stopped or opponent.status != OpponentStatus.ACTIVE:
         return
-    here = target_position(opponent)
-    reached = any(memo.reaches(pos, here, StrikeDelivery.MELEE) for _h, pos in _placed(hostiles))
+    reached = any(_can_strike_at(hostile, opponent, memo) for hostile, _pos in _placed(hostiles))
     limit = NpcTacticsConfig.load().retreat_rounds_limit
     streak = _retreat_streak(opponent, move.round_number, limit) + 1
     if not reached or streak >= limit:
         _flee(opponent)
         result.fled = True
+
+
+def _can_strike_at(hostile: Combatant, opponent: CombatOpponent, memo: ReachMemo) -> bool:
+    """Whether ``hostile`` could strike ``opponent`` where both stand now, by its real reach.
+
+    A player character: any of its known combat-ready techniques reaches it
+    (``technique_can_reach``, the declaration's own rule, roofs and screens included). An
+    opponent: one of its threat entries' deliveries does (``strike_reaches``). The owner's
+    ruling of 2026-10-24: a broken opponent has not got away while an archer can still
+    shoot it (ADR-4609-A).
+    """
+    if isinstance(hostile, CombatOpponent):
+        here, there = target_position(hostile), target_position(opponent)
+        return any(memo.reaches(here, there, d) for d in strike_deliveries(hostile))
+    from world.combat.reach import technique_can_reach  # noqa: PLC0415
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
+
+    character = hostile.character_sheet.character
+    known = CharacterTechnique.objects.filter(
+        character=hostile.character_sheet, technique__action_template__isnull=False
+    ).select_related("technique")
+    return any(
+        resolve_cast_check(character, grant.technique) is not None
+        and technique_can_reach(character, grant.technique, opponent.objectdb)
+        for grant in known
+    )
 
 
 # ---------------------------------------------------------------------------
