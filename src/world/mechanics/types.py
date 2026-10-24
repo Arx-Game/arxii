@@ -49,7 +49,13 @@ class HasProperties(Protocol):
 
 @dataclass
 class ModifierSourceDetail:
-    """Single modifier source with calculation details."""
+    """Single modifier source with calculation details.
+
+    ``level`` and ``size`` (#4638) are set only when a sized distinction effect was valued
+    from a lane's value table (``get_modifier_breakdown(value_lane=...)``): the holder's
+    level and the effect's ``ModifierSize``. ``base_value`` is then the table's number,
+    scaled by rank. Every other source leaves both None and keeps its flat value.
+    """
 
     source_name: str
     base_value: int
@@ -57,6 +63,8 @@ class ModifierSourceDetail:
     final_value: int
     is_amplifier: bool
     blocked_by_immunity: bool
+    level: int | None = None
+    size: int | None = None
 
 
 @dataclass

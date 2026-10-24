@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from world.covenants.perks.context import SituationContext
     from world.items.models import ItemCheckModifier
     from world.mechanics.models import CharacterChallengeRecord
-    from world.scenes.models import Interaction, Scene
+    from world.scenes.models import Interaction, Scene, SceneCheckModifier
     from world.skills.models import Specialization
     from world.traits.handlers import TraitHandler
 
@@ -1727,18 +1727,13 @@ def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror
     if scene is not None and isinstance(check_type, _DjangoModel):
         from world.scenes.models import SceneCheckModifier  # noqa: PLC0415
 
-        scene_mods = SceneCheckModifier.objects.filter(
-            scene=scene,
-            check_type=check_type,
-        ).select_related("scene")
-        contributions.extend(
-            ModifierContribution(
-                source_kind=ModifierSourceKind.SCENE,
-                source_label=f"Scene surroundings: {mod.scene.name}",
-                value=mod.modifier_value,
-            )
-            for mod in scene_mods
+        scene_mods = list(
+            SceneCheckModifier.objects.filter(
+                scene=scene,
+                check_type=check_type,
+            ).select_related("scene")
         )
+        contributions.extend(_scene_check_contributions(scene_mods))
 
     # --- EQUIPMENT contributions ---
     from world.items.models import ItemCheckModifier  # noqa: PLC0415
@@ -1809,6 +1804,39 @@ def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror
         contributions=contributions,
         tapers=load_taper_rules(ModifierLane.CHECK),
     )
+
+
+def _scene_check_contributions(
+    scene_mods: "list[SceneCheckModifier]",
+) -> list[ModifierContribution]:
+    """SCENE contributions for a scene's authored surroundings (#4638).
+
+    A row staff gave a level and a size reads the check lane's value table
+    (``ValueTable.signed_value``) at that authored level, signed like its flat value;
+    any other row (or one no table row covers) keeps its flat value. Both taper with
+    the SCENE pile. Nothing about the character rolling is read. The table loads only
+    when a row is sized.
+    """
+    value_table = None
+    if any(mod.modifier_size is not None and mod.modifier_level is not None for mod in scene_mods):
+        value_table = load_value_table(ModifierLane.CHECK)
+    contributions: list[ModifierContribution] = []
+    for mod in scene_mods:
+        sized = (
+            value_table.signed_value(mod.modifier_value, mod.modifier_level, mod.modifier_size)
+            if value_table is not None
+            else None
+        )
+        contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.SCENE,
+                source_label=f"Scene surroundings: {mod.scene.name}",
+                value=mod.modifier_value if sized is None else sized,
+                level=mod.modifier_level if sized is not None else None,
+                size=mod.modifier_size if sized is not None else None,
+            )
+        )
+    return contributions
 
 
 def _equipment_check_contributions(
@@ -1891,13 +1919,20 @@ def _character_and_equipment_contributions(
 
     contributions: list[ModifierContribution] = []
 
-    # CHARACTER — eager CharacterModifier rows.
-    character_breakdown = get_character_modifier_breakdown(character_sheet, scoped_target)
+    # CHARACTER — eager CharacterModifier rows. #4638: a distinction effect with a size
+    # is valued from the check lane's table at its holder's level (scaled by rank); the
+    # other rows on this path (achievement rewards, form profiles, unsized distinctions)
+    # keep their flat values. All taper together in the CHARACTER pile.
+    character_breakdown = get_character_modifier_breakdown(
+        character_sheet, scoped_target, value_lane=ModifierLane.CHECK
+    )
     contributions.extend(
         ModifierContribution(
             source_kind=ModifierSourceKind.CHARACTER,
             source_label=detail.source_name,
             value=detail.final_value,
+            level=detail.level,
+            size=detail.size,
         )
         for detail in character_breakdown.sources
         if not detail.blocked_by_immunity and detail.final_value != 0

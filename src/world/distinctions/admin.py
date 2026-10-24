@@ -51,6 +51,7 @@ class DistinctionEffectInline(admin.TabularInline):
         "target",
         "value_per_rank",
         "scaling_values",
+        "modifier_size",
         "description",
     ]
     autocomplete_fields = ["target"]
@@ -152,7 +153,7 @@ class DistinctionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
 
 @admin.register(DistinctionEffect)
 class DistinctionEffectAdmin(admin.ModelAdmin):
-    list_display = ["distinction", "target", "category", "value_per_rank"]
+    list_display = ["distinction", "target", "category", "value_per_rank", "modifier_size"]
     list_filter = ["target__category"]
     search_fields = ["distinction__name", "target__name", "description"]
     autocomplete_fields = ["distinction", "target"]
