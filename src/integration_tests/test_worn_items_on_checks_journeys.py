@@ -15,25 +15,34 @@ journeys also prove the seed is coherent.
   carries does not raise her worn Fine boots.
 - A sized penalty (a plate cuirass) stays a penalty, in its own pile.
 - Her covenant's level bonus rides the equipment walk and is never tapered.
+- An item at a tier with no level keeps its flat value.
 - Staff set a tier's level and an item's size on the admin pages; Paramount is refused.
+
+The player's own ``check <name>`` command rolls through ``perform_check`` without gathering
+modifiers, so no worn item, buff or condition reaches it today; these journeys read the
+check through ``perform_check_with_modifiers``, the seam challenges, social actions and
+casts roll through.
 """
 
 from __future__ import annotations
 
+from django.contrib import admin
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
+from django.test import RequestFactory
 
 from evennia_extensions.factories import ObjectDBFactory
 from integration_tests.harness import JourneyCase
 from web.admin.tuning.required_content import collect_required_content
 from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKind
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
+from world.checks.modifier_models import ModifierValue
 from world.checks.modifier_values import load_value_table
 from world.checks.services import collect_check_modifiers, perform_check_with_modifiers
 from world.checks.types import CheckResult
 from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory, make_engaged_member
 from world.covenants.models import CovenantLevelBonus
+from world.items.admin import ItemCheckModifierInline
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, TemplateSlotFactory
 from world.items.models import ItemCheckModifier, ItemInstance, ItemTemplate, QualityTier
@@ -141,7 +150,6 @@ class WornItemsOnChecks(JourneyCase):
 
         # 16 + 16 x 7/8 + 16 x (7/8)^2 = 42.25, rounded once.
         self.assertEqual(self.gain(before), 42)
-        self.assertLess(self.gain(before), 3 * 16)
 
     def test_an_unsized_item_keeps_its_flat_value_and_tapers(self) -> None:
         hood = self.template("Old Hood", BodyRegion.HEAD)
@@ -160,19 +168,43 @@ class WornItemsOnChecks(JourneyCase):
     def test_a_better_item_of_the_same_size_adds_more(self) -> None:
         boots, _cloak, _gloves = self.boots_cloak_gloves()
         before = self.shadowing_check()
-        fine_boots = self.carried(boots, self.fine, key="Fine Boots")
-        superb_boots = self.carried(boots, self.superb, key="Superb Boots")
+        self.carried(boots, self.fine, key="Fine Boots")
+        self.carried(boots, self.superb, key="Superb Boots")
 
         self.wear("Fine Boots")
         # Superb boots she carries but does not wear leave the Fine pair's level alone.
         self.assertEqual(self.gain(before), 16)
 
-        self.assertIn("You remove", self.telnet(self.ysmay, "remove Fine Boots"))
+        self.assertIn("You remove Fine Boots.", self.telnet(self.ysmay, "remove Fine Boots"))
         self.wear("Superb Boots")
         # Superb counts at level 16, where Large is worth 23.
         self.assertEqual(self.superb.modifier_level, 16)
         self.assertEqual(self.gain(before), 23)
-        self.assertNotEqual(fine_boots.pk, superb_boots.pk)
+
+    def test_a_tier_with_no_level_keeps_the_flat_value(self) -> None:
+        boots, _cloak, _gloves = self.boots_cloak_gloves()
+        unranked = QualityTier.objects.get(name="Poor")
+        unranked.modifier_level = None
+        unranked.save(update_fields=["modifier_level"])
+        before = self.shadowing_check()
+
+        self.dress(boots, tier=unranked)
+
+        self.assertEqual(self.gain(before), FLAT_AUTHORED)
+        (worn,) = collect_check_modifiers(self.ysmay.sheet_data, self.shadowing).contributions
+        self.assertEqual((worn.value, worn.level, worn.size), (FLAT_AUTHORED, None, None))
+
+    def test_without_a_value_row_the_item_keeps_its_flat_value(self) -> None:
+        boots, _cloak, _gloves = self.boots_cloak_gloves()
+        for row in ModifierValue.objects.filter(lane=ModifierLane.CHECK):
+            row.delete()
+        before = self.shadowing_check()
+
+        self.dress(boots)
+
+        self.assertEqual(self.gain(before), FLAT_AUTHORED)
+        (worn,) = collect_check_modifiers(self.ysmay.sheet_data, self.shadowing).contributions
+        self.assertEqual((worn.value, worn.level, worn.size), (FLAT_AUTHORED, None, None))
 
     def test_a_sized_penalty_stays_a_penalty_in_its_own_pile(self) -> None:
         boots, _cloak, _gloves = self.boots_cloak_gloves()
@@ -227,8 +259,8 @@ class StaffTuneWornItems(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
         seed_provisioning_content()
-        staff = get_user_model().objects.create_superuser("tuner", "t@example.com", "pw-12345")
-        self.client.force_login(staff)
+        self.staff = get_user_model().objects.create_superuser("tuner", "t@example.com", "pw-12345")
+        self.client.force_login(self.staff)
         self.shadowing = CheckTypeFactory(name="Shadowing")
 
     def test_the_quality_tier_list_edits_each_tier_level(self) -> None:
@@ -250,6 +282,8 @@ class StaffTuneWornItems(JourneyCase):
         )
 
         self.assertEqual(response.status_code, 302)
+        listing = self.client.get("/admin/arxii/qualitytier/").content.decode()
+        self.assertRegex(listing, r'name="form-\d+-modifier_level" value="9"')
         self.assertEqual(QualityTier.objects.get(pk=fine.pk).modifier_level, 9)
 
     def test_the_item_template_page_offers_the_size_and_paramount_is_refused(self) -> None:
@@ -258,15 +292,28 @@ class StaffTuneWornItems(JourneyCase):
         self.assertIn(b"check_modifiers-0-modifier_size", body)
         self.assertIn(b"Exceptional", body)
 
-        row = ItemCheckModifier(
-            template=template,
-            check_type=self.shadowing,
-            modifier_value=5,
-            modifier_size=ModifierSize.PARAMOUNT,
+        # The admin's own inline formset, bound to what the page posts: Paramount is refused.
+        request = RequestFactory().post("/")
+        request.user = self.staff
+        inline = ItemCheckModifierInline(ItemTemplate, admin.site)
+        formset_class = inline.get_formset(request, template)
+        prefix = formset_class.get_default_prefix()
+        posted = {
+            f"{prefix}-TOTAL_FORMS": "1",
+            f"{prefix}-INITIAL_FORMS": "0",
+            f"{prefix}-0-check_type": str(self.shadowing.pk),
+            f"{prefix}-0-modifier_value": "5",
+            f"{prefix}-0-modifier_size": str(ModifierSize.PARAMOUNT),
+        }
+        refused = formset_class(posted, instance=template, prefix=prefix)
+        self.assertFalse(refused.is_valid())
+        self.assertIn(
+            "Paramount is reached only through a vow's size step.",
+            refused.forms[0].errors["modifier_size"],
         )
-        with self.assertRaises(ValidationError) as refused:
-            row.full_clean()
-        self.assertIn("modifier_size", refused.exception.message_dict)
+        posted[f"{prefix}-0-modifier_size"] = str(ModifierSize.EXCEPTIONAL)
+        accepted = formset_class(posted, instance=template, prefix=prefix)
+        self.assertTrue(accepted.is_valid(), accepted.errors)
 
     def test_the_required_content_sentinel_lists_the_item_level_rows(self) -> None:
         def present_keys() -> set[str]:

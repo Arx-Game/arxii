@@ -1819,8 +1819,9 @@ def _equipment_check_contributions(
     Each row carries the ``item_level`` its query annotated: the quality-tier level of
     the best worn instance of its template. A row with a size and a level reads the
     check lane's value table (``ValueTable.signed_value``), signed like its flat value;
-    any other row keeps its flat value. Both kinds still taper with the EQUIPMENT pile.
-    Nothing about the wearer is read. The table loads only when a row is sized.
+    any other row (or one no table row covers) keeps its flat value. Both kinds still
+    taper with the EQUIPMENT pile. Nothing about the wearer is read. The table loads
+    only when a row is sized.
     """
     value_table = None
     if any(mod.modifier_size is not None and mod.item_level is not None for mod in item_mods):
@@ -1838,8 +1839,10 @@ def _equipment_check_contributions(
                 source_kind=ModifierSourceKind.EQUIPMENT,
                 source_label=f"Equipped: {mod.template.name}",
                 value=mod.modifier_value if sized is None else sized,
-                level=level,
-                size=mod.modifier_size if level is not None else None,
+                # Level and size travel only with a table value, so provenance never
+                # claims the table priced a row it had no cell for.
+                level=level if sized is not None else None,
+                size=mod.modifier_size if sized is not None else None,
             )
         )
     return contributions
