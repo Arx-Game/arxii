@@ -1832,7 +1832,7 @@ class CombatOpponentAction(SharedMemoryModel):
 class PendingOpponentAttack(SharedMemoryModel):
     """A telegraphed NPC attack winding up before it lands (#2637).
 
-    Created by ``world.combat.services._build_opponent_round_actions`` at NPC
+    Created by ``world.combat.services.plan_opponent_round`` at NPC
     declaration when the chosen ``ThreatPoolEntry.windup_rounds > 0``, INSTEAD
     of a same-round ``CombatOpponentAction``. Matured by
     ``world.combat.services._mature_pending_opponent_attacks`` at the top of

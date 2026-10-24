@@ -8092,7 +8092,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `redirect_opponent_target` (FK `CombatOpponent`, SET_NULL) / `redirect_object_target`
   (FK `objects.ObjectDB`, SET_NULL) — mutually exclusive declared REDIRECT-flavor
   destinations, #2210, see the Redirect section above),
-  `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
+  `CombatOpponentAction`, `CombatOpponentMove` (#4607 - one opponent's movement plan for
+  one round: `kind` `OpponentMoveKind` ADVANCE/SHELTER/BASH/RETREAT/WAIT, `goal_position`
+  hint (SET_NULL), `barrier_edge` (CASCADE, required for BASH), `threat_entry` (required for
+  BASH/WAIT), `fired`; unique per opponent and round; slice 2 writes only ADVANCE),
+  `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `ComboSlot` (`requirement_label` names what a slot asks for, #3553),
   `ComboLearning` (use_count tracks repeat
   use; written by `fire_combo_discovery` on first combat trigger, #2017),
@@ -8667,7 +8671,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `target` (nullable FK → `CombatParticipant`, v1 single-target — null when the entry is
     room-targeting), `declared_round`/`resolves_round` (CheckConstraint `resolves_round >
     declared_round`), `called_out` (bool), `downgrades` (PositiveSmallInt).
-  - **Declaration:** `_build_opponent_round_actions` (`world/combat/services/`) creates a
+  - **Declaration:** `plan_opponent_round` (`world/combat/services/npc/npc_selection.py`) creates a
     `PendingOpponentAttack` INSTEAD OF a same-round `CombatOpponentAction` when the chosen
     entry's `windup_rounds > 0`; `_batch_fetch_cooldown_data` also reads
     `PendingOpponentAttack.declared_round` so a wind-up commits to its entry's cooldown
@@ -8726,7 +8730,33 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     auto-selects (while status is still DECLARING, since `select_npc_actions` requires it)
     when the round has no NPC selection of EITHER shape yet — no `CombatOpponentAction` AND
     no `PendingOpponentAttack` declared this round — a conservative, idempotent fallback;
-    any explicit prior selection (staff, simulation, tests) is left alone.
+    any explicit prior selection (staff, simulation, tests) is left alone. Since #4607 a
+    `CombatOpponentMove` row also counts as a selection, and `ensure_opponent_plans` then
+    always plans any opponent still lacking a plan.
+- **Movement and reach (#4607, slice 2 of #4576, ADR-4607-A) [BUILT & WIRED]:**
+  - Planning: `plan_opponent_round(opponent, ctx)` / `ensure_opponent_plans(encounter)`
+    (`world/combat/services/npc/npc_selection.py`, one context builder
+    `_build_npc_round_context`) write the attack rows plus one ADVANCE `CombatOpponentMove`
+    per active opponent; targets are narrowed to those strikeable this round after moving
+    (`can_strike_this_round` / `reachable_pools_by_delivery`, `npc_movement.py`). No move row
+    for a wind-up that has not matured.
+  - Resolution: `_resolve_actions(..., npc_moves=)` runs `advance_opponent` once before an
+    opponent's first attack row (live re-plan, walk cut to `speed_hops`, narrated
+    "{name} moves to {position}."), then `refit_targets` before each row (live
+    `strike_reaches`, re-pick by the entry's mode, "{name} cannot reach anyone." when none).
+  - Creature fields: `CreatureTemplate.tactics` (`CreatureTactics`), `speed_hops`,
+    `traversal` (`CreatureTraversal`, defined in `world.areas.positioning.constants`), read
+    live through `CombatOpponent.movement_profile` (`MovementProfile`; template-less =
+    `NPC_DEFAULT_TACTICS`/`NPC_DEFAULT_HOPS`/`NPC_DEFAULT_TRAVERSAL`).
+  - PC hop budget: `world/combat/services/movement_budget.py` (`active_combat_participant`,
+    `hops_for`, `hops_left`, `spend_combat_hop`), `CombatParticipant.hops_used` reset in
+    `begin_declaration_phase`, gated by `CombatMovementPrerequisite` on
+    `MoveToPositionAction`; `_positioning_actions` marks refused moves and the hops left.
+  - PC live reach: `_resolve_pc_action` fizzles a strike whose target left reach
+    ("{name}'s strike finds no one in reach.", no anima or fatigue); AREA/FILTERED_GROUP keep
+    only `opponents_in_reach` (`techniques/technique_targets.py`).
+  - Path service and reach rule live in positioning (`find_path`, `step_costs`,
+    `edge_crossing_cost`, `strike_reaches`); see `docs/systems/areas.md`.
 - **Conditions reach the fight for both sides (#4572) [BUILT & WIRED]:**
   - `select_npc_actions` -> `_apply_aggro_conditions` (`world/combat/services/npc/npc_selection.py`)
     adds each PC's summed `aggro_priority` (`world.conditions.services.aggro_priority_by_target`,
@@ -9060,7 +9090,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   fixtures. Driven end-to-end by `src/integration_tests/test_boss_fight_journey.py`.
 - **Engagement locks — foil duels (#2020, player surface #3386):** `EngagementLock`
   (`world/combat/models.py`) pairs one PC to one opponent; while ACTIVE the locked
-  opponent's targeting narrows to just that PC (`_build_opponent_round_actions`,
+  opponent's targeting narrows to just that PC (`plan_opponent_round`,
   `world/combat/services/`). #2020 shipped the whole mechanic (threat tracking,
   autonomous lock formation past `auto_lock_threshold`, boss-suppression consumer —
   see the break-bar entry above) but left its two player entry points unreachable
