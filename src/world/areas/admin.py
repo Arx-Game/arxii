@@ -62,8 +62,8 @@ class PositionBlueprintAdmin(admin.ModelAdmin):
 class BlueprintPositionAdmin(admin.ModelAdmin):
     """#3831 - a position-node template belonging to a PositionBlueprint."""
 
-    list_display = ["name", "blueprint", "kind"]
-    list_filter = ["kind"]
+    list_display = ["name", "blueprint", "kind", "is_roofed", "screens_ranged"]
+    list_filter = ["kind", "is_roofed", "screens_ranged"]
     search_fields = ["name", "blueprint__name"]
     list_select_related = ["blueprint"]
     autocomplete_fields = ["blueprint"]

@@ -139,6 +139,9 @@ class CombatManeuver(models.TextChoices):
     USE_ITEM = "use_item", "Use Item"
     CHARGE = "charge", "Charge"
     JOUST = "joust", "Joust"
+    # The waiting strike (#4608): a melee strike held for an enemy that comes into
+    # reach or attacks. It is the PC's one action for the round and fires at most once.
+    AWAIT_OPENING = "await_opening", "Wait for an opening"
 
 
 # ---------------------------------------------------------------------------

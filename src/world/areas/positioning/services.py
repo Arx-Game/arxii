@@ -5,7 +5,8 @@ Positions + edges are room-anchored. A walker crosses an edge unless
 resolved gate opens a sealed wall (#4606). How other movers cross is
 ``edge_crossing_cost`` by ``CreatureTraversal``, and ``find_path`` routes over it;
 ``strike_reaches`` is the reach rule for a strike's delivery (#4607). Every
-position write goes through ``_commit_position``.
+position write goes through ``_commit_position``. A roofed position and a screened
+position are cover facts the reach rules and the route search read directly (#4608).
 """
 
 from __future__ import annotations
@@ -78,6 +79,20 @@ def create_position(
 ) -> Position:
     """Create and return a new Position in the given room."""
     return Position.objects.create(room=room, name=name, kind=kind, description=description)
+
+
+def set_position_cover(position: Position, *, roofed: bool, screens_ranged: bool) -> Position:
+    """Mark ``position`` roofed and/or screened (#4608) and drop the room's cached graph.
+
+    The reach rules and the route search read the flags off the position itself, so
+    the aerial layer is left as it is: a roof closes the vertical edge without any
+    change to that edge's row.
+    """
+    position.is_roofed = roofed
+    position.screens_ranged = screens_ranged
+    position.save(update_fields=["is_roofed", "screens_ranged"])
+    invalidate_position_graph_caches(position.room)
+    return position
 
 
 def remove_position(position: Position) -> None:
@@ -570,6 +585,8 @@ def instantiate_blueprint(
                 description=bp_pos.description,
                 layout_x=bp_pos.layout_x,
                 layout_y=bp_pos.layout_y,
+                is_roofed=bp_pos.is_roofed,
+                screens_ranged=bp_pos.screens_ranged,
             )
             for bp_pos in blueprint_positions
         ]
@@ -655,6 +672,39 @@ def _reachable_within_hops(origin: Position, max_hops: int) -> set[Position]:
     return result
 
 
+def roof_between(a: Position, b: Position) -> bool:
+    """True when a roof stands between ``a`` and ``b`` (#4608).
+
+    That is: exactly one of the two is AERIAL and the other, a ground position, is
+    roofed. No strike crosses it, whatever its reach or delivery, even though the
+    aerial twin and its ground twin share a passable vertical edge, and no mover flies
+    straight through it (``find_path``, ``move_to_position``).
+    """
+    a_aerial = a.kind == PositionKind.AERIAL
+    b_aerial = b.kind == PositionKind.AERIAL
+    if a_aerial == b_aerial:
+        return False
+    ground = b if a_aerial else a
+    return ground.is_roofed
+
+
+def _within_a_step(origin: Position, target: Position) -> bool:
+    """Same position, or joined by a passable edge (the ADJACENT rule, gates ignored)."""
+    if origin.pk == target.pk:
+        return True
+    edge = edge_between(origin, target)
+    return edge is not None and edge.is_passable
+
+
+def screen_blocks(origin: Position, target: Position) -> bool:
+    """True when ``target`` is screened and ``origin`` is neither it nor beside it (#4608).
+
+    A screen breaks line of sight: a missile or room-wide (ANY reach) strike at a
+    screened position has to come from the same position or an adjacent one.
+    """
+    return target.screens_ranged and not _within_a_step(origin, target)
+
+
 def position_reachable(
     origin: Position,
     target: Position,
@@ -663,6 +713,10 @@ def position_reachable(
     reach_hops: int | None = None,
 ) -> bool:
     """Whether ``target`` is reachable from ``origin`` under a TechniqueReach value.
+
+    Two cover rules come first (#4608): a roof between the two (``roof_between``)
+    stops every reach, and a screened target (``screen_blocks``) stops an ANY strike
+    from further than a step away.
 
     SAME     -> target is the same position.
     ADJACENT -> same position, or a directly-connected passable edge exists.
@@ -675,6 +729,8 @@ def position_reachable(
     """
     from world.magic.constants import TechniqueReach
 
+    if roof_between(origin, target):
+        return False
     if reach == TechniqueReach.SAME:
         return origin.pk == target.pk
     if reach in (TechniqueReach.ADJACENT, TechniqueReach.REACH_N):
@@ -686,7 +742,7 @@ def position_reachable(
         max_hops = reach_hops if reach_hops is not None else 1
         return target in _reachable_within_hops(origin, max_hops)
     if reach == TechniqueReach.ANY:
-        return origin.room_id == target.room_id
+        return origin.room_id == target.room_id and not screen_blocks(origin, target)
     # Unknown reach value — conservative fallback.
     return False
 
@@ -756,6 +812,7 @@ class PositionNode:
 
     ``rampart_*`` fields (#2209) are populated from the position's covering
     ``Rampart`` (one-to-one) when present, else all four are ``None``.
+    ``is_roofed``/``screens_ranged`` (#4608) are the position's cover facts.
     """
 
     id: int
@@ -768,6 +825,8 @@ class PositionNode:
     rampart_integrity: int | None
     rampart_max_integrity: int | None
     rampart_crack_state: str | None
+    is_roofed: bool = False
+    screens_ranged: bool = False
 
 
 @dataclass(frozen=True)
@@ -808,6 +867,8 @@ def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
         rampart_integrity=rampart.integrity if rampart else None,
         rampart_max_integrity=rampart.max_integrity if rampart else None,
         rampart_crack_state=rampart.crack_state if rampart else None,
+        is_roofed=position.is_roofed,
+        screens_ranged=position.screens_ranged,
     )
 
 
@@ -905,12 +966,18 @@ GATED_CROSSING_HOPS = 2
 _CROSSERS_OF_GATES = (CreatureTraversal.CLIMBS, CreatureTraversal.LEAPS)
 
 
-def _crossing_cost(edge: PositionEdge, *, touches_aerial: bool, traversal: str) -> int | None:
+def _crossing_cost(
+    edge: PositionEdge, *, touches_aerial: bool, roofed: bool, traversal: str
+) -> int | None:
     """Hops to cross ``edge`` for ``traversal``; None means closed to that mover.
 
-    The edge row decides everything except whether either end is AERIAL, which
-    the caller supplies (``find_path`` reads it off its loaded node set).
+    The edge row decides everything except whether either end is AERIAL and whether
+    a roof stands between the ends (``roof_between``), which the caller supplies
+    (``find_path`` reads them off its loaded node set). A roof closes the vertical
+    edge to everyone (#4608): a flier lands beside a roofed position and walks in.
     """
+    if roofed:
+        return None
     blocked = edge_blocks_crossing(edge)
     if touches_aerial:
         # Only a flier enters the aerial layer (vertical and aerial-horizontal edges).
@@ -931,10 +998,14 @@ def edge_crossing_cost(edge: PositionEdge, traversal: str) -> int | None:
     costs 1 for FLIES and is closed to every other traversal. A ground edge a walker
     can cross costs 1 for everyone. A wall with an active gating challenge costs
     CLIMBS and LEAPS ``GATED_CROSSING_HOPS`` and is closed to WALKS and FLIES; a hard
-    seal is closed to all.
+    seal is closed to all. The vertical edge between a roofed position and the air
+    above it is closed to all (#4608).
     """
-    touches_aerial = PositionKind.AERIAL in (edge.position_a.kind, edge.position_b.kind)
-    return _crossing_cost(edge, touches_aerial=touches_aerial, traversal=traversal)
+    a, b = edge.position_a, edge.position_b
+    touches_aerial = PositionKind.AERIAL in (a.kind, b.kind)
+    return _crossing_cost(
+        edge, touches_aerial=touches_aerial, roofed=roof_between(a, b), traversal=traversal
+    )
 
 
 @dataclass(frozen=True)
@@ -948,7 +1019,10 @@ class _RoomGraph:
     def cost(self, edge: PositionEdge, traversal: str) -> int | None:
         a, b = self.nodes.get(edge.position_a_id), self.nodes.get(edge.position_b_id)
         touches_aerial = any(p is not None and p.kind == PositionKind.AERIAL for p in (a, b))
-        return _crossing_cost(edge, touches_aerial=touches_aerial, traversal=traversal)
+        roofed = a is not None and b is not None and roof_between(a, b)
+        return _crossing_cost(
+            edge, touches_aerial=touches_aerial, roofed=roofed, traversal=traversal
+        )
 
 
 def _room_graph(origin: Position) -> _RoomGraph:
@@ -1056,15 +1130,20 @@ def strike_reaches(
     MELEE needs the same or an adjacent position (``position_reachable``'s ADJACENT rule:
     a passable edge, gates ignored); MISSILE reaches anywhere in the room (ANY). An
     unknown delivery is treated as MELEE. Either position missing is reachable (an
-    unplaced combatant stays lenient). The edge is read from the room's cached graph,
-    so a path search can ask this of every node it visits without a query each time.
+    unplaced combatant stays lenient). The cover rules come first, as in
+    ``position_reachable`` (#4608): a roof between the two stops every delivery, and a
+    MISSILE at a screened target must come from the same or an adjacent position.
     """
     from world.combat.constants import StrikeDelivery
 
     if attacker_pos is None or target_pos is None:
         return True
+    if roof_between(attacker_pos, target_pos):
+        return False
     if delivery == StrikeDelivery.MISSILE:
-        return attacker_pos.room_id == target_pos.room_id
+        return attacker_pos.room_id == target_pos.room_id and not screen_blocks(
+            attacker_pos, target_pos
+        )
     if attacker_pos.pk == target_pos.pk:
         return True
     edge = _room_graph(attacker_pos).edges.get(tuple(sorted((attacker_pos.pk, target_pos.pk))))
@@ -1120,6 +1199,7 @@ _ERR_MOVE_NO_PATH = "There is no path to there."
 _ERR_MOVE_BLOCKED = "The way is blocked."
 _ERR_MOVE_IMMOBILE = "You cannot move."
 _ERR_MOVE_CANNOT_FLY = "You cannot fly."
+_ERR_MOVE_ROOFED = "A roof is in the way."
 _ERR_TAKE_ALREADY_PLACED = "You are already placed somewhere — move instead."
 _ERR_TAKE_NOT_ENTRY = "You cannot enter the position graph there."
 
@@ -1201,7 +1281,8 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     4. the edge does not block a walker (``edge_blocks_crossing``): an active
        gating challenge names itself; a hard seal is "The way is blocked."
     5. an AERIAL target needs the mover to hold the ``aerial`` property: "You cannot fly."
-    6. the actor's MOVEMENT capability > 0 (characters only)
+    6. no roof stands between the two (``roof_between``): "A roof is in the way." (#4608)
+    7. the actor's MOVEMENT capability > 0 (characters only)
     """
     if target.room_id != objectdb.db_location_id:
         raise PositionTransitionError(_ERR_MOVE_CROSS_ROOM)
@@ -1223,6 +1304,9 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
 
     if target.kind == PositionKind.AERIAL and not is_aerial(objectdb):
         raise PositionTransitionError(_ERR_MOVE_CANNOT_FLY)
+
+    if roof_between(current, target):
+        raise PositionTransitionError(_ERR_MOVE_ROOFED)
 
     if not _can_move(objectdb):
         raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
