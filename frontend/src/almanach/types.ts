@@ -370,6 +370,8 @@ export type AlmanachActionKey =
   | 'almanach_batch_unclaimed'
   | 'almanach_name_rung'
   | 'almanach_assign_holder'
+  | 'almanach_delete_rung'
+  | 'almanach_move_rung'
   | 'almanach_edit_house'
   | 'almanach_swear'
   | 'almanach_describe_demesne'

@@ -812,12 +812,17 @@ itself.
 
 ### Actions (`actions/definitions/almanach.py`)
 
-Eleven REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
+Thirteen REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
 `StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`),
 `AlmanachBatchUnclaimedAction` (`almanach_batch_unclaimed`), `AlmanachNameRungAction`
 (`almanach_name_rung`), `AlmanachAssignHolderAction` (`almanach_assign_holder`, kwargs `title_id`,
 `org_id`: `almanach.assign_holder`, seating an existing house on a rung's whole chain, vacant or
-held, #4614), `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
+held, #4614), `AlmanachDeleteRungAction` (`almanach_delete_rung`: `almanach.delete_rung` removes a
+chain's Titles, Domains and Areas, refused while held, with rungs, holdings or rooms beneath, or
+when something else still points at the land) and `AlmanachMoveRungAction` (`almanach_move_rung`,
+`title_id` + `parent_title_id`: `almanach.move_rung` reparents the rung's Area, refused for another
+realm, a parent that is the rung or beneath it, a wrong tier, or a held subtree) (#4617),
+`AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
 state, succession law default, and a wholesale `OrganizationFacet`/`OrganizationFeature`/
 `OrganizationObservance` replace; an `observances` row is `{ic_month, ic_day, name, lore}`,
 #4206), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneAction`
@@ -834,7 +839,9 @@ buttons.
 
 The same page seats an existing house: a "house" select and Seat button, offered only on a
 chain's top title (`assign_holder` refuses an inner chain member), over `almanach_assign_holder`
-(#4614). Create Family stays the way to seat a brand-new family.
+(#4614). Create Family stays the way to seat a brand-new family. A chain-top rung's page also offers Move
+under (a select of the realm's rungs) and, while unheld, Delete rung (second press; lands on the
+realm ladder after) (#4617).
 
 `AlmanachEditKinAction` mints a new family-tree/household node on create (`kinsperson_id`
 absent, via `almanach.record_kin` — see "Founder claims" above, the same engine founder finalize

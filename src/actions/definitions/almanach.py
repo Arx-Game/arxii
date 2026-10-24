@@ -1,6 +1,6 @@
 """Staff Almanach de Catenys actions (#3983): the feudal ladder + house record.
 
-Eleven REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
+Thirteen REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
 by ``StaffOnlyPrerequisite`` — the shared ``action.run()`` seam a future web
 staff console and telnet alike will dispatch through, mirroring the shape of
 the world-builder canvas (``world_builder.py``). Each is a thin wrapper over
@@ -246,6 +246,69 @@ class AlmanachAssignHolderAction(_AlmanachAction):
             success=True,
             message=f"{org.name} holds {title.name or 'the rung'}.",
             data={"title_id": title.pk, "org_id": org.pk},
+        )
+
+
+@dataclass
+class AlmanachDeleteRungAction(_AlmanachAction):
+    """Delete an empty, unheld rung. Kwargs: ``title_id``."""
+
+    key: str = "almanach_delete_rung"
+    name: str = "Delete Rung"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import delete_rung  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        title = Title.objects.filter(pk=kwargs.get("title_id")).first()
+        if title is None:
+            return ActionResult(success=False, message=_NO_SUCH_TITLE)
+        realm_id = title.realm_id
+        label = title.name or "The rung"
+        try:
+            delete_rung(title)
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        return ActionResult(success=True, message=f"{label} deleted.", data={"realm_id": realm_id})
+
+
+@dataclass
+class AlmanachMoveRungAction(_AlmanachAction):
+    """Move a rung under another. Kwargs: ``title_id``, ``parent_title_id``."""
+
+    key: str = "almanach_move_rung"
+    name: str = "Move Rung"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import move_rung  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        title = Title.objects.filter(pk=kwargs.get("title_id")).first()
+        parent = Title.objects.filter(pk=kwargs.get("parent_title_id")).first()
+        if title is None or parent is None:
+            return ActionResult(success=False, message=_NO_SUCH_TITLE)
+        try:
+            title = move_rung(title, parent)
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        return ActionResult(
+            success=True,
+            message=f"{title.name or 'The rung'} moved under {parent.name or 'its new parent'}.",
+            data={"title_id": title.pk},
         )
 
 

@@ -63,6 +63,14 @@ vi.mock('../queries', () => ({
   useTitleDocument: () => ({ data: currentDoc }),
   useSearch: () => ({ data: undefined }),
   useHouses: () => ({ data: { results: [] } }),
+  useRealmTitles: () => ({
+    data: {
+      results: [
+        { id: 3, name: 'Duchy of Katta', tier: 'duchy' },
+        { id: 8, name: 'Kingdom of Umbros', tier: 'kingdom' },
+      ],
+    },
+  }),
   useAllHouses: () => ({
     data: {
       results: [
@@ -161,4 +169,33 @@ test("a rung inside a higher title's own chain offers no house picker", () => {
   } finally {
     currentDoc = doc;
   }
+});
+
+test('a rung is moved under another from its page', async () => {
+  mutate.mockClear();
+  renderWithProviders(<TitlePage titleId={3} />);
+  const move = screen.getByRole('button', { name: 'Move' });
+  expect(move).toBeDisabled();
+  await userEvent.selectOptions(screen.getByLabelText('move under'), 'Kingdom of Umbros (kingdom)');
+  await userEvent.click(move);
+  expect(mutate).toHaveBeenCalledWith({ title_id: 3, parent_title_id: 8 });
+});
+
+test('a vacant rung is deleted only after a second press', async () => {
+  mutate.mockClear();
+  currentDoc = { ...doc, title: { ...doc.title, house_id: null, held_by: '', chain_top_id: 3 } };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Delete rung' }));
+    expect(mutate).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm delete Duchy of Katta' }));
+    expect(mutate).toHaveBeenCalledWith({ title_id: 3 }, expect.anything());
+  } finally {
+    currentDoc = doc;
+  }
+});
+
+test('a held rung offers no Delete', () => {
+  renderWithProviders(<TitlePage titleId={3} />);
+  expect(screen.queryByRole('button', { name: 'Delete rung' })).toBeNull();
 });

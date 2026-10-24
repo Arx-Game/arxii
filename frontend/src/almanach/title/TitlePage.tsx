@@ -5,9 +5,15 @@
  * seats. A vacant title offers Create Family, which takes it.
  */
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
-import { useAllHouses, useAlmanachMutation, useHoldingKinds, useTitleDocument } from '../queries';
+import {
+  useAllHouses,
+  useAlmanachMutation,
+  useHoldingKinds,
+  useRealmTitles,
+  useTitleDocument,
+} from '../queries';
 import { RecordRail, type RecordRailDoor, type RecordRailRow } from '../document/RecordRail';
 import { PlantRungDialog } from '../ladder/PlantRungDialog';
 import { BatchUnclaimedDialog } from '../ladder/BatchUnclaimedDialog';
@@ -24,11 +30,17 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const setHolder = useAlmanachMutation('almanach_set_holder');
   const describe = useAlmanachMutation('almanach_describe_demesne');
   const nameRung = useAlmanachMutation('almanach_name_rung');
+  const deleteRung = useAlmanachMutation('almanach_delete_rung');
+  const moveRung = useAlmanachMutation('almanach_move_rung');
+  const navigate = useNavigate();
+  const { data: realmTitles } = useRealmTitles(doc?.title.realm_id);
   const assignHolder = useAlmanachMutation('almanach_assign_holder');
   const { data: housesPayload } = useAllHouses();
   const addHolding = useAlmanachMutation('almanach_add_holding');
   const { data: holdingKinds } = useHoldingKinds();
   const [rungName, setRungName] = useState('');
+  const [moveTo, setMoveTo] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [seatHouseId, setSeatHouseId] = useState('');
   const [description, setDescription] = useState('');
   const [holdingKindId, setHoldingKindId] = useState<number | null>(null);
@@ -215,6 +227,75 @@ export function TitlePage({ titleId }: { titleId: number }) {
               >
                 Seat
               </button>
+            </div>
+          )}
+          {title.chain_top_id === title.title_id && (
+            <div className="field">
+              <label htmlFor="r-move">move under</label>
+              <select id="r-move" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+                <option value="">pick a rung</option>
+                {(realmTitles?.results ?? [])
+                  .filter((t) => t.id !== title.title_id)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name || 'unnamed'} ({t.tier})
+                    </option>
+                  ))}
+              </select>{' '}
+              <button
+                type="button"
+                className="btn sm quiet"
+                disabled={moveTo === ''}
+                onClick={() => {
+                  moveRung.mutate({ title_id: titleId, parent_title_id: Number(moveTo) });
+                  setMoveTo('');
+                }}
+              >
+                Move
+              </button>
+              {title.house_id == null &&
+                (confirmDelete ? (
+                  <>
+                    {' '}
+                    <button
+                      type="button"
+                      className="btn sm quiet"
+                      onClick={() => {
+                        deleteRung.mutate(
+                          { title_id: titleId },
+                          {
+                            onSuccess: (result) => {
+                              if (result.success !== false) {
+                                navigate(`/staff/almanach/realms/${title.realm_id}`);
+                              }
+                            },
+                          }
+                        );
+                        setConfirmDelete(false);
+                      }}
+                    >
+                      Confirm delete {title.name || 'rung'}
+                    </button>{' '}
+                    <button
+                      type="button"
+                      className="btn sm ghost"
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {' '}
+                    <button
+                      type="button"
+                      className="btn sm quiet"
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      Delete rung
+                    </button>
+                  </>
+                ))}
             </div>
           )}
           {createFamily && (
