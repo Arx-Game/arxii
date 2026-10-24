@@ -81,6 +81,7 @@ from world.combat.models import (
 from world.combat.services import begin_declaration_phase, resolve_round
 from world.combat.services.boss.creature_spawn import spawn_from_creature_template
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.conditions.models import CapabilityType
 from world.fatigue.constants import EffortLevel
 from world.fatigue.models import FatiguePool
 from world.magic.constants import TechniqueReach
@@ -89,6 +90,7 @@ from world.magic.factories import (
     CharacterTechniqueFactory,
     EffectTypeFactory,
     GiftFactory,
+    TechniqueCapabilityGrantFactory,
     TechniqueDamageProfileFactory,
     TechniqueFactory,
 )
@@ -135,7 +137,9 @@ class _TheCauseway(JourneyCase):
         seed_check_resolution_tables()
         with override_settings(SEED_SAMPLE_CONTENT=True):  # the movement capability
             ensure_foundational_capabilities()
-        OpponentTierTemplateFactory(tier=OpponentTier.MOOK, base_health=30, base_soak=0)
+        self.mook_tier = OpponentTierTemplateFactory(
+            tier=OpponentTier.MOOK, base_health=30, base_soak=0
+        )
         self.room = self.make_room("The Causeway")
         self.lane = PositionFactory(room=self.room, name="Lane")
         self.gate = PositionFactory(room=self.room, name="Gate")
@@ -215,6 +219,29 @@ class _TheCauseway(JourneyCase):
     def participant(self, character) -> CombatParticipant:
         return CombatParticipant.objects.get(pk=self.participants[character.pk].pk)
 
+    def assertNoMoveRow(self, character, name: str) -> None:  # noqa: N802
+        """``character`` was never shown "{name} moves to ..." (the enemy stood still)."""
+        rows = self.mailbox(character).rows
+        self.assertFalse([row for row in rows if f"{name} moves to" in row], rows)
+
+    def assertStrikeRow(self, character, name: str, target: str) -> None:  # noqa: N802
+        """``character`` was shown "{name}\u2019s ... strikes {target} for ... damage"."""
+        rows = self.mailbox(character).rows
+        self.assertTrue(
+            [
+                row
+                for row in rows
+                if row.startswith(f"{name}\u2019s ") and f"strikes {target} for" in row
+            ],
+            rows,
+        )
+
+    def assertNotRefused(self, told: str) -> None:  # noqa: N802
+        """A move that worked told the player none of the refusals (it says nothing at all)."""
+        for refusal in (NO_MOVEMENT_LEFT, WAIT_FOR_RESOLUTION, WAIT_FOR_NEXT_ROUND, CANNOT_FLY):
+            self.assertNotIn(refusal, told)
+        self.assertNotIn("Crossing that requires", told)
+
     def edge_sealed_between_gate_and_yard(self, **kwargs: object) -> None:
         create_conjured_obstacle(self.gate, self.yard, caster_sheet=None, integrity=12, **kwargs)
 
@@ -247,7 +274,8 @@ class AnEnemyClosesIn(_TheCauseway):
         self.assertEqual(self.health(self.hobb), FULL_HEALTH - BITE)
 
         self.next_round()
-        self.telnet(self.hobb, "position Lane")
+        told = self.telnet(self.hobb, "position Lane")
+        self.assertNotRefused(told)
         self.assertEqual(position_of(self.hobb), self.lane)
         self.resolve()  # round 2: no bite to use, so the wolf only follows him
 
@@ -282,6 +310,25 @@ class AnEnemyClosesIn(_TheCauseway):
         self.assertEqual(self.where(wolf), self.hall)
         self.assertEqual(self.health(self.hobb), FULL_HEALTH)
         self.assertShownRow(self.hobb, MOVES_TO.format(name="Grey Wolf", position="Hall"))
+
+    def test_a_creature_with_two_actions_closes_in_once_then_strikes_twice(self) -> None:
+        # The tier row staff authored gives its creatures two actions a round.
+        self.mook_tier.base_actions_per_round = 2
+        self.mook_tier.save()
+        ogre = self.creature("Ogre", at=self.hall)
+        self.assertEqual(ogre.actions_per_round, 2)
+
+        self.resolve()
+
+        # One hop from the Hall is the Yard, beside the Gate: both blows land from there.
+        self.assertEqual(self.where(ogre), self.yard)
+        self.assertEqual(self.health(self.hobb), FULL_HEALTH - 2 * BITE)
+        rows = self.mailbox(self.hobb).rows
+        self.assertEqual([r for r in rows if "Ogre moves to" in r], ["Ogre moves to Yard."])
+        # Both blows are told in one row, whose total is the two bites.
+        blows = [r for r in rows if r.startswith("Ogre\u2019s ") and "strikes" in r]
+        self.assertEqual(len(blows), 1, rows)
+        self.assertIn(f"for {2 * BITE} damage", blows[0])
 
     def test_an_archer_shoots_across_the_room_without_moving(self) -> None:
         archer = self.creature("Bandit Archer", at=self.tower, delivery=StrikeDelivery.MISSILE)
@@ -344,7 +391,8 @@ class HobbMovesOneHopARound(_TheCauseway):
             self.assertEqual(action.prerequisite_reasons, [NO_MOVEMENT_LEFT])
 
     def test_the_first_move_typed_in_telnet_spends_the_hop_too(self) -> None:
-        self.telnet(self.hobb, "position Yard")
+        told = self.telnet(self.hobb, "position Yard")
+        self.assertNotRefused(told)
 
         self.assertEqual(position_of(self.hobb), self.yard)
         self.assertEqual(self.hops_used(), 1)
@@ -363,7 +411,8 @@ class HobbMovesOneHopARound(_TheCauseway):
         )
 
     def test_no_move_between_rounds_and_the_hop_comes_back_next_round(self) -> None:
-        self.telnet(self.hobb, "position Yard")
+        told = self.telnet(self.hobb, "position Yard")
+        self.assertNotRefused(told)
         self.resolve()
         self.encounter.refresh_from_db()
         self.assertEqual(self.encounter.status, RoundStatus.BETWEEN_ROUNDS)
@@ -393,6 +442,42 @@ class HobbMovesOneHopARound(_TheCauseway):
 
         self.assertEqual(position_of(self.hobb), self.tower)
         self.assertEqual(self.hops_used(), 0)
+
+
+class HobbMovesTwoHops(_TheCauseway):
+    """A mortal's movement is 5; a known technique granting 5 more makes 10, two hops a round."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.hobb = self.fighter("Hobb", at=self.lane)
+        # Someone to fight, who never acts, so the fight goes on between rounds.
+        CombatOpponentFactory(encounter=self.encounter, name="Watcher", threat_pool=None)
+        sprint = TechniqueFactory(damage_profile=False)
+        TechniqueCapabilityGrantFactory(
+            technique=sprint,
+            capability=CapabilityType.objects.get(name="movement"),
+            base_value=5,
+        )
+        CharacterTechniqueFactory(character=self.hobb.sheet_data, technique=sprint)
+
+    def move_descriptions(self) -> dict[str, str]:
+        return {
+            action.display_name: action.description
+            for action in get_player_actions(self.hobb)
+            if action.ref.registry_key == "move_to_position"
+        }
+
+    def test_two_moves_in_a_round_and_the_third_is_refused(self) -> None:
+        self.assertEqual(self.move_descriptions()["Move to Gate"], "2 hops left this round.")
+
+        self.assertNotRefused(self.telnet(self.hobb, "position Gate"))
+        self.assertEqual(self.move_descriptions()["Move to Yard"], ONE_HOP_LEFT)
+        self.assertNotRefused(self.telnet(self.hobb, "position Yard"))
+        self.assertEqual(position_of(self.hobb), self.yard)
+
+        self.assertIn(NO_MOVEMENT_LEFT, self.telnet(self.hobb, "position Hall"))
+        self.assertEqual(position_of(self.hobb), self.yard)
+        self.assertEqual(self.participant(self.hobb).hops_used, 2)
 
 
 class HobbsStrikeFindsNoOne(_TheCauseway):
@@ -483,6 +568,7 @@ class ABruteWindsUp(_TheCauseway):
         self.next_round()
         self.resolve()  # round 3: Hobb stayed put, so the blow lands
         self.assertEqual(self.health(hobb), FULL_HEALTH - BITE)
+        self.assertStrikeRow(hobb, "Brute", "Hobb")
 
     def test_the_blow_lands_on_the_weakest_still_in_reach_after_hobb_steps_away(self) -> None:
         hobb = self.fighter("Hobb", at=self.gate, health=60)
@@ -502,6 +588,8 @@ class ABruteWindsUp(_TheCauseway):
         self.assertEqual(self.health(hobb), 60)
         self.assertEqual(self.health(corwin), 80 - BITE)
         self.assertEqual(self.health(brenna), FULL_HEALTH)
+        self.assertStrikeRow(hobb, "Brute", "Corwin")
+        self.assertFalse([r for r in self.mailbox(hobb).rows if "strikes Hobb" in r])
 
     def test_the_blow_is_called_off_when_nobody_is_in_reach(self) -> None:
         hobb = self.fighter("Hobb", at=self.gate)
@@ -544,6 +632,7 @@ class WallsOnTheCauseway(_TheCauseway):
 
         self.assertEqual(self.where(wolf), self.yard)
         self.assertEqual(self.health(self.hobb), FULL_HEALTH)
+        self.assertNoMoveRow(self.hobb, "Grey Wolf")
 
     def climbable_wall(self) -> None:
         hedge = ChallengeInstanceFactory(
@@ -571,6 +660,7 @@ class WallsOnTheCauseway(_TheCauseway):
 
         self.assertEqual(self.where(lizard), self.yard)
         self.assertEqual(self.health(self.hobb), FULL_HEALTH)
+        self.assertNoMoveRow(self.hobb, "Wall Lizard")
 
     def test_a_walker_cannot_climb_the_same_wall(self) -> None:
         self.climbable_wall()
@@ -580,6 +670,7 @@ class WallsOnTheCauseway(_TheCauseway):
 
         self.assertEqual(self.where(wolf), self.yard)
         self.assertEqual(self.health(self.hobb), FULL_HEALTH)
+        self.assertNoMoveRow(self.hobb, "Grey Wolf")
 
     def test_a_hawk_flies_over_a_hard_seal(self) -> None:
         self.edge_sealed_between_gate_and_yard()
@@ -600,6 +691,7 @@ class WallsOnTheCauseway(_TheCauseway):
 
         self.assertEqual(self.where(hawk), self.yard)
         self.assertEqual(self.health(self.hobb), FULL_HEALTH)
+        self.assertNoMoveRow(self.hobb, "Hawk")
 
 
 class HobbCannotFly(_TheCauseway):
