@@ -353,6 +353,7 @@ def advance_opponent(
         encounter=opponent.encounter,
         narration=MOVES_TO_LINE.format(name=opponent.name, position=final.name),
         target_personas=[],
+        deliver_telnet=True,
     )
     return final
 
@@ -431,4 +432,5 @@ def broadcast_cannot_reach(opponent: CombatOpponent) -> None:
         encounter=opponent.encounter,
         narration=CANNOT_REACH_LINE.format(name=opponent.name),
         target_personas=[],
+        deliver_telnet=True,
     )

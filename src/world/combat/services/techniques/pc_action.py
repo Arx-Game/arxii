@@ -74,10 +74,17 @@ def _run_combat_technique_pipeline(
 def _broadcast_fizzle_no_one_in_reach(
     participant: CombatParticipant, action: CombatRoundAction
 ) -> None:
-    """Narrate a strike whose target left reach before the PC's slot (costs nothing)."""
+    """Narrate a strike whose target left reach before the PC's slot (costs nothing).
+
+    A concealed caster stays concealed: the line goes through the cast's own audience,
+    and a strike that touched no one leaves nothing for the lower tiers to perceive.
+    """
     from world.combat.interaction_services import (  # noqa: PLC0415
         broadcast_action_outcome,
         target_persona_for_round_action,
+    )
+    from world.combat.services.techniques.cast_audience import (  # noqa: PLC0415
+        _resolve_combat_cast_audience,
     )
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
@@ -86,7 +93,10 @@ def _broadcast_fizzle_no_one_in_reach(
         encounter=participant.encounter,
         narration=f"{active_persona_for_sheet(participant.character_sheet).name}'s strike "
         "finds no one in reach.",
+        audience=_resolve_combat_cast_audience(participant, action.focused_action),
+        unattributed_narration="",
         target_personas=[target_persona] if target_persona is not None else None,
+        deliver_telnet=True,
     )
 
 
