@@ -834,7 +834,10 @@ GMs and Guides play Story NPCs; the actions are web tools over services, with no
    of `test_keeping_what_is_yours_journeys.py` (the companions view's and the forms
    view's own sends, a pose sent twice under one request id) and the portal journey of
    `test_keeping_a_house_journeys.py`; the ship and portal keys have no web caller
-   either),
+   either; tranche 23 took `test_mood_actions` and `test_language_actions` and all but
+   one test of `test_ooc_say` and `test_language_speech` into
+   `integration_tests/test_voice_and_feeling_journeys.py`; the mood and language keys
+   have no web caller either),
    and a new `tests/test_<verb>.py`
    that only calls `.run()` down the happy path is the shape that gets removed next.
    Never patch the room's `msg_contents` to keep a test quiet: `secure` raised on its
