@@ -184,6 +184,18 @@ with reasons in the ADR: sizing crafted recipe modifiers and accents (generic-ta
 by every lane), the walk's thread passives, and fashion. Journey:
 `integration_tests/test_worn_items_on_checks_journeys.py`.
 
+✅ **Check math, slice c, distinctions and scene surroundings (#4638 of #4551, ADR-4638-A)**: the
+third and fourth sized sources on the check lane. Built: an authored size on `DistinctionEffect`
+and an authored level and size on `SceneCheckModifier` (Paramount refused; surroundings take both
+or neither), on the distinction's effect inline and a new surroundings inline on the scene admin.
+A sized distinction effect counts at its holder's level (`CharacterSheet.current_level`), scaled
+by rank the way its authored value scales, with amplification and immunity applied on top; sized
+surroundings count at their own level. Distinctions stay in the CHARACTER kind and taper with the
+achievement-reward and form-profile rows on that path, which stay flat. Unsized rows stay flat and
+still taper. The value-table Required content entry names every sized source. Still open in
+#4551: the other lanes, crafted modifiers and walk passives (see ADR-4628-A), and the vow size
+shift (slice d). Journey: `integration_tests/test_distinctions_and_surroundings_on_checks_journeys.py`.
+
 ✅ **Phase B (#1221)** — "makes them tunable," referenced at 3.9 above, has shipped: admin-hosted
 Game Tuning (`/admin/_tuning/`) and Game Ops (`/admin/_ops/`) dashboards, plus a superuser
 content-repo load surface (#1220). See [docs/systems/tuning.md](../systems/tuning.md) and

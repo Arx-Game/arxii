@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0290_combat_movement_and_reach"),
-    ]
+    dependencies = [("arxii", "0291_distinction_and_scene_modifier_size")]
 
     operations = [
         migrations.AddField(

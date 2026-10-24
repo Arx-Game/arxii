@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -14,6 +15,7 @@ from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
+from world.checks.constants import ModifierSize
 from world.magic.constants import LedgerOp, PowerStage
 from world.scenes.constants import (
     DecisiveCheckMarkerStatus,
@@ -1734,6 +1736,26 @@ class SceneCheckModifier(SharedMemoryModel):
     modifier_value = models.IntegerField(
         help_text="Flat modifier (positive = bonus, negative = penalty)",
     )
+    modifier_level = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "The level these surroundings count at (#4638). With a size it reads the "
+            "modifier value table; nothing about the character rolling is read. Blank "
+            "keeps the flat value."
+        ),
+    )
+    modifier_size = models.PositiveSmallIntegerField(
+        choices=ModifierSize.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "How big this bonus or penalty is for its level (#4638). The flat value's "
+            "sign says bonus or penalty. Blank keeps the flat value. Paramount is reached "
+            "only through a vow and cannot be authored here."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -1746,6 +1768,20 @@ class SceneCheckModifier(SharedMemoryModel):
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
         return f"{self.scene.name}: {sign}{self.modifier_value} to {self.check_type.name}"
+
+    def clean(self) -> None:
+        """Refuse Paramount, and a level or a size without the other (#4638)."""
+        super().clean()
+        if self.modifier_size == ModifierSize.PARAMOUNT:
+            raise ValidationError(
+                {"modifier_size": "Paramount is reached only through a vow's size step."}
+            )
+        if (self.modifier_level is None) != (self.modifier_size is None):
+            msg = (
+                "Surroundings need both a level and a size to read the value table; "
+                "leave both blank to keep the flat value."
+            )
+            raise ValidationError({"modifier_size": msg})
 
 
 class SceneRound(AbstractRound):

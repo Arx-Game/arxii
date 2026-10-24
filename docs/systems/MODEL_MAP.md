@@ -7011,9 +7011,10 @@
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] - Get all capability values for a character.`
 - `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' - Generate available Actions for a character at a location.`
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' - Collect all Capability sources for a character (per-source, not aggregated).`
-- `get_modifier_breakdown(character, modifier_target: 'ModifierTarget') -> 'ModifierBreakdown' - Get detailed breakdown of all modifiers for a target.`
+- `get_modifier_breakdown(character, modifier_target: 'ModifierTarget', *, value_lane: 'str | None' = None) -> 'ModifierBreakdown' - Get detailed breakdown of all modifiers for a target.`
 - `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None, level_override: 'int | None' = None) -> 'int' - Get total modifier value for a target.`
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' - Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
+- `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
 - `motif_coherence_bonus(sheet: 'object', resonance_id: 'int') -> 'int' - Per-resonance fashion-coherence bonus from worn styles bound to the character's Motif.`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_facet_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum ConditionModifierEffect from FACET thread crossing choices (wear-gated).`

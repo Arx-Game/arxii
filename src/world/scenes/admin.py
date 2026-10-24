@@ -10,6 +10,7 @@ from world.scenes.models import (
     PersonaDiscovery,
     ReactionEmoji,
     Scene,
+    SceneCheckModifier,
     SceneParticipation,
     SceneRoundDefaultsConfig,
     SceneSummaryRevision,
@@ -60,6 +61,23 @@ class SceneParticipationInline(admin.TabularInline):
     readonly_fields = ["joined_at", "left_at"]
 
 
+class SceneCheckModifierInline(admin.TabularInline):
+    """The scene's surroundings modifiers (#4638): staff author a level and a size here.
+
+    With both set, a surroundings modifier reads the check value table at that level and
+    size; blank keeps the flat value. ``SceneCheckModifier.clean`` refuses Paramount and a
+    level or size without the other.
+    """
+
+    model = SceneCheckModifier
+    formset = OneRowPerFormSet
+    extra = 0
+    fields = ["check_type", "modifier_value", "modifier_level", "modifier_size"]
+    autocomplete_fields = ["check_type"]
+    verbose_name = "Surroundings check modifier"
+    verbose_name_plural = "Surroundings check modifiers"
+
+
 @admin.register(Scene)
 class SceneAdmin(admin.ModelAdmin):
     autocomplete_fields = ["location", "participants"]
@@ -74,7 +92,7 @@ class SceneAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "privacy_mode", "date_started"]
     search_fields = ["name", "description"]
     readonly_fields = ["date_started"]
-    inlines = [SceneParticipationInline]
+    inlines = [SceneParticipationInline, SceneCheckModifierInline]
 
     def participant_count(self, obj):
         return obj.participants.count()

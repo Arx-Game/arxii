@@ -45,7 +45,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   ease
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
-- [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide, own standing and the hopeless pin (#4601); and modifier level, size, value table, level baseline, taper and lane (#4594), with worn items' level from quality (#4628)
+- [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide, own standing and the hopeless pin (#4601); and modifier level, size, value table, level baseline, taper and lane (#4594), with worn items' level from quality (#4628) and distinctions' from their holder (#4638)
 - [mechanics](src/world/mechanics/AGENT_GLOSSARY.md) - also holds the favor categories and
   `ModifierTarget.target_being` (#4333)
 - [progression](src/world/progression/AGENT_GLOSSARY.md)

@@ -14,6 +14,7 @@ defining characteristics (merits/flaws equivalent):
 - SheetUpdateRequest: Player-initiated requests to add/remove distinctions
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -21,6 +22,7 @@ from core.descriptors import ReverseOneToOneOrNone
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty
+from world.checks.constants import ModifierSize
 from world.contributors.models import CreditedContent
 from world.distinctions.types import (
     DistinctionOrigin,
@@ -417,6 +419,20 @@ class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=False,
         help_text="If true, character is immune to negative modifiers of this type.",
     )
+    modifier_size = models.PositiveSmallIntegerField(
+        choices=ModifierSize.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "How big this effect's bonus or penalty to a check is for its holder's level "
+            "(#4638). Read only when the target is a check type: the holder's level and "
+            "this size read the modifier value table, the authored value's sign says bonus "
+            "or penalty, and rank scales the table's number the way it scales the authored "
+            "value (rank 2 of a per-rank effect is twice rank 1). Blank keeps the flat "
+            "authored value. Paramount is reached only through a vow and cannot be "
+            "authored here."
+        ),
+    )
     description = models.TextField(
         blank=True,
         help_text="Description of what this effect does.",
@@ -435,6 +451,14 @@ class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.distinction.name}: {self.target.name}"
+
+    def clean(self) -> None:
+        """Refuse Paramount: only a vow's size step reaches it (#4551 section 5.3)."""
+        super().clean()
+        if self.modifier_size == ModifierSize.PARAMOUNT:
+            raise ValidationError(
+                {"modifier_size": "Paramount is reached only through a vow's size step."}
+            )
 
     def get_value_at_rank(self, rank: int) -> int:
         """

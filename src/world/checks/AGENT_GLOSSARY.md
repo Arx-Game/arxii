@@ -173,7 +173,9 @@ effective power picks a `CastPowerLevel` row and the outcome shifts it by a
 `CastOutcomeLevelShift` row; the `ConditionInstance` keeps it as `modifier_level`. It is the
 buff's own level, never the bearer's or the target's. A worn item takes it from its quality
 (#4628): the `QualityTier.modifier_level` of the best worn instance of its template (the **item
-level rows**).
+level rows**). A distinction is the one source that counts at its **holder's** level (#4638,
+`CharacterSheet.current_level`); scene surroundings count at the level staff author on the
+`SceneCheckModifier` row.
 _Avoid_: buff tier, power level (power is the cast's number; the level is what it resolves to),
 item tier (the tier is the quality; the level is what it counts at)
 
@@ -182,7 +184,9 @@ How big a modifier is for its level, from the `ModifierSize` ladder: Minor, Mode
 Exceptional (placeholder name), Paramount (placeholder name, reached only through a vow's size
 step). Authored on `TechniqueAppliedCondition.modifier_size`: a technique that only buffs is
 Large, one that also does something else is Minor or Moderate, narrow use is one step higher.
-Also authored on `ItemCheckModifier.modifier_size` for a worn item's check bonus (#4628).
+Also authored on `ItemCheckModifier.modifier_size` for a worn item's check bonus (#4628),
+`DistinctionEffect.modifier_size` for a distinction's (the size at rank 1; rank scales the value
+like the authored one) and `SceneCheckModifier.modifier_size` for scene surroundings (#4638).
 _Avoid_: magnitude, strength, small/big buff
 
 **Value table** (#4594, ADR-4594-A):
