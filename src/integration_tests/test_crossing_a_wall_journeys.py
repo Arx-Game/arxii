@@ -262,13 +262,15 @@ class ARampartFalls(_TheYard):
 
         self.assertFalse(Rampart.objects.filter(pk=rampart.pk).exists())
         self.next_round()
+        # Both edges the Rampart sealed are open moves in her list; she has one hop to spend.
+        open_moves = {
+            action.display_name
+            for action in get_player_actions(self.brenna)
+            if action.ref.registry_key == "move_to_position" and action.prerequisite_met
+        }
+        self.assertEqual(open_moves, {"Move to West", "Move to East"})
         self.telnet(self.brenna, "position West")
         self.assertEqual(position_of(self.brenna), self.west)
-        self.next_round()
-        self.telnet(self.brenna, "position Middle")
-        self.next_round()
-        self.telnet(self.brenna, "position East")
-        self.assertEqual(position_of(self.brenna), self.east)
 
     def test_an_edge_a_later_barricade_took_stays_sealed_when_the_rampart_falls(self) -> None:
         self.stone_rampart()
