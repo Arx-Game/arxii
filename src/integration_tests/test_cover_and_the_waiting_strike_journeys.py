@@ -149,6 +149,7 @@ class _TheSteading(JourneyCase):
             status=RoundStatus.DECLARING, round_number=1, room=self.room
         )
         self.participants: dict[int, CombatParticipant] = {}
+        self.spawned_health: dict[int, int] = {}
 
     # -- the people in the fight ----------------------------------------------
 
@@ -211,7 +212,9 @@ class _TheSteading(JourneyCase):
             speed_hops=hops,
             traversal=traversal,
         )
-        return spawn_from_creature_template(self.encounter, template, position=at)
+        opponent = spawn_from_creature_template(self.encounter, template, position=at)
+        self.spawned_health[opponent.pk] = opponent.health
+        return opponent
 
     def airborne(self, opponent: CombatOpponent) -> None:
         """Take a flier up into the air over where it stands (its own flight)."""
@@ -231,6 +234,10 @@ class _TheSteading(JourneyCase):
 
     def opponent_health(self, opponent: CombatOpponent) -> int:
         return CombatOpponent.objects.get(pk=opponent.pk).health
+
+    def was_struck(self, opponent: CombatOpponent) -> bool:
+        """The opponent has less health than it was spawned with."""
+        return self.opponent_health(opponent) < self.spawned_health[opponent.pk]
 
     def where(self, opponent: CombatOpponent):
         return position_of(opponent.objectdb)
@@ -428,7 +435,7 @@ class HobbWaitsForAnOpening(_TheSteading):
         first = self.row_index(self.hobb, strike_line)
         bite = self.row_index(self.hobb, "strikes Hobb for")
         self.assertLess(first, bite)
-        self.assertLess(self.opponent_health(wolf), 30)
+        self.assertTrue(self.was_struck(wolf))
         # The wolf lived, so its bite still lands after the exchange.
         self.assertEqual(self.health(self.hobb), FULL_HEALTH - BITE)
         self.assertEqual(self.waiting_row().focused_opponent_target_id, wolf.pk)
@@ -456,7 +463,7 @@ class HobbWaitsForAnOpening(_TheSteading):
         self.resolve()
 
         self.assertEqual(len(self.rows_with(self.hobb, "with a waiting strike")), 1)
-        struck = [o for o in (first, second) if self.opponent_health(o) < 30]
+        struck = [o for o in (first, second) if self.was_struck(o)]
         self.assertEqual(len(struck), 1)
         self.assertEqual(self.health(self.hobb), FULL_HEALTH - 2 * BITE)
 
@@ -491,9 +498,32 @@ class HobbWaitsForAnOpening(_TheSteading):
         )
         stab = self.row_index(self.hobb, "strikes Hobb for")
         self.assertLess(strike, stab)
-        self.assertLess(self.opponent_health(assassin), 30)
+        self.assertTrue(self.was_struck(assassin))
         # It ended the action far out of reach, but it was beside him when it struck.
         self.assertEqual(self.where(assassin), self.tower)
+
+    def test_an_archer_shooting_from_across_the_room_draws_nothing(self) -> None:
+        self.wait_on_telnet()
+        archer = self.creature("Bandit Archer", at=self.tower, delivery=StrikeDelivery.MISSILE)
+
+        self.resolve()
+
+        self.assertEqual(self.health(self.hobb), FULL_HEALTH - BITE)
+        self.assertFalse(self.rows_with(self.hobb, "with a waiting strike"))
+        self.assertFalse(self.was_struck(archer))
+        self.assertShownRow(self.hobb, NEVER_CAME.format(name="Hobb"))
+
+    def test_an_archer_shooting_point_blank_draws_the_strike(self) -> None:
+        self.wait_on_telnet()
+        archer = self.creature("Bandit Archer", at=self.yard, delivery=StrikeDelivery.MISSILE)
+
+        self.resolve()
+
+        strike = self.row_index(
+            self.hobb, WAITING_STRIKE.format(name="Hobb", mover="Bandit Archer")
+        )
+        self.assertLess(strike, self.row_index(self.hobb, "strikes Hobb for"))
+        self.assertTrue(self.was_struck(archer))
 
     def test_when_nothing_comes_it_says_so_and_costs_nothing(self) -> None:
         self.wait_on_telnet()
