@@ -374,7 +374,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - **Enemies fight by their wits, and none idles (#4609, slice 4 of #4576, ADR-4609-A).** The
   tactics ladder (`combat/services/npc/npc_tactics.py`) reads each creature template's
   `tactics`. A broken enemy backs away over real hops toward the position farthest from the
-  party and leaves once nobody can reach it, or after two rounds of it; cornered, it fights. An
+  party and leaves once nobody can strike it there by their real reach (an archer's shot
+  counts), or after two rounds of it; cornered, it fights. An
   enemy hit by an attacker it cannot answer runs for a roofed or screened position (every
   level: cover is instinct; a tactical one keeps an ally beside it) and fights from there. With
   nobody in reach it walks toward a position its strikes land from; a wall in the way is

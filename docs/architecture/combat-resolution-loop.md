@@ -1897,7 +1897,8 @@ _resolve_npc_slot
               else walk to the near end, "{name} batters {barrier}.", damage_barrier(chip);
               a fall says "{barrier} gives way."
     RETREAT → walk toward the farthest position; then FLED ("{name} flees the fight.") when no
-              enemy reaches it in melee or this is the retreat_rounds_limit-th round in a row
+              enemy can strike it there (a PC's best technique reach, an opponent's entry
+              deliveries) or this is the retreat_rounds_limit-th round in a row
     WAIT    → "{name} waits for an opening."; the row fires through fire_waiting_strikes
   attack rows (+ any the plan made): refit, ATTACKING waiting strikes, resolve,
     apply_unanswered_hit_morale(attacker, outcome)

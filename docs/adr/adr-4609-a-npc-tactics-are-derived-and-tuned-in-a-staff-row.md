@@ -19,8 +19,13 @@ before it leaves, and the morale an unanswered hit takes) sit in a one-row staff
 Three readings were made where the spec left room. "Hit this round" counts an attack aimed at
 the opponent this round, landed or still to come, because selection runs before anyone
 strikes. Ratified decision 9 says a creature attacked by a flier it cannot reach runs for
-cover at once. "No hostile can strike it by reach" is melee reach: what a player will strike
-with next round is not known, and the round limit ends the rest. When nothing gets the
+cover at once. "No hostile can strike it by reach" counts ranged reach (the owner's ruling,
+2026-10-24, replacing a melee-only first reading): a player character reaches it when any of
+its known combat-ready techniques does, through the declaration's own reach rule
+(`technique_can_reach`, roofs and screens included), and a hostile opponent when one of its
+threat entries' deliveries does (`strike_reaches`). So a broken opponent an archer can still
+shoot keeps backing away and leaves only at the retreat limit. Whether it is cornered (an
+enemy in arm's reach and nowhere farther to go) stays a melee question. When nothing gets the
 opponent nearer, a cunning or tactical one waits once before it bashes a wall it cannot
 break in time, and bashes it the round after, when the wait cap stops a second wait. That
 follows ratified decision 2 ("An NPC that can knock a wall down does so. Otherwise it skips
