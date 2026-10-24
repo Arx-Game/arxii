@@ -30,6 +30,15 @@ can"), over the technical section's zero-hop list, which put the desperate bash 
 mindless one never waits and bashes at once. Either way no round is empty: the wait is a
 held waiting strike, and the bash that follows lowers the wall.
 
+A broken opponent no longer turns FLED when the round is planned. It shows ACTIVE until
+its own slot in the round, backs away there over real hops, and turns FLED at the end of
+that walk when no enemy reaches it or the retreat limit is hit. `resolve_round` checks
+whether the encounter is over after every slot has run, so a rout or victory the flight
+causes still ends the fight in the same round. Off the map, or with no enemy on it, a
+broken opponent still flees when the round is planned, as before. One that breaks while
+winding up writes no plan until the blow lands (the telegraph is its action, as the spec's
+wind-up rule says), then retreats the round after.
+
 ## Rejected
 
 Recording hits, waits and retreat counts on the opponent row. Each copy is a second home for a
