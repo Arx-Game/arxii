@@ -16,6 +16,8 @@ telnet ``position`` and ``combat await``.
   nothing else, and a blow it can answer costs none.
 - A cunning ogre with a net brings the flying archer down with it; a mindless construct
   with the same net never throws it.
+- Hobb is walled off behind a wall too strong to break and Wren is reachable the long way:
+  a cunning wolf turns toward Wren and bites her; a mindless brute batters Hobb's wall.
 - At a wall too strong for it with no way round, a cunning wolf waits once, then batters
   the wall anyway; a mindless brute batters it at once.
 - Shut away behind a wall nothing can break, a cunning wolf waits for an opening once,
@@ -403,6 +405,58 @@ class AWallTooStrongWithNoWayRound(_TheField):
         self.assertEqual(self.plan(brute).kind, OpponentMoveKind.BASH)
         self.assertFalse(self.rows_with(self.hobb, "waits for an opening"))
         self.assertEqual(self.edge(self.middle, self.east).integrity, 40 - 9)
+
+
+class TheFirstChoiceIsWalledOff(_TheField):
+    """Hall | Den - Lane - Field - Moor. Hobb holds the Hall, behind a 40-strength wall at
+    Hall-Den with no other way in; Wren stands at the Moor, three open hops from the Den.
+
+    Hobb is nearest through the wall (one hop), Wren nearest the long way (two hops to the
+    Field, beside her). One enemy chips 4 or 9 a round: 12 or 27 in three rounds, short of
+    40, so nobody could break it in time.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.hall = PositionFactory(room=self.room, name="Hall")
+        self.den, self.lane, self.field, self.moor = self.places("Den", "Lane", "Field", "Moor")
+        self.conjured_wall(self.hall, self.den, integrity=40)
+        self.hobb = self.fighter("Hobb", at=self.hall)
+        self.wren = self.fighter("Wren", at=self.moor)
+
+    def test_a_cunning_wolf_goes_for_the_one_it_can_reach(self) -> None:
+        wolf = self.creature("Grey Wolf", at=self.den, bite=4)
+
+        self.resolve()
+
+        # It does not bash the wall it cannot break in time; it turns toward Wren.
+        self.assertEqual(self.plan(wolf).kind, OpponentMoveKind.ADVANCE)
+        self.assertEqual(self.where(wolf), self.lane)
+        self.assertShownRow(self.wren, MOVES_TO.format(name="Grey Wolf", position="Lane"))
+        self.assertFalse(self.rows_with(self.hobb, "Grey Wolf batters"))
+        self.assertEqual(self.edge(self.hall, self.den).integrity, 40)
+
+        self.next_round()
+        self.resolve()
+
+        # Beside her at the Field, it bites Wren; Hobb behind his wall is never touched.
+        self.assertEqual(self.where(wolf), self.field)
+        self.assertEqual(self.health(self.wren), FULL_HEALTH - 4)
+        self.assertEqual(self.health(self.hobb), FULL_HEALTH)
+
+    def test_a_mindless_brute_batters_the_wall_toward_its_first_choice(self) -> None:
+        brute = self.creature(
+            "Hulking Brute", at=self.den, tactics=CreatureTactics.MINDLESS, bite=9
+        )
+
+        self.resolve()
+
+        # It never retargets: it stays at the Den and batters the wall between it and Hobb.
+        self.assertEqual(self.plan(brute).kind, OpponentMoveKind.BASH)
+        self.assertEqual(self.where(brute), self.den)
+        self.assertShownRow(self.hobb, BATTERS.format(name="Hulking Brute", barrier=BARRIER))
+        self.assertEqual(self.edge(self.hall, self.den).integrity, 40 - 9)
+        self.assertEqual(self.health(self.wren), FULL_HEALTH)
 
 
 class AnArcherThatCannotBeAnswered(_TheField):
