@@ -1,11 +1,12 @@
 """Derived effect summary for a Technique — the one thing every surface shows (#2898).
 
 A technique's ``Technique`` row carries almost no differentiation; everything that
-tells one technique from another lives in five sibling tables
+tells one technique from another lives in sibling payload tables
 (``TechniqueCapabilityGrant`` / ``TechniqueAppliedCondition`` /
 ``TechniqueDamageProfile`` / ``TechniqueRemovedCondition`` /
-``TechniqueTreatment``) that no display surface ever read. This module reads them
-once and renders them, both as structured data and as a plain-words line.
+``TechniqueTreatment`` / ``TechniqueMoraleEffect``) that no display surface ever
+read. This module reads them once and renders them, both as structured data and as a
+plain-words line.
 ``TechniqueTreatment`` joined in #3682 — it was the one payload family #2898
 missed, so a treatment-only technique described itself as having no effect.
 
@@ -37,6 +38,7 @@ from world.magic.models.techniques import (
     TechniqueAppliedCondition,
     TechniqueCapabilityGrant,
     TechniqueDamageProfile,
+    TechniqueMoraleEffect,
     TechniqueRemovedCondition,
     TechniqueTreatment,
 )
@@ -192,6 +194,7 @@ def render_technique_effect_sentence(  # noqa: PLR0913
     treatments: list[TreatmentEffectPayload],
     grants: list[CapabilityEffectPayload],
     is_underspecified: bool,
+    shakes_morale: bool,
 ) -> str:
     """Render the plain-words line a player reads on every surface.
 
@@ -222,6 +225,8 @@ def render_technique_effect_sentence(  # noqa: PLR0913
             applies=applies, removes=removes, damage=damage, treatments=treatments
         )
     )
+    if shakes_morale:
+        sentences.append("Shakes morale.")
     if grants:
         sentences.append(f"Knowing it grants {_join_phrases([row['name'] for row in grants])}.")
 
@@ -279,12 +284,14 @@ def _capability_payload(row: AbstractCapabilityGrant) -> CapabilityEffectPayload
 def technique_payload_prefetches(
     *, prefix: str = "", include_condition_diagnostics: bool = False
 ) -> list[Prefetch]:
-    """The five payload prefetches any queryset feeding the effect summary needs.
+    """The payload prefetches any queryset feeding the effect summary needs.
 
-    ``summarize_technique_effects`` reads five sibling tables, so a surface that
+    One per payload family: capability grants, applied conditions, damage
+    profiles, removed conditions, treatments and the morale effect.
+    ``summarize_technique_effects`` reads all of them, so a surface that
     builds a summary per row in a list — the in-scene cast list, the character
-    sheet's magic section, the ``TechniqueAdmin`` changelist — pays five queries
-    per technique unless it prefetches them. Each ``to_attr`` is the
+    sheet's magic section, the ``TechniqueAdmin`` changelist, pays one query
+    per family per technique unless it prefetches them. Each ``to_attr`` is the
     ``cached_*`` property name the derivations read, which is also what keeps a
     prefetched row from going stale against the identity map (#2728, ADR-0263).
 
@@ -332,6 +339,11 @@ def technique_payload_prefetches(
             ),
             to_attr="cached_treatments",
         ),
+        # No to_attr, unlike its siblings: this is a reverse one-to-one, and when this
+        # block rides inside an outer Prefetch (the character sheet's spellbook) Django
+        # re-walks each lookup with getattr(obj, "morale_effect") -- a query per technique
+        # unless the descriptor's own cache is filled. ``cached_morale_effect`` reads it.
+        Prefetch(f"{prefix}morale_effect", queryset=TechniqueMoraleEffect.objects.all()),
         Prefetch(
             f"{prefix}capability_grants",
             queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
@@ -363,6 +375,7 @@ def technique_is_underspecified(technique: SummarizableTechnique) -> bool:
         or technique.cached_removed_conditions
         or technique.cached_damage_profiles
         or technique.cached_treatments
+        or technique.cached_morale_effect is not None
     )
 
 
@@ -399,6 +412,9 @@ def technique_relationship_is_ambiguous(technique: SummarizableTechnique) -> boo
     kinds = {row.target_kind for row in technique.cached_condition_applications}
     kinds |= {row.target_kind for row in technique.cached_removed_conditions}
     kinds |= {row.target_kind for row in technique.cached_treatments}
+    if technique.cached_morale_effect is not None:
+        # Morale only ever lands on enemy opponents.
+        kinds.add(ConditionTargetKind.ENEMY)
     return len(kinds) > 1
 
 
@@ -445,6 +461,7 @@ def summarize_technique_effects(technique: SummarizableTechnique) -> TechniqueEf
             treatments=treatments,
             grants=grants,
             is_underspecified=is_underspecified,
+            shakes_morale=technique.cached_morale_effect is not None,
         ),
         is_underspecified=is_underspecified,
     )
@@ -456,6 +473,7 @@ _PAYLOAD_CACHE_ATTRS = (
     "cached_removed_conditions",
     "cached_damage_profiles",
     "cached_treatments",
+    "cached_morale_effect",
     "cached_capability_grants",
     "cached_effect_summary",
     "is_lock_applying",
@@ -511,6 +529,7 @@ def invalidate_technique_payload_caches(technique: Technique) -> None:
     """
     for attr in _PAYLOAD_CACHE_ATTRS:
         technique.__dict__.pop(attr, None)
+    technique.forget_morale_effect()
     bump_technique_catalog_revision()
 
 

@@ -43,6 +43,7 @@ from world.magic.constants import (
     is_imbuing_ritual,
 )
 from world.magic.exceptions import (
+    DuplicateTechniqueName,
     InvalidImbueAmount,
     TechniqueAuthoringNotPermitted,
     TechniqueBudgetExceeded,
@@ -606,6 +607,8 @@ class TechniqueViewSet(viewsets.ModelViewSet):
             )
         except TechniqueAuthoringNotPermitted as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+        except DuplicateTechniqueName as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         data = TechniqueSerializer(tech).data
         data["breakdown"] = _breakdown_to_dict(breakdown)
         return Response(data, status=status.HTTP_201_CREATED)

@@ -10,6 +10,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.models import CombatMark
+from world.combat.serializers import EncounterDetailSerializer
 from world.combat.services import declare_mark
 from world.scenes.constants import RoundStatus
 
@@ -124,3 +125,43 @@ class DeclareMarkServiceTest(TestCase):
         mark2 = declare_mark(self.participant, self.opponent)
         self.assertEqual(mark1.pk, mark2.pk)
         self.assertEqual(CombatMark.objects.count(), 1)
+
+
+def _serialize(encounter: object) -> dict:
+    if not hasattr(encounter, "participants_cached"):
+        encounter.participants_cached = list(encounter.participants.all())
+    if not hasattr(encounter, "opponents_cached"):
+        encounter.opponents_cached = list(encounter.opponents.all())
+    return EncounterDetailSerializer(encounter, context={}).data
+
+
+class EncounterMarksPayloadTest(TestCase):
+    """EncounterDetail ``marks``: this round's marks, public to every reader (#4603)."""
+
+    def setUp(self):
+        self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=2)
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        self.opponent = CombatOpponentFactory(encounter=self.encounter)
+
+    def _mark(self, round_number: int) -> CombatMark:
+        return CombatMark.objects.create(
+            encounter=self.encounter,
+            participant=self.participant,
+            opponent=self.opponent,
+            round_number=round_number,
+        )
+
+    def test_mark_rows_carry_marker_and_target(self):
+        mark = self._mark(2)
+        marks = _serialize(self.encounter)["marks"]
+        self.assertEqual(
+            marks,
+            [
+                {
+                    "id": mark.pk,
+                    "participant_id": self.participant.pk,
+                    "opponent_id": self.opponent.pk,
+                    "round_number": 2,
+                }
+            ],
+        )

@@ -7,6 +7,8 @@ combo upgrade/revert — is a real ``Action`` here. Telnet (``CmdCombat``) and t
 each ``execute()`` resolves the actor's combat state and calls the existing
 service. No new game logic lives here.
 
+``MarkAction`` (#4603) is the free-act exception: it declares no round action.
+
 ``yield`` is intentionally absent: ``YieldAction`` (``definitions/duels.py``)
 already exists and is reused by the ``combat yield`` subverb.
 """
@@ -915,3 +917,41 @@ class ParleyAction(Action):
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
         return ActionResult(success=True, message="You attempt to parley with your foe.")
+
+
+@dataclass
+class MarkAction(Action):
+    """Mark an opponent for covenant-mates this round (wraps ``declare_mark``).
+
+    A mark is a free act (ADR-0003): it writes a ``CombatMark`` and never a
+    ``CombatRoundAction``, so it uses none of the marker's declared action.
+    """
+
+    key: str = "combat_mark"
+    name: str = "Mark"
+    icon: str = "crosshair"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        opponent_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_mark  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        opponent = _resolve_opponent(participant, opponent_id)
+        if opponent is None:
+            return ActionResult(success=False, message=_NO_SUCH_OPPONENT_MSG)
+        try:
+            declare_mark(participant, opponent)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message=f"You mark {opponent.name}.")

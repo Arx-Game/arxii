@@ -94,6 +94,7 @@ function makeEncounter(participants: Participant[] = []): EncounterDetail {
     current_round_actions: [],
     clashes: [],
     engagement_locks: [],
+    marks: [],
     pending_attacks: [],
     created_at: '2026-01-01T00:00:00Z',
     outcome: '',

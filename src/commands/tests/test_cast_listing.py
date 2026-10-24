@@ -104,8 +104,9 @@ class CastListingTests(TestCase):
         """The payload tables prefetch onto the cached_property names the summary
         reads, so N techniques cost a fixed handful of queries, not 5N.
 
-        8 queries: the CharacterTechnique rows, the four #2898 payload prefetches
-        plus treatments (#3682 — the fifth table the summary reads), the #2901
+        9 queries: the CharacterTechnique rows, the four #2898 payload prefetches
+        plus treatments (#3682 — the fifth table the summary reads) and the morale
+        row (#4619 — TechniqueMoraleEffect, the sixth), the #2901
         variants prefetch (the caster's alternate forms), and one read of the
         cached threads handler (which of those variants they have unlocked).
         Every one is fixed; none is per technique.
@@ -114,7 +115,7 @@ class CastListingTests(TestCase):
             self._technique(name)
 
         cmd = _RecordingCmd(self.character)
-        with self.assertNumQueries(8):
+        with self.assertNumQueries(9):
             lines = cmd._castable_listing()
 
         self.assertIn("Ash Veil", "\n".join(lines))

@@ -7,6 +7,7 @@ from django.forms.models import BaseInlineFormSet
 from django.template.response import TemplateResponse
 from django.utils.html import format_html
 
+from web.admin.authoring.identity_map import RefusedSaveFlushMixin
 from web.admin.authoring.offers import DistinctionOfferFormSetMixin
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
 from world.character_creation.constants import OfferChapter
@@ -110,6 +111,7 @@ from world.magic.models import (
     TechniqueFunctionTag,
     TechniqueGrant,
     TechniqueManifestOption,
+    TechniqueMoraleEffect,
     TechniqueOutcomeModifier,
     TechniqueProgress,
     TechniqueRemovedCondition,
@@ -413,6 +415,28 @@ class TechniqueTreatmentInline(admin.TabularInline):
     extra = 1
 
 
+class TechniqueMoraleEffectInline(admin.TabularInline):
+    """The morale a technique removes from each enemy opponent it hits (#4619).
+
+    Amount removed = base_morale + morale_intensity_multiplier * intensity
+    + morale_per_extra_sl * (success levels above the minimum), by
+    ``AbstractMoraleEffect.compute_morale``. One row per technique; a row that
+    removes no morale is refused by the model's ``clean``.
+    """
+
+    model = TechniqueMoraleEffect
+    extra = 1
+    max_num = 1
+    fields = [
+        "minimum_success_level",
+        "base_morale",
+        "morale_intensity_multiplier",
+        "morale_per_extra_sl",
+    ]
+    verbose_name = "Morale effect"
+    verbose_name_plural = "Morale effect"
+
+
 class TechniqueFunctionTagInline(admin.TabularInline):
     """Inline fine-grained function labels on the Technique admin (#2443)."""
 
@@ -513,7 +537,7 @@ def wire_technique_cast_templates(modeladmin, request, queryset):  # type: ignor
 
 
 @admin.register(Technique)
-class TechniqueAdmin(admin.ModelAdmin):
+class TechniqueAdmin(RefusedSaveFlushMixin, admin.ModelAdmin):
     actions = [wire_technique_cast_templates]
     list_display = [
         "name",
@@ -550,6 +574,7 @@ class TechniqueAdmin(admin.ModelAdmin):
         TechniqueCapabilityGrantInline,
         TechniqueRemovedConditionInline,
         TechniqueTreatmentInline,
+        TechniqueMoraleEffectInline,
         TechniqueFunctionTagInline,
         TechniqueManifestOptionInline,
     ]
@@ -558,8 +583,9 @@ class TechniqueAdmin(admin.ModelAdmin):
         """Prefetch every payload table the Gap/Targets columns read (#3682).
 
         ``get_authoring_gap`` and ``get_relationship`` both walk the derived
-        effect summary, which reads four payload relations. Without this the
-        changelist paid four queries per row; the ``to_attr`` names are the
+        effect summary, which reads every payload family (grants, applied and
+        removed conditions, damage, treatments, morale). Without this the
+        changelist paid one query per family per row; the ``to_attr`` names are the
         ``cached_*`` properties those derivations read, so the prefetched rows
         are what answers them (and cannot go stale against the identity map,
         #2728).

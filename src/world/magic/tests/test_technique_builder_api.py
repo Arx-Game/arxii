@@ -14,6 +14,8 @@ Covers:
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
@@ -22,13 +24,19 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import CapabilityTypeFactory
+from world.magic.exceptions import DuplicateTechniqueName
 from world.magic.factories import (
     CharacterGiftFactory,
     EffectTypeFactory,
     GiftFactory,
     TechniqueStyleFactory,
 )
-from world.magic.models import CharacterTechnique, Technique, TechniqueTierBudget
+from world.magic.models import (
+    CharacterTechnique,
+    Technique,
+    TechniqueMoraleEffect,
+    TechniqueTierBudget,
+)
 from world.magic.services.technique_builder import get_technique_budget_config
 from world.roster.factories import RosterTenureFactory
 
@@ -121,6 +129,54 @@ class TechniqueBuilderAPITests(APITestCase):
         assert profile.ignores_soak is True
         assert profile.resistance_shift == 5
         assert profile.bypasses_wards is True
+
+    def test_a_design_with_a_morale_effect_builds_the_row(self) -> None:
+        self.client.force_authenticate(user=self.staff_account)
+        response = self.client.post(
+            reverse("magic:technique-author"),
+            self._payload(gift_id=self.staff_gift.pk, morale_effect={"base_morale": 30}),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        row = TechniqueMoraleEffect.objects.get(technique__name="Spark")
+        assert row.base_morale == 30
+
+    def test_a_fractional_morale_multiplier_saves_as_two_places(self) -> None:
+        # The API carries a float; 0.1 and 0.3 must not trip the DecimalField validator.
+        self.client.force_authenticate(user=self.staff_account)
+        for name, mult in (("Spark", 0.1), ("Flare", 0.3)):
+            response = self.client.post(
+                reverse("magic:technique-author"),
+                self._payload(
+                    name=name,
+                    gift_id=self.staff_gift.pk,
+                    morale_effect={"base_morale": 5, "morale_intensity_multiplier": mult},
+                ),
+                format="json",
+            )
+            assert response.status_code == status.HTTP_201_CREATED, response.data
+            row = TechniqueMoraleEffect.objects.get(technique__name=name)
+            assert row.morale_intensity_multiplier == Decimal(str(mult)).quantize(Decimal("0.01"))
+
+    def test_a_negative_morale_amount_is_refused(self) -> None:
+        self.client.force_authenticate(user=self.staff_account)
+        response = self.client.post(
+            reverse("magic:technique-author"),
+            self._payload(gift_id=self.staff_gift.pk, morale_effect={"base_morale": -5}),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert "morale_effect" in response.data
+
+    def test_an_all_zero_morale_effect_is_refused(self) -> None:
+        self.client.force_authenticate(user=self.staff_account)
+        response = self.client.post(
+            reverse("magic:technique-author"),
+            self._payload(gift_id=self.staff_gift.pk, morale_effect={}),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert "morale_effect" in response.data
 
     def test_author_rejects_negative_resistance_shift(self) -> None:
         self.client.force_authenticate(user=self.staff_account)
@@ -217,6 +273,23 @@ class TechniqueBuilderAPITests(APITestCase):
         tech = Technique.objects.get(pk=res.data["id"])
         # Staff technique is unbound — no CharacterTechnique row
         assert not CharacterTechnique.objects.filter(technique=tech).exists()
+
+    def test_staff_duplicate_name_under_same_gift_returns_400(self):
+        """The staff path refuses a reused (gift, name) with the clean 400 the player
+        path gives, not a 500 (#4619)."""
+        self.client.force_authenticate(user=self.staff_account)
+        url = reverse("magic:technique-author")
+        payload = self._payload(gift_id=self.staff_gift.id)
+        payload.pop("character_id")
+        first = self.client.post(url, payload, format="json")
+        assert first.status_code == status.HTTP_201_CREATED, first.data
+        before = Technique.objects.count()
+
+        second = self.client.post(url, payload, format="json")
+
+        assert second.status_code == status.HTTP_400_BAD_REQUEST, second.data
+        assert second.data["detail"] == DuplicateTechniqueName.user_message
+        assert Technique.objects.count() == before
 
     # ------------------------------------------------------------------
     # base CRUD — non-staff must be rejected

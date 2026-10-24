@@ -471,8 +471,12 @@ AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Thread carry"). Decision re
 `docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`.
 _Avoid_: thread inheritance, prerequisite thread.
 
+**Technique morale effect** (#4619): a technique's own payload row that removes morale from the
+enemies a cast lands on. Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md)
+("Technique morale effect"); combat side under "Morale".
+
 **Effect Summary** (#2898):
-What a Technique actually does, derived on read from its four payload tables and cached on
+What a Technique actually does, derived on read from its payload families (capability grants, applied and removed conditions, damage, treatments, morale effect) and cached on
 the row — never a stored field. One serialized block (`effect_summary`) shared by every
 technique surface across four apps (`magic`, `character_creation`, `scenes`,
 `character_sheets`), carrying a **plain-words line** authored server-side so the web client

@@ -96,7 +96,10 @@ from world.magic.models import (
     TechniqueCapabilityGrant,
     TechniqueCapabilityRequirement,
     TechniqueDamageProfile,
+    TechniqueDraft,
+    TechniqueDraftMoraleEffect,
     TechniqueFunctionTag,
+    TechniqueMoraleEffect,
     TechniqueOutcomeModifier,
     TechniqueRemovedCondition,
     TechniqueStyle,
@@ -532,6 +535,35 @@ class TechniqueDamageProfileFactory(factory.django.DjangoModelFactory):
     damage_intensity_multiplier = Decimal(0)
     damage_per_extra_sl = 0
     uses_equipped_weapon = False
+
+
+class TechniqueMoraleEffectFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueMoraleEffect: the morale a technique removes (#4619)."""
+
+    class Meta:
+        model = TechniqueMoraleEffect
+
+    technique = factory.SubFactory("world.magic.factories.TechniqueFactory")
+    base_morale = 10
+
+
+class TechniqueDraftFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueDraft: one in-progress draft per character sheet."""
+
+    class Meta:
+        model = TechniqueDraft
+
+    character = factory.SubFactory(CharacterSheetFactory)
+
+
+class TechniqueDraftMoraleEffectFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueDraftMoraleEffect (#4619)."""
+
+    class Meta:
+        model = TechniqueDraftMoraleEffect
+
+    draft = factory.SubFactory(TechniqueDraftFactory)
+    base_morale = 10
 
 
 class TechniqueVariantFactory(factory.django.DjangoModelFactory):

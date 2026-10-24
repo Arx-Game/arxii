@@ -16,6 +16,7 @@ from world.magic.factories import (
     TechniqueCapabilityGrantFactory,
     TechniqueDamageProfileFactory,
     TechniqueFactory,
+    TechniqueMoraleEffectFactory,
     TechniqueRemovedConditionFactory,
 )
 from world.magic.models.techniques import ConditionTargetKind, TechniqueTreatment
@@ -264,9 +265,9 @@ class TechniqueEffectCacheTests(TestCase):
         )
         invalidate_technique_payload_caches(technique)
 
-        with self.assertNumQueries(5):
-            # One query per payload table on the first build — five since
-            # treatments joined the summary (#3682).
+        with self.assertNumQueries(6):
+            # One query per payload table on the first build - six since
+            # the morale row joined the summary (#4619).
             first = technique.cached_effect_summary
         with self.assertNumQueries(0):
             second = technique.cached_effect_summary
@@ -399,3 +400,39 @@ class TechniqueCastLinkageTests(TestCase):
 
         self.assertTrue(technique_is_not_castable_standalone(technique))
         self.assertNotIn(technique.pk, gap_ids)
+
+
+class TechniqueMoralePayloadTests(TestCase):
+    """A morale row is a payload the derivations and the sentence read (#4619)."""
+
+    def test_morale_row_makes_a_technique_specified(self):
+        technique = _bare_technique()
+        TechniqueMoraleEffectFactory(technique=technique)
+        invalidate_technique_payload_caches(technique)
+
+        self.assertFalse(technique_is_underspecified(technique))
+
+    def test_summary_says_it_shakes_morale(self):
+        technique = _bare_technique()
+        TechniqueMoraleEffectFactory(technique=technique)
+        invalidate_technique_payload_caches(technique)
+
+        summary = technique.cached_effect_summary["summary"]
+
+        self.assertIn("Shakes morale.", summary)
+        self.assertNotIn("not yet catalogued", summary)
+
+    def test_an_ally_heal_with_a_morale_row_is_ambiguous(self):
+        technique = _bare_technique()
+        _treatment_row(technique, target_kind=ConditionTargetKind.ALLY)
+        TechniqueMoraleEffectFactory(technique=technique)
+        invalidate_technique_payload_caches(technique)
+
+        self.assertTrue(technique_relationship_is_ambiguous(technique))
+
+    def test_a_technique_without_a_morale_row_does_not_say_so(self):
+        plain = _bare_technique()
+        TechniqueAppliedConditionFactory(technique=plain)
+        invalidate_technique_payload_caches(plain)
+
+        self.assertNotIn("Shakes morale.", plain.cached_effect_summary["summary"])

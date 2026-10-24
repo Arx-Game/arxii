@@ -54,6 +54,35 @@ def tier_has_morale(opponent: CombatOpponent) -> bool:
     return tpl.has_morale if tpl is not None else True
 
 
+def tier_morale_map() -> dict[str, bool]:
+    """``{tier: has_morale}`` in one query; a tier with no template keeps its morale.
+
+    The batch form of ``tier_has_morale`` for a loop over many opponents
+    (spectacle witnesses, a technique's morale targets).
+    """
+    from world.combat.models import OpponentTierTemplate  # noqa: PLC0415
+
+    return dict(OpponentTierTemplate.objects.values_list("tier", "has_morale"))
+
+
+def mindless_share(amount: int, *, mindless_percent: int) -> int:
+    """The share of a morale hit a mindless tier still takes (#4619).
+
+    An amount of 0 or less stays 0; a positive amount never rounds down to
+    nothing, so a mindless opponent is resistant, never immune.
+
+    Args:
+        amount: The hit a tier with morale would take.
+        mindless_percent: ``SpectacleConfig.mindless_percent``.
+
+    Returns:
+        The reduced hit.
+    """
+    if amount <= 0:
+        return 0
+    return max(1, amount * mindless_percent // 100)
+
+
 def morale_state_for(opponent: CombatOpponent) -> OpponentMoraleState:
     """Return the opponent's derived morale state (STEADY/FALTER/BREAK).
 

@@ -41,6 +41,7 @@ _SUBVERBS: dict[str, str] = {
     "demoralize": "combat_demoralize",
     "taunt": "combat_taunt",
     "parley": "combat_parley",
+    "mark": "combat_mark",
     "charge": "combat_charge",
     "joust": "combat_joust",
     "engage": "combat_engage",
@@ -49,7 +50,7 @@ _SUBVERBS: dict[str, str] = {
 
 # subverbs that take a single name argument.
 _ALLY_SUBVERBS = {"cover", "interpose", "succor", "rally"}
-_OPPONENT_SUBVERBS = {"demoralize", "taunt", "parley", "engage"}
+_OPPONENT_SUBVERBS = {"demoralize", "taunt", "parley", "engage", "mark"}
 
 # Trailing-clause separator for ``interpose [ally] with <technique>`` (#2207) —
 # mirrors ``CmdClashCommit``'s ``" with "`` split in ``commands/combat.py``.
@@ -115,6 +116,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat demoralize <opp>     - break an opponent's nerve (morale damage)
         combat taunt <opp>          - draw an NPC's aggro toward you
         combat parley <opp>          - talk a wavering foe down mid-fight
+        combat mark <opp>           - mark a foe for your covenant-mates this round
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
         combat joust with <technique> - mounted, lance-armed opposed pass (duels only)
         combat engage <opp>          - challenge an opponent to a foil duel (engagement lock)
@@ -538,6 +540,24 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             lines.append(f"  {row.opponent.name} -> {target}, {landing}{suffix}")
         return lines
 
+    @staticmethod
+    def _render_mark_lines(participant: Any) -> list[str]:
+        """One line per mark laid this round in the participant's encounter (#4603)."""
+        from world.combat.models import CombatMark  # noqa: PLC0415
+
+        marks = (
+            CombatMark.objects.filter(
+                encounter=participant.encounter,
+                round_number=participant.encounter.round_number,
+            )
+            .select_related("participant__character_sheet__character", "opponent")
+            .order_by("pk")
+        )
+        return [
+            f"{mark.participant.character_sheet.character} marked {mark.opponent.name}."
+            for mark in marks
+        ]
+
     def _show_status_hub(self) -> None:
         """Print resource/risk state + the declared action + available subverbs."""
         lines = [
@@ -546,7 +566,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             "interpose [ally] [with <technique>] [into <dest>] [soulfray], "
             "succor <ally>, "
             "use <item> [on <target>], "
-            "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, "
+            "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, mark <opp>, "
             "charge <opp> with <technique>, joust with <technique>, "
             "engage <opp>, disengage, "
             "join, leave, ready, "
@@ -579,6 +599,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             lines.extend(
                 self._render_windup_lines(participant, self._pending_windups(participant.encounter))
             )
+            lines.extend(self._render_mark_lines(participant))
         self.msg("\n".join(lines))
 
     def _show_round_combos(self) -> None:
