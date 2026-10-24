@@ -16,6 +16,8 @@ sent a ``combat_encounter_state`` ping for that encounter.
 - An effect that shoves Ada while the round is declared sends one ping too: every move goes
   through the one position writer.
 - Once the fight is over, a step sends nothing.
+- Who is told: a bystander standing in the room, and a fighter who has stepped out of it,
+  each get one ping; a player in another room who is not in the fight gets none.
 
 Expected values come from the issue: every open battle map shows a move as soon as it is
 saved, the same as a reload would.
@@ -144,3 +146,22 @@ class AShoveWhileDeclaring(_TwoOnTheCauseway):
             self.pings(self.ada),
             [{"encounter_id": self.encounter.pk, "round_number": 1}],
         )
+
+
+class WhoIsTold(_TwoOnTheCauseway):
+    def test_the_room_and_the_fighters_are_told_and_no_one_else(self) -> None:
+        bystander = self.make_player("Pell", room=self.room)
+        elsewhere = self.make_room("The Mill")
+        stranger = self.make_player("Wren", room=elsewhere)
+        self.watch(bystander, stranger)
+        self.ada.location = elsewhere  # Still an active fighter, out of the room.
+        for character in (self.ada, bystander, stranger):
+            self.mailbox(character).calls.clear()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            force_move_to_position(self.hobb, self.lane)
+
+        one_ping = [{"encounter_id": self.encounter.pk, "round_number": 1}]
+        self.assertEqual(self.pings(bystander), one_ping)
+        self.assertEqual(self.pings(self.ada), one_ping)
+        self.assertEqual(self.pings(stranger), [])

@@ -32,9 +32,9 @@ def notify_encounter_changed(encounter: CombatEncounter) -> None:
     """Send the ping to everyone who can have this fight's map open.
 
     That is everything in the encounter's room (fighters, the GM, bystanders), as the
-    room's outcome lines are sent, plus the player characters fighting in it, for an
-    encounter with no room. ``msg`` reaches only puppeted sessions, so an object
-    nobody is playing gets nothing.
+    room's outcome lines are sent, plus every ACTIVE player character fighting in it
+    wherever they stand (an encounter with no room has only these). ``msg`` reaches only
+    puppeted sessions, so an object nobody is playing gets nothing.
     """
     payload = asdict(
         CombatEncounterStatePayload(
