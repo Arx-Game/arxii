@@ -7,7 +7,12 @@ from pathlib import Path
 from django.http import HttpResponse, HttpResponseRedirect
 from django.views import View
 
+from web.link_previews import apply_preview, preview_for
+
 logger = logging.getLogger(__name__)
+
+# The compiled React entry page; tests point this at a small fixture.
+INDEX_PATH = Path(__file__).resolve().parent / "static" / "dist" / "index.html"
 
 
 class PasswordChangeDiscoveryView(View):
@@ -54,11 +59,7 @@ class FrontendAppView(View):
     def get(self, request, *args, **kwargs):
         """Serve the React index.html with proper static file URLs."""
         try:
-            # Path to the generated index.html - use current directory structure
-            current_dir = Path(__file__).resolve().parent.parent
-            index_path = current_dir / "web" / "static" / "dist" / "index.html"
-
-            with index_path.open(encoding="utf-8") as f:
+            with INDEX_PATH.open(encoding="utf-8") as f:
                 html = f.read()
 
             # Fix asset paths to include /static/dist/ prefix
@@ -70,6 +71,16 @@ class FrontendAppView(View):
             # TwistedWeb doesn't send CORS headers on static files, which can cause
             # module evaluation ordering issues with type="module" scripts.
             html = html.replace(" crossorigin", "")
+
+            # Link unfurlers (Discord) never run the React app, so the shared page's
+            # title and description are written into the served HTML here.
+            # The query string of a page URL, not an API filter.
+            query = request.GET.dict()  # noqa: USE_FILTERSET
+            html = apply_preview(
+                html,
+                preview_for(request.path, query),
+                request.build_absolute_uri(request.get_full_path()),
+            )
 
             return HttpResponse(html, content_type="text/html")
 
