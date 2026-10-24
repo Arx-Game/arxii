@@ -28,6 +28,7 @@ from world.scenes.constants import (
 | `SceneClock` | An authored countdown on the beat a scene is running (#3567) | `scene` (FK, CASCADE - where it was opened), `beat` (FK `arxii.Beat`, CASCADE - the key: a staged battle's private scene runs the same beat and reads the same clock), `size`/`filled` (PositiveSmallIntegerField), `created_at`, `closed_at` (nullable), `closed_reason` (`SceneClockClosedReason`: FILLED/COMPLETED/SCENE_ENDED). `UniqueConstraint` on `beat` where `closed_at__isnull=True` - one open clock per beat. Play state: resettable |
 | `SceneParticipation` | Links accounts to scenes with roles | `scene` (FK), `account` (FK AccountDB), `is_gm`, `is_owner`, `joined_at`, `left_at` |
 | `Persona` | Identity a participant uses within a scene | `participation` (FK), `name`, `is_fake_name`, `description`, `thumbnail_url`, `character` (FK ObjectDB) |
+| `SceneCheckModifier` | A scene's surroundings bonus or penalty to one check type, gathered by `collect_check_modifiers(scene=...)` as SCENE | `scene` (FK), `check_type` (FK), `modifier_value` (flat), `modifier_level` + `modifier_size` (#4638: both set reads the check value table at that level; both blank keeps the flat value; Paramount refused). One row per (scene, check type). Play state: resettable |
 
 ### Messages
 
@@ -2105,6 +2106,6 @@ closed-then-reopened tab. Key points:
 
 ## Admin
 
-- `SceneAdmin` - List display with participant count; inline participations and messages
+- `SceneAdmin` - List display with participant count; inline participations and the surroundings check modifiers (`SceneCheckModifierInline`, #4638: check type, flat value, level, size)
 - `PersonaAdmin` - Search by name, scene name, account username
 - `SceneMessageAdmin` - Inline supplemental data and reactions; filterable by context, mode, active status

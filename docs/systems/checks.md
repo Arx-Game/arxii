@@ -119,6 +119,30 @@ The walk only reaches a check whose scoped `ModifierTarget` is in an
 `EQUIPMENT_RELEVANT_CATEGORIES` category; the check-scoped targets authored today (category
 `check` or `roll_modifier`) are not, so on those checks the walk adds nothing.
 
+**Distinctions and scene surroundings (#4638, ADR-4638-A).** The third and fourth sized sources.
+
+- *Distinctions.* `DistinctionEffect.modifier_size` is authored on the distinction's effect
+  inline (Paramount refused). The CHARACTER block calls
+  `get_modifier_breakdown(sheet, scoped_target, value_lane=ModifierLane.CHECK)`; a distinction
+  row whose effect has a size reads the value table at the holder's `CharacterSheet.current_level`
+  and the effect's size, signed like the effect's rank-1 value (`ValueTable.signed_value`). Rank
+  scales the table's number the way it scales the authored one: the ratio of
+  `get_value_at_rank(rank)` to `get_value_at_rank(1)`, so rank 2 of a per-rank effect is twice
+  its rank-1 table number (rounded half up). Amplification (`amplifies_sources_by`) and immunity
+  then apply to the table number exactly as they did to the flat one. The detail row, and so the
+  contribution, carries `level`/`size` only when the table priced it. No class level (level 0),
+  no value row or no size keeps the flat `CharacterModifier.value`. Every other caller of
+  `get_modifier_breakdown` (stats, power, soak, levers) passes no lane and reads flat values.
+- *Source kind.* Distinction rows stay in the CHARACTER kind and taper in its pile with the other
+  `CharacterModifier` rows that can reach a check-scoped target: achievement rewards
+  (`ModifierSource.achievement_reward`) and form combat profiles (`form_combat_profile`), both
+  flat. Residence comfort targets only the AP-regen targets and never reaches a check.
+- *Scene surroundings.* `SceneCheckModifier.modifier_level` and `modifier_size` are authored
+  together on the scene admin's surroundings inline (`SceneCheckModifierInline`; a level without
+  a size, or the reverse, and Paramount are refused). `_scene_check_contributions` values a
+  sized row at its own level, never the roller's; an unsized row keeps its flat value. The SCENE
+  pile tapers, though one scene holds at most one row per check type.
+
 ### Authoring guardrail: one channel per condition/check pair (#2505)
 
 A condition can reach the same check through **two independent channels**, and

@@ -82,9 +82,15 @@ def _generate_effect_text(effect: DistinctionEffect) -> str:
     - Stat category: divides value by 10 for display.
     - Percentage categories: appends '%' after the value.
     - Scaling values: shows slash-separated values per rank.
+    - Sized check effects (#4638): the size, not the flat number, because the check
+      values the effect at its holder's level and the flat number is never added.
     """
     category_name = effect.target.category.name
     target_name = effect.target.name
+
+    if effect.modifier_size is not None and effect.target.target_check_type_id is not None:
+        sign = "+" if effect.get_value_at_rank(1) >= 0 else "-"
+        return f"{sign}{effect.get_modifier_size_display()} {target_name}"
 
     if effect.scaling_values:
         if category_name == STAT_CATEGORY_NAME:

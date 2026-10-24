@@ -228,6 +228,13 @@ are the second (#4628, ADR-4628-A): a sized `ItemCheckModifier` counts at the be
 instance's `QualityTier.modifier_level`, valued through `ValueTable.signed_value` (the one
 valuation helper; never re-derive the sign/None rule). The equipment walk's vow terms ride as
 `vow_part`, and crafted modifiers are one contribution per worn piece.
+Distinctions and scene surroundings are the third and fourth (#4638, ADR-4638-A): the CHARACTER
+block calls `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)`, which prices a sized
+`DistinctionEffect` at the holder's `CharacterSheet.current_level`, scaled by rank, before
+amplification and immunity; the rows stay in the CHARACTER kind (achievement rewards and form
+profiles on the same path stay flat). `_scene_check_contributions` prices a sized
+`SceneCheckModifier` at its authored `modifier_level`. Only this seam passes a lane: every other
+`get_modifier_breakdown` caller reads flat values.
 
 **Social/scene actions** funnel their plain (non-technique) check through the same
 seam in `world.scenes.action_services._resolve_action_against_persona`

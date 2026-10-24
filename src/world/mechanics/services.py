@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from contextlib import contextmanager
 import contextvars
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -17,6 +17,7 @@ from django.db import transaction
 from django.db.models import Prefetch, Q
 
 from typeclasses.characters import Character
+from world.checks.modifier_values import ValueTable, load_value_table
 from world.checks.services import chart_has_success_outcomes, preview_check_difficulty
 from world.conditions.services import get_all_capability_values
 from world.distinctions.models import CharacterDistinction
@@ -157,25 +158,57 @@ def _amplifiers_and_immunity(distinction_mods: list) -> tuple[list[tuple[int, in
     return amplifiers, has_immunity
 
 
+def _sized_distinction_value(
+    mod: CharacterModifier, value_table: ValueTable | None, level: int | None
+) -> int | None:
+    """A sized distinction effect's value from the lane's table, or None to keep it flat.
+
+    #4638: the holder's ``level`` and the effect's ``modifier_size`` read the table
+    (``ValueTable.signed_value``, signed like the effect's rank-1 value). Rank scales the
+    table's number the way it scales the authored one: the ratio of the effect's value
+    at the held rank to its value at rank 1, so a per-rank effect at rank 2 is twice its
+    rank-1 table number. None (the flat ``mod.value``) when there is no table, no size,
+    no level, a rank-1 value of 0, or no table row for the pair.
+    """
+    effect = mod.source.distinction_effect
+    if value_table is None or effect.modifier_size is None:
+        return None
+    unit = effect.get_value_at_rank(1)
+    magnitude = value_table.signed_value(unit, level, effect.modifier_size)
+    if magnitude is None:
+        return None
+    held = mod.source.character_distinction
+    at_rank = effect.get_value_at_rank(held.rank) if held is not None else unit
+    scaled = Decimal(magnitude) * Decimal(at_rank) / Decimal(unit)
+    return int(scaled.to_integral_value(rounding=ROUND_HALF_UP))
+
+
 def _distinction_contributions(
     distinction_mods: list,
     amplifiers: list[tuple[int, int]],
     *,
     has_immunity: bool,
+    value_table: ValueTable | None = None,
+    level: int | None = None,
 ) -> tuple[list[ModifierSourceDetail], int, int]:
     """Each distinction source's detail row, the running total, and the blocked count.
 
     A source is amplified by every OTHER amplifier, never by itself. Immunity
     blocks a source whose amplified value ends up negative — it is still reported,
-    with `blocked_by_immunity` set, but contributes nothing to the total.
+    with `blocked_by_immunity` set, but contributes nothing to the total. With a
+    ``value_table`` (#4638), a sized effect's base value is the table's number at the
+    holder's ``level`` (``_sized_distinction_value``); amplification and immunity then
+    apply to it as they do to a flat value.
     """
     sources: list[ModifierSourceDetail] = []
     total = 0
     negatives_blocked = 0
     for mod in distinction_mods:
         effect = mod.source.distinction_effect
+        sized = _sized_distinction_value(mod, value_table, level)
+        base_value = mod.value if sized is None else sized
         amplification = sum(bonus for amp_id, bonus in amplifiers if amp_id != mod.id)
-        final_value = mod.value + amplification
+        final_value = base_value + amplification
         blocked = has_immunity and final_value < 0
         if blocked:
             negatives_blocked += 1
@@ -184,17 +217,23 @@ def _distinction_contributions(
         sources.append(
             ModifierSourceDetail(
                 source_name=effect.distinction.name,
-                base_value=mod.value,
+                base_value=base_value,
                 amplification=amplification,
                 final_value=final_value,
                 is_amplifier=bool(effect.amplifies_sources_by),
                 blocked_by_immunity=blocked,
+                # Level and size travel only with a table value, so provenance never
+                # claims the table priced a row it had no cell for.
+                level=level if sized is not None else None,
+                size=effect.modifier_size if sized is not None else None,
             )
         )
     return sources, total, negatives_blocked
 
 
-def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> ModifierBreakdown:
+def get_modifier_breakdown(
+    character, modifier_target: ModifierTarget, *, value_lane: str | None = None
+) -> ModifierBreakdown:
     """
     Get detailed breakdown of all modifiers for a target.
 
@@ -205,6 +244,10 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
     Args:
         character: CharacterSheet instance
         modifier_target: The ModifierTarget to aggregate
+        value_lane: (#4638) a ``ModifierLane`` whose value table prices sized
+            distinction effects at the holder's ``current_level``. The check seam
+            passes the check lane; every other caller passes nothing and reads the
+            flat authored values, as before. The table loads only when a row is sized.
 
     Returns:
         ModifierBreakdown with sources, calculations, and total
@@ -244,8 +287,19 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
         )
 
     amplifiers, has_immunity = _amplifiers_and_immunity(distinction_mods)
+    value_table = None
+    level = None
+    if value_lane is not None and any(
+        mod.source.distinction_effect.modifier_size is not None for mod in distinction_mods
+    ):
+        value_table = load_value_table(value_lane)
+        level = character.current_level or None
     sources, total, negatives_blocked = _distinction_contributions(
-        distinction_mods, amplifiers, has_immunity=has_immunity
+        distinction_mods,
+        amplifiers,
+        has_immunity=has_immunity,
+        value_table=value_table,
+        level=level,
     )
 
     # Non-distinction sources are flat addends (outside the amplification graph).
