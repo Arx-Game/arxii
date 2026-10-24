@@ -222,6 +222,24 @@ class DistinctionsOnChecks(JourneyCase):
         (row,) = self.contributions(self.corvin)
         self.assertEqual((row.value, row.level, row.size), (FLAT_AUTHORED, None, None))
 
+    def test_the_distinction_list_names_the_size_not_the_flat_number(self) -> None:
+        for distinction in (
+            self.distinction("Silver Tongue"),
+            self.distinction("Old Habits", size=None),
+        ):
+            # No authored description, so the list writes the effect's own line.
+            for effect in distinction.effects.all():
+                effect.description = ""
+                effect.save(update_fields=["description"])
+
+        response = self.api(self.account_of(self.corvin)).get("/api/distinctions/distinctions/")
+
+        self.assertEqual(response.status_code, 200)
+        summaries = {row["name"]: row["effects_summary"] for row in response.json()}
+        # A sized check effect is worth its holder's level, so the list names its size.
+        self.assertEqual(summaries["Silver Tongue"], [{"text": "+Large haggling_check"}])
+        self.assertEqual(summaries["Old Habits"], [{"text": "+5 haggling_check"}])
+
 
 class SurroundingsOnChecks(JourneyCase):
     """The river market's surroundings help whoever haggles there."""
