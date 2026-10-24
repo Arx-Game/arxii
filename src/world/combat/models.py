@@ -4500,7 +4500,8 @@ class NpcTacticsConfig(SharedMemoryModel):
         default=UNANSWERED_HIT_MORALE,
         help_text=(
             "Morale an opponent loses each time it is hit by an attacker it cannot hit "
-            "back. A tier without morale takes the share set in the spectacle settings."
+            "back. 0 switches this off. A tier without morale takes the mindless percent "
+            "share of it set in the spectacle settings, never less than 1."
         ),
     )
 
