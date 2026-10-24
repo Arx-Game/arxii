@@ -152,7 +152,12 @@ They do not use the command system, dispatchers, or handlers.
   data alone left telnet silent; and `tasking.py` names an agent by `persona.name`, never
   `str(persona)` ("Wren (Established)"). The whole town group is typed in
   `integration_tests/test_working_the_town_journeys.py`. Tranche 15's lines in this layer:
-  `positioning.py`'s `SetTheStageAction` names what it staged ("You set the stage with Lone
+  `positioning.py`'s `MoveToPositionAction` carries `CombatMovementPrerequisite` (#4607): a character
+  with an ACTIVE `CombatParticipant` in a live encounter in their room moves only while the round is
+  DECLARING and `movement_budget.hops_left` is above 0, and `execute()` then spends one hop
+  (`spend_combat_hop`); RESOLVING and BETWEEN_ROUNDS refuse with a reason. `_positioning_actions`
+  builds move entries by hand, so it asks the prerequisite itself and puts the refusal or the
+  "N hops left this round." line on each entry. `positioning.py`'s `SetTheStageAction` names what it staged ("You set the stage with Lone
   Dais: Center."; it had answered with no message), and `distinctions.py`'s
   `GMAwardDistinctionAction` searches quietly and answers an absent name itself ("Could not
   find 'Nobody'.", as `GrantItemAction` does) and refuses a distinction already at its

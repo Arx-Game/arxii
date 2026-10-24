@@ -1106,6 +1106,21 @@ def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
 # ---------------------------------------------------------------------------
 
 
+def _hops_left_note(character: ObjectDB) -> str:
+    """ "2 hops left this round." for a character in a declaring encounter, else ""."""
+    from world.combat.services.movement_budget import (  # noqa: PLC0415
+        active_combat_participant,
+        hops_left,
+    )
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+    participant = active_combat_participant(character)
+    if participant is None or participant.encounter.status != RoundStatus.DECLARING:
+        return ""
+    left = hops_left(participant)
+    return f"{left} hop left this round." if left == 1 else f"{left} hops left this round."
+
+
 def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     """Surface a move_to_position ``PlayerAction`` for each directly adjacent open position.
 
@@ -1121,6 +1136,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     """
     from django.db.models import Q  # noqa: PLC0415
 
+    from actions.prerequisites import CombatMovementPrerequisite  # noqa: PLC0415
     from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
     from world.areas.positioning.models import Position, PositionEdge  # noqa: PLC0415
     from world.areas.positioning.services import (  # noqa: PLC0415
@@ -1149,6 +1165,11 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
             for position in entry_positions
         ]
 
+    # The prerequisite is not run for these hand-built entries, so ask it once here (#4607):
+    # a refusal shows on every move, and a live declaring round shows the hops left.
+    move_met, move_reason = CombatMovementPrerequisite().is_met(character)
+    move_note = _hops_left_note(character) if move_met else ""
+
     result: list[PlayerAction] = []
     for edge in adjacent_open_positions(current):
         # Determine which side of the edge is the destination (not current).
@@ -1163,8 +1184,10 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
                 backend=ActionBackend.REGISTRY,
                 display_name=f"Move to {neighbor.name}",
                 ref=ref,
-                description=neighbor.description,
+                description=move_note if move_note else neighbor.description,
                 action_category=ActionCategory.PHYSICAL,
+                prerequisite_met=move_met,
+                prerequisite_reasons=[] if move_met else [move_reason],
             )
         )
 
