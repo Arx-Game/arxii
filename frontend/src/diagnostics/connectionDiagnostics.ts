@@ -114,6 +114,7 @@ const SAFE_FRAME_TYPES = new Set([
   'interaction',
   'roulette_result',
   'battle_state',
+  'combat_encounter_state',
   'kudos_received',
   'mail_arrived',
   'hazard_prompt',

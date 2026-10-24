@@ -444,3 +444,7 @@ _Avoid_: AI level, intelligence, difficulty
 **Move plan** (`CombatOpponentMove`, #4607):
 Play state: the movement plan for one opponent in one round (`OpponentMoveKind`: ADVANCE, SHELTER, BASH, RETREAT, WAIT), written at selection for every active opponent that is not winding up, calmed or a duel mirror, even one with no attack it can use. It is advisory: in the opponent's slot `advance_opponent` re-plans against live positions, moves up to its hop budget, and only then are its attack rows re-fit to the targets still in reach. An opponent never moves after its first attack in a round (strike then stay). See ADR-4607-A.
 _Avoid_: AI move, pathing order, NPC intent
+
+**Encounter state ping** (`combat_encounter_state`, #4644):
+The slim WS message `{encounter_id, round_number}` (`CombatEncounterStatePayload`) sent after a combat change commits: once per resolved round, and after any move in a room with an open encounter. It carries no encounter data; the client refetches the REST encounter, so the battle map shows where everyone stands. The combat counterpart of the battles' BATTLE_STATE ping (ADR-0095).
+_Avoid_: combat push, encounter sync, live map update

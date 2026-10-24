@@ -33,6 +33,7 @@ from world.combat.services.encounter.completion import (
     complete_encounter,
 )
 from world.combat.services.encounter.encounter_outcome import _classify_encounter_outcome
+from world.combat.services.encounter.state_ping import notify_encounter_changed_on_commit
 from world.combat.services.npc.npc_selection import ensure_opponent_plans, select_npc_actions
 from world.combat.services.npc.npc_targeting import attach_npc_action_targets
 from world.combat.services.npc.sustained import _mature_sustained_actions
@@ -369,5 +370,7 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         enc.round_started_at = None
         enc.save(update_fields=["status", "round_started_at"])
     encounter.refresh_from_db()
+    # After the commit, so a map that refetches reads this round's outcome (#4644).
+    notify_encounter_changed_on_commit(enc)
 
     return result

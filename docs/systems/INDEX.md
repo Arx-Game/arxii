@@ -8762,6 +8762,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `traversal` (`CreatureTraversal`, defined in `world.areas.positioning.constants`), read
     live through `CombatOpponent.movement_profile` (`MovementProfile`; template-less =
     `NPC_DEFAULT_TACTICS`/`NPC_DEFAULT_HOPS`/`NPC_DEFAULT_TRAVERSAL`).
+  - Live battle maps (#4644): `world/combat/services/encounter/state_ping.py`
+    (`notify_encounter_changed`, `notify_encounter_changed_on_commit`,
+    `notify_room_encounters_on_commit`) sends the slim `combat_encounter_state` WS ping
+    (`CombatEncounterStatePayload`) after `resolve_round` and after any move commits; the
+    client (`hooks/handleCombatEncounterStatePayload.ts`) refetches that encounter.
   - PC hop budget: `world/combat/services/movement_budget.py` (`active_combat_participant`,
     `hops_for`, `hops_left`, `spend_combat_hop`), `CombatParticipant.hops_used` reset in
     `begin_declaration_phase`, gated by `CombatMovementPrerequisite` on
