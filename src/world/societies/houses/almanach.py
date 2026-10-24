@@ -49,7 +49,7 @@ from world.societies.houses.constants import (
     LifeStatus,
     TitleTier,
 )
-from world.societies.houses.models import Domain, FealtyEdge, LandShape, Title
+from world.societies.houses.models import Domain, DomainHolding, FealtyEdge, LandShape, Title
 from world.societies.houses.services import (
     HousesServiceError,
     acknowledge_into_family,
@@ -284,6 +284,86 @@ def batch_unclaimed(
                     realm=parent_title.realm, tier=TitleTier.BARONY, name="", parent_title=rung
                 )
     return made
+
+
+@transaction.atomic
+def delete_rung(title: Title) -> None:
+    """Delete a planted rung: its chain's Titles, Domains and Areas together.
+
+    Only a rung that is the top of its own chain, unheld, with no rung or room
+    beneath it and no holding on it. Anything else still points at the land and
+    is refused with a sentence saying what to clear first.
+    """
+    from django.db.models import ProtectedError  # noqa: PLC0415
+
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+    family = _require_chain_top(title)
+    if any(member.house_id is not None for member in family):
+        msg = f"title {title.pk} is held"
+        raise HousesServiceError(msg, user_message="That rung is held; vacate it first.")
+    areas = [_rung_area(member) for member in family]
+    area_pks = {area.pk for area in areas}
+    if Area.objects.filter(parent_id__in=area_pks).exclude(pk__in=area_pks).exists():
+        msg = f"title {title.pk} has rungs beneath it"
+        raise HousesServiceError(
+            msg, user_message="Rungs sit beneath it; delete or move them first."
+        )
+    if DomainHolding.objects.filter(domain__area_id__in=area_pks).exists():
+        msg = f"title {title.pk} has holdings"
+        raise HousesServiceError(msg, user_message="It has holdings; remove them first.")
+    if RoomProfile.objects.filter(area_id__in=area_pks).exists():
+        msg = f"title {title.pk} has rooms"
+        raise HousesServiceError(msg, user_message="Rooms are placed there; move them first.")
+    try:
+        with transaction.atomic():
+            Title.objects.filter(pk__in=[member.pk for member in family]).delete()
+            Domain.objects.filter(pk__in=area_pks).delete()
+            for area in sorted(areas, key=lambda a: a.level):
+                area.delete()
+    except ProtectedError as exc:
+        msg = f"title {title.pk} is still referenced"
+        raise HousesServiceError(
+            msg, user_message="Something else still points at that land."
+        ) from exc
+
+
+@transaction.atomic
+def move_rung(title: Title, new_parent: Title) -> Title:
+    """Move a rung (its chain, and every rung beneath it) under ``new_parent``.
+
+    Refused for a rung that is not its chain's top, one in another realm, a parent
+    that is the rung itself or lies beneath it, a parent of the wrong tier, and any
+    rung whose subtree is held (moving it would change the liege of a held house).
+    """
+    from world.areas.services import area_subtree_pks  # noqa: PLC0415
+
+    family = _require_chain_top(title)
+    own_area = _rung_area(title)
+    parent_area = _rung_area(new_parent)
+    if new_parent.realm_id != title.realm_id:
+        msg = f"title {new_parent.pk} is in another realm"
+        raise HousesServiceError(msg, user_message="That rung belongs to another realm.")
+    subtree = set(area_subtree_pks(own_area))
+    if parent_area.pk in subtree:
+        msg = f"title {new_parent.pk} lies beneath title {title.pk}"
+        raise HousesServiceError(msg, user_message="A rung cannot move beneath itself.")
+    if TIER_TO_AREA_LEVEL[title.tier] >= parent_area.level:
+        msg = f"tier {title.tier} does not nest inside {new_parent.tier}"
+        raise HousesServiceError(
+            msg, user_message="That rung does not sit beneath the one you picked."
+        )
+    if own_area.parent_id == parent_area.pk:
+        return title
+    held = Title.objects.filter(house__isnull=False).filter(
+        seat_domain__area_id__in=subtree
+    ) | Title.objects.filter(pk__in=[member.pk for member in family], house__isnull=False)
+    if held.exists():
+        msg = f"title {title.pk} has held rungs in its subtree"
+        raise HousesServiceError(msg, user_message="A rung beneath it is held; vacate those first.")
+    own_area.parent = parent_area
+    own_area.save()
+    return title
 
 
 @transaction.atomic

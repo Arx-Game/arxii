@@ -11,7 +11,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 
 | Registry | Surfaces | Named by no test |
 |---|---|---|
-| Actions (`actions.registry`) | 578 | 0 |
+| Actions (`actions.registry`) | 580 | 0 |
 | Commands (character + account cmdsets) | 272 | 57 |
 | API routes (`urls.py` under `src/`) | 567 | 83 |
 | Frontend routes (`App.tsx`) | 132 | 60 |
@@ -49,12 +49,14 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `almanach_correct_kin` | `actions.definitions.almanach.AlmanachCorrectKinAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_create_family` | `actions.definitions.almanach.AlmanachCreateFamilyAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_create_kin` | `actions.definitions.almanach.AlmanachCreateKinAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
+| `almanach_delete_rung` | `actions.definitions.almanach.AlmanachDeleteRungAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_describe_demesne` | `actions.definitions.almanach.AlmanachDescribeDemesneAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_edit_house` | `actions.definitions.almanach.AlmanachEditHouseAction` | almanach / self | `frontend/e2e/evidence/house-observances-4206.spec.ts`, `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_edit_kin` | `actions.definitions.almanach.AlmanachEditKinAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_edit_person` | `actions.definitions.almanach.AlmanachEditPersonAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_found_organization` | `actions.definitions.almanach.AlmanachFoundOrganizationAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_link_kin` | `actions.definitions.almanach.AlmanachLinkKinAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
+| `almanach_move_rung` | `actions.definitions.almanach.AlmanachMoveRungAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_name_rung` | `actions.definitions.almanach.AlmanachNameRungAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_open_crew_slot` | `actions.definitions.almanach.AlmanachOpenCrewSlotAction` | almanach / self | `src/actions/tests/test_almanach_people_actions.py`, `src/actions/tests/test_base.py` |
 | `almanach_plan_estate` | `actions.definitions.almanach.AlmanachPlanEstateAction` | almanach / self | `src/actions/tests/test_almanach_actions.py`, `src/actions/tests/test_base.py` |
@@ -1139,7 +1141,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `dashboard/` | `GMDashboardView` | `world.gm.urls` | `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/e2e/evidence/standoff-named-npc-4373.spec.ts`, `frontend/e2e/pantheon.spec.ts`, `frontend/e2e/stories-gm.spec.ts` (+38) |
 | `attention/` | `GMAttentionView` | `world.gm.urls` | `frontend/e2e/evidence/character-slots-3996.spec.ts`, `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/e2e/selected-character-chip.spec.ts`, `frontend/src/components/__tests__/Header.test.tsx` (+30) |
 | `looking-for-table/` | `LookingForTableBrowseView` | `world.gm.urls` | `src/world/gm/tests/test_looking_for_table_services.py`, `src/world/gm/tests/test_looking_for_table_views.py` |
-| `domains/` | `GoalDomainViewSet` | `world.goals.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts` (+56) |
+| `domains/` | `GoalDomainViewSet` | `world.goals.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts` (+57) |
 | `my-goals/` | `CharacterGoalViewSet` | `world.goals.urls` | `src/web/tests/test_url_imports.py`, `src/world/goals/tests/test_offscreen_gate_web.py`, `src/world/goals/tests/test_views.py`, `src/world/scenes/tests/test_offscreen_gate_persona.py` |
 | `my-goals/update/` | `CharacterGoalViewSet` | `world.goals.urls` | `src/web/tests/test_url_imports.py`, `src/world/goals/tests/test_offscreen_gate_web.py`, `src/world/goals/tests/test_views.py`, `src/world/scenes/tests/test_offscreen_gate_persona.py` |
 | `journals/` | `GoalJournalViewSet` | `world.goals.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts` (+46) |
@@ -1209,7 +1211,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `signatures/` | `SignatureViewSet` | `world.magic.urls` | `src/typeclasses/tests/test_cmdset_updates.py`, `src/typeclasses/tests/test_login_entry.py`, `src/world/character_sheets/tests/test_sheet_personalization.py`, `src/world/character_sheets/tests/test_viewset.py` (+3) |
 | `motif-styles/` | `MotifStyleViewSet` | `world.magic.urls` | `frontend/src/magic/__tests__/queries.test.tsx`, `src/world/magic/tests/test_motif_style_views.py`, `src/world/magic/tests/test_technique_progress_views.py` |
 | `technique-progress/` | `TechniqueProgressViewSet` | `world.magic.urls` | `frontend/src/magic/__tests__/queries.test.tsx`, `frontend/src/magic/components/TechniqueProgressPanel.test.tsx`, `src/world/magic/tests/test_technique_progress_config.py`, `src/world/magic/tests/test_technique_progress_views.py` |
-| `progression/` | `MagicProgressionView` | `world.magic.urls` | `frontend/e2e/journals-reading-room.spec.ts`, `frontend/src/components/__tests__/Header.test.tsx`, `frontend/src/components/__tests__/NominateButton.test.tsx`, `frontend/src/hooks/__tests__/handleKudosReceivedPayload.test.ts` (+270) |
+| `progression/` | `MagicProgressionView` | `world.magic.urls` | `frontend/e2e/journals-reading-room.spec.ts`, `frontend/src/components/__tests__/Header.test.tsx`, `frontend/src/components/__tests__/NominateButton.test.tsx`, `frontend/src/hooks/__tests__/handleKudosReceivedPayload.test.ts` (+271) |
 | `applicable-pulls/` | `ApplicablePullsView` | `world.magic.urls` | `frontend/e2e/evidence/combat-mark-4603.spec.ts`, `src/world/magic/tests/test_pull_applicability.py` |
 | `thread-hub-summary/` | `ThreadHubSummaryView` | `world.magic.urls` | `frontend/src/magic/__tests__/queries.test.tsx`, `src/world/magic/tests/test_thread_hub_summary_view.py` |
 | `thread-pull-preview/` | `ThreadPullPreviewView` | `world.magic.urls` | `src/world/magic/tests/test_api.py` |
