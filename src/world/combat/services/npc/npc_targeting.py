@@ -208,6 +208,30 @@ def _select_opponent_targets(
     )
 
 
+def _targetable_participants(encounter: CombatEncounter) -> list[CombatParticipant]:
+    """The PCs an NPC may pick as a target this round.
+
+    Design: NPCs target PCs who can still act (not dead, not incapacitated).
+    Unconscious PCs (awareness 0) are "down" and not picked as targets; a
+    dying-but-conscious PC remains in the fight and is targetable. can_act is
+    the same coarse agency gate used for declaration eligibility.
+    Intangible PCs (incorporeal, sunk, phased) are also excluded (#1584 Task 8).
+    """
+    from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+    from world.conditions.services import is_untargetable  # noqa: PLC0415
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    candidates = CombatParticipant.objects.filter(
+        encounter=encounter,
+        status=ParticipantStatus.ACTIVE,
+    ).select_related("character_sheet__character")
+    return [
+        p
+        for p in candidates
+        if can_act(p.character_sheet) and not is_untargetable(p.character_sheet.character)
+    ]
+
+
 def _npc_action_target_pool(
     opponent: CombatOpponent,
     active_participants: list[CombatParticipant],

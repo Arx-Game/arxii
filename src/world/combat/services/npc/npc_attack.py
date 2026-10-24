@@ -46,12 +46,18 @@ def _execute_npc_attack(  # noqa: PLR0913
     threat_map: dict[int, int] | None,
     shield_participant_ids: set[int] | None,
     actions: list[CombatOpponentAction],
-) -> None:
+    pool_by_delivery: dict[str, list] | None = None,
+) -> bool:
     """Execute one NPC attack, appending to *actions* or declaring a windup.
 
     Picks a weighted-random threat entry; if it has ``windup_rounds > 0``
     declares a pending windup attack (no immediate row). Otherwise creates a
     ``CombatOpponentAction`` row and sets its targets.
+
+    ``pool_by_delivery`` (#4607) narrows the pool to the targets the CHOSEN entry's
+    delivery can strike this round (``reachable_pools_by_delivery``); the caller passes
+    only entries whose delivery has someone in reach. Returns True when a wind-up was
+    declared.
 
     Args:
         opponent: The attacking ``CombatOpponent``.
@@ -63,9 +69,12 @@ def _execute_npc_attack(  # noqa: PLR0913
         threat_map: Optional threat-map for target selection.
         shield_participant_ids: Optional set of shield-bearing participant IDs.
         actions: The accumulator list to append created actions to.
+        pool_by_delivery: Optional per-delivery reachable targets (see above).
     """
     weights = [e.weight for e in eligible]
     chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311 # NOSONAR game RNG, not crypto
+    if pool_by_delivery is not None:
+        target_pool = pool_by_delivery.get(chosen.delivery) or target_pool
 
     # Telegraphed wind-up (#2637 design 2-3): a windup_rounds entry commits
     # to a PendingOpponentAttack instead of a same-round CombatOpponentAction.
@@ -81,7 +90,7 @@ def _execute_npc_attack(  # noqa: PLR0913
             threat_map=threat_map,
             shield_participant_ids=shield_participant_ids,
         )
-        return
+        return True
 
     action = CombatOpponentAction.objects.create(
         opponent=opponent,
@@ -98,6 +107,7 @@ def _execute_npc_attack(  # noqa: PLR0913
         shield_participant_ids=shield_participant_ids,
     )
     actions.append(action)
+    return False
 
 
 def resolve_npc_attack(

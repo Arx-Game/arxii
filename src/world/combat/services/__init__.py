@@ -391,8 +391,13 @@ from world.combat.services.npc.npc_cooldowns import (
     _collect_cooldown_actions,
     _collect_cooldown_pending,
 )
+from world.combat.services.npc.npc_movement import (
+    advance_opponent,
+    refit_targets,
+)
 from world.combat.services.npc.npc_selection import (
-    _build_opponent_round_actions,
+    ensure_opponent_plans,
+    plan_opponent_round,
     select_npc_actions,
 )
 from world.combat.services.npc.npc_targeting import (
@@ -589,7 +594,6 @@ __all__ = [
     "_build_affected_targets",
     "_build_combat_result",
     "_build_cooldown_q_filters",
-    "_build_opponent_round_actions",
     "_build_round_combo",
     "_bulk_primary_levels",
     "_cancel_pending_certain_death_if_abandoned",
@@ -768,6 +772,7 @@ __all__ = [
     "active_combat_engagement_for",
     "add_opponent",
     "add_participant",
+    "advance_opponent",
     "apply_damage_to_opponent",
     "apply_damage_to_participant",
     "apply_equipped_armor_soak",
@@ -806,6 +811,7 @@ __all__ = [
     "elevation_bonus",
     "emit_event",
     "end_encounter",
+    "ensure_opponent_plans",
     "expire_pulls_for_round",
     "finalize_new_encounter",
     "get_clash_config",
@@ -824,7 +830,9 @@ __all__ = [
     "maybe_resolve_on_ready",
     "minimum_break_bar_threshold",
     "perform_check",
+    "plan_opponent_round",
     "random",
+    "refit_targets",
     "remove_opponent",
     "remove_participant",
     "resolve_cast_position_params",
