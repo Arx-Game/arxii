@@ -25,6 +25,7 @@ from actions.definitions.almanach import (
     AlmanachPlantRungAction,
     AlmanachPublishAction,
     AlmanachSwearAction,
+    AlmanachVacateHolderAction,
 )
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.areas.factories import AreaFactory
@@ -36,7 +37,7 @@ from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import plant_rung
 from world.societies.houses.constants import HouseState, TitleTier
 from world.societies.houses.factories import HoldingKindFactory
-from world.societies.houses.models import Title
+from world.societies.houses.models import Domain, FealtyEdge, Title
 
 
 def _staff_actor(db_key: str) -> ObjectDB:
@@ -241,7 +242,7 @@ class AlmanachActionTests(TestCase):
         )
         assert not result.success
 
-    def _held_duchy(self, name: str):
+    def _duchy_held_by(self, name: str):
         house = OrganizationFactory(name=name, family=FamilyFactory(name=name))
         duchy = plant_rung(
             realm=self.realm,
@@ -271,7 +272,7 @@ class AlmanachActionTests(TestCase):
         assert Area.objects.count() < areas_before
 
     def test_delete_rung_refuses_held_parented_and_inner_rungs(self) -> None:
-        _, held = self._held_duchy("Katta")
+        _, held = self._duchy_held_by("Katta")
         assert not AlmanachDeleteRungAction().run(self.staff, title_id=held.pk).success
 
         parent = self._vacant(TitleTier.DUCHY, "Fervor", self.kingdom)
@@ -335,6 +336,62 @@ class AlmanachActionTests(TestCase):
     def test_player_is_refused_delete_and_move_rung(self) -> None:
         assert not AlmanachDeleteRungAction().run(self.player, title_id=1).success
         assert not AlmanachMoveRungAction().run(self.player, title_id=1, parent_title_id=2).success
+
+    def test_vacate_holder_returns_the_chain_to_unheld_and_claimable(self) -> None:
+        _, duchy = self._duchy_held_by("Katta")
+
+        result = AlmanachVacateHolderAction().run(self.staff, title_id=duchy.pk)
+
+        assert result.success, result.message
+        chain = Title.objects.filter(seat_domain=duchy.seat_domain)
+        assert chain.exists()
+        assert all(t.house_id is None and t.is_claimable for t in chain)
+        assert not Domain.objects.filter(
+            area__in=[t.seat_domain.area for t in chain], owner_org__isnull=False
+        ).exists()
+
+    def test_vacate_holder_reswears_a_vassal_to_the_next_liege_up(self) -> None:
+        katta, duchy = self._duchy_held_by("Katta")
+        vassal = OrganizationFactory(name="Vampa", family=FamilyFactory(name="Vampa"))
+        plant_rung(
+            realm=self.realm,
+            tier=TitleTier.COUNTY,
+            name="County of Vampa",
+            parent_title=duchy,
+            held_by=vassal,
+        )
+        assert FealtyEdge.objects.get(vassal=vassal).liege_id == katta.pk
+
+        result = AlmanachVacateHolderAction().run(self.staff, title_id=duchy.pk)
+
+        assert result.success, result.message
+        assert FealtyEdge.objects.get(vassal=vassal).liege_id == self.crown.pk
+
+    def test_vacate_holder_frees_a_vassal_when_no_liege_is_left(self) -> None:
+        _, duchy = self._duchy_held_by("Katta")
+        assert FealtyEdge.objects.filter(vassal__name="Katta").exists()
+
+        result = AlmanachVacateHolderAction().run(self.staff, title_id=self.kingdom.pk)
+
+        assert result.success, result.message
+        assert not FealtyEdge.objects.filter(vassal__name="Katta").exists()
+        duchy.refresh_from_db()
+        assert duchy.house_id is not None  # the duchy itself stays held
+
+    def test_vacate_holder_refuses_a_vacant_rung_an_inner_member_and_a_stranger(self) -> None:
+        _, duchy = self._duchy_held_by("Katta")
+        vacant = plant_rung(
+            realm=self.realm, tier=TitleTier.DUCHY, name="Fervor", parent_title=self.kingdom
+        )
+        assert not AlmanachVacateHolderAction().run(self.staff, title_id=vacant.pk).success
+        inner = Title.objects.filter(seat_domain=duchy.seat_domain).exclude(pk=duchy.pk).first()
+        assert inner is not None
+        assert not AlmanachVacateHolderAction().run(self.staff, title_id=inner.pk).success
+        assert not AlmanachVacateHolderAction().run(self.staff, title_id=0).success
+
+    def test_player_is_refused_vacate_holder(self) -> None:
+        result = AlmanachVacateHolderAction().run(self.player, title_id=self.kingdom.pk)
+        assert not result.success
 
     def test_plant_rung_refuses_parent_title_with_no_seat_domain(self) -> None:
         orphan = Title.objects.create(name="Orphan", tier=TitleTier.BARONY, realm=self.realm)

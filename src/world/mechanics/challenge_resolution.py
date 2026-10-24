@@ -7,14 +7,20 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.checks.consequence_resolution import apply_resolution
+from world.checks.constants import ModifierSourceKind
 from world.checks.models import Consequence
 from world.checks.outcome_utils import (
     build_outcome_display,
     filter_character_loss,
     select_weighted,
 )
-from world.checks.services import perform_check
-from world.checks.types import PendingResolution, ResolutionContext
+from world.checks.services import collect_check_modifiers, perform_check
+from world.checks.types import (
+    ModifierBreakdown,
+    ModifierContribution,
+    PendingResolution,
+    ResolutionContext,
+)
 from world.mechanics.constants import CapabilitySourceType, DiscoveryType, ResolutionType
 from world.mechanics.models import (
     ApproachConsequence,
@@ -32,6 +38,8 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import PendingActionResolution
+    from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType
     from world.checks.types import CheckResult, ExtraTraitTerm
     from world.mechanics.models import (
         ChallengeApproach,
@@ -85,34 +93,60 @@ def resolve_challenge(
     Resolve a character's action against a challenge.
 
     1. Validate state
-    2. Fold capability_source's value into extra_modifiers
-    3. Perform check
+    2. Gather the character's modifiers for the check (#4629)
+    3. Perform check with them, the capability source's value and ``extra_modifiers``
     4. Select consequence
     5. Apply effects
     6. Update challenge state
-    7. Create record
+    7. Create record, storing the breakdown the roll used
     8. Return result
+
+    The roll counts what any other check counts: worn items, buffs, conditions,
+    distinctions and the active scene's modifiers, gathered by
+    ``collect_check_modifiers`` (see :func:`_gather_challenge_modifiers`). The
+    capability source's ``value`` (the one capability instance that opened this
+    approach, ADR-0145) is added once, as before; authored ``CheckTypeCapabilityModifier``
+    points are added once, by ``perform_check`` itself. ``extra_modifiers`` is the
+    caller's own bonus (the bond bonus on Interpose and Succor).
     """
     _validate(character, challenge_instance, approach)
     extra_traits = capability_skill_terms(character, capability_source)
 
     if approach.action_template is not None:
         return _resolve_via_template(
-            character, challenge_instance, approach, extra_traits=extra_traits
+            character,
+            challenge_instance,
+            approach,
+            capability_source,
+            extra_modifiers=extra_modifiers,
+            extra_traits=extra_traits,
         )
 
     template = challenge_instance.template
 
-    # 2-3. Fold the capability source's value into extra_modifiers, then perform check.
+    # 2-3. Gather modifiers, then perform check.
     # effective_severity, not template.severity: a GM who placed this instance may
     # have shifted it one band with a stated reason (#2865).
+    breakdown = _gather_challenge_modifiers(
+        character,
+        approach.check_type,
+        challenge_instance,
+        capability_source,
+        extra_traits=extra_traits,
+    )
     check_result = perform_check(
         character,
         approach.check_type,
         target_difficulty=challenge_instance.effective_severity,
-        extra_modifiers=extra_modifiers + capability_source.value,
+        extra_modifiers=_roll_modifiers(capability_source, breakdown, extra_modifiers),
         extra_traits=extra_traits,
+        extra_standing=breakdown.standing_total if breakdown is not None else 0,
     )
+    if breakdown is not None:
+        # Lazy import: world.conditions.services imports world.checks at load time.
+        from world.conditions.services import spend_contributing_conditions  # noqa: PLC0415
+
+        spend_contributing_conditions(breakdown)
 
     # 4. Select consequence and resolution metadata
     consequence, resolution_type = _select_consequence(
@@ -167,7 +201,7 @@ def resolve_challenge(
         pool=None,
         check_type=approach.check_type,
         consequence=consequence,
-        extra_traits=extra_traits,
+        breakdown=breakdown,
     )
 
     # 8. Build display consequences and return
@@ -210,6 +244,85 @@ def capability_skill_terms(
     return (term,) if term is not None else ()
 
 
+def _sheet_or_none(character: ObjectDB) -> CharacterSheet | None:
+    """The character's sheet, or None for a sheet-less actor (a GM puppet, a prop)."""
+    try:
+        return character.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return None
+
+
+def _capability_source_contribution(
+    capability_source: CapabilitySource,
+) -> list[ModifierContribution]:
+    """The approach's capability as a labelled CAPABILITY row, for the stored record.
+
+    CAPABILITY rows stay out of ``ModifierBreakdown.extra_modifiers_total`` because the
+    roll adds those points by its own route (#4453); this one's route is
+    :func:`_roll_modifiers`, which adds ``capability_source.value`` once. Labelled
+    "<capability>: <source>" so it never reads like an authored check link
+    ("Capability: <capability>"). A zero value moved nothing and is not recorded.
+    """
+    if capability_source.value == 0:
+        return []
+    names = [n for n in (capability_source.capability_name, capability_source.source_name) if n]
+    return [
+        ModifierContribution(
+            source_kind=ModifierSourceKind.CAPABILITY,
+            source_label=": ".join(names) or "Capability",
+            value=capability_source.value,
+        )
+    ]
+
+
+def _gather_challenge_modifiers(
+    character: ObjectDB,
+    check_type: CheckType,
+    challenge_instance: ChallengeInstance,
+    capability_source: CapabilitySource,
+    *,
+    extra_traits: tuple[ExtraTraitTerm, ...] = (),
+) -> ModifierBreakdown | None:
+    """The character's modifiers for a challenge roll, gathered once, before it (#4629).
+
+    Through ``collect_check_modifiers`` with the active scene at the challenge's
+    location, so worn items, buffs, conditions, distinctions, fashion and the scene's
+    own modifiers count as on any other check. The approach's capability rides along
+    as a CAPABILITY row (:func:`_capability_source_contribution`) so the stored record
+    shows it. This one breakdown feeds the roll and is the one stored on the
+    ``ConsequenceOutcome``; nothing rebuilds it afterwards. None for a sheet-less
+    actor, which rolls without gathered modifiers.
+    """
+    sheet = _sheet_or_none(character)
+    if sheet is None:
+        return None
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    return collect_check_modifiers(
+        sheet,
+        check_type,
+        scene=get_active_scene(challenge_instance.location),
+        extra_contributions=_capability_source_contribution(capability_source),
+        extra_traits=extra_traits,
+    )
+
+
+def _roll_modifiers(
+    capability_source: CapabilitySource,
+    breakdown: ModifierBreakdown | None,
+    extra_modifiers: int,
+) -> int:
+    """What a challenge roll adds as ``extra_modifiers``: each term exactly once.
+
+    The caller's bonus, the capability source's value (ADR-0145), and the gathered
+    breakdown's ``extra_modifiers_total``, which leaves out every CAPABILITY row:
+    authored capability links are added by ``perform_check`` itself and the source's
+    row is the value added here (#4453).
+    """
+    gathered = breakdown.extra_modifiers_total if breakdown is not None else 0
+    return extra_modifiers + capability_source.value + gathered
+
+
 def _record_challenge_outcome(  # noqa: PLR0913 - keyword-only record context
     *,
     record: CharacterChallengeRecord,
@@ -217,7 +330,7 @@ def _record_challenge_outcome(  # noqa: PLR0913 - keyword-only record context
     pool,  # actions.ConsequencePool | None — no import to avoid a cross-app cycle
     check_type,  # checks.CheckType | None
     consequence: Consequence,
-    extra_traits: tuple[ExtraTraitTerm, ...] = (),
+    breakdown: ModifierBreakdown | None,
 ) -> None:
     """Persist a ConsequenceOutcome for a challenge resolution (#850).
 
@@ -229,25 +342,21 @@ def _record_challenge_outcome(  # noqa: PLR0913 - keyword-only record context
     A null pool is valid — it represents a plain (non-template) challenge resolution
     whose roulette is reconstructed on read from the authored consequence links.
 
-    The ModifierBreakdown is rebuilt from the character's live modifiers via
-    collect_check_modifiers — the challenge pipeline does not retain a breakdown
-    object, and rebuilding at record time is faithful to resolution-time state.
+    ``breakdown`` is the one the roll used, gathered before it by
+    :func:`_gather_challenge_modifiers` and passed through (#4629). It is never
+    rebuilt here: a rebuild after the roll would see conditions the consequence just
+    applied or a once-only condition the roll just spent, and before #4629 it stored
+    modifiers the roll had never counted. An empty breakdown means the roll used
+    none (a gate-only template resolution).
     """
-    from world.checks.services import (  # noqa: PLC0415
-        collect_check_modifiers,
-        record_consequence_outcome,
-    )
+    from world.checks.services import record_consequence_outcome  # noqa: PLC0415
 
-    if check_type is None:
+    if check_type is None or breakdown is None:
         return
-    try:
-        character_sheet = character.sheet_data
-    except (AttributeError, ObjectDoesNotExist):
-        return
+    character_sheet = _sheet_or_none(character)
     if character_sheet is None:
         return
 
-    breakdown = collect_check_modifiers(character_sheet, check_type, extra_traits=extra_traits)
     record_consequence_outcome(
         character_sheet,
         check_type,
@@ -378,15 +487,26 @@ def _resolution_type_for(
     return link.resolution_type if link else ResolutionType.PERSONAL
 
 
-def _resolve_via_template(
+def _resolve_via_template(  # noqa: PLR0913 - mirrors resolve_challenge's inputs
     character: ObjectDB,
     challenge_instance: ChallengeInstance,
     approach: ChallengeApproach,
+    capability_source: CapabilitySource,
     *,
+    extra_modifiers: int = 0,
     extra_traits: tuple[ExtraTraitTerm, ...] = (),
 ) -> ChallengeResolutionResult:
-    """Resolve challenge using the approach's ActionTemplate pipeline."""
-    from actions.services import start_action_resolution  # noqa: PLC0415
+    """Resolve challenge using the approach's ActionTemplate pipeline.
+
+    The template's main check gets the same roll inputs as the plain path (#4629):
+    the gathered modifiers, the capability source's value and the caller's
+    ``extra_modifiers``. Gates roll without them, as ``start_action_resolution``
+    documents for every caller.
+    """
+    from actions.services import (  # noqa: PLC0415
+        spend_or_defer_condition_uses,
+        start_action_resolution,
+    )
 
     action_template = approach.action_template
     # target=challenge_instance.target_object (#2503) — see the direct-path comment above.
@@ -396,13 +516,28 @@ def _resolve_via_template(
         target=challenge_instance.target_object,
     )
 
+    breakdown = _gather_challenge_modifiers(
+        character,
+        action_template.check_type,
+        challenge_instance,
+        capability_source,
+        extra_traits=extra_traits,
+    )
     pending = start_action_resolution(
         character=character,
         template=action_template,
         target_difficulty=challenge_instance.effective_severity,
         context=context,
+        extra_modifiers=_roll_modifiers(capability_source, breakdown, extra_modifiers),
         extra_traits=extra_traits,
+        extra_standing=breakdown.standing_total if breakdown is not None else 0,
     )
+    if breakdown is not None:
+        spend_or_defer_condition_uses(pending, breakdown)
+        if pending.main_result is None:
+            # The main check never rolled (a gate stopped or paused it): nothing the
+            # breakdown holds moved a roll, so the record stores no modifiers.
+            breakdown = ModifierBreakdown()
 
     consequence, check_result = _outcome_of_pending(pending)
     resolution_type = _resolution_type_for(challenge_instance, consequence)
@@ -432,7 +567,7 @@ def _resolve_via_template(
         pool=action_template.consequence_pool,
         check_type=action_template.check_type,
         consequence=consequence,
-        extra_traits=extra_traits,
+        breakdown=breakdown,
     )
 
     all_consequences = list(

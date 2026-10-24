@@ -38,6 +38,7 @@ from actions.definitions.almanach import (
     AlmanachSetHolderAction,
     AlmanachSetStatusAction,
     AlmanachSwearAction,
+    AlmanachVacateHolderAction,
 )
 from actions.definitions.alterations import ResolveAlterationAction
 from actions.definitions.appetites import DrainAction, FeedAction
@@ -1292,6 +1293,7 @@ _ALL_ACTIONS: list[Action] = [
     AlmanachAssignHolderAction(),
     AlmanachDeleteRungAction(),
     AlmanachMoveRungAction(),
+    AlmanachVacateHolderAction(),
     AlmanachEditHouseAction(),
     AlmanachSwearAction(),
     AlmanachDescribeDemesneAction(),

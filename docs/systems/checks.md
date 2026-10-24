@@ -612,9 +612,21 @@ All models registered with appropriate admin interfaces:
   (`world.conditions.services` already imports `world.checks.services` at module scope)
 - **Attempts app**: Calls `perform_check()` for resolution; provides roulette display content via `ConsequenceDisplay`
 - **Callers** (goals, magic, combat, conditions, GM adjudication): Compute `extra_modifiers` before calling `perform_check()`
-- **Mechanics app**: `resolve_challenge()` folds its `capability_source.value` (a `CapabilitySource`, e.g. from a
-  technique) into `extra_modifiers` before calling `perform_check()`; a technique source also adds that
-  technique's skill as `extra_traits` (#4450), on the direct roll and the action-template path alike
+- **Mechanics app**: `resolve_challenge()` gathers the character's modifiers with
+  `collect_check_modifiers` (the active scene at the challenge's location) once, BEFORE the roll
+  (#4629), and rolls `perform_check()` with `extra_modifiers = caller bonus + capability_source.value +
+  breakdown.extra_modifiers_total` and `extra_standing = breakdown.standing_total`. Each term counts once:
+  the capability source's value (a `CapabilitySource`, e.g. from a technique; ADR-0145's narrower channel)
+  is added there, authored `CheckTypeCapabilityModifier` points are added by `perform_check` itself, and
+  both appear in the breakdown only as CAPABILITY rows, which `extra_modifiers_total` leaves out. Once-only
+  conditions that helped are spent. `_record_challenge_outcome` stores THAT breakdown on the
+  `ConsequenceOutcome` (the capability source as a "<capability>: <source>" CAPABILITY row); it no longer
+  rebuilds one after the roll, which had stored worn items, buffs and conditions the roll never counted.
+  The action-template path (`_resolve_via_template`) feeds the same inputs to the template's main check
+  through `start_action_resolution` (gates roll without them), where it had dropped the capability value
+  and the caller's bonus; a gate-only resolution stores no modifier rows. A technique source also adds
+  that technique's skill as `extra_traits` (#4450), on the direct roll and the action-template path alike.
+  The caller's own bonus (the bond bonus on Interpose and Succor) moves the roll but has no stored row.
 
 ---
 
@@ -633,6 +645,10 @@ point:
   code path.
 - **Situational modifier**: at most one band of `edge` (easier) or `setback` (harder) shift, each
   requiring a free-text reason that is echoed into the result. Never an integer offset.
+- **The target's own modifiers** (#4629): the roll goes through `perform_check_with_modifiers` with the
+  target's active scene, so the target's worn items, buffs, conditions and distinctions count as on any
+  other check. They are the character's, not a GM-chosen number, so Decision 3 of #2118 (no integer
+  passthrough) is untouched; the band step stays the GM's only lever.
 - **Result**: number-free — only `CheckResult.outcome_name` reaches the message (never
   `total_points`/`trait_points`/`success_level`/the roll), and it goes to the invoking GM only
   (ADR-0031). No audit model records the invocation; the GM narrates the outcome via pose.
@@ -656,8 +672,8 @@ catalog search/listing, and band validation this action uses were extracted into
 `render_catalog_listing`/`resolve_band`/`catalog_queryset` — so every catalog-check
 invocation surface (this SENIOR ad-hoc action, and the player/GM scene surfaces
 below) resolves against the exact same code, never a parallel reimplementation.
-`InvokeCatalogCheckAction` itself is unchanged behaviorally — same messages, same
-gate, same result shape.
+`InvokeCatalogCheckAction` itself was unchanged behaviorally by that extraction: same
+messages, same gate, same result shape.
 
 ---
 
@@ -676,7 +692,9 @@ Three loops, all thin `action.run()` dispatchers over the shared
   SELF-target only. Resolves `check_type_ref` against the catalog scoped to the
   actor's own `CharacterSheet` (`catalog_queryset(owner_sheet=actor_sheet)` — sees
   staff-authored rows plus the actor's own synthesized magic `CheckType`, never
-  another character's), fires `perform_check` as-is, and broadcasts a
+  another character's), rolls it through `perform_check_with_modifiers` with the
+  room's active scene (#4629: worn items, buffs, conditions, distinctions and scene
+  modifiers count; a Call on favor's bonus rides as `extra_modifiers`), and broadcasts a
   Narrator-style OUTCOME line to the room via `world.scenes.interaction_services
   .record_interaction` + `render_challenge_outcome_narration` — the roller's own
   currently-presenting persona names the roll (never the raw character key; the

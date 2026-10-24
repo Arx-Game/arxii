@@ -1,6 +1,6 @@
 """Staff Almanach de Catenys actions (#3983): the feudal ladder + house record.
 
-Thirteen REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
+Fourteen REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
 by ``StaffOnlyPrerequisite`` — the shared ``action.run()`` seam a future web
 staff console and telnet alike will dispatch through, mirroring the shape of
 the world-builder canvas (``world_builder.py``). Each is a thin wrapper over
@@ -308,6 +308,43 @@ class AlmanachMoveRungAction(_AlmanachAction):
         return ActionResult(
             success=True,
             message=f"{title.name or 'The rung'} moved under {parent.name or 'its new parent'}.",
+            data={"title_id": title.pk},
+        )
+
+
+@dataclass
+class AlmanachVacateHolderAction(_AlmanachAction):
+    """Unseat a rung's holder. Kwargs: ``title_id``.
+
+    Wraps ``almanach.vacate_holder``, the inverse of ``almanach_assign_holder``: the
+    chain goes back to unheld and claimable, and houses sworn to the old holder by
+    the land they hold beneath it are re-sworn upward.
+    """
+
+    key: str = "almanach_vacate_holder"
+    name: str = "Vacate Holder"
+    icon: str = "crown"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import vacate_holder  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        title = Title.objects.filter(pk=kwargs.get("title_id")).first()
+        if title is None:
+            return ActionResult(success=False, message="No such title.")
+        try:
+            title = vacate_holder(title)
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"{title.name or 'The rung'} is vacant.",
             data={"title_id": title.pk},
         )
 

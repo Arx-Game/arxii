@@ -812,12 +812,13 @@ itself.
 
 ### Actions (`actions/definitions/almanach.py`)
 
-Thirteen REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
+Fourteen REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
 `StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`),
 `AlmanachBatchUnclaimedAction` (`almanach_batch_unclaimed`), `AlmanachNameRungAction`
 (`almanach_name_rung`), `AlmanachAssignHolderAction` (`almanach_assign_holder`, kwargs `title_id`,
 `org_id`: `almanach.assign_holder`, seating an existing house on a rung's whole chain, vacant or
-held, #4614), `AlmanachDeleteRungAction` (`almanach_delete_rung`: `almanach.delete_rung` removes a
+held, #4614), `AlmanachVacateHolderAction` (`almanach_vacate_holder`, kwarg `title_id`:
+`almanach.vacate_holder`, the inverse, #4615), `AlmanachDeleteRungAction` (`almanach_delete_rung`: `almanach.delete_rung` removes a
 chain's Titles, Domains and Areas, refused while held, with rungs, holdings or rooms beneath, or
 when something else still points at the land) and `AlmanachMoveRungAction` (`almanach_move_rung`,
 `title_id` + `parent_title_id`: `almanach.move_rung` reparents the rung's Area, refused for another
@@ -839,7 +840,10 @@ buttons.
 
 The same page seats an existing house: a "house" select and Seat button, offered only on a
 chain's top title (`assign_holder` refuses an inner chain member), over `almanach_assign_holder`
-(#4614). Create Family stays the way to seat a brand-new family. A chain-top rung's page also offers Move
+(#4614). Create Family stays the way to seat a brand-new family. A held chain-top rung also offers
+Vacate (a second press confirms): the chain returns to unheld and claimable, its Domains lose
+their owner, and a house sworn to the old holder by the land it holds beneath is re-sworn to the
+nearest remaining liege, or released when none is left (#4615). A chain-top rung's page also offers Move
 under (a select of the realm's rungs) and, while unheld, Delete rung (second press; lands on the
 realm ladder after) (#4617).
 

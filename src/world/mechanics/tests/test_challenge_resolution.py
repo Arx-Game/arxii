@@ -1012,7 +1012,10 @@ class TechniqueSkillTermTests(TestCase):
         return (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),)
 
     def _resolve(self, source: CapabilitySource):
-        """Resolve and return (terms the roll carried, terms the recorded breakdown used)."""
+        """Resolve and return (terms the roll carried, terms the recorded breakdown used).
+
+        The breakdown is gathered once, before the roll, and is the one stored (#4629).
+        """
         from world.checks import services as check_services
         from world.checks.test_helpers import force_check_outcome
         from world.mechanics.challenge_resolution import resolve_challenge
@@ -1021,7 +1024,8 @@ class TechniqueSkillTermTests(TestCase):
         with (
             force_check_outcome(self.outcome) as capture,
             patch(
-                "world.checks.services.collect_check_modifiers", side_effect=real_collect
+                "world.mechanics.challenge_resolution.collect_check_modifiers",
+                side_effect=real_collect,
             ) as collect,
         ):
             resolve_challenge(self.character, self._challenge(), self.approach, source)
