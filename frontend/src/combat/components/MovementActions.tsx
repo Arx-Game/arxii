@@ -10,6 +10,7 @@
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { PlayerAction } from '@/scenes/actionTypes';
+import { hopsLeftLine } from '@/combat/roundActionHelpers';
 import { isDispatchFailure, type DispatchActionRequest, type DispatchResult } from '@/combat/types';
 
 export interface MovementActionsProps {
@@ -30,12 +31,12 @@ export function MovementActions({
   if (actions.length === 0) return null;
 
   // While the round is open the server puts "N hops left this round." on each move it offers.
-  const hopsLine = actions[0].prerequisite_met ? actions[0].description : '';
+  const hopsLine = hopsLeftLine(actions);
 
   return (
     <div className="space-y-2" data-testid="movement-section">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Move</p>
-      {hopsLine.includes('hop') && (
+      {hopsLine !== null && (
         <p className="text-xs text-muted-foreground" data-testid="movement-hops-line">
           {hopsLine}
         </p>

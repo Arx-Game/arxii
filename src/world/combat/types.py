@@ -182,6 +182,19 @@ class ActionOutcome:
 
 
 @dataclass
+class StrikeResult:
+    """What one ``fire_waiting_strikes`` call did (#4608).
+
+    ``outcomes`` are the waiting strikes that fired, for the round's outcome list.
+    ``mover_stopped`` is True when a strike left the mover unable to go on (defeated,
+    downed, fled): its attack and the rest of its move are cancelled this round.
+    """
+
+    outcomes: list[ActionOutcome] = field(default_factory=list)
+    mover_stopped: bool = False
+
+
+@dataclass
 class RoundResolutionResult:
     """Full result of resolving a combat round."""
 

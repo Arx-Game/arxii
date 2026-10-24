@@ -139,6 +139,9 @@ class CombatManeuver(models.TextChoices):
     USE_ITEM = "use_item", "Use Item"
     CHARGE = "charge", "Charge"
     JOUST = "joust", "Joust"
+    # The waiting strike (#4608): a melee strike held for an enemy that comes into
+    # reach or attacks. It is the PC's one action for the round and fires at most once.
+    AWAIT_OPENING = "await_opening", "Wait for an opening"
 
 
 # ---------------------------------------------------------------------------
@@ -867,3 +870,24 @@ BOSS_PARLEY_RESISTANCE_STEP: int = 1
 PHASE_SHIFT_NARRATION = "{name} shifts - the fight changes."
 ENRAGE_NARRATION = "{name} is enraged."
 HELD_BACK_NARRATION = "{name} holds back."
+
+
+class WaitingStrikeReason(models.TextChoices):
+    """Why a waiting strike is asked to fire (#4608, slice 3 of #4576).
+
+    ARRIVED: the mover just ended a hop in the waiter's reach. ATTACKING: the mover is
+    about to attack the waiter. Arrival comes first in time, so an enemy that walks in
+    and then attacks draws the strike on arrival and the spent strike does not fire
+    again on its attack.
+    """
+
+    ARRIVED = "arrived", "Arrived in reach"
+    ATTACKING = "attacking", "Attacking"
+
+
+WAITING_STRIKE_NARRATION = "{name} meets {mover} with a waiting strike."
+WAITING_STRIKE_LAPSED_NARRATION = "{name} sees the opening, but cannot pay for the strike."
+WAITING_STRIKE_NEVER_CAME_NARRATION = "{name} waited for an opening that never came."
+STOPPED_BEFORE_STRIKING_NARRATION = "{name} is stopped before striking."
+# Label tag on the ActionOutcome of a waiting strike in the round's outcome list.
+WAITING_STRIKE_LABEL_TAG = "(waiting strike)"

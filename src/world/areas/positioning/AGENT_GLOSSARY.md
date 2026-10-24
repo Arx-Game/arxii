@@ -42,3 +42,15 @@ _Avoid_: square, tile, step (in code)
 **Strike reach** (#4607):
 Whether a strike lands from one position on another, by its delivery (`strike_reaches`): melee needs the same or an adjacent position, and a missile reaches anywhere in the room. A combatant with no position is always in reach. PC techniques keep their own reach value through `technique_can_reach`; both read `position_reachable`.
 _Avoid_: range, line of attack
+
+**Roofed position** (#4608, slice 3 of #4576):
+A position with overhead cover (`is_roofed`). No strike of any reach or delivery passes between it and any AERIAL position (`roof_between`), even its own aerial twin across the vertical edge, and no mover flies straight down into it or up out of it: a flier lands beside it and walks in. A forced landing ignores the roof. A position fact, not a shelter row (ADR-4608-A).
+_Avoid_: covered position (cover means shelter rows and the cover maneuver), indoors
+
+**Screened position** (#4608):
+A position that breaks line of sight (`screens_ranged`). A missile or room-wide strike at someone there must come from that position or one beside it (`screen_blocks`); melee is unaffected. Walls and Ramparts do not block line of sight.
+_Avoid_: concealed, hidden (concealment is a casting term), blind
+
+**Grounding** (#4608):
+Knocking a flier out of the air (`REMOVE_FLIGHT`, `ground_flier`). It is a fall through the plummet rules, not the soft landing `leave_aerial` gives: a character gets the catch window and lands at the end-of-round tick; a combat opponent lands at once with the fall damage on its health. The fall has no source, so it never kills.
+_Avoid_: landing, knockdown

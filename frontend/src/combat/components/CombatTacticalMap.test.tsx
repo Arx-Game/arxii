@@ -197,6 +197,8 @@ describe('CombatTacticalMap', () => {
             rampart_integrity: null,
             rampart_max_integrity: null,
             rampart_crack_state: null,
+            is_roofed: false,
+            screens_ranged: false,
           },
           {
             id: 102,
@@ -209,6 +211,8 @@ describe('CombatTacticalMap', () => {
             rampart_integrity: null,
             rampart_max_integrity: null,
             rampart_crack_state: null,
+            is_roofed: false,
+            screens_ranged: false,
           },
         ],
         position_edges: [
@@ -303,6 +307,8 @@ describe('CombatTacticalMap', () => {
             rampart_integrity: null,
             rampart_max_integrity: null,
             rampart_crack_state: null,
+            is_roofed: false,
+            screens_ranged: false,
           },
         ],
         position_edges: [],
@@ -409,6 +415,8 @@ describe('CombatTacticalMap', () => {
     rampart_integrity: null,
     rampart_max_integrity: null,
     rampart_crack_state: null,
+    is_roofed: false,
+    screens_ranged: false,
   }));
   const overlayEdges = [
     {
@@ -535,6 +543,8 @@ describe('CombatTacticalMap', () => {
             rampart_integrity: null,
             rampart_max_integrity: null,
             rampart_crack_state: null,
+            is_roofed: false,
+            screens_ranged: false,
           },
           {
             id: 102,
@@ -547,6 +557,8 @@ describe('CombatTacticalMap', () => {
             rampart_integrity: null,
             rampart_max_integrity: null,
             rampart_crack_state: null,
+            is_roofed: false,
+            screens_ranged: false,
           },
         ],
         position_edges: [
@@ -681,6 +693,8 @@ describe('CombatTacticalMap', () => {
             rampart_integrity: null,
             rampart_max_integrity: null,
             rampart_crack_state: null,
+            is_roofed: false,
+            screens_ranged: false,
           },
           {
             id: 102,
@@ -693,6 +707,8 @@ describe('CombatTacticalMap', () => {
             rampart_integrity: null,
             rampart_max_integrity: null,
             rampart_crack_state: null,
+            is_roofed: false,
+            screens_ranged: false,
           },
         ],
         position_edges: [],
@@ -797,6 +813,8 @@ describe('CombatTacticalMap', () => {
             rampart_integrity: null,
             rampart_max_integrity: null,
             rampart_crack_state: null,
+            is_roofed: false,
+            screens_ranged: false,
           },
         ],
         position_edges: [],
@@ -879,6 +897,8 @@ describe('CombatTacticalMap', () => {
             rampart_integrity: null,
             rampart_max_integrity: null,
             rampart_crack_state: null,
+            is_roofed: false,
+            screens_ranged: false,
           },
         ],
         position_edges: [],

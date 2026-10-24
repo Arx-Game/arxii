@@ -7,7 +7,7 @@ import { memo } from 'react';
 import { Handle, Position as FlowPosition } from '@xyflow/react';
 import type { Node, NodeProps } from '@xyflow/react';
 
-import { Shield, ShieldCheck, ShieldPlus, Swords } from 'lucide-react';
+import { EyeOff, House, Shield, ShieldCheck, ShieldPlus, Swords } from 'lucide-react';
 
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import type { PersonaAvatarSource } from '@/components/PersonaAvatar';
@@ -77,6 +77,29 @@ export interface PositionMapNodeData extends Record<string, unknown> {
   rampartIntegrity: number | null;
   rampartMaxIntegrity: number | null;
   rampartCrackState: string | null;
+  /** Overhead cover (#4608): no strike passes between here and the air. */
+  isRoofed?: boolean;
+  /** Breaks line of sight (#4608): missiles reach here only from here or next door. */
+  screensRanged?: boolean;
+}
+
+/** Roof and screen badges beside a position's name (#4608); nothing when it has neither. */
+function CoverBadges({ isRoofed, screensRanged }: { isRoofed?: boolean; screensRanged?: boolean }) {
+  if (!isRoofed && !screensRanged) return null;
+  return (
+    <span className="flex shrink-0 items-center gap-0.5">
+      {isRoofed && (
+        <span title="Roofed" aria-label="Roofed" data-testid="position-roof-badge">
+          <House className="h-3 w-3 text-amber-300" aria-hidden="true" />
+        </span>
+      )}
+      {screensRanged && (
+        <span title="Screened" aria-label="Screened" data-testid="position-screen-badge">
+          <EyeOff className="h-3 w-3 text-sky-300" aria-hidden="true" />
+        </span>
+      )}
+    </span>
+  );
 }
 
 /**
@@ -189,7 +212,10 @@ function PositionMapNodeComponent({ data }: NodeProps<PositionMapNodeType>) {
         <div className={rampartRing.className} data-testid="rampart-ring" aria-hidden="true" />
       )}
       <Handle type="target" position={FlowPosition.Top} className="!opacity-0" />
-      <p className="truncate text-xs font-semibold text-foreground">{data.name}</p>
+      <div className="flex items-center gap-1">
+        <p className="truncate text-xs font-semibold text-foreground">{data.name}</p>
+        <CoverBadges isRoofed={data.isRoofed} screensRanged={data.screensRanged} />
+      </div>
       {data.occupants.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1.5">
           {data.occupants.map((occupant, index) => (

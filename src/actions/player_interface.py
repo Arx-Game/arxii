@@ -1143,6 +1143,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
         adjacent_open_positions,
         is_aerial,
         position_of,
+        roof_between,
     )
 
     current = position_of(character)
@@ -1178,6 +1179,8 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
         # Determine which side of the edge is the destination (not current).
         neighbor = edge.position_b if edge.position_a_id == current.pk else edge.position_a
         if neighbor.kind == PositionKind.AERIAL and not airborne:
+            continue
+        if roof_between(current, neighbor):  # nobody flies through a roof (#4608)
             continue
         ref = ActionRef(
             backend=ActionBackend.REGISTRY,

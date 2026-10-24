@@ -356,8 +356,21 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   capability (one for a mortal), and the web move list shows the hops left or the refusal; a PC
   strike whose target left reach before its slot fizzles for free. `CreatureTemplate` gained
   `tactics`, `speed_hops` and `traversal` (staff-authored, exported with the content).
-  Journeys: `src/integration_tests/test_npcs_close_in_journeys.py`. Slices 3-4 (cover and the
-  waiting strike, tactics) remain; slice 4 reads `tactics` and fills the other move kinds.
+  Journeys: `src/integration_tests/test_npcs_close_in_journeys.py`. Slice 4 (tactics) reads
+  `tactics` and fills the other move kinds.
+- **Roofs and screens stop strikes, the waiting strike, and grounded fliers fall (#4608, slice
+  3 of #4576, ADR-4608-A).** Positions and blueprint positions carry `is_roofed` and
+  `screens_ranged`. No strike passes between the air and a roofed position, both ways, and a
+  flier cannot fly straight down into it, so an NPC flier lands beside it to strike; a missile
+  or room-wide strike at a screened position comes only from it or the position beside it.
+  The tactical map badges both and shows the viewer's hops left. A PC can wait for an opening
+  (`combat await <technique>`, the web Wait for an Opening control) with a melee technique as
+  the round's one action: the strike fires at most once, first, when an enemy ends a hop in
+  reach or attacks the waiter, and a strike that drops the enemy cancels its attack; when
+  nothing comes it says so and costs nothing. `REMOVE_FLIGHT` now drops a flier through the
+  plummet rules: a PC gets the catch window, an NPC lands at once with the fall damage on its
+  health. NPC waiting strikes fire through the same path once slice 4 writes WAIT plans.
+  Journeys: `src/integration_tests/test_cover_and_the_waiting_strike_journeys.py`.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips

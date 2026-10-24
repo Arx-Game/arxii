@@ -306,6 +306,7 @@ class ActionRegistryTests(TestCase):
             "combat_interpose",
             "combat_succor",
             "combat_charge",
+            "combat_await_opening",
             "combat_joust",
             "combat_use",
             "combat_engage",
