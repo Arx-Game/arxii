@@ -1704,8 +1704,10 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   nullable-small-integer cosmetic tactical-map coordinates, #2006), `PositionEdge` (optional
   `gating_challenge` FK + `is_passable` + `blocks_flight`; a conjured wall's nullable
   `integrity`/`max_integrity` and `source_rampart` FK, #4606), `ObjectPosition` (OneToOne
-  occupancy); **abstract bases** `PositionNodeBase` / `PositionEdgeBase` shared by live
-  and blueprint layers; **blueprint models** `PositionBlueprint` (reusable GM-authored
+  occupancy); **abstract bases** `PositionNodeBase` (with the cover facts `is_roofed` /
+  `screens_ranged`, #4608, ADR-4608-A: no strike between the air and a roofed position, a
+  missile at a screened one only from beside it; `roof_between` / `screen_blocks` /
+  `set_position_cover`) / `PositionEdgeBase` shared by live and blueprint layers; **blueprint models** `PositionBlueprint` (reusable GM-authored
   layout), `BlueprintPosition` (`layout_x`/`layout_y` too), `BlueprintEdge`;
   `RoomProfile.default_blueprint` FK (`evennia_extensions`) links a room to its
   preferred layout. **Rampart trio (#2209):** `Rampart` (`OneToOneField` → `Position`,
@@ -6902,7 +6904,9 @@ Unified modifier system — categories, types, sources, and per-character modifi
     `DEAL_DAMAGE`, `LAUNCH_ATTACK`, `LAUNCH_FLOW`, `GRANT_CODEX`, `MAGICAL_SCARS`,
     `LEGEND_AWARD`, `CAPTURE`, `ESCAPE_CAPTIVITY`, `RESCUE_CAPTIVE`
   - Added in #1018: `CREATE_POSITION`, `MOVE_TO_POSITION`, `SEVER_EDGE`,
-    `CONNECT_EDGE`, `GRANT_FLIGHT`, `REMOVE_FLIGHT`
+    `CONNECT_EDGE`, `GRANT_FLIGHT`, `REMOVE_FLIGHT` (since #4608 a fall, not a landing:
+    `ground_flier` hands an airborne target to the plummet rules; a combat opponent lands at
+    once with the fall damage on its health)
   - Added in #1697: `SET_RELATIONSHIP_CONDITION`, `SHIFT_AFFECTION`
   - Added in #2037: `GRANT_DISTINCTION` — `ConsequenceEffect.distinction` FK (CASCADE, mirrors
     `property`) + `distinction_rank` (nullable, mirrors `property_value`; null = advance one
@@ -8771,6 +8775,23 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     only `opponents_in_reach` (`techniques/technique_targets.py`).
   - Path service and reach rule live in positioning (`find_path`, `step_costs`,
     `edge_crossing_cost`, `strike_reaches`); see `docs/systems/areas.md`.
+- **The waiting strike (#4608, slice 3 of #4576) [BUILT & WIRED]:**
+  - Declaration: `declare_await_opening(participant, technique, *, confirm_soulfray_risk)`
+    (`world/combat/services/declarations/await_opening.py`) writes the round action with
+    `maneuver=AWAIT_OPENING`, the held technique (known, combat-ready, SINGLE target, reach
+    SAME or ADJACENT) and no target. REGISTRY `AwaitOpeningAction` (`combat_await_opening`),
+    telnet `combat await <technique> [soulfray]`, web `WaitingStrikeControl`. Its own slot
+    is a no-op (`_STANDALONE_MANEUVER_RESOLVERS`).
+  - Firing: `fire_waiting_strikes(encounter, mover, *, reason, defenders, ...) -> StrikeResult`
+    (`world/combat/services/rounds/waiting_strikes.py`, `WaitingStrikeReason` ARRIVED /
+    ATTACKING), called by `_resolve_actions` after each NPC hop (`advance_opponent(...,
+    on_hop=)`) and before each attack (NPC attack rows after the re-fit; a PC attack, after a
+    charge's move). A PC waiter's strike runs `resolve_pc_technique` (the attack half of
+    `_resolve_pc_action`) with `focused_opponent_target` set to the mover, which is what
+    "fired" means; an NPC waiter (a WAIT `CombatOpponentMove`) writes and resolves a real
+    `CombatOpponentAction` and sets `fired`. Unconsented Soulfray at firing lapses it for
+    free. A mover the strike stops loses its move and attacks ("{name} is stopped before
+    striking."). `narrate_unanswered_waits` names unfired waiters after the loop.
 - **Conditions reach the fight for both sides (#4572) [BUILT & WIRED]:**
   - `select_npc_actions` -> `_apply_aggro_conditions` (`world/combat/services/npc/npc_selection.py`)
     adds each PC's summed `aggro_priority` (`world.conditions.services.aggro_priority_by_target`,

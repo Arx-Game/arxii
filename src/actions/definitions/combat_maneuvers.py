@@ -322,6 +322,53 @@ class ChargeAction(Action):
 
 
 @dataclass
+class AwaitOpeningAction(Action):
+    """Declare a waiting strike: hold a melee technique for an enemy's approach (#4608).
+
+    Wraps ``declare_await_opening``. The strike is this round's one action and fires at
+    most once, when an enemy ends a hop in reach or attacks the waiter.
+    """
+
+    key: str = "combat_await_opening"
+    name: str = "Wait for an opening"
+    icon: str = "hourglass"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        technique_id: int | None = None,
+        confirm_soulfray_risk: bool = False,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.kwarg_parsing import truthy_kwarg  # noqa: PLC0415
+        from world.combat.services import declare_await_opening  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        technique = _resolve_technique(technique_id)
+        if technique is None:
+            return ActionResult(success=False, message="Wait with which technique?")
+        try:
+            declare_await_opening(
+                participant, technique, confirm_soulfray_risk=truthy_kwarg(confirm_soulfray_risk)
+            )
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            technique_display_name,
+        )
+
+        shown = technique_display_name(actor, technique)
+        return ActionResult(success=True, message=f"You wait for an opening, ready with {shown}.")
+
+
+@dataclass
 class JoustAction(Action):
     """Declare a joust — a mounted, lance-armed opposed pass (#1843).
 

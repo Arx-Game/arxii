@@ -47,7 +47,10 @@ They do not use the command system, dispatchers, or handlers.
   `UseItemManeuverAction`/`ReadyAction`/
   `UpgradeComboAction`/`RevertComboAction`/`JoinEncounterAction`/`LeaveEncounterAction`/
   `RallyAction`/`DemoralizeAction`/`TauntAction`/`ParleyAction` (social maneuvers, #1590/#1591)/
-  `ChargeAction`/`JoustAction` (mounted, #1843)/`EngageAction`/`DisengageAction`
+  `ChargeAction`/`JoustAction` (mounted, #1843)/`AwaitOpeningAction` (key
+  `combat_await_opening`, #4608: the waiting strike, wraps `declare_await_opening`; kwargs
+  `technique_id`, `confirm_soulfray_risk`; telnet `combat await <technique> [soulfray]`, web
+  `WaitingStrikeControl`)/`EngageAction`/`DisengageAction`
   (engagement locks, #2020; telnet `combat engage`/`combat disengage` since #3396;
   the web affordance #3396 deferred to #3381 never landed there — tracked in #3447)/
   `MarkAction` (#4603: a free act that writes only a `CombatMark`, never a

@@ -28,6 +28,8 @@ import type {
 } from '@/actions/types';
 import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
 import { MovementActions } from '../components/MovementActions';
+import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
+import { waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
 import { FuryDeclaration } from '../components/FuryDeclaration';
@@ -1878,6 +1880,7 @@ export function YourTurn({
   // shares it); falls back to local state otherwise (e.g. standalone tests).
   // NOT part of RoundScopedState — stays lifted/controlled exactly as before.
   const [localCastPosition, setLocalCastPosition] = useState<CastPosition>({});
+  const [awaitError, setAwaitError] = useState<string | null>(null);
   const castPosition = castPositionProp ?? localCastPosition;
   const setCastPosition = onCastPositionChangeProp ?? setLocalCastPosition;
 
@@ -2127,6 +2130,16 @@ export function YourTurn({
   // Physical-category combat techniques, offered by Charge/Joust's technique
   // picker (#3381) — a minimal `<select>`, not the full ActionDeclarationCard
   // (Decision 4: no client-side reach/prerequisite duplication).
+  // Melee techniques a waiting strike can hold (#4608), and the one held this round.
+  const meleeTechniques = waitingStrikeTechniques(availableActions);
+  const heldTechniqueId =
+    declaredManeuver === 'await_opening' ? (ownRoundAction?.focused_action ?? null) : null;
+  const heldTechniqueName =
+    heldTechniqueId === null
+      ? null
+      : (meleeTechniques.find((a) => a.ref.technique_id === heldTechniqueId)?.display_name ??
+        'your strike');
+
   const physicalTechniques = availableActions.filter(
     (a) =>
       a.ref.backend === 'combat' && a.ref.technique_id != null && a.action_category === 'physical'
@@ -2442,6 +2455,21 @@ export function YourTurn({
     }
   }
 
+  async function handleAwaitOpening(techniqueId: number, confirmSoulfrayRisk: boolean) {
+    setAwaitError(null);
+    try {
+      const result = await dispatchManeuver({
+        registryKey: 'combat_await_opening',
+        kwargs: { technique_id: techniqueId, confirm_soulfray_risk: confirmSoulfrayRisk },
+      });
+      if (isDispatchFailure(result)) {
+        setAwaitError(result.message ?? 'Failed to wait for an opening.');
+      }
+    } catch (err) {
+      setAwaitError(err instanceof Error ? err.message : 'Failed to wait for an opening.');
+    }
+  }
+
   async function handleJoust() {
     const techniqueId = parseInt(joustTechniqueId, 10);
     if (!techniqueId) {
@@ -2720,6 +2748,18 @@ export function YourTurn({
           }}
         />
       )}
+
+      <WaitingStrikeControl
+        techniques={meleeTechniques}
+        declaredTechniqueName={heldTechniqueName}
+        error={awaitError}
+        disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+        inactive={isLocked || !isDeclaringPhase}
+        pending={maneuverDispatchPending}
+        onDeclare={(techniqueId, confirm) => {
+          handleAwaitOpening(techniqueId, confirm).catch(() => {});
+        }}
+      />
 
       <ThreadPullSection
         characterSheetId={characterSheetId}

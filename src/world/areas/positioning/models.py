@@ -58,6 +58,24 @@ class PositionNodeBase(SharedMemoryModel):
         max_length=20, choices=PositionKind.choices, default=PositionKind.FEATURE
     )
     description = models.TextField(blank=True)
+    # Cover facts (#4608, slice 3 of #4576): read directly by the reach rules
+    # (position_reachable, strike_reaches) and the route search, never mirrored
+    # into the aerial layer. Not a PositionShelter row: shelter lowers damage,
+    # these say a strike cannot land at all (ADR-4608-A).
+    is_roofed = models.BooleanField(
+        default=False,
+        help_text=(
+            "Overhead cover. No strike passes between this position and any position "
+            "in the air, and nothing flies straight down into it or up out of it."
+        ),
+    )
+    screens_ranged = models.BooleanField(
+        default=False,
+        help_text=(
+            "Breaks line of sight. A missile or room-wide strike at someone here "
+            "must come from this position or one beside it."
+        ),
+    )
 
     class Meta:
         abstract = True

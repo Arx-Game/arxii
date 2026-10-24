@@ -143,6 +143,21 @@ def _resolve_pc_action(
         yield_duel(participant)
         return ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
+    return resolve_pc_technique(participant, action, offense_check_fn)
+
+
+def resolve_pc_technique(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    offense_check_fn: PerformCheckFn | None = None,
+) -> ActionOutcome:
+    """Resolve a PC's declared technique at its declared target (the attack half).
+
+    ``_resolve_pc_action`` reaches it after the maneuver dispatch; a waiting strike
+    (#4608) calls it directly when it fires, so defenses, ramparts, fatigue, anima and
+    the log line behave exactly as for any attack. Reach is re-checked live first: a
+    target out of reach fizzles for free.
+    """
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
     outcome.participant_id = participant.pk
 

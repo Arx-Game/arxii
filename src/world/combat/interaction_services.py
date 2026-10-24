@@ -654,13 +654,13 @@ def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outco
             line as plain text to every non-web session in the room
             (``send_outcome_text_to_non_web``, #3807), synchronously so the
             web push keeps its place ahead of any follow-up push (fix round
-            4), so a bare telnet session gets the line too. Only the
-            top-level encounter-outcome call opts into this (#4091 fix round
-            2); every per-action narration caller of this function (flee,
+            4), so a bare telnet session gets the line too. The top-level
+            encounter-outcome call opts into this (#4091 fix round 2), and so
+            do the waiting strike's own lines (#4608, ``waiting_strikes._say``).
+            Every per-action narration caller of this function (flee,
             technique cast, NPC actions, windup, sustained rituals, cleanup)
-            keeps the pre-existing WebSocket-only behavior unchanged -- fixing
-            telnet parity for those is a separate, broader #3807 gap outside
-            this fix's scope.
+            keeps the WebSocket-only behavior; telnet parity for those is
+            #4640.
         audience: Who perceived this outcome, from ``resolve_cast_audience``
             (#2734). ``None`` -- the default, and what every non-cast caller
             passes -- keeps the room-wide broadcast byte-identical to its

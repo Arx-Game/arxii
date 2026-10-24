@@ -99,8 +99,16 @@ def _potential_catcher_present(
     )
 
 
-def begin_plummet(faller: ObjectDB, position: Position) -> None:  # noqa: OBJECTDB_PARAM
-    """Begin a plummet for *faller* who has entered CHASM *position*.
+def begin_plummet(  # noqa: OBJECTDB_PARAM
+    faller: ObjectDB,
+    position: Position,
+    *,
+    allow_catch: bool = True,
+) -> int | None:
+    """Begin a plummet for *faller* who has entered CHASM *position*, or was grounded.
+
+    Returns the impact damage when the fall resolved in this call, else None (a catch
+    window is open, or the faller was already plummeting).
 
     Falling is environmental and self-completing — a faller is NEVER paused mid-air.
     Two paths, by whether anyone is present to catch:
@@ -115,6 +123,10 @@ def begin_plummet(faller: ObjectDB, position: Position) -> None:  # noqa: OBJECT
       so the fall resolves to the floor + impact synchronously in this call rather
       than freezing in a round nothing will drive (ADR-0004: action-driven tempo).
 
+    ``allow_catch=False`` (#4608) skips the catch window whoever is present: a combat
+    opponent grounded from the air has no vitals for the descent tick to act on, so its
+    fall resolves now and the caller applies the returned damage to its health.
+
     Idempotent — no-op if the faller is already plummeting.
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
@@ -124,19 +136,47 @@ def begin_plummet(faller: ObjectDB, position: Position) -> None:  # noqa: OBJECT
     )
 
     if _faller_is_plummeting(faller):
-        return
+        return None
 
     apply_condition(faller, ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME))
 
-    if _potential_catcher_present(faller):
+    if allow_catch and _potential_catcher_present(faller):
         _create_catch_challenge_for(faller, position)
         ensure_round_for_acute_condition(faller.sheet_data)
-        return
+        return None
 
     # Unattended fall — resolve to the floor + impact now (never frozen mid-air).
     instance = _plummeting_instance(faller)
-    if instance is not None:
-        _descend_to_floor(faller, instance)
+    if instance is None:
+        return None
+    return _descend_to_floor(faller, instance)
+
+
+def ground_flier(objectdb: ObjectDB, *, allow_catch: bool = True) -> int | None:  # noqa: OBJECTDB_PARAM
+    """Knock *objectdb* out of the air: it falls from where it is (#4608, slice 3 of #4576).
+
+    The grounding counterpart of ``leave_aerial``, which stays the soft, voluntary
+    landing. A target that is not on an AERIAL position is left alone (returns None).
+    Otherwise the ``aerial`` property comes off and the plummet rules take over from
+    the position it is on: the descent walks ``elevation_anchor`` to the floor and the
+    impact deals ``severity * FALL_IMPACT_PER_LEVEL`` of the fall damage type with no
+    source, so it never kills (``death_is_permitted``).
+
+    A character (``allow_catch=True``) gets the usual catch window when anyone is there
+    to catch, descending at the end-of-round tick. ``allow_catch=False`` is the combat
+    opponent's fall: it resolves now and the impact damage is returned for the caller
+    to apply to the opponent's health. Returns the impact damage when the fall resolved
+    in this call, else None.
+    """
+    from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
+    from world.areas.positioning.services import _aerial_property, position_of  # noqa: PLC0415
+    from world.mechanics.models import ObjectProperty  # noqa: PLC0415
+
+    position = position_of(objectdb)
+    if position is None or position.kind != PositionKind.AERIAL:
+        return None
+    ObjectProperty.objects.filter(object=objectdb, property=_aerial_property()).delete()
+    return begin_plummet(objectdb, position, allow_catch=allow_catch)
 
 
 def begin_plummet_handler(*, payload: object) -> None:
@@ -161,8 +201,11 @@ def _plummeting_instance(target: ObjectDB) -> ConditionInstance | None:  # noqa:
     return get_condition_instance(target, template)
 
 
-def _apply_fall_impact(target: ObjectDB, instance: ConditionInstance) -> None:  # noqa: OBJECTDB_PARAM
+def _apply_fall_impact(target: ObjectDB, instance: ConditionInstance) -> int:  # noqa: OBJECTDB_PARAM
     """Apply depth-scaled fall damage through the survivability pipeline, then end.
+
+    Returns the impact damage, so a caller whose faller has no vitals (a combat
+    opponent grounded from the air, #4608) can apply it to the faller's own health.
 
     Damage scales with the Plummeting instance's accumulated ``severity`` (one per
     level descended) times the configured ``FALL_IMPACT_PER_LEVEL`` magnitude, and
@@ -194,6 +237,7 @@ def _apply_fall_impact(target: ObjectDB, instance: ConditionInstance) -> None:  
 
     process_damage_consequences(sheet, damage, fall_type)
     end_plummet(target, caught=False)
+    return damage
 
 
 def end_plummet(faller: ObjectDB, *, caught: bool = False) -> None:  # noqa: OBJECTDB_PARAM
@@ -250,14 +294,17 @@ def _narrate_plummet_end(faller: ObjectDB, *, caught: bool) -> None:  # noqa: OB
     location.msg_contents(message)
 
 
-def _descend_one_level(target: ObjectDB, instance: ConditionInstance) -> bool:  # noqa: OBJECTDB_PARAM
-    """Walk *target* down one ``elevation_anchor`` level; return True iff it impacted.
+def _descend_one_level(target: ObjectDB, instance: ConditionInstance) -> int | None:  # noqa: OBJECTDB_PARAM
+    """Walk *target* down one ``elevation_anchor`` level; return the impact damage, or None.
 
     Moves down one level and accumulates depth (severity += 1). When the target is
     already on solid ground (no ``elevation_anchor``), or lands on it this step,
     fall impact fires through ``_apply_fall_impact`` (which removes the Plummeting
-    condition + clears the catch challenge) and the function returns True (done).
+    condition + clears the catch challenge) and the function returns the damage (done).
+    A faller who drops out of the air leaves the room's aerial layer to be taken down
+    once nobody is up there (#4608), as a voluntary landing does.
     """
+    from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
     from world.areas.positioning.services import (  # noqa: PLC0415
         force_move_to_position,
         position_of,
@@ -267,20 +314,32 @@ def _descend_one_level(target: ObjectDB, instance: ConditionInstance) -> bool:  
     below = cur.elevation_anchor if cur is not None else None
     if below is None:
         # Already on the floor with the condition still on — impact now.
-        _apply_fall_impact(target, instance)
-        return True
+        return _apply_fall_impact(target, instance)
     force_move_to_position(target, below)
+    if cur is not None and cur.kind == PositionKind.AERIAL:
+        _settle_aerial_layer(below.room)
     instance.severity += 1
     instance.save(update_fields=["severity"])
     if below.elevation_anchor is None:
         # Landed on solid ground this step — impact fires now.
-        _apply_fall_impact(target, instance)
-        return True
-    return False
+        return _apply_fall_impact(target, instance)
+    return None
 
 
-def _descend_to_floor(target: ObjectDB, instance: ConditionInstance) -> None:  # noqa: OBJECTDB_PARAM
-    """Resolve *target*'s fall all the way to the floor + impact in one call.
+def _settle_aerial_layer(room: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
+    """Take the room's aerial layer down when nobody is left in the air (#4608)."""
+    from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
+    from world.areas.positioning.models import ObjectPosition  # noqa: PLC0415
+    from world.areas.positioning.services import teardown_aerial_layer  # noqa: PLC0415
+
+    if not ObjectPosition.objects.filter(
+        position__room=room, position__kind=PositionKind.AERIAL
+    ).exists():
+        teardown_aerial_layer(room)
+
+
+def _descend_to_floor(target: ObjectDB, instance: ConditionInstance) -> int:  # noqa: OBJECTDB_PARAM
+    """Resolve *target*'s fall all the way to the floor + impact in one call; returns the damage.
 
     Used for an unattended fall (no one present to catch): walks down level by level
     until impact. Bounded by the number of Position rows in the room (+1) so a cyclic
@@ -292,11 +351,12 @@ def _descend_to_floor(target: ObjectDB, instance: ConditionInstance) -> None:  #
     room = target.location
     max_steps = (Position.objects.filter(room=room).count() + 1) if room is not None else 100
     for _ in range(max_steps):
-        if _descend_one_level(target, instance):
-            return
+        damage = _descend_one_level(target, instance)
+        if damage is not None:
+            return damage
     # Safety net: a malformed (cyclic) elevation chain never reached the floor —
     # force impact rather than leave the faller suspended.
-    _apply_fall_impact(target, instance)
+    return _apply_fall_impact(target, instance)
 
 
 def advance_plummet(targets: Iterable[ObjectDB]) -> None:  # noqa: OBJECTDB_PARAM

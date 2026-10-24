@@ -43,6 +43,7 @@ _SUBVERBS: dict[str, str] = {
     "parley": "combat_parley",
     "mark": "combat_mark",
     "charge": "combat_charge",
+    "await": "combat_await_opening",
     "joust": "combat_joust",
     "engage": "combat_engage",
     "disengage": "combat_disengage",
@@ -118,6 +119,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat parley <opp>          - talk a wavering foe down mid-fight
         combat mark <opp>           - mark a foe for your covenant-mates this round
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
+        combat await <technique> [soulfray] - wait for an opening: strike first at the
+                                     first enemy to come within reach or attack you
         combat joust with <technique> - mounted, lance-armed opposed pass (duels only)
         combat engage <opp>          - challenge an opponent to a foil duel (engagement lock)
         combat disengage             - break your active engagement lock
@@ -176,8 +179,14 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return {"combo_id": self._resolve_combo_pk(self._require_rest("a combo name"))}
         if self._subverb == "use":  # noqa: STRING_LITERAL
             return self._resolve_use_item_args(self._require_rest("an item"))
+        return self._resolve_technique_subverb_args()
+
+    def _resolve_technique_subverb_args(self) -> dict[str, Any]:
+        """charge / await / joust: the subverbs that carry a technique."""
         if self._subverb == "charge":  # noqa: STRING_LITERAL
             return self._resolve_charge_args(self._require_rest("an opponent with <technique>"))
+        if self._subverb == "await":  # noqa: STRING_LITERAL
+            return self._resolve_await_args(self._require_rest("a technique"))
         if self._subverb == "joust":  # noqa: STRING_LITERAL
             technique_text = self._require_rest("a technique")
             # Accept both "joust with <technique>" and bare "joust <technique>".
@@ -186,6 +195,24 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         return {}
 
     # -- helpers ---------------------------------------------------------------
+
+    def _resolve_await_args(self, text: str) -> dict[str, Any]:
+        """``<technique> [soulfray]`` for a waiting strike (#4608).
+
+        A trailing ``soulfray`` consents to cast into Soulfray when the strike fires, as
+        ``interpose ... soulfray`` does; without it such a strike lapses unpaid.
+        """
+        text = text.strip()
+        consent = text.lower() == _SOULFRAY_TOKEN or text.lower().endswith(f" {_SOULFRAY_TOKEN}")
+        if consent:
+            text = text[: -len(_SOULFRAY_TOKEN)].strip()
+        if not text:
+            msg = "Usage: combat await <technique> [soulfray]."
+            raise CommandError(msg)
+        kwargs: dict[str, Any] = {"technique_id": self._find_technique_id(text)}
+        if consent:
+            kwargs["confirm_soulfray_risk"] = True
+        return kwargs
 
     def _require_rest(self, what: str) -> str:
         if not self._rest:

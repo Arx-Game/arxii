@@ -47342,6 +47342,8 @@ export interface components {
       readonly rampart_integrity: number | null;
       readonly rampart_max_integrity: number | null;
       readonly rampart_crack_state: string | null;
+      readonly is_roofed: boolean;
+      readonly screens_ranged: boolean;
     };
     /** @description Compact public representation of a Position (id + name). */
     PositionSummary: {
