@@ -4,8 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from actions.constants import ActionTargetType
 from world.combat.constants import OpponentStatus
-from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
+from world.combat.models import (
+    CombatOpponent,
+    CombatParticipant,
+    CombatRoundAction,
+    CombatRoundActionTarget,
+)
+from world.conditions.constants import Allegiance
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -178,3 +185,124 @@ def _check_combat_target_prerequisites(
     for target_od in targets:
         if not prerequisites_met(prereqs, caster_od, target_od):
             raise InvalidCastTarget(msg)
+
+
+def opponents_in_reach(
+    attacker: ObjectDB, technique: Technique, opponents: list[CombatOpponent]
+) -> list[CombatOpponent]:
+    """Keep the opponents ``technique_can_reach`` allows from the attacker's live position.
+
+    The one reach filter for an area cast (#4607): the resolver uses it to drop targets
+    that moved out of reach, and ``_resolve_pc_action`` uses it to decide a cast fizzles.
+    An opponent with no game object stays, and so does everyone when either side is
+    unplaced (``technique_can_reach`` is lenient).
+    """
+    from world.combat.reach import technique_can_reach  # noqa: PLC0415
+
+    return [
+        opp
+        for opp in opponents
+        if opp.objectdb is None or technique_can_reach(attacker, technique, opp.objectdb)
+    ]
+
+
+def _filter_by_target_prerequisites(
+    caster_od: ObjectDB, technique: Technique, opponents: list[CombatOpponent]
+) -> list[CombatOpponent]:
+    """Silently drop opponents that fail technique.target_prerequisites.
+
+    AREA/FILTERED_GROUP only: these are enumerated independently of
+    _build_affected_targets/_check_combat_target_prerequisites (which skips
+    AREA/FILTERED_GROUP entirely, deferring to this filter, #1793 second-pass
+    fix), so a target_prerequisites-gated technique would otherwise land on every
+    opponent regardless of eligibility. Mirrors resolve_targets' silent
+    AREA/FILTERED_GROUP filter (world/magic/services/targeting.py) rather than
+    raising: an AoE cast skips ineligible targets, it does not block (ADR-0045).
+    """
+    from world.mechanics.services import prerequisites_met  # noqa: PLC0415
+
+    prereqs = technique.cached_target_prerequisites
+    if not prereqs:
+        return opponents
+    eligible = []
+    for opp in opponents:
+        target_od = opp.objectdb
+        if target_od is None:
+            continue  # can't evaluate a Property-based prerequisite without an ObjectDB
+        if prerequisites_met(prereqs, caster_od, target_od):
+            eligible.append(opp)
+    return eligible
+
+
+def aoe_opponent_candidates(
+    participant: CombatParticipant, action: CombatRoundAction, technique: Technique
+) -> list[CombatOpponent]:
+    """Opponents an AREA or FILTERED_GROUP technique would act on, before the reach filter.
+
+    - AREA: every non-DEFEATED opponent in the encounter (one query), minus any whose
+      effective allegiance is ALLY_OF_CASTER (a summon or charmed NPC; Decision 4, #4091).
+    - FILTERED_GROUP: the opponents stored in ``CombatRoundActionTarget``, falling back
+      to the single ``focused_opponent_target`` when no join rows exist.
+
+    Both then run through the silent target_prerequisites filter (#1793). Any other
+    target type returns an empty list.
+    """
+    caster_od = participant.character_sheet.character
+    if technique.target_type == ActionTargetType.AREA:
+        from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
+
+        opponents = list(
+            CombatOpponent.objects.filter(encounter=participant.encounter)
+            .exclude(status=OpponentStatus.DEFEATED)
+            .order_by("pk")
+        )
+        allegiances = effective_allegiances(opponents)
+        opponents = [o for o in opponents if allegiances[o.pk] != Allegiance.ALLY_OF_CASTER]
+        return _filter_by_target_prerequisites(caster_od, technique, opponents)
+    if technique.target_type == ActionTargetType.FILTERED_GROUP:
+        join_opponents = list(
+            CombatRoundActionTarget.objects.filter(action=action, opponent__isnull=False)
+            .select_related("opponent")
+            .order_by("pk")
+        )
+        if join_opponents:
+            opponents = [row.opponent for row in join_opponents]
+        else:
+            primary = action.focused_opponent_target
+            opponents = [primary] if primary is not None else []
+        return _filter_by_target_prerequisites(caster_od, technique, opponents)
+    return []
+
+
+def _unreachable_single_target(
+    participant: CombatParticipant, action: CombatRoundAction, technique: Technique
+) -> bool:
+    """True when the declared opponent or ally target is out of the technique's reach now."""
+    from world.combat.reach import technique_can_reach  # noqa: PLC0415
+
+    attacker = participant.character_sheet.character
+    target_od = None
+    if action.focused_opponent_target is not None:
+        target_od = action.focused_opponent_target.objectdb
+    elif action.focused_ally_target is not None and action.focused_ally_target != participant:
+        target_od = action.focused_ally_target.character_sheet.character
+    return target_od is not None and not technique_can_reach(attacker, technique, target_od)
+
+
+def finds_no_one_in_reach(
+    participant: CombatParticipant, action: CombatRoundAction, technique: Technique
+) -> bool:
+    """True when the cast's declared target(s) are all out of reach at resolution (#4607).
+
+    Positions change between declaration and the PC's slot (NPCs move in theirs), so
+    the declare-time reach gate is re-checked live. A single opponent or ally target
+    fizzles when out of reach. An AREA / FILTERED_GROUP cast fizzles only when it had
+    opponents to act on and none of them is still in reach. Unplaced combatants and
+    self-targeted casts never fizzle.
+    """
+    if technique.target_type in (ActionTargetType.AREA, ActionTargetType.FILTERED_GROUP):
+        candidates = aoe_opponent_candidates(participant, action, technique)
+        return bool(candidates) and not opponents_in_reach(
+            participant.character_sheet.character, technique, candidates
+        )
+    return _unreachable_single_target(participant, action, technique)

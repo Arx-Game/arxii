@@ -14,6 +14,7 @@ from django.db import models
 from actions.constants import (
     ActionCategory as ActionCategory,  # noqa: PLC0414
 )
+from world.areas.positioning.constants import CreatureTraversal
 from world.gm.constants import GMLevel
 
 # #2051 — the combo invariant: combos are never solo. A combo definition must
@@ -156,6 +157,42 @@ LANCE_UNMOUNTED_PENALTY: int = -10
 # Max hops a CHARGE may cover — generous but bounded (mirrors technique
 # REACH_N's reach_hops parameter).
 CHARGE_MAX_HOPS: int = 5
+
+# ---------------------------------------------------------------------------
+# Movement on the battle map (#4607, slice 2 of #4576)
+# ---------------------------------------------------------------------------
+
+# A PC's hops per round are its effective movement capability divided by this,
+# clamped to [1, MAX_HOPS_PER_ROUND] when the capability is above 0 (an
+# unimpaired mortal's 5 gives 1 hop; a rooted 0 gives none).
+MOVEMENT_PER_HOP: int = 5
+
+# Most hops anyone (PC or NPC) may take in one round. Same cap as a CHARGE.
+MAX_HOPS_PER_ROUND: int = 5
+
+
+class CreatureTactics(models.TextChoices):
+    """How cleverly a creature fights, authored on its CreatureTemplate (#4607)."""
+
+    MINDLESS = "mindless", "Mindless"
+    CUNNING = "cunning", "Cunning"
+    TACTICAL = "tactical", "Tactical"
+
+
+class OpponentMoveKind(models.TextChoices):
+    """What an opponent's movement plan for a round is (CombatOpponentMove.kind)."""
+
+    ADVANCE = "advance", "Advance"
+    SHELTER = "shelter", "Shelter"
+    BASH = "bash", "Bash a barrier"
+    RETREAT = "retreat", "Retreat"
+    WAIT = "wait", "Wait for an opening"
+
+
+# Movement profile for an opponent with no CreatureTemplate.
+NPC_DEFAULT_TACTICS: str = CreatureTactics.CUNNING
+NPC_DEFAULT_HOPS: int = 1
+NPC_DEFAULT_TRAVERSAL: str = CreatureTraversal.WALKS
 
 # success_level gap bands for a JOUST's opposed pass. A gap >= DECISIVE is a
 # clean unhorsing; a gap >= NARROW (but < DECISIVE) lands a lesser hit; a gap

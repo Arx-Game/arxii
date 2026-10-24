@@ -583,3 +583,17 @@ class SpectacleResult:
     def lines(self) -> list[str]:
         lines = (self.credit_line, self.flavour_line, self.heartened_line)
         return [line for line in lines if line]
+
+
+@dataclass(frozen=True)
+class MovementProfile:
+    """How an opponent moves and thinks this fight (#4607).
+
+    Read from its CreatureTemplate, or the NPC defaults when it has none
+    (``CombatOpponent.movement_profile``). Values are ``CreatureTactics`` and
+    ``CreatureTraversal`` members.
+    """
+
+    tactics: str
+    speed_hops: int
+    traversal: str

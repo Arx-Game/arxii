@@ -432,3 +432,15 @@ _Avoid_: parley phase
 **Added-effect firing** (`VowAddedEffectFiring`, #4581):
 Play state: one row recording that a combat participant's covenant vow fired a once-per-round or once-per-fight added effect in a given round. The participant is the holder whose vow carried the effect, not necessarily the caster (an ally's cast can fire the holder's effect). Written only by a cast that landed; a new fight starts with an empty ledger because a participant row belongs to one encounter. The effect itself is a covenants term: see the covenants glossary's "Vow added effect".
 _Avoid_: cooldown, charge, spent flag (a boolean on the participant was the rejected shape).
+
+**Hop budget** (#4607, slice 2 of #4576):
+How many hops a combatant may move in one round. A player character's comes from the movement capability (`hops_for`: one hop per `MOVEMENT_PER_HOP` points, at least one, at most `MAX_HOPS_PER_ROUND`; a value of 0 gives none) and is counted on `CombatParticipant.hops_used`, which resets when declaration opens. A PC may move only while the round is DECLARING; while it resolves or between rounds the move is refused, and outside an active encounter moving is free. An opponent's budget is its creature template's `speed_hops`.
+_Avoid_: movement points, speed (speed is the resolution-order rank), action economy
+
+**Tactics level** (#4607):
+How a creature thinks in a fight (`CreatureTactics`: MINDLESS, CUNNING, TACTICAL), authored on its `CreatureTemplate` and inherited by every opponent spawned from it. An opponent with no template is CUNNING. Slice 2 stores it; the tactics ladder that reads it (bash, retarget, take cover, wait, retreat) is slice 4 of #4576.
+_Avoid_: AI level, intelligence, difficulty
+
+**Move plan** (`CombatOpponentMove`, #4607):
+Play state: the movement plan for one opponent in one round (`OpponentMoveKind`: ADVANCE, SHELTER, BASH, RETREAT, WAIT), written at selection for every active opponent that is not winding up, calmed or a duel mirror, even one with no attack it can use. It is advisory: in the opponent's slot `advance_opponent` re-plans against live positions, moves up to its hop budget, and only then are its attack rows re-fit to the targets still in reach. An opponent never moves after its first attack in a round (strike then stay). See ADR-4607-A.
+_Avoid_: AI move, pathing order, NPC intent

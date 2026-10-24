@@ -13,6 +13,7 @@ from world.combat.models import (
     CombatEncounter,
     CombatOpponent,
     CombatOpponentAction,
+    CombatOpponentMove,
     CombatParticipant,
     CombatRoundAction,
     PendingOpponentAttack,
@@ -32,7 +33,8 @@ from world.combat.services.encounter.completion import (
     complete_encounter,
 )
 from world.combat.services.encounter.encounter_outcome import _classify_encounter_outcome
-from world.combat.services.npc.npc_selection import select_npc_actions
+from world.combat.services.npc.npc_selection import ensure_opponent_plans, select_npc_actions
+from world.combat.services.npc.npc_targeting import attach_npc_action_targets
 from world.combat.services.npc.sustained import _mature_sustained_actions
 from world.combat.services.npc.windup import _mature_pending_opponent_attacks
 from world.combat.services.rounds.action_resolution import _resolve_actions
@@ -132,9 +134,15 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     # this round has no NPC selection of EITHER shape yet (a normal
     # CombatOpponentAction OR a wind-up's PendingOpponentAttack) — a
     # conservative, idempotent fallback: any explicit prior selection (staff,
-    # simulation, tests) is left alone.
+    # simulation, tests) is left alone. A move plan (#4607) also counts as a
+    # selection. Either way, ensure_opponent_plans then plans any opponent a
+    # partial prior selection left without a plan, so none stands idle.
     already_selected = (
         CombatOpponentAction.objects.filter(
+            opponent__encounter=enc,
+            round_number=enc.round_number,
+        ).exists()
+        or CombatOpponentMove.objects.filter(
             opponent__encounter=enc,
             round_number=enc.round_number,
         ).exists()
@@ -145,6 +153,7 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     )
     if not already_selected:
         select_npc_actions(enc)
+    ensure_opponent_plans(enc)
 
     # Berserk compulsion (#2845): rage-driven participants who declared nothing
     # get their simplest damaging technique auto-declared. Idempotent — a
@@ -235,24 +244,21 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         .select_related("opponent", "threat_entry")
         .prefetch_related(
             Prefetch(
-                "targets",
-                queryset=CombatParticipant.objects.select_related(
-                    "character_sheet",
-                ),
-                to_attr="cached_targets",
-            ),
-            Prefetch(
-                "opponent_targets",
-                queryset=CombatOpponent.objects.all(),
-                to_attr="cached_opponent_targets",
-            ),
-            Prefetch(
                 "threat_entry__conditions_applied",
                 to_attr="cached_conditions",
             ),
         )
     ):
         npc_actions[npc_action.opponent_id].append(npc_action)
+    attach_npc_action_targets([row for rows in npc_actions.values() for row in rows])
+
+    npc_moves: dict[int, CombatOpponentMove] = {
+        move.opponent_id: move
+        for move in CombatOpponentMove.objects.filter(
+            opponent__encounter=encounter,
+            round_number=round_number,
+        )
+    }
 
     # --- Resolve in speed-rank order ---
     resolution_order = get_resolution_order(encounter)
@@ -267,6 +273,7 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         defense_check_fn,
         offense_check_fn,
         sustaining_participant_ids=sustaining_participant_ids,
+        npc_moves=npc_moves,
     )
 
     # --- Held-back line (#3552): a PC in the order with nothing declared was

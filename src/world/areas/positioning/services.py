@@ -2,19 +2,31 @@
 
 Positions + edges are room-anchored. A walker crosses an edge unless
 ``edge_blocks_crossing`` says no: an active gating challenge or a hard seal. A
-resolved gate opens a sealed wall (#4606).
+resolved gate opens a sealed wall (#4606). How other movers cross is
+``edge_crossing_cost`` by ``CreatureTraversal``, and ``find_path`` routes over it;
+``strike_reaches`` is the reach rule for a strike's delivery (#4607). Every
+position write goes through ``_commit_position``.
 """
 
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
+import heapq
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
 
-from world.areas.positioning.constants import AERIAL_PROPERTY_NAME, PositionKind, RampartSignature
+from world.areas.positioning.constants import (
+    AERIAL_PROPERTY_NAME,
+    CreatureTraversal,
+    PositionKind,
+    RampartSignature,
+)
 from world.areas.positioning.exceptions import PositionError, PositionTransitionError
 from world.areas.positioning.models import (
     BlueprintEdge,
@@ -885,6 +897,181 @@ def reachable_positions(objectdb: ObjectDB) -> set[Position]:
 
 
 # ---------------------------------------------------------------------------
+# Path service and reach rule (#4607, slice 2 of #4576)
+# ---------------------------------------------------------------------------
+
+# What a climber or leaper pays to cross a wall that has a way past it.
+GATED_CROSSING_HOPS = 2
+_CROSSERS_OF_GATES = (CreatureTraversal.CLIMBS, CreatureTraversal.LEAPS)
+
+
+def _crossing_cost(edge: PositionEdge, *, touches_aerial: bool, traversal: str) -> int | None:
+    """Hops to cross ``edge`` for ``traversal``; None means closed to that mover.
+
+    The edge row decides everything except whether either end is AERIAL, which
+    the caller supplies (``find_path`` reads it off its loaded node set).
+    """
+    blocked = edge_blocks_crossing(edge)
+    if touches_aerial:
+        # Only a flier enters the aerial layer (vertical and aerial-horizontal edges).
+        return 1 if traversal == CreatureTraversal.FLIES and not blocked else None
+    if not blocked:
+        return 1
+    if traversal in _CROSSERS_OF_GATES and edge.gating_challenge_id is not None:
+        # edge_blocks_crossing only blocks a gated edge while its challenge is active.
+        return GATED_CROSSING_HOPS
+    # A hard seal, or a walker or flier at any wall (a flier goes over by the aerial layer).
+    return None
+
+
+def edge_crossing_cost(edge: PositionEdge, traversal: str) -> int | None:
+    """Hops a mover of ``traversal`` (a ``CreatureTraversal``) pays to cross ``edge``.
+
+    None means the edge is closed to that mover. An edge touching an AERIAL position
+    costs 1 for FLIES and is closed to every other traversal. A ground edge a walker
+    can cross costs 1 for everyone. A wall with an active gating challenge costs
+    CLIMBS and LEAPS ``GATED_CROSSING_HOPS`` and is closed to WALKS and FLIES; a hard
+    seal is closed to all.
+    """
+    touches_aerial = PositionKind.AERIAL in (edge.position_a.kind, edge.position_b.kind)
+    return _crossing_cost(edge, touches_aerial=touches_aerial, traversal=traversal)
+
+
+@dataclass(frozen=True)
+class _RoomGraph:
+    """One room's positions and edges, loaded once from ``room.positions_cached``."""
+
+    nodes: dict[int, Position]
+    edges: dict[tuple[int, int], PositionEdge]
+    neighbours: dict[int, list[tuple[int, PositionEdge]]]
+
+    def cost(self, edge: PositionEdge, traversal: str) -> int | None:
+        a, b = self.nodes.get(edge.position_a_id), self.nodes.get(edge.position_b_id)
+        touches_aerial = any(p is not None and p.kind == PositionKind.AERIAL for p in (a, b))
+        return _crossing_cost(edge, touches_aerial=touches_aerial, traversal=traversal)
+
+
+def _room_graph(origin: Position) -> _RoomGraph:
+    """Build the routing graph for ``origin``'s room from the database (two queries).
+
+    Not from ``room.positions_cached``: in a running server the per-position edge
+    caches a page load prefetched can outlive the aerial layer a flier's planning just
+    built, and Django's prefetch never refills a cache that is already set, so a route
+    search read from them missed the new vertical edges (#4607, found in a live run).
+    Edges are canonical (position_a.pk < position_b.pk), so each is read once.
+    """
+    positions = list(Position.objects.filter(room_id=origin.room_id))
+    nodes = {p.pk: p for p in positions}
+    nodes.setdefault(origin.pk, origin)
+    edges: dict[tuple[int, int], PositionEdge] = {}
+    neighbours: dict[int, list[tuple[int, PositionEdge]]] = {pk: [] for pk in nodes}
+    room_edges = PositionEdge.objects.filter(position_a__room_id=origin.room_id).select_related(
+        "gating_challenge__template", "source_rampart"
+    )
+    for edge in room_edges:
+        a_id, b_id = edge.position_a_id, edge.position_b_id
+        if a_id not in nodes or b_id not in nodes:
+            continue
+        edges[(a_id, b_id)] = edge
+        neighbours[a_id].append((b_id, edge))
+        neighbours[b_id].append((a_id, edge))
+    return _RoomGraph(nodes=nodes, edges=edges, neighbours=neighbours)
+
+
+def find_path(
+    origin: Position,
+    goal_test: Callable[[Position], bool],
+    *,
+    traversal: str,
+) -> list[Position] | None:
+    """The cheapest route from ``origin`` to the first position ``goal_test`` accepts.
+
+    Returns ``[origin, ..., goal]`` (``[origin]`` when the origin already passes), or
+    None when no position the mover can reach passes. Cost is the summed
+    ``edge_crossing_cost`` for ``traversal``; ties go to fewer steps, then to the
+    lower position pk, so the answer is deterministic. Only a FLIES mover enters an
+    AERIAL position, and only through the aerial layer already in the room (this
+    never materializes it). Positions have no capacity: several movers may share one.
+    The room graph is read once from ``room.positions_cached``.
+    """
+    graph = _room_graph(origin)
+    best: dict[int, tuple[int, int]] = {origin.pk: (0, 0)}
+    parent: dict[int, int] = {}
+    frontier: list[tuple[int, int, int]] = [(0, 0, origin.pk)]
+    done: set[int] = set()
+    while frontier:
+        cost, steps, pk = heapq.heappop(frontier)
+        if pk in done:
+            continue
+        done.add(pk)
+        if goal_test(graph.nodes[pk]):
+            return _walk_back(graph, parent, pk)
+        for other, edge in graph.neighbours[pk]:
+            hop = graph.cost(edge, traversal)
+            if hop is None or other in done:
+                continue
+            candidate = (cost + hop, steps + 1)
+            if other not in best or candidate < best[other]:
+                best[other] = candidate
+                parent[other] = pk
+                heapq.heappush(frontier, (*candidate, other))
+    return None
+
+
+def _walk_back(graph: _RoomGraph, parent: dict[int, int], goal_pk: int) -> list[Position]:
+    chain = [goal_pk]
+    while chain[-1] in parent:
+        chain.append(parent[chain[-1]])
+    return [graph.nodes[pk] for pk in reversed(chain)]
+
+
+def step_costs(path: list[Position], *, traversal: str) -> list[int]:
+    """The hop cost of each step of ``path`` for ``traversal`` (``len(path) - 1`` items).
+
+    Lets a caller cut a ``find_path`` route to a hop budget. Raises PositionError
+    when two consecutive positions share no edge, or the edge is closed to the mover.
+    """
+    if len(path) <= 1:  # a path of one position takes no step
+        return []
+    graph = _room_graph(path[0])
+    costs: list[int] = []
+    for here, there in pairwise(path):
+        lo, hi = sorted((here.pk, there.pk))
+        edge = graph.edges.get((lo, hi))
+        hop = graph.cost(edge, traversal) if edge is not None else None
+        if hop is None:
+            msg = f"No crossing from {here.name} to {there.name} for {traversal}."
+            raise PositionError(msg)
+        costs.append(hop)
+    return costs
+
+
+def strike_reaches(
+    attacker_pos: Position | None,
+    target_pos: Position | None,
+    delivery: str,
+) -> bool:
+    """Whether a strike of ``delivery`` (a ``StrikeDelivery``) lands from one position on another.
+
+    MELEE needs the same or an adjacent position (``position_reachable``'s ADJACENT rule:
+    a passable edge, gates ignored); MISSILE reaches anywhere in the room (ANY). An
+    unknown delivery is treated as MELEE. Either position missing is reachable (an
+    unplaced combatant stays lenient). The edge is read from the room's cached graph,
+    so a path search can ask this of every node it visits without a query each time.
+    """
+    from world.combat.constants import StrikeDelivery
+
+    if attacker_pos is None or target_pos is None:
+        return True
+    if delivery == StrikeDelivery.MISSILE:
+        return attacker_pos.room_id == target_pos.room_id
+    if attacker_pos.pk == target_pos.pk:
+        return True
+    edge = _room_graph(attacker_pos).edges.get(tuple(sorted((attacker_pos.pk, target_pos.pk))))
+    return edge is not None and edge.is_passable
+
+
+# ---------------------------------------------------------------------------
 # Character-sheet resolution
 # ---------------------------------------------------------------------------
 
@@ -932,6 +1119,7 @@ _ERR_MOVE_UNPLACED = "You are not placed in any position yet."
 _ERR_MOVE_NO_PATH = "There is no path to there."
 _ERR_MOVE_BLOCKED = "The way is blocked."
 _ERR_MOVE_IMMOBILE = "You cannot move."
+_ERR_MOVE_CANNOT_FLY = "You cannot fly."
 _ERR_TAKE_ALREADY_PLACED = "You are already placed somewhere — move instead."
 _ERR_TAKE_NOT_ENTRY = "You cannot enter the position graph there."
 
@@ -944,10 +1132,30 @@ def place_in_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
     """
     if position.room_id != objectdb.db_location_id:
         raise PositionError(_ERR_PLACE_CROSS_ROOM)
+    return _commit_position(objectdb, position)
+
+
+def _commit_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
+    """The one writer of an object's position (#4607).
+
+    Writes the ``ObjectPosition`` row, drops the cached ``current_position`` of every
+    combat opponent and participant this object is (the rows are identity-mapped, so
+    a stale cache would outlive the move), then re-reconciles sunlight.
+    """
+    from world.combat.models import CombatOpponent, CombatParticipant
+
     obj_pos, _ = ObjectPosition.objects.update_or_create(
         objectdb=objectdb,
         defaults={"position": position},
     )
+    # Only identity-mapped rows can hold the cached property, so walk the map (no query).
+    # CharacterSheet shares ObjectDB's pk, so a participant's sheet id is the object's pk.
+    for opponent in CombatOpponent.get_all_cached_instances():
+        if opponent.objectdb_id == objectdb.pk:
+            opponent.__dict__.pop("current_position", None)
+    for participant in CombatParticipant.get_all_cached_instances():
+        if participant.character_sheet_id == objectdb.pk:
+            participant.__dict__.pop("current_position", None)
     _reconcile_sun_after_position_change(objectdb)
     return obj_pos
 
@@ -992,7 +1200,8 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     3. an edge exists between current and target
     4. the edge does not block a walker (``edge_blocks_crossing``): an active
        gating challenge names itself; a hard seal is "The way is blocked."
-    5. the actor's MOVEMENT capability > 0 (characters only)
+    5. an AERIAL target needs the mover to hold the ``aerial`` property: "You cannot fly."
+    6. the actor's MOVEMENT capability > 0 (characters only)
     """
     if target.room_id != objectdb.db_location_id:
         raise PositionTransitionError(_ERR_MOVE_CROSS_ROOM)
@@ -1012,15 +1221,26 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
             raise PositionTransitionError(msg)
         raise PositionTransitionError(_ERR_MOVE_BLOCKED)
 
+    if target.kind == PositionKind.AERIAL and not is_aerial(objectdb):
+        raise PositionTransitionError(_ERR_MOVE_CANNOT_FLY)
+
     if not _can_move(objectdb):
         raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
 
-    obj_pos, _ = ObjectPosition.objects.update_or_create(
-        objectdb=objectdb,
-        defaults={"position": target},
-    )
-    _reconcile_sun_after_position_change(objectdb)
-    return obj_pos
+    return _commit_position(objectdb, target)
+
+
+def is_aerial(objectdb: ObjectDB) -> bool:
+    """Whether objectdb holds the ``aerial`` property (it has taken flight).
+
+    Only an airborne mover may step onto an AERIAL position (``move_to_position``), so
+    the move list offers those positions to it alone.
+    """
+    from world.mechanics.models import ObjectProperty
+
+    return ObjectProperty.objects.filter(
+        object=objectdb, property__name=AERIAL_PROPERTY_NAME
+    ).exists()
 
 
 def force_move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
@@ -1030,12 +1250,7 @@ def force_move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPositi
     """
     if target.room_id != objectdb.db_location_id:
         raise PositionError(_ERR_PLACE_CROSS_ROOM)
-    obj_pos, _ = ObjectPosition.objects.update_or_create(
-        objectdb=objectdb,
-        defaults={"position": target},
-    )
-    _reconcile_sun_after_position_change(objectdb)
-    return obj_pos
+    return _commit_position(objectdb, target)
 
 
 # ---------------------------------------------------------------------------
@@ -1083,6 +1298,31 @@ def materialize_aerial_layer(room: ObjectDB) -> None:
         a, b = twin.get(edge.position_a_id), twin.get(edge.position_b_id)
         if a is not None and b is not None:
             connect_positions(a, b)
+    # A page load may have prefetched the ground positions' edge lists; drop them all so
+    # the tactical map and every later reader see the new vertical edges (#4607).
+    invalidate_position_graph_caches(room)
+
+
+@contextmanager
+def aerial_layer_for_route(room: ObjectDB) -> Iterator[None]:
+    """Hold the room's aerial layer up while a flier searches and walks a route (#4607).
+
+    ``find_path`` only routes a flier through a layer that exists, so this builds one
+    when the room has none, and takes it down again on the way out unless someone ended
+    up airborne. A route search alone therefore never leaves "Above" positions on the
+    map. A layer that already existed is left as it was.
+    """
+    existed = Position.objects.filter(room=room, kind=PositionKind.AERIAL).exists()
+    if not existed:
+        materialize_aerial_layer(room)
+    try:
+        yield
+    finally:
+        airborne = ObjectPosition.objects.filter(
+            position__room=room, position__kind=PositionKind.AERIAL
+        ).exists()
+        if not existed and not airborne:
+            teardown_aerial_layer(room)
 
 
 def teardown_aerial_layer(room: ObjectDB) -> None:

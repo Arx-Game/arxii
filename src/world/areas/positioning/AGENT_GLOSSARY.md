@@ -30,3 +30,15 @@ _Avoid_: ward, barrier, bulwark, shield wall (all already claimed by other syste
 **Wall integrity** (#4606, slice 1 of #4576):
 How much damage a conjured wall on a `PositionEdge` can still take before it falls and the edge opens (`integrity`/`max_integrity`; both null = indestructible, as staff-authored edges are). A spell wall is raised with integrity from its cast; a Rampart's seal has none of its own and reads the Rampart's pool through `source_rampart`, so the Rampart's collapse, expiry or teardown opens every edge it sealed. `damage_barrier` is the one seam that lowers it. Distinct from getting past a wall through its gating challenge (the climb or smash, ADR-0109), which opens the edge without touching integrity: the **walker rule** (`edge_blocks_crossing`) reads a sealed edge whose challenge is resolved as open.
 _Avoid_: wall HP, barrier health, hardness
+
+**Traversal** (#4607, slice 2 of #4576):
+How a mover crosses the position graph (`CreatureTraversal`: WALKS, CLIMBS, LEAPS, FLIES). A walker crosses only what the walker rule leaves open. A climber or leaper also crosses a wall that has a way past it (an active gating challenge) for one extra hop, and the two differ in narration only. A flier also uses the aerial layer, so it passes over any wall that does not block flight. A hard seal stops everyone on the ground. `edge_crossing_cost` turns an edge and a traversal into hops, and `find_path` routes over it. Staff set it on a creature template; it is not derived from tier.
+_Avoid_: movement mode, locomotion, move type
+
+**Hop** (#4607):
+One step along a `PositionEdge`, the unit of movement on the battle map. Crossing a wall with a way past it costs a climber or leaper two hops, and taking off into the aerial layer or landing costs one.
+_Avoid_: square, tile, step (in code)
+
+**Strike reach** (#4607):
+Whether a strike lands from one position on another, by its delivery (`strike_reaches`): melee needs the same or an adjacent position, and a missile reaches anywhere in the room. A combatant with no position is always in reach. PC techniques keep their own reach value through `technique_can_reach`; both read `position_reachable`.
+_Avoid_: range, line of attack

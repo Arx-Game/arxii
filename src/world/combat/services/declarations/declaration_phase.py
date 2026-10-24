@@ -71,10 +71,11 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     reset_participants = list(CombatParticipant.objects.filter(encounter=enc))
     for reset_participant in reset_participants:
         reset_participant.reactions_used = 0
+        reset_participant.hops_used = 0
     if reset_participants:
         CombatParticipant.objects.bulk_update_with_reason(
             reset_participants,
-            ["reactions_used"],
+            ["reactions_used", "hops_used"],
             reason="issue #3817: intentional bulk write",
         )
 

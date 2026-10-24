@@ -21,6 +21,7 @@ from world.combat.models import (
     ThreatPoolEntry,
 )
 from world.combat.services.combos.combo_outcome import _damage_multiplier_for_success
+from world.combat.services.npc.npc_movement import strike_pool_key
 from world.combat.services.npc.npc_targeting import _set_npc_action_targets
 from world.combat.services.npc.windup import _declare_windup_attack
 from world.combat.types import DefenseResult, ParticipantDamageResult
@@ -46,12 +47,18 @@ def _execute_npc_attack(  # noqa: PLR0913
     threat_map: dict[int, int] | None,
     shield_participant_ids: set[int] | None,
     actions: list[CombatOpponentAction],
-) -> None:
+    pools: dict[tuple[str, bool], list] | None = None,
+) -> bool:
     """Execute one NPC attack, appending to *actions* or declaring a windup.
 
     Picks a weighted-random threat entry; if it has ``windup_rounds > 0``
     declares a pending windup attack (no immediate row). Otherwise creates a
     ``CombatOpponentAction`` row and sets its targets.
+
+    ``pools`` (#4607) narrows the pool to the targets the CHOSEN entry can strike this
+    round, keyed by ``strike_pool_key`` (``reachable_pools``: a wind-up only from where
+    the opponent stands, else after moving); the caller passes only entries with someone
+    in reach. Returns True when a wind-up was declared.
 
     Args:
         opponent: The attacking ``CombatOpponent``.
@@ -63,9 +70,12 @@ def _execute_npc_attack(  # noqa: PLR0913
         threat_map: Optional threat-map for target selection.
         shield_participant_ids: Optional set of shield-bearing participant IDs.
         actions: The accumulator list to append created actions to.
+        pools: Optional reachable targets per ``strike_pool_key`` (see above).
     """
     weights = [e.weight for e in eligible]
     chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311 # NOSONAR game RNG, not crypto
+    if pools is not None:
+        target_pool = pools.get(strike_pool_key(chosen)) or target_pool
 
     # Telegraphed wind-up (#2637 design 2-3): a windup_rounds entry commits
     # to a PendingOpponentAttack instead of a same-round CombatOpponentAction.
@@ -81,7 +91,7 @@ def _execute_npc_attack(  # noqa: PLR0913
             threat_map=threat_map,
             shield_participant_ids=shield_participant_ids,
         )
-        return
+        return True
 
     action = CombatOpponentAction.objects.create(
         opponent=opponent,
@@ -98,6 +108,7 @@ def _execute_npc_attack(  # noqa: PLR0913
         shield_participant_ids=shield_participant_ids,
     )
     actions.append(action)
+    return False
 
 
 def resolve_npc_attack(
