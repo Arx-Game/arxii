@@ -24,6 +24,7 @@ from world.combat.constants import (
     EngagementLockStatus,
     LockInitiator,
     LockPcRole,
+    OpponentMoveKind,
     OpponentTier,
     PaceMode,
     ParticipantStatus,
@@ -47,6 +48,7 @@ from world.combat.models import (
     CombatEncounter,
     CombatOpponent,
     CombatOpponentAction,
+    CombatOpponentMove,
     CombatParticipant,
     CombatPull,
     CombatPullResolvedEffect,
@@ -396,6 +398,17 @@ class CombatOpponentActionFactory(factory_django.DjangoModelFactory):
     opponent = factory.SubFactory(CombatOpponentFactory)
     round_number = 1
     threat_entry = factory.SubFactory(ThreatPoolEntryFactory)
+
+
+class CombatOpponentMoveFactory(factory_django.DjangoModelFactory):
+    """Factory for CombatOpponentMove (#4607). Defaults to a plain ADVANCE plan."""
+
+    class Meta:
+        model = CombatOpponentMove
+
+    opponent = factory.SubFactory(CombatOpponentFactory)
+    round_number = 1
+    kind = OpponentMoveKind.ADVANCE
 
 
 class PendingOpponentAttackFactory(factory_django.DjangoModelFactory):
