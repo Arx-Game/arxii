@@ -5,8 +5,11 @@ check anyone rolls in a scene is an authored ``CheckType`` from the catalog, at 
 ``DifficultyChoice`` band -- never a freeform stat/skill/difficulty invention. None of
 the actions here select, compose, or fire a ``ConsequenceOutcome``/consequence pool;
 each only resolves a catalog reference + band (via ``world.checks.catalog_invocation``,
-the same shared core the SENIOR ad-hoc ``InvokeCatalogCheckAction`` uses) and fires
-``perform_check`` as-is. When the catalog lacks a fitting check, ``ProposeCheckAction``
+the same shared core the SENIOR ad-hoc ``InvokeCatalogCheckAction`` uses) and rolls it
+through ``perform_check_with_modifiers``, so the roller's worn items, buffs, conditions,
+distinctions and the scene's modifiers count as on any other check (#4629). "As-is" here
+(#3314) always meant the catalog row at its band, never a roll without modifiers. When the
+catalog lacks a fitting check, ``ProposeCheckAction``
 routes a structured proposal to the staff inbox -- it never creates a live ``CheckType``
 row.
 
@@ -157,7 +160,7 @@ def _perform_and_broadcast_self_check(
     band: str,
     invocation: InvocationRequest | None = None,
 ) -> ActionResult:
-    """Fire ``perform_check`` and broadcast a number-free narration to the room.
+    """Roll the check with every modifier and broadcast a number-free narration to the room.
 
     Shared by ``SceneSelfCheckAction`` and ``AnswerCheckCallAction`` -- the one place
     a catalog check actually rolls and reaches the scene feed. Attributes the
@@ -172,8 +175,12 @@ def _perform_and_broadcast_self_check(
     ``invocation`` (#4333): a Call on favor rolls first; its lines reach the room
     and its bonus is added to this check. The roller's result message carries
     their own line (for a secret faith the room line omits it) and the bonus.
+
+    The roll gathers the roller's modifiers through ``perform_check_with_modifiers``
+    with the room's active scene (#4629), the same seam every other check uses; the
+    favor bonus rides on top as ``extra_modifiers``.
     """
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.scenes.interaction_services import (  # noqa: PLC0415
         get_active_scene,
         record_interaction,
@@ -182,6 +189,7 @@ def _perform_and_broadcast_self_check(
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     persona = active_persona_for_sheet(actor_sheet)
+    scene = get_active_scene(actor.location)
     favor_lines: list[str] = []
     favor_bonus = 0
     if invocation is not None:
@@ -192,7 +200,6 @@ def _perform_and_broadcast_self_check(
         from world.worship.exceptions import FavorInvocationRefused  # noqa: PLC0415
         from world.worship.invocation_services import invoke_favor  # noqa: PLC0415
 
-        scene = get_active_scene(actor.location)
         try:
             outcome = invoke_favor(
                 actor_sheet,
@@ -206,11 +213,12 @@ def _perform_and_broadcast_self_check(
         broadcast_invocation(outcome, persona=persona, scene=scene, location=actor.location)
         favor_bonus = outcome.bonus
         favor_lines = invocation_private_lines(outcome)
-    result = perform_check(
+    result = perform_check_with_modifiers(
         actor,
         check_type,
         target_difficulty=DIFFICULTY_VALUES[band],
         extra_modifiers=favor_bonus,
+        scene=scene,
     )
     band_label = DifficultyChoice(band).label
     narration = render_challenge_outcome_narration(

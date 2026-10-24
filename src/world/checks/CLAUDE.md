@@ -259,8 +259,11 @@ seeds the conditions.
 - **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` is the sole
   agency-oracle source `_calculate_capability_points`/CAPABILITY contributions read; lazily
   imported (`world.conditions.services` already imports `world.checks.services` at module scope)
-- **Mechanics app**: `resolve_challenge()` uses `apply_resolution()` for effect dispatch, and
-  folds its `capability_source.value` into `extra_modifiers` before calling `perform_check()`
+- **Mechanics app**: `resolve_challenge()` uses `apply_resolution()` for effect dispatch. Since
+  #4629 it gathers the character's modifiers once (`_gather_challenge_modifiers`), adds its
+  `capability_source.value` exactly once, rolls with them, spends the once-only conditions the
+  roll used, and records that same breakdown on the `ConsequenceOutcome`, never one rebuilt
+  after the roll
 - **Any system**: Can call `select_consequence()` + `apply_resolution()` for standalone consequence resolution (magic mishaps, reactive checks, etc.)
 - **Callers**: Goals, magic, combat, conditions compute extra_modifiers before calling perform_check
 

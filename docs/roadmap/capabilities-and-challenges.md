@@ -130,6 +130,13 @@ The core resolution loop is implemented end-to-end.
   condition/item capability that chose the approach) directly into `extra_modifiers` before
   calling `perform_check` — the two capability oracles (availability's technique-grant read
   vs. this agency-value read) now both reach the roll.
+- **Challenge rolls gather every modifier** (#4629): DONE. `resolve_challenge` (plain and
+  action-template approaches) gathers `collect_check_modifiers` once before the roll, with the
+  active scene at the challenge's location, so worn items, technique buffs, conditions and
+  distinctions count as on any other check; each capability channel still counts once. The
+  `ConsequenceOutcome` stores that same breakdown, where it used to rebuild one after the
+  roll and store modifiers the roll had never counted. The action-template path no longer
+  drops the capability source's value and the caller's bonus.
 - **Capability value ladder + deviation-scored check contribution** (#2704, ADR-0164) — DONE.
   Built: (1) one shared, deliberately uncapped ladder for every `CapabilityType.innate_baseline`
   and effective value — 0 blocked, 1-3 impaired, 5 unimpaired mortal, 8-12 gifted, 25+ greater
@@ -322,7 +329,9 @@ invention).
   so every catalog-check invocation surface (SENIOR ad-hoc, player self-check,
   GM call) resolves against the exact same code.
 - **`SceneSelfCheckAction`** (`scene_self_check`) — any player, SELF-target
-  only, broadcasts a Narrator-style OUTCOME line to the room via the scene
+  only, rolls with every modifier the character carries (#4629, through
+  `perform_check_with_modifiers`; so do answered calls and `gm check`),
+  broadcasts a Narrator-style OUTCOME line to the room via the scene
   interaction pipeline, attributed to the roller's own presenting persona
   (never the raw character name — the #981 alt-leak rule).
 - **`CallForCheckAction`** (`call_for_check`) — JUNIOR+ GM, creates a `CheckCall`

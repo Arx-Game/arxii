@@ -5,9 +5,10 @@ or consequence pools on whim.** Every code path in this module resolves against 
 authored catalog row (``CheckType``, a ``DifficultyChoice`` band, a ``Trait``, or a
 ``ConditionTemplate``) -- there is no integer difficulty parameter, no free-form
 stat/skill passthrough, and no ``ConsequenceOutcome``/consequence-pool reference
-anywhere here. ``InvokeCatalogCheckAction`` fires ``perform_check`` and returns a
-graded, number-free result to the invoking GM only; it never selects, composes, or
-fires a consequence pool.
+anywhere here. ``InvokeCatalogCheckAction`` rolls the target's check through
+``perform_check_with_modifiers`` (the target's own gear, buffs and conditions count, as on
+every other check, #4629) and returns a graded, number-free result to the invoking GM
+only; it never selects, composes, or fires a consequence pool.
 """
 
 from __future__ import annotations
@@ -111,9 +112,14 @@ class InvokeCatalogCheckAction(Action):
     unresolvable refuses with a hint back to ``find``), a ``difficulty`` band
     (validated against ``DifficultyChoice`` -- no integers accepted anywhere), and
     an optional ``edge_reason``/``setback_reason`` (mutually exclusive) shifting the
-    band by exactly one step, echoed into the result. Fires ``perform_check`` as-is
-    -- it never selects, composes, or fires a ``ConsequenceOutcome``/consequence
-    pool, and no parameter on this action could.
+    band by exactly one step, echoed into the result. The GM's only lever on the
+    number is that one band step; there is no integer modifier parameter (#2118
+    Decision 3). The target's own modifiers (worn items, buffs, conditions,
+    distinctions, the scene) are gathered through ``perform_check_with_modifiers`` as
+    on every other check (#4629): they are the character's, not the GM's invention, and
+    the same check must resolve the same at every table. It never selects, composes,
+    or fires a ``ConsequenceOutcome``/consequence pool, and no parameter on this action
+    could.
 
     Gated on ``MinimumGMLevelPrerequisite(GMLevel.SENIOR)`` — the ad-hoc check
     is a staff/senior stopgap for impromptu moments no authored situation covers.
@@ -170,7 +176,8 @@ class InvokeCatalogCheckAction(Action):
             resolve_band,
             resolve_check_type_ref,
         )
-        from world.checks.services import perform_check  # noqa: PLC0415
+        from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
         resolved = resolve_check_type_ref(
             kwargs.get("check_type_ref"), not_found_hint=_CATALOG_HINT
@@ -192,10 +199,11 @@ class InvokeCatalogCheckAction(Action):
             return shift_result
         effective_band, shift_note = shift_result
 
-        result = perform_check(
+        result = perform_check_with_modifiers(
             target,
             check_type,
             target_difficulty=DIFFICULTY_VALUES[effective_band],
+            scene=get_active_scene(target.location),
         )
         band_label = DifficultyChoice(difficulty).label
         message = (

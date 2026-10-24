@@ -109,6 +109,12 @@ OWN_STANDING_SOURCE_KINDS: frozenset[str] = frozenset(
     {ModifierSourceKind.FATIGUE, ModifierSourceKind.STRAIN, ModifierSourceKind.SOULFRAY}
 )
 
+# Kinds ``perform_check`` already counts on its own, so a caller never feeds them back in
+# through ``extra_modifiers`` (``ModifierBreakdown.extra_modifiers_total``).
+ROLL_COUNTED_SOURCE_KINDS: frozenset[str] = frozenset(
+    {ModifierSourceKind.CAPABILITY, ModifierSourceKind.ROLLMOD}
+)
+
 
 class ModifierLane(models.TextChoices):
     """A kind of quantity a modifier can change (#4551 section 5.5, #4594).
