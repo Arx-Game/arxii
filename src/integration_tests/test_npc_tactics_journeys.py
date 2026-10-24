@@ -78,6 +78,7 @@ from world.combat.constants import (
 )
 from world.combat.factories import (
     CombatEncounterFactory,
+    CombatOpponentFactory,
     CombatParticipantFactory,
     CreatureTemplateFactory,
     OpponentTierTemplateFactory,
@@ -88,6 +89,7 @@ from world.combat.models import (
     CombatOpponent,
     CombatOpponentAction,
     CombatOpponentMove,
+    CombatParticipant,
     NpcTacticsConfig,
 )
 from world.combat.services import begin_declaration_phase, resolve_round
@@ -452,6 +454,35 @@ class AnArcherThatCannotBeAnswered(_TheField):
         self.assertLess(ogre.health, ogre.max_health)  # both blows landed
         self.assertEqual(before - ogre.morale, UNANSWERED)
         self.assertEqual(NpcTacticsConfig.load().unanswered_hit_morale, UNANSWERED)
+
+    def test_a_duel_mirror_and_a_pool_less_opponent_keep_their_morale(self) -> None:
+        # Neither has a threat pool to answer with, so the tactics ladder never judges
+        # them: arrows they cannot return shake neither of them.
+        hobb = self.fighter("Hobb", at=self.lane)
+        mirror = CombatOpponentFactory(
+            encounter=self.encounter,
+            name="Hobb's Reflection",
+            threat_pool=None,
+            mirrors_participant_id=CombatParticipant.objects.get(
+                character_sheet=hobb.sheet_data
+            ).pk,
+        )
+        spirit = CombatOpponentFactory(
+            encounter=self.encounter, name="Thorn Spirit", threat_pool=None
+        )
+        for opponent in (mirror, spirit):
+            place_in_position(opponent.objectdb, self.lane)
+        before = {o.pk: o.morale for o in (mirror, spirit)}
+
+        # Four rounds: Wren shoots each of them twice from the air.
+        for round_index, opponent in enumerate((mirror, spirit, mirror, spirit)):
+            if round_index:
+                self.next_round()
+            self.declare_strike(self.wren, self.bow, opponent)
+            self.resolve()
+        for shot in (self.fresh(mirror), self.fresh(spirit)):
+            self.assertLess(shot.health, shot.max_health, shot.name)  # the arrows landed
+            self.assertEqual(shot.morale, before[shot.pk], shot.name)
 
 
 class BringingDownAFlier(_TheField):

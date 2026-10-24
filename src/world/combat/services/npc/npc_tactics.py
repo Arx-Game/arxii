@@ -98,6 +98,8 @@ from world.conditions.constants import Allegiance
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from django.db.models import QuerySet
+
     from world.combat.services.npc.npc_movement import HopHook
     from world.combat.services.npc.npc_selection import NpcRoundContext
     from world.combat.types import MovementProfile
@@ -329,9 +331,24 @@ def unanswerable_attackers(  # noqa: PLR0913 - the ladder's per-opponent inputs
     ]
 
 
+def plannable_opponents(opponents: QuerySet[CombatOpponent]) -> QuerySet[CombatOpponent]:
+    """The ACTIVE opponents the tactics ladder plans for: those with a threat pool that are
+    not duel mirrors. A mirror or a pool-less opponent (a mirrored boss, a summon with no
+    attacks) has no entries to answer with, so the ladder never reads it."""
+    return (
+        opponents.filter(status=OpponentStatus.ACTIVE)
+        .exclude(threat_pool__isnull=True)
+        .exclude(mirrors_participant_id__isnull=False)
+    )
+
+
 def apply_unanswered_hit_morale(attacker: Combatant, outcome: ActionOutcome) -> None:
     """Each hit ``attacker`` landed on an opponent that cannot answer it shakes that
-    opponent by ``unanswered_hit_morale`` (a tier without morale takes its share)."""
+    opponent by ``unanswered_hit_morale`` (a tier without morale takes its share).
+
+    Only an opponent the ladder plans for (``plannable_opponents``) is shaken this way:
+    a duel mirror or a pool-less opponent has nothing to answer with and is not judged
+    by whether it could."""
     from world.combat.morale import apply_morale_damage  # noqa: PLC0415
 
     victims = [
@@ -344,7 +361,7 @@ def apply_unanswered_hit_morale(attacker: Combatant, outcome: ActionOutcome) -> 
         return
     struck = [
         o
-        for o in CombatOpponent.objects.filter(pk__in=victims, status=OpponentStatus.ACTIVE)
+        for o in plannable_opponents(CombatOpponent.objects.filter(pk__in=victims))
         if not (isinstance(attacker, CombatOpponent) and attacker.pk == o.pk)
     ]
     entries_by_pool: dict[int, list[ThreatPoolEntry]] = defaultdict(list)

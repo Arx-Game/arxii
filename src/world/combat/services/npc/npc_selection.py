@@ -40,6 +40,7 @@ from world.combat.services.npc.npc_tactics import (
     grounding_strike,
     plan_approach,
     plan_retreat,
+    plannable_opponents,
     shelter_goal,
     unanswerable_attackers,
     usable_entries,
@@ -84,15 +85,11 @@ class NpcRoundContext:
 
 
 def _plannable_opponents(encounter: CombatEncounter) -> list[CombatOpponent]:
-    """ACTIVE opponents with a threat pool that are not duel mirrors."""
+    """ACTIVE opponents with a threat pool that are not duel mirrors (``plannable_opponents``)."""
     return list(
-        CombatOpponent.objects.filter(
-            encounter=encounter,
-            status=OpponentStatus.ACTIVE,
+        plannable_opponents(CombatOpponent.objects.filter(encounter=encounter)).select_related(
+            "threat_pool", "objectdb"
         )
-        .exclude(threat_pool__isnull=True)
-        .exclude(mirrors_participant_id__isnull=False)
-        .select_related("threat_pool", "objectdb")
     )
 
 
