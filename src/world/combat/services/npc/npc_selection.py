@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from world.combat.constants import (
     EngagementLockStatus,
@@ -29,7 +30,8 @@ from world.combat.services.npc.npc_movement import (
     ReachMemo,
     mover_origin,
     nearest_hostile_position,
-    reachable_pools_by_delivery,
+    reachable_pools,
+    strike_pool_key,
     write_move_plan,
 )
 from world.combat.services.npc.npc_targeting import (
@@ -39,6 +41,9 @@ from world.combat.services.npc.npc_targeting import (
 )
 from world.conditions.constants import Allegiance
 from world.scenes.constants import RoundStatus
+
+if TYPE_CHECKING:
+    from world.areas.positioning.models import Position
 
 
 @dataclass
@@ -158,11 +163,16 @@ def _build_npc_round_context(
 def _unmatured_windup_opponent_ids(
     encounter: CombatEncounter, opponents: list[CombatOpponent]
 ) -> set[int]:
-    """Opponents with a wind-up that does not mature this round (it is their action)."""
+    """Opponents still winding up when the round is planned (the telegraph is their action).
+
+    Includes a wind-up that lands this round: maturation runs after planning, and the blow
+    comes from where the opponent stands, so a fighter who stepped out of reach makes it
+    miss instead of being chased down (#4607).
+    """
     return set(
         PendingOpponentAttack.objects.filter(
             opponent__in=opponents,
-            resolves_round__gt=encounter.round_number,
+            resolves_round__gte=encounter.round_number,
         ).values_list("opponent_id", flat=True)
     )
 
@@ -340,12 +350,14 @@ def plan_opponent_round(
     Returns the created attack rows. Writes no row at all when the opponent flees
     (morale BREAK sets FLED, #2015), is calmed (NEUTRAL holds by design, #1590), or holds
     on a companion HOLD order (#1921). Otherwise it always writes one ADVANCE
-    ``CombatOpponentMove``, except when it holds an unmatured wind-up after selection
-    (the telegraph is its action and standing still is the tell).
+    ``CombatOpponentMove``, except when it is winding up after selection, including a
+    wind-up that lands this round (the telegraph is its action and standing still is the
+    tell).
 
     Attack rows go only at targets the opponent can strike THIS round: reachable from
-    its position within ``speed_hops`` for the chosen entry's delivery
-    (``reachable_pools_by_delivery``); unplaced combatants count as reachable. With no
+    its position within ``speed_hops`` for the chosen entry's delivery, and from where it
+    stands for a wind-up entry (``reachable_pools``); unplaced combatants count as
+    reachable. With no
     eligible entry (all on cooldown) or nobody in reach it writes the ADVANCE row only,
     hinting the nearest hostile's position. A summon with no live hostile left gets the
     ADVANCE row and no attack.
@@ -403,21 +415,21 @@ def plan_opponent_round(
     )
     profile = opponent.movement_profile
     with mover_origin(opponent, profile) as origin:
-        pool_by_delivery = reachable_pools_by_delivery(
+        pools = reachable_pools(
             origin,
             target_pool,
-            {e.delivery for e in eligible},
+            {strike_pool_key(e) for e in eligible},
             profile=profile,
             memo=ctx.reach_memo,
         )
-        strikeable = [e for e in eligible if pool_by_delivery[e.delivery]]
+        strikeable = [e for e in eligible if pools[strike_pool_key(e)]]
         # A hostile's own position, never an aerial node a route search put up alone.
         goal = None if strikeable else nearest_hostile_position(origin, target_pool, profile)
     if not strikeable:
-        write_move_plan(opponent, encounter.round_number, goal_position=goal)
+        _write_advance_unless_winding_up(opponent, ctx, goal_position=goal)
         return []
 
-    in_reach = list({t.pk: t for pool in pool_by_delivery.values() for t in pool}.values())
+    in_reach = list({t.pk: t for pool in pools.values() for t in pool}.values())
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
         n_attacks = swarm_attack_count(
             opponent.swarm_count,
@@ -440,9 +452,20 @@ def plan_opponent_round(
             threat_map=ctx.threat_maps.get(opponent.pk),
             shield_participant_ids=ctx.shield_participant_ids,
             actions=actions,
-            pool_by_delivery=pool_by_delivery,
+            pools=pools,
         )
 
-    if not declared_windup and opponent.pk not in ctx.unmatured_windup_opponent_ids:
-        write_move_plan(opponent, encounter.round_number)
+    if not declared_windup:
+        _write_advance_unless_winding_up(opponent, ctx)
     return actions
+
+
+def _write_advance_unless_winding_up(
+    opponent: CombatOpponent,
+    ctx: NpcRoundContext,
+    *,
+    goal_position: Position | None = None,
+) -> None:
+    """Write the opponent's ADVANCE plan, unless it is winding up (then it stands still)."""
+    if opponent.pk not in ctx.unmatured_windup_opponent_ids:
+        write_move_plan(opponent, ctx.encounter.round_number, goal_position=goal_position)

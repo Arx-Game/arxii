@@ -454,13 +454,31 @@ class ABruteWindsUp(_TheCauseway):
 
     def test_a_brute_winding_up_does_not_move(self) -> None:
         hobb = self.fighter("Hobb", at=self.gate)
-        brute = self.brute(at=self.hall)
+        brute = self.brute(at=self.yard)  # beside Hobb: its blow reaches from where it stands
 
         self.resolve()
 
         self.assertTrue(PendingOpponentAttack.objects.filter(opponent=brute).exists())
-        self.assertEqual(self.where(brute), self.hall)
+        self.assertEqual(self.where(brute), self.yard)
         self.assertNotIn("Brute moves to", "\n".join(self.mailbox(hobb).rows))
+
+    def test_a_brute_out_of_reach_closes_in_then_winds_up_then_lands_the_blow(self) -> None:
+        hobb = self.fighter("Hobb", at=self.gate)
+        brute = self.brute(at=self.hall)  # two hops from Hobb: a wind-up cannot reach him
+
+        self.resolve()  # round 1: it walks up instead of winding up at nobody
+        self.assertEqual(self.where(brute), self.yard)
+        self.assertFalse(PendingOpponentAttack.objects.filter(opponent=brute).exists())
+        self.assertShownRow(hobb, "Brute moves to Yard.")
+
+        self.next_round()
+        self.resolve()  # round 2: beside Hobb now, it winds up and stands still
+        self.assertEqual(self.where(brute), self.yard)
+        self.assertEqual(self.health(hobb), FULL_HEALTH)
+
+        self.next_round()
+        self.resolve()  # round 3: Hobb stayed put, so the blow lands
+        self.assertEqual(self.health(hobb), FULL_HEALTH - BITE)
 
     def test_the_blow_lands_on_the_weakest_still_in_reach_after_hobb_steps_away(self) -> None:
         hobb = self.fighter("Hobb", at=self.gate, health=60)

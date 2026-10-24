@@ -35,6 +35,7 @@ from world.combat.models import (
     CombatOpponentAction,
     CombatOpponentMove,
     CombatParticipant,
+    ThreatPoolEntry,
 )
 from world.combat.services.npc.npc_targeting import (
     _npc_action_target_pool,
@@ -126,24 +127,44 @@ def can_strike_this_round(
     return sum(step_costs(path, traversal=profile.traversal)) <= profile.speed_hops
 
 
-def reachable_pools_by_delivery(
+PoolKey = tuple[str, bool]
+
+
+def strike_pool_key(entry: ThreatPoolEntry) -> PoolKey:
+    """Which reachable-target pool an entry draws from: its delivery, and whether it
+    strikes from where the opponent stands.
+
+    A wind-up entry stands still: an opponent winding up does not move (the telegraph
+    is its action), so it may only aim at someone it already reaches. Every other entry
+    may close in first, up to the opponent's hop budget.
+    """
+    return entry.delivery, entry.windup_rounds > 0
+
+
+def reachable_pools(
     origin: Position | None,
     target_pool: list,
-    deliveries: set[str],
+    keys: set[PoolKey],
     *,
     profile: MovementProfile,
     memo: ReachMemo,
-) -> dict[str, list]:
-    """For each delivery, the targets in ``target_pool`` strikeable this round."""
+) -> dict[PoolKey, list]:
+    """For each pool key (``strike_pool_key``), the targets in ``target_pool`` strikeable
+    this round: from where the opponent stands for a wind-up, else after moving."""
     positions = [(t, target_position(t)) for t in target_pool]
-    return {
-        delivery: [
-            t
-            for t, pos in positions
-            if can_strike_this_round(origin, pos, delivery, profile=profile, memo=memo)
-        ]
-        for delivery in deliveries
-    }
+    pools: dict[PoolKey, list] = {}
+    for delivery, stands_still in keys:
+        if stands_still:
+            pools[(delivery, stands_still)] = [
+                t for t, pos in positions if memo.reaches(origin, pos, delivery)
+            ]
+        else:
+            pools[(delivery, stands_still)] = [
+                t
+                for t, pos in positions
+                if can_strike_this_round(origin, pos, delivery, profile=profile, memo=memo)
+            ]
+    return pools
 
 
 def nearest_hostile_position(

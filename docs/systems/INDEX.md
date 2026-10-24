@@ -8738,8 +8738,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     (`world/combat/services/npc/npc_selection.py`, one context builder
     `_build_npc_round_context`) write the attack rows plus one ADVANCE `CombatOpponentMove`
     per active opponent; targets are narrowed to those strikeable this round after moving
-    (`can_strike_this_round` / `reachable_pools_by_delivery`, `npc_movement.py`). No move row
-    for a wind-up that has not matured.
+    (`can_strike_this_round` / `reachable_pools`, `npc_movement.py`); a wind-up entry aims
+    only at someone in reach from where the opponent stands, since it will not move. No
+    move row for a wind-up that has not matured.
   - Resolution: `_resolve_actions(..., npc_moves=)` runs `advance_opponent` once before an
     opponent's first attack row (live re-plan, walk cut to `speed_hops`, narrated
     "{name} moves to {position}."), then `refit_targets` before each row (live
