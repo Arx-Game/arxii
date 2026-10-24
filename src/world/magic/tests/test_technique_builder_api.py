@@ -24,6 +24,7 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import CapabilityTypeFactory
+from world.magic.exceptions import DuplicateTechniqueName
 from world.magic.factories import (
     CharacterGiftFactory,
     EffectTypeFactory,
@@ -272,6 +273,23 @@ class TechniqueBuilderAPITests(APITestCase):
         tech = Technique.objects.get(pk=res.data["id"])
         # Staff technique is unbound — no CharacterTechnique row
         assert not CharacterTechnique.objects.filter(technique=tech).exists()
+
+    def test_staff_duplicate_name_under_same_gift_returns_400(self):
+        """The staff path refuses a reused (gift, name) with the clean 400 the player
+        path gives, not a 500 (#4619)."""
+        self.client.force_authenticate(user=self.staff_account)
+        url = reverse("magic:technique-author")
+        payload = self._payload(gift_id=self.staff_gift.id)
+        payload.pop("character_id")
+        first = self.client.post(url, payload, format="json")
+        assert first.status_code == status.HTTP_201_CREATED, first.data
+        before = Technique.objects.count()
+
+        second = self.client.post(url, payload, format="json")
+
+        assert second.status_code == status.HTTP_400_BAD_REQUEST, second.data
+        assert second.data["detail"] == DuplicateTechniqueName.user_message
+        assert Technique.objects.count() == before
 
     # ------------------------------------------------------------------
     # base CRUD — non-staff must be rejected

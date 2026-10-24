@@ -309,14 +309,15 @@ so that web case calls `author_staff_technique()` directly.)
 - `add_draft_capability_grant` / `add_draft_damage_profile` / `add_draft_applied_condition`
   and `remove_*` counterparts — payload row management.
 - `draft_to_design(draft) -> TechniqueDesignInput` — validates completeness; raises
-  `TechniqueDraftIncomplete` on missing required fields.
+  `TechniqueDraftIncomplete` on missing required fields, and its subclass
+  `TechniqueDraftMoraleRemovesNothing` when the draft's morale row removes no morale (#4619).
 
 **Shared validation gate** (`services/technique_builder.py`):
 - `validate_design_for_character(design, policy, character)` — gift-ownership check; the single
   source of truth for the gate (telnet + web call it); raises `GiftNotOwned`.
 
 **Exceptions** (in `exceptions.py`): `NoActiveTechniqueDraft`, `TechniqueDraftIncomplete`,
-`UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
+`TechniqueDraftMoraleRemovesNothing`, `UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
 
 **Telnet workbench** — `CmdTechnique` (`commands/technique.py`, key `"technique"`,
 `cmd:perm(Builder)` — staff/GM only). Subcommands: `draft`, `show`, `set`, `restrict`,

@@ -878,6 +878,10 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   reporting success (#4457 real-testing). Guard:
   `SchoolingFloorTest.test_a_correction_after_a_refused_save_is_written_to_the_database`.
   Reviewer: `tools/agents/idmapper-form-binding-reviewer.md`.
+- **Stock admin change pages** get the same protection from
+  `web.admin.authoring.identity_map.RefusedSaveFlushMixin` (its `render_change_form` flushes the
+  change form and every inline formset after rendering a refused POST); `TechniqueAdmin` uses
+  it (#4619, guard: `AuthoringAMoraleEffect.test_a_refused_save_leaves_the_game_reading_the_stored_row`).
 - **Save-time side effect (`views._sync_schooling_offers`)** - a POST that
   validates saves all three formsets in one `transaction.atomic()` block,
   then keeps every `SchoolingLine`'s TRADITION_STEP `DistinctionOffer` in

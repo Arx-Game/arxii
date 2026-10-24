@@ -358,14 +358,14 @@ class DraftToDesignTests(TestCase):
 
         assert built.morale_effect.morale_intensity_multiplier == Decimal("0.10")
 
-    def test_a_drafted_all_zero_morale_row_is_refused_at_build(self) -> None:
-        from django.core.exceptions import ValidationError
+    def test_a_drafted_all_zero_morale_row_is_refused_at_design(self) -> None:
+        from world.magic.exceptions import TechniqueDraftMoraleRemovesNothing
 
         draft = self._make_complete_draft()
         set_draft_morale_effect(draft, base_morale=0)
 
-        with self.assertRaises(ValidationError):
-            build_technique(draft_to_design(draft), creator=self.sheet)
+        with self.assertRaises(TechniqueDraftMoraleRemovesNothing):
+            draft_to_design(draft)
 
     def test_draft_without_a_morale_row_designs_none(self) -> None:
         assert draft_to_design(self._make_complete_draft()).morale_effect is None

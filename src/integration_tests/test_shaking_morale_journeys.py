@@ -50,6 +50,7 @@ from world.conditions.factories import (
     PenetrationOutcomeFactorFactory,
 )
 from world.fatigue.constants import EffortLevel
+from world.magic.exceptions import TechniqueDraftMoraleRemovesNothing
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
@@ -59,7 +60,13 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueMoraleEffectFactory,
 )
-from world.magic.models import Technique, TechniqueMoraleEffect
+from world.magic.models import (
+    Technique,
+    TechniqueDraft,
+    TechniqueMoraleEffect,
+    TechniqueTierBudget,
+)
+from world.magic.services.technique_draft import set_draft_morale_effect
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneParticipationFactory
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
@@ -137,6 +144,60 @@ class AuthoringAMoraleEffect(JourneyCase):
 
         self.assertContains(response, "This row removes no morale.")
         self.assertFalse(TechniqueMoraleEffect.objects.filter(technique=self.technique).exists())
+
+    def test_a_refused_save_leaves_the_game_reading_the_stored_row(self) -> None:
+        """A refused save must not leave the posted values on the cached rows.
+
+        Validating the admin form writes the posted values onto the identity-mapped
+        Technique and morale row. The database read alone cannot see that, so this
+        reads both rows back the way the game does, through the identity map.
+        """
+        stored = TechniqueMoraleEffectFactory(technique=self.technique, base_morale=30)
+        stored_description = self.technique.description
+        data = self.change_post(
+            {"base_morale": 0, "morale_intensity_multiplier": 0, "morale_per_extra_sl": 0}
+        )
+        data["description"] = "A description nobody saved."
+
+        response = self.client.post(self.url, data)
+
+        self.assertContains(response, "This row removes no morale.")
+        self.assertEqual(TechniqueMoraleEffect.objects.get(pk=stored.pk).base_morale, 30)
+        technique = Technique.objects.get(pk=self.technique.pk)
+        self.assertEqual(technique.description, stored_description)
+        self.assertEqual(technique.cached_morale_effect.base_morale, 30)
+        page = self.client.get(self.url)
+        self.assertContains(page, 'name="morale_effect-0-base_morale" value="30"')
+
+    def test_authoring_a_draft_whose_morale_row_removes_nothing_is_refused(self) -> None:
+        """A draft carrying an all-zero morale row is refused at ``technique author``.
+
+        The workbench has no morale subcommand, so the row is set through the draft
+        service; the authoring itself goes through the telnet command handler.
+        """
+        TechniqueTierBudget.objects.get_or_create(
+            tier=1, defaults={"power_budget": 100, "representative_level": 1, "label": "Tier 1"}
+        )
+        room = self.make_room("The Workroom")
+        warden = self.make_player("Warden", room=room)
+        self.account_of(warden).permissions.add("Builder")
+        gift = GiftFactory()
+        effect_type = EffectTypeFactory()
+        self.telnet(warden, "technique draft Hollow Threat")
+        self.telnet(
+            warden,
+            f"technique set gift={gift.pk} effect_type={effect_type.pk} action_category=physical"
+            " tier=1 intensity=2 control=2 anima_cost=1",
+        )
+        set_draft_morale_effect(
+            TechniqueDraft.objects.get(character=warden.sheet_data), base_morale=0
+        )
+
+        said = self.telnet(warden, "technique author")
+
+        self.assertIn(TechniqueDraftMoraleRemovesNothing().user_message, said)
+        self.assertFalse(Technique.objects.filter(name="Hollow Threat").exists())
+        self.assertTrue(TechniqueDraft.objects.filter(character=warden.sheet_data).exists())
 
 
 @contextmanager
