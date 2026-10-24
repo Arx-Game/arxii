@@ -325,10 +325,9 @@ class AnEnemyClosesIn(_TheCauseway):
         self.assertEqual(self.health(self.hobb), FULL_HEALTH - 2 * BITE)
         rows = self.mailbox(self.hobb).rows
         self.assertEqual([r for r in rows if "Ogre moves to" in r], ["Ogre moves to Yard."])
-        # Both blows are told in one row, whose total is the two bites.
+        # Each blow is its own row, naming Hobb once, for one bite each.
         blows = [r for r in rows if r.startswith("Ogre\u2019s ") and "strikes" in r]
-        self.assertEqual(len(blows), 1, rows)
-        self.assertIn(f"for {2 * BITE} damage", blows[0])
+        self.assertEqual(blows, [f"Ogre\u2019s Ogre strike strikes Hobb for {BITE} damage."] * 2)
 
     def test_an_archer_shoots_across_the_room_without_moving(self) -> None:
         archer = self.creature("Bandit Archer", at=self.tower, delivery=StrikeDelivery.MISSILE)
@@ -603,6 +602,31 @@ class ABruteWindsUp(_TheCauseway):
         self.assertEqual(self.where(brute), self.yard)
         self.assertEqual(self.health(hobb), FULL_HEALTH)
         self.assertShownRow(hobb, CANNOT_REACH.format(name="Brute"))
+
+
+class TwoEnemiesOnHobb(_TheCauseway):
+    """Two enemies whose attacks name the same fighter each keep their own target (#4607)."""
+
+    def test_the_brute_calls_off_while_the_wolf_still_bites(self) -> None:
+        hobb = self.fighter("Hobb", at=self.gate)
+        brute = self.creature(
+            "Brute", at=self.yard, windup_rounds=1, target_selection=TargetSelection.LOWEST_HEALTH
+        )
+        self.resolve()  # round 1: the brute winds up at Hobb, beside it
+        wolf = self.creature("Grey Wolf", at=self.hall, hops=2)
+
+        self.next_round()
+        self.telnet(hobb, "position Lane")  # two from the brute; the wolf can still follow
+        self.resolve()
+
+        self.assertEqual(self.where(brute), self.yard)
+        self.assertEqual(self.where(wolf), self.gate)
+        self.assertShownRow(hobb, CANNOT_REACH.format(name="Brute"))
+        bites = [r for r in self.mailbox(hobb).rows if "strikes Hobb" in r]
+        self.assertEqual(
+            bites, [f"Grey Wolf\u2019s Grey Wolf strike strikes Hobb for {BITE} damage."]
+        )
+        self.assertEqual(self.health(hobb), FULL_HEALTH - BITE)
 
 
 class WallsOnTheCauseway(_TheCauseway):

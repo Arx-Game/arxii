@@ -34,6 +34,7 @@ from world.combat.services.encounter.completion import (
 )
 from world.combat.services.encounter.encounter_outcome import _classify_encounter_outcome
 from world.combat.services.npc.npc_selection import ensure_opponent_plans, select_npc_actions
+from world.combat.services.npc.npc_targeting import attach_npc_action_targets
 from world.combat.services.npc.sustained import _mature_sustained_actions
 from world.combat.services.npc.windup import _mature_pending_opponent_attacks
 from world.combat.services.rounds.action_resolution import _resolve_actions
@@ -243,24 +244,13 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         .select_related("opponent", "threat_entry")
         .prefetch_related(
             Prefetch(
-                "targets",
-                queryset=CombatParticipant.objects.select_related(
-                    "character_sheet",
-                ),
-                to_attr="cached_targets",
-            ),
-            Prefetch(
-                "opponent_targets",
-                queryset=CombatOpponent.objects.all(),
-                to_attr="cached_opponent_targets",
-            ),
-            Prefetch(
                 "threat_entry__conditions_applied",
                 to_attr="cached_conditions",
             ),
         )
     ):
         npc_actions[npc_action.opponent_id].append(npc_action)
+    attach_npc_action_targets([row for rows in npc_actions.values() for row in rows])
 
     npc_moves: dict[int, CombatOpponentMove] = {
         move.opponent_id: move

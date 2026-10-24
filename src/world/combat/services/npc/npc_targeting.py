@@ -312,3 +312,43 @@ def _set_npc_action_targets(  # noqa: PLR0913
                 _shield_participant_ids=None,
             )
         )
+
+
+def attach_npc_action_targets(actions: list[CombatOpponentAction]) -> None:
+    """Set ``cached_targets`` / ``cached_opponent_targets`` on each action from its own rows.
+
+    Not a ``Prefetch``: participants and opponents are identity-mapped, and Django's
+    many-to-many prefetch tags each fetched object with the action it belongs to. When
+    two actions target the same fighter both rows come back as the one shared instance,
+    the second tag overwrites the first, and both are grouped under one action: the first
+    attack lost its target and the second struck it twice (#4607, found in a live run).
+    Reads the two join tables (one query each) and the fighters they name (one each).
+    """
+    if not actions:
+        return
+    action_ids = [action.pk for action in actions]
+    participant_links = list(
+        CombatOpponentAction.targets.through.objects.filter(combatopponentaction_id__in=action_ids)
+        .order_by("pk")
+        .values_list("combatopponentaction_id", "combatparticipant_id")
+    )
+    opponent_links = list(
+        CombatOpponentAction.opponent_targets.through.objects.filter(
+            combatopponentaction_id__in=action_ids
+        )
+        .order_by("pk")
+        .values_list("combatopponentaction_id", "combatopponent_id")
+    )
+    participants = CombatParticipant.objects.select_related("character_sheet").in_bulk(
+        {participant_id for _, participant_id in participant_links}
+    )
+    opponents = CombatOpponent.objects.in_bulk({opponent_id for _, opponent_id in opponent_links})
+    targets_by_action: dict[int, list[CombatParticipant]] = {pk: [] for pk in action_ids}
+    for action_id, participant_id in participant_links:
+        targets_by_action[action_id].append(participants[participant_id])
+    opponent_targets_by_action: dict[int, list[CombatOpponent]] = {pk: [] for pk in action_ids}
+    for action_id, opponent_id in opponent_links:
+        opponent_targets_by_action[action_id].append(opponents[opponent_id])
+    for action in actions:
+        action.cached_targets = targets_by_action[action.pk]
+        action.cached_opponent_targets = opponent_targets_by_action[action.pk]
