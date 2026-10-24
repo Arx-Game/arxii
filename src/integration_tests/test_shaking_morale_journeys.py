@@ -138,6 +138,30 @@ class AuthoringAMoraleEffect(JourneyCase):
         self.assertContains(response, "This row removes no morale.")
         self.assertFalse(TechniqueMoraleEffect.objects.filter(technique=self.technique).exists())
 
+    def test_a_refused_save_leaves_the_game_reading_the_stored_row(self) -> None:
+        """A refused save must not leave the posted values on the cached rows.
+
+        Validating the admin form writes the posted values onto the identity-mapped
+        Technique and morale row. The database read alone cannot see that, so this
+        reads both rows back the way the game does, through the identity map.
+        """
+        stored = TechniqueMoraleEffectFactory(technique=self.technique, base_morale=30)
+        stored_description = self.technique.description
+        data = self.change_post(
+            {"base_morale": 0, "morale_intensity_multiplier": 0, "morale_per_extra_sl": 0}
+        )
+        data["description"] = "A description nobody saved."
+
+        response = self.client.post(self.url, data)
+
+        self.assertContains(response, "This row removes no morale.")
+        self.assertEqual(TechniqueMoraleEffect.objects.get(pk=stored.pk).base_morale, 30)
+        technique = Technique.objects.get(pk=self.technique.pk)
+        self.assertEqual(technique.description, stored_description)
+        self.assertEqual(technique.cached_morale_effect.base_morale, 30)
+        page = self.client.get(self.url)
+        self.assertContains(page, 'name="morale_effect-0-base_morale" value="30"')
+
 
 @contextmanager
 def every_check_at(outcome_name: str) -> Iterator[None]:

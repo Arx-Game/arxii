@@ -62,7 +62,8 @@ the bound forms from the identity map:
 `instance.flush_from_cache(force=True)` on each form's instance, and on each model row
 passed directly, that has a pk. A hand-assigned row is passed directly (the row editor's
 `_render_refused_edit`). This is the per-row spelling the Standoff Profile Builder, Being
-Service builder, Faction Rules page and Answer builder already use. Accept a page's own
+Service builder, Faction Rules page and Answer builder already use. A stock Django admin change page
+mixes in `RefusedSaveFlushMixin` from the same module (`TechniqueAdmin`, #4619). Accept a page's own
 equivalent (`CacheGuard` on the Soulfray builder, which puts saved values back). Do not
 ask for a global flush of the identity map or a new cache helper (`sharedmemory-model`
 skill: no flushing the whole cache, no `resolve_*` helpers).
