@@ -13,6 +13,7 @@ from actions.definitions.allegiance import SendAwayAction
 from actions.definitions.almanach import (
     AlmanachAddGangAction,
     AlmanachAddHoldingAction,
+    AlmanachAssignHolderAction,
     AlmanachAttachSheetAction,
     AlmanachBatchUnclaimedAction,
     AlmanachClaimWardAction,
@@ -1286,6 +1287,7 @@ _ALL_ACTIONS: list[Action] = [
     AlmanachPlantRungAction(),
     AlmanachBatchUnclaimedAction(),
     AlmanachNameRungAction(),
+    AlmanachAssignHolderAction(),
     AlmanachEditHouseAction(),
     AlmanachSwearAction(),
     AlmanachDescribeDemesneAction(),

@@ -62,11 +62,28 @@ the bound forms from the identity map:
 `instance.flush_from_cache(force=True)` on each form's instance, and on each model row
 passed directly, that has a pk. A hand-assigned row is passed directly (the row editor's
 `_render_refused_edit`). This is the per-row spelling the Standoff Profile Builder, Being
-Service builder, Faction Rules page and Answer builder already use. A stock Django admin change page
-mixes in `RefusedSaveFlushMixin` from the same module (`TechniqueAdmin`, #4619). Accept a page's own
-equivalent (`CacheGuard` on the Soulfray builder, which puts saved values back). Do not
+Service builder, Faction Rules page and Answer builder already use. Accept a page's own
+equivalent (`CacheGuard`, same module, on the Soulfray builder, which puts saved values back).
+Do not
 ask for a global flush of the identity map or a new cache helper (`sharedmemory-model`
 skill: no flushing the whole cache, no `resolve_*` helpers).
+
+**The stock admin is covered once, by the site (#4626, ADR-4626).** `ArxAdminSite.register`
+puts `RefusedSaveRestoreMixin` first in the MRO of every admin whose model or declared
+inline's model is a `SharedMemoryModel`, and `web/admin/tests/test_refused_save_restore.py`
+fails for a registered admin without it. The mixin keeps every row the change form, its
+inlines and a list edit bind (`_create_formsets`, the changelist formset's `full_clean`)
+in a `CacheGuard`, and puts them back in place after a refusal renders and after any
+exception out of the POST. So for a plain `ModelAdmin`, an inline, a `list_editable` or
+an admin's own `render_change_form`/`changelist_view` override, do not ask for a flush:
+it is covered. What is still yours to check on an admin diff: (1) an admin registered
+around `register` (a hand-written `_registry[...]` entry, another `AdminSite`); (2) an
+inline added through `get_inlines`/`get_inline_instances` on a parent whose own model is
+not idmapper-shared (the predicate reads the declared `inlines` only); (3) a
+`save_model`/`save_related`/`save_formset` override that writes a shared row no form is
+bound to, which the guard does not keep, on the path where the save then raises; (4) a
+custom admin view (an object tool, a `get_urls` page) that binds a form itself, which is
+a builder page and needs its own flush or guard.
 
 **`refresh_from_db()` is NOT a fix, and a diff that uses one is a finding.** Its query
 builds the row through the identity map, which hands back the same polluted instance, so
