@@ -106,19 +106,23 @@ only admins left without it are plain-model ones (Django's `Group`, allauth's, `
   values too: after a refused change form renders (`render_change_form` on a POST is reached
   only on a refusal; the page shows the posted values first), after a refused list edit
   renders (a `TemplateResponse` instead of the redirect), and after any exception out of the
-  POST (Django's `transaction.atomic` has rolled the database back). A row the failed save
-  had created and cached is evicted. `restore` is idempotent.
-- **Not covered** - a shared row an admin's own `save_model`/`save_related` override writes
-  that no form is bound to, on the exception path only (nothing writes on a refusal); a
-  one-to-one target whose reverse cache a form set, when that target is not itself a bound
-  row; a row a failed save deleted (the delete dropped it from the cache; the next read loads
-  it fresh).
+  POST (Django's `transaction.atomic` has rolled the database back; a list-edit POST gets
+  one transaction of its own around the whole view, since Django's covers only the save
+  loop). A row the failed save had created and cached is evicted, a one-to-one target a
+  form picked loses the back-pointer the pick cached on it, and a row the failed save
+  deleted loses its `_is_deleted` mark. `restore` is idempotent.
+- **Not covered** - a shared row an admin's own `save_model`/`save_related`/`save_formset`
+  override writes that no form is bound to (`ItemInstanceAdmin`'s game-object key sync, the
+  character sheet admin's profile writes, the roster admin's person and union services), on
+  the exception path only (nothing writes on a refusal); a row a failed save deleted is
+  usable again but out of the cache, so the next read loads a second object for it.
 - **Guard** - `web/admin/tests/test_refused_save_restore.py` walks the live registry and fails
   for any admin over shared rows without the mixin (so an admin put in the registry around
   `register` is caught). Journeys: `integration_tests/test_refused_admin_saves_journeys.py`
   (an inline refusal on the codex entry page, a blank name on the Path page then the
   corrected save, a held known-technique row after a refused Technique save, a save that
-  raises part way, a refused Tradition list edit). Decision record: ADR-4626. Reviewer:
+  raises part way, a refused Tradition list edit, a list edit that raises after writing,
+  a refused rename on Evennia's object page). Decision record: ADR-4626. Reviewer:
   `tools/agents/idmapper-form-binding-reviewer.md`.
 
 ### Save as new on every change form (#4094)
