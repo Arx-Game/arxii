@@ -1869,11 +1869,11 @@ plan_opponent_round(opponent, ctx)                # ctx.tactics = build_tactics_
       free = find_path(origin, approach set)                      # walls respected
       wall = find_path(..., through_barriers=True)                # breakable walls cost 1
       blocking = first_closed_edge(wall), unless going round costs no more
-      blocking and a melee bash entry and (MINDLESS or can_break_in_time or cannot advance)
+      blocking and a melee bash entry and (MINDLESS or can_break_in_time)
         → BASH plan (barrier_edge, threat_entry)
-      can advance → ADVANCE plan
-      zero-hop: the wall in the way (or an unaffordable first step that is breakable) → BASH
-      CUNNING/TACTICAL with a melee entry, and last round's plan was not WAIT → WAIT plan
+      can advance (round the wall, or toward another enemy) → ADVANCE plan
+      zero-hop, CUNNING/TACTICAL with a melee entry, last round's plan not WAIT → WAIT plan
+      zero-hop otherwise: the wall in the way (or an unaffordable breakable first step) → BASH
       else ADVANCE plan (nothing will move: the slot narrates the strain)
   somebody strikeable:
     CUNNING/TACTICAL: grounding_strike → first attack row is a grounding entry at a flier hitting it

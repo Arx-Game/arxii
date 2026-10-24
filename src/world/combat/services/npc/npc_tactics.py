@@ -18,9 +18,10 @@ live positions. The ladder runs in order and the first step that applies wins:
 5. A breakable wall blocks the shortest way: bash it (BASH). A mindless opponent always
    does; the others only when the group can bring it down within ``bash_rounds_limit``
    rounds, and otherwise go around, or toward another enemy they can reach.
-6. Nothing gets it nearer this round: bash the wall in the way anyway (all levels),
-   else wait once for an opening (WAIT, cunning and tactical, never twice running),
-   else stand. An opponent with no move left at all says it strains against the wall.
+6. Nothing gets it nearer this round: a cunning or tactical opponent waits once for an
+   opening (WAIT, never twice running; ratified decision 2 and Scenario 1), then bashes
+   the wall in the way anyway; a mindless one never waits. With no wall to bash it
+   stands, and an opponent with no move left at all says it strains against the wall.
 
 Everything the ladder reads is derived: who is hitting an opponent comes from this
 round's declarations and attack rows, the waiting cap from last round's move row, the
@@ -585,33 +586,43 @@ def plan_approach(  # noqa: PLR0913 - the ladder's steps 4 to 8 read as one tabl
     advance_to = free[-1] if free is not None else None
     can_advance = free is not None and len(_truncate_to_budget(free, profile)) > 1
     basher = best_bash_entry(eligible, opponent)
-
-    if (
-        blocking is not None
-        and basher is not None
-        and (is_mindless(profile) or can_break_in_time(blocking, opponent, ctx) or not can_advance)
-    ):
-        write_plan(
-            opponent, ctx, kind=OpponentMoveKind.BASH, barrier_edge=blocking, threat_entry=basher
-        )
-        return
-    if can_advance:
-        write_plan(opponent, ctx, goal_position=advance_to)
-        return
-    # Nothing gets it nearer this round (zero-hop).
-    stuck_at = _unaffordable_wall(free) if blocking is None else blocking
-    if stuck_at is not None and basher is not None:
-        write_plan(
-            opponent, ctx, kind=OpponentMoveKind.BASH, barrier_edge=stuck_at, threat_entry=basher
-        )
-        return
     held = wait_entry(eligible)
     waited_last_round = (
         ctx.tactics.prior_move_kinds.get(opponent.pk, {}).get(round_number - 1)
         == OpponentMoveKind.WAIT
     )
-    if not is_mindless(profile) and held is not None and not waited_last_round:
+    can_wait = not is_mindless(profile) and held is not None and not waited_last_round
+
+    if (
+        blocking is not None
+        and basher is not None
+        and (is_mindless(profile) or can_break_in_time(blocking, opponent, ctx))
+    ):
+        write_plan(
+            opponent, ctx, kind=OpponentMoveKind.BASH, barrier_edge=blocking, threat_entry=basher
+        )
+        return
+    if can_advance:  # round the wall, or toward another enemy
+        write_plan(opponent, ctx, goal_position=advance_to)
+        return
+    # Ratified decision 2 and Scenario 1: a cunning or tactical opponent at a wall it
+    # cannot break in time, with no other way, waits once; the round after (the wait
+    # cap reached) it bashes the wall anyway, so the round is never empty. A mindless
+    # one never waits and bashes at once (above).
+    if can_wait:
         write_plan(opponent, ctx, kind=OpponentMoveKind.WAIT, threat_entry=held)
+        return
+    # Nothing gets it nearer: bash the wall in the way, or a breakable first step it
+    # cannot afford this round (a one-hop climber at a wall with a way past it).
+    in_the_way = blocking if blocking is not None else _unaffordable_wall(free)
+    if in_the_way is not None and basher is not None:
+        write_plan(
+            opponent,
+            ctx,
+            kind=OpponentMoveKind.BASH,
+            barrier_edge=in_the_way,
+            threat_entry=basher,
+        )
         return
     write_plan(opponent, ctx, goal_position=advance_to)
 

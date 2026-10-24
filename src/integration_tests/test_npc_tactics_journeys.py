@@ -16,6 +16,8 @@ telnet ``position`` and ``combat await``.
   nothing else, and a blow it can answer costs none.
 - A cunning ogre with a net brings the flying archer down with it; a mindless construct
   with the same net never throws it.
+- At a wall too strong for it with no way round, a cunning wolf waits once, then batters
+  the wall anyway; a mindless brute batters it at once.
 - Shut away behind a wall nothing can break, a cunning wolf waits for an opening once,
   then strains against the wall; a mindless construct never waits.
 - Hobb holds a screened gate (Scenario 7). Archers who cannot see him walk out into the
@@ -351,6 +353,46 @@ class AWallSplitsAPack(_TheField):
         self.assertShownRow(self.hobb, BATTERS.format(name="Hulking Brute", barrier=BARRIER))
         self.assertEqual(self.edge(self.middle, self.east).integrity, 40 - 9)
         self.assertEqual(self.where(self.brute), self.east)
+
+
+class AWallTooStrongWithNoWayRound(_TheField):
+    """West - Middle - East and a 40-strength wall at Middle-East, the only way to Hobb."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.west, self.middle, self.east = self.places("West", "Middle", "East")
+        self.hobb = self.fighter("Hobb", at=self.west)
+        self.conjured_wall(self.middle, self.east, integrity=40)
+
+    def test_a_cunning_wolf_waits_once_then_batters_the_wall_anyway(self) -> None:
+        # Alone it chips 4 a round: 12 in three rounds, far short of 40, and there is no
+        # way round. It judges the wall unbreakable and waits for an opening first.
+        wolf = self.creature("Grey Wolf", at=self.east, hops=2, bite=4)
+
+        self.resolve()
+
+        self.assertEqual(self.plan(wolf).kind, OpponentMoveKind.WAIT)
+        self.assertShownRow(self.hobb, WAITS.format(name="Grey Wolf"))
+        self.assertEqual(self.edge(self.middle, self.east).integrity, 40)
+
+        self.next_round()
+        self.resolve()
+
+        # It cannot wait twice running, so it batters the wall it could not break in time.
+        self.assertEqual(self.plan(wolf, 2).kind, OpponentMoveKind.BASH)
+        self.assertShownRow(self.hobb, BATTERS.format(name="Grey Wolf", barrier=BARRIER))
+        self.assertEqual(self.edge(self.middle, self.east).integrity, 40 - 4)
+
+    def test_a_mindless_brute_batters_it_at_once(self) -> None:
+        brute = self.creature(
+            "Hulking Brute", at=self.east, tactics=CreatureTactics.MINDLESS, bite=9
+        )
+
+        self.resolve()
+
+        self.assertEqual(self.plan(brute).kind, OpponentMoveKind.BASH)
+        self.assertFalse(self.rows_with(self.hobb, "waits for an opening"))
+        self.assertEqual(self.edge(self.middle, self.east).integrity, 40 - 9)
 
 
 class AnArcherThatCannotBeAnswered(_TheField):

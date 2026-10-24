@@ -379,8 +379,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   level: cover is instinct; a tactical one keeps an ally beside it) and fights from there. With
   nobody in reach it walks toward a position its strikes land from; a wall in the way is
   battered when the group can bring it down in three rounds, or always by a mindless creature,
-  and otherwise gone around. With nothing nearer to reach it bashes anyway, or waits once for
-  an opening (never a mindless one), and an enemy with nothing left to do says it strains
+  and otherwise gone around. With nothing nearer to reach a cunning or tactical enemy waits
+  once for an opening and then bashes the wall anyway (a mindless one bashes at once), and an enemy with nothing left to do says it strains
   against the wall. A cunning or tactical enemy spends a net or other grounding entry on a
   flier it cannot otherwise reach; a mindless one never does. Every unanswered hit costs the
   struck enemy morale. The three numbers live in the `NpcTacticsConfig` staff row. Journeys:

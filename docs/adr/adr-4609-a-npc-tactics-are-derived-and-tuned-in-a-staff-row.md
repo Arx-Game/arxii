@@ -21,9 +21,14 @@ the opponent this round, landed or still to come, because selection runs before 
 strikes. Ratified decision 9 says a creature attacked by a flier it cannot reach runs for
 cover at once. "No hostile can strike it by reach" is melee reach: what a player will strike
 with next round is not known, and the round limit ends the rest. When nothing gets the
-opponent nearer, it bashes the wall in its way before it waits. That is the spec's zero-hop
-order. Scenario 1 has a cunning wolf wait once at a wall it cannot break, and the order was
-kept because bashing is the step that makes progress.
+opponent nearer, a cunning or tactical one waits once before it bashes a wall it cannot
+break in time, and bashes it the round after, when the wait cap stops a second wait. That
+follows ratified decision 2 ("An NPC that can knock a wall down does so. Otherwise it skips
+the wall or finds a way around, depending on intelligence.") and Scenario 1 ("a cunning wolf
+would judge it unbreakable ... With none, it would wait once, then advance as near as it
+can"), over the technical section's zero-hop list, which put the desperate bash first. A
+mindless one never waits and bashes at once. Either way no round is empty: the wait is a
+held waiting strike, and the bash that follows lowers the wall.
 
 ## Rejected
 
