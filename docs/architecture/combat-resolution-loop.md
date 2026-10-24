@@ -1402,7 +1402,7 @@ declaration itself, not an action to resolve.
 ### Wind-up declare → telegraph → wreck → mature flow
 
 ```
-_build_opponent_round_actions (NPC declaration, still DECLARING)
+plan_opponent_round (NPC declaration, still DECLARING)
   chosen = weighted-random ThreatPoolEntry
   chosen.windup_rounds > 0?
     yes → _declare_windup_attack
@@ -1714,3 +1714,70 @@ Django compiles `field__in=[x, None]` to a bare `IN (x)`, dropping the `None` en
 rather than adding an `OR field IS NULL` branch. Both queries now use
 `Q(focused_ally_target=participant) | Q(focused_ally_target__isnull=True)`. See
 ADR-0162.
+
+## Implementation addendum — movement and reach (#4607, slice 2 of #4576)
+
+NPCs move on the battle map and then strike; melee reach is real for them; PCs and NPCs
+share a per-round hop budget. ADR-4607-A records why: in an automated encounter no
+position trick may make an enemy passive.
+
+### `resolve_round` ordering change
+
+```
+resolve_round (status DECLARING)
+  already_selected = any CombatOpponentAction | PendingOpponentAttack | CombatOpponentMove this round
+  not already_selected → select_npc_actions(enc)
+  ensure_opponent_plans(enc)          # NEW: always; plans every opponent still lacking a plan
+  ... RESOLVING, round start, wind-up + sustained maturation (unchanged) ...
+  npc_actions = this round's CombatOpponentAction rows (Prefetch cached_targets, unchanged)
+  npc_moves   = this round's CombatOpponentMove rows, keyed by opponent   # NEW
+  _resolve_actions(order, pc_actions, npc_actions, ..., npc_moves=npc_moves)
+```
+
+`select_npc_actions` and `ensure_opponent_plans` share one per-round context builder
+(`_build_npc_round_context`) and the same exclusions as before: no threat pool, a duel
+mirror, a calmed (NEUTRAL) opponent, a companion on HOLD, a BREAK (which still flees).
+`plan_opponent_round` writes the attack rows and exactly one ADVANCE `CombatOpponentMove`,
+even when no entry is off cooldown or nobody is in reach. An opponent that declared a
+wind-up, or holds one that has not matured, writes no move row: the telegraph is its
+action. `ensure_opponent_plans` is idempotent; an opponent staff pre-selected (attack rows,
+no move row) gets only its move row.
+
+Selection narrows targets by reach after the move: for the chosen entry's delivery, only a
+target the opponent can strike from some position within its `speed_hops`
+(`can_strike_this_round`, over `find_path` and `strike_reaches`). With nobody in reach it
+writes no attack rows, and the ADVANCE row's `goal_position` hints at the nearest hostile.
+
+### The NPC slot: advance, re-fit, strike, stay
+
+```
+_resolve_actions, NPC entity
+  advance_opponent(opponent, npc_moves[pk], attack_rows)   # once, before any attack row
+    re-plan on live positions (PCs moved at declaration)
+    goal = a node from which a live target of this round's rows is struck (else any hostile, MELEE)
+    already there → stay; no route → walk toward the nearest hostile; none → stay
+    walk the route cut to speed_hops (enter_aerial / leave_aerial / force_move_to_position)
+    narrate "{name} moves to {position}."
+  for each attack row:
+    _resolve_npc_action → refit_targets(row)          # live strike_reaches per target
+      none left (single target) → re-pick among reachable hostiles by the entry's mode
+      still none → "{name} cannot reach anyone." and the row deals nothing
+      writes .targets/.opponent_targets AND cached_targets / cached_opponent_targets
+  (never moves again this round: strike then stay)
+```
+
+### The PC slot: live reach
+
+`_resolve_pc_action` re-checks reach with `technique_can_reach` after a CHARGE moves and
+before the pipeline, so a target that left reach since declaration fizzles the action with
+"{name}'s strike finds no one in reach." and no anima or fatigue is charged. AREA and
+FILTERED_GROUP casts keep only the opponents in reach (`opponents_in_reach`) and fizzle only
+when none is left. Unplaced combatants stay lenient throughout.
+
+### PC moves during a round
+
+`MoveToPositionAction` carries `CombatMovementPrerequisite`: with an ACTIVE participant in a
+non-COMPLETED encounter in this room, a move is allowed only in DECLARING and only while
+`hops_left` > 0, and `execute()` spends the hop after the move succeeds. RESOLVING and
+BETWEEN_ROUNDS refuse it. `begin_declaration_phase` resets `hops_used` beside
+`reactions_used`.

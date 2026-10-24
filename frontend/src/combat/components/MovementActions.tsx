@@ -29,16 +29,25 @@ export function MovementActions({
 }: MovementActionsProps) {
   if (actions.length === 0) return null;
 
+  // While the round is open the server puts "N hops left this round." on each move it offers.
+  const hopsLine = actions[0].prerequisite_met ? actions[0].description : '';
+
   return (
     <div className="space-y-2" data-testid="movement-section">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Move</p>
+      {hopsLine.includes('hop') && (
+        <p className="text-xs text-muted-foreground" data-testid="movement-hops-line">
+          {hopsLine}
+        </p>
+      )}
       {actions.map((action) => {
         const positionId = action.ref.position_id;
+        const refused = !action.prerequisite_met;
         return (
           <button
             key={positionId ?? action.display_name}
             type="button"
-            disabled={isLocked}
+            disabled={isLocked || refused}
             data-testid={`move-btn-${positionId ?? 'unknown'}`}
             onClick={() => {
               dispatchAction({ ref: action.ref, kwargs: {} })
@@ -56,12 +65,17 @@ export function MovementActions({
             className={cn(
               'w-full rounded border px-3 py-1.5 text-left text-xs font-medium transition-colors',
               'disabled:cursor-not-allowed disabled:opacity-50',
-              isLocked
+              isLocked || refused
                 ? 'border-border bg-muted text-muted-foreground'
                 : 'border-amber-500/40 bg-amber-500/5 text-amber-300 hover:bg-amber-500/10'
             )}
           >
             {action.display_name}
+            {refused && action.prerequisite_reasons[0] && (
+              <span className="block text-[11px] font-normal">
+                {action.prerequisite_reasons[0]}
+              </span>
+            )}
           </button>
         );
       })}

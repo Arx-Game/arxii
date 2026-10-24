@@ -90,7 +90,7 @@ def _declare_windup_attack(  # noqa: PLR0913
 ) -> None:
     """Select this wind-up's target(s) and create its PendingOpponentAttack.
 
-    Split out of ``_build_opponent_round_actions`` to keep that function's
+    Split out of ``plan_opponent_round`` to keep that function's
     branch count within the lint threshold (#2637).
     """
     selected = _select_windup_targets(

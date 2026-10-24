@@ -138,4 +138,34 @@ describe('MovementActions', () => {
     expect(onDispatched).toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
   });
+
+  it('disables a refused move and shows why under the label', () => {
+    const refused: PlayerAction = {
+      ...makeMoveAction(7, 'Move to Gate'),
+      prerequisite_met: false,
+      prerequisite_reasons: ['You have no movement left this round.'],
+    };
+
+    render(
+      <MovementActions actions={[refused]} isLocked={false} dispatchAction={vi.fn(okDispatch)} />
+    );
+
+    expect(screen.getByTestId('move-btn-7')).toBeDisabled();
+    expect(screen.getByText('You have no movement left this round.')).toBeInTheDocument();
+    expect(screen.queryByTestId('movement-hops-line')).not.toBeInTheDocument();
+  });
+
+  it('shows the hops left once under the Move heading', () => {
+    const actions = [
+      { ...makeMoveAction(1, 'Move to North Wall'), description: '2 hops left this round.' },
+      { ...makeMoveAction(2, 'Move to Center'), description: '2 hops left this round.' },
+    ];
+
+    render(
+      <MovementActions actions={actions} isLocked={false} dispatchAction={vi.fn(okDispatch)} />
+    );
+
+    expect(screen.getAllByText('2 hops left this round.')).toHaveLength(1);
+    expect(screen.getByTestId('move-btn-1')).toBeEnabled();
+  });
 });

@@ -342,8 +342,22 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   clash), expiry or scene-end teardown opens every edge it sealed, except one a later spell
   took over. `damage_barrier` is the one seam for wall damage; its plain-wall caller is the
   NPC bash step in slice 4. The tactical map labels a wall with its strength. Journeys:
-  `src/integration_tests/test_crossing_a_wall_journeys.py`. Slices 2-4 (movement and reach,
-  cover and the waiting strike, tactics) remain.
+  `src/integration_tests/test_crossing_a_wall_journeys.py`.
+- **NPCs move on the battle map, melee reach is real, PCs and NPCs share a hop budget (#4607,
+  slice 2 of #4576, ADR-4607-A).** Selection writes a `CombatOpponentMove` plan for every
+  active opponent every round, even one with nothing in reach; in its slot the opponent walks
+  a real route (`find_path` over `edge_crossing_cost`, by its creature template's
+  `traversal`) up to `speed_hops`, then strikes. Its targets are re-fit to live reach before
+  each attack (`strike_reaches`: melee adjacent, missile room-wide), re-picked by the entry's
+  mode when the target left, and the row says "{name} cannot reach anyone." when nobody is in
+  reach. Walkers route around walls, climbers and leapers cross a wall with a way past it for
+  one extra hop, fliers go over through the aerial layer and stop at `blocks_flight`. A PC in an
+  active encounter moves only while declaring, one hop per `MOVEMENT_PER_HOP` of movement
+  capability (one for a mortal), and the web move list shows the hops left or the refusal; a PC
+  strike whose target left reach before its slot fizzles for free. `CreatureTemplate` gained
+  `tactics`, `speed_hops` and `traversal` (staff-authored, exported with the content).
+  Journeys: `src/integration_tests/test_npcs_close_in_journeys.py`. Slices 3-4 (cover and the
+  waiting strike, tactics) remain; slice 4 reads `tactics` and fills the other move kinds.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips

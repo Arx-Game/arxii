@@ -9,7 +9,11 @@ from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.prerequisites import MinimumGMLevelPrerequisite
+from actions.prerequisites import (
+    CombatMovementPrerequisite,
+    MinimumGMLevelPrerequisite,
+    Prerequisite,
+)
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.utils.gm_resolution import resolve_account_or_none
 from flows.scene_data_manager import SceneDataManager
@@ -22,7 +26,9 @@ from world.areas.positioning.services import (
     place_in_position,
     take_position,
 )
+from world.combat.services.movement_budget import active_combat_participant, spend_combat_hop
 from world.gm.constants import GMLevel
+from world.scenes.constants import RoundStatus
 
 
 @dataclass
@@ -51,6 +57,10 @@ class MoveToPositionAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
 
+    def get_prerequisites(self) -> list[Prerequisite]:
+        """In a live encounter a move costs a hop and is refused outside declaration (#4607)."""
+        return [CombatMovementPrerequisite()]
+
     def execute(
         self,
         actor: ObjectDB,
@@ -70,6 +80,11 @@ class MoveToPositionAction(Action):
             move_to_position(actor, target)
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
+
+        # The prerequisite let a DECLARING-round move through; it now costs its hop.
+        participant = active_combat_participant(actor)
+        if participant is not None and participant.encounter.status == RoundStatus.DECLARING:
+            spend_combat_hop(participant)
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)

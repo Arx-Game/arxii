@@ -14,6 +14,7 @@ from world.combat.models import (
     CombatParticipant,
 )
 from world.combat.services.npc.npc_attack import resolve_npc_attack
+from world.combat.services.npc.npc_movement import broadcast_cannot_reach, refit_targets
 from world.combat.services.sent_flying.sent_flying import _trigger_sent_flying
 from world.combat.types import ActionOutcome
 
@@ -252,10 +253,20 @@ def _resolve_npc_action(
     When ``defense_check_type`` is None (production), the defense check type is
     sourced from ``npc_action.threat_entry.defense_check_type`` (#1994). A
     non-None external param (test override) takes precedence.
+
+    Before any damage, ``refit_targets`` re-checks reach against live positions
+    (#4607). When no target is left the row is skipped with
+    ``"{name} cannot reach anyone."`` and an empty outcome.
     """
     # Source from threat entry when no external override is provided (#1994).
     effective_defense_check_type = defense_check_type or npc_action.threat_entry.defense_check_type
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_NPC, entity_label=str(opponent))
+
+    # Reach is live (#4607): drop the stored targets this strike no longer reaches
+    # (a PC stepped away at declaration, or this opponent's advance fell short).
+    if not refit_targets(npc_action):
+        broadcast_cannot_reach(opponent)
+        return outcome
 
     try:
         targets: list[CombatParticipant] = npc_action.cached_targets
@@ -353,7 +364,7 @@ def _resolve_npc_action(
     # re-running persona_names_for_sheets for the identical list.
     npc_target_label = npc_action_label
     npc_narration = render_action_outcome_narration(
-        actor_label=str(opponent),
+        actor_label=opponent.name,
         technique_name=npc_action.threat_entry.name,
         target_label=npc_target_label,
         outcome=outcome,
