@@ -460,3 +460,7 @@ _Avoid_: anti-idle rule, no-stall rule
 **Bash** (#4609):
 An opponent's move plan to break the wall in its way (`OpponentMoveKind.BASH`): it walks to the wall's near end and strikes it once with its hardest melee entry, `base_damage` times its damage multiplier with no defence roll, through `damage_barrier`. Chosen when the group can bring the wall down within `bash_rounds_limit` rounds (the summed best melee chip of its side within a hop of the wall), always by a mindless creature, and by a cunning or tactical one when nothing else gets it nearer and it has already waited once (ADR-4609-A). If the wall fell before its slot it closes in and strikes whoever is in reach instead.
 _Avoid_: siege, breach (a breach is a challenge approach)
+
+**Encounter state ping** (`combat_encounter_state`, #4644):
+The slim WS message `{encounter_id, round_number}` (`CombatEncounterStatePayload`) sent after a combat change commits: once per resolved round, and after any move in a room with an open encounter. It carries no encounter data; the client refetches the REST encounter, so the battle map shows where everyone stands. The combat counterpart of the battles' BATTLE_STATE ping (ADR-0095).
+_Avoid_: combat push, encounter sync, live map update

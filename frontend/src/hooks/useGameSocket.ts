@@ -42,6 +42,10 @@ import { handleInteractionPayload } from './handleInteractionPayload';
 import { handleRoulettePayload } from './handleRoulettePayload';
 import type { RoulettePayload } from '@/components/roulette/types';
 import { handleBattleStatePayload } from './handleBattleStatePayload';
+import {
+  handleCombatEncounterStatePayload,
+  type CombatEncounterStatePayload,
+} from './handleCombatEncounterStatePayload';
 import type { BattleStatePayload } from '@/battles/types';
 import { handleKudosReceivedPayload } from './handleKudosReceivedPayload';
 import { handleMailArrivedPayload } from './handleMailArrivedPayload';
@@ -420,6 +424,10 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
 
     case WS_MESSAGE_TYPE.BATTLE_STATE:
       return ({ kwargs }) => handleBattleStatePayload(kwargs as unknown as BattleStatePayload);
+
+    case WS_MESSAGE_TYPE.COMBAT_ENCOUNTER_STATE:
+      return ({ kwargs }) =>
+        handleCombatEncounterStatePayload(kwargs as unknown as CombatEncounterStatePayload);
 
     case WS_MESSAGE_TYPE.MAIL_ARRIVED:
       return ({ kwargs }) => handleMailArrivedPayload(kwargs as unknown as MailArrivedPayload);

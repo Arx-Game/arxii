@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { verifyEmail } from './api';
 import { SITE_NAME } from '@/config';
 import { Button } from '@/components/ui/button';
 
 export function EmailVerifyPage() {
   const { key } = useParams<{ key: string }>();
-  const navigate = useNavigate();
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -21,13 +20,6 @@ export function EmailVerifyPage() {
       try {
         await verifyEmail(key);
         setStatus('success');
-
-        // Redirect to home page after a short delay (user is now verified)
-        setTimeout(() => {
-          navigate('/', {
-            replace: true,
-          });
-        }, 2000);
       } catch (error) {
         setStatus('error');
         setErrorMessage(
@@ -39,7 +31,7 @@ export function EmailVerifyPage() {
     };
 
     performVerification();
-  }, [key, navigate]);
+  }, [key]);
 
   if (status === 'verifying') {
     return (
@@ -62,8 +54,10 @@ export function EmailVerifyPage() {
               ></path>
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Verifying Your Email</h1>
-          <p className="mt-2 text-gray-600">Please wait while we verify your email address...</p>
+          <h1 className="text-2xl font-bold text-foreground">Verifying Your Email</h1>
+          <p className="mt-2 text-muted-foreground">
+            Please wait while we verify your email address...
+          </p>
         </div>
       </div>
     );
@@ -88,8 +82,8 @@ export function EmailVerifyPage() {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Email Verified!</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="text-2xl font-bold text-foreground">Email Verified!</h1>
+          <p className="mt-2 text-muted-foreground">
             Your email address has been successfully verified. You can now log in to {SITE_NAME}!
           </p>
         </div>
@@ -127,8 +121,8 @@ export function EmailVerifyPage() {
             />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Verification Failed</h1>
-        <p className="mt-2 text-gray-600">We couldn't verify your email address.</p>
+        <h1 className="text-2xl font-bold text-foreground">Verification Failed</h1>
+        <p className="mt-2 text-muted-foreground">We couldn't verify your email address.</p>
       </div>
 
       <div className="space-y-4">

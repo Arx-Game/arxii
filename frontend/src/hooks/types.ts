@@ -27,6 +27,8 @@ export const WS_MESSAGE_TYPE = {
   ROULETTE_RESULT: 'roulette_result',
   /** Inbound: slim ping — a battle's round transitioned; clients refetch the REST aggregate. */
   BATTLE_STATE: 'battle_state',
+  /** Inbound: slim ping — a combat encounter changed and committed; clients refetch it (#4644). */
+  COMBAT_ENCOUNTER_STATE: 'combat_encounter_state',
   INTERACTION: 'interaction',
   PUPPET_CHANGED: 'puppet_changed',
   /** Inbound: result of an `execute_action` invocation. */

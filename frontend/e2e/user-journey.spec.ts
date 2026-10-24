@@ -217,7 +217,9 @@ test.describe('Login flow', () => {
     await page.getByRole('button', { name: /log in/i }).click();
 
     // Should show an error message (not crash)
-    await expect(page.getByText(/login failed/i)).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.getByRole('alert').filter({ hasText: /username and\/or password.*not correct/i })
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('full journey: register → verify → login → see authenticated home', async ({ page }) => {
@@ -269,7 +271,7 @@ test.describe('Login flow', () => {
     await page.locator('input[type="password"]').fill(password);
     await page.getByRole('button', { name: /log in/i }).click();
 
-    await expect(page.getByText('Login failed. Please try again.')).toBeVisible({
+    await expect(page.getByRole('alert').filter({ hasText: /^Login failed$/ })).toBeVisible({
       timeout: 10000,
     });
     expect(page.url()).toContain('/login');

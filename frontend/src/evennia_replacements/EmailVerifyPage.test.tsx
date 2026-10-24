@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, act } from '@testing-library/react';
 import { EmailVerifyPage } from './EmailVerifyPage';
 import { vi } from 'vitest';
 import * as api from './api';
@@ -47,32 +47,30 @@ describe('EmailVerifyPage', () => {
     resolveVerify();
   });
 
-  it('verifies email successfully and redirects', async () => {
+  it('keeps verification success visible until the player chooses login', async () => {
     const { useParams } = await import('react-router-dom');
     vi.mocked(useParams).mockReturnValue({ key: 'valid-key-456' });
     vi.mocked(api.verifyEmail).mockResolvedValue(undefined);
 
-    renderWithProviders(<EmailVerifyPage />);
-
-    await waitFor(() => {
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        renderWithProviders(<EmailVerifyPage />);
+      });
       expect(api.verifyEmail).toHaveBeenCalledWith('valid-key-456');
-    });
-
-    await waitFor(() => {
       expect(screen.getByText('Email Verified!')).toBeInTheDocument();
-    });
-
-    expect(
-      screen.getByText(/Your email address has been successfully verified/)
-    ).toBeInTheDocument();
-
-    // Should auto-redirect after 2 seconds
-    await waitFor(
-      () => {
-        expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
-      },
-      { timeout: 3000 }
-    );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(screen.getByRole('link', { name: /continue to login/i })).toHaveAttribute(
+        'href',
+        '/login'
+      );
+      expect(screen.getByText('Email Verified!')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows error when key is missing', async () => {
