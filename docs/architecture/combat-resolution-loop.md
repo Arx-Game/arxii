@@ -1782,6 +1782,22 @@ non-COMPLETED encounter in this room, a move is allowed only in DECLARING and on
 BETWEEN_ROUNDS refuse it. `begin_declaration_phase` resets `hops_used` beside
 `reactions_used`.
 
+### Battle maps follow moves live (#4644)
+
+The outcome lines a round pushes go out while `resolve_round` is still open, so a battle map
+that refetched the encounter on one of them could read positions from before the commit and
+then wait for its 10-second poll. Two writers now send a slim `combat_encounter_state` ping
+(`{encounter_id, round_number}`, `CombatEncounterStatePayload`) on commit, the battles'
+ping-plus-refetch shape from ADR-0095, and the client refetches that encounter:
+
+- `resolve_round` sends one per round, as its last step (`notify_encounter_changed_on_commit`).
+- `_commit_position`, the one position writer, pings each open encounter in the room after a
+  move commits (`notify_room_encounters_on_commit`). A RESOLVING encounter is skipped, so the
+  moves inside a round add no pings of their own.
+
+The audience is everything in the encounter's room plus its ACTIVE player participants
+(`world/combat/services/encounter/state_ping.py`).
+
 ## Implementation addendum — cover, the waiting strike and grounding (#4608, slice 3 of #4576)
 
 ### Cover in the reach rules

@@ -19,6 +19,7 @@ class WebsocketMessageType(str, Enum):
     INTERACTION = "interaction"
     ROULETTE_RESULT = "roulette_result"
     BATTLE_STATE = "battle_state"
+    COMBAT_ENCOUNTER_STATE = "combat_encounter_state"
     KUDOS_RECEIVED = "kudos_received"
     MAIL_ARRIVED = "mail_arrived"
     HAZARD_PROMPT = "hazard_prompt"
@@ -144,6 +145,19 @@ class BattleStatePayload:
 
     battle_id: int
     round_number: int | None
+
+
+@dataclass
+class CombatEncounterStatePayload:
+    """Slim ping for ``combat_encounter_state`` messages (#4644).
+
+    Sent after a combat change commits (a round resolved, someone moved), so a
+    client that refetches on receipt reads the committed encounter. Carries no
+    encounter data itself; clients refetch the REST encounter.
+    """
+
+    encounter_id: int
+    round_number: int
 
 
 @dataclass

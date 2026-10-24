@@ -1220,9 +1220,11 @@ def _commit_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
 
     Writes the ``ObjectPosition`` row, drops the cached ``current_position`` of every
     combat opponent and participant this object is (the rows are identity-mapped, so
-    a stale cache would outlive the move), then re-reconciles sunlight.
+    a stale cache would outlive the move), tells the open battle maps in the room to
+    refetch once the move commits (#4644), then re-reconciles sunlight.
     """
     from world.combat.models import CombatOpponent, CombatParticipant
+    from world.combat.services.encounter.state_ping import notify_room_encounters_on_commit
 
     obj_pos, _ = ObjectPosition.objects.update_or_create(
         objectdb=objectdb,
@@ -1236,6 +1238,7 @@ def _commit_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
     for participant in CombatParticipant.get_all_cached_instances():
         if participant.character_sheet_id == objectdb.pk:
             participant.__dict__.pop("current_position", None)
+    notify_room_encounters_on_commit(position.room_id)
     _reconcile_sun_after_position_change(objectdb)
     return obj_pos
 
