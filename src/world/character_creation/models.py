@@ -34,6 +34,7 @@ from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     ENEMY_MARKING_DEGREES,
     MAGIC_SKILL_POINTS_REFUSAL,
+    MAGIC_TRAINING_POINTS_TARGET,
     REPUTATION_SEED_MAX,
     REPUTATION_SEED_MIN,
     REQUIRED_STATS,
@@ -61,6 +62,8 @@ from world.character_creation.constants import (
 )
 from world.character_creation.types import (
     CGPointBreakdownEntry,
+    DistinctionBonusSource,
+    MagicTrainingPool,
     StageValidationErrors,
 )
 from world.character_sheets.types import EnemyDegree, EnemyPowerTier
@@ -1866,11 +1869,22 @@ class CharacterDraft(SharedMemoryModel):
 
     def _get_distinction_bonus(self, modifier_target_name: str, category_name: str) -> int:
         """Sum distinction effect values targeting a specific ModifierTarget."""
+        sources = self._distinction_bonus_sources(modifier_target_name, category_name)
+        return sum(source.points for source in sources)
+
+    def _distinction_bonus_sources(
+        self, modifier_target_name: str, category_name: str
+    ) -> list[DistinctionBonusSource]:
+        """One source per (distinction, rank) feeding a ModifierTarget, ordered by name, rank.
+
+        A distinction held at one rank more than once (per feature) sums into one source,
+        so the points total stays every holding's value.
+        """
         from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
 
         distinctions_data = self.draft_data.get("distinctions", [])
         if not distinctions_data:
-            return 0
+            return []
 
         # A per-feature distinction (#3739) is held once per feature, so ranks are
         # collected as a list per distinction and every one of them pays: "Alluring 2"
@@ -1880,18 +1894,72 @@ class CharacterDraft(SharedMemoryModel):
             if d.get("distinction_id"):
                 ranks[d["distinction_id"]].append(d.get("rank", 1))
         if not ranks:
-            return 0
+            return []
 
         effects = DistinctionEffect.objects.filter(
             distinction_id__in=ranks.keys(),
             target__name=modifier_target_name,
             target__category__name=category_name,
-        ).select_related("target")
+        ).select_related("target", "distinction")
 
-        return sum(
-            effect.get_value_at_rank(rank)
-            for effect in effects
-            for rank in ranks[effect.distinction_id]
+        by_key: dict[tuple[str, int], int] = defaultdict(int)
+        max_ranks: dict[str, int] = {}
+        for effect in effects:
+            max_ranks[effect.distinction.name] = effect.distinction.max_rank
+            for rank in ranks[effect.distinction_id]:
+                by_key[(effect.distinction.name, rank)] += effect.get_value_at_rank(rank)
+        return [
+            DistinctionBonusSource(name=name, rank=rank, points=points, max_rank=max_ranks[name])
+            for (name, rank), points in sorted(by_key.items())
+        ]
+
+    @property
+    def magic_training_pool(self) -> MagicTrainingPool:
+        """The Magic-skill points this draft spends, with the Tradition's fit bonuses.
+
+        Computed on every call, never memoised (drafts are idmapper-shared). The fit
+        bonuses only apply on top of some training (``base > 0``).
+        """
+        from world.magic.models import Gift, Resonance  # noqa: PLC0415
+        from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+        from world.magic.services.teaching_fit import (  # noqa: PLC0415
+            get_teaching_config,
+            teaching_fit,
+        )
+        from world.skills.models import SkillPointBudget  # noqa: PLC0415
+
+        # The breakdown reads biggest first ("Tradition Training, rank 1 20" before
+        # "Studious +10"), then by name.
+        sources = sorted(
+            self._distinction_bonus_sources(MAGIC_TRAINING_POINTS_TARGET, CG_MODIFIER_CATEGORY),
+            key=lambda source: (-source.points, source.name),
+        )
+        base = sum(source.points for source in sources)
+        gift_id = self.draft_data.get("selected_gift_id")
+        resonance_id = self.draft_data.get("selected_gift_resonance_id")
+        gift = Gift.objects.filter(pk=gift_id).first() if gift_id else None
+        resonance = (
+            Resonance.objects.select_related("affinity").filter(pk=resonance_id).first()
+            if resonance_id
+            else None
+        )
+        affinity = resonance.affinity if resonance is not None else None
+        fit = teaching_fit(self.selected_tradition, gift, affinity)
+        config = get_teaching_config()
+        gift_bonus = config.gift_fit_training_bonus if base > 0 and fit.gift_fit else 0
+        affinity_bonus = config.affinity_fit_training_bonus if base > 0 and fit.affinity_fit else 0
+        budget = SkillPointBudget.get_active_budget()
+        total = base + gift_bonus + affinity_bonus
+        total -= total % budget.points_per_tier
+        required_spend = min(total, magic_category_skills().count() * budget.max_skill_value)
+        return MagicTrainingPool(
+            base=base,
+            gift_bonus=gift_bonus,
+            affinity_bonus=affinity_bonus,
+            total=total,
+            required_spend=required_spend,
+            fit=fit,
+            sources=sources,
         )
 
     @property
@@ -1905,18 +1973,6 @@ class CharacterDraft(SharedMemoryModel):
         return 1 + self._get_distinction_bonus(
             STARTING_TECHNIQUE_PICKS_TARGET, CG_MODIFIER_CATEGORY
         )
-
-    @property
-    def starting_magic_skill_floor(self) -> int:
-        """The level every Magic skill starts at, from the schooling stance picked (#4457).
-
-        Read live from the draft's Tradition Training pick on every call, never memoised;
-        finalize writes it as the floor of every Magic skill. 0 for a self-taught
-        character, rank 0, or a tradition whose state opens no stances.
-        """
-        from world.character_creation.offers import schooling_magic_skill_floor  # noqa: PLC0415
-
-        return schooling_magic_skill_floor(self)
 
     def calculate_stat_budget(self) -> int:
         """Total stat points = default * stat_count + net bonuses."""
@@ -2524,10 +2580,9 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     slate page; read by the tradition serializer to draw the stances under a
     living tradition and by the offers module to open a Tradition Training offer.
 
-    ``magic_skill_floor`` (#4457) is the level every Magic-category skill starts at
-    for a character who picks this stance at character creation. It is a skill level,
-    not development points, and it is the same for every Tradition (the stances are
-    shared by every Beginning). Rank 0 grants no floor, since it grants nothing.
+    The Magic-skill training points a stance gives (slice 2 of #4659) are not a column
+    here: they are the ``magic_training_points`` effect of ``grants`` at this line's
+    rank, read by ``CharacterDraft.magic_training_pool``. Rank 0 grants nothing.
     """
 
     rank = models.PositiveSmallIntegerField(unique=True)
@@ -2541,14 +2596,6 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="granted_by_schooling_lines",
         help_text="The distinction this line grants, at this line's rank.",
     )
-    magic_skill_floor = models.PositiveSmallIntegerField(
-        default=0,
-        help_text=(
-            "The level every Magic-category skill starts at for a character who picks "
-            "this stance, the same for every Tradition. A skill level, not development. "
-            "0 = no Magic skills."
-        ),
-    )
 
     objects = NaturalKeyManager()
 
@@ -2556,12 +2603,6 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         verbose_name = "Schooling line"
         verbose_name_plural = "Schooling lines"
         ordering = ["rank"]
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(rank__gt=0) | models.Q(magic_skill_floor=0),
-                name="schooling_rank_zero_grants_no_floor",
-            ),
-        ]
 
     class NaturalKeyConfig:
         fields = ["rank"]

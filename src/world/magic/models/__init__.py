@@ -206,6 +206,7 @@ from world.magic.models.soul_tether import (
 )
 from world.magic.models.soul_tether_config import SoulTetherConfig
 from world.magic.models.soulfray import AnimaRitualBudgetAward, MishapPoolTier, SoulfrayConfig
+from world.magic.models.teaching import TraditionTeachingConfig
 from world.magic.models.technique_builder import (
     TechniqueBudgetConfig,
     TechniqueTierBudget,
@@ -509,6 +510,7 @@ __all__ = [
     "TraditionGiftGrant",
     "TraditionManager",
     "TraditionRitualGrant",
+    "TraditionTeachingConfig",
     # training outcome awards (#2727)
     "TrainingOutcomeAward",
 ]

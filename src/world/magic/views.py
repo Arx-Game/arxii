@@ -62,6 +62,7 @@ from world.magic.filters import (
     ThreadWeavingTeachingOfferFilter,
 )
 from world.magic.models import (
+    Affinity,
     CharacterAnima,
     CharacterAura,
     CharacterCrossingText,
@@ -100,6 +101,7 @@ from world.magic.serializers import (
     AcceptTeachingOfferResponseSerializer,
     AcceptTeachingOfferSerializer,
     AcceptTechniqueOfferRequestSerializer,
+    AffinitySerializer,
     AlterationResolutionResponseSerializer,
     AlterationResolutionSerializer,
     ApplicablePullsRequestSerializer,
@@ -145,6 +147,7 @@ from world.magic.serializers import (
     ReadiedUltimateSerializer,
     RescueOutcomeSerializer,
     ResonanceGrantSerializer,
+    ResonanceSerializer,
     RestrictionSerializer,
     RitualPatchSerializer,
     RitualPerformRequestSerializer,
@@ -215,6 +218,30 @@ class TechniqueStyleViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TechniqueStyleSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup table
+
+
+class AffinityViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only list of the three Affinities, for pickers (character creation)."""
+
+    queryset = Affinity.objects.order_by("name")
+    serializer_class = AffinitySerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Three rows; a picker needs all of them.
+
+
+class ResonanceViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only list of Resonance rows with their Affinity, for pickers.
+
+    The character-creation Gift stage lists every Resonance and stores the chosen
+    pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+    """
+
+    queryset = Resonance.objects.select_related("affinity").order_by("affinity__name", "name")
+    serializer_class = ResonanceSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["affinity"]
+    pagination_class = None  # A bounded catalog the CG picker shows in full.
 
 
 class EffectTypeViewSet(viewsets.ReadOnlyModelViewSet):

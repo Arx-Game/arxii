@@ -1077,6 +1077,18 @@ resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
   The same authored Gift grants a different set per path (a warrior-line and a spy-line path
   both grant Pyromancy, but different techniques from it). `clean()` rejects a starter
   technique not belonging to the grant's gift; unique per `(path, gift)`.
+- **Tradition teaching fit (slice 2 of #4659, ADR-4659-B).** A `TraditionGiftGrant` row marks a
+  Gift the Tradition favors; it does not gate the Gift pick (ADR-4659-A). `Tradition.favored_affinities`
+  (M2M `Affinity`) marks the affinities it favors. `teaching_fit(tradition, gift, affinity)` in
+  `services/teaching_fit.py` is the one resolver: affinity fit is that `Affinity` row being in
+  `favored_affinities` (by pk, through foreign keys only); the numbers live in the
+  `TraditionTeachingConfig` singleton (`get_teaching_config()`). Character creation
+  (`CharacterDraft.magic_training_pool`) passes the picked Gift resonance's `affinity`; the Academy
+  goes through `student_fit(tradition, student_traits(sheet))` (`npc_services.effects._course_ease`,
+  `services._teaching_lines`), where `student_traits` reads the Major Gift (`major_gift_for`) and the
+  affinity of the resonance on the student's active GIFT thread for it (`gift_affinity_for`, via
+  `specialization.services.gift_threads_for`; None without one). Fit by the character's aura is
+  deferred to #4672. Fit is a bonus or an ease, never a gate.
 - `grant_path_magic(sheet, path)` (`services/path_magic.py`, returns `PathMagicGrantResult`)
   mints, idempotently, `CharacterGift` + the latent GIFT thread (reusing
   `provision_latent_gift_thread`) + `CharacterTechnique` rows for the path's `PathGiftGrant`

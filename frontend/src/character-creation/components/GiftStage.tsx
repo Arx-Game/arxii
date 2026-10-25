@@ -1,8 +1,9 @@
 /**
  * Stage 6: Gift (#3630).
  *
- * The five-step Gift funnel — Tradition, Gift, Techniques, Resonance, Anima
- * Check — as nested index entries: each step is an `Entry` in an `EntryList`,
+ * The Gift funnel — Tradition, Gift, Techniques, Resonance, magical training (#4659,
+ * only for a draft with training; after the Resonance, whose affinity its bonus reads),
+ * Anima Check — as nested index entries: each step is an `Entry` in an `EntryList`,
  * closed and unreadable (`gated`) until the step before it is done, and its
  * own body holds that step's picker. Motif is a field below the funnel;
  * the Glimpse is mounted via `GlimpseSection` (#2427; folio-grammar
@@ -45,6 +46,8 @@ import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftSelector } from './gift/GiftSelector';
 import { GlimpseSection } from './gift/GlimpseSection';
+import { MagicTrainingBlock } from './gift/MagicTrainingBlock';
+import { hasMagicTraining, isTrainingSpent, trainingHeading } from './gift/magicTraining';
 import { TechniqueSelector } from './gift/TechniqueSelector';
 import { TraditionStep } from './gift/TraditionStep';
 
@@ -61,6 +64,7 @@ export interface GiftFormValues {
 
 interface FunnelStepProps {
   n: number;
+  total: number;
   name: string;
   value?: string;
   done: boolean;
@@ -73,12 +77,22 @@ interface FunnelStepProps {
 /** One step of the Gift funnel: readable once the step before it is done,
  * choosable only then — its body (the step's own picker) mounts only when
  * unlocked, so a gated step never fires the queries its picker would make. */
-function FunnelStep({ n, name, value, done, gated, gateReason, open, children }: FunnelStepProps) {
+function FunnelStep({
+  n,
+  total,
+  name,
+  value,
+  done,
+  gated,
+  gateReason,
+  open,
+  children,
+}: FunnelStepProps) {
   return (
     <Entry
       name={name}
       gloss={value ?? undefined}
-      tag={gated ? gateReason : `Step ${n} of 5`}
+      tag={gated ? gateReason : `Step ${n} of ${total}`}
       chosen={done}
       closed={gated}
       open={open}
@@ -173,6 +187,18 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const giftName = cgGifts?.find((gift) => gift.id === giftId)?.name;
   const resonanceName = resonances.find((r) => r.id === selectedResonanceId)?.name;
   const techniqueCountLine = `${selectedTechniqueIds.length} of ${picks} chosen`;
+
+  // Magical training (#4659) is its own step after the Resonance: its fit bonuses count
+  // the Gift and the resonance's affinity, so it opens only once both are picked. It
+  // exists only for a draft with training (or a stale allocation) and stays open until
+  // the allocation spends exactly what it must.
+  const training = draft.magic_training;
+  const showTraining = hasMagicTraining(training);
+  const trainingSpent = showTraining && isTrainingSpent(training);
+  const stepCount = showTraining ? 6 : 5;
+  const afterResonance = showTraining ? 1 : 0;
+  const trainingReady = completion.gift && completion.resonance;
+  const trainingValue = showTraining ? `${training.allocated} of ${training.total}` : undefined;
 
   // The Tradition row names the schooling stance under it, when one is
   // picked (the tradition step's own SchoolingStances, #3675): the same "How
@@ -295,6 +321,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
       <EntryList label="Gift steps">
         <FunnelStep
           n={1}
+          total={stepCount}
           name={copy?.gift_tradition_heading ?? 'Tradition'}
           value={draft.selected_tradition?.name}
           done={completion.tradition}
@@ -307,6 +334,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
 
         <FunnelStep
           n={2}
+          total={stepCount}
           name="Gift"
           value={giftName}
           done={completion.gift}
@@ -319,6 +347,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
 
         <FunnelStep
           n={3}
+          total={stepCount}
           name="Techniques"
           value={completion.gift ? techniqueCountLine : undefined}
           done={completion.techniques}
@@ -331,6 +360,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
 
         <FunnelStep
           n={4}
+          total={stepCount}
           name="Resonance"
           value={resonanceName}
           done={completion.resonance}
@@ -345,7 +375,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
                 <Entry
                   key={resonance.id}
                   name={resonance.name}
-                  tag={resonance.resonance_affinity ?? 'Resonance'}
+                  tag={resonance.affinity_name}
                   chosen={isSelected}
                   open={isSelected}
                   onChoose={() => handleSelectResonance(resonance.id)}
@@ -363,8 +393,24 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           </EntryList>
         </FunnelStep>
 
+        {showTraining && (
+          <FunnelStep
+            n={5}
+            total={stepCount}
+            name={trainingHeading(copy, draft.selected_tradition?.name ?? '')}
+            value={trainingValue}
+            done={trainingSpent}
+            gated={!trainingReady}
+            gateReason={completion.gift ? 'Choose a resonance first' : 'Choose a gift first'}
+            open={trainingReady && !trainingSpent}
+          >
+            <MagicTrainingBlock draft={draft} />
+          </FunnelStep>
+        )}
+
         <FunnelStep
-          n={5}
+          n={5 + afterResonance}
+          total={stepCount}
           name={copy?.anima_check_heading ?? 'Anima Check'}
           value={animaCheckLine}
           done={completion.anima}

@@ -90,11 +90,11 @@ review: this page used to carry a verbatim copy of that script inline.
             <thead>
               <tr>
                 <th>Schooling line</th><th>Name</th><th>The player reads</th>
-                <th>Grants</th><th>Price (derived)</th><th>Magic skill floor</th>
+                <th>Grants</th><th>Price (derived)</th><th>Magical training</th>
               </tr>
             </thead>
             <tbody>
-              {% for form, rank, display, floor_preview in schooling_rows %}
+              {% for form, rank, display, training_preview in schooling_rows %}
               <tr>
                 <td>{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
                   {{ rank }}</td>
@@ -103,9 +103,8 @@ review: this page used to carry a verbatim copy of that script inline.
                 <td>{{ form.grants }} {% builder_link form.instance.grants %}</td>
                 <td>{{ display.text }}<br><span class="help">{{ display.help }}</span></td>
                 <td>{% if rank == 0 %}<span class="help">Rank 0 trains none.</span>
-                  {% else %}{{ form.magic_skill_floor }}<br>
-                  <span class="help">At most {{ floor_cap }}, the creation skill cap.</span><br>
-                  <span class="help">Derived, read-only: {{ floor_preview }}</span>{% endif %}</td>
+                  {% else %}<span class="help">Derived, read-only: {{ training_preview }}</span>
+                  {% endif %}</td>
               </tr>
               {% if form.errors %}<tr><td colspan="6">{{ form.errors }}</td></tr>{% endif %}
               {% endfor %}
@@ -113,10 +112,9 @@ review: this page used to carry a verbatim copy of that script inline.
           </table>
           <div class="description">Prices on this page are never typed here. A price lives on
             the distinction's Builder page and is read back wherever the distinction is
-            offered, so it is the same in every Beginning. The Magic skill floor is the level
-            every Magic-category skill starts at for a character who picks that stance; the
-            skill list under it is read from the skills' category, so it changes when staff
-            move a skill in or out of Magic.</div>
+            offered, so it is the same in every Beginning. A stance's magical training points
+            are read the same way: from the granted distinction's magical training effect at
+            the stance's rank, edited on its Builder page.</div>
         </div>
 
         <div class="module" id="slate-module">

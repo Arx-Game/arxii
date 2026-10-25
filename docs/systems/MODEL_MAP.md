@@ -5526,6 +5526,7 @@
 **Pointed to by:**
   - modifier_target <- mechanics.ModifierTarget
   - resonances <- magic.Resonance
+  - favoring_traditions <- magic.Tradition
   - alteration_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
   - glimpse_tags <- magic.GlimpseTag
@@ -6664,6 +6665,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - favored_affinities -> magic.Affinity [M2M]
 **Pointed to by:**
   - available_beginnings <- character_creation.Beginnings
   - beginning_traditions <- character_creation.BeginningTradition
@@ -6685,6 +6687,8 @@
 **Foreign Keys:**
   - tradition -> magic.Tradition [FK]
   - ritual -> magic.Ritual [FK]
+
+### TraditionTeachingConfig
 
 ### TrainingOutcomeAward
 **Foreign Keys:**

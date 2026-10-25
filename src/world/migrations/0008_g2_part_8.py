@@ -469,7 +469,7 @@ class Migration(BatchedCreateModelMigration):
                     "teaches_tradition",
                     models.ForeignKey(
                         blank=True,
-                        help_text="Optional: the Tradition this role's trainer teaches signature techniques for (#2440). Gates TRAIN-offer signature-technique availability to learners who belong to the same Tradition (CharacterTradition membership). Blank = the role only trains shared (Path × Gift) pool techniques, no tradition signatures.",
+                        help_text="Optional: the Tradition this role's trainer teaches signature techniques for (#2440). Gates TRAIN-offer signature-technique availability to learners who belong to the same Tradition (CharacterTradition membership). Blank = the role only trains shared (Path × Gift) pool techniques, no tradition signatures. A skill course this role offers is taught in this Tradition's manner, so a student whose Major Gift, or whose Gift resonance's affinity, it favors finds the course sessions easier. Blank: this role's courses are neutral for every student.",
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="teaching_npc_roles",

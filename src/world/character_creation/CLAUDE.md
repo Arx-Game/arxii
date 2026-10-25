@@ -192,6 +192,17 @@ for the five-branch validation gate this data must satisfy before submission.
   gets a `CharacterTechnique.objects.get_or_create` link (`origin=CHARACTER_CREATION`,
   #3055 — same for the gift link's `grant_gift_to_character(..., origin=...)` call).
   `announce_access_change` fires once with every linked technique as `gained`.
+- **Magical training pool (slice 2 of #4659, ADR-4659-B).** `CharacterDraft.magic_training_pool`
+  (a `MagicTrainingPool`, live on every call) is the base from distinction effects on the
+  `magic_training_points` target plus the Tradition's flat fit bonuses
+  (`world.magic.services.teaching_fit.teaching_fit`), the bonuses only when the base is above 0,
+  rounded down to a skill step. The player spends it on `draft_data["magic_skills"]`;
+  `_magic_skill_allocation_errors` (in `compute_magic_errors`) requires exactly `required_spend`;
+  `_create_skill_values` writes the allocation; `_glimpse` starts a new aura at the model defaults
+  (a starting aura that follows the picked resonance is #4672). `SchoolingLine.magic_skill_floor`
+  is gone (migration 0299, no carry: production held no schooling lines, ADR-0237 "empty in
+  production"). Any
+  Tradition may teach any Major Gift: `get_gift_options` does not read `TraditionGiftGrant`.
 - **Technique personalization (#4099, ADR-4099).** `_finalize_technique_personalizations`
   runs as step 1d, right after `provision_starting_languages` (1c) and before
   `CharacterTradition` creation (step 2): first `seed_motif_from_gift_resonance`

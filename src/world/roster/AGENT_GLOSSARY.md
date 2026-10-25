@@ -482,8 +482,8 @@ carried/granted `Distinction`.
 One `SchoolingLine` row (rank 0-2): the standard stance a player picks under a
 tradition whose state opens stances (LIVING_MASTERS ranks 0-2, TEACHERS_GONE ranks 0-1,
 #4457), what it grants at that rank, the derived price (`grants.cost_per_rank * rank`)
-and its `magic_skill_floor` (the level it lifts every Magic skill to; see the magic
-glossary's "Magic skill floor"). Shared by every Beginning; a schooling line's
+and the magical training points its granted distinction gives (see the magic
+glossary's "Magical training points"). Shared by every Beginning; a schooling line's
 own `DistinctionOffer` (chapter TRADITION_STEP) is kept in sync with it by the
 tradition slate page's save, never authored separately.
 

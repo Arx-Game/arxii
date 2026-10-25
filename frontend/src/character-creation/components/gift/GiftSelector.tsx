@@ -5,11 +5,12 @@
  * Lists the gifts pickable for the draft's chosen tradition + path
  * (GET /api/character-creation/gifts/?draft_id=). Selecting a gift resets any
  * previously chosen techniques, since the technique catalog is scoped per-gift.
+ * A Gift the draft's Tradition favors carries its own "Teaches well" tag (#4659).
  */
 
 import { useEffect } from 'react';
 import { CodexLine, Entry, EntryDoors, EntryList } from '../../folio';
-import { useCGGifts, useUpdateDraft } from '../../queries';
+import { useCGExplanations, useCGGifts, useUpdateDraft } from '../../queries';
 import type { CharacterDraft } from '../../types';
 
 interface GiftSelectorProps {
@@ -19,6 +20,7 @@ interface GiftSelectorProps {
 export function GiftSelector({ draft }: GiftSelectorProps) {
   const updateDraft = useUpdateDraft();
   const { data: gifts, isLoading, isFetching } = useCGGifts(draft.id);
+  const { data: copy } = useCGExplanations();
   const selectedGiftId = draft.draft_data.selected_gift_id ?? null;
 
   const handleSelect = (giftId: number) => {
@@ -87,6 +89,7 @@ export function GiftSelector({ draft }: GiftSelectorProps) {
             key={gift.id}
             name={gift.name}
             tag={gift.kind}
+            tags={gift.favored ? [copy?.gift_teaches_well ?? 'Teaches well'] : undefined}
             chosen={isSelected}
             open={isSelected}
             onChoose={() => handleSelect(gift.id)}

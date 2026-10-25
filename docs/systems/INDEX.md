@@ -33,11 +33,21 @@
   only (`MAGIC_SKILL_CHOICES` in `world/magic/skill_choices.py`), no seeder names a skill for
   magic, and the `check-types-weight-no-magic-skill` probe lists check types that weight a
   Magic skill directly. Details: [magic.md](magic.md) "Magical skills".
-- **Tradition training and Academy skill courses (#4457, ADR-4457-A):** a Tradition's schooling
-  stance sets the level every Magic skill starts at. `SchoolingLine.magic_skill_floor` (0 on rank 0,
-  check constraint) is read by `offers.schooling_magic_skill_floor(draft)`, exposed as
-  `CharacterDraft.starting_magic_skill_floor` and `schooling[].magic_skill_floor` on the Tradition
-  list, and written to every `magic_category_skills()` skill at finalize. `SCHOOLING_MAX_RANK_BY_STATE`
+- **Tradition training and Academy skill courses (#4457, ADR-4457-A; pool and fit #4659,
+  ADR-4659-B):** a Tradition's schooling stance gives magical training points to spend on Magic
+  skills at creation (the granted distinction's `magic_training_points` effect, read by
+  `CharacterDraft.magic_training_pool`; the old `SchoolingLine.magic_skill_floor` column was dropped
+  by migration 0298 with no carry, since production held no schooling lines, ADR-0237 "empty in
+  production"). A Tradition's teaching fit
+  (`world/magic/services/teaching_fit.py`: `teaching_fit`, `major_gift_for`, `gift_affinity_for`,
+  `student_traits`, `student_fit` (the Academy's entry), `get_teaching_config`) comes from
+  `TraditionGiftGrant` (favored Gifts) and `Tradition.favored_affinities` (compared with an
+  `Affinity` row by foreign key: the picked Gift resonance's in character creation, the resonance on
+  the student's Major Gift thread in the Academy), tuned by the `TraditionTeachingConfig`
+  singleton. Fit adds a flat bonus to the pool only when the draft has some training, and eases
+  Academy course checks; it never gates. The Gift stage validates `draft_data["magic_skills"]`
+  against the pool and finalize writes it. Aura-based fit and starting aura are #4672.
+  `SCHOOLING_MAX_RANK_BY_STATE`
   (`character_creation/constants.py`) sets which states open which stances: LIVING_MASTERS up to
   rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. CG skill points never buy a Magic skill or
   one of its specializations. A character catches up by use, weekly training, or an Academy
@@ -45,7 +55,7 @@
   the handler `run_skill_course_offer` (enroll once for coin and a Golden Hare, then rolled
   sessions at AP each, one per course per game week, development scaled by `TrainingOutcomeAward`,
   every refusal charging nothing). Trainer-menu price line: `OfferPrice`, `format_offer_price`,
-  `InteractionOfferSerializer.price`. `train_skill` and `points_to_next_boundary` in
+  `InteractionOfferSerializer.price` (a course under a Tradition adds `teaching_line` and `fit_line`; `_course_ease` in `npc_services/effects.py` lowers the check difficulty). `train_skill` and `points_to_next_boundary` in
   `world.skills.services`. `AcademyOfferApCostError` replaced `TrainOfferMisconfiguredError`;
   `_academy_for` is shared by TRAIN, the course and settle-obligation. Three Required content
   TUNING rows. Details: [magic.md](magic.md) "Tradition training and Academy skill courses".
@@ -985,7 +995,7 @@ allocations that convert AP to development points.
   casts (`Path.technique_skill`, `Gift.technique_skill`, `Technique.skill`), so a trained
   skill adds points to those rolls and develops from them. The Anima Check pick in character
   creation excludes MAGIC-category skills. See [magic.md](magic.md) "Magical skills". Since #4457 a schooled
-  character starts with them at the stance floor and CG points never buy one; `train_skill` (the one
+  character starts with the Magic skills the player spent their Tradition training points on (#4659) and CG points never buy one; `train_skill` (the one
   writer for development from training, shared with weekly training) and `points_to_next_boundary`
   are in `world.skills.services`.
 - **Integrates with:** traits (skill checks), character_creation (skill selection),
@@ -2993,7 +3003,7 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   (`TraditionStateLine`, per-tradition `own_wording` override, never its own price) and, for
   LIVING_MASTERS (ranks 0-2) and TEACHERS_GONE (ranks 0-1, #4457), offers the standard schooling
   set (`SchoolingLine`, each granting a distinction at its rank, priced
-  `grants.cost_per_rank * rank`, and carrying a `magic_skill_floor`, #4457). `OriginTemplate
+  `grants.cost_per_rank * rank`, and granting the Tradition training points a draft spends on Magic skills, #4457, #4659). `OriginTemplate
   .closed_distinctions`/`.closed_reason` names distinctions a route never offers, in any
   chapter. `GET /api/character-creation/drafts/{id}/offers/?chapter=<chapter>` returns
   `{"offers": [...], "closed": [...]}` for one chapter; `reconcile_offer_picks` runs after every

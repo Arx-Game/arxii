@@ -13594,6 +13594,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/affinities/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only list of the three Affinities, for pickers (character creation). */
+    get: operations['magic_affinities_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/affinities/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only list of the three Affinities, for pickers (character creation). */
+    get: operations['magic_affinities_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/applicable-pulls/': {
     parameters: {
       query?: never;
@@ -15059,6 +15093,50 @@ export interface paths {
      *     Filter params: source, resonance (PK), granted_after, granted_before.
      */
     get: operations['magic_resonance_grants_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/resonances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only list of Resonance rows with their Affinity, for pickers.
+     *
+     *     The character-creation Gift stage lists every Resonance and stores the chosen
+     *     pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+     */
+    get: operations['magic_resonances_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/resonances/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only list of Resonance rows with their Affinity, for pickers.
+     *
+     *     The character-creation Gift stage lists every Resonance and stores the chosen
+     *     pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+     */
+    get: operations['magic_resonances_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -27654,6 +27732,14 @@ export interface components {
       target_companion_id?: number;
       journal_entry_id: number;
     };
+    /** @description Serializer for Affinity records (Celestial, Primal, Abyssal). */
+    Affinity: {
+      readonly id: number;
+      /** @description Affinity name (e.g., 'Celestial', 'Abyssal', 'Primal'). */
+      readonly name: string;
+      /** @description Description of this affinity. */
+      readonly description: string;
+    };
     /** @description Schema-only shape of the beat line in an aftermath digest (#3551). */
     AftermathBeat: {
       outcome: string;
@@ -29467,6 +29553,12 @@ export interface components {
        */
       readonly kind: components['schemas']['CGGiftOptionKindEnum'];
       readonly codex_entry_id: number | null;
+      /**
+       * @description Whether the draft's Tradition favors this Gift: a ``TraditionGiftGrant`` (#4659).
+       *
+       *     The view passes the favored Gift ids in context (one query for the list).
+       */
+      readonly favored: boolean;
     };
     /**
      * @description * `MAJOR` - Major (CG-chosen)
@@ -30379,7 +30471,9 @@ export interface components {
       /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
       readonly starting_technique_picks: number;
-      readonly starting_magic_skill_floor: number;
+      readonly magic_training: {
+        [key: string]: unknown;
+      };
       readonly age_min: number;
       readonly age_max: number;
       readonly ic_month_names: string[];
@@ -39501,6 +39595,8 @@ export interface components {
       development_remaining: number | null;
       development_total: number | null;
       training_points: number | null;
+      teaching_line: string | null;
+      fit_line: string | null;
       display: string;
     };
     /** @description Serializer for a directed-offer summons (#2050). */
@@ -49454,8 +49550,9 @@ export interface components {
       player_line: string;
       price: number;
       techniques: number;
-      magic_skill_floor: number;
+      training_points: number;
       grants_distinction_id: number | null;
+      grants_distinction_name: string | null;
       offer_id: number | null;
     };
     /**
@@ -53064,6 +53161,10 @@ export interface components {
       readonly own_wording: string;
       readonly refund: number;
       readonly schooling: components['schemas']['SchoolingLine'][];
+      /** @description The Gifts this Tradition teaches well (its ``TraditionGiftGrant`` rows, #4659). */
+      readonly favored_gift_names: string[];
+      /** @description The affinities this Tradition teaches well (``favored_affinities``, #4659). */
+      readonly favored_affinity_names: string[];
     };
     /** @description Read-only serializer for a character's training allocation. */
     TrainingAllocation: {
@@ -72479,6 +72580,47 @@ export interface operations {
       };
     };
   };
+  magic_affinities_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Affinity'][];
+        };
+      };
+    };
+  };
+  magic_affinities_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this affinity. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Affinity'];
+        };
+      };
+    };
+  };
   magic_applicable_pulls_create: {
     parameters: {
       query?: never;
@@ -74396,6 +74538,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ResonanceGrant'];
+        };
+      };
+    };
+  };
+  magic_resonances_list: {
+    parameters: {
+      query?: {
+        affinity?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Resonance'][];
+        };
+      };
+    };
+  };
+  magic_resonances_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this resonance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Resonance'];
         };
       };
     };
