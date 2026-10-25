@@ -37,7 +37,7 @@
   ADR-4659-B):** a Tradition's schooling stance gives magical training points to spend on Magic
   skills at creation (the granted distinction's `magic_training_points` effect, read by
   `CharacterDraft.magic_training_pool`; the old `SchoolingLine.magic_skill_floor` column was carried
-  into it by migration 0298 and dropped by 0299). A Tradition's teaching fit
+  into it by migration 0299 and dropped by 0300). A Tradition's teaching fit
   (`world/magic/services/teaching_fit.py`: `teaching_fit`, `cg_aura_type`, `character_aura_type`,
   `major_gift_for`, `student_traits`, `student_fit` (the Academy's entry),
   `get_teaching_config`) comes from `TraditionGiftGrant` (favored Gifts),
@@ -8793,6 +8793,26 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     only `opponents_in_reach` (`techniques/technique_targets.py`).
   - Path service and reach rule live in positioning (`find_path`, `step_costs`,
     `edge_crossing_cost`, `strike_reaches`); see `docs/systems/areas.md`.
+- **Movement by capability and held ground (#4663, slice 2 of #4651, ADR-4663) [BUILT & WIRED]:**
+  - A player's way of moving is a capability: `CapabilityType.traversal` (`CreatureTraversal`,
+    blank for none; migration 0294); `player_traversals(sheet)`, `traversals_of(objectdb)`,
+    `cheapest_crossing`, `best_crossing_cost` (`world/areas/positioning/traversal.py`) read it
+    from `get_effective_capability_value` above `innate_baseline`. `move_to_position(...,
+    traversals=)` and `check_move_to_position(...)` (positioning services) take it; a crossing
+    costs its hops via `spend_combat_hop(participant, hops=)` (`movement_budget.py`).
+  - Actions `take_flight`, `land` (roof rule: "A roof is in the way."), `pass_held_ground`
+    (`actions/definitions/positioning.py`); telnet `position/fly`, `position/land`,
+    `position/pass <name>`. `enter_aerial` draws a missing aerial twin.
+  - Held ground (`world/combat/services/held_ground.py`): `held_position_ids_against`,
+    `encounter_holds` / `EncounterHolds`, `npc_stop_at`, `routing_profile`, `holder_names`, `held_place_holders`;
+    `find_path` / `path_costs_from` take `stop_at`, `MovementProfile.stop_at`.
+  - The pass (`world/combat/services/held_ground_pass.py`): `pass_choices`, `pass_options`,
+    `attempt_pass` -> `PassResult` (`HeldGroundPassOutcome` CLEAN / PARTIAL / STOPPED);
+    `MovementConfig.held_ground_challenge` (singleton) names the challenge. Authoring note: the
+    partial outcome's damage must target `self` to hit the roller.
+  - Capability sources: `CapabilitySourceType.MODIFIER` / `_get_modifier_sources`;
+    `CharacterModifierQuerySet.active()`; `get_available_actions` keeps the strongest source per
+    approach. Detail in `docs/systems/areas.md`, "Movement by capability and held ground".
 - **The waiting strike (#4608, slice 3 of #4576) [BUILT & WIRED]:**
   - Declaration: `declare_await_opening(participant, technique, *, confirm_soulfray_risk)`
     (`world/combat/services/declarations/await_opening.py`) writes the round action with

@@ -24,8 +24,8 @@ gives a pool of magical training points and the player spends all of it on Magic
   check's difficulty. The roll's outcome still decides how much development is gained.
 
 The fit is resolved in one place, `teaching_fit` in `world/magic/services/teaching_fit.py`, which
-character creation and the Academy both call. Migration 0298 carried each old stance floor into its
-distinction as `floor x active Magic skill count`, and 0299 dropped the column.
+character creation and the Academy both call. Migration 0299 carried each old stance floor into its
+distinction as `floor x active Magic skill count`, and 0300 dropped the column.
 
 ## Rejected
 

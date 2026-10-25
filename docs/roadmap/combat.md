@@ -387,6 +387,21 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   struck enemy morale. The three numbers live in the `NpcTacticsConfig` staff row. Journeys:
   `src/integration_tests/test_npc_tactics_journeys.py`; the progress guarantee is fuzzed in
   `src/integration_tests/fuzz/test_npc_progress_fuzz.py`. This completes #4576.
+- **Movement by capability and held ground (#4663, slice 2 of #4651, ADR-4663).** A player
+  character moves by her capabilities: a capability row can name a way of moving
+  (`CapabilityType.traversal`), and holding it above baseline, from a technique, condition,
+  species, distinction or gear, lets her climb or leap a walled edge for its hops, take flight
+  and land (`take_flight`, `land`, telnet `position/fly`, `position/land`), with the roof rule
+  on both. Ground a ready enemy holds stops a player character who enters it, however she moves
+  on the ground (walking, climbing or leaping; landing in it too); NPCs do not roll, so an NPC
+  walker or climber stops there and an NPC flier or leaper passes (`held_ground.py`; routing
+  treats it as the end of a route). A character with a matching
+  capability can roll to get past instead (`pass_held_ground`, telnet `position/pass <name>`):
+  clean, past at the template's price, or stopped in the place. Staff set the challenge on the
+  `MovementConfig` row; none authored means no pass. Capabilities raised by sheet modifiers now
+  count as challenge capability sources, one action per approach from the strongest source.
+  She is not stopped by ground held below her while in the air. Journeys: `test_moving_by_capability_journeys.py`,
+  `test_holding_ground_journeys.py`, `test_crossing_a_wall_journeys.py`.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips

@@ -17,7 +17,10 @@ from integration_tests.game_content.characters import CharacterContent
 from integration_tests.game_content.social import SocialContent
 from world.mechanics.constants import CapabilitySourceType
 from world.mechanics.models import ChallengeApproach, ChallengeInstance, CharacterChallengeRecord
-from world.mechanics.services import get_available_actions
+from world.mechanics.services import (
+    get_available_actions,
+    get_capability_sources_for_character,
+)
 from world.mechanics.types import CapabilitySource
 from world.seeds.game_content.magic import MagicContent
 
@@ -205,14 +208,20 @@ class TechniqueChallengePipelineTests(TestCase):
         assert "Cow" in display_names
 
     def test_multi_capability_technique_produces_multiple_approaches(self) -> None:
-        """Technique-sourced actions should produce >= 3 approaches."""
+        """A technique's capabilities reach >= 3 approaches.
+
+        Each approach is offered once, carrying its strongest source (#4663), so an approach
+        a trait also reaches may carry the trait rather than the technique; counted here by
+        the capabilities the technique grants, not by which source won.
+        """
+        granted = {
+            source.capability_id
+            for source in get_capability_sources_for_character(self.fire_char)
+            if source.source_type == CapabilitySourceType.TECHNIQUE
+        }
         actions = get_available_actions(self.fire_char, self.room)
-        technique_actions = [
-            a for a in actions if a.capability_source.source_type == CapabilitySourceType.TECHNIQUE
-        ]
-        assert len(technique_actions) >= 3, (
-            f"Expected >= 3 technique-sourced actions, got {len(technique_actions)}"
-        )
+        reached = [a for a in actions if a.capability_source.capability_id in granted]
+        assert len(reached) >= 3, f"Expected >= 3 approaches, got {len(reached)}"
 
 
 # ---------------------------------------------------------------------------

@@ -22,7 +22,7 @@ def set_aura_types(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0296_tradition_teaching_fit_schema"),
+        ("arxii", "0297_tradition_teaching_fit_schema"),
     ]
 
     operations = [

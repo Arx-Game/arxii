@@ -319,9 +319,9 @@ cuts the stance rows to the same ranks, and `reconcile_offer_picks` drops a pick
 opens. Each stance row carries `training_points` and `grants_distinction_name`.
 
 **Magical training pool (slice 2 of #4659, ADR-4659-B).** The old per-stance Magic skill floor is
-gone: `0298_schooling_floor_to_training_points` carried each floor into the stance distinction's
+gone: `0299_schooling_floor_to_training_points` carried each floor into the stance distinction's
 `magic_training_points` effect (value `floor x active Magic skill count` at the stance's rank) and
-`0299_remove_schoolingline_magic_skill_floor` dropped the column and its check constraint.
+`0300_remove_schoolingline_magic_skill_floor` dropped the column and its check constraint.
 `CharacterDraft.magic_training_pool` sums the draft's distinction effects on that target (`base`),
 then adds the Tradition's flat fit bonuses from `TraditionTeachingConfig` (`gift_fit_training_bonus`
 when the Tradition favors the picked Gift, `affinity_fit_training_bonus` when it favors the picked

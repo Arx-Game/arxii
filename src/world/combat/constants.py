@@ -6,6 +6,7 @@ import issues when serializers need to reference them.
 """
 
 from datetime import timedelta
+from typing import Final
 
 from django.db import models
 
@@ -907,3 +908,31 @@ BATTERS_BARRIER_NARRATION = "{name} batters {barrier}."
 BARRIER_GIVES_WAY_NARRATION = "{barrier} gives way."
 NPC_WAITS_NARRATION = "{name} waits for an opening."
 NPC_FLEES_NARRATION = "{name} flees the fight."
+
+
+class HeldGroundPassOutcome(models.TextChoices):
+    """How a roll to get past held ground went (#4663, ``held_ground_pass.attempt_pass``).
+
+    CLEAN and PARTIAL are past (PARTIAL with whatever the challenge's partial consequence
+    authors); STOPPED is in the held place with no movement left this round.
+    """
+
+    CLEAN = "clean", "Past cleanly"
+    PARTIAL = "partial", "Past, not cleanly"
+    STOPPED = "stopped", "Stopped"
+
+
+# What the player is told after a roll to get past held ground (#4663), by outcome.
+HELD_GROUND_GOT_PAST: Final = "You get past {name}."
+HELD_GROUND_GOT_PAST_PARTLY: Final = "You get past {name}, but not cleanly."
+HELD_GROUND_STOPS_YOU: Final = "{name} stops you."
+# What the room is told of the same roll (#4663): the roller, the holder, the place.
+HELD_GROUND_ROOM_GOT_PAST: Final = "{name} gets past {holder} into {place}."
+HELD_GROUND_ROOM_GOT_PAST_PARTLY: Final = "{name} gets past {holder} into {place}, but not cleanly."
+HELD_GROUND_ROOM_STOPPED: Final = "{holder} stops {name} in {place}."
+# Why a roll to get past held ground is refused (#4663), one message per cause.
+HELD_GROUND_NOT_IN_FIGHT: Final = "There is no fight here to get past anyone in."
+HELD_GROUND_NO_CHALLENGE: Final = "There is no way past them."
+HELD_GROUND_NOT_HELD: Final = "No one holds that place."
+HELD_GROUND_NO_CAPABILITY: Final = "You have no way past them."
+HELD_GROUND_NOT_THAT_WAY: Final = "You cannot get past them that way."

@@ -21,6 +21,9 @@ function action(backend: string, registryKey: string | null, name: string): Play
 const results = [
   action('combat', null, 'Lunge'),
   action('registry', 'move_to_position', 'Move to Yard'),
+  action('registry', 'take_flight', 'Take flight'),
+  action('registry', 'land', 'Land'),
+  action('registry', 'pass_held_ground', 'Get past Bandit into Gatehouse'),
   action('registry', 'take_position', 'Take position: Gate'),
   action('registry', 'create_battle', 'Create battle'),
 ];
@@ -41,6 +44,13 @@ describe('useAvailableActions', () => {
   it('keeps the combat actions and the moves, and nothing else', () => {
     const { result } = renderHook(() => useAvailableActions(4));
 
-    expect(result.current.data.map((a) => a.display_name)).toEqual(['Lunge', 'Move to Yard']);
+    // Take-off, landing and the pass roll are moves too (#4663).
+    expect(result.current.data.map((a) => a.display_name)).toEqual([
+      'Lunge',
+      'Move to Yard',
+      'Take flight',
+      'Land',
+      'Get past Bandit into Gatehouse',
+    ]);
   });
 });

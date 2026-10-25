@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from django.utils.functional import cached_property
 
 from core.managers import ArxSharedMemoryManager, ArxSharedMemoryQuerySet
@@ -421,6 +422,18 @@ class ModifierSource(SharedMemoryModel):
 
 class CharacterModifierQuerySet(ArxSharedMemoryQuerySet):
     """Custom queryset for CharacterModifier with batch aggregation methods."""
+
+    def active(self) -> "CharacterModifierQuerySet":
+        """Rows still in force: permanent (``expires_at`` null) or not yet expired (#4663).
+
+        The one expiry rule for capability reads: the agency oracle
+        (``get_effective_capability_value``) and the availability oracle
+        (``_get_modifier_sources``) both filter through this, so they agree on whether a
+        capability raised by a temporary modifier is present.
+        """
+        return self.filter(
+            models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=timezone.now())
+        )
 
     def totals_by_character_for_targets(
         self,

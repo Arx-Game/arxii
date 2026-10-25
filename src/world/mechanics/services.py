@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch, Q, Sum
 
 from typeclasses.characters import Character
 from world.checks.modifier_values import ValueTable, load_value_table
@@ -1296,6 +1296,7 @@ def get_capability_sources_for_character(
     sources.extend(_get_technique_sources(character))
     sources.extend(_get_trait_sources(character))
     sources.extend(_get_condition_sources(character))
+    sources.extend(_get_modifier_sources(character))
     return sources
 
 
@@ -1541,6 +1542,42 @@ def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
     return sources
 
 
+def _get_modifier_sources(character: ObjectDB) -> list[CapabilitySource]:
+    """One source per capability raised by the sheet's CharacterModifier rows (#4663).
+
+    A species gift, a distinction or worn gear raises a capability through a
+    ``CharacterModifier`` aimed at that capability's ``ModifierTarget``; the agency oracle
+    (``get_effective_capability_value``) already counts these, and this is the same
+    reading for the availability oracle, so the capability is offered as an approach.
+    Rows are summed per capability in one query (all modifiers stack), expired rows left
+    out; a sum above zero is one MODIFIER source. ``get_all_capability_values`` (the
+    condition source) does not read these rows, so nothing is counted twice.
+    """
+    try:
+        sheet = character.sheet_data
+    except ObjectDoesNotExist:
+        return []
+    rows = (
+        CharacterModifier.objects.active()
+        .filter(character=sheet, target__target_capability__isnull=False)
+        .values("target__target_capability_id", "target__target_capability__name")
+        .annotate(total=Sum("value"))
+        .order_by("target__target_capability_id")
+    )
+    return [
+        CapabilitySource(
+            capability_name=row["target__target_capability__name"],
+            capability_id=row["target__target_capability_id"],
+            value=row["total"],
+            source_type=CapabilitySourceType.MODIFIER,
+            source_name="",  # Modifiers aggregate; no single source name
+            source_id=0,
+        )
+        for row in rows
+        if row["total"] > 0
+    ]
+
+
 # =============================================================================
 # Action Generation
 # =============================================================================
@@ -1605,7 +1642,35 @@ def get_available_actions(
 
     actions.extend(_bare_object_actions(character, location, cap_id_to_sources))
 
-    return actions
+    return _strongest_source_per_action(actions)
+
+
+def _strongest_source_per_action(actions: list[AvailableAction]) -> list[AvailableAction]:
+    """One action per approach on a challenge (or per application on a bare object) (#4663).
+
+    A capability can come from several sources (a technique, a condition, a modifier), and
+    each source matches the same approach. The player gets one entry per approach, carrying
+    the source the roll should use: one whose prerequisite is met before one whose is not,
+    then the highest value, then the first built. CHALLENGE dispatch and deferred round
+    resolution both look the action up by approach, so they roll this same source. Order
+    is otherwise kept.
+    """
+    best: dict[tuple[int | None, ...], AvailableAction] = {}
+    for action in actions:
+        if action.challenge_instance_id is not None:
+            key: tuple[int | None, ...] = (action.challenge_instance_id, action.approach_id)
+        else:
+            target_id = action.target_object.pk if action.target_object is not None else None
+            key = (None, action.application_id, target_id)
+        held = best.get(key)
+        if held is None or _source_rank(action) > _source_rank(held):
+            best[key] = action
+    return list(best.values())
+
+
+def _source_rank(action: AvailableAction) -> tuple[bool, int]:
+    """How strongly an action's source should win: prerequisite met first, then value."""
+    return (action.prerequisite_met, action.capability_source.value)
 
 
 def _build_action_for_source(  # noqa: PLR0913

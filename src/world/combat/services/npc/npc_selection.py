@@ -24,6 +24,7 @@ from world.combat.models import (
     ThreatRecord,
 )
 from world.combat.services.damage.swarm import swarm_attack_count
+from world.combat.services.held_ground import EncounterHolds, encounter_holds, routing_profile
 from world.combat.services.npc.companion_orders import _COMPANION_HOLD, _apply_companion_order
 from world.combat.services.npc.npc_attack import _execute_npc_attack
 from world.combat.services.npc.npc_cooldowns import _batch_fetch_cooldown_data
@@ -57,7 +58,7 @@ from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
-    from world.combat.types import TacticsInputs
+    from world.combat.types import MovementProfile, TacticsInputs
 
 
 @dataclass
@@ -81,6 +82,7 @@ class NpcRoundContext:
     provokers: dict[int, int]
     unmatured_windup_opponent_ids: set[int]
     tactics: TacticsInputs
+    holds: EncounterHolds  # where each side stands, read once for the pass (#4663)
     reach_memo: ReachMemo = field(default_factory=ReachMemo)
 
 
@@ -169,6 +171,7 @@ def _build_npc_round_context(
         provokers=_provoking_participant_ids(opponents, active_participants),
         unmatured_windup_opponent_ids=_unmatured_windup_opponent_ids(encounter, opponents),
         tactics=build_tactics_inputs(encounter, opponents, all_active, entries_by_pool),
+        holds=encounter_holds(encounter, acting_participants=active_participants),
     )
 
 
@@ -402,7 +405,7 @@ def plan_opponent_round(
         return []  # a companion HOLD order
     target_pool, targeting_participants = resolved
 
-    profile = opponent.movement_profile
+    profile = routing_profile(opponent, ctx.holds)
     grounding = ctx.tactics.grounding_entry_ids
     pool_entries = ctx.entries_by_pool.get(opponent.threat_pool_id, [])
     usable = usable_entries(pool_entries, profile, grounding)
@@ -437,7 +440,14 @@ def plan_opponent_round(
         )
         if not strikeable:
             _plan_with_no_one_in_reach(
-                opponent, ctx, origin, target_pool, eligible, usable, shelter=shelter
+                opponent,
+                ctx,
+                origin,
+                target_pool,
+                eligible,
+                usable,
+                shelter=shelter,
+                profile=profile,
             )
             return []
         grounder = grounding_strike(
@@ -525,9 +535,12 @@ def _plan_with_no_one_in_reach(  # noqa: PLR0913 - the ladder's per-opponent inp
     usable: list[ThreatPoolEntry],
     *,
     shelter: Position | None,
+    profile: MovementProfile,
 ) -> None:
-    """The move plan of an opponent no hostile is in reach of this round."""
-    profile = opponent.movement_profile
+    """The move plan of an opponent no hostile is in reach of this round.
+
+    ``profile`` is the opponent's routing profile, held ground included (#4663).
+    """
     if shelter is not None:
         write_plan(opponent, ctx, kind=OpponentMoveKind.SHELTER, goal_position=shelter)
     elif eligible:

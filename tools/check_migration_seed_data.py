@@ -85,13 +85,13 @@ ALLOWED_MIGRATIONS: set[str] = {
     # #4665 (slice 2 of #4659): one-off designation of which of the three
     # Affinity rows is which aura (sets Affinity.aura_type by name). The name
     # match lives only in this migration; runtime code reads the field.
-    "world/migrations/0297_affinity_aura_type_backfill.py",
+    "world/migrations/0298_affinity_aura_type_backfill.py",
     # #4665 (slice 2 of #4659): ADR-0237 restructure. Carries each schooling
-    # stance's magic_skill_floor (dropped by 0299) into a magic_training_points
+    # stance's magic_skill_floor (dropped by 0300) into a magic_training_points
     # DistinctionEffect on its granted distinction (floor x active Magic skill
     # count). The category/target rows are get_or_created only when a floor
     # exists to carry; nothing authored is invented.
-    "world/migrations/0298_schooling_floor_to_training_points.py",
+    "world/migrations/0299_schooling_floor_to_training_points.py",
 }
 
 # Patterns that suggest seed data in migrations

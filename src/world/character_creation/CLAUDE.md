@@ -199,7 +199,7 @@ for the five-branch validation gate this data must satisfy before submission.
   rounded down to a skill step. The player spends it on `draft_data["magic_skills"]`;
   `_magic_skill_allocation_errors` (in `compute_magic_errors`) requires exactly `required_spend`;
   `_create_skill_values` writes the allocation; `_glimpse` starts a new aura on the picked
-  resonance's affinity. `SchoolingLine.magic_skill_floor` is gone (migrations 0298, 0299). Any
+  resonance's affinity. `SchoolingLine.magic_skill_floor` is gone (migrations 0299, 0300). Any
   Tradition may teach any Major Gift: `get_gift_options` does not read `TraditionGiftGrant`.
 - **Technique personalization (#4099, ADR-4099).** `_finalize_technique_personalizations`
   runs as step 1d, right after `provision_starting_languages` (1c) and before

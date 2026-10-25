@@ -2561,7 +2561,7 @@ def get_effective_capability_value(
     baseline = capability.innate_baseline
     modifier_total = sum(
         m.value
-        for m in CharacterModifier.objects.filter(
+        for m in CharacterModifier.objects.active().filter(
             character=character_sheet, target__target_capability=capability
         )
     )

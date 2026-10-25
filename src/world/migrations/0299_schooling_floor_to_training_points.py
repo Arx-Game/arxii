@@ -68,7 +68,7 @@ def carry_floors(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0297_affinity_aura_type_backfill"),
+        ("arxii", "0298_affinity_aura_type_backfill"),
     ]
 
     operations = [

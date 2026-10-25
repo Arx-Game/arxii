@@ -739,6 +739,11 @@ building toward breakthrough moments.
 - `mechanics.TraitCapabilityDerivation` and `magic.TechniqueCapabilityGrant`
   models exist (`calculate_value`), surfaced via `mechanics/services.py`
   `_get_trait_sources` / `_get_technique_sources`.
+- `mechanics/services.py: _get_modifier_sources` (#4663) — the sheet's
+  `CharacterModifier` rows aimed at a capability's `ModifierTarget`
+  (`target_capability`: species gifts, distinctions, worn gear), summed per
+  capability into one `CapabilitySourceType.MODIFIER` source, expired rows left
+  out. The agency oracle (`get_effective_capability_value`) already counted these.
 - `mechanics/services.py: get_capability_sources_for_character` returns a flat
   per-source `CapabilitySource` list (sources are **siloed**, not summed into a
   single effective value).

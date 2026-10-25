@@ -1001,9 +1001,9 @@ students better than others.
 **Built:**
 - The floor became training points: `magic_training_points` modifier target, read by
   `CharacterDraft.magic_training_pool`; `SchoolingLine.magic_skill_floor` and its constraint removed
-  (data carried by 0298 as `floor x active Magic skill count`, column dropped by 0299; the production
+  (data carried by 0299 as `floor x active Magic skill count`, column dropped by 0300; the production
   dump had no schooling lines to carry).
-- Teaching fit: `Tradition.favored_affinities`, `Affinity.aura_type` (0297 designated the three
+- Teaching fit: `Tradition.favored_affinities`, `Affinity.aura_type` (0298 designated the three
   existing rows), the `TraditionTeachingConfig` singleton and `world/magic/services/teaching_fit.py`.
   Flat Gift and affinity bonuses join the pool only when the draft has some training; the player must
   spend all of it at the ordinary 10 points per step, validated at the Gift stage and written at

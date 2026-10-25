@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0295_remove_self_taught_tradition_gift_grants"),
+        ("arxii", "0296_movement_traversal_and_config"),
     ]
 
     operations = [

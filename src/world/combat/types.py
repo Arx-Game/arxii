@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from world.checks.models import Consequence
     from world.checks.outcome_models import ConsequenceOutcome
     from world.checks.types import CheckResult
+    from world.combat.constants import HeldGroundPassOutcome
     from world.combat.models import (
         Clash,
         ClashContribution,
@@ -37,7 +38,8 @@ if TYPE_CHECKING:
     from world.magic.models import Affinity, FuryTier
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
-    from world.mechanics.types import ChallengeResolutionResult
+    from world.mechanics.models import ChallengeApproach
+    from world.mechanics.types import CapabilitySource, ChallengeResolutionResult
     from world.scenes.models import Interaction
     from world.societies.models import LegendEntry
     from world.stories.models import BeatCompletion
@@ -608,11 +610,43 @@ class MovementProfile:
     Read from its CreatureTemplate, or the NPC defaults when it has none
     (``CombatOpponent.movement_profile``). Values are ``CreatureTactics`` and
     ``CreatureTraversal`` members.
+
+    ``stop_at`` is the held ground its routes end in and never walk past (#4663): empty
+    on the bare profile, filled for one planning pass by ``held_ground.routing_profile``.
     """
 
     tactics: str
     speed_hops: int
     traversal: str
+    stop_at: frozenset[int] = frozenset()
+
+
+@dataclass(frozen=True)
+class PassOption:
+    """One way a character may try to get past held ground (#4663).
+
+    An approach on ``MovementConfig.held_ground_challenge`` whose capability the
+    character holds, paired with her best source of it (its value is the roll's bonus).
+    Built by ``held_ground_pass.pass_options``.
+    """
+
+    approach: ChallengeApproach
+    capability_source: CapabilitySource
+
+
+@dataclass(frozen=True)
+class PassResult:
+    """How a roll to get past held ground went (#4663, ``held_ground_pass.attempt_pass``).
+
+    ``outcome`` reads the roll's success level: above 0 CLEAN, 0 PARTIAL (past, with
+    whatever the challenge's authored consequence does), below 0 or no check at all
+    STOPPED (in the held place, movement over for the round). ``holder_name`` is who
+    held it.
+    """
+
+    outcome: HeldGroundPassOutcome
+    resolution: ChallengeResolutionResult
+    holder_name: str
 
 
 @dataclass

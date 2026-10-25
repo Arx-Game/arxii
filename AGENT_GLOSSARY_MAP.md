@@ -96,7 +96,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to,
   plus Ward (#3983 Plan B, `AreaLevel.WARD` vs. the unrelated household Ward position) and a
   Capital stub pointing to societies' canonical entry
-- [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md) - also holds wall integrity and the walker rule (#4606), and traversal, hop and strike reach (#4607), and roofed position, screened position and grounding (#4608)
+- [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md) - also holds wall integrity and the walker rule (#4606), and traversal, hop and strike reach (#4607), and roofed position, screened position and grounding (#4608), and held ground, pass and player traversal (#4663)
 - [buildings](src/world/buildings/AGENT_GLOSSARY.md)
 - [locations](src/world/locations/AGENT_GLOSSARY.md)
 - [forms](src/world/forms/AGENT_GLOSSARY.md)

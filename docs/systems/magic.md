@@ -767,9 +767,9 @@ that grows the pool and eases Academy courses.
 `magic_training_points` `ModifierTarget` (category `character_creation`, seeded by
 `wire_magic_training_points_target`). `CharacterDraft.magic_training_pool` sums those effects with the
 fit bonuses below. `SchoolingLine.magic_skill_floor` and its check constraint were removed
-(migration `0298_schooling_floor_to_training_points` carried each floor into the distinction's
+(migration `0299_schooling_floor_to_training_points` carried each floor into the distinction's
 effect as `floor x active Magic skill count`, so a rank that bought a floor still buys the same
-total; `0299_remove_schoolingline_magic_skill_floor` dropped the column). The set of skills is
+total; `0300_remove_schoolingline_magic_skill_floor` dropped the column). The set of skills is
 still every skill in `magic_category_skills()`, the same for every Tradition.
 
 **Teaching fit.** Three authored inputs say how well a Tradition teaches a given student:
@@ -778,7 +778,7 @@ still every skill in `magic_category_skills()`, the same for every Tradition.
 |---------|----------|---------|
 | `TraditionGiftGrant` | `world/magic/models/grants.py` | A row now means a Gift the Tradition's teachers favor (ADR-4659-A); it no longer gates the Gift pick |
 | `Tradition.favored_affinities` | `world/magic/models/gifts.py` | M2M to `Affinity`, blank; reverse name `favoring_traditions`. A student whose current dominant aura is one of these gets the affinity fit. Admin field on `TraditionAdmin` |
-| `Affinity.aura_type` | `world/magic/models/affinity.py` | See the `Affinity` row above; backfilled once in `0297_affinity_aura_type_backfill` for the three existing rows |
+| `Affinity.aura_type` | `world/magic/models/affinity.py` | See the `Affinity` row above; backfilled once in `0298_affinity_aura_type_backfill` for the three existing rows |
 | `TraditionTeachingConfig` | `world/magic/models/teaching.py` | Singleton (pk=1, lazy-created): `gift_fit_training_bonus` (10), `affinity_fit_training_bonus` (10), `course_ease_gift_fit` (2), `course_ease_affinity_fit` (2). `clean()` requires the two training bonuses to be multiples of `SkillPointBudget.points_per_tier`. Kept apart from `GiftAcquisitionConfig`, which tunes technique acquisition |
 | `teaching_fit(tradition, gift, aura_type)` | `world/magic/services/teaching_fit.py` | The one resolver, returning a `TeachingFit` (`world/magic/types/teaching_fit.py`: `gift_fit`, `affinity_fit`, `favored_gift_name`, `favored_affinity_name`, `training_bonus(config)`, `course_ease(config)`). Gift fit is a `TraditionGiftGrant` for the pair; affinity fit is a favored Affinity whose `aura_type` equals the student's. A blank `aura_type` or no Tradition never fits |
 | `cg_aura_type(resonance)` / `character_aura_type(sheet)` | same file | The aura type character creation passes (the picked Gift resonance's affinity) and the one the Academy passes (`CharacterAura.dominant_affinity`); None when unset or the sheet has no aura |
