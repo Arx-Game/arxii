@@ -2699,6 +2699,11 @@
 
 ### FleeTierModifier
 
+### MovementConfig
+**Foreign Keys:**
+  - held_ground_challenge -> mechanics.ChallengeTemplate [FK] (nullable)
+  - updated_by -> evennia.AccountDB [FK] (nullable)
+
 ### NpcTacticsConfig
 
 ### OpponentTierTemplate
@@ -2801,7 +2806,7 @@
 - `active_combat_engagement_for(character: 'ObjectDB') -> 'CharacterEngagement | None' - The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None, level: 'int | None' = None) -> 'CombatOpponent' - Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' - Create a CombatParticipant linking a PC to an encounter.`
-- `advance_opponent(opponent: 'CombatOpponent', move_row: 'CombatOpponentMove | None', attack_rows: 'list[CombatOpponentAction] | None' = None, *, on_hop: 'HopHook | None' = None) -> 'Position | None' - Run an opponent's ADVANCE plan in its resolution slot; returns where it moved, or None.`
+- `advance_opponent(opponent: 'CombatOpponent', move_row: 'CombatOpponentMove | None', attack_rows: 'list[CombatOpponentAction] | None' = None, *, on_hop: 'HopHook | None' = None, profile: 'MovementProfile | None' = None) -> 'Position | None' - Run an opponent's ADVANCE plan in its resolution slot; returns where it moved, or None.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0'), skip_condition_interactions: 'bool' = False) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' - Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
