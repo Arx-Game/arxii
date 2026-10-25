@@ -35,7 +35,7 @@ class MagicTrainingPoolTest(TestCase):
         cls.tradition = TraditionFactory()
         cls.tradition.favored_affinities.add(cls.affinity)
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.training = DistinctionFactory(name="Tradition Training")
+        cls.training = DistinctionFactory(name="Tradition Training", max_rank=3)
         DistinctionEffectFactory(distinction=cls.training, target=cls.target, value_per_rank=20)
         cls.studious = DistinctionFactory(name="Studious")
         DistinctionEffectFactory(distinction=cls.studious, target=cls.target, value_per_rank=10)
@@ -63,8 +63,8 @@ class MagicTrainingPoolTest(TestCase):
         self.assertEqual(
             pool.sources,
             [
-                DistinctionBonusSource(name="Studious", rank=1, points=10),
-                DistinctionBonusSource(name="Tradition Training", rank=1, points=20),
+                DistinctionBonusSource(name="Studious", rank=1, points=10, max_rank=1),
+                DistinctionBonusSource(name="Tradition Training", rank=1, points=20, max_rank=3),
             ],
         )
 

@@ -215,8 +215,8 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         # The breakdown line names the rank held: "Tradition Training, rank 2" (#4659).
         sources = self.client.get(self._draft_url(draft)).json()["magic_training"]["base_sources"]
         self.assertEqual(
-            [(s["name"], s["rank"], s["points"]) for s in sources],
-            [(self.training.name, 2, 40)],
+            [(s["name"], s["rank"], s["points"], s["show_rank"]) for s in sources],
+            [(self.training.name, 2, 40, True)],
         )
 
         total = self._allocate_pool(draft, self.thaumaturgy)
@@ -478,6 +478,10 @@ class MagicTrainingAllocationJourney(JourneyCase):
 
         body = self._patch({first: 20})
         self.assertEqual(body["magic_training"]["total"], 30)
+        # The block steps by the active budget's tier, never a hard-coded 10.
+        self.assertEqual(body["magic_training"]["step"], 10)
+        # A one-rank distinction is named without its rank ("Tradition Training").
+        self.assertEqual([s["show_rank"] for s in body["magic_training"]["base_sources"]], [False])
         self.assertEqual(body["magic_training"]["allocated"], 20)
         self.assertEqual(
             body["stage_errors"][stage], ["Spend all of your magical training: 10 left"]

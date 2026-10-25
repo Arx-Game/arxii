@@ -1532,7 +1532,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         pool = obj.magic_training_pool
         raw = obj.draft_data.get("magic_skills")
         allocation = raw if isinstance(raw, dict) else {}
-        max_value = SkillPointBudget.get_active_budget().max_skill_value
+        budget = SkillPointBudget.get_active_budget()
+        max_value = budget.max_skill_value
 
         def value_of(skill_id: int) -> int:
             value = allocation.get(str(skill_id), 0)
@@ -1544,7 +1545,13 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         ]
         return {
             "base_sources": [
-                {"name": source.name, "rank": source.rank, "points": source.points}
+                {
+                    "name": source.name,
+                    "rank": source.rank,
+                    "points": source.points,
+                    # Only a multi-rank distinction names its rank (slice 2 of #4659).
+                    "show_rank": source.max_rank > 1,
+                }
                 for source in pool.sources
             ],
             "gift_bonus": pool.gift_bonus,
@@ -1553,6 +1560,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "favored_affinity_name": pool.fit.favored_affinity_name,
             "total": pool.total,
             "required_spend": pool.required_spend,
+            # Magic skills move a whole tier at a time, like the Skills stage.
+            "step": budget.points_per_tier,
             "allocated": sum(skill["value"] for skill in skills),
             "skills": skills,
         }

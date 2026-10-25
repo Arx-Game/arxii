@@ -572,7 +572,7 @@ class TheTrainersMenu(_AcademyCourseCase):
         self.assertNotIn("next week", menu)
 
     def test_telnet_prints_the_tradition_line_then_the_fit_line(self) -> None:
-        """A tutor who teaches a Tradition says so, then what of her it teaches well (#4659)."""
+        """A tutor who teaches a Tradition says so, then what of her it fits (#4659)."""
         gift = GiftFactory(name="Lantern Gift")
         CharacterGiftFactory(character=self.sheet, gift=gift)
         tradition = TraditionFactory(name="House of Dawn")
@@ -585,7 +585,7 @@ class TheTrainersMenu(_AcademyCourseCase):
         self.assertRegex(
             menu,
             rf"Course: Occult.*{self.ENROLL}\s+Taught in the manner of House of Dawn\s+"
-            r"Teaches well: your Lantern Gift\. Sessions are easier for you\.",
+            r"Fits your Lantern Gift\. Sessions are easier for you\.",
         )
 
     def test_a_free_course_names_only_the_hare(self) -> None:

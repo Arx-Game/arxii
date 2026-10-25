@@ -39,7 +39,8 @@
   `CharacterDraft.magic_training_pool`; the old `SchoolingLine.magic_skill_floor` column was carried
   into it by migration 0298 and dropped by 0299). A Tradition's teaching fit
   (`world/magic/services/teaching_fit.py`: `teaching_fit`, `cg_aura_type`, `character_aura_type`,
-  `major_gift_for`, `get_teaching_config`) comes from `TraditionGiftGrant` (favored Gifts),
+  `major_gift_for`, `student_traits`, `student_fit` (the Academy's entry),
+  `get_teaching_config`) comes from `TraditionGiftGrant` (favored Gifts),
   `Tradition.favored_affinities` and `Affinity.aura_type`, tuned by the `TraditionTeachingConfig`
   singleton. Fit adds a flat bonus to the pool only when the draft has some training, and eases
   Academy course checks; it never gates. The Gift stage validates `draft_data["magic_skills"]`

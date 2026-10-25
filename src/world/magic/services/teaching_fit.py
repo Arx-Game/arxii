@@ -16,7 +16,7 @@ from world.magic.models import (
     TraditionGiftGrant,
     TraditionTeachingConfig,
 )
-from world.magic.types.teaching_fit import TeachingFit
+from world.magic.types.teaching_fit import StudentTraits, TeachingFit
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -89,3 +89,17 @@ def major_gift_for(sheet: CharacterSheet) -> Gift | None:
         .first()
     )
     return row.gift if row is not None else None
+
+
+def student_traits(sheet: CharacterSheet) -> StudentTraits:
+    """The sheet's Major Gift and aura type, the two things teaching fit reads."""
+    return StudentTraits(major_gift=major_gift_for(sheet), aura_type=character_aura_type(sheet))
+
+
+def student_fit(tradition: Tradition | None, student: StudentTraits) -> TeachingFit:
+    """How well ``tradition`` teaches this student; no fit when there is no Tradition.
+
+    The Academy's one entry point: the session ease (``npc_services.effects``) and the
+    menu's fit line (``npc_services.services``) both call it.
+    """
+    return teaching_fit(tradition, student.major_gift, student.aura_type)

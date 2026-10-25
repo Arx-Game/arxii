@@ -133,11 +133,16 @@ class CGPointBreakdownEntry(TypedDict):
 
 @dataclass(frozen=True)
 class DistinctionBonusSource:
-    """One distinction, at one rank, feeding a ModifierTarget: what its effect adds."""
+    """One distinction, at one rank, feeding a ModifierTarget: what its effect adds.
+
+    ``max_rank`` is the distinction's own: a breakdown names the rank held only when
+    the distinction has more than one ("Tradition Training, rank 1", but "Studious").
+    """
 
     name: str
     rank: int
     points: int
+    max_rank: int
 
 
 @dataclass(frozen=True)

@@ -40,8 +40,9 @@ class OfferPrice:
     session this game week, so the next one waits for the week to turn. It only
     changes the menu line, and is not sent on the wire on its own.
     ``teaching_line`` names the Tradition a skill course's role teaches ("Taught in the
-    manner of X", None when it teaches none); ``fit_line`` says what of the learner that
-    Tradition teaches well and that sessions are easier (None when nothing fits). Both
+    manner of X", None when it teaches none); ``fit_line`` says what of the learner the
+    Tradition fits and that sessions are easier ("Fits your X. Sessions are easier for
+    you.", None when nothing fits or the fit eases nothing). Both
     ride the wire under their own names (#4659).
 
     A TRAIN offer charges no AP on acceptance (``ap`` 0): its Hare and coin are paid

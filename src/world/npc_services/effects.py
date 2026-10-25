@@ -1019,16 +1019,12 @@ def _course_ease(offer: NPCServiceOffer, sheet: CharacterSheet) -> int:
     and aura type are weighed against it (slice 2 of #4659).
     """
     from world.magic.services.teaching_fit import (  # noqa: PLC0415
-        character_aura_type,
         get_teaching_config,
-        major_gift_for,
-        teaching_fit,
+        student_fit,
+        student_traits,
     )
 
-    tradition = offer.role.teaches_tradition
-    if tradition is None:
-        return 0
-    fit = teaching_fit(tradition, major_gift_for(sheet), character_aura_type(sheet))
+    fit = student_fit(offer.role.teaches_tradition, student_traits(sheet))
     return fit.course_ease(get_teaching_config())
 
 

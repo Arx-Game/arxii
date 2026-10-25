@@ -1903,11 +1903,13 @@ class CharacterDraft(SharedMemoryModel):
         ).select_related("target", "distinction")
 
         by_key: dict[tuple[str, int], int] = defaultdict(int)
+        max_ranks: dict[str, int] = {}
         for effect in effects:
+            max_ranks[effect.distinction.name] = effect.distinction.max_rank
             for rank in ranks[effect.distinction_id]:
                 by_key[(effect.distinction.name, rank)] += effect.get_value_at_rank(rank)
         return [
-            DistinctionBonusSource(name=name, rank=rank, points=points)
+            DistinctionBonusSource(name=name, rank=rank, points=points, max_rank=max_ranks[name])
             for (name, rank), points in sorted(by_key.items())
         ]
 

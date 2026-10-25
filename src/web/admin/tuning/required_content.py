@@ -1041,27 +1041,20 @@ def _probe_schooling_training_points() -> ProbeResult:
     stance counts when its `grants` distinction has such an effect (in the
     `character_creation` modifier category); a stance that grants nothing, or a
     distinction without one, gives a schooled character no points to spend on Magic
-    skills. That is a legal state, not a failure, and it stays listed until staff add
-    the effect on the Distinction Builder. A rank with no `SchoolingLine` row at all is
-    skipped here: `character_creation.tradition_schooling_lines` already reports it as
-    REQUIRED. Rank 0 grants nothing, so it gives no points.
+    skills. So does an effect worth 0 or less at the stance's rank. That is a legal
+    state, not a failure, and it stays listed until staff add the effect on the
+    Distinction Builder. A rank with no `SchoolingLine` row at all is skipped here:
+    `character_creation.tradition_schooling_lines` already reports it as REQUIRED. Rank 0
+    grants nothing, so it gives no points. Points are read through
+    `world.character_creation.offers.schooling_training_points`, the reader the
+    tradition serializer and the slate page use, so the probe and the stance rows agree.
     """
-    from world.character_creation.constants import (  # noqa: PLC0415
-        CG_MODIFIER_CATEGORY,
-        MAGIC_TRAINING_POINTS_TARGET,
-    )
     from world.character_creation.models import SchoolingLine  # noqa: PLC0415
-    from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
+    from world.character_creation.offers import schooling_training_points  # noqa: PLC0415
 
-    trained = DistinctionEffect.objects.filter(
-        target__name=MAGIC_TRAINING_POINTS_TARGET,
-        target__category__name=CG_MODIFIER_CATEGORY,
-    ).values("distinction_id")
-    unset = (
-        SchoolingLine.objects.filter(rank__gte=1)
-        .exclude(grants__isnull=False, grants_id__in=trained)
-        .order_by("rank")
-    )
+    lines = list(SchoolingLine.objects.filter(rank__gte=1).order_by("rank"))
+    points = schooling_training_points(lines)
+    unset = [line for line in lines if points[line.rank] <= 0]
     missing = tuple(f"Rank {line.rank}" for line in unset)
     if not missing:
         return ProbeResult(present=True)

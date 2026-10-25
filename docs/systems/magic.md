@@ -798,7 +798,7 @@ disagree. The fit gives bonuses and ease, never a gate.
 | `_glimpse` | `world/character_creation/magic_writer.py` | A new `CharacterAura` starts with its 80 on the picked resonance's affinity (below) |
 | `CharacterDraft._check_no_magic_points` | `world/character_creation/models.py` | Refuses points in a Magic skill or in a specialization whose parent is one, naming them (`MAGIC_SKILL_POINTS_REFUSAL`), from `validate_path_skills`. Magic skills are bought only from the training pool |
 | `TraditionSerializer` | `world/character_creation/serializers.py` | Each Tradition row carries `favored_gift_names` and `favored_affinity_names` (one query each for the list, built in `TraditionViewSet.get_serializer_context`); each stance row carries `training_points` and `grants_distinction_name`. Gift options carry `favored` |
-| `CharacterDraftSerializer.magic_training` | `world/character_creation/serializers.py` | Read-only breakdown on `GET /api/character-creation/drafts/<id>/`: `base_sources` (name, rank, points), `gift_bonus`, `affinity_bonus`, `favored_gift_name`, `favored_affinity_name`, `total`, `required_spend`, `allocated`, and `skills` (id, name, value, max) |
+| `CharacterDraftSerializer.magic_training` | `world/character_creation/serializers.py` | Read-only breakdown on `GET /api/character-creation/drafts/<id>/`: `base_sources` (name, rank, points, `show_rank`: true only for a distinction whose `max_rank` is above 1), `gift_bonus`, `affinity_bonus`, `favored_gift_name`, `favored_affinity_name`, `total`, `required_spend`, `step` (the active `SkillPointBudget.points_per_tier`), `allocated`, and `skills` (id, name, value, max) |
 
 **The pool.** `base` is the sum of the draft's `magic_training_points` distinction effects.
 `total = base + gift bonus + affinity bonus`, where each bonus is the config value when that fit
@@ -837,13 +837,15 @@ The Required content dashboard has these rows (`required_content.py`; `affinity-
 | Key | Lists | Consumer |
 |-----|-------|----------|
 | `affinity-aura-types` | Affinities with a blank `aura_type` (a Tradition favoring one never fits a student) | `teaching_fit()` |
-| `schooling-magic-skill-floors` | Schooling ranks 1 and above whose granted distinction has no `magic_training_points` effect (key kept so the dashboard row is stable) | `schooling_training_points()` |
+| `schooling-magic-skill-floors` | Schooling ranks 1 and above that give no training points: no granted distinction, no `magic_training_points` effect, or one worth 0 or less at the rank, read through `schooling_training_points()` (key kept so the dashboard row is stable) | `schooling_training_points()` |
 | `magic-skill-courses` | Active Magic skills with no `SKILL_COURSE` offer on an active role that has a `faction_affiliation` (an inactive role's offers are never shown) | `run_skill_course_offer()` |
 | `path-suggestions-name-magic-skills` | `PathSkillSuggestion` rows naming a Magic skill (CG cannot take them) | `PathSkillSuggestionViewSet` |
 
-**Frontend.** The Gift stage has its own training step after the Gift pick (its Gift bonus depends
-on the pick): `MagicTrainingBlock` lists the pool lines (each source with its rank, the Gift and
-affinity bonuses, the total), the remaining count, and a row per Magic skill; an overspend or an
+**Frontend.** The Gift stage has its own training step after the Resonance step, shown once both
+the Gift and the resonance are picked (its Gift bonus depends on the Gift, its affinity bonus on the
+resonance): `MagicTrainingBlock` lists the pool lines (each source, with its rank when `show_rank`;
+the Gift and affinity bonuses; the total), the remaining count, and a row per Magic skill stepping
+by the payload's `step`; an overspend or an
 underspend is flagged and the step stays open until `allocated` equals `required_spend`. Tradition
 and Gift cards carry "Teaches well" tags from `favored_gift_names`, `favored_affinity_names` and
 `favored`. `SchoolingStances` shows each stance's training points. `SkillsSection` hides Magic skills
@@ -878,12 +880,14 @@ stamped complete when `development_remaining` reaches 0. The AP is spent on any 
 including a botch that teaches nothing.
 
 *Teaching fit (slice 2 of #4659).* When the offer's role has `teaches_tradition`, `_course_ease`
-(`effects.py`) resolves `teaching_fit(tradition, major_gift_for(sheet), character_aura_type(sheet))`
-and subtracts `course_ease(config)` from `check_difficulty` before the roll, with no floor. The fit
+(`effects.py`) resolves `student_fit(tradition, student_traits(sheet))` (the sheet's Major Gift and
+aura type, then `teaching_fit`) and subtracts `course_ease(config)` from `check_difficulty` before the roll, with no floor. The fit
 changes the check only: the roll's outcome still decides the development gained. A role with no
 Tradition is neutral. The menu price (`OfferPrice`) carries two lines for such a course:
 `teaching_line` ("Taught in the manner of <Tradition>") and, when the learner fits,
-`fit_line` ("Teaches well: your <Gift> and <Affinity> affinity. Sessions are easier for you."); both
+`fit_line` ("Fits your <Gift> and <Affinity> aura. Sessions are easier for you.", or just the part
+that fits; omitted when the fit's `course_ease` is 0, so staff zeroing both eases removes the claim).
+The menu resolves the student's traits once (`serialize_npc_session_state`), not per offer. Both
 ride `OfferPriceSerializer`, `NPCInteractionDialog` shows them and telnet `hire` prints them.
 
 *Refusals charge nothing.* Every refusal is checked before anything is charged, in this order:

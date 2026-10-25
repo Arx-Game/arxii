@@ -192,6 +192,14 @@ class SchoolingTrainingPointsProbeTests(TestCase):
 
         self.assertEqual(self._resolve().missing, ("Rank 1",))
 
+    def test_an_effect_worth_zero_at_the_stance_rank_is_listed(self) -> None:
+        """An effect on the right target that adds nothing gives no points (#4665)."""
+        zero = DistinctionFactory(name="Zero Effect")
+        DistinctionEffectFactory(distinction=zero, target=self.target, value_per_rank=0)
+        SchoolingLineFactory(rank=1, grants=zero)
+
+        self.assertEqual(self._resolve().missing, ("Rank 1",))
+
     def test_rank_zero_and_a_missing_rank_are_not_listed(self) -> None:
         """Rank 0 grants nothing, and a missing row is REQUIRED elsewhere."""
         trained = DistinctionFactory(name="Trained")

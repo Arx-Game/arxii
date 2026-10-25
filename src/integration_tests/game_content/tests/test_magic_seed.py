@@ -902,6 +902,39 @@ class SeedCanonicalAffinitiesTests(TestCase):
         # Three canonical names must all exist after seeding.
         self.assertGreaterEqual(names, {"Celestial", "Primal", "Abyssal"})
 
+    def test_seeds_aura_type_on_each_canonical_affinity(self) -> None:
+        """A fresh database gets the aura designation from the seeder (#4665)."""
+        from world.magic.models.affinity import Affinity
+        from world.magic.types.aura import AffinityType
+
+        seed_canonical_affinities()
+
+        self.assertEqual(
+            dict(
+                Affinity.objects.filter(name__in=["Celestial", "Primal", "Abyssal"]).values_list(
+                    "name", "aura_type"
+                )
+            ),
+            {
+                "Celestial": AffinityType.CELESTIAL,
+                "Primal": AffinityType.PRIMAL,
+                "Abyssal": AffinityType.ABYSSAL,
+            },
+        )
+
+    def test_fills_blank_aura_type_and_keeps_a_set_one(self) -> None:
+        """An existing blank row is designated; an existing set row is not overwritten."""
+        from world.magic.models.affinity import Affinity
+        from world.magic.types.aura import AffinityType
+
+        Affinity.objects.create(name="Celestial", aura_type="")
+        Affinity.objects.create(name="Primal", aura_type=AffinityType.ABYSSAL)
+
+        seed_canonical_affinities()
+
+        self.assertEqual(Affinity.objects.get(name="Celestial").aura_type, AffinityType.CELESTIAL)
+        self.assertEqual(Affinity.objects.get(name="Primal").aura_type, AffinityType.ABYSSAL)
+
     def test_idempotent(self) -> None:
         seed_canonical_affinities()
         from world.magic.models.affinity import Affinity

@@ -6,7 +6,19 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from world.magic.models import Tradition, TraditionTeachingConfig
+    from world.magic.models import Gift, Tradition, TraditionTeachingConfig
+
+
+@dataclass(frozen=True)
+class StudentTraits:
+    """What of a student a Tradition's teaching is weighed against: Major Gift and aura.
+
+    Resolved once per student (``student_traits``) so a menu of several courses reads
+    the sheet once, not once per course.
+    """
+
+    major_gift: Gift | None
+    aura_type: str | None
 
 
 @dataclass(frozen=True)

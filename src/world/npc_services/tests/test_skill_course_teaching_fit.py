@@ -14,6 +14,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
+from world.magic.services.teaching_fit import get_teaching_config
 from world.magic.types.aura import AffinityType
 from world.npc_services.effects import _run_course_session
 from world.npc_services.factories import (
@@ -98,22 +99,18 @@ class SkillCourseTeachingFitTests(TestCase):
         self.assertEqual(payload["teaching_line"], "Taught in the manner of House of Dawn")
         self.assertEqual(
             payload["fit_line"],
-            "Teaches well: your Lantern Gift and Dawn affinity. Sessions are easier for you.",
+            "Fits your Lantern Gift and Dawn aura. Sessions are easier for you.",
         )
 
     def test_fit_line_with_only_the_gift(self) -> None:
         sheet = self._student(gift=self.gift, aura=AffinityType.ABYSSAL)
         price = _offer_price(self.course.offer, sheet, {}, None)
-        self.assertEqual(
-            price.fit_line, "Teaches well: your Lantern Gift. Sessions are easier for you."
-        )
+        self.assertEqual(price.fit_line, "Fits your Lantern Gift. Sessions are easier for you.")
 
     def test_fit_line_with_only_the_affinity(self) -> None:
         sheet = self._student(aura=AffinityType.CELESTIAL)
         price = _offer_price(self.course.offer, sheet, {}, None)
-        self.assertEqual(
-            price.fit_line, "Teaches well: your Dawn affinity. Sessions are easier for you."
-        )
+        self.assertEqual(price.fit_line, "Fits your Dawn aura. Sessions are easier for you.")
 
     def test_non_fitting_student_sees_only_the_tradition(self) -> None:
         sheet = self._student()
@@ -126,7 +123,17 @@ class SkillCourseTeachingFitTests(TestCase):
         enrollment = SkillCourseEnrollmentFactory(character_sheet=sheet, course=self.course)
         price = _offer_price(self.course.offer, sheet, {self.course.offer_id: enrollment}, None)
         self.assertEqual(price.teaching_line, "Taught in the manner of House of Dawn")
-        self.assertEqual(
-            price.fit_line, "Teaches well: your Lantern Gift. Sessions are easier for you."
-        )
+        self.assertEqual(price.fit_line, "Fits your Lantern Gift. Sessions are easier for you.")
         self.assertNotIn("House of Dawn", format_offer_price(price))
+
+    def test_fit_line_is_dropped_when_staff_ease_nothing(self) -> None:
+        """No "easier" claim when both course eases are 0; the Tradition line stays."""
+        config = get_teaching_config()
+        config.course_ease_gift_fit = 0
+        config.course_ease_affinity_fit = 0
+        config.save()
+        sheet = self._student(gift=self.gift, aura=AffinityType.CELESTIAL)
+        price = _offer_price(self.course.offer, sheet, {}, None)
+        self.assertEqual(price.teaching_line, "Taught in the manner of House of Dawn")
+        self.assertIsNone(price.fit_line)
+        self.assertEqual(self._difficulty_rolled(sheet), DIFFICULTY)

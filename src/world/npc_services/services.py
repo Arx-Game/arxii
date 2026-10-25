@@ -53,6 +53,7 @@ from world.predicates.predicates import CharacterPredicateContext, evaluate
 if TYPE_CHECKING:
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
+    from world.magic.types.teaching_fit import StudentTraits
     from world.npc_services.models import RecordedProfile
     from world.scenes.models import Persona
 
@@ -897,35 +898,37 @@ def _open_enrollments_by_offer(sheet: CharacterSheet) -> dict[int, SkillCourseEn
     }
 
 
-def _teaching_lines(offer: NPCServiceOffer, sheet: CharacterSheet) -> tuple[str | None, str | None]:
+def _teaching_lines(
+    offer: NPCServiceOffer, student: StudentTraits
+) -> tuple[str | None, str | None]:
     """The menu's two Tradition lines for a course: who it is taught by, and how it fits.
 
     ``(teaching_line, fit_line)``. ``teaching_line`` names the Tradition the offer's role
-    teaches ("Taught in the manner of X"); ``fit_line`` names what of ``sheet`` the
-    Tradition teaches well and that sessions are easier, None when nothing fits. Both
-    None when the role teaches no Tradition (slice 2 of #4659).
+    teaches ("Taught in the manner of X"); ``fit_line`` names what of the student the
+    Tradition fits and that sessions are easier, None when nothing fits or the fit
+    eases nothing (staff set both eases to 0). Both None when the role teaches no
+    Tradition (slice 2 of #4659).
     """
     from world.magic.services.teaching_fit import (  # noqa: PLC0415
-        character_aura_type,
-        major_gift_for,
-        teaching_fit,
+        get_teaching_config,
+        student_fit,
     )
 
     tradition = offer.role.teaches_tradition
     if tradition is None:
         return None, None
-    fit = teaching_fit(tradition, major_gift_for(sheet), character_aura_type(sheet))
     teaching_line = f"Taught in the manner of {tradition.name}"
+    fit = student_fit(tradition, student)
+    if fit.course_ease(get_teaching_config()) <= 0:
+        return teaching_line, None
     gift, affinity = fit.favored_gift_name, fit.favored_affinity_name
     if gift is not None and affinity is not None:
-        favored = f"your {gift} and {affinity} affinity"
+        fits = f"your {gift} and {affinity} aura"
     elif gift is not None:
-        favored = f"your {gift}"
-    elif affinity is not None:
-        favored = f"your {affinity} affinity"
+        fits = f"your {gift}"
     else:
-        return teaching_line, None
-    return teaching_line, f"Teaches well: {favored}. Sessions are easier for you."
+        fits = f"your {affinity} aura"
+    return teaching_line, f"Fits {fits}. Sessions are easier for you."
 
 
 def _offer_price(
@@ -933,6 +936,7 @@ def _offer_price(
     sheet: CharacterSheet,
     open_enrollments: dict[int, SkillCourseEnrollment],
     current_week_pk: int | None,
+    student: StudentTraits | None = None,
 ) -> OfferPrice | None:
     """What accepting ``offer`` charges ``sheet``, or None for an offer that names no price.
 
@@ -944,7 +948,9 @@ def _offer_price(
     :class:`~world.npc_services.types.OfferPrice`). An offer whose details row was
     never authored names no price either. A skill course
     whose role teaches a Tradition also carries the ``teaching_line`` and, when ``sheet``
-    fits it, the ``fit_line``; the price itself is the same for everyone.
+    fits it, the ``fit_line``; the price itself is the same for everyone. ``student`` is
+    the sheet's resolved traits, passed in by a menu that resolves them once; None
+    resolves them here.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -952,7 +958,13 @@ def _offer_price(
         if offer.kind == OfferKind.SKILL_COURSE:
             course = offer.skill_course_offer_details
             enrollment = open_enrollments.get(offer.pk)
-            teaching_line, fit_line = _teaching_lines(offer, sheet)
+            if student is None:
+                from world.magic.services.teaching_fit import (  # noqa: PLC0415
+                    student_traits,
+                )
+
+                student = student_traits(sheet)
+            teaching_line, fit_line = _teaching_lines(offer, student)
             if enrollment is not None:
                 return OfferPrice(
                     ap=course.session_ap_cost,
@@ -1022,9 +1034,10 @@ def _offer_price_payload(
     sheet: CharacterSheet,
     open_enrollments: dict[int, SkillCourseEnrollment],
     current_week_pk: int | None,
+    student: StudentTraits | None = None,
 ) -> dict | None:
     """The offer's price as the wire shape, with its menu line; None when it names none."""
-    price = _offer_price(offer, sheet, open_enrollments, current_week_pk)
+    price = _offer_price(offer, sheet, open_enrollments, current_week_pk, student)
     if price is None:
         return None
     return {**asdict(price), "display": format_offer_price(price)}
@@ -1061,6 +1074,10 @@ def serialize_npc_session_state(
 
     current_week = GameWeek.get_current() if open_enrollments else None
     current_week_pk = current_week.pk if current_week is not None else None
+    # The student's Major Gift and aura, read once for the whole menu (slice 2 of #4659).
+    from world.magic.services.teaching_fit import student_traits  # noqa: PLC0415
+
+    student = student_traits(sheet) if offers else None
     serialized_offers = InteractionOfferSerializer(
         [
             {
@@ -1070,7 +1087,7 @@ def serialize_npc_session_state(
                 "is_final": o.is_final,
                 "rapport_requirement": o.rapport_requirement,
                 "risk_tier": _offer_risk_tier(o),
-                "price": _offer_price_payload(o, sheet, open_enrollments, current_week_pk),
+                "price": _offer_price_payload(o, sheet, open_enrollments, current_week_pk, student),
             }
             for o in offers
         ],

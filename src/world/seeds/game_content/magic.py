@@ -1665,10 +1665,24 @@ def seed_canonical_affinities() -> None:
     canonical Affinity is absent.
     """
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
+    from world.magic.types.aura import AffinityType  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    for name in ("Celestial", "Primal", "Abyssal"):
-        authored_or_sample(Affinity, {}, name=name)
+    # Each canonical row carries its aura designation (slice 2 of #4659): the
+    # 0297 backfill runs before any seeding, so a fresh database only gets it
+    # here. A blank designation on an existing row is filled; a set one is kept,
+    # and a value another row already holds is left alone (unique constraint).
+    for name, aura_type in (
+        ("Celestial", AffinityType.CELESTIAL),
+        ("Primal", AffinityType.PRIMAL),
+        ("Abyssal", AffinityType.ABYSSAL),
+    ):
+        free = not Affinity.objects.filter(aura_type=aura_type).exists()
+        defaults = {"aura_type": aura_type} if free else {}
+        affinity = authored_or_sample(Affinity, defaults, name=name)
+        if affinity is not None and not affinity.aura_type and free:
+            affinity.aura_type = aura_type
+            affinity.save(update_fields=["aura_type"])
 
 
 # Task RC1 — directed RPS affinity interaction matrix

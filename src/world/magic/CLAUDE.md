@@ -1082,8 +1082,9 @@ resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
   (M2M `Affinity`) marks the auras it favors, matched through `Affinity.aura_type`, never by name.
   `teaching_fit(tradition, gift, aura_type)` in `services/teaching_fit.py` is the one resolver; the
   numbers live in the `TraditionTeachingConfig` singleton (`get_teaching_config()`). Character creation
-  (`CharacterDraft.magic_training_pool`) and the Academy (`npc_services.effects._course_ease`,
-  `services._teaching_lines`) both call it. Fit is a bonus or an ease, never a gate.
+  (`CharacterDraft.magic_training_pool`) and the Academy both call it; the Academy goes through
+  `student_fit(tradition, student_traits(sheet))` (`npc_services.effects._course_ease`,
+  `services._teaching_lines`). Fit is a bonus or an ease, never a gate.
 - `grant_path_magic(sheet, path)` (`services/path_magic.py`, returns `PathMagicGrantResult`)
   mints, idempotently, `CharacterGift` + the latent GIFT thread (reusing
   `provision_latent_gift_thread`) + `CharacterTechnique` rows for the path's `PathGiftGrant`
