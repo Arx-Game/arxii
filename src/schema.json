@@ -56459,6 +56459,11 @@ components:
           items:
             $ref: '#/components/schemas/PositionEdge'
           readOnly: true
+        held_positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeldPosition'
+          readOnly: true
         volatile_objects:
           type: array
           items:
@@ -56520,6 +56525,7 @@ components:
       - escalation_tick_narration
       - forced_escape
       - gm_standoff
+      - held_positions
       - id
       - is_gm
       - is_lethal
@@ -61591,6 +61597,21 @@ components:
       - id
       - name
       - target_kind
+    HeldPosition:
+      type: object
+      description: A place an enemy able to act holds, and who holds it (#4670).
+      properties:
+        position_id:
+          type: integer
+          readOnly: true
+        holder_names:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - holder_names
+      - position_id
     Heritage:
       type: object
       description: A heritage, for staff edit mode's picker (#3988).
@@ -70083,6 +70104,11 @@ components:
           - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
           nullable: true
+        current_square:
+          allOf:
+          - $ref: '#/components/schemas/Square'
+          nullable: true
+          readOnly: true
         mirrors_participant_id:
           type: integer
           readOnly: true
@@ -70092,6 +70118,7 @@ components:
       - break_bar_current
       - break_bar_threshold
       - current_position
+      - current_square
       - damage_multiplier
       - health
       - id
@@ -77482,6 +77509,11 @@ components:
           - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
           nullable: true
+        current_square:
+          allOf:
+          - $ref: '#/components/schemas/Square'
+          nullable: true
+          readOnly: true
         aftermath:
           allOf:
           - $ref: '#/components/schemas/AftermathDigest'
@@ -77507,6 +77539,7 @@ components:
       - character_status
       - control_modifier
       - current_position
+      - current_square
       - escalation_level
       - fatigue
       - health
@@ -82060,9 +82093,19 @@ components:
           - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
           nullable: true
+        square_x:
+          type: integer
+          readOnly: true
+          nullable: true
+        square_y:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - persona_id
       - position
+      - square_x
+      - square_y
     PersonaTitle:
       type: object
       description: |-
@@ -83409,7 +83452,35 @@ components:
         screens_ranged:
           type: boolean
           readOnly: true
+        area_x:
+          type: integer
+          readOnly: true
+          nullable: true
+        area_y:
+          type: integer
+          readOnly: true
+          nullable: true
+        area_w:
+          type: integer
+          readOnly: true
+          nullable: true
+        area_h:
+          type: integer
+          readOnly: true
+          nullable: true
+        terrain_name:
+          type: string
+          readOnly: true
+          nullable: true
+        terrain_art_url:
+          type: string
+          readOnly: true
+          nullable: true
       required:
+      - area_h
+      - area_w
+      - area_x
+      - area_y
       - elevation_anchor_id
       - id
       - is_roofed
@@ -83422,6 +83493,8 @@ components:
       - rampart_integrity
       - rampart_max_integrity
       - screens_ranged
+      - terrain_art_url
+      - terrain_name
     PositionSummary:
       type: object
       description: Compact public representation of a Position (id + name).
@@ -89480,6 +89553,19 @@ components:
       - created_at
       - id
       - title
+    Square:
+      type: object
+      description: 'A battle-map square inside a place (#4651): drawing only.'
+      properties:
+        x:
+          type: integer
+          readOnly: true
+        y:
+          type: integer
+          readOnly: true
+      required:
+      - x
+      - y
     StaffBeginningsRequest:
       type: object
       properties:

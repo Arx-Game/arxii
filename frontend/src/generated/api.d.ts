@@ -32995,6 +32995,7 @@ export interface components {
       readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
       readonly position_nodes: components['schemas']['PositionNode'][];
       readonly position_edges: components['schemas']['PositionEdge'][];
+      readonly held_positions: components['schemas']['HeldPosition'][];
       readonly volatile_objects: components['schemas']['VolatileObject'][];
       readonly objective: components['schemas']['ObjectiveSnapshot'] | null;
       readonly pending_selections: components['schemas']['PendingSelection'][];
@@ -35397,6 +35398,11 @@ export interface components {
       readonly target_kind: string;
       /** Format: date-time */
       readonly found_at: string;
+    };
+    /** @description A place an enemy able to act holds, and who holds it (#4670). */
+    HeldPosition: {
+      readonly position_id: number;
+      readonly holder_names: string[];
     };
     /** @description A heritage, for staff edit mode's picker (#3988). */
     Heritage: {
@@ -39667,6 +39673,7 @@ export interface components {
        */
       readonly thumbnail_media_url: string | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
+      readonly current_square: components['schemas']['Square'] | null;
       readonly mirrors_participant_id: number | null;
     };
     /**
@@ -44129,6 +44136,7 @@ export interface components {
       /** @description Process-derived control bonus from the COMBAT engagement. */
       readonly control_modifier: number | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
+      readonly current_square: components['schemas']['Square'] | null;
       readonly aftermath: components['schemas']['AftermathDigest'] | null;
       /** @description Return spent reactions only to the owner, GM, or staff. */
       readonly reactions_used: number | null;
@@ -46719,6 +46727,8 @@ export interface components {
     PersonaPosition: {
       readonly persona_id: number;
       readonly position: components['schemas']['PositionSummary'] | null;
+      readonly square_x: number | null;
+      readonly square_y: number | null;
     };
     /**
      * @description Serializer for an earned, displayable character title (#1522, #3466).
@@ -47344,6 +47354,12 @@ export interface components {
       readonly rampart_crack_state: string | null;
       readonly is_roofed: boolean;
       readonly screens_ranged: boolean;
+      readonly area_x: number | null;
+      readonly area_y: number | null;
+      readonly area_w: number | null;
+      readonly area_h: number | null;
+      readonly terrain_name: string | null;
+      readonly terrain_art_url: string | null;
     };
     /** @description Compact public representation of a Position (id + name). */
     PositionSummary: {
@@ -50175,6 +50191,11 @@ export interface components {
       readonly base_value: number;
       /** Format: date-time */
       readonly created_at: string;
+    };
+    /** @description A battle-map square inside a place (#4651): drawing only. */
+    Square: {
+      readonly x: number;
+      readonly y: number;
     };
     StaffBeginningsRequest: {
       beginnings: number;

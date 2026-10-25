@@ -104,6 +104,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    current_square: null,
     current_position: null,
     aftermath: null,
     reactions_used: null,
@@ -136,6 +137,7 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
     active_conditions: [],
     thumbnail_url: '',
     thumbnail_media_url: null,
+    current_square: null,
     current_position: null,
     mirrors_participant_id: null,
     ...overrides,
@@ -174,6 +176,7 @@ function makeEncounter(
     position_adjacency: [],
     position_nodes: [],
     position_edges: [],
+    held_positions: [],
     volatile_objects: [],
     is_lethal: false,
     duel_winner: null,
@@ -452,6 +455,7 @@ describe('CombatantsList', () => {
         makeParticipant({
           id: 1,
           character_name: 'Aerande',
+          current_square: null,
           current_position: { id: 3, name: 'Flank' },
         }),
       ],
@@ -484,6 +488,7 @@ describe('CombatantsList', () => {
         makeOpponent({
           id: 10,
           name: 'Mire Knight',
+          current_square: null,
           current_position: { id: 5, name: 'Center' },
         }),
       ]
