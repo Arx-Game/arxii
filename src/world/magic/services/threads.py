@@ -284,13 +284,14 @@ def compute_level_cap(character_sheet: CharacterSheet) -> int:
 def cap_exceeded_error(thread: Thread) -> type[AnchorCapExceeded]:
     """The refusal naming whichever cap binds ``thread`` (#4585).
 
-    ``LevelCapExceeded`` when the character-level cap is below the anchor cap, else
-    ``AnchorCapExceeded``. The same test the imbue loop uses for its ``LEVEL_CAP`` /
-    ``ANCHOR_CAP`` blocked reason.
+    ``LevelCapExceeded`` when the character-level cap is at or below the anchor cap
+    (a tie binds on level: a GIFT thread's anchor cap *is* the level cap, and only a
+    higher level would let it grow), else ``AnchorCapExceeded``. The same test the
+    imbue loop uses for its ``LEVEL_CAP`` / ``ANCHOR_CAP`` blocked reason.
     """
     from world.magic.exceptions import LevelCapExceeded  # noqa: PLC0415
 
-    if compute_level_cap(thread.owner) < compute_anchor_cap(thread):
+    if compute_level_cap(thread.owner) <= compute_anchor_cap(thread):
         return LevelCapExceeded
     return AnchorCapExceeded
 

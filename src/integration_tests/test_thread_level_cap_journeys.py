@@ -193,6 +193,30 @@ class TheCapStopsAnImbuePartway(_ThreadCase):
         self.assertEqual(thread.developed_points, imbue_cost(20, 25))
 
 
+class AGiftThreadIsHeldByHerLevel(_ThreadCase):
+    def test_a_gift_thread_names_her_level_not_its_anchor(self) -> None:
+        """A gift's anchor cap is her level cap, so the two tie; only a higher level
+        would let it grow, so she is told her level stopped it."""
+        from world.magic.factories import GiftFactory
+
+        self.her_level_is(2)
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=GiftFactory(),
+            level=19,
+        )
+        self.boundaries_paid(thread, 30)
+
+        told = self.imbue(thread, imbue_cost(19, 25))
+
+        self.assertEqual(thread.level, 20)
+        self.assertIn("Your character level limits this thread's growth.", told)
+        self.assertNotIn("anchor's strength", told)
+        self.assertIn("Your character level limits", self.imbue(thread, 100))
+
+
 class AnOrganizationThreadTakesTheLowerCap(_ThreadCase):
     def _org_thread(self, level: int) -> Thread:
         from world.magic.factories import GiftFactory

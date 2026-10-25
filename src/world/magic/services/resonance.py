@@ -399,7 +399,7 @@ def _check_imbue_level_advance(  # noqa: PLR0913
     if next_level > cap:
         blocked_by = (
             "LEVEL_CAP"
-            if compute_level_cap(character_sheet) < compute_anchor_cap(thread)
+            if compute_level_cap(character_sheet) <= compute_anchor_cap(thread)
             else "ANCHOR_CAP"
         )
         return False, blocked_by, []
