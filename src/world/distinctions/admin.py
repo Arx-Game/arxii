@@ -17,6 +17,7 @@ from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
+    DistinctionEffectRankSize,
     DistinctionTag,
     SheetUpdateRequest,
 )
@@ -151,8 +152,22 @@ class DistinctionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
         return "; ".join(parts) or "None"
 
 
+class DistinctionEffectRankSizeInline(admin.TabularInline):
+    """The size a sized effect has from each rank up (#4660).
+
+    Lives on the standalone effect page: the effect is itself an inline on the
+    distinction page, and Django admin cannot nest inlines.
+    """
+
+    model = DistinctionEffectRankSize
+    formset = OneRowPerFormSet
+    extra = 1
+    fields = ["rank", "size"]
+
+
 @admin.register(DistinctionEffect)
 class DistinctionEffectAdmin(admin.ModelAdmin):
+    inlines = [DistinctionEffectRankSizeInline]
     list_display = ["distinction", "target", "category", "value_per_rank", "modifier_size"]
     list_filter = ["target__category"]
     search_fields = ["distinction__name", "target__name", "description"]

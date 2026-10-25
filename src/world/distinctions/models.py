@@ -7,12 +7,15 @@ defining characteristics (merits/flaws equivalent):
 - DistinctionTag: Tags for filtering and search
 - Distinction: Individual advantages/disadvantages
 - DistinctionEffect: Mechanical effects of distinctions
+- DistinctionEffectRankSize: The size a sized effect has from one rank up (#4660)
 - Distinction.mutually_exclusive_with: symmetrical self-referential M2M for mutually
   exclusive distinction pairs (not a separate model)
 - CharacterDistinction: A character's taken distinctions
 - CharacterDistinctionOther: Freeform "Other" entries pending staff mapping
 - SheetUpdateRequest: Player-initiated requests to add/remove distinctions
 """
+
+from typing import ClassVar
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -22,6 +25,7 @@ from core.descriptors import ReverseOneToOneOrNone
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.checks.constants import ModifierSize
 from world.contributors.models import CreditedContent
 from world.distinctions.types import (
@@ -424,13 +428,14 @@ class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         null=True,
         blank=True,
         help_text=(
-            "How big this effect's bonus or penalty to a check is for its holder's level "
-            "(#4638). Read only when the target is a check type: the holder's level and "
-            "this size read the modifier value table, the authored value's sign says bonus "
-            "or penalty, and rank scales the table's number the way it scales the authored "
-            "value (rank 2 of a per-rank effect is twice rank 1). Blank keeps the flat "
-            "authored value. Paramount is reached only through a vow and cannot be "
-            "authored here."
+            "How big this effect's bonus or penalty to a check is at rank 1, for its "
+            "holder's level (#4638). Read only when the target is a check type: the "
+            "holder's level and the size read the modifier value table, and the authored "
+            "rank-1 value's sign says bonus or penalty. Rank never multiplies a sized "
+            "effect (#4660): a later rank takes its size from this effect's rank sizes "
+            "(the highest authored rank at or below it), and with none authored every "
+            "rank uses this size. Blank keeps the flat authored per-rank value. Paramount "
+            "is reached only through a vow and cannot be authored here."
         ),
     )
     description = models.TextField(
@@ -475,6 +480,114 @@ class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         if self.value_per_rank is not None:
             return self.value_per_rank * rank
         return 0
+
+    @PrunedCachedProperty
+    def cached_rank_sizes(self) -> list["DistinctionEffectRankSize"]:
+        """This effect's rank sizes (#4660, ADR-0298).
+
+        Fed cold by ``get_modifier_breakdown``'s ``Prefetch`` into this attribute, never
+        one query per effect there; this body is the fallback for a lone instance. Writes
+        clear it through ``DistinctionEffectRankSize.related_cache_fields``.
+        """
+        return list(self.rank_sizes.all())
+
+    def size_at_rank(self, rank: int) -> int | None:
+        """The effect's size at ``rank`` on a check (#4660), or None when it is unsized.
+
+        The highest authored ``DistinctionEffectRankSize`` at or below ``rank``, else
+        ``modifier_size`` (the rank-1 size). Reads ``cached_rank_sizes``, so a caller that
+        prefetched it runs no query here.
+        """
+        if self.modifier_size is None:
+            return None
+        size = self.modifier_size
+        best_rank = 1
+        for row in self.cached_rank_sizes:
+            if best_rank < row.rank <= rank:
+                best_rank = row.rank
+                size = row.size
+        return size
+
+
+class DistinctionEffectRankSize(NaturalKeyMixin, RelatedCacheClearingMixin, SharedMemoryModel):
+    """The size a sized distinction effect has from one rank up (#4660, slice 6 of #4551).
+
+    Rank steps a sized effect up the size ladder, effect by effect; it never multiplies
+    the table value (ADR-4660-A). Rank 1 is the effect's own ``modifier_size``; a row
+    here names the size from its ``rank`` on, until a higher row takes over. A rank with
+    no row keeps the size of the nearest lower rank that has one. Read only on the check
+    lane, by ``DistinctionEffect.size_at_rank``.
+    """
+
+    effect = models.ForeignKey(
+        DistinctionEffect,
+        on_delete=models.CASCADE,
+        related_name="rank_sizes",
+        help_text="The sized distinction effect this rank's size belongs to.",
+    )
+    rank = models.PositiveSmallIntegerField(
+        help_text=(
+            "The rank this size starts at: 2 or more (rank 1 is the effect's own size), "
+            "and no higher than the distinction's maximum rank."
+        ),
+    )
+    size = models.PositiveSmallIntegerField(
+        choices=ModifierSize.choices,
+        help_text=(
+            "The effect's size from this rank up, until a higher rank names another. "
+            "Paramount is reached only through a vow and cannot be authored here."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    #: A write here clears the effect's ``cached_rank_sizes`` (ADR-0298 pairing), so the
+    #: identity-mapped effect in a running server sees a size staff just authored.
+    related_cache_fields: ClassVar[list[str]] = ["effect"]
+
+    class NaturalKeyConfig:
+        fields = ["effect", "rank"]
+        dependencies = ["arxii.DistinctionEffect"]
+
+    class Meta:
+        ordering = ["effect_id", "rank"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["effect", "rank"],
+                name="unique_distinction_effect_rank_size",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(rank__gte=2),
+                name="distinction_effect_rank_size_rank_at_least_2",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(size=ModifierSize.PARAMOUNT),
+                name="distinction_effect_rank_size_not_paramount",
+            ),
+        ]
+        verbose_name = "Distinction Effect Rank Size"
+        verbose_name_plural = "Distinction Effect Rank Sizes"
+
+    def __str__(self) -> str:
+        return f"{self.effect} rank {self.rank}: {self.get_size_display()}"
+
+    def clean(self) -> None:
+        """Refuse Paramount, a rank past the distinction's maximum, and an unsized effect."""
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.size == ModifierSize.PARAMOUNT:
+            errors["size"] = "Paramount is reached only through a vow's size step."
+        if self.effect_id is not None:
+            effect = self.effect
+            if effect.modifier_size is None:
+                errors["effect"] = (
+                    "This effect has no size, so it has no rank sizes. Give it a rank-1 size first."
+                )
+            max_rank = effect.distinction.max_rank
+            if self.rank is not None and self.rank > max_rank:
+                errors["rank"] = f"This distinction's maximum rank is {max_rank}."
+        if errors:
+            raise ValidationError(errors)
 
 
 class CharacterDistinction(SharedMemoryModel):

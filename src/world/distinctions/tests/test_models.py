@@ -1,13 +1,17 @@
-"""Tests for the SheetUpdateRequest model (#2628)."""
+"""Tests for the SheetUpdateRequest model (#2628) and the rank-size constraints (#4660)."""
 
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.constants import ModifierSize
 from world.distinctions.factories import (
     CharacterDistinctionFactory,
+    DistinctionEffectFactory,
+    DistinctionEffectRankSizeFactory,
     DistinctionFactory,
     SheetUpdateRequestFactory,
 )
@@ -76,3 +80,29 @@ class SheetUpdateRequestModelTests(TestCase):
         )
         assert "Add" in str(req)
         assert "5" in str(req)
+
+
+class DistinctionEffectRankSizeConstraintTests(TestCase):
+    """The database refuses what the admin form refuses, for writes that skip ``clean()``.
+
+    The admin journey covers ``clean()``; a bulk load or a script write reaches only these.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.effect = DistinctionEffectFactory(
+            distinction=DistinctionFactory(max_rank=3), modifier_size=ModifierSize.MINOR
+        )
+
+    def test_paramount_is_refused(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DistinctionEffectRankSizeFactory(effect=self.effect, size=ModifierSize.PARAMOUNT)
+
+    def test_rank_one_is_refused(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DistinctionEffectRankSizeFactory(effect=self.effect, rank=1)
+
+    def test_one_size_per_rank(self) -> None:
+        DistinctionEffectRankSizeFactory(effect=self.effect, rank=2)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DistinctionEffectRankSizeFactory(effect=self.effect, rank=2)

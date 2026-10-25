@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
                     (4, "Exceptional"),
                     (5, "Paramount"),
                 ],
-                help_text="How big this effect's bonus or penalty to a check is for its holder's level (#4638). Read only when the target is a check type: the holder's level and this size read the modifier value table, the authored value's sign says bonus or penalty, and rank scales the table's number the way it scales the authored value (rank 2 of a per-rank effect is twice rank 1). Blank keeps the flat authored value. Paramount is reached only through a vow and cannot be authored here.",
+                help_text="How big this effect's bonus or penalty to a check is at rank 1, for its holder's level (#4638). Read only when the target is a check type: the holder's level and the size read the modifier value table, and the authored rank-1 value's sign says bonus or penalty. Rank never multiplies a sized effect (#4660): a later rank takes its size from this effect's rank sizes (the highest authored rank at or below it), and with none authored every rank uses this size. Blank keeps the flat authored per-rank value. Paramount is reached only through a vow and cannot be authored here.",
                 null=True,
             ),
         ),

@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from contextlib import contextmanager
 import contextvars
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -160,27 +160,26 @@ def _amplifiers_and_immunity(distinction_mods: list) -> tuple[list[tuple[int, in
 
 def _sized_distinction_value(
     mod: CharacterModifier, value_table: ValueTable | None, level: int | None
-) -> int | None:
-    """A sized distinction effect's value from the lane's table, or None to keep it flat.
+) -> tuple[int, int] | None:
+    """A sized distinction effect's (value, size) from the lane's table, or None for flat.
 
-    #4638: the holder's ``level`` and the effect's ``modifier_size`` read the table
-    (``ValueTable.signed_value``, signed like the effect's rank-1 value). Rank scales the
-    table's number the way it scales the authored one: the ratio of the effect's value
-    at the held rank to its value at rank 1, so a per-rank effect at rank 2 is twice its
-    rank-1 table number. None (the flat ``mod.value``) when there is no table, no size,
-    no level, a rank-1 value of 0, or no table row for the pair.
+    #4638: the holder's ``level`` and the effect's size read the table
+    (``ValueTable.signed_value``, signed like the effect's rank-1 value). #4660: the size
+    is the one the held rank names (``DistinctionEffect.size_at_rank``: the highest
+    authored rank size at or below it, else ``modifier_size``); rank steps the size and
+    never multiplies the table's number (ADR-4660-A). None (the flat ``mod.value``) when
+    there is no table, no size, no level, a rank-1 value of 0, or no table row for the
+    pair.
     """
     effect = mod.source.distinction_effect
     if value_table is None or effect.modifier_size is None:
         return None
-    unit = effect.get_value_at_rank(1)
-    magnitude = value_table.signed_value(unit, level, effect.modifier_size)
+    held = mod.source.character_distinction
+    size = effect.size_at_rank(held.rank if held is not None else 1)
+    magnitude = value_table.signed_value(effect.get_value_at_rank(1), level, size)
     if magnitude is None:
         return None
-    held = mod.source.character_distinction
-    at_rank = effect.get_value_at_rank(held.rank) if held is not None else unit
-    scaled = Decimal(magnitude) * Decimal(at_rank) / Decimal(unit)
-    return int(scaled.to_integral_value(rounding=ROUND_HALF_UP))
+    return magnitude, size
 
 
 def _distinction_contributions(
@@ -206,7 +205,7 @@ def _distinction_contributions(
     for mod in distinction_mods:
         effect = mod.source.distinction_effect
         sized = _sized_distinction_value(mod, value_table, level)
-        base_value = mod.value if sized is None else sized
+        base_value = mod.value if sized is None else sized[0]
         amplification = sum(bonus for amp_id, bonus in amplifiers if amp_id != mod.id)
         final_value = base_value + amplification
         blocked = has_immunity and final_value < 0
@@ -225,7 +224,7 @@ def _distinction_contributions(
                 # Level and size travel only with a table value, so provenance never
                 # claims the table priced a row it had no cell for.
                 level=level if sized is not None else None,
-                size=effect.modifier_size if sized is not None else None,
+                size=sized[1] if sized is not None else None,
             )
         )
     return sources, total, negatives_blocked
@@ -258,9 +257,15 @@ def get_modifier_breakdown(
         CharacterModifier.objects.filter(
             character=character,
             target=modifier_target,
-        ).select_related(
+        )
+        .select_related(
             "source__distinction_effect__distinction",
             "source__character_distinction__feature_marking",
+        )
+        # #4660: a sized effect reads its rank sizes; one query for every row, not one each.
+        # A warm (identity-mapped) effect already holds the list and is skipped.
+        .prefetch_related(
+            Prefetch("source__distinction_effect__rank_sizes", to_attr="cached_rank_sizes")
         )
     )
     modifiers = _visible_feature_modifiers(character, modifiers)
