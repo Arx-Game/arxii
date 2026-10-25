@@ -212,7 +212,7 @@ class DefenseProfileGearSubstitutionTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=parent,
             resonance=resonance,
-            level=10,
+            level=30,  # stored; shows 3, the sub-role's unlock level (#4585)
         )
 
         if parent_tenths is not None:
