@@ -36,9 +36,13 @@ from world.currency.services import (
     transfer,
 )
 from world.game_clock.week_services import advance_game_week
+from world.magic.constants import TargetKind
 from world.magic.factories import (
+    AffinityFactory,
     CharacterGiftFactory,
     GiftFactory,
+    ResonanceFactory,
+    ThreadFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
@@ -586,6 +590,33 @@ class TheTrainersMenu(_AcademyCourseCase):
             menu,
             rf"Course: Occult.*{self.ENROLL}\s+Taught in the manner of House of Dawn\s+"
             r"Fits your Lantern Gift\. Sessions are easier for you\.",
+        )
+
+    def test_the_web_menu_reads_the_affinity_from_her_major_gift_thread(self) -> None:
+        """Affinity fit is the resonance on her Major Gift's thread, by foreign key (#4659)."""
+        gift = GiftFactory(name="Lantern Gift")
+        CharacterGiftFactory(character=self.sheet, gift=gift)
+        dawn = AffinityFactory(name="Dawn")
+        tradition = TraditionFactory(name="House of Dawn")
+        TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+        tradition.favored_affinities.add(dawn)
+        self.role.teaches_tradition = tradition
+        self.role.save()
+
+        before = self.web_offers()["Course: Occult"]["price"]["fit_line"]
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=ResonanceFactory(affinity=dawn),
+            target_kind=TargetKind.GIFT,
+            target_trait=None,
+            target_gift=gift,
+        )
+        self.sheet.character.threads.invalidate()  # as weaving a thread does
+        after = self.web_offers()["Course: Occult"]["price"]["fit_line"]
+
+        self.assertEqual(before, "Fits your Lantern Gift. Sessions are easier for you.")
+        self.assertEqual(
+            after, "Fits your Lantern Gift and its Dawn affinity. Sessions are easier for you."
         )
 
     def test_a_free_course_names_only_the_hare(self) -> None:
