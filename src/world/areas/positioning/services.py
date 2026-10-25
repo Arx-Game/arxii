@@ -1523,6 +1523,40 @@ def teardown_aerial_layer(room: ObjectDB) -> None:
     invalidate_position_graph_caches(room)
 
 
+def _aerial_twin(room: ObjectDB, ground: Position) -> Position:
+    """The AERIAL twin above ``ground``, drawn now if ``ground`` was added after the layer.
+
+    ``materialize_aerial_layer`` builds the whole layer once, so a ground position staged
+    later has no twin until the layer is torn down. This adds that one twin the way the
+    layer builder would: the vertical edge, and an aerial edge to each existing twin over
+    a ground neighbour whose edge does not block flight (#4663).
+    """
+    above = Position.objects.filter(
+        room=room, kind=PositionKind.AERIAL, elevation_anchor=ground
+    ).first()
+    if above is not None:
+        return above
+    above = create_position(room, f"Above {ground.name}", kind=PositionKind.AERIAL)
+    above.elevation_anchor = ground
+    above.save(update_fields=["elevation_anchor"])
+    connect_positions(ground, above)  # vertical
+    twins = {
+        twin.elevation_anchor_id: twin
+        for twin in Position.objects.filter(room=room, kind=PositionKind.AERIAL).exclude(
+            pk=above.pk
+        )
+    }
+    for edge in PositionEdge.objects.filter(Q(position_a=ground) | Q(position_b=ground)):
+        if edge.blocks_flight:
+            continue
+        neighbour_id = edge.position_b_id if edge.position_a_id == ground.pk else edge.position_a_id
+        neighbour_twin = twins.get(neighbour_id)
+        if neighbour_twin is not None:
+            connect_positions(above, neighbour_twin)
+    invalidate_position_graph_caches(room)
+    return above
+
+
 def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:
     """Move objectdb to the AERIAL twin above its current position.
 
@@ -1542,7 +1576,7 @@ def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:
         return objectdb.object_position
     room = objectdb.location
     materialize_aerial_layer(room)
-    above = Position.objects.get(room=room, kind=PositionKind.AERIAL, elevation_anchor=ground)
+    above = _aerial_twin(room, ground)
     ObjectProperty.objects.update_or_create(
         object=objectdb,
         property=_aerial_property(),

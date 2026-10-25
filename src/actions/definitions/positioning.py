@@ -139,22 +139,30 @@ def _move_cost(actor: ObjectDB, target: Position, traversals: frozenset[str]) ->
 
 
 class CanFlyPrerequisite(Prerequisite):
-    """The actor holds a flight capability above its baseline and is on the ground (#4663)."""
+    """The actor holds a flight capability above its baseline, is on the ground, and has
+    open sky above her (#4663). A roof closes the vertical edge to everyone (#4608)."""
 
     def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
         if CreatureTraversal.FLIES not in traversals_of(actor):
             return False, _ERR_CANNOT_FLY
         if is_aerial(actor):
             return False, _ERR_ALREADY_AIRBORNE
+        ground = position_of(actor)
+        if ground is not None and ground.is_roofed:
+            return False, _ERR_MOVE_ROOFED
         return True, ""
 
 
 class AirbornePrerequisite(Prerequisite):
-    """The actor is in the air (#4663)."""
+    """The actor is in the air, over ground with no roof between (#4663, #4608)."""
 
     def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
         if not is_aerial(actor):
             return False, _ERR_NOT_AIRBORNE
+        current = position_of(actor)
+        below = current.elevation_anchor if current is not None else None
+        if below is not None and below.is_roofed:
+            return False, _ERR_MOVE_ROOFED
         return True, ""
 
 
@@ -299,6 +307,7 @@ _ERR_TARGET_NOT_FOUND = "That object does not exist."
 _ERR_TARGET_NOT_CO_LOCATED = "That object is not here."
 _ERR_POSITION_NOT_FOUND = "That position does not exist."
 _ERR_CANNOT_FLY = "You cannot fly."
+_ERR_MOVE_ROOFED = "A roof is in the way."
 _ERR_ALREADY_AIRBORNE = "You are already in the air."
 _ERR_NOT_AIRBORNE = "You are not in the air."
 

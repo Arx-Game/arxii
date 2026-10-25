@@ -49,17 +49,11 @@ def traversals_of(objectdb: ObjectDB) -> frozenset[str]:
     return player_traversals(sheet)
 
 
-def best_crossing_cost(edge: PositionEdge, traversals: frozenset[str]) -> int | None:
-    """The fewest hops any of ``traversals`` pays to cross ``edge``; None when all are shut."""
-    costs = [edge_crossing_cost(edge, traversal) for traversal in traversals]
-    open_costs = [cost for cost in costs if cost is not None]
-    return min(open_costs) if open_costs else None
+def cheapest_crossing(edge: PositionEdge, traversals: frozenset[str]) -> tuple[int, str] | None:
+    """The fewest hops any of ``traversals`` pays to cross ``edge``, and which one pays it.
 
-
-def cheapest_traversal(edge: PositionEdge, traversals: frozenset[str]) -> str | None:
-    """The traversal that crosses ``edge`` for ``best_crossing_cost``, or None.
-
-    Ties go to the ``CreatureTraversal`` declared first, so a climber-leaper climbs.
+    None when ``edge`` is shut to all of them. Ties go to the ``CreatureTraversal``
+    declared first, so a climber-leaper climbs.
     """
     best: tuple[int, int, str] | None = None
     order = list(CreatureTraversal.values)
@@ -70,4 +64,10 @@ def cheapest_traversal(edge: PositionEdge, traversals: frozenset[str]) -> str | 
         candidate = (cost, order.index(traversal), traversal)
         if best is None or candidate < best:
             best = candidate
-    return None if best is None else best[2]
+    return None if best is None else (best[0], best[2])
+
+
+def best_crossing_cost(edge: PositionEdge, traversals: frozenset[str]) -> int | None:
+    """The fewest hops any of ``traversals`` pays to cross ``edge``; None when all are shut."""
+    crossing = cheapest_crossing(edge, traversals)
+    return None if crossing is None else crossing[0]

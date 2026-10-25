@@ -27,11 +27,15 @@ from actions.player_interface import get_player_actions
 from integration_tests.harness import JourneyCase
 from world.areas.positioning.constants import CreatureTraversal, PositionKind
 from world.areas.positioning.factories import PositionFactory
+from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
     connect_positions,
+    edge_between,
     is_aerial,
+    materialize_aerial_layer,
     place_in_position,
     position_of,
+    set_position_cover,
 )
 from world.combat.constants import ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
@@ -56,6 +60,7 @@ from world.vitals.seeds import ensure_foundational_capabilities
 
 HEDGE = "Thorn Hedge"
 GATED = f"Crossing that requires getting past {HEDGE}."
+ROOFED = "A roof is in the way."
 TOO_FEW_HOPS = "That crossing takes 2 hops; you have 1 left."
 EXTRA_MOVEMENT = 5  # baseline 5 + 5 = 10 movement = 2 hops a round
 CAPABILITY_RAISE = 3
@@ -179,6 +184,49 @@ class TakingFlight(_TheHedgedYard):
         self.assertEqual(position_of(wren), self.west)
         self.assertFalse(is_aerial(wren))
         self.assertEqual(self.participant(wren).hops_used, 2)
+
+    def test_flier_cannot_take_off_under_a_roof(self) -> None:
+        wren = self.mover("Wren", flies=True)
+        set_position_cover(self.west, roofed=True, screens_ranged=False)
+
+        self.assertIn(ROOFED, self.telnet(wren, "position/fly"))
+
+        self.assertEqual(position_of(wren), self.west)
+        self.assertFalse(is_aerial(wren))
+        self.assertEqual(self.participant(wren).hops_used, 0)
+        names = {action.display_name for action in get_player_actions(wren)}
+        self.assertNotIn("Take flight", names)
+
+    def test_flier_cannot_land_onto_a_roofed_place(self) -> None:
+        wren = self.mover("Wren", flies=True)
+        self.telnet(wren, "position/fly")
+        above = position_of(wren)
+        set_position_cover(self.west, roofed=True, screens_ranged=False)
+
+        self.assertIn(ROOFED, self.telnet(wren, "position/land"))
+
+        self.assertEqual(position_of(wren), above)
+        self.assertTrue(is_aerial(wren))
+        self.assertEqual(self.participant(wren).hops_used, 1)
+        names = {action.display_name for action in get_player_actions(wren)}
+        self.assertNotIn("Land", names)
+
+    def test_flier_takes_off_from_a_place_added_after_the_sky_was_drawn(self) -> None:
+        materialize_aerial_layer(self.yard)  # someone is already up; the sky has a layer
+        east = PositionFactory(room=self.yard, name="East")
+        connect_positions(self.west, east)
+        wren = self.mover("Wren", flies=True)
+        place_in_position(wren, east)
+
+        self.telnet(wren, "position/fly")
+
+        above = position_of(wren)
+        self.assertEqual(above.kind, PositionKind.AERIAL)
+        self.assertEqual(above.elevation_anchor, east)
+        above_west = Position.objects.get(
+            room=self.yard, kind=PositionKind.AERIAL, elevation_anchor=self.west
+        )
+        self.assertIsNotNone(edge_between(above, above_west))
 
     def test_a_walker_cannot_take_flight(self) -> None:
         hobb = self.mover("Hobb")

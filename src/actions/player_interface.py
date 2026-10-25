@@ -1151,7 +1151,7 @@ def _flight_entry(
 def _crossing_entry(  # noqa: PLR0913 - the list's shared refusal state rides along
     neighbor: Position,
     cost: int,
-    traversal: str | None,
+    traversal: str,
     hops: int | None,
     move_met: bool,
     move_reason: str,
@@ -1201,8 +1201,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
         roof_between,
     )
     from world.areas.positioning.traversal import (  # noqa: PLC0415
-        best_crossing_cost,
-        cheapest_traversal,
+        cheapest_crossing,
         traversals_of,
     )
 
@@ -1261,10 +1260,12 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
 
     # Take off or land (#4663): a character with a flight capability above its baseline
     # rises into the air above where she stands; an airborne one comes down.
+    # A roof closes the way up or down for everyone (#4608), so neither is offered under one.
     traversals = traversals_of(character)
-    if airborne:
+    below = current.elevation_anchor if airborne else None
+    if airborne and not (below is not None and below.is_roofed):
         result.append(_flight_entry("land", "Land", move_met, move_reason, move_note))
-    elif CreatureTraversal.FLIES in traversals:
+    elif not airborne and CreatureTraversal.FLIES in traversals and not current.is_roofed:
         result.append(_flight_entry("take_flight", "Take flight", move_met, move_reason, move_note))
 
     # Surface gated (locked) edges as non-actionable entries so the player
@@ -1279,13 +1280,14 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     ).select_related("position_a", "position_b", "gating_challenge__template")
     for edge in gated_edges:
         neighbor = edge.position_b if edge.position_a_id == current.pk else edge.position_a
-        cost = best_crossing_cost(edge, traversals)
-        if cost is not None:
+        crossing = cheapest_crossing(edge, traversals)
+        if crossing is not None:
+            cost, traversal = crossing
             result.append(
                 _crossing_entry(
                     neighbor,
                     cost,
-                    cheapest_traversal(edge, traversals),
+                    traversal,
                     hops,
                     move_met,
                     move_reason,
