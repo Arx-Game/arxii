@@ -203,8 +203,9 @@ class NPCRole(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "(CharacterTradition membership). Blank = the role only trains "
             "shared (Path × Gift) pool techniques, no tradition signatures. "
             "A skill course this role offers is taught in this Tradition's manner, so a "
-            "student whose Major Gift or current aura it favors finds the course "
-            "sessions easier. Blank: this role's courses are neutral for every student."
+            "student whose Major Gift, or whose Gift resonance's affinity, it favors "
+            "finds the course sessions easier. Blank: this role's courses are neutral "
+            "for every student."
         ),
     )
     is_active = models.BooleanField(

@@ -1723,52 +1723,6 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         assert aura.primal == Decimal("80.00")
         assert aura.abyssal == Decimal("20.00")
 
-    def _aura_for_resonance_pick(self, aura_type: str):
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.factories import AffinityFactory, GiftFactory, ResonanceFactory
-        from world.magic.models import CharacterAura
-
-        affinity = AffinityFactory(name=f"Aura {aura_type or 'blank'}", aura_type=aura_type)
-        resonance = ResonanceFactory(name=f"Res {aura_type or 'blank'}", affinity=affinity)
-        gift = GiftFactory(name=f"Gift {aura_type or 'blank'}")
-        gift.resonances.add(resonance)
-        sheet = CharacterSheetFactory()
-        draft = self._create_draft()
-        draft.draft_data["selected_gift_id"] = gift.id
-        draft.draft_data["selected_gift_resonance_id"] = resonance.id
-        draft.save()
-        finalize_magic_data(draft, sheet)
-        return CharacterAura.objects.get(character=sheet)
-
-    def test_new_aura_follows_an_abyssal_resonance_pick(self):
-        from world.magic.types.aura import AffinityType
-
-        aura = self._aura_for_resonance_pick(AffinityType.ABYSSAL)
-        assert aura.dominant_affinity == AffinityType.ABYSSAL
-        assert (aura.celestial, aura.primal, aura.abyssal) == (
-            Decimal("0.00"),
-            Decimal("20.00"),
-            Decimal("80.00"),
-        )
-
-    def test_new_aura_follows_a_celestial_resonance_pick(self):
-        from world.magic.types.aura import AffinityType
-
-        aura = self._aura_for_resonance_pick(AffinityType.CELESTIAL)
-        assert aura.dominant_affinity == AffinityType.CELESTIAL
-        assert (aura.celestial, aura.primal, aura.abyssal) == (
-            Decimal("80.00"),
-            Decimal("0.00"),
-            Decimal("20.00"),
-        )
-
-    def test_blank_aura_type_resonance_keeps_primal(self):
-        from world.magic.types.aura import AffinityType
-
-        aura = self._aura_for_resonance_pick("")
-        assert aura.dominant_affinity == AffinityType.PRIMAL
-
     def test_finalize_saves_glimpse_story(self):
         """glimpse_story from draft_data should be saved on the CharacterAura."""
         from world.magic.models import CharacterAura

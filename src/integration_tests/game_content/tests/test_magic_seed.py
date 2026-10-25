@@ -902,41 +902,6 @@ class SeedCanonicalAffinitiesTests(TestCase):
         # Three canonical names must all exist after seeding.
         self.assertGreaterEqual(names, {"Celestial", "Primal", "Abyssal"})
 
-    def test_seeds_aura_type_on_each_canonical_affinity(self) -> None:
-        """A fresh database gets the aura designation from the seeder (#4665)."""
-        from world.magic.models.affinity import Affinity
-        from world.magic.types.aura import AffinityType
-
-        seed_canonical_affinities()
-
-        self.assertEqual(
-            dict(
-                Affinity.objects.filter(name__in=["Celestial", "Primal", "Abyssal"]).values_list(
-                    "name", "aura_type"
-                )
-            ),
-            {
-                "Celestial": AffinityType.CELESTIAL,
-                "Primal": AffinityType.PRIMAL,
-                "Abyssal": AffinityType.ABYSSAL,
-            },
-        )
-
-    def test_never_writes_aura_type_on_an_existing_row(self) -> None:
-        """Authored rows are left as they are: blank stays blank, a set value is kept."""
-        from world.magic.models.affinity import Affinity
-        from world.magic.types.aura import AffinityType
-
-        Affinity.objects.create(name="Celestial", aura_type="")
-        Affinity.objects.create(name="Primal", aura_type=AffinityType.ABYSSAL)
-
-        seed_canonical_affinities()
-
-        self.assertEqual(Affinity.objects.get(name="Celestial").aura_type, "")
-        self.assertEqual(Affinity.objects.get(name="Primal").aura_type, AffinityType.ABYSSAL)
-        # The created Abyssal row does not reuse a value another row holds.
-        self.assertEqual(Affinity.objects.get(name="Abyssal").aura_type, "")
-
     def test_idempotent(self) -> None:
         seed_canonical_affinities()
         from world.magic.models.affinity import Affinity

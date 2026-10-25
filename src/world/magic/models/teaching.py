@@ -27,8 +27,8 @@ class TraditionTeachingConfig(SharedMemoryModel):
         default=10,
         verbose_name="Affinity fit training bonus",
         help_text=(
-            "Added when the Tradition favors the student's current dominant aura. "
-            "Only given to a student with some training."
+            "Added when the Tradition favors the affinity of the student's Gift "
+            "resonance. Only given to a student with some training."
         ),
     )
     course_ease_gift_fit = models.PositiveSmallIntegerField(

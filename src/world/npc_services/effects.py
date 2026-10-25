@@ -1016,7 +1016,7 @@ def _course_ease(offer: NPCServiceOffer, sheet: CharacterSheet) -> int:
     """How many difficulty steps off a session a student who fits the Tradition gets.
 
     Zero when the offer's role teaches no Tradition. Otherwise the student's Major Gift
-    and aura type are weighed against it (slice 2 of #4659).
+    and its Gift thread's affinity are weighed against it (slice 2 of #4659).
     """
     from world.magic.services.teaching_fit import (  # noqa: PLC0415
         get_teaching_config,

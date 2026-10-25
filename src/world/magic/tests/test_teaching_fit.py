@@ -1,26 +1,25 @@
 """Tradition teaching fit (slice 2 of #4659)."""
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.constants import TargetKind
 from world.magic.factories import (
     AffinityFactory,
-    CharacterAuraFactory,
+    CharacterGiftFactory,
     GiftFactory,
     ResonanceFactory,
+    ThreadFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
 from world.magic.models import TraditionTeachingConfig
 from world.magic.services.teaching_fit import (
-    cg_aura_type,
-    character_aura_type,
     get_teaching_config,
+    student_traits,
     teaching_fit,
 )
-from world.magic.types.aura import AffinityType
 
 
 class TeachingConfigTests(TestCase):
@@ -45,28 +44,20 @@ class TeachingConfigTests(TestCase):
             config.full_clean()
 
 
-class AffinityAuraTypeTests(TestCase):
-    def test_aura_type_unique_when_set_blank_repeats(self) -> None:
-        AffinityFactory(aura_type="")
-        AffinityFactory(aura_type="")
-        AffinityFactory(aura_type=AffinityType.ABYSSAL)
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            AffinityFactory(aura_type=AffinityType.ABYSSAL)
-
-
 class TeachingFitTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.config = get_teaching_config()
         cls.gift = GiftFactory()
         cls.other_gift = GiftFactory()
-        cls.affinity = AffinityFactory(aura_type=AffinityType.CELESTIAL)
+        cls.affinity = AffinityFactory()
+        cls.other_affinity = AffinityFactory()
         cls.tradition = TraditionFactory()
         cls.tradition.favored_affinities.add(cls.affinity)
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
 
     def test_both_fit(self) -> None:
-        fit = teaching_fit(self.tradition, self.gift, AffinityType.CELESTIAL)
+        fit = teaching_fit(self.tradition, self.gift, self.affinity)
         self.assertTrue(fit.gift_fit and fit.affinity_fit)
         self.assertEqual(fit.favored_gift_name, self.gift.name)
         self.assertEqual(fit.favored_affinity_name, self.affinity.name)
@@ -74,13 +65,13 @@ class TeachingFitTests(TestCase):
         self.assertEqual(fit.course_ease(self.config), 4)
 
     def test_gift_only(self) -> None:
-        fit = teaching_fit(self.tradition, self.gift, AffinityType.ABYSSAL)
+        fit = teaching_fit(self.tradition, self.gift, self.other_affinity)
         self.assertEqual((fit.gift_fit, fit.affinity_fit), (True, False))
         self.assertIsNone(fit.favored_affinity_name)
         self.assertEqual(fit.training_bonus(self.config), 10)
 
     def test_affinity_only(self) -> None:
-        fit = teaching_fit(self.tradition, self.other_gift, AffinityType.CELESTIAL)
+        fit = teaching_fit(self.tradition, self.other_gift, self.affinity)
         self.assertEqual((fit.gift_fit, fit.affinity_fit), (False, True))
         self.assertIsNone(fit.favored_gift_name)
         self.assertEqual(fit.course_ease(self.config), 2)
@@ -92,27 +83,26 @@ class TeachingFitTests(TestCase):
         self.assertEqual(fit.course_ease(self.config), 0)
 
     def test_no_tradition(self) -> None:
-        fit = teaching_fit(None, self.gift, AffinityType.CELESTIAL)
+        fit = teaching_fit(None, self.gift, self.affinity)
         self.assertEqual((fit.gift_fit, fit.affinity_fit), (False, False))
         self.assertIsNone(fit.tradition)
 
-    def test_blank_aura_type_affinity_never_fits(self) -> None:
-        blank = AffinityFactory(aura_type="")
-        tradition = TraditionFactory()
-        tradition.favored_affinities.add(blank)
-        resonance = ResonanceFactory(affinity=blank)
-        fit = teaching_fit(tradition, self.gift, cg_aura_type(resonance))
-        self.assertFalse(fit.affinity_fit)
-
-    def test_cg_aura_type(self) -> None:
-        resonance = ResonanceFactory(affinity=self.affinity)
-        self.assertEqual(cg_aura_type(resonance), AffinityType.CELESTIAL)
-        self.assertIsNone(cg_aura_type(None))
-
-    def test_character_aura_type(self) -> None:
+    def test_student_affinity_is_the_major_gift_threads_resonance(self) -> None:
         sheet = CharacterSheetFactory()
-        self.assertIsNone(character_aura_type(sheet))
+        CharacterGiftFactory(character=sheet, gift=self.gift)
+        ThreadFactory(
+            owner=sheet,
+            resonance=ResonanceFactory(affinity=self.affinity),
+            target_kind=TargetKind.GIFT,
+            target_trait=None,
+            target_gift=self.gift,
+        )
+        traits = student_traits(sheet)
+        self.assertEqual(traits.major_gift, self.gift)
+        self.assertEqual(traits.affinity, self.affinity)
+
+    def test_student_without_a_gift_thread_has_no_affinity(self) -> None:
         sheet = CharacterSheetFactory()
-        CharacterAuraFactory(character=sheet)
-        sheet = type(sheet).objects.get(pk=sheet.pk)
-        self.assertEqual(character_aura_type(sheet), AffinityType.PRIMAL)
+        CharacterGiftFactory(character=sheet, gift=self.gift)
+        self.assertIsNone(student_traits(sheet).affinity)
+        self.assertIsNone(student_traits(CharacterSheetFactory()).affinity)

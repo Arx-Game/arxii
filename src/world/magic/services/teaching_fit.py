@@ -4,14 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist
-
 from world.magic.constants import GiftKind
 from world.magic.models import (
     Affinity,
     CharacterGift,
     Gift,
-    Resonance,
     Tradition,
     TraditionGiftGrant,
     TraditionTeachingConfig,
@@ -33,13 +30,13 @@ def get_teaching_config() -> TraditionTeachingConfig:
 def teaching_fit(
     tradition: Tradition | None,
     gift: Gift | None,
-    aura_type: str | None,
+    affinity: Affinity | None,
 ) -> TeachingFit:
-    """Resolve how well ``tradition`` teaches ``gift`` to someone of ``aura_type``.
+    """Resolve how well ``tradition`` teaches ``gift`` to someone whose Gift is of ``affinity``.
 
-    Gift fit: a TraditionGiftGrant(tradition, gift) exists. Affinity fit: one of the
-    Tradition's favored Affinities carries this ``aura_type`` (matched by the field,
-    never by name; a blank aura_type never fits).
+    Gift fit: a TraditionGiftGrant(tradition, gift) exists. Affinity fit: ``affinity``
+    is one of the Tradition's ``favored_affinities`` (matched by pk). The aura-based fit
+    is deferred to #4672.
     """
     if tradition is None:
         return TeachingFit(None, False, False, None, None)
@@ -50,12 +47,8 @@ def teaching_fit(
     ):
         gift_name = gift.name
     affinity_name = None
-    if aura_type:
-        affinity = Affinity.objects.filter(
-            favoring_traditions=tradition, aura_type=aura_type
-        ).first()
-        if affinity is not None:
-            affinity_name = affinity.name
+    if affinity is not None and tradition.favored_affinities.filter(pk=affinity.pk).exists():
+        affinity_name = affinity.name
     return TeachingFit(
         tradition=tradition,
         gift_fit=gift_name is not None,
@@ -63,21 +56,6 @@ def teaching_fit(
         favored_gift_name=gift_name,
         favored_affinity_name=affinity_name,
     )
-
-
-def cg_aura_type(resonance: Resonance | None) -> str | None:
-    """The aura type of a resonance's affinity, None when unset or blank."""
-    if resonance is None:
-        return None
-    return resonance.affinity.aura_type or None
-
-
-def character_aura_type(sheet: CharacterSheet) -> str | None:
-    """The sheet's dominant aura type, None when it has no aura row."""
-    try:
-        return str(sheet.aura.dominant_affinity.value)
-    except ObjectDoesNotExist:
-        return None
 
 
 def major_gift_for(sheet: CharacterSheet) -> Gift | None:
@@ -91,9 +69,24 @@ def major_gift_for(sheet: CharacterSheet) -> Gift | None:
     return row.gift if row is not None else None
 
 
+def gift_affinity_for(sheet: CharacterSheet, gift: Gift | None) -> Affinity | None:
+    """The affinity of the resonance on the sheet's active GIFT thread for ``gift``.
+
+    None when there is no Gift or no such thread. Reads the cached thread handler
+    through ``gift_threads_for`` (a direct hold on ``gift`` sorts first).
+    """
+    from world.magic.specialization.services import gift_threads_for  # noqa: PLC0415
+
+    if gift is None:
+        return None
+    threads = gift_threads_for(sheet.character, gift)
+    return threads[0].resonance.affinity if threads else None
+
+
 def student_traits(sheet: CharacterSheet) -> StudentTraits:
-    """The sheet's Major Gift and aura type, the two things teaching fit reads."""
-    return StudentTraits(major_gift=major_gift_for(sheet), aura_type=character_aura_type(sheet))
+    """The sheet's Major Gift and its Gift thread's affinity, what teaching fit reads."""
+    gift = major_gift_for(sheet)
+    return StudentTraits(major_gift=gift, affinity=gift_affinity_for(sheet, gift))
 
 
 def student_fit(tradition: Tradition | None, student: StudentTraits) -> TeachingFit:
@@ -102,4 +95,4 @@ def student_fit(tradition: Tradition | None, student: StudentTraits) -> Teaching
     The Academy's one entry point: the session ease (``npc_services.effects``) and the
     menu's fit line (``npc_services.services``) both call it.
     """
-    return teaching_fit(tradition, student.major_gift, student.aura_type)
+    return teaching_fit(tradition, student.major_gift, student.affinity)

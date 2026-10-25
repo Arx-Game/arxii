@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -208,27 +207,10 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
         set_glimpse_prose,
         set_glimpse_tags,
     )
-    from world.magic.services.teaching_fit import cg_aura_type  # noqa: PLC0415
-    from world.magic.types.aura import AffinityType  # noqa: PLC0415
 
     aura = CharacterAura.objects.filter(character=sheet).first()
     if aura is None:
         aura = CharacterAura(character=sheet)
-        # A new aura's 80 follows the picked resonance's affinity, swapping with Primal
-        # (#4659); an existing aura is never altered.
-        aura_type = cg_aura_type(picks.resonance)
-        if aura_type == AffinityType.ABYSSAL:
-            aura.celestial, aura.primal, aura.abyssal = (
-                Decimal("0.00"),
-                Decimal("20.00"),
-                Decimal("80.00"),
-            )
-        elif aura_type == AffinityType.CELESTIAL:
-            aura.celestial, aura.primal, aura.abyssal = (
-                Decimal("80.00"),
-                Decimal("0.00"),
-                Decimal("20.00"),
-            )
         aura.full_clean()
         aura.save()
     if picks.glimpse_tag_ids:

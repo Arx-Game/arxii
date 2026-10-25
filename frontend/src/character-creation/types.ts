@@ -848,7 +848,6 @@ export interface Affinity {
   id: number;
   name: string;
   description: string;
-  aura_type: string;
 }
 
 /** A Resonance row from /api/magic/resonances/ (ResonanceSerializer). */

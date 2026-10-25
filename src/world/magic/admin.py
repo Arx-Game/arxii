@@ -164,7 +164,7 @@ from world.magic.specialization.models import (
 
 @admin.register(Affinity)
 class AffinityAdmin(admin.ModelAdmin):
-    list_display = ["name", "aura_type", "description"]
+    list_display = ["name", "description"]
     search_fields = ["name"]
 
 

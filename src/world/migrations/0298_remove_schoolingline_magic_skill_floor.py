@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0299_schooling_floor_to_training_points"),
+        ("arxii", "0297_tradition_teaching_fit_schema"),
     ]
 
     operations = [

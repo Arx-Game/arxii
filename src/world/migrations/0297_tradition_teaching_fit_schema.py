@@ -34,7 +34,7 @@ class Migration(migrations.Migration):
                     models.PositiveSmallIntegerField(
                         default=10,
                         verbose_name="Affinity fit training bonus",
-                        help_text="Added when the Tradition favors the student's current dominant aura. Only given to a student with some training.",
+                        help_text="Added when the Tradition favors the affinity of the student's Gift resonance. Only given to a student with some training.",
                     ),
                 ),
                 (
@@ -60,35 +60,13 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.AddField(
-            model_name="affinity",
-            name="aura_type",
-            field=models.CharField(
-                blank=True,
-                choices=[
-                    ("celestial", "Celestial"),
-                    ("primal", "Primal"),
-                    ("abyssal", "Abyssal"),
-                ],
-                help_text="Which aura this affinity is, so a Tradition's favored affinities can be compared with a character's aura. Set once for each of the three.",
-                max_length=16,
-            ),
-        ),
-        migrations.AddField(
             model_name="tradition",
             name="favored_affinities",
             field=models.ManyToManyField(
                 blank=True,
-                help_text="Students whose current dominant aura is checked here get extra magical training and find this Tradition's courses easier. None checked: affinity never helps.",
+                help_text="A student whose Gift resonance belongs to an affinity checked here gets extra magical training and finds this Tradition's courses easier. None checked: affinity never helps.",
                 related_name="favoring_traditions",
                 to="arxii.affinity",
-            ),
-        ),
-        migrations.AddConstraint(
-            model_name="affinity",
-            constraint=models.UniqueConstraint(
-                condition=models.Q(("aura_type", ""), _negated=True),
-                fields=("aura_type",),
-                name="unique_affinity_aura_type",
             ),
         ),
     ]

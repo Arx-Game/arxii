@@ -1093,7 +1093,7 @@ def serialize_npc_session_state(
 
     current_week = GameWeek.get_current() if open_enrollments else None
     current_week_pk = current_week.pk if current_week is not None else None
-    # The student's Major Gift and aura, read once for the whole menu (slice 2 of #4659).
+    # The student's Major Gift and its Gift thread's affinity, read once per menu (#4659).
     from world.magic.services.teaching_fit import student_traits  # noqa: PLC0415
 
     # One fit per teaching Tradition, not one per course offer (two queries each).

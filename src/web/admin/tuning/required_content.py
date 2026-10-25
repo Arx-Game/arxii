@@ -1015,24 +1015,6 @@ def _probe_minor_gift_technique_skills() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
-def _probe_affinity_aura_types() -> ProbeResult:
-    """Every `Affinity` names the aura it is (slice 2 of #4659).
-
-    Consumer: `world/magic/services/teaching_fit.py` `teaching_fit()`, which compares a
-    Tradition's favored affinities with a student's aura through `Affinity.aura_type`.
-    A blank one cannot be matched to anyone's aura, so a Tradition favoring it never helps.
-    """
-    from world.magic.models import Affinity  # noqa: PLC0415
-
-    missing = tuple(
-        Affinity.objects.filter(aura_type="").order_by("name").values_list("name", flat=True)
-    )
-    if not missing:
-        return ProbeResult(present=True)
-    detail = f"{len(missing)} affinit(ies) have no aura type: a Tradition favoring one never fits."
-    return ProbeResult(present=False, missing=missing, detail=detail)
-
-
 def _probe_schooling_training_points() -> ProbeResult:
     """Each rank 1+ schooling stance gives Magic-skill training points (slice 2 of #4659).
 
@@ -2819,18 +2801,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence="Players see PLACEHOLDER headings on the Audere and crossing offers.",
             probe=CustomProbe(fn=_probe_audere_offer_copy),
             admin_model="AudereThreshold",
-        ),
-        ContentDependency(
-            key="affinity-aura-types",
-            label="Affinities with no aura type",
-            tier=DependencyTier.REQUIRED,
-            consumer="world/magic/services/teaching_fit.py teaching_fit()",
-            consequence=(
-                "A Tradition that favors this affinity never helps a student, since the "
-                "affinity cannot be matched to anyone's aura."
-            ),
-            probe=CustomProbe(fn=_probe_affinity_aura_types),
-            admin_model="Affinity",
         ),
         ContentDependency(
             key="magic-activity-skills",

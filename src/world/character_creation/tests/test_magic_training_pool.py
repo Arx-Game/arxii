@@ -16,7 +16,6 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
-from world.magic.types.aura import AffinityType
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.skills.factories import SkillFactory, SkillPointBudgetFactory
 from world.traits.factories import SkillTraitFactory
@@ -30,7 +29,7 @@ class MagicTrainingPoolTest(TestCase):
         cls.target = ModifierTargetFactory(name=MAGIC_TRAINING_POINTS_TARGET, category=category)
         SkillPointBudgetFactory(pk=1)
         cls.gift = GiftFactory()
-        cls.affinity = AffinityFactory(aura_type=AffinityType.CELESTIAL)
+        cls.affinity = AffinityFactory()
         cls.resonance = ResonanceFactory(affinity=cls.affinity)
         cls.tradition = TraditionFactory()
         cls.tradition.favored_affinities.add(cls.affinity)
@@ -49,9 +48,7 @@ class MagicTrainingPoolTest(TestCase):
         if affinity:
             data["selected_gift_resonance_id"] = self.resonance.id
         else:
-            data["selected_gift_resonance_id"] = ResonanceFactory(
-                affinity=AffinityFactory(aura_type=AffinityType.ABYSSAL)
-            ).id
+            data["selected_gift_resonance_id"] = ResonanceFactory(affinity=AffinityFactory()).id
         return CharacterDraftFactory(
             draft_data=data, selected_tradition=self.tradition if tradition else None
         )
@@ -134,7 +131,7 @@ class MagicSkillAllocationTest(TestCase):
             SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC)) for _ in range(3)
         ]
         cls.combat = SkillFactory(trait=SkillTraitFactory(category=TraitCategory.COMBAT))
-        cls.resonance = ResonanceFactory(affinity=AffinityFactory(aura_type=AffinityType.ABYSSAL))
+        cls.resonance = ResonanceFactory(affinity=AffinityFactory())
 
     def _draft(self, magic_skills, *, gift=None, trained=True):
         data = {

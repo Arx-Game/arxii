@@ -336,9 +336,9 @@ class Tradition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         related_name="favoring_traditions",
         help_text=(
-            "Students whose current dominant aura is checked here get extra magical "
-            "training and find this Tradition's courses easier. None checked: "
-            "affinity never helps."
+            "A student whose Gift resonance belongs to an affinity checked here gets "
+            "extra magical training and finds this Tradition's courses easier. None "
+            "checked: affinity never helps."
         ),
     )
 

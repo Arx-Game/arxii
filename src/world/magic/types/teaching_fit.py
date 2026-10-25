@@ -6,24 +6,27 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from world.magic.models import Gift, Tradition, TraditionTeachingConfig
+    from world.magic.models import Affinity, Gift, Tradition, TraditionTeachingConfig
 
 
 @dataclass(frozen=True)
 class StudentTraits:
-    """What of a student a Tradition's teaching is weighed against: Major Gift and aura.
+    """What of a student a Tradition's teaching is weighed against.
+
+    The Major Gift, and the affinity of the resonance on the student's GIFT thread for
+    it (None without one).
 
     Resolved once per student (``student_traits``) so a menu of several courses reads
     the sheet once, not once per course.
     """
 
     major_gift: Gift | None
-    aura_type: str | None
+    affinity: Affinity | None
 
 
 @dataclass(frozen=True)
 class TeachingFit:
-    """How well a Tradition's teaching fits a Gift and an aura.
+    """How well a Tradition's teaching fits a Gift and an Affinity.
 
     ``favored_gift_name`` / ``favored_affinity_name`` are the names of the matched
     Gift / Affinity (None when that dimension does not fit); they feed the

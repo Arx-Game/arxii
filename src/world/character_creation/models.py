@@ -1923,7 +1923,6 @@ class CharacterDraft(SharedMemoryModel):
         from world.magic.models import Gift, Resonance  # noqa: PLC0415
         from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
         from world.magic.services.teaching_fit import (  # noqa: PLC0415
-            cg_aura_type,
             get_teaching_config,
             teaching_fit,
         )
@@ -1944,7 +1943,8 @@ class CharacterDraft(SharedMemoryModel):
             if resonance_id
             else None
         )
-        fit = teaching_fit(self.selected_tradition, gift, cg_aura_type(resonance))
+        affinity = resonance.affinity if resonance is not None else None
+        fit = teaching_fit(self.selected_tradition, gift, affinity)
         config = get_teaching_config()
         gift_bonus = config.gift_fit_training_bonus if base > 0 and fit.gift_fit else 0
         affinity_bonus = config.affinity_fit_training_bonus if base > 0 and fit.affinity_fit else 0

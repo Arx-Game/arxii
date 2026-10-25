@@ -168,7 +168,7 @@ class AffinitySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Affinity
-        fields = ["id", "name", "description", "aura_type"]
+        fields = ["id", "name", "description"]
         read_only_fields = fields
 
 
