@@ -53,7 +53,7 @@ from world.predicates.predicates import CharacterPredicateContext, evaluate
 if TYPE_CHECKING:
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
-    from world.magic.types.teaching_fit import StudentTraits
+    from world.magic.types.teaching_fit import StudentTraits, TeachingFit
     from world.npc_services.models import RecordedProfile
     from world.scenes.models import Persona
 
@@ -898,27 +898,52 @@ def _open_enrollments_by_offer(sheet: CharacterSheet) -> dict[int, SkillCourseEn
     }
 
 
+def _menu_teaching_fits(
+    offers: list[NPCServiceOffer], student: StudentTraits
+) -> dict[int, TeachingFit]:
+    """The student's fit with each Tradition the menu's skill courses are taught under.
+
+    Keyed by Tradition pk: one fit per teaching Tradition, however many of its courses
+    the menu lists. A plain local the menu builder passes down, never stored.
+    """
+    from world.magic.services.teaching_fit import student_fit  # noqa: PLC0415
+
+    traditions = {
+        offer.role.teaches_tradition
+        for offer in offers
+        if offer.kind == OfferKind.SKILL_COURSE and offer.role.teaches_tradition is not None
+    }
+    return {tradition.pk: student_fit(tradition, student) for tradition in traditions}
+
+
 def _teaching_lines(
-    offer: NPCServiceOffer, student: StudentTraits
+    offer: NPCServiceOffer,
+    sheet: CharacterSheet,
+    fits: dict[int, TeachingFit] | None = None,
 ) -> tuple[str | None, str | None]:
     """The menu's two Tradition lines for a course: who it is taught by, and how it fits.
 
     ``(teaching_line, fit_line)``. ``teaching_line`` names the Tradition the offer's role
-    teaches ("Taught in the manner of X"); ``fit_line`` names what of the student the
+    teaches ("Taught in the manner of X"); ``fit_line`` names what of ``sheet`` the
     Tradition fits and that sessions are easier, None when nothing fits or the fit
     eases nothing (staff set both eases to 0). Both None when the role teaches no
-    Tradition (slice 2 of #4659).
+    Tradition (slice 2 of #4659). ``fits`` is the menu's per-Tradition fits
+    (``_menu_teaching_fits``, which reads the student once); a Tradition missing from
+    it is resolved here from ``sheet``.
     """
     from world.magic.services.teaching_fit import (  # noqa: PLC0415
         get_teaching_config,
         student_fit,
+        student_traits,
     )
 
     tradition = offer.role.teaches_tradition
     if tradition is None:
         return None, None
     teaching_line = f"Taught in the manner of {tradition.name}"
-    fit = student_fit(tradition, student)
+    fit = (fits or {}).get(tradition.pk)
+    if fit is None:
+        fit = student_fit(tradition, student_traits(sheet))
     if fit.course_ease(get_teaching_config()) <= 0:
         return teaching_line, None
     gift, affinity = fit.favored_gift_name, fit.favored_affinity_name
@@ -936,7 +961,7 @@ def _offer_price(
     sheet: CharacterSheet,
     open_enrollments: dict[int, SkillCourseEnrollment],
     current_week_pk: int | None,
-    student: StudentTraits | None = None,
+    fits: dict[int, TeachingFit] | None = None,
 ) -> OfferPrice | None:
     """What accepting ``offer`` charges ``sheet``, or None for an offer that names no price.
 
@@ -948,9 +973,9 @@ def _offer_price(
     :class:`~world.npc_services.types.OfferPrice`). An offer whose details row was
     never authored names no price either. A skill course
     whose role teaches a Tradition also carries the ``teaching_line`` and, when ``sheet``
-    fits it, the ``fit_line``; the price itself is the same for everyone. ``student`` is
-    the sheet's resolved traits, passed in by a menu that resolves them once; None
-    resolves them here.
+    fits it, the ``fit_line``; the price itself is the same for everyone. ``fits`` is the
+    menu's fit per teaching Tradition, resolved once per menu (``_menu_teaching_fits``);
+    None resolves the fit here.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -958,13 +983,7 @@ def _offer_price(
         if offer.kind == OfferKind.SKILL_COURSE:
             course = offer.skill_course_offer_details
             enrollment = open_enrollments.get(offer.pk)
-            if student is None:
-                from world.magic.services.teaching_fit import (  # noqa: PLC0415
-                    student_traits,
-                )
-
-                student = student_traits(sheet)
-            teaching_line, fit_line = _teaching_lines(offer, student)
+            teaching_line, fit_line = _teaching_lines(offer, sheet, fits)
             if enrollment is not None:
                 return OfferPrice(
                     ap=course.session_ap_cost,
@@ -1034,10 +1053,10 @@ def _offer_price_payload(
     sheet: CharacterSheet,
     open_enrollments: dict[int, SkillCourseEnrollment],
     current_week_pk: int | None,
-    student: StudentTraits | None = None,
+    fits: dict[int, TeachingFit] | None = None,
 ) -> dict | None:
     """The offer's price as the wire shape, with its menu line; None when it names none."""
-    price = _offer_price(offer, sheet, open_enrollments, current_week_pk, student)
+    price = _offer_price(offer, sheet, open_enrollments, current_week_pk, fits)
     if price is None:
         return None
     return {**asdict(price), "display": format_offer_price(price)}
@@ -1077,7 +1096,8 @@ def serialize_npc_session_state(
     # The student's Major Gift and aura, read once for the whole menu (slice 2 of #4659).
     from world.magic.services.teaching_fit import student_traits  # noqa: PLC0415
 
-    student = student_traits(sheet) if offers else None
+    # One fit per teaching Tradition, not one per course offer (two queries each).
+    fits = _menu_teaching_fits(offers, student_traits(sheet)) if offers else {}
     serialized_offers = InteractionOfferSerializer(
         [
             {
@@ -1087,7 +1107,7 @@ def serialize_npc_session_state(
                 "is_final": o.is_final,
                 "rapport_requirement": o.rapport_requirement,
                 "risk_tier": _offer_risk_tier(o),
-                "price": _offer_price_payload(o, sheet, open_enrollments, current_week_pk, student),
+                "price": _offer_price_payload(o, sheet, open_enrollments, current_week_pk, fits),
             }
             for o in offers
         ],

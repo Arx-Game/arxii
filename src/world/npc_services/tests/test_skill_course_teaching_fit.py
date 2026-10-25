@@ -2,7 +2,9 @@
 
 from unittest.mock import MagicMock, patch
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.game_clock.week_services import get_current_game_week
@@ -14,7 +16,8 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
-from world.magic.services.teaching_fit import get_teaching_config
+from world.magic.models import Affinity, TraditionGiftGrant
+from world.magic.services.teaching_fit import get_teaching_config, student_traits
 from world.magic.types.aura import AffinityType
 from world.npc_services.effects import _run_course_session
 from world.npc_services.factories import (
@@ -22,7 +25,12 @@ from world.npc_services.factories import (
     SkillCourseEnrollmentFactory,
     SkillCourseOfferDetailsFactory,
 )
-from world.npc_services.services import _offer_price, _offer_price_payload, format_offer_price
+from world.npc_services.services import (
+    _menu_teaching_fits,
+    _offer_price,
+    _offer_price_payload,
+    format_offer_price,
+)
 
 DIFFICULTY = 10
 
@@ -137,3 +145,29 @@ class SkillCourseTeachingFitTests(TestCase):
         self.assertEqual(price.teaching_line, "Taught in the manner of House of Dawn")
         self.assertIsNone(price.fit_line)
         self.assertEqual(self._difficulty_rolled(sheet), DIFFICULTY)
+
+    def _fit_queries_for_menu(self, offers, sheet) -> int:
+        """Fit queries (Gift grant and favored Affinity) one menu serialization makes."""
+        tables = (TraditionGiftGrant._meta.db_table, Affinity._meta.db_table)
+        with CaptureQueriesContext(connection) as ctx:
+            fits = _menu_teaching_fits(offers, student_traits(sheet))
+            payloads = [_offer_price_payload(o, sheet, {}, None, fits) for o in offers]
+        for payload in payloads:
+            self.assertEqual(
+                payload["fit_line"],
+                "Fits your Lantern Gift and Dawn aura. Sessions are easier for you.",
+            )
+        return sum(
+            1 for q in ctx.captured_queries if any(f'FROM "{t}"' in q["sql"] for t in tables)
+        )
+
+    def test_menu_resolves_the_fit_once_per_tradition_not_per_course(self) -> None:
+        """Two courses under one Tradition cost no more fit queries than one (#4671 review)."""
+        sheet = self._student(gift=self.gift, aura=AffinityType.CELESTIAL)
+        second = SkillCourseOfferDetailsFactory(offer__role=self.role)
+
+        one = self._fit_queries_for_menu([self.course.offer], sheet)
+        two = self._fit_queries_for_menu([self.course.offer, second.offer], sheet)
+
+        self.assertGreater(one, 0)
+        self.assertEqual(two, one)

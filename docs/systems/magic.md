@@ -887,7 +887,8 @@ Tradition is neutral. The menu price (`OfferPrice`) carries two lines for such a
 `teaching_line` ("Taught in the manner of <Tradition>") and, when the learner fits,
 `fit_line` ("Fits your <Gift> and <Affinity> aura. Sessions are easier for you.", or just the part
 that fits; omitted when the fit's `course_ease` is 0, so staff zeroing both eases removes the claim).
-The menu resolves the student's traits once (`serialize_npc_session_state`), not per offer. Both
+The menu (`serialize_npc_session_state`) reads the student's traits once and resolves one fit per
+teaching Tradition (`_menu_teaching_fits`, a local dict passed down), not one per offer. Both
 ride `OfferPriceSerializer`, `NPCInteractionDialog` shows them and telnet `hire` prints them.
 
 *Refusals charge nothing.* Every refusal is checked before anything is charged, in this order:
