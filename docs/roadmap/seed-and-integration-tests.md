@@ -189,12 +189,21 @@ third and fourth sized sources on the check lane. Built: an authored size on `Di
 and an authored level and size on `SceneCheckModifier` (Paramount refused; surroundings take both
 or neither), on the distinction's effect inline and a new surroundings inline on the scene admin.
 A sized distinction effect counts at its holder's level (`CharacterSheet.current_level`), scaled
-by rank the way its authored value scales, with amplification and immunity applied on top; sized
+by rank the way its authored value scales (replaced by #4660: rank now steps the size, see
+below), with amplification and immunity applied on top; sized
 surroundings count at their own level. Distinctions stay in the CHARACTER kind and taper with the
 achievement-reward and form-profile rows on that path, which stay flat. Unsized rows stay flat and
 still taper. The value-table Required content entry names every sized source. Still open in
 #4551: the other lanes, crafted modifiers and walk passives (see ADR-4628-A), and the vow size
 shift (slice d). Journey: `integration_tests/test_distinctions_and_surroundings_on_checks_journeys.py`.
+
+✅ **Check math, slice 6, distinction ranks step the size (#4660 of #4551, ADR-4660-A)**: rank no
+longer multiplies a sized distinction effect on checks. Built: `DistinctionEffectRankSize`, one
+row per effect and rank (rank 2 or more, at most `max_rank`, Paramount refused), authored as an
+inline on the distinction effect admin page. An effect's size at a rank is the highest authored
+row at or below it, else its `modifier_size`; so one distinction can step one effect Minor,
+Minor, Large while another stays flat. Unsized effects still follow `value_per_rank` /
+`scaling_values`. Same journey file.
 
 ✅ **Phase B (#1221)** — "makes them tunable," referenced at 3.9 above, has shipped: admin-hosted
 Game Tuning (`/admin/_tuning/`) and Game Ops (`/admin/_ops/`) dashboards, plus a superuser

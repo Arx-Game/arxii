@@ -1000,14 +1000,17 @@ rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
 `reconcile_offer_picks`); see the Character Creation section below and
 [distinctions.md](distinctions.md)'s "CG Integration".
 
-- **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
+- **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`,
+  `DistinctionEffectRankSize` (#4660: an effect's size from one rank up), `CharacterDistinction`
   (`from_glimpse` nullable FK → `magic.CharacterAura`, SET_NULL, #2427 — FK presence is
   the Glimpse-provenance state, mirroring `.secret`; set via
   `world.magic.services.glimpse.link_distinction_to_glimpse`/`unlink_distinction_from_glimpse`)
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
 - **Check lane (#4638):** `DistinctionEffect.modifier_size` (Paramount refused): on a check-scoped
-  target the effect reads the check value table at its holder's level and this size, scaled by
-  rank like the authored value; blank keeps the flat value. The list serializer's generated
+  target the effect reads the check value table at its holder's level and the size its held rank
+  names (`DistinctionEffect.size_at_rank`: the highest `DistinctionEffectRankSize` at or below
+  the rank, else `modifier_size`; rank never multiplies it, #4660, ADR-4660-A); blank keeps the
+  flat per-rank value. Rank sizes are an inline on the standalone effect admin page. The list serializer's generated
   effect line names the size ("+Large <target>") for such an effect. See [checks.md](checks.md).
 - **Enums:** `DistinctionOrigin` (`CHARACTER_CREATION`, `GAMEPLAY` vestigial, `GM_AWARD`,
   `ACHIEVEMENT_AUTO_GRANT`, `CONSEQUENCE_POOL`, `ENDORSEMENT_THRESHOLD`), `OtherStatus`
@@ -1086,8 +1089,8 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `ValueTable.signed_value`; crafted modifiers are one EQUIPMENT contribution per worn piece; the
   equipment walk's vow terms (`equipment_walk_parts(...).vow_part`) ride untapered.
   Third and fourth, distinctions and scene surroundings (#4638, ADR-4638-A):
-  `DistinctionEffect.modifier_size` at the holder's `CharacterSheet.current_level`, scaled by
-  rank, through `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)` (kept in the
+  `DistinctionEffect.modifier_size` at the holder's `CharacterSheet.current_level`, stepped up
+  the size ladder by rank through `DistinctionEffectRankSize` (#4660, ADR-4660-A), through `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)` (kept in the
   CHARACTER kind); `SceneCheckModifier.modifier_level`/`modifier_size` authored together,
   valued in `_scene_check_contributions`.
 - **Source:** `src/world/checks/`
