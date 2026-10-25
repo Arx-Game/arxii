@@ -59,7 +59,7 @@ from world.skills.factories import (
     SkillPointBudgetFactory,
     SpecializationFactory,
 )
-from world.skills.models import CharacterSkillValue
+from world.skills.models import CharacterSkillValue, SkillPointBudget
 from world.traits.factories import CheckSystemSetupFactory, SkillTraitFactory, StatTraitFactory
 from world.traits.models import (
     CharacterTraitChange,
@@ -98,6 +98,13 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         # One Tradition Training distinction; each stance is a line that grants it and an
         # offer that opens it at the Tradition step.
         cls.training = DistinctionFactory(name="Tradition Training", cost_per_rank=1, max_rank=2)
+        # Each rank of Tradition Training also adds Magic training points to spend (#4659).
+        pool_target = ModifierTargetFactory(
+            name=MAGIC_TRAINING_POINTS_TARGET,
+            category=ModifierCategoryFactory(name=CG_MODIFIER_CATEGORY),
+        )
+        DistinctionEffectFactory(distinction=cls.training, target=pool_target, value_per_rank=20)
+        SkillPointBudgetFactory(pk=1)
         cls.offers = {}
         for rank, floor in FLOORS.items():
             line = SchoolingLineFactory(
@@ -178,29 +185,54 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         self.assertEqual([s["rank"] for s in rows[self.orphaned.pk]["schooling"]], [0, 1])
         self.assertEqual(rows[self.self_taught.pk]["schooling"], [])
 
-    def test_rank_two_pick_finalizes_floor(self) -> None:
+    def _allocate_pool(self, draft, skill) -> int:
+        """Put the draft's whole Magic training pool on ``skill`` (the Gift stage's PATCH)."""
+        draft.refresh_from_db()
+        total = draft.magic_training_pool.total
+        # Past one skill's ceiling the rest goes on a second Magic skill.
+        cap = SkillPointBudget.get_active_budget().max_skill_value
+        spread = {str(skill.pk): min(total, cap)}
+        if total > cap:
+            spread[str(self.hermetics.pk)] = total - cap
+        response = self.client.patch(
+            self._draft_url(draft),
+            {"draft_data": {"magic_skills": spread}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        return total
+
+    def test_rank_two_pick_finalizes_the_allocation(self) -> None:
         draft = self._create_base_draft()
         self._select(draft, self.living)
         self.assertEqual(self._sync(draft, 2).status_code, 200)
         self.assertEqual(self._floor(draft), 30)
 
+        total = self._allocate_pool(draft, self.thaumaturgy)
+        self.assertGreater(total, 0)
+
         sheet = self._finalize(draft)
 
-        for skill in self.active_magic:
-            self.assertEqual(
-                CharacterSkillValue.objects.get(character=sheet, skill=skill).value, 30
-            )
-            self.assertEqual(
-                CharacterTraitValue.objects.get(character=sheet, trait=skill.trait).value, 30
-            )
-            change = CharacterTraitChange.objects.get(character_sheet=sheet, trait=skill.trait)
-            self.assertEqual(change.source, TraitChangeSource.CHARACTER_CREATION)
-        self.assertFalse(CharacterSkillValue.objects.filter(character=sheet, skill=self.lapsed))
+        held = {
+            row.skill_id: row.value for row in CharacterSkillValue.objects.filter(character=sheet)
+        }
+        self.assertEqual(sum(held.values()), total)
+        self.assertIn(held[self.thaumaturgy.pk], range(1, total + 1))
+        skill = self.thaumaturgy
+        self.assertEqual(
+            CharacterTraitValue.objects.get(character=sheet, trait=skill.trait).value,
+            held[skill.pk],
+        )
+        change = CharacterTraitChange.objects.get(character_sheet=sheet, trait=skill.trait)
+        self.assertEqual(change.source, TraitChangeSource.CHARACTER_CREATION)
+        # Only allocated Magic skills are written; the floor no longer lifts the rest.
         self.assertFalse(
-            CharacterTraitValue.objects.filter(character=sheet, trait=self.lapsed.trait)
+            CharacterSkillValue.objects.filter(
+                character=sheet, skill__in=[self.geomancy, self.lapsed]
+            )
         )
 
-    def test_orphaned_rank_one_finalizes_floor_and_rank_two_refused(self) -> None:
+    def test_orphaned_rank_one_finalizes_the_allocation_and_rank_two_refused(self) -> None:
         draft = self._create_base_draft()
         self._select(draft, self.orphaned)
 
@@ -210,11 +242,11 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
 
         self.assertEqual(self._sync(draft, 1).status_code, 200)
         self.assertEqual(self._floor(draft), 20)
+        total = self._allocate_pool(draft, self.geomancy)
         sheet = self._finalize(draft)
-        for skill in self.active_magic:
-            self.assertEqual(
-                CharacterSkillValue.objects.get(character=sheet, skill=skill).value, 20
-            )
+        self.assertEqual(
+            CharacterSkillValue.objects.get(character=sheet, skill=self.geomancy).value, total
+        )
 
     def test_switching_tradition_drops_floor(self) -> None:
         draft = self._create_base_draft()
@@ -298,7 +330,7 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         self.assertEqual(len(rolled), 1)
         return capture.extra_traits, rolled[0]
 
-    def test_a_schooled_cast_rolls_its_magic_skill_at_the_stance_floor(self) -> None:
+    def test_a_schooled_cast_rolls_its_magic_skill_at_the_allocated_value(self) -> None:
         # The CG Path's technique skill is a Magic skill, so a cast on it adds that skill.
         CheckSystemSetupFactory.create()
         PointConversionRange.objects.get_or_create(
@@ -326,6 +358,7 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         self_taught_draft = self._create_base_draft(first_name="Hobb")
         self._select(self_taught_draft, self.self_taught)
 
+        allocated = self._allocate_pool(schooled_draft, self.thaumaturgy)
         casters = []
         for draft in (schooled_draft, self_taught_draft):
             sheet = self._finalize(draft)
@@ -353,7 +386,7 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
                 character=self_taught.sheet_data, trait=self.thaumaturgy.trait
             )
         )
-        self.assertEqual(schooled_roll.trait_points - self_taught_roll.trait_points, FLOORS[1])
+        self.assertEqual(schooled_roll.trait_points - self_taught_roll.trait_points, allocated)
 
     def test_a_stance_offer_saved_without_its_stance_is_not_offered(self) -> None:
         # Nothing in the database requires a Tradition Step offer to name a stance, so a

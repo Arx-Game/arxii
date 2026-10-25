@@ -591,6 +591,51 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         assert skill_value.development_points == 0
         assert skill_value.rust_points == 0
 
+    def test_finalize_writes_the_magic_skill_allocation_and_no_other_magic_skill(self):
+        """draft_data["magic_skills"] is written as given; unallocated Magic skills get no row."""
+        from world.character_creation.constants import (
+            CG_MODIFIER_CATEGORY,
+            MAGIC_TRAINING_POINTS_TARGET,
+        )
+        from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+        from world.skills.factories import SkillPointBudgetFactory
+        from world.skills.models import CharacterSkillValue
+        from world.traits.constants import TraitCategory
+
+        occult = SkillFactory(trait__name="Occult Test", trait__category=TraitCategory.MAGIC)
+        ritualism = SkillFactory(trait__name="Ritualism Test", trait__category=TraitCategory.MAGIC)
+        SkillFactory(trait__name="Unallocated Test", trait__category=TraitCategory.MAGIC)
+        category = ModifierCategoryFactory(name=CG_MODIFIER_CATEGORY)
+        target = ModifierTargetFactory(name=MAGIC_TRAINING_POINTS_TARGET, category=category)
+        SkillPointBudgetFactory(pk=1)
+        training = DistinctionFactory(name="Magic Training Test")
+        DistinctionEffectFactory(distinction=training, target=target, value_per_rank=40)
+        # The base 40 plus the Gift-fit bonus (10) is the 50 spent below.
+        draft = self._create_complete_draft()
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": training.id,
+                "distinction_name": training.name,
+                "distinction_slug": training.slug,
+                "category_slug": training.category.slug,
+                "rank": 1,
+                "cost": 0,
+                "notes": "",
+            }
+        ]
+        draft.draft_data["magic_skills"] = {str(occult.pk): 30, str(ritualism.pk): 20}
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        held = dict(
+            CharacterSkillValue.objects.filter(
+                character_id=character.pk, skill__trait__category=TraitCategory.MAGIC
+            ).values_list("skill_id", "value")
+        )
+        assert held == {occult.pk: 30, ritualism.pk: 20}
+
     def test_finalize_stamps_character_trait_change_for_skill_bridge(self):
         """The CG skill->trait bridge row also stamps a CharacterTraitChange (#3055)."""
         draft = self._create_complete_draft()
@@ -1677,6 +1722,52 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         assert aura.celestial == Decimal("0.00")
         assert aura.primal == Decimal("80.00")
         assert aura.abyssal == Decimal("20.00")
+
+    def _aura_for_resonance_pick(self, aura_type: str):
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import AffinityFactory, GiftFactory, ResonanceFactory
+        from world.magic.models import CharacterAura
+
+        affinity = AffinityFactory(name=f"Aura {aura_type or 'blank'}", aura_type=aura_type)
+        resonance = ResonanceFactory(name=f"Res {aura_type or 'blank'}", affinity=affinity)
+        gift = GiftFactory(name=f"Gift {aura_type or 'blank'}")
+        gift.resonances.add(resonance)
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft()
+        draft.draft_data["selected_gift_id"] = gift.id
+        draft.draft_data["selected_gift_resonance_id"] = resonance.id
+        draft.save()
+        finalize_magic_data(draft, sheet)
+        return CharacterAura.objects.get(character=sheet)
+
+    def test_new_aura_follows_an_abyssal_resonance_pick(self):
+        from world.magic.types.aura import AffinityType
+
+        aura = self._aura_for_resonance_pick(AffinityType.ABYSSAL)
+        assert aura.dominant_affinity == AffinityType.ABYSSAL
+        assert (aura.celestial, aura.primal, aura.abyssal) == (
+            Decimal("0.00"),
+            Decimal("20.00"),
+            Decimal("80.00"),
+        )
+
+    def test_new_aura_follows_a_celestial_resonance_pick(self):
+        from world.magic.types.aura import AffinityType
+
+        aura = self._aura_for_resonance_pick(AffinityType.CELESTIAL)
+        assert aura.dominant_affinity == AffinityType.CELESTIAL
+        assert (aura.celestial, aura.primal, aura.abyssal) == (
+            Decimal("80.00"),
+            Decimal("0.00"),
+            Decimal("20.00"),
+        )
+
+    def test_blank_aura_type_resonance_keeps_primal(self):
+        from world.magic.types.aura import AffinityType
+
+        aura = self._aura_for_resonance_pick("")
+        assert aura.dominant_affinity == AffinityType.PRIMAL
 
     def test_finalize_saves_glimpse_story(self):
         """glimpse_story from draft_data should be saved on the CharacterAura."""
