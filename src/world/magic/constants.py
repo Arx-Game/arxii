@@ -452,10 +452,11 @@ class RestrictionKind(models.TextChoices):
     PRICE = "price", "Price a caster pays"
 
 
-#: Highest thread level a creation pick may start a thread at, or unlock early: one
-#: below the first crossing (level 3, ``world.classes.services.is_crossing_level``), so a
-#: creation pick never skips a crossing ceremony or its requirements (#4099).
-CREATION_PERSONALIZATION_MAX_LEVEL = 2
+#: Highest shown thread level a creation pick may start a thread at, or unlock early.
+#: A new character is level 1 and a thread never exceeds its character's level
+#: (``compute_level_cap``, #4585), so a creation pick stops at 1. That also keeps it below
+#: the first crossing (level 3, ``world.classes.services.is_crossing_level``, #4099).
+CREATION_PERSONALIZATION_MAX_LEVEL = 1
 CUSTOM_TECHNIQUE_NAME_MAX_LENGTH = 80
 CUSTOM_TECHNIQUE_DESCRIPTION_MAX_LENGTH = 2000
 

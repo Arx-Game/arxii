@@ -85,7 +85,7 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Character-creation points to take this flourish (#4099). Blank = not "
-        "offered in creation. Only resonance-gated rows at level 2 or below can be offered.",
+        "offered in creation. Only resonance-gated rows at level 1 can be offered.",
     )
 
     class Meta:

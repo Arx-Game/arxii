@@ -582,7 +582,7 @@ possible; higher crossings produce no beat.
 (nullable; blank = not offered in creation) is a separate authored decision from
 `min_crossing_level`: a flourish is only offered as a CG pick when staff set its creation
 cost, and creation weaves the TECHNIQUE thread no higher than
-`CREATION_PERSONALIZATION_MAX_LEVEL` (2) via `weave_creation_technique_thread`
+`CREATION_PERSONALIZATION_MAX_LEVEL` (1, a new character's level, #4585) via `weave_creation_technique_thread`
 (`services/threads.py`), so a creation pick never skips the first crossing. A flourish with
 no `creation_point_cost` is still reachable later in play, once a thread reaches its
 `min_crossing_level` the ordinary way.

@@ -509,7 +509,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     without the price. Picks live on `CharacterTechnique` (the hold), never the catalog, and are written at
     finalize by `apply_creation_personalizations`
     (`world/magic/services/creation_personalization.py`); the flourish pick also weaves a
-    TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (2) via
+    TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (1, a new character's level, #4585) via
     `weave_creation_technique_thread`, so creation never skips a crossing. The old hard
     level-3 floor on signing is gone; `SignatureMotifBonus.min_crossing_level` is the only
     gate, so flourishes keep unlocking in play as the thread is imbued. Endpoint: `GET

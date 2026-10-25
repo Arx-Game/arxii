@@ -22,10 +22,11 @@ from world.magic.types.technique_builder import TechniqueDesignInput
 
 
 class CreationLevelCeilingTests(TestCase):
-    def test_ceiling_sits_just_below_the_first_crossing(self) -> None:
+    def test_ceiling_is_a_new_characters_level_below_any_crossing(self) -> None:
+        """A new character is level 1 and a thread never exceeds its level (#4585)."""
+        self.assertEqual(CREATION_PERSONALIZATION_MAX_LEVEL, 1)
         for level in range(1, CREATION_PERSONALIZATION_MAX_LEVEL + 1):
             self.assertFalse(is_crossing_level(level))
-        self.assertTrue(is_crossing_level(CREATION_PERSONALIZATION_MAX_LEVEL + 1))
 
 
 class HoldCleanTests(TestCase):

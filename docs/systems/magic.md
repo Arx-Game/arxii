@@ -1563,8 +1563,8 @@ draft-time half):
 - `weave_creation_technique_thread(character_sheet, technique, resonance, *, level) ->
   Thread` weaves a TECHNIQUE thread at a starting level during creation, paid for in CG
   points. Raises `CreationThreadLevelTooHigh` above `CREATION_PERSONALIZATION_MAX_LEVEL`
-  (2), so creation never starts a thread at or past the first crossing (level 3) and no
-  crossing ceremony is skipped.
+  (1), because a new character is level 1 and a thread never exceeds its character's
+  level (#4585); that also keeps creation below the first crossing (level 3).
 - `next_signature_bonus(thread, catalog) -> SignatureMotifBonus | None` returns the
   nearest flourish the thread has not yet reached, for a "keep imbuing" display. See
   "Gradual unlock" above: `min_crossing_level` is the only gate on when a flourish

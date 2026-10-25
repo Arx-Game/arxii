@@ -351,7 +351,7 @@ reaching thread level 3 in play. Built:
   (`price_power_term`), and its `cast_narration` joins the cast line.
 - **Gradual flourishes.** The old hard level-3 floor on signing is gone;
   `SignatureMotifBonus.min_crossing_level` is the only gate, and creation can weave a
-  TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (2) so an early flourish is
+  TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (1, a new character's level, #4585) so an early flourish is
   reachable without skipping a crossing.
 - **Early forms.** An `early_form` bought in creation applies before the gift thread
   reaches it, for its buyer only, when the cast's resolved resonance matches the form's

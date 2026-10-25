@@ -227,12 +227,17 @@ class GradualSignatureTests(TestCase):
         self.assertEqual(thread.target_kind, TargetKind.TECHNIQUE)
         self.assertEqual(thread.target_technique, self.technique)
 
-    def test_weaving_at_exactly_level_two_succeeds(self) -> None:
-        """CREATION_PERSONALIZATION_MAX_LEVEL (shown 2, stored 20) is the inclusive ceiling."""
+    def test_weaving_at_exactly_level_one_succeeds(self) -> None:
+        """CREATION_PERSONALIZATION_MAX_LEVEL (shown 1, stored 10) is the inclusive ceiling."""
         thread = weave_creation_technique_thread(
-            self.sheet, self.technique, self.resonance, level=20
+            self.sheet, self.technique, self.resonance, level=10
         )
-        self.assertEqual(thread.level, 20)
+        self.assertEqual(thread.level, 10)
+
+    def test_weaving_at_level_two_is_refused(self) -> None:
+        """A new character is level 1, so creation cannot start a thread at shown 2 (#4585)."""
+        with self.assertRaises(CreationThreadLevelTooHigh):
+            weave_creation_technique_thread(self.sheet, self.technique, self.resonance, level=20)
 
     def test_creation_weave_of_unowned_technique_raises_technique_not_owned(self) -> None:
         unowned_technique = TechniqueFactory(level=1)

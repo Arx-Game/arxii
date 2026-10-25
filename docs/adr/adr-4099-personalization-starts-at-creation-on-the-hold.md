@@ -48,7 +48,8 @@ reader was a money mint (fencing the same item twice).
 
 The early flourish is the existing `Thread.signature_bonus`: creation weaves the TECHNIQUE
 thread at the flourish's own `min_crossing_level`, up to `CREATION_PERSONALIZATION_MAX_LEVEL`
-(2), so it never skips a crossing. The hard level-3 floor on signing is gone; each bonus's
+(2 when written; 1 since #4585, because a thread never exceeds its character's level and a
+new character is level 1), so it never skips a crossing. The hard level-3 floor on signing is gone; each bonus's
 authored `min_crossing_level` is now the only gate, so flourishes grow as the thread is
 imbued rather than unlocking in one step at level 3. Each catalog row (price, flourish, or
 early form) is offered in creation only when staff set its `creation_point_cost`; a blank
