@@ -129,6 +129,11 @@ export function NPCInteractionDialog({
                     {offer.price.display}
                   </span>
                 )}
+                {offer.price?.teaching_line && (
+                  <span className="basis-full text-left text-sm font-normal text-muted-foreground">
+                    {offer.price.teaching_line}
+                  </span>
+                )}
               </Button>
             ))}
           </div>

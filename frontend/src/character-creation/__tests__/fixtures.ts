@@ -780,7 +780,17 @@ export const mockEmptyDraft: CharacterDraft = {
   stats_points_remaining: 5,
   stats_budget: 5,
   starting_technique_picks: 1,
-  starting_magic_skill_floor: 0,
+  magic_training: {
+    base_sources: [],
+    gift_bonus: 0,
+    affinity_bonus: 0,
+    favored_gift_name: null,
+    favored_affinity_name: null,
+    total: 0,
+    required_spend: 0,
+    allocated: 0,
+    skills: [],
+  },
   age_min: 18,
   age_max: 65,
   ic_month_names: [
@@ -1150,8 +1160,9 @@ export const mockSchoolingRows: SchoolingLineRow[] = [
     player_line: 'Taken in after the Glimpse.',
     price: 0,
     techniques: 1,
-    magic_skill_floor: 0,
+    training_points: 0,
     grants_distinction_id: null,
+    grants_distinction_name: null,
     offer_id: null,
   },
   {
@@ -1161,8 +1172,9 @@ export const mockSchoolingRows: SchoolingLineRow[] = [
     player_line: 'Trained since youth.',
     price: 1,
     techniques: 2,
-    magic_skill_floor: 20,
+    training_points: 20,
     grants_distinction_id: 77,
+    grants_distinction_name: 'Tradition Training',
     offer_id: 201,
   },
   {
@@ -1172,8 +1184,9 @@ export const mockSchoolingRows: SchoolingLineRow[] = [
     player_line: 'Born to it.',
     price: 2,
     techniques: 3,
-    magic_skill_floor: 30,
+    training_points: 40,
     grants_distinction_id: 77,
+    grants_distinction_name: 'Tradition Training',
     offer_id: 202,
   },
 ];
@@ -1190,6 +1203,8 @@ export const mockTradition: Tradition = {
   own_wording: '',
   refund: 0,
   schooling: mockSchoolingRows,
+  favored_gift_names: ['Whispers of Shadow'],
+  favored_affinity_names: ['Abyssal'],
 };
 
 /** A self-taught tradition (#3675): no schooling set, a refund on the entry. */
@@ -1205,6 +1220,8 @@ export const mockSelfTaughtTradition: Tradition = {
   own_wording: '',
   refund: -75,
   schooling: [],
+  favored_gift_names: [],
+  favored_affinity_names: [],
 };
 
 export const mockCGGiftOption: CGGiftOption = {
@@ -1213,6 +1230,7 @@ export const mockCGGiftOption: CGGiftOption = {
   description: 'Mastery over shadows and darkness.',
   kind: 'major',
   codex_entry_id: 12,
+  favored: true,
 };
 
 export const mockCGGiftOptions: CGGiftOption[] = [
@@ -1223,6 +1241,7 @@ export const mockCGGiftOptions: CGGiftOption[] = [
     description: 'Command over fire and heat.',
     kind: 'major',
     codex_entry_id: null,
+    favored: false,
   },
 ];
 

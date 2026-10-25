@@ -30,7 +30,8 @@ import type { CharacterDraft, PathSkillSuggestion, Skill, Specialization } from 
 
 /**
  * Build a skill-value map from a path's suggested starting values. Magic
- * skills are trained through the Tradition, never bought with points here, so
+ * skills are spent from the Gift stage's magical training (#4659), never bought with
+ * points here, so
  * a suggestion naming one is left out (#4457).
  */
 function skillsFromSuggestions(
@@ -332,7 +333,9 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
   const remaining = budget.total_points - totalSpent;
   const canIncrease = remaining >= 10;
   const appliedSuggestions = (suggestions ?? []).filter((s) => !magicSkillIds.has(s.skill_id));
-  const magicFloor = draft.starting_magic_skill_floor;
+  // The Magic group reads the Gift stage's training allocation, never the point pool (#4659).
+  const magicTrained = (draft.magic_training?.skills ?? []).filter((skill) => skill.value > 0);
+  const magicTooltip = new Map(magicSkills.map((skill) => [skill.id, skill.tooltip]));
 
   return (
     <div>
@@ -408,20 +411,20 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
           <InstrumentGroup
             title={magicSkills[0].category_display}
             gloss={
-              magicFloor > 0
+              magicTrained.length > 0
                 ? (copy?.skills_magic_granted_heading ?? 'From your Tradition training')
                 : undefined
             }
           >
-            {magicFloor > 0 ? (
-              magicSkills.map((skill) => (
+            {magicTrained.length > 0 ? (
+              draft.magic_training.skills.map((skill) => (
                 <StatRow
                   key={skill.id}
                   id={`lbl-skill-${skill.id}`}
                   name={skill.name}
-                  sub={skill.tooltip}
-                  value={magicFloor}
-                  max={budget.max_skill_value}
+                  sub={magicTooltip.get(skill.id)}
+                  value={skill.value}
+                  max={skill.max}
                   step={10}
                   readOnly
                 />

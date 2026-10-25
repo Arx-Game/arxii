@@ -9,8 +9,9 @@
  * (rank 0 clears the pick); every other CHOICE distinction on the draft is
  * resent unchanged, same as `ChapterOffers`.
  *
- * Each stance prints its Magic skill floor (#4457). Rank 0 grants none and says so; a
- * rank 1 or 2 stance whose floor staff have not set yet shows no Magic line at all.
+ * Each stance names the training distinction it grants at its rank ("Tradition
+ * Training 1"), which feeds the Gift stage's magical training (#4659); rank 0 grants none
+ * and says so.
  */
 
 import { useCallback } from 'react';
@@ -18,25 +19,13 @@ import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctio
 import type { CGExplanations, CharacterDraft, SchoolingLineRow, Tradition } from '../../types';
 import { choiceEntries } from './syncHelpers';
 
-/**
- * A stance's Magic skill line: its floor once staff set one, "No magic skills" on rank 0
- * (which grants none), and nothing for a rank 1 or 2 stance whose floor is still unset.
- */
-function MagicSkillLine({ row, copy }: { row: SchoolingLineRow; copy?: CGExplanations }) {
-  if (row.magic_skill_floor > 0) {
-    return (
-      <span className="grant">
-        {(copy?.offers_magic_skill_floor ?? 'Magic skills {floor}').replace(
-          '{floor}',
-          String(row.magic_skill_floor)
-        )}
-      </span>
-    );
-  }
+/** A stance's training line: the distinction and rank it grants, or "no training" on rank 0. */
+function TrainingLine({ row, copy }: { row: SchoolingLineRow; copy?: CGExplanations }) {
   if (row.rank === 0) {
-    return <span className="none">{copy?.offers_magic_skill_floor_none ?? 'No magic skills'}</span>;
+    return <span className="none">{copy?.offers_schooling_no_training ?? 'no training'}</span>;
   }
-  return null;
+  if (!row.grants_distinction_name) return null;
+  return <span className="grant">{`${row.grants_distinction_name} ${row.rank}`}</span>;
 }
 
 interface SchoolingStancesProps {
@@ -101,7 +90,7 @@ export function SchoolingStances({ draft, tradition, copy }: SchoolingStancesPro
                   <span className={row.rank > 0 ? 'grant' : undefined}>
                     {row.techniques} technique{row.techniques === 1 ? '' : 's'}
                   </span>
-                  <MagicSkillLine row={row} copy={copy} />
+                  <TrainingLine row={row} copy={copy} />
                 </span>
               </button>
             </li>

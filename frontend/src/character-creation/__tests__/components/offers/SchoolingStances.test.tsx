@@ -33,8 +33,9 @@ const newlyTakenIn: SchoolingLineRow = {
   player_line: 'Taken in after the Glimpse.',
   price: 0,
   techniques: 1,
-  magic_skill_floor: 0,
+  training_points: 0,
   grants_distinction_id: null,
+  grants_distinction_name: null,
   offer_id: null,
 };
 
@@ -45,8 +46,9 @@ const trainedForYears: SchoolingLineRow = {
   player_line: 'Trained since youth.',
   price: 1,
   techniques: 2,
-  magic_skill_floor: 20,
+  training_points: 20,
   grants_distinction_id: 77,
+  grants_distinction_name: 'Tradition Training',
   offer_id: 201,
 };
 
@@ -57,8 +59,9 @@ const raisedWithinIt: SchoolingLineRow = {
   player_line: 'Born to it.',
   price: 2,
   techniques: 3,
-  magic_skill_floor: 30,
+  training_points: 40,
   grants_distinction_id: 77,
+  grants_distinction_name: 'Tradition Training',
   offer_id: 202,
 };
 
@@ -85,51 +88,43 @@ describe('SchoolingStances', () => {
     expect(screen.getByText('3 techniques')).toBeInTheDocument();
   });
 
-  it("prints each stance's Magic skill floor, or that it grants none (#4457)", () => {
+  it('names the training distinction each stance grants, or no training on rank 0 (#4659)', () => {
     renderWithCharacterCreationProviders(
       <SchoolingStances draft={createMockDraft()} tradition={tradition} />
     );
-    expect(screen.getByText('No magic skills')).toHaveClass('none');
-    expect(screen.getByText('Magic skills 20')).toBeInTheDocument();
-    expect(screen.getByText('Magic skills 30')).toBeInTheDocument();
+    expect(screen.getByText('no training')).toHaveClass('none');
+    expect(screen.getByText('Tradition Training 1')).toHaveClass('grant');
+    expect(screen.getByText('Tradition Training 2')).toBeInTheDocument();
+    expect(screen.queryByText(/magic skills/i)).not.toBeInTheDocument();
   });
 
-  it('a ranked stance whose floor is unset shows no Magic line (#4457)', () => {
+  it('a ranked stance with no granted distinction shows no training line (#4659)', () => {
     renderWithCharacterCreationProviders(
       <SchoolingStances
         draft={createMockDraft()}
         tradition={{
           ...tradition,
-          schooling: [newlyTakenIn, { ...trainedForYears, magic_skill_floor: 0 }, raisedWithinIt],
+          schooling: [
+            newlyTakenIn,
+            { ...trainedForYears, grants_distinction_name: null },
+            raisedWithinIt,
+          ],
         }}
       />
     );
-    expect(screen.getAllByText('No magic skills')).toHaveLength(1);
-    const unset = screen.getByRole('button', { name: /Trained for years/ });
-    expect(unset).not.toHaveTextContent(/magic skills/i);
+    const unnamed = screen.getByRole('button', { name: /Trained for years/ });
+    expect(unnamed).not.toHaveTextContent(/Tradition Training/);
   });
 
-  it('the no-floor line routes through copy key offers_magic_skill_floor_none (#4457)', () => {
+  it('the rank-0 line routes through copy key offers_schooling_no_training (#4659)', () => {
     renderWithCharacterCreationProviders(
       <SchoolingStances
         draft={createMockDraft()}
         tradition={tradition}
-        copy={{ offers_magic_skill_floor_none: 'No arcane schooling' }}
+        copy={{ offers_schooling_no_training: 'untaught' }}
       />
     );
-    expect(screen.getByText('No arcane schooling')).toHaveClass('none');
-    expect(screen.queryByText('No magic skills')).not.toBeInTheDocument();
-  });
-
-  it('the floor line routes through copy key offers_magic_skill_floor (#4457)', () => {
-    renderWithCharacterCreationProviders(
-      <SchoolingStances
-        draft={createMockDraft()}
-        tradition={tradition}
-        copy={{ offers_magic_skill_floor: 'Arcane skills at {floor}' }}
-      />
-    );
-    expect(screen.getByText('Arcane skills at 20')).toBeInTheDocument();
+    expect(screen.getByText('untaught')).toHaveClass('none');
   });
 
   it('picking rank 2 syncs Tradition Training at rank 2 with its offer id', async () => {

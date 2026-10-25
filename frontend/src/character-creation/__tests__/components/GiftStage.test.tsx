@@ -96,6 +96,49 @@ describe('GiftStage (folio)', () => {
     ).toBeInTheDocument();
   });
 
+  it('names the Gifts and affinities a tradition teaches well on its entry (#4659)', () => {
+    const draft = createMockDraft({
+      selected_path: mockPath,
+      selected_tradition: null,
+      selected_beginnings: mockBeginnings,
+    });
+    renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    const line = screen.getByText(
+      (_, el) => el?.tagName === 'P' && (el.textContent ?? '').startsWith('Teaches well')
+    );
+    expect(line).toHaveTextContent('Teaches well · Gifts: Whispers of Shadow · Affinity: Abyssal');
+    expect(screen.getByText('Whispers of Shadow', { selector: '.tag' })).toBeInTheDocument();
+  });
+
+  it('mounts the training block after the tradition once the draft has training (#4659)', () => {
+    const draft = createMockDraft({
+      selected_path: mockPath,
+      selected_tradition: mockTradition,
+      magic_training: {
+        ...createMockDraft().magic_training,
+        base_sources: [{ name: 'Tradition Training', points: 20 }],
+        total: 20,
+        required_spend: 20,
+        skills: [{ id: 3, name: 'Occult', value: 0, max: 30 }],
+      },
+    });
+    renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText('What The Whispering Path taught you')).toBeInTheDocument();
+    expect(screen.getByText(/Remaining/)).toHaveTextContent('Remaining 20');
+  });
+
+  it('mounts no training block when the draft has no training', () => {
+    const draft = createMockDraft({ selected_path: mockPath, selected_tradition: mockTradition });
+    renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.queryByText(/taught you/)).not.toBeInTheDocument();
+  });
+
   it('mounts the schooling stances under a chosen living-masters tradition', () => {
     const draft = createMockDraft({
       selected_beginnings: mockBeginnings,

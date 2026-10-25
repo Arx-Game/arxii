@@ -8,8 +8,9 @@ This module provides the staged character creation UI flow.
 character-creation/
 ├── index.ts                 # Public exports
 ├── types.ts                 # TypeScript type definitions
-├── constants.ts             # MAGIC_SKILL_CATEGORY: Magic skills are trained by the Tradition
-│                              #   stance (read-only group in SkillsSection, #4457), never bought
+├── constants.ts             # MAGIC_SKILL_CATEGORY: Magic skills are spent from the Gift
+│                              #   stage's magical training (read-only group in SkillsSection,
+│                              #   #4457, #4659), never bought with skill points
 ├── api.ts                   # API fetch functions using apiFetch
 ├── queries.ts               # React Query hooks
 ├── cg.css                   # Scoped under `.interview`; realm is an ink, paper
@@ -77,7 +78,13 @@ character-creation/
     │                        #   entry in TraditionPicker (#3281, #3630)
     ├── gift/                # GiftStage funnel steps (#2426 Task 10)
     │   ├── TraditionStep.tsx    # Wraps TraditionPicker
-    │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=)
+    │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=); a Gift the
+    │   │                        #   Tradition favors is tagged "Teaches well" (#4659)
+    │   ├── MagicTrainingBlock.tsx # "What <Tradition> taught you" (#4659), mounted after
+    │   │                        #   TraditionStep: the training pool's breakdown (sources,
+    │   │                        #   "Fits:" bonuses, total), a "Spend all of it" ledger and a
+    │   │                        #   StatRow per Magic skill writing draft_data.magic_skills;
+    │   │                        #   hidden with no training and nothing allocated
     │   ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
     │   ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
     │   ├── GlimpseSection.tsx   # CG state binder for the Glimpse (#2427): draft reads,

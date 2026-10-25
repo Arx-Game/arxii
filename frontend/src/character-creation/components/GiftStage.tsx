@@ -45,6 +45,7 @@ import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftSelector } from './gift/GiftSelector';
 import { GlimpseSection } from './gift/GlimpseSection';
+import { MagicTrainingBlock } from './gift/MagicTrainingBlock';
 import { TechniqueSelector } from './gift/TechniqueSelector';
 import { TraditionStep } from './gift/TraditionStep';
 
@@ -303,6 +304,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           open={!completion.tradition}
         >
           <TraditionStep draft={draft} />
+          <MagicTrainingBlock draft={draft} />
         </FunnelStep>
 
         <FunnelStep
