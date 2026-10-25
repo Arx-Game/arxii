@@ -840,28 +840,26 @@ export interface Motif {
 }
 
 // =============================================================================
-// Modifier Type Items (Affinities & Resonances via /api/mechanics/types/)
+// Affinities & Resonances (/api/magic/affinities/, /api/magic/resonances/)
 // =============================================================================
 
-/**
- * ModifierType record from /api/mechanics/types/?category=affinity|resonance.
- * Replaces the legacy Affinity and Resonance interfaces.
- */
-export interface ModifierTypeItem {
+/** An Affinity row from /api/magic/affinities/ (AffinitySerializer). */
+export interface Affinity {
   id: number;
   name: string;
-  category: number;
-  category_name: string;
   description: string;
-  display_order: number;
-  is_active: boolean;
-  opposite: number | null;
-  resonance_affinity: string | null;
-  codex_entry_id: number | null;
+  aura_type: string;
 }
 
-export type Affinity = ModifierTypeItem;
-export type Resonance = ModifierTypeItem;
+/** A Resonance row from /api/magic/resonances/ (ResonanceSerializer). */
+export interface Resonance {
+  id: number;
+  name: string;
+  affinity: number;
+  affinity_name: string;
+  description: string;
+  codex_entry_id: number | null;
+}
 
 /**
  * Projected resonance total from draft distinctions.

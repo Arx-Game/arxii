@@ -207,6 +207,8 @@ character-creation/
 - `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Draft detail operations
 - `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's tradition + path
 - `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options (pool ∪ signature) for the chosen gift
+- `GET /api/magic/resonances/` - Every Resonance with its `affinity_name`, unpaginated (the Gift
+  stage's Resonance step; `GET /api/magic/affinities/` lists the Affinities, #4665)
 - `GET /api/character-creation/glimpse-tags/` - List the active glimpse tag catalog (guided Glimpse flow, #2427)
 - `GET /api/character-creation/form-options/{species_id}/?draft=X` - Trait palettes (`{traits, inherited}`; traits carry `is_required`, `?draft=` appends cross-line option groups from the draft's parents, #2815)
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review

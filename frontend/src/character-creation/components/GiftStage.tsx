@@ -375,7 +375,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
                 <Entry
                   key={resonance.id}
                   name={resonance.name}
-                  tag={resonance.resonance_affinity ?? 'Resonance'}
+                  tag={resonance.affinity_name}
                   chosen={isSelected}
                   open={isSelected}
                   onChoose={() => handleSelectResonance(resonance.id)}
