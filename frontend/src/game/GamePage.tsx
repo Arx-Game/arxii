@@ -1095,7 +1095,7 @@ export function GamePage() {
 
   return (
     <PersonaCardContext.Provider value={cardContextValue}>
-      <CombatPickProvider>
+      <CombatPickProvider encounterId={showCombatRail ? railEncounterId : null}>
         <GameLayout
           accountId={account?.id}
           topBar={

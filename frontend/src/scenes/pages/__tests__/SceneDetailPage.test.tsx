@@ -798,6 +798,9 @@ describe('SceneDetailPage', () => {
 
     const lingeringRail = getByTestId('combat-rail-stub');
     expect(lingeringRail).toHaveAttribute('data-encounter-id', '7');
+    // One map while the fight's map lingers: the header map stays out (#4670).
+    expect(getByTestId('combat-tactical-map')).toBeInTheDocument();
+    expect(queryByTestId('scene-tactical-map-stub')).not.toBeInTheDocument();
 
     fireEvent.click(getByTestId('combat-rail-dismiss-stub'));
 

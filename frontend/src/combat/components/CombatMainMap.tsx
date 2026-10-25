@@ -9,7 +9,7 @@
 import { useMemo } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
-import { useCombatPick } from '@/combat/CombatPickContext';
+import { useCombatPick } from '@/combat/combatPick';
 import { CombatTacticalMap } from '@/combat/components/CombatTacticalMap';
 
 export function CombatMainMap({ sceneId, encounterId }: { sceneId: number; encounterId: number }) {
@@ -21,7 +21,10 @@ export function CombatMainMap({ sceneId, encounterId }: { sceneId: number; encou
   );
   const { positionShape, pickPosition } = useCombatPick();
   return (
-    <div className="h-[clamp(320px,55vh,640px)] shrink-0" data-testid="combat-main-map">
+    <div
+      className="h-[clamp(320px,55vh,640px)] shrink-0 max-md:h-[40vh]"
+      data-testid="combat-main-map"
+    >
       <CombatTacticalMap
         sceneId={sceneId}
         encounterId={encounterId}

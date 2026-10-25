@@ -7,7 +7,8 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { CombatPickProvider, useCombatPick } from '@/combat/CombatPickContext';
+import { CombatPickProvider } from '@/combat/CombatPickContext';
+import { useCombatPick } from '@/combat/combatPick';
 import { CombatMainMap } from '../CombatMainMap';
 
 vi.mock('@/roster/queries', () => ({
@@ -51,7 +52,7 @@ describe('CombatMainMap', () => {
   it('fills the cast position from a place click once a technique asks for one', async () => {
     const user = userEvent.setup();
     render(
-      <CombatPickProvider>
+      <CombatPickProvider encounterId={7}>
         <YourTurnStub />
         <CombatMainMap sceneId={1} encounterId={7} />
       </CombatPickProvider>
@@ -68,5 +69,23 @@ describe('CombatMainMap', () => {
 
     await user.click(screen.getByTestId('map-place-5'));
     expect(screen.getByTestId('cast-destination')).toHaveTextContent('undefined');
+  });
+
+  it('clears picks when the encounter changes', async () => {
+    const user = userEvent.setup();
+    const tree = (id: number | null) => (
+      <CombatPickProvider encounterId={id}>
+        <YourTurnStub />
+        <CombatMainMap sceneId={1} encounterId={7} />
+      </CombatPickProvider>
+    );
+    const { rerender } = render(tree(7));
+    await user.click(screen.getByTestId('pick-single'));
+    await user.click(screen.getByTestId('map-place-5'));
+    expect(screen.getByTestId('cast-destination')).toHaveTextContent('5');
+
+    rerender(tree(null));
+    expect(screen.getByTestId('cast-destination')).toHaveTextContent('undefined');
+    expect(screen.getByTestId('map-shape')).toHaveTextContent('none');
   });
 });

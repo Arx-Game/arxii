@@ -10,23 +10,26 @@
  * map's move dispatch runs unchanged otherwise.
  */
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { CastPosition, PositionTargetShape } from '@/actions/types';
+import { CombatPickContext } from '@/combat/combatPick';
 
-export interface CombatPickValue {
-  castPosition: CastPosition;
-  setCastPosition: (next: CastPosition) => void;
-  positionShape: PositionTargetShape;
-  setPositionShape: (shape: PositionTargetShape) => void;
-  pickPosition: (positionId: number) => boolean;
-}
-
-const CombatPickContext = createContext<CombatPickValue | null>(null);
-
-export function CombatPickProvider({ children }: { children: ReactNode }) {
+/** Picks belong to one encounter: they clear when `encounterId` changes (fight end, new fight). */
+export function CombatPickProvider({
+  encounterId,
+  children,
+}: {
+  encounterId: number | null;
+  children: ReactNode;
+}) {
   const [castPosition, setCastPosition] = useState<CastPosition>({});
   const [positionShape, setPositionShape] = useState<PositionTargetShape>('none');
+
+  useEffect(() => {
+    setCastPosition({});
+    setPositionShape('none');
+  }, [encounterId]);
 
   const pickPosition = useCallback(
     (positionId: number): boolean => {
@@ -56,12 +59,4 @@ export function CombatPickProvider({ children }: { children: ReactNode }) {
   );
 
   return <CombatPickContext.Provider value={value}>{children}</CombatPickContext.Provider>;
-}
-
-// The hook lives beside its provider; splitting them would only scatter one small context.
-// eslint-disable-next-line react-refresh/only-export-components
-export function useCombatPick(): CombatPickValue {
-  const value = useContext(CombatPickContext);
-  if (!value) throw new Error('useCombatPick must be used inside a CombatPickProvider');
-  return value;
 }

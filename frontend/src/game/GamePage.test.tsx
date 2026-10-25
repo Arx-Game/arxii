@@ -1720,6 +1720,39 @@ describe('GamePage', () => {
     });
   });
 
+  describe('battle map in the center (#4670)', () => {
+    it('renders the map above the feed during a fight', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 7 },
+        isLoading: false,
+        isError: false,
+      });
+
+      renderWithProviders(<GamePage />);
+
+      const map = await screen.findByTestId('combat-tactical-map');
+      expect(map).toHaveAttribute('data-encounter-id', '7');
+      expect(screen.getByTestId('combat-main-map')).toBeInTheDocument();
+    });
+
+    it('renders no map outside a fight', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({
+        data: null,
+        isLoading: false,
+        isError: false,
+      });
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByLabelText('Conversations');
+      expect(screen.queryByTestId('combat-tactical-map')).not.toBeInTheDocument();
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // Outcome banner lingering (final-review Finding I1, ported from
   // SceneDetailPage.tsx's own #3551 pattern): the scene's active-encounter

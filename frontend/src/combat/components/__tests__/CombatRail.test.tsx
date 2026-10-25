@@ -97,7 +97,7 @@ function createWrapper() {
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <CombatPickProvider>{children}</CombatPickProvider>
+        <CombatPickProvider encounterId={7}>{children}</CombatPickProvider>
       </QueryClientProvider>
     );
   };
@@ -156,7 +156,7 @@ describe('CombatRail - GM tab (#3557)', () => {
   it('has no GM tab when the viewer cannot GM the scene', () => {
     render(<CombatRail sceneId={1} encounterId={7} />, { wrapper: createWrapper() });
     expect(screen.queryByTestId('rail-tab-gm')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
   });
 
   it('shows a GM tab for a scene GM and still defaults to Your Turn', () => {

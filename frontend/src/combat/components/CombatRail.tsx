@@ -16,11 +16,11 @@
  * in CombatPickProvider so Your Turn here and the map there share it.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { CombatTurnPanel } from '@/combat/CombatTurnPanel';
-import { useCombatPick } from '@/combat/CombatPickContext';
+import { useCombatPick } from '@/combat/combatPick';
 import { CombatGMTab } from '@/combat/components/CombatGMTab';
 import { DeepLinkModalHost } from '@/combat/modals/DeepLinkModalHost';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -62,6 +62,12 @@ export function CombatRail({
   const [rightRailTab, setRightRailTab] = useState<'turn' | 'gm'>('turn');
   const { castPosition, setCastPosition, setPositionShape } = useCombatPick();
 
+  // Your Turn unmounts on the GM tab; with it gone nothing can clear the shape,
+  // and the map would keep consuming place clicks.
+  useEffect(() => {
+    if (rightRailTab === 'gm') setPositionShape('none');
+  }, [rightRailTab, setPositionShape]);
+
   return (
     <div className="min-h-0 overflow-y-auto" data-testid="combat-rail">
       <Tabs
@@ -69,16 +75,16 @@ export function CombatRail({
         onValueChange={(value) => setRightRailTab(value as 'turn' | 'gm')}
         className="flex h-full flex-col"
       >
-        <TabsList className={`grid w-full shrink-0 ${viewerCanGm ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          <TabsTrigger value="turn" data-testid="rail-tab-turn" className="text-xs">
-            Your Turn
-          </TabsTrigger>
-          {viewerCanGm && (
+        {viewerCanGm && (
+          <TabsList className="grid w-full shrink-0 grid-cols-2">
+            <TabsTrigger value="turn" data-testid="rail-tab-turn" className="text-xs">
+              Your Turn
+            </TabsTrigger>
             <TabsTrigger value="gm" data-testid="rail-tab-gm" className="text-xs">
               GM
             </TabsTrigger>
-          )}
-        </TabsList>
+          </TabsList>
+        )}
         <TabsContent value="turn" className="mt-2 min-h-0 flex-1 overflow-y-auto">
           <CombatTurnPanel
             encounterId={encounterId}

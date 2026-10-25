@@ -337,7 +337,7 @@ export function SceneDetailPage() {
       {/* One map during a fight: the rail's CombatTacticalMap draws the room
           with bystanders, so the header map unmounts (Set the Stage rides on
           it and is unavailable mid-fight by design; it returns with the map). */}
-      {!hasActiveEncounter && <SceneTacticalMap sceneId={id} />}
+      {!hasActiveEncounter && !showCombatRail && <SceneTacticalMap sceneId={id} />}
       <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
       {/* GM "Start Encounter" affordance (#3067), only while no encounter is
           active; the active-encounter controls live in the rail's GM tab. */}
@@ -374,7 +374,7 @@ export function SceneDetailPage() {
 
   return (
     <PersonaCardContext.Provider value={cardContextValue}>
-      <CombatPickProvider>
+      <CombatPickProvider encounterId={showCombatRail ? railEncounterId : null}>
         <div className="flex h-full flex-col">
           <div className="shrink-0 px-4 pt-4">
             <SceneHeader scene={scene} onRefresh={() => refetch()} />
