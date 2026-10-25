@@ -20,8 +20,11 @@ vi.mock('../queries', async () => {
 
 vi.mock('@/scenes/actionQueries', async () => {
   const { useQuery } = await import('@tanstack/react-query');
+  const actual =
+    await vi.importActual<typeof import('@/scenes/actionQueries')>('@/scenes/actionQueries');
   const fetchAvailableActions = vi.fn();
   return {
+    availableActionsKeys: actual.availableActionsKeys,
     fetchAvailableActions,
     useAvailableActionsQuery: (
       characterId: number | null,
@@ -50,7 +53,7 @@ vi.mock('@/scenes/queries', async () => {
 });
 
 import { combatKeys, useCombatEncounter, useDispatchPlayerAction } from '../queries';
-import { fetchAvailableActions } from '@/scenes/actionQueries';
+import { availableActionsKeys, fetchAvailableActions } from '@/scenes/actionQueries';
 import { toast } from 'sonner';
 import { CombatTacticalMap } from './CombatTacticalMap';
 import type { EncounterDetail } from '../types';
@@ -676,6 +679,22 @@ describe('CombatTacticalMap', () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: combatKeys.encounter(7) });
     });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: sceneKeys.detail(1) });
+  });
+
+  it('refreshes the available actions on a success:true move, so the hops line keeps up', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: true })
+    );
+    const { invalidateSpy } = renderWithMoveAction(mockMutateAsync);
+
+    const centerNode = await screen.findByTestId('tactical-map-node-102');
+    fireEvent.click(centerNode);
+
+    await vi.waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: availableActionsKeys.forCharacter(10),
+      });
+    });
   });
 
   // ---------------------------------------------------------------------------

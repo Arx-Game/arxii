@@ -129,15 +129,23 @@ export function tokenSquares<T extends SquaredOccupant>(
     }
   });
 
-  const free: Square[] = [];
-  for (let row = 0; row < area.h; row++) {
+  // The top row carries the place's name label: an area two or more rows tall fills
+  // from its second row and reaches the top row only when the rest is full.
+  const rowSquares = (row: number): Square[] => {
+    const squares: Square[] = [];
     for (let col = 0; col < area.w; col++) {
       const x = area.x + col;
       const y = area.y + row;
-      if (!taken.has(keyOf(x, y))) free.push({ x, y });
+      if (!taken.has(keyOf(x, y))) squares.push({ x, y });
     }
-  }
-  if (options.fromEnd) free.reverse();
+    return squares;
+  };
+  const lower: Square[] = [];
+  for (let row = area.h >= 2 ? 1 : 0; row < area.h; row++) lower.push(...rowSquares(row));
+  if (options.fromEnd) lower.reverse();
+  const top = area.h >= 2 ? rowSquares(0) : [];
+  if (options.fromEnd) top.reverse();
+  const free = [...lower, ...top];
   const last = options.fromEnd
     ? { x: area.x, y: area.y }
     : { x: area.x + area.w - 1, y: area.y + area.h - 1 };

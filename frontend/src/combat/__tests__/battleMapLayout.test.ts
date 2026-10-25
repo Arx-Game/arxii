@@ -54,31 +54,58 @@ describe('tokenSquares', () => {
     expect(placed.map((p) => [p.x, p.y])).toEqual([[3, 4]]);
   });
 
-  it('fills the rest into free squares row-major from the top-left', () => {
+  it('fills the rest row-major from the second row, leaving the label row for last', () => {
     const placed = tokenSquares(area, [
       { name: 'A', square: null },
       { name: 'B', square: { x: 2, y: 3 } },
       { name: 'C', square: { x: 9, y: 9 } },
+      { name: 'D', square: null },
     ]);
     expect(placed.map((p) => [p.occupant.name, p.x, p.y])).toEqual([
-      ['A', 3, 3],
+      ['A', 2, 4],
       ['B', 2, 3],
-      ['C', 2, 4],
+      ['C', 3, 4],
+      ['D', 3, 3],
     ]);
   });
 
-  it('stacks overflow on the last square', () => {
+  it('fills the top row of a one-row area', () => {
+    const strip: MapArea = { x: 0, y: 0, w: 3, h: 1, derived: true };
+    const placed = tokenSquares(strip, [
+      { name: 'A', square: null },
+      { name: 'B', square: null },
+    ]);
+    expect(placed.map((p) => [p.x, p.y])).toEqual([
+      [0, 0],
+      [1, 0],
+    ]);
+  });
+
+  it('fills from the bottom-right, still leaving the label row for last', () => {
+    const placed = tokenSquares(
+      area,
+      ['A', 'B', 'C'].map((name) => ({ name, square: null })),
+      { fromEnd: true }
+    );
+    expect(placed.map((p) => [p.x, p.y])).toEqual([
+      [3, 4],
+      [2, 4],
+      [3, 3],
+    ]);
+  });
+
+  it('stacks overflow on the last free square', () => {
     const placed = tokenSquares(
       area,
       ['A', 'B', 'C', 'D', 'E', 'F'].map((name) => ({ name, square: null }))
     );
     expect(placed.map((p) => [p.x, p.y])).toEqual([
-      [2, 3],
-      [3, 3],
       [2, 4],
       [3, 4],
-      [3, 4],
-      [3, 4],
+      [2, 3],
+      [3, 3],
+      [3, 3],
+      [3, 3],
     ]);
   });
 
@@ -89,7 +116,7 @@ describe('tokenSquares', () => {
     ]);
     expect(placed.map((p) => [p.x, p.y])).toEqual([
       [2, 3],
-      [3, 3],
+      [2, 4],
     ]);
   });
 });

@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { combatKeys, useCombatEncounter, useDispatchPlayerAction } from '../queries';
 import { isDispatchFailure } from '../types';
 import type { EncounterDetail, RoundActionTyped } from '../types';
-import { useAvailableActionsQuery } from '@/scenes/actionQueries';
+import { availableActionsKeys, useAvailableActionsQuery } from '@/scenes/actionQueries';
 import { fetchScene, sceneKeys } from '@/scenes/queries';
 import type { SceneDetail } from '@/scenes/types';
 import { GMPlacementControls } from '@/areas/components/GMPlacementControls';
@@ -57,15 +57,15 @@ export interface CombatTacticalMapProps {
   characterId: number;
   /**
    * Cast-time position-targeting shape for the currently selected focused
-   * technique (#2206), lifted to CombatRail so this map can
-   * highlight pickable nodes and consume clicks while a position-shaped
-   * technique is selected in the rail's "Your Turn" tab. Defaults to 'none'
+   * technique (#2206), held by CombatPickProvider (combat/combatPick.ts) so
+   * this map can highlight pickable nodes and consume clicks while a
+   * position-shaped technique is selected in the rail's "Your Turn" tab. Defaults to 'none'
    * (today's move-only behavior) when the caller omits it.
    */
   positionShape?: PositionTargetShape;
   /**
    * Called when the player clicks a map node while `positionShape !== 'none'`.
-   * Only forwarded to TacticalMap when picking is active — see the
+   * Only forwarded to BattleMap when picking is active — see the
    * presence-gated `onPickPosition` handoff below.
    */
   onPickPosition?: (positionId: number) => boolean;
@@ -212,6 +212,10 @@ export function CombatTacticalMap({
   const refreshMapSources = () => {
     queryClient.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
     queryClient.invalidateQueries({ queryKey: sceneKeys.detail(sceneId) }).catch(() => {});
+    // The hops line and move targets come from the available actions.
+    queryClient
+      .invalidateQueries({ queryKey: availableActionsKeys.forCharacter(characterId) })
+      .catch(() => {});
   };
 
   const occupantsByPosition = useMemo(() => {

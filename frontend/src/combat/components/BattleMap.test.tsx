@@ -139,6 +139,14 @@ describe('BattleMap', () => {
     expect(byName('Barkeep')).toHaveAttribute('data-bystander', 'true');
   });
 
+  it('fills its box and centres the drawing', () => {
+    renderMap();
+    const svg = screen.getByTestId('battle-map');
+    expect(svg).toHaveAttribute('width', '100%');
+    expect(svg).toHaveAttribute('height', '100%');
+    expect(svg).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
+  });
+
   it('labels a held place with its holders', () => {
     renderMap();
     expect(screen.getByText('Stage · Held by Harrow, Blade')).toBeInTheDocument();
@@ -147,6 +155,9 @@ describe('BattleMap', () => {
 
   it('fills a place with its terrain art and names a gate on its route', () => {
     renderMap();
+    // Art of any shape covers its tile: no letterbox bands.
+    const tile = screen.getByTestId('battle-map').querySelector('pattern image')!;
+    expect(tile).toHaveAttribute('preserveAspectRatio', 'xMidYMid slice');
     expect(screen.getByTestId('battle-map-terrain-2').getAttribute('fill')).toMatch(/^url\(#/);
     expect(screen.getByTestId('battle-map-terrain-1').getAttribute('fill')).not.toMatch(/url/);
     expect(screen.getByTestId('battle-map-edge-1-3')).toHaveTextContent('Locked Gate');

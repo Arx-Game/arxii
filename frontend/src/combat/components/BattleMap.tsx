@@ -453,7 +453,10 @@ export function BattleMap({
     >
       <svg
         viewBox={`${bounds.x} ${bounds.y} ${bounds.w} ${bounds.h}`}
-        className="block h-auto w-full min-w-[560px]"
+        width="100%"
+        height="100%"
+        preserveAspectRatio="xMidYMid meet"
+        className="block min-w-[560px]"
         role="group"
         aria-label="Battle map"
         data-testid="battle-map"
@@ -469,6 +472,8 @@ export function BattleMap({
             >
               <image
                 href={url}
+                x={0}
+                y={0}
                 width={TERRAIN_TILE}
                 height={TERRAIN_TILE}
                 preserveAspectRatio="xMidYMid slice"
