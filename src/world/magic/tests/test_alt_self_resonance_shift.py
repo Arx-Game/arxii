@@ -83,7 +83,7 @@ class AltSelfResonanceShiftTests(TestCase):
             target_kind=TargetKind.GIFT,
             target_gift=self.gift,
         )
-        thread.level = 3
+        thread.level = 30  # stored; shows 3 (#4585)
         thread.save(update_fields=["level"])
         # Invalidate the cached thread handler so the new level is visible.
         self.sheet.character.threads.invalidate()

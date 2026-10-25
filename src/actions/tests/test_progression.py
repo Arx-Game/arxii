@@ -323,12 +323,12 @@ class PurchaseUnlockActionTests(TestCase):
     def test_purchase_thread_xp_lock_success(self):
         """Can purchase a thread XP-lock boundary the actor owns."""
         character, sheet, account = self._create_character_with_account()
-        # Path stage 2 -> path cap 20; trait value 30 -> anchor cap 30.
+        # Class level 2 -> level cap 20; trait value 30 -> anchor cap 30.
         # Effective cap is 20, so boundary level 20 is purchasable.
         thread = ThreadFactory(
             owner=sheet,
             _trait_value=30,
-            _path_stage=2,
+            _class_level=2,
         )
         ThreadXPLockedLevelFactory(level=20, xp_cost=100)
         self._set_xp(account, total_earned=150)

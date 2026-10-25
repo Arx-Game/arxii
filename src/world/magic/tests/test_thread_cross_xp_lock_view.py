@@ -76,14 +76,14 @@ class CrossXPLockViewTests(APITestCase):
         cls.resonance = ResonanceFactory()
 
         # Thread at level 0, TRAIT kind with trait value 100 → anchor cap = 100
-        # _path_stage=3 → path cap = 30. effective cap = min(30, 100) = 30.
+        # _class_level=3 → level cap = 30. effective cap = min(30, 100) = 30.
         # boundary_level=20 is within cap and above level=0, so the happy path works.
         cls.thread = ThreadFactory(
             owner=cls.sheet,
             resonance=cls.resonance,
             as_trait_thread=True,
             _trait_value=100,
-            _path_stage=3,  # path cap = 30
+            _class_level=3,  # level cap = 30
             level=0,
         )
 
@@ -137,14 +137,14 @@ class CrossXPLockViewTests(APITestCase):
     def test_anchor_cap_exceeded_returns_400(self) -> None:
         """Boundary above effective cap → 400 with user_message."""
         # Use a thread with a very low trait value so anchor cap is tiny.
-        # _path_stage=3 → path cap=30. _trait_value=5 → anchor cap=5.
+        # _class_level=3 → level cap=30. _trait_value=5 → anchor cap=5.
         # effective cap = min(30, 5) = 5. boundary_level=20 > 5 → AnchorCapExceeded.
         low_cap_thread = ThreadFactory(
             owner=self.sheet,
             resonance=self.resonance,
             as_trait_thread=True,
             _trait_value=5,
-            _path_stage=3,
+            _class_level=3,
             level=0,
         )
         _give_xp(self.account, 9999)
@@ -173,7 +173,7 @@ class CrossXPLockViewTests(APITestCase):
             resonance=self.resonance,
             as_trait_thread=True,
             _trait_value=100,
-            _path_stage=3,
+            _class_level=3,
             level=20,
         )
         _give_xp(self.account, 9999)

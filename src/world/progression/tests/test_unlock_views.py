@@ -86,7 +86,7 @@ class UnlockShopViewTests(TestCase):
             level=0,
             developed_points=10,
             _trait_value=30,
-            _path_stage=2,
+            _class_level=2,
         )
 
     def _create_gated_skill(self, *, xp_cost: int | None = None):
