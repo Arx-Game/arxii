@@ -33,13 +33,9 @@ import {
   GOLD,
   HELD,
   LABEL_TEXT,
-  LabelChip,
-  CoverBadges,
-  RouteLabel,
   TARGET_OUTLINE_HOVER,
   TARGET_OUTLINE_PICKING,
   TERRAIN_TILE,
-  Token,
   center,
   chipWidth,
   kindFill,
@@ -47,10 +43,11 @@ import {
   placeAriaLabel,
   rampartRing,
   routeStyle,
-} from './battleMapPieces';
-import type { BattleOccupant } from './battleMapPieces';
+} from '../battleMapPalette';
+import type { BattleOccupant } from '../battleMapPalette';
+import { CoverBadges, LabelChip, RouteLabel, Token } from './battleMapPieces';
 
-export type { BattleOccupant, CombatSide } from './battleMapPieces';
+export type { BattleOccupant, CombatSide } from '../battleMapPalette';
 
 export interface HeldPlace {
   position_id: number;
@@ -564,36 +561,26 @@ export function BattleMap({
           );
         })}
 
-        {/* Engagement locks: a dashed rose line, with a wide invisible stroke for its title. */}
+        {/* Engagement locks: a dashed rose line; the locked marks carry the words. */}
         {(links ?? [])
           .filter((link) => link.positionAId !== link.positionBId)
           .map((link) => {
             const ends = routeEnds(link.positionAId, link.positionBId);
             if (!ends) return null;
             return (
-              <g key={link.id} data-testid={`battle-map-link-${link.id}`} aria-label={link.label}>
-                <line
-                  x1={ends.p.x}
-                  y1={ends.p.y}
-                  x2={ends.q.x}
-                  y2={ends.q.y}
-                  stroke="#f43f5e"
-                  strokeWidth={2}
-                  strokeDasharray="8 4"
-                  pointerEvents="none"
-                />
-                <line
-                  x1={ends.p.x}
-                  y1={ends.p.y}
-                  x2={ends.q.x}
-                  y2={ends.q.y}
-                  stroke="transparent"
-                  strokeWidth={10}
-                  pointerEvents="stroke"
-                >
-                  <title>{link.label}</title>
-                </line>
-              </g>
+              <line
+                key={link.id}
+                data-testid={`battle-map-link-${link.id}`}
+                aria-label={link.label}
+                x1={ends.p.x}
+                y1={ends.p.y}
+                x2={ends.q.x}
+                y2={ends.q.y}
+                stroke="#f43f5e"
+                strokeWidth={2}
+                strokeDasharray="8 4"
+                pointerEvents="none"
+              />
             );
           })}
 

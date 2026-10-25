@@ -229,7 +229,8 @@ describe('BattleMap', () => {
     });
     const link = screen.getByTestId('battle-map-link-lock-9');
     expect(link).toHaveAttribute('aria-label', 'Liraveth locked with Harrow');
-    expect(link.querySelector('title')).toHaveTextContent('Liraveth locked with Harrow');
+    // Never a click target: a click on the line reaches the square beneath.
+    expect(link).toHaveAttribute('pointer-events', 'none');
   });
 
   it('does nothing on a click of the viewer’s own square', () => {
