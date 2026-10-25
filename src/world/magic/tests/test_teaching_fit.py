@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import TargetKind
+from world.magic.constants import GiftKind, TargetKind
 from world.magic.factories import (
     AffinityFactory,
     CharacterGiftFactory,
@@ -106,3 +106,19 @@ class TeachingFitTests(TestCase):
         CharacterGiftFactory(character=sheet, gift=self.gift)
         self.assertIsNone(student_traits(sheet).affinity)
         self.assertIsNone(student_traits(CharacterSheetFactory()).affinity)
+
+    def test_a_thread_on_another_gift_does_not_supply_the_affinity(self) -> None:
+        sheet = CharacterSheetFactory()
+        CharacterGiftFactory(character=sheet, gift=self.gift)
+        minor = GiftFactory(kind=GiftKind.MINOR)
+        CharacterGiftFactory(character=sheet, gift=minor)
+        ThreadFactory(
+            owner=sheet,
+            resonance=ResonanceFactory(affinity=self.affinity),
+            target_kind=TargetKind.GIFT,
+            target_trait=None,
+            target_gift=minor,
+        )
+        traits = student_traits(sheet)
+        self.assertEqual(traits.major_gift, self.gift)
+        self.assertIsNone(traits.affinity)

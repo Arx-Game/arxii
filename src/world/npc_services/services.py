@@ -1096,8 +1096,12 @@ def serialize_npc_session_state(
     # The student's Major Gift and its Gift thread's affinity, read once per menu (#4659).
     from world.magic.services.teaching_fit import student_traits  # noqa: PLC0415
 
-    # One fit per teaching Tradition, not one per course offer (two queries each).
-    fits = _menu_teaching_fits(offers, student_traits(sheet)) if offers else {}
+    # One fit per teaching Tradition, not one per course offer (two queries each); the
+    # student is not read at all when no course on the menu teaches a Tradition.
+    teaches = any(
+        o.kind == OfferKind.SKILL_COURSE and o.role.teaches_tradition_id is not None for o in offers
+    )
+    fits = _menu_teaching_fits(offers, student_traits(sheet)) if teaches else {}
     serialized_offers = InteractionOfferSerializer(
         [
             {

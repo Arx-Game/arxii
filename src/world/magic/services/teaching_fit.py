@@ -73,7 +73,10 @@ def gift_affinity_for(sheet: CharacterSheet, gift: Gift | None) -> Affinity | No
     """The affinity of the resonance on the sheet's active GIFT thread for ``gift``.
 
     None when there is no Gift or no such thread. Reads the cached thread handler
-    through ``gift_threads_for`` (a direct hold on ``gift`` sorts first).
+    through ``gift_threads_for`` (a direct hold on ``gift`` sorts first). An active
+    alternate self's resonance is deliberately not read: fit follows the student's own
+    Gift thread, and ``gift_resonances_for`` would fall back to every resonance the Gift
+    supports when there is no thread.
     """
     from world.magic.specialization.services import gift_threads_for  # noqa: PLC0415
 
