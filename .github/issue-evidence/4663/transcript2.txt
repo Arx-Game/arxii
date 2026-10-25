@@ -1,0 +1,253 @@
+[Hobb] >>> (login)
+[Hobb]     You become Hobb.
+[Hobb]     Velvet Cellar
+[Hobb]     This is a room.
+[Hobb]     Characters: Bandit and Hobb
+[Hobb]     Now controlling Hobb.
+[Dace] >>> (login)
+[Dace]     You become Dace.
+[Dace]     Velvet Cellar
+[Dace]     This is a room.
+[Dace]     Characters: Bandit, Hobb, and Dace Morrow
+[Dace]     Now controlling Dace.
+[Marn] >>> (login)
+[Marn]     You become Marn.
+[Marn]     Velvet Cellar
+[Marn]     This is a room.
+[Marn]     Characters: Bandit, Hobb, Dace Morrow, and Marn
+[Marn]     Now controlling Marn.
+[Hobb]     Dace Morrow has entered the game.
+[Hobb]     Marn has entered the game.
+[Dace]     Marn has entered the game.
+--- DB read (participants, round 1, continued) ---
+     db_key  | enc | hops_used |   pos   | health 
+    ---------+-----+-----------+---------+--------
+     Dace    |   1 |         5 | Bar     |     95
+     Hobb    |   1 |         5 | Bar     |    100
+     Kestrel |   1 |         1 | Bar     |     95
+     Pell    |   1 |         5 | Bar     |    100
+     Wren    |   1 |         2 | Gallery |    100
+     Ilse    |   2 |         0 | Lane    |     30
+     Tamsin  |   2 |         0 | Yard    |     90
+    (7 rows)
+--- DB read (opponents, round 1, continued) ---
+         name     | enc | pos  | status 
+    --------------+-----+------+--------
+     Bandit       |   1 | Bar  | active
+     Leaping Wolf |   2 | Gate | active
+     Walking Wolf |   2 | Yard | active
+    (3 rows)
+
+========================================================================
+ITEM 1/2 WEB (rerun): Wren on the Gallery takes flight, lands, then has one hop
+========================================================================
+
+===== WEB PHASE wren3 =====
+[web:wren3] w21-wren-gallery-round1: hops line = "3 hops left this round."
+[web:wren3] w21-wren-gallery-round1:   [enabled ] Take flight
+[web:wren3] w21-wren-gallery-round1:   [enabled ] Climb over to Floor (2 hops)
+[web:wren3] screenshots w21-wren-gallery-round1-panel.png, w21-wren-gallery-round1-page.png
+[web:wren3] clicked "Take flight" -> toast: "You take flight."
+[web:wren3] screenshot w22-wren-takeoff-toast.png
+[web:wren3] w23-wren-in-air: hops line = "2 hops left this round."
+[web:wren3] w23-wren-in-air:   [enabled ] Move to Above Floor
+[web:wren3] w23-wren-in-air:   [enabled ] Move to Gallery
+[web:wren3] w23-wren-in-air:   [enabled ] Land
+[web:wren3] screenshots w23-wren-in-air-panel.png, w23-wren-in-air-page.png
+[web:wren3] clicked "Land" -> toast: "You land at Gallery."
+[web:wren3] screenshot w24-wren-land-toast.png
+[web:wren3] w25-wren-landed-one-hop: hops line = "1 hop left this round."
+[web:wren3] w25-wren-landed-one-hop:   [enabled ] Take flight
+[web:wren3] w25-wren-landed-one-hop:   [disabled] Climb over to Floor (2 hops) | That crossing takes 2 hops; you have 1 left.
+[web:wren3] screenshots w25-wren-landed-one-hop-panel.png, w25-wren-landed-one-hop-page.png
+[web:wren3] exit=0
+--- DB read (participants, after Wren's flight and landing) ---
+     db_key  | enc | hops_used |   pos   | health 
+    ---------+-----+-----------+---------+--------
+     Dace    |   1 |         5 | Bar     |     95
+     Hobb    |   1 |         5 | Bar     |    100
+     Kestrel |   1 |         1 | Bar     |     95
+     Pell    |   1 |         5 | Bar     |    100
+     Wren    |   1 |         4 | Gallery |    100
+     Ilse    |   2 |         0 | Lane    |     30
+     Tamsin  |   2 |         0 | Yard    |     90
+    (7 rows)
+--- DB read (opponents, after Wren's flight and landing) ---
+         name     | enc | pos  | status 
+    --------------+-----+------+--------
+     Bandit       |   1 | Bar  | active
+     Leaping Wolf |   2 | Gate | active
+     Walking Wolf |   2 | Yard | active
+    (3 rows)
+
+========================================================================
+ITEM 3 WEB: Pell's panel after being stopped (fresh load)
+========================================================================
+
+===== WEB PHASE pell3 =====
+[web:pell3] w26-pell-in-bar-no-hops: hops line = null
+[web:pell3] w26-pell-in-bar-no-hops:   [disabled] Move to Cellar Stair | You have no movement left this round.
+[web:pell3] w26-pell-in-bar-no-hops:   [disabled] Move to Floor | You have no movement left this round.
+[web:pell3] screenshots w26-pell-in-bar-no-hops-panel.png, w26-pell-in-bar-no-hops-page.png
+[web:pell3] screenshot w27-pell-map.png
+[web:pell3] exit=0
+
+========================================================================
+ROUND 1 ENDS: Marn resolves the Velvet Cellar round
+========================================================================
+[Marn] >>> encounter resolve
+[Marn]     Wren Vale has entered the game.
+[Marn]     Wren Vale has left the game.
+[Marn]     Pell has entered the game.
+[Marn]     Pell has left the game.
+[Marn]     Bandit’s Bandit strike strikes Kestrel Ash for 10 damage.
+[Marn]     Wren holds back.
+[Marn]     Pell holds back.
+[Marn]     Kestrel holds back.
+[Marn]     Hobb holds back.
+[Marn]     Dace holds back.
+[Marn]     The round resolves.
+[Marn] --- received while resolve ---
+[Marn] >>> encounter begin
+[Marn]     Round begins.
+--- DB read (participants, round 2 open) ---
+     db_key  | enc | hops_used |   pos   | health 
+    ---------+-----+-----------+---------+--------
+     Dace    |   1 |         0 | Bar     |     95
+     Hobb    |   1 |         0 | Bar     |    100
+     Kestrel |   1 |         0 | Bar     |     85
+     Pell    |   1 |         0 | Bar     |    100
+     Wren    |   1 |         0 | Gallery |    100
+     Ilse    |   2 |         0 | Lane    |     30
+     Tamsin  |   2 |         0 | Yard    |     90
+    (7 rows)
+--- DB read (opponents, round 2 open) ---
+         name     | enc | pos  | status 
+    --------------+-----+------+--------
+     Bandit       |   1 | Bar  | active
+     Leaping Wolf |   2 | Gate | active
+     Walking Wolf |   2 | Yard | active
+    (3 rows)
+--- DB read (encounters) ---
+     id | round_number |     status     
+    ----+--------------+----------------
+      2 |            1 | between_rounds
+      1 |            2 | declaring
+    (2 rows)
+
+========================================================================
+ITEM 4: staff raise Slip Past severity to 90 in the admin (to see a stopped outcome)
+========================================================================
+
+===== WEB PHASE admin-severity =====
+[web:admin-severity] admin messages: ["The challenge template “Slip Past” was changed successfully."]
+[web:admin-severity] exit=0
+--- DB read (template) ---
+     id |   name    | severity 
+    ----+-----------+----------
+      1 | Slip Past |       90
+    (1 row)
+
+========================================================================
+ITEM 4 TELNET round 2: Dace walks out of the Bar and rolls to get back in
+========================================================================
+[Dace] >>> position
+[Dace]     Wren Vale has entered the game.
+[Dace]     Wren Vale has left the game.
+[Dace]     Pell has entered the game.
+[Dace]     Pell has left the game.
+[Dace]     Bandit’s Bandit strike strikes Kestrel Ash for 10 damage.
+[Dace]     Wren holds back.
+[Dace]     Pell holds back.
+[Dace]     Kestrel holds back.
+[Dace]     Hobb holds back.
+[Dace]     Dace holds back.
+[Dace]     Positions here:
+[Dace]       Doorway (Feature) — occupants: empty; adjacent: Floor
+[Dace]       Floor (Feature) — occupants: empty; adjacent: Doorway, Bar, Stage
+[Dace]       Bar (Feature) — occupants: Bandit, Hobb, Kestrel, Dace, Pell; adjacent: Floor, Cellar Stair
+[Dace]       Cellar Stair (Feature) — occupants: empty; adjacent: Bar
+[Dace]       Stage (Feature) — occupants: empty; adjacent: Floor
+[Dace]       Gallery (Feature) — occupants: Wren; adjacent: none
+[Dace] >>> position Floor
+[Dace] >>> position/pass Bar
+[Dace]     Bandit stops Dace Morrow in Bar.
+[Dace]     Bandit stops you.
+--- DB read (participants, after Dace round-2 pass 1) ---
+     db_key  | enc | hops_used |   pos   | health 
+    ---------+-----+-----------+---------+--------
+     Dace    |   1 |         5 | Bar     |     95
+     Hobb    |   1 |         0 | Bar     |    100
+     Kestrel |   1 |         0 | Bar     |     85
+     Pell    |   1 |         0 | Bar     |    100
+     Wren    |   1 |         0 | Gallery |    100
+     Ilse    |   2 |         0 | Lane    |     30
+     Tamsin  |   2 |         0 | Yard    |     90
+    (7 rows)
+--- DB read (opponents, after Dace round-2 pass 1) ---
+         name     | enc | pos  | status 
+    --------------+-----+------+--------
+     Bandit       |   1 | Bar  | active
+     Leaping Wolf |   2 | Gate | active
+     Walking Wolf |   2 | Yard | active
+    (3 rows)
+[Dace] >>> position Floor
+[Dace]     You have no movement left this round.
+[Marn] --- received while Dace rolled on telnet ---
+[Marn]     Bandit stops Dace Morrow in Bar.
+[Hobb] --- received while Dace rolled on telnet ---
+[Hobb]     Wren Vale has entered the game.
+[Hobb]     Wren Vale has left the game.
+[Hobb]     Pell has entered the game.
+[Hobb]     Pell has left the game.
+[Hobb]     Bandit’s Bandit strike strikes Kestrel Ash for 10 damage.
+[Hobb]     Wren holds back.
+[Hobb]     Pell holds back.
+[Hobb]     Kestrel holds back.
+[Hobb]     Hobb holds back.
+[Hobb]     Dace holds back.
+[Hobb]     Bandit stops Dace Morrow in Bar.
+
+========================================================================
+ITEM 4 WEB round 2: Kestrel walks out and rolls to get back in
+========================================================================
+
+===== WEB PHASE kestrel2 =====
+[web:kestrel2] w30-kestrel-round2: hops line = "5 hops left this round."
+[web:kestrel2] w30-kestrel-round2:   [enabled ] Move to Cellar Stair
+[web:kestrel2] w30-kestrel-round2:   [enabled ] Move to Floor
+[web:kestrel2] screenshots w30-kestrel-round2-panel.png, w30-kestrel-round2-page.png
+[web:kestrel2] ERROR locator.waitFor: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-sonner-toast]').first() to be visible[22m
+
+    at click (/tmp/claude-1000/-workspaces-arxii/63aef41e-a4bb-4338-ab96-b210d0e527b2/scratchpad/4651/rt4663/web_phase.cjs:38:15)
+    at async /tmp/claude-1000/-workspaces-arxii/63aef41e-a4bb-4338-ab96-b210d0e527b2/scratchpad/4651/rt4663/web_phase.cjs:136:7
+[web:kestrel2] exit=1
+--- DB read (participants, after Kestrel round 2) ---
+     db_key  | enc | hops_used |   pos   | health 
+    ---------+-----+-----------+---------+--------
+     Dace    |   1 |         5 | Bar     |     95
+     Hobb    |   1 |         0 | Bar     |    100
+     Kestrel |   1 |         1 | Floor   |     85
+     Pell    |   1 |         0 | Bar     |    100
+     Wren    |   1 |         0 | Gallery |    100
+     Ilse    |   2 |         0 | Lane    |     30
+     Tamsin  |   2 |         0 | Yard    |     90
+    (7 rows)
+--- DB read (opponents, after Kestrel round 2) ---
+         name     | enc | pos  | status 
+    --------------+-----+------+--------
+     Bandit       |   1 | Bar  | active
+     Leaping Wolf |   2 | Gate | active
+     Walking Wolf |   2 | Yard | active
+    (3 rows)
+[Marn] --- received while Kestrel rolled on the web ---
+[Marn]     Kestrel Ash has entered the game.
+[Marn]     Kestrel Ash has left the game.
+[Hobb] --- received while Kestrel rolled on the web ---
+[Hobb]     Kestrel Ash has entered the game.
+[Hobb]     Kestrel Ash has left the game.
+[Dace] --- received while Kestrel rolled on the web ---
+[Dace]     Kestrel Ash has entered the game.
+[Dace]     Kestrel Ash has left the game.

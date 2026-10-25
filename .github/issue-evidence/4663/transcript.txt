@@ -1,0 +1,550 @@
+[Hobb] >>> (login)
+[Hobb]     You become Hobb.
+[Hobb]     Velvet Cellar
+[Hobb]     This is a room.
+[Hobb]     Characters: Pell, Hobb, Kestrel Ash, Marn, Dace Morrow, and Bandit
+[Hobb]     Now controlling Hobb.
+[Dace] >>> (login)
+[Dace]     You become Dace.
+[Dace]     Velvet Cellar
+[Dace]     This is a room.
+[Dace]     Characters: Pell, Hobb, Kestrel Ash, Marn, Dace Morrow, and Bandit
+[Dace]     Now controlling Dace.
+[Marn] >>> (login)
+[Marn]     You become Marn.
+[Marn]     Velvet Cellar
+[Marn]     This is a room.
+[Marn]     Characters: Pell, Hobb, Kestrel Ash, Marn, Dace Morrow, and Bandit
+[Marn]     Now controlling Marn.
+[Ansel] >>> (login)
+[Ansel]     You become Ansel.
+[Ansel]     The Causeway
+[Ansel]     This is a room.
+[Ansel]     Characters: Ilse, Tamsin, Leaping Wolf, Walking Wolf, and Ansel
+[Ansel]     Now controlling Ansel.
+[Hobb]     Dace Morrow has entered the game.
+[Hobb]     Marn has entered the game.
+[Dace]     Marn has entered the game.
+--- DB read (participants, start) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         0 | Floor |    100
+     Hobb    |   1 |         0 | Stage |    100
+     Kestrel |   1 |         0 | Floor |    100
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, start) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+
+========================================================================
+ITEM 1/2 WEB: Wren takes flight and lands (no MovementConfig yet)
+========================================================================
+
+===== WEB PHASE wren1 =====
+[web:wren1] ERROR locator.waitFor: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for getByTestId('movement-section') to be visible[22m
+
+    at openPanel (/tmp/claude-1000/-workspaces-arxii/63aef41e-a4bb-4338-ab96-b210d0e527b2/scratchpad/4651/rt4663/web_phase.cjs:10:46)
+    at async /tmp/claude-1000/-workspaces-arxii/63aef41e-a4bb-4338-ab96-b210d0e527b2/scratchpad/4651/rt4663/web_phase.cjs:46:20
+[web:wren1] exit=1
+--- DB read (participants, after Wren take-off and landing) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         0 | Floor |    100
+     Hobb    |   1 |         0 | Stage |    100
+     Kestrel |   1 |         0 | Floor |    100
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, after Wren take-off and landing) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+
+========================================================================
+ITEM 2 WEB: Pell, a walker, sees the railing
+========================================================================
+
+===== WEB PHASE pell1 =====
+[web:pell1] w06-pell-walker: hops line = "5 hops left this round."
+[web:pell1] w06-pell-walker:   [enabled ] Move to Doorway
+[web:pell1] w06-pell-walker:   [enabled ] Move to Bar | Held by Bandit: you'd stop there.
+[web:pell1] w06-pell-walker:   [enabled ] Move to Stage
+[web:pell1] screenshots w06-pell-walker-panel.png, w06-pell-walker-page.png
+[web:pell1] exit=0
+
+========================================================================
+ITEM 4 EDGE WEB: Kestrel (acrobat) with no MovementConfig row
+========================================================================
+
+===== WEB PHASE kestrel-noconfig =====
+[web:kestrel-noconfig] w07-kestrel-no-config: hops line = "5 hops left this round."
+[web:kestrel-noconfig] w07-kestrel-no-config:   [enabled ] Move to Doorway
+[web:kestrel-noconfig] w07-kestrel-no-config:   [enabled ] Move to Bar | Held by Bandit: you'd stop there.
+[web:kestrel-noconfig] w07-kestrel-no-config:   [enabled ] Move to Stage
+[web:kestrel-noconfig] screenshots w07-kestrel-no-config-panel.png, w07-kestrel-no-config-page.png
+[web:kestrel-noconfig] exit=0
+
+========================================================================
+ITEM 1 TELNET: Hobb under the Stage roof, then out, up and down
+========================================================================
+[Hobb] >>> position
+[Hobb]     Pell has entered the game.
+[Hobb]     Pell has left the game.
+[Hobb]     Kestrel Ash has entered the game.
+[Hobb]     Kestrel Ash has left the game.
+[Hobb]     Positions here:
+[Hobb]       Doorway (Feature) — occupants: empty; adjacent: Floor
+[Hobb]       Floor (Feature) — occupants: Wren, Pell, Kestrel, Dace; adjacent: Doorway, Bar, Stage
+[Hobb]       Bar (Feature) — occupants: Bandit; adjacent: Floor, Cellar Stair; held by Bandit
+[Hobb]       Cellar Stair (Feature) — occupants: empty; adjacent: Bar
+[Hobb]       Stage (Feature) — occupants: Hobb; adjacent: Floor
+[Hobb]       Gallery (Feature) — occupants: empty; adjacent: none
+[Hobb] >>> position/fly
+[Hobb]     A roof is in the way.
+--- DB read (participants, after roofed take-off attempt) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         0 | Floor |    100
+     Hobb    |   1 |         0 | Stage |    100
+     Kestrel |   1 |         0 | Floor |    100
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, after roofed take-off attempt) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+[Hobb] >>> position Floor
+[Hobb] >>> position/fly
+[Hobb]     You take flight.
+--- DB read (participants, after Hobb take-off) ---
+     db_key  | enc | hops_used |     pos     | health 
+    ---------+-----+-----------+-------------+--------
+     Dace    |   1 |         0 | Floor       |    100
+     Hobb    |   1 |         2 | Above Floor |    100
+     Kestrel |   1 |         0 | Floor       |    100
+     Pell    |   1 |         0 | Floor       |    100
+     Wren    |   1 |         0 | Floor       |    100
+     Ilse    |   2 |         0 | Lane        |     40
+     Tamsin  |   2 |         0 | Yard        |    100
+    (7 rows)
+--- DB read (opponents, after Hobb take-off) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+[Hobb] >>> position
+[Hobb]     Positions here:
+[Hobb]       Doorway (Feature) — occupants: empty; adjacent: Floor, Above Doorway
+[Hobb]       Floor (Feature) — occupants: Wren, Pell, Kestrel, Dace; adjacent: Doorway, Bar, Stage, Above Floor
+[Hobb]       Bar (Feature) — occupants: Bandit; adjacent: Floor, Cellar Stair, Above Bar; held by Bandit
+[Hobb]       Cellar Stair (Feature) — occupants: empty; adjacent: Bar, Above Cellar Stair
+[Hobb]       Stage (Feature) — occupants: empty; adjacent: Floor, Above Stage
+[Hobb]       Gallery (Feature) — occupants: empty; adjacent: Above Gallery
+[Hobb]       Above Bar (Aerial) — occupants: empty; adjacent: Bar, Above Cellar Stair, Above Floor
+[Hobb]       Above Cellar Stair (Aerial) — occupants: empty; adjacent: Cellar Stair, Above Bar
+[Hobb]       Above Doorway (Aerial) — occupants: empty; adjacent: Doorway, Above Floor
+[Hobb]       Above Floor (Aerial) — occupants: Hobb; adjacent: Floor, Above Bar, Above Doorway, Above Gallery, Above Stage
+[Hobb]       Above Gallery (Aerial) — occupants: empty; adjacent: Gallery, Above Floor
+[Hobb]       Above Stage (Aerial) — occupants: empty; adjacent: Stage, Above Floor
+[Hobb] >>> position/land
+[Hobb]     You land at Floor.
+--- DB read (participants, after Hobb landing) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         0 | Floor |    100
+     Hobb    |   1 |         3 | Floor |    100
+     Kestrel |   1 |         0 | Floor |    100
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, after Hobb landing) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+
+========================================================================
+ITEM 3 TELNET: listing marks the Bar; walking in stops Hobb
+========================================================================
+[Hobb] >>> position
+[Hobb]     Positions here:
+[Hobb]       Doorway (Feature) — occupants: empty; adjacent: Floor
+[Hobb]       Floor (Feature) — occupants: Wren, Pell, Kestrel, Dace, Hobb; adjacent: Doorway, Bar, Stage
+[Hobb]       Bar (Feature) — occupants: Bandit; adjacent: Floor, Cellar Stair; held by Bandit
+[Hobb]       Cellar Stair (Feature) — occupants: empty; adjacent: Bar
+[Hobb]       Stage (Feature) — occupants: empty; adjacent: Floor
+[Hobb]       Gallery (Feature) — occupants: empty; adjacent: none
+[Hobb] >>> position Bar
+[Hobb]     You are stopped by Bandit.
+--- DB read (participants, after Hobb walks into the Bar) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         0 | Floor |    100
+     Hobb    |   1 |         5 | Bar   |    100
+     Kestrel |   1 |         0 | Floor |    100
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, after Hobb walks into the Bar) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+[Hobb] >>> position Cellar Stair
+[Hobb]     You have no movement left this round.
+[Hobb] >>> position Floor
+[Hobb]     You have no movement left this round.
+--- DB read (participants, after Hobb's refused onward moves) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         0 | Floor |    100
+     Hobb    |   1 |         5 | Bar   |    100
+     Kestrel |   1 |         0 | Floor |    100
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, after Hobb's refused onward moves) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+[Marn] --- received while Hobb moved ---
+[Marn]     Pell has entered the game.
+[Marn]     Pell has left the game.
+[Marn]     Kestrel Ash has entered the game.
+[Marn]     Kestrel Ash has left the game.
+
+========================================================================
+ITEM 4 EDGE TELNET: Dace tries to pass with no MovementConfig row
+========================================================================
+[Dace] >>> position
+[Dace]     Pell has entered the game.
+[Dace]     Pell has left the game.
+[Dace]     Kestrel Ash has entered the game.
+[Dace]     Kestrel Ash has left the game.
+[Dace]     Positions here:
+[Dace]       Doorway (Feature) — occupants: empty; adjacent: Floor
+[Dace]       Floor (Feature) — occupants: Wren, Pell, Kestrel, Dace; adjacent: Doorway, Bar, Stage
+[Dace]       Bar (Feature) — occupants: Bandit, Hobb; adjacent: Floor, Cellar Stair; held by Bandit
+[Dace]       Cellar Stair (Feature) — occupants: empty; adjacent: Bar
+[Dace]       Stage (Feature) — occupants: empty; adjacent: Floor
+[Dace]       Gallery (Feature) — occupants: empty; adjacent: none
+[Dace] >>> position/pass Bar
+[Dace]     There is no way past them.
+--- DB read (participants, after Dace's refused pass) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         0 | Floor |    100
+     Hobb    |   1 |         5 | Bar   |    100
+     Kestrel |   1 |         0 | Floor |    100
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, after Dace's refused pass) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+
+========================================================================
+ITEM 4: staff designate Slip Past on MovementConfig in the admin
+========================================================================
+
+===== WEB PHASE admin =====
+[web:admin] picked: Slip Past
+[web:admin] admin messages: ["The movement config “MovementConfig(pk=1)” was added successfully."]
+[web:admin] exit=0
+--- DB read (movement config after admin save) ---
+     id | held_ground_challenge_id |          updated_at           | updated_by_id 
+    ----+--------------------------+-------------------------------+---------------
+      1 |                        1 | 2026-10-25 16:19:12.426093+00 |              
+    (1 row)
+
+========================================================================
+ITEM 4 WEB: Kestrel rolls to get past the Bandit
+========================================================================
+
+===== WEB PHASE kestrel-pass =====
+[web:kestrel-pass] w11-kestrel-with-config: hops line = "5 hops left this round."
+[web:kestrel-pass] w11-kestrel-with-config:   [enabled ] Move to Doorway
+[web:kestrel-pass] w11-kestrel-with-config:   [enabled ] Move to Bar | Held by Bandit: you'd stop there.
+[web:kestrel-pass] w11-kestrel-with-config:   [enabled ] Get past Bandit into Bar | Tumble past
+[web:kestrel-pass] w11-kestrel-with-config:   [enabled ] Move to Stage
+[web:kestrel-pass] screenshots w11-kestrel-with-config-panel.png, w11-kestrel-with-config-page.png
+[web:kestrel-pass] clicked "Get past" -> toast: "You get past Bandit, but not cleanly."
+[web:kestrel-pass] screenshot w12-kestrel-pass1-toast.png
+[web:kestrel-pass] w13-kestrel-after-pass1: hops line = "5 hops left this round."
+[web:kestrel-pass] w13-kestrel-after-pass1:   [enabled ] Move to Doorway
+[web:kestrel-pass] w13-kestrel-after-pass1:   [enabled ] Move to Bar | Held by Bandit: you'd stop there.
+[web:kestrel-pass] w13-kestrel-after-pass1:   [enabled ] Get past Bandit into Bar | Tumble past
+[web:kestrel-pass] w13-kestrel-after-pass1:   [enabled ] Move to Stage
+[web:kestrel-pass] screenshots w13-kestrel-after-pass1-panel.png, w13-kestrel-after-pass1-page.png
+[web:kestrel-pass] exit=0
+--- DB read (participants, after Kestrel's passes) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         0 | Floor |    100
+     Hobb    |   1 |         5 | Bar   |    100
+     Kestrel |   1 |         1 | Bar   |     95
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, after Kestrel's passes) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+[Marn] --- received while Kestrel rolled on the web ---
+[Marn]     Kestrel Ash has entered the game.
+[Marn]     Kestrel Ash gets past Bandit into Bar, but not cleanly.
+[Marn]     Kestrel Ash has left the game.
+[Hobb] --- received while Kestrel rolled on the web ---
+[Hobb]     Kestrel Ash has entered the game.
+[Hobb]     Kestrel Ash gets past Bandit into Bar, but not cleanly.
+[Hobb]     Kestrel Ash has left the game.
+[Dace] --- received while Kestrel rolled on the web ---
+[Dace]     Kestrel Ash has entered the game.
+[Dace]     Kestrel Ash gets past Bandit into Bar, but not cleanly.
+[Dace]     Kestrel Ash has left the game.
+
+========================================================================
+ITEM 4 TELNET: Dace rolls to get past the Bandit
+========================================================================
+[Dace] >>> position/pass Bar
+[Dace]     Dace Morrow gets past Bandit into Bar.
+[Dace]     You get past Bandit.
+--- DB read (participants, after Dace pass 1) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         1 | Bar   |    100
+     Hobb    |   1 |         5 | Bar   |    100
+     Kestrel |   1 |         1 | Bar   |     95
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, after Dace pass 1) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+[Dace] >>> position Floor
+[Dace] >>> position/pass Bar
+[Dace]     Dace Morrow gets past Bandit into Bar.
+[Dace]     You get past Bandit.
+--- DB read (participants, after Dace pass 2) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         3 | Bar   |    100
+     Hobb    |   1 |         5 | Bar   |    100
+     Kestrel |   1 |         1 | Bar   |     95
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, after Dace pass 2) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+[Dace] >>> position Floor
+[Dace] >>> position/pass Bar
+[Dace]     Dace Morrow gets past Bandit into Bar, but not cleanly.
+[Dace]     You get past Bandit, but not cleanly.
+--- DB read (participants, after Dace pass 3) ---
+     db_key  | enc | hops_used |  pos  | health 
+    ---------+-----+-----------+-------+--------
+     Dace    |   1 |         5 | Bar   |     95
+     Hobb    |   1 |         5 | Bar   |    100
+     Kestrel |   1 |         1 | Bar   |     95
+     Pell    |   1 |         0 | Floor |    100
+     Wren    |   1 |         0 | Floor |    100
+     Ilse    |   2 |         0 | Lane  |     40
+     Tamsin  |   2 |         0 | Yard  |    100
+    (7 rows)
+--- DB read (opponents, after Dace pass 3) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+[Dace] >>> position Floor
+[Dace]     You have no movement left this round.
+[Marn] --- received while Dace rolled on telnet ---
+[Marn]     Dace Morrow gets past Bandit into Bar.
+[Marn]     Dace Morrow gets past Bandit into Bar.
+[Marn]     Dace Morrow gets past Bandit into Bar, but not cleanly.
+[Hobb] --- received while Dace rolled on telnet ---
+[Hobb]     Dace Morrow gets past Bandit into Bar.
+[Hobb]     Dace Morrow gets past Bandit into Bar.
+[Hobb]     Dace Morrow gets past Bandit into Bar, but not cleanly.
+
+========================================================================
+ITEM 2 WEB: Wren climbs the railing, then has one hop
+========================================================================
+
+===== WEB PHASE wren2 =====
+[web:wren2] w16-wren-before-climb: hops line = "5 hops left this round."
+[web:wren2] w16-wren-before-climb:   [enabled ] Move to Doorway
+[web:wren2] w16-wren-before-climb:   [enabled ] Move to Bar | Held by Bandit: you'd stop there.
+[web:wren2] w16-wren-before-climb:   [enabled ] Move to Stage
+[web:wren2] w16-wren-before-climb:   [enabled ] Take flight
+[web:wren2] w16-wren-before-climb:   [enabled ] Climb over to Gallery (2 hops)
+[web:wren2] screenshots w16-wren-before-climb-panel.png, w16-wren-before-climb-page.png
+[web:wren2] ERROR locator.waitFor: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-sonner-toast]').first() to be visible[22m
+
+    at click (/tmp/claude-1000/-workspaces-arxii/63aef41e-a4bb-4338-ab96-b210d0e527b2/scratchpad/4651/rt4663/web_phase.cjs:33:15)
+    at async /tmp/claude-1000/-workspaces-arxii/63aef41e-a4bb-4338-ab96-b210d0e527b2/scratchpad/4651/rt4663/web_phase.cjs:97:7
+[web:wren2] exit=1
+--- DB read (participants, after Wren's climb) ---
+     db_key  | enc | hops_used |   pos   | health 
+    ---------+-----+-----------+---------+--------
+     Dace    |   1 |         5 | Bar     |     95
+     Hobb    |   1 |         5 | Bar     |    100
+     Kestrel |   1 |         1 | Bar     |     95
+     Pell    |   1 |         0 | Floor   |    100
+     Wren    |   1 |         2 | Gallery |    100
+     Ilse    |   2 |         0 | Lane    |     40
+     Tamsin  |   2 |         0 | Yard    |    100
+    (7 rows)
+--- DB read (opponents, after Wren's climb) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+
+========================================================================
+ITEM 3 WEB: Pell walks into the Bar
+========================================================================
+
+===== WEB PHASE pell2 =====
+[web:pell2] clicked "Move to Bar" -> toast: "You are stopped by Bandit."
+[web:pell2] screenshot w19-pell-into-bar-toast.png
+[web:pell2] w20-pell-stopped: hops line = "5 hops left this round."
+[web:pell2] w20-pell-stopped:   [enabled ] Move to Doorway
+[web:pell2] w20-pell-stopped:   [enabled ] Move to Bar | Held by Bandit: you'd stop there.
+[web:pell2] w20-pell-stopped:   [enabled ] Move to Stage
+[web:pell2] screenshots w20-pell-stopped-panel.png, w20-pell-stopped-page.png
+[web:pell2] exit=0
+--- DB read (participants, after Pell walks in) ---
+     db_key  | enc | hops_used |   pos   | health 
+    ---------+-----+-----------+---------+--------
+     Dace    |   1 |         5 | Bar     |     95
+     Hobb    |   1 |         5 | Bar     |    100
+     Kestrel |   1 |         1 | Bar     |     95
+     Pell    |   1 |         5 | Bar     |    100
+     Wren    |   1 |         2 | Gallery |    100
+     Ilse    |   2 |         0 | Lane    |     40
+     Tamsin  |   2 |         0 | Yard    |    100
+    (7 rows)
+--- DB read (opponents, after Pell walks in) ---
+         name     | enc |  pos  | status 
+    --------------+-----+-------+--------
+     Bandit       |   1 | Bar   | active
+     Leaping Wolf |   2 | Tower | active
+     Walking Wolf |   2 | Tower | active
+    (3 rows)
+[Marn] --- received while web moves ---
+[Marn]     Wren Vale has entered the game.
+[Marn]     Wren Vale has left the game.
+[Marn]     Pell has entered the game.
+[Marn]     Pell has left the game.
+
+========================================================================
+ITEM 5: Ansel resolves the Causeway round
+========================================================================
+[Ansel] >>> position
+[Ansel]     Positions here:
+[Ansel]       Lane (Feature) — occupants: Ilse; adjacent: Gate
+[Ansel]       Gate (Feature) — occupants: empty; adjacent: Lane, Yard
+[Ansel]       Yard (Feature) — occupants: Tamsin; adjacent: Gate, Hall
+[Ansel]       Hall (Feature) — occupants: empty; adjacent: Yard, Tower
+[Ansel]       Tower (Feature) — occupants: Walking Wolf, Leaping Wolf; adjacent: Hall
+[Ansel] >>> encounter resolve
+[Ansel]     Walking Wolf moves to Yard.
+[Ansel]     Walking Wolf’s Walking Wolf strike strikes Tamsin for 10 damage.
+[Ansel]     Leaping Wolf moves to Gate.
+[Ansel]     Leaping Wolf’s Leaping Wolf strike strikes Ilse for 10 damage.
+[Ansel]     Tamsin holds back.
+[Ansel]     Ilse holds back.
+[Ansel]     The round resolves.
+[Ansel] --- received while resolution ---
+[Ansel] >>> position
+[Ansel]     Positions here:
+[Ansel]       Lane (Feature) — occupants: Ilse; adjacent: Gate
+[Ansel]       Gate (Feature) — occupants: Leaping Wolf; adjacent: Lane, Yard
+[Ansel]       Yard (Feature) — occupants: Tamsin, Walking Wolf; adjacent: Gate, Hall
+[Ansel]       Hall (Feature) — occupants: empty; adjacent: Yard, Tower
+[Ansel]       Tower (Feature) — occupants: empty; adjacent: Hall
+--- DB read (participants, after the Causeway resolve) ---
+     db_key  | enc | hops_used |   pos   | health 
+    ---------+-----+-----------+---------+--------
+     Dace    |   1 |         5 | Bar     |     95
+     Hobb    |   1 |         5 | Bar     |    100
+     Kestrel |   1 |         1 | Bar     |     95
+     Pell    |   1 |         5 | Bar     |    100
+     Wren    |   1 |         2 | Gallery |    100
+     Ilse    |   2 |         0 | Lane    |     30
+     Tamsin  |   2 |         0 | Yard    |     90
+    (7 rows)
+--- DB read (opponents, after the Causeway resolve) ---
+         name     | enc | pos  | status 
+    --------------+-----+------+--------
+     Bandit       |   1 | Bar  | active
+     Leaping Wolf |   2 | Gate | active
+     Walking Wolf |   2 | Yard | active
+    (3 rows)
