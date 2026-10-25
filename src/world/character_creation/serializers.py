@@ -1320,6 +1320,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # needs it for the "n of m chosen" budget banner.
     starting_technique_picks = serializers.IntegerField(read_only=True)
     starting_magic_skill_floor = serializers.IntegerField(read_only=True)
+    # The Magic-skill training pool and the player's allocation of it (#4659).
+    magic_training = serializers.SerializerMethodField()
     # The age range CG accepts for this draft: the general cap tightened by
     # eternal youth and by the heritage's first appearance (#3663). The
     # appearance stage clamps to these instead of knowing the rule.
@@ -1398,6 +1400,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_budget",
             "starting_technique_picks",
             "starting_magic_skill_floor",
+            "magic_training",
             "age_min",
             "age_max",
             "ic_month_names",
@@ -1429,6 +1432,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_budget",
             "starting_technique_picks",
             "starting_magic_skill_floor",
+            "magic_training",
             "bundled_distinctions",
             "derived_anchors",
         ]
@@ -1460,6 +1464,37 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stage_errors(self, obj: CharacterDraft) -> StageValidationErrors:
         """Get validation errors for each stage."""
         return obj.get_stage_validation_errors()
+
+    @extend_schema_field(serializers.DictField())
+    def get_magic_training(self, obj: CharacterDraft) -> dict:
+        """The Magic-skill training pool, its fit bonuses and the skills to spend it on."""
+        from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+        from world.skills.models import SkillPointBudget  # noqa: PLC0415
+
+        pool = obj.magic_training_pool
+        raw = obj.draft_data.get("magic_skills")
+        allocation = raw if isinstance(raw, dict) else {}
+        max_value = SkillPointBudget.get_active_budget().max_skill_value
+
+        def value_of(skill_id: int) -> int:
+            value = allocation.get(str(skill_id), 0)
+            return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+        skills = [
+            {"id": skill.pk, "name": skill.name, "value": value_of(skill.pk), "max": max_value}
+            for skill in magic_category_skills().select_related("trait").order_by("trait__name")
+        ]
+        return {
+            "base_sources": [{"name": name, "points": points} for name, points in pool.sources],
+            "gift_bonus": pool.gift_bonus,
+            "affinity_bonus": pool.affinity_bonus,
+            "favored_gift_name": pool.fit.favored_gift_name,
+            "favored_affinity_name": pool.fit.favored_affinity_name,
+            "total": pool.total,
+            "required_spend": pool.required_spend,
+            "allocated": sum(skill["value"] for skill in skills),
+            "skills": skills,
+        }
 
     def get_cg_points_spent(self, obj: CharacterDraft) -> int:
         """Get total CG points spent."""

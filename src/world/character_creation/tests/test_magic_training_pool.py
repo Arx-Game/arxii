@@ -89,3 +89,78 @@ class MagicTrainingPoolTest(TestCase):
         DistinctionEffectFactory(distinction=big, target=self.target, value_per_rank=200)
         pool = self._draft([big], gift=False, affinity=False).magic_training_pool
         self.assertEqual((pool.total, pool.required_spend), (200, 90))
+
+
+class MagicSkillAllocationTest(TestCase):
+    """The Gift stage's Magic skill allocation (task 4 of slice 2 of #4659)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        category = ModifierCategoryFactory(name=CG_MODIFIER_CATEGORY)
+        cls.target = ModifierTargetFactory(name=MAGIC_TRAINING_POINTS_TARGET, category=category)
+        SkillPointBudgetFactory(pk=1)
+        cls.gift = GiftFactory()
+        cls.other_gift = GiftFactory()
+        cls.tradition = TraditionFactory()
+        TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
+        training = DistinctionFactory(name="Tradition Training")
+        DistinctionEffectFactory(distinction=training, target=cls.target, value_per_rank=30)
+        cls.training = training
+        cls.skills = [
+            SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC)) for _ in range(3)
+        ]
+        cls.combat = SkillFactory(trait=SkillTraitFactory(category=TraitCategory.COMBAT))
+        cls.resonance = ResonanceFactory(affinity=AffinityFactory(aura_type=AffinityType.ABYSSAL))
+
+    def _draft(self, magic_skills, *, gift=None, trained=True):
+        data = {
+            "selected_gift_id": (gift or self.gift).id,
+            "selected_gift_resonance_id": self.resonance.id,
+            "distinctions": ([{"distinction_id": self.training.id, "rank": 1}] if trained else []),
+            "magic_skills": magic_skills,
+        }
+        return CharacterDraftFactory(draft_data=data, selected_tradition=self.tradition)
+
+    def _errors(self, magic_skills, **kwargs):
+        from world.character_creation.validators import _magic_skill_allocation_errors
+
+        return _magic_skill_allocation_errors(self._draft(magic_skills, **kwargs))
+
+    def test_exact_spend_passes(self) -> None:
+        # Pool 30 (Gift fits: +10 -> 40).
+        alloc = {str(self.skills[0].pk): 30, str(self.skills[1].pk): 10}
+        self.assertEqual(self._errors(alloc), [])
+
+    def test_under_spend_fails(self) -> None:
+        alloc = {str(self.skills[0].pk): 30}
+        self.assertEqual(self._errors(alloc), ["Spend all of your magical training: 10 left"])
+
+    def test_over_after_swapping_gift(self) -> None:
+        alloc = {str(self.skills[0].pk): 30, str(self.skills[1].pk): 10}
+        self.assertEqual(self._errors(alloc), [])
+        self.assertEqual(
+            self._errors(alloc, gift=self.other_gift), ["Your magical training is over by 10"]
+        )
+
+    def test_non_magic_skill_fails(self) -> None:
+        alloc = {str(self.combat.pk): 30, str(self.skills[0].pk): 10}
+        self.assertEqual(self._errors(alloc), ["Magic skills only"])
+
+    def test_inactive_magic_skill_fails(self) -> None:
+        lapsed = SkillFactory(
+            trait=SkillTraitFactory(category=TraitCategory.MAGIC), is_active=False
+        )
+        self.assertEqual(self._errors({str(lapsed.pk): 40}), ["Magic skills only"])
+
+    def test_off_step_value_fails(self) -> None:
+        alloc = {str(self.skills[0].pk): 15, str(self.skills[1].pk): 25}
+        self.assertEqual(self._errors(alloc), ["Magic skill values go in steps of 10 up to 30"])
+
+    def test_no_pool_and_empty_allocation_passes(self) -> None:
+        self.assertEqual(self._errors({}, trained=False), [])
+
+    def test_no_pool_with_allocation_fails(self) -> None:
+        self.assertEqual(
+            self._errors({str(self.skills[0].pk): 10}, trained=False),
+            ["Your magical training is over by 10"],
+        )

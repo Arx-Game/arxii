@@ -20,35 +20,47 @@ from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
 from world.character_creation.constants import (
+    CG_MODIFIER_CATEGORY,
     MAGIC_SKILL_POINTS_REFUSAL,
+    MAGIC_TRAINING_POINTS_TARGET,
     OfferChapter,
     TraditionState,
 )
 from world.character_creation.factories import (
     BeginningTraditionFactory,
+    CharacterDraftFactory,
     DistinctionOfferFactory,
     SchoolingLineFactory,
 )
-from world.character_creation.models import DistinctionOffer
+from world.character_creation.models import CharacterDraft, DistinctionOffer
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.services import perform_check
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult, ExtraTraitTerm
-from world.distinctions.factories import DistinctionFactory
+from world.classes.factories import PathFactory
+from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     GiftFactory,
+    PathGiftGrantFactory,
+    ResonanceFactory,
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
 from world.magic.models import CharacterAnima
+from world.magic.seeds_cast import get_standalone_cast_template
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
-from world.skills.factories import SkillFactory, SpecializationFactory
+from world.skills.factories import (
+    SkillFactory,
+    SkillPointBudgetFactory,
+    SpecializationFactory,
+)
 from world.skills.models import CharacterSkillValue
-from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
+from world.traits.factories import CheckSystemSetupFactory, SkillTraitFactory, StatTraitFactory
 from world.traits.models import (
     CharacterTraitChange,
     CharacterTraitValue,
@@ -372,3 +384,64 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         ]
         draft.save(update_fields=["draft_data"])
         self.assertEqual(self._floor(draft), 0)
+
+
+class MagicTrainingAllocationJourney(JourneyCase):
+    """A player spends the Magic training pool on the Gift stage over the draft API."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        category = ModifierCategoryFactory(name=CG_MODIFIER_CATEGORY)
+        target = ModifierTargetFactory(name=MAGIC_TRAINING_POINTS_TARGET, category=category)
+        SkillPointBudgetFactory(pk=1)
+        training = DistinctionFactory(name="Tradition Training")
+        DistinctionEffectFactory(distinction=training, target=target, value_per_rank=30)
+        path = PathFactory()
+        gift = GiftFactory()
+        tradition = TraditionFactory()
+        PathGiftGrantFactory(path=path, gift=gift).starter_techniques.set(
+            [TechniqueFactory(gift=gift, action_template=get_standalone_cast_template())]
+        )
+        technique = gift.techniques.first()
+        cls.skills = [
+            SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC)) for _ in range(3)
+        ]
+        cls.account = AccountFactory()
+        cls.draft = CharacterDraftFactory(
+            account=cls.account,
+            selected_path=path,
+            selected_tradition=tradition,
+            draft_data={
+                "distinctions": [{"distinction_id": training.pk, "rank": 1}],
+                "selected_gift_id": gift.pk,
+                "selected_technique_ids": [technique.pk],
+                "selected_gift_resonance_id": ResonanceFactory().pk,
+                "anima_check_stat_id": StatTraitFactory(name="strength").pk,
+                "anima_check_skill_id": SkillFactory().pk,
+            },
+        )
+
+    def _patch(self, magic_skills: dict[str, int]) -> dict:
+        client = self.api(self.account)
+        url = f"/api/character-creation/drafts/{self.draft.pk}/"
+        response = client.patch(url, {"draft_data": {"magic_skills": magic_skills}}, format="json")
+        self.assertEqual(response.status_code, 200, response.content)
+        return client.get(url).json()
+
+    def test_allocation_shows_in_payload_and_gates_the_gift_stage(self) -> None:
+        first, second, _third = (str(skill.pk) for skill in self.skills)
+        stage = str(CharacterDraft.Stage.GIFT)
+
+        body = self._patch({first: 20})
+        self.assertEqual(body["magic_training"]["total"], 30)
+        self.assertEqual(body["magic_training"]["allocated"], 20)
+        self.assertEqual(
+            body["stage_errors"][stage], ["Spend all of your magical training: 10 left"]
+        )
+
+        body = self._patch({first: 20, second: 10})
+        self.assertEqual(body["magic_training"]["allocated"], 30)
+        self.assertEqual(body["stage_errors"][stage], [])
+        values = {s["id"]: s["value"] for s in body["magic_training"]["skills"]}
+        self.assertEqual(values[self.skills[0].pk], 20)
+        self.assertEqual(values[self.skills[2].pk], 0)
