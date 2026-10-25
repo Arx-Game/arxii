@@ -1,4 +1,4 @@
-"""Tests for the SheetUpdateRequest model (#2628) and the rank-size constraints (#4660)."""
+"""Tests for SheetUpdateRequest (#2628) and distinction effect rank sizes (#4660)."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from world.distinctions.factories import (
     DistinctionFactory,
     SheetUpdateRequestFactory,
 )
+from world.distinctions.models import DistinctionEffectRankSize
 from world.distinctions.types import (
     DistinctionOrigin,
     SheetUpdateRequestStatus,
@@ -106,3 +107,33 @@ class DistinctionEffectRankSizeConstraintTests(TestCase):
         DistinctionEffectRankSizeFactory(effect=self.effect, rank=2)
         with self.assertRaises(IntegrityError), transaction.atomic():
             DistinctionEffectRankSizeFactory(effect=self.effect, rank=2)
+
+
+class DistinctionEffectRankSizeCacheTests(TestCase):
+    """A running server's cached effect sees staff add and remove rank sizes (#4660).
+
+    The effect is identity-mapped, so its ``cached_rank_sizes`` outlives a request; the
+    check path's prefetch skips an effect that already holds the list.
+    """
+
+    def setUp(self) -> None:
+        self.effect = DistinctionEffectFactory(
+            distinction=DistinctionFactory(max_rank=3), modifier_size=ModifierSize.MINOR
+        )
+        self.assertEqual(ModifierSize.MINOR, self.effect.size_at_rank(2))
+
+    def test_a_saved_rank_size_reaches_the_cached_effect(self) -> None:
+        DistinctionEffectRankSizeFactory(effect=self.effect, rank=2, size=ModifierSize.LARGE)
+        self.assertEqual(ModifierSize.LARGE, self.effect.size_at_rank(2))
+
+    def test_a_deleted_rank_size_leaves_the_cached_effect(self) -> None:
+        row = DistinctionEffectRankSizeFactory(effect=self.effect, rank=2, size=ModifierSize.LARGE)
+        self.assertEqual(ModifierSize.LARGE, self.effect.size_at_rank(2))
+        row.delete()
+        self.assertEqual(ModifierSize.MINOR, self.effect.size_at_rank(2))
+
+    def test_a_queryset_delete_leaves_the_cached_effect(self) -> None:
+        DistinctionEffectRankSizeFactory(effect=self.effect, rank=2, size=ModifierSize.LARGE)
+        self.assertEqual(ModifierSize.LARGE, self.effect.size_at_rank(2))
+        DistinctionEffectRankSize.objects.filter(effect=self.effect).delete()
+        self.assertEqual(ModifierSize.MINOR, self.effect.size_at_rank(2))
