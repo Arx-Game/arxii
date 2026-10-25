@@ -281,6 +281,20 @@ def compute_level_cap(character_sheet: CharacterSheet) -> int:
     return get_character_path_level(character_sheet.character) * PATH_LEVEL_CAP_MULTIPLIER
 
 
+def cap_exceeded_error(thread: Thread) -> type[AnchorCapExceeded]:
+    """The refusal naming whichever cap binds ``thread`` (#4585).
+
+    ``LevelCapExceeded`` when the character-level cap is below the anchor cap, else
+    ``AnchorCapExceeded``. The same test the imbue loop uses for its ``LEVEL_CAP`` /
+    ``ANCHOR_CAP`` blocked reason.
+    """
+    from world.magic.exceptions import LevelCapExceeded  # noqa: PLC0415
+
+    if compute_level_cap(thread.owner) < compute_anchor_cap(thread):
+        return LevelCapExceeded
+    return AnchorCapExceeded
+
+
 def compute_effective_cap(thread: Thread) -> int:
     """Return min(level cap, anchor cap), the binding limit on this thread (Spec A §2.4).
 
@@ -381,7 +395,7 @@ def cross_thread_xp_lock(
         raise InvalidImbueAmount(msg)
     if boundary_level > compute_effective_cap(thread):
         msg = "Boundary level exceeds effective cap."
-        raise AnchorCapExceeded(msg)
+        raise cap_exceeded_error(thread)(msg)
 
     locked = ThreadXPLockedLevel.objects.filter(level=boundary_level).first()
     if locked is None:

@@ -704,23 +704,22 @@ investment can this carry?" to the common scale:
 #### Path cap (universal ceiling)
 
 Independently of the anchor cap, every thread is also capped by the character's
-current Path stage:
+level (#4585; this replaced the original Path-stage cap):
 
 ```
-path_cap = (latest CharacterPathHistory entry's path.stage) × 10
-         (defaults to 10 if the character has no path history yet —
-          a level-1 character can carry a level-10 thread at most)
+level_cap = get_character_path_level(character) × PATH_LEVEL_CAP_MULTIPLIER (10)
+         (get_character_path_level returns at least 1, so a character with no
+          class level can carry a thread stored at 10, shown 1, at most)
 ```
 
-Path stages are 1, 2, 3, … in the existing `classes.Path` model; Stage-1
-characters are capped at thread level 10, Stage-2 at 20, etc. This guarantees
-no thread can outpace the character's structural maturity even if the anchor
-itself (e.g., a high-tier trait inherited from CG) would permit higher.
+A level-4 character's threads stop at stored 40 (shown 4). This guarantees no
+thread is shown higher than its owner's level even if the anchor itself (e.g., a
+high-tier trait inherited from CG) would permit higher.
 
 #### Effective cap
 
 ```
-effective_cap(thread) = min(path_cap(thread.owner), anchor_cap(thread))
+effective_cap(thread) = min(level_cap(thread.owner), anchor_cap(thread))
 ```
 
 The spend service uses `effective_cap`. The My Threads page surfaces both
@@ -813,10 +812,10 @@ def spend_resonance_for_imbuing(
         - new_level: int
         - new_developed_points: int
         - blocked_by: Literal[
-              "NONE", "XP_LOCK", "ANCHOR_CAP", "PATH_CAP", "INSUFFICIENT_BUCKET"
+              "NONE", "XP_LOCK", "ANCHOR_CAP", "LEVEL_CAP", "INSUFFICIENT_BUCKET"
           ]
     Emits a `ThreadImbued` event.
-    Raises `ResonanceInsufficient`, `AnchorCapExceeded`, `PathCapExceeded`,
+    Raises `ResonanceInsufficient`, `AnchorCapExceeded`, `LevelCapExceeded`,
     or `InvalidImbueAmount` on failure.
     """
 ```
@@ -2070,9 +2069,9 @@ Service functions to add in `world/magic/services.py`:
   with per-`target_kind` normalization to the common scale (TRAIT direct,
   TECHNIQUE × 10, SANCTUM = sanctum.feature_instance.level × 10, etc.). ITEM
   is pending Spec D.
-- `compute_path_cap(character)` — `path_stage × 10`, defaulting to 10 for
+- `compute_level_cap(character)` — character level × 10 (#4585; was `compute_path_cap`, `path_stage × 10`), defaulting to 10 for
   characters with no path history yet
-- `compute_effective_cap(thread)` — `min(compute_path_cap(owner),
+- `compute_effective_cap(thread)` — `min(compute_level_cap(owner),
   compute_anchor_cap(thread))`; used by both spend services and the My Threads
   page
 - `recompute_max_health_with_threads(character)` — wrapper that calls
@@ -2186,7 +2185,7 @@ Service functions to remove (tied to deleted models):
     TRAIT cap = trait_value (no multiplier), TECHNIQUE cap = level × 10,
     SANCTUM cap = sanctum.feature_instance.level × 10, RELATIONSHIP_TRACK cap =
     tier_index × 10, RELATIONSHIP_CAPSTONE cap = path_stage × 10, ITEM pending Spec D
-  - `compute_path_cap`: stage 0 → 10, stage N → N × 10, no path history → 10
+  - `compute_level_cap` (was `compute_path_cap`, #4585): no class level → 10, level N → N × 10
   - `compute_effective_cap`: chooses the tighter of path/anchor; surfaces
     which gate is active
   - pull cost + stacking (FLAT_BONUS sum-of-scaled, INTENSITY_BUMP cap,

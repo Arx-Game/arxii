@@ -13,7 +13,6 @@ from django.db import transaction
 from world.classes.services import is_crossing_level
 from world.magic.constants import ACCELERATED_GAIN_SOURCES, EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
-    AnchorCapExceeded,
     CovenantRoleNotEngagedError,
     InvalidImbueAmount,
     MagicError,
@@ -31,6 +30,7 @@ from world.magic.models import (
 )
 from world.magic.services.pull_effects import get_pull_effects_for_thread
 from world.magic.services.threads import (
+    cap_exceeded_error,
     compute_anchor_cap,
     compute_effective_cap,
     compute_level_cap,
@@ -466,7 +466,8 @@ def spend_resonance_for_imbuing(
 
     Raises:
         InvalidImbueAmount: If amount < 0 or thread.owner != character_sheet.
-        AnchorCapExceeded: If thread is already at effective cap.
+        AnchorCapExceeded: If thread is already at effective cap (``LevelCapExceeded``,
+            a subclass, when the character-level cap is the one binding it).
         ResonanceInsufficient: If balance < amount.
     """
     from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
@@ -483,7 +484,7 @@ def spend_resonance_for_imbuing(
     cap = compute_effective_cap(thread)
     if thread.level >= cap:
         msg = "Thread already at effective cap."
-        raise AnchorCapExceeded(msg)
+        raise cap_exceeded_error(thread)(msg)
 
     cr = CharacterResonance.objects.get(
         character_sheet=character_sheet,
