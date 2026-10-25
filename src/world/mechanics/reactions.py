@@ -35,16 +35,17 @@ def _select_reaction_action(
 ) -> AvailableAction:
     """Pick the :class:`~world.mechanics.types.AvailableAction` matching *approach*.
 
-    Iterates *actions* looking for one whose ``capability_source.capability_name``
-    equals *approach*.  Falls back to ``actions[0]`` when:
+    Iterates *actions* looking for one whose approach rests on the capability named
+    *approach* (``resolved_challenge_approach.application.capability.name``, always
+    set), not on ``capability_source.capability_name``, which a condition source
+    leaves empty (#4663). Falls back to ``actions[0]`` when:
 
     - *approach* is ``None`` and *select_best_check_rating* is ``False``;
-    - no action's capability name matches (e.g. the approach is condition-sourced
-      and carries an empty ``capability_name``).
+    - no action's capability name matches.
 
     When *select_best_check_rating* is ``True`` and *approach* is ``None``,
     delegates to :func:`_select_best_rated_action` instead of the naive
-    first-match fallback (#2207) — string-matching on ``capability_name`` is
+    first-match fallback (#2207) — string-matching on the source's ``capability_name`` is
     dead on the condition-sourced path (``capability_name=""``, see
     ``world.mechanics.services._get_condition_sources``), so a caller comparing
     two mechanically-equivalent approaches (e.g. interpose's Reflexes vs.
@@ -60,8 +61,8 @@ def _select_reaction_action(
 
     if approach is not None:
         for action in actions:
-            source = action.capability_source
-            if source is not None and source.capability_name == approach:
+            approach_row = action.resolved_challenge_approach
+            if approach_row is not None and approach_row.application.capability.name == approach:
                 return action
     # No match — fall back to the first available reaction action.
     return actions[0]
