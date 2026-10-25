@@ -438,6 +438,9 @@
   display: none;
 }
 @media (min-width: 960px) {
+  /* The handle is a 12px strip so it never sits over the pane's content (the
+     battle map's zoom buttons, #4641). A touch screen also gets a 44px grip at
+     the strip's middle, reaching into the pane from that edge only. */
   .play-sidebar-resize {
     display: flex;
     align-items: center;
@@ -462,6 +465,22 @@
   }
   .play-mobile-nav {
     display: none;
+  }
+}
+@media (min-width: 960px) and (pointer: coarse) {
+  .play-sidebar-resize::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translateY(-50%);
+  }
+  .play-sidebar-resize[data-edge='left']::before {
+    left: 0;
+  }
+  .play-sidebar-resize[data-edge='right']::before {
+    right: 0;
   }
 }
 @media (max-width: 959px) {

@@ -40,6 +40,11 @@ const nodeTypes = { position: PositionMapNode };
 const NODE_WIDTH = 140;
 const NODE_HEIGHT = 72;
 
+// React Flow's default floor is 0.5, which stops `fitView` (on open and on the
+// fit button) at half scale: a room wider than twice the sidebar never fits
+// (#4641). Low enough that a large room fits a 240px sidebar.
+const MIN_ZOOM = 0.1;
+
 function fallbackHandles() {
   return [
     { id: null, type: 'target' as const, position: FlowPosition.Top, x: NODE_WIDTH / 2, y: 0 },
@@ -262,6 +267,7 @@ export function TacticalMap({
           nodesDraggable={false}
           nodesConnectable={false}
           fitView
+          minZoom={MIN_ZOOM}
         >
           {!artUrl && <Background gap={40} />}
           <Controls showInteractive={false} />
