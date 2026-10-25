@@ -25,7 +25,7 @@ import type { OccupantLink } from '@/areas/components/TacticalMap';
 import type { OccupantMark, OccupantSummary } from '@/areas/components/PositionMapNode';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import type { PositionTargetShape } from '@/actions/types';
-import { hopsLeftLine } from '../roundActionHelpers';
+import { hopsLeftLine, isMoveAction } from '../roundActionHelpers';
 
 export interface CombatTacticalMapProps {
   /**
@@ -167,8 +167,7 @@ export function CombatTacticalMap({
   const availableActions: PlayerAction[] = actionsData?.results ?? [];
   const moveActions = availableActions.filter(
     (a) =>
-      a.ref.backend === 'registry' &&
-      (a.ref.registry_key === 'move_to_position' || a.ref.registry_key === 'take_position')
+      isMoveAction(a) || (a.ref.backend === 'registry' && a.ref.registry_key === 'take_position')
   );
   // GM-place (#3385): a non-empty list is itself the "am I GM" signal — the
   // adapter (_gm_place_in_position_actions) only ever emits these when the
@@ -240,6 +239,8 @@ export function CombatTacticalMap({
           toast.error(result.message ?? 'Move rejected.');
           return;
         }
+        // A move into held ground ends there; the server's line says so (#4663).
+        if (result.message) toast.success(result.message);
         refreshMapSources();
       })
       .catch((err: unknown) => {

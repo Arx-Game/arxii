@@ -117,6 +117,26 @@ describe('TacticalMap', () => {
     expect(onDispatchMove).toHaveBeenCalledWith(moveAction(2));
   });
 
+  it('a click on a held place takes the plain move, never the pass roll (#4663)', () => {
+    const onDispatchMove = vi.fn();
+    const pass: PlayerAction = {
+      ...moveAction(2),
+      display_name: 'Get past Bandit into Position 2',
+      ref: { ...moveAction(2).ref, registry_key: 'pass_held_ground' },
+    };
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary'), node(2)]}
+        edges={[edge(1, 2)]}
+        occupantsByPosition={new Map()}
+        moveActions={[moveAction(2), pass]}
+        onDispatchMove={onDispatchMove}
+      />
+    );
+    fireEvent.click(screen.getByTestId('tactical-map-node-2'));
+    expect(onDispatchMove).toHaveBeenCalledWith(moveAction(2));
+  });
+
   it('does not dispatch when clicking a node with no matching move action', () => {
     const onDispatchMove = vi.fn();
     render(
