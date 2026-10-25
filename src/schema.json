@@ -45083,18 +45083,7 @@ components:
           type: string
           readOnly: true
           description: Description of this affinity.
-        aura_type:
-          allOf:
-          - $ref: '#/components/schemas/AuraTypeEnum'
-          readOnly: true
-          description: |-
-            Which aura this affinity is, so a Tradition's favored affinities can be compared with a character's aura. Set once for each of the three.
-
-            * `celestial` - Celestial
-            * `primal` - Primal
-            * `abyssal` - Abyssal
       required:
-      - aura_type
       - description
       - id
       - name
@@ -46253,16 +46242,6 @@ components:
         * `other_side` - Other side
         * `third_party` - Third party
         * `staff` - Staff
-    AuraTypeEnum:
-      enum:
-      - celestial
-      - primal
-      - abyssal
-      type: string
-      description: |-
-        * `celestial` - Celestial
-        * `primal` - Primal
-        * `abyssal` - Abyssal
     AuthoredSecret:
       type: object
       description: Staff authoring shape for Secret (#3266). Provenance is fixed server-side.

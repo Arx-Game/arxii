@@ -1001,23 +1001,25 @@ students better than others.
 **Built:**
 - The floor became training points: `magic_training_points` modifier target, read by
   `CharacterDraft.magic_training_pool`; `SchoolingLine.magic_skill_floor` and its constraint removed
-  (data carried by 0299 as `floor x active Magic skill count`, column dropped by 0300; the production
-  dump had no schooling lines to carry).
-- Teaching fit: `Tradition.favored_affinities`, `Affinity.aura_type` (0298 designated the three
-  existing rows), the `TraditionTeachingConfig` singleton and `world/magic/services/teaching_fit.py`.
+  (column dropped by 0298 with no carry: the production dump arxii-20261025T033001Z held 0 schooling
+  lines, so the disposition is "empty in production", ADR-0237).
+- Teaching fit: `Tradition.favored_affinities`, the `TraditionTeachingConfig` singleton and
+  `world/magic/services/teaching_fit.py`, comparing `Affinity` rows by foreign key only: character
+  creation reads the picked Gift resonance's affinity, the Academy the affinity of the resonance on
+  the student's active GIFT thread for their Major Gift.
   Flat Gift and affinity bonuses join the pool only when the draft has some training; the player must
   spend all of it at the ordinary 10 points per step, validated at the Gift stage and written at
-  finalize. A new character's starting aura follows the picked resonance's affinity.
+  finalize.
 - Academy: a course taught under a Tradition lowers the session check's difficulty for a fitting
   student (`_course_ease`), and the offer shows `teaching_line` and `fit_line` on the web and in telnet.
 - Frontend: a training step on the Gift stage (after the Resonance step, stepping by the payload's
   `step`), "Teaches well" tags on Tradition and Gift cards, the
   stance training-points line, the Skills stage Magic group, and the two offer lines.
-- Admin: the `affinity-aura-types` Required content row lists any `Affinity` with a blank
-  `aura_type` (a blank one never fits); the tradition slate shows a stance's points read-only; the `schooling-magic-skill-floors`
+- Admin: the tradition slate shows a stance's points read-only; the `schooling-magic-skill-floors`
   Required content row now lists stances whose distinction has no training effect.
 
-**Not built:** a per-Tradition skill list.
+**Not built:** a per-Tradition skill list. Fit by the character's aura, and a starting aura that
+follows the picked resonance, wait on normalizing the aura's three columns (#4672).
 
 ## Magical skills: Magic skills only (#4547, BUILT 2026-10-21)
 

@@ -80,7 +80,7 @@ and the 5-axis Thread model no longer exist.
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
-| `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target`, `aura_type` (`AffinityType`, blank until set, unique when set: which aura axis this authored row is, so the teaching fit compares by field and never by name; slice 2 of #4659). Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
+| `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target`. Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne. Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
 
 **Note:** `Affinity` and `Resonance` are proper first-class domain models in
@@ -766,10 +766,9 @@ that grows the pool and eases Academy courses.
 **Training points.** The stance's granted distinction carries a `DistinctionEffect` on the
 `magic_training_points` `ModifierTarget` (category `character_creation`, seeded by
 `wire_magic_training_points_target`). `CharacterDraft.magic_training_pool` sums those effects with the
-fit bonuses below. `SchoolingLine.magic_skill_floor` and its check constraint were removed
-(migration `0299_schooling_floor_to_training_points` carried each floor into the distinction's
-effect as `floor x active Magic skill count`, so a rank that bought a floor still buys the same
-total; `0300_remove_schoolingline_magic_skill_floor` dropped the column). The set of skills is
+fit bonuses below. `SchoolingLine.magic_skill_floor` and its check constraint were removed by
+`0298_remove_schoolingline_magic_skill_floor` with no carry: production held no schooling lines
+(dump arxii-20261025T033001Z, 0 rows), so the data disposition is "empty in production" (ADR-0237). The set of skills is
 still every skill in `magic_category_skills()`, the same for every Tradition.
 
 **Teaching fit.** Three authored inputs say how well a Tradition teaches a given student:
@@ -777,11 +776,10 @@ still every skill in `magic_category_skills()`, the same for every Tradition.
 | Surface | Location | Purpose |
 |---------|----------|---------|
 | `TraditionGiftGrant` | `world/magic/models/grants.py` | A row now means a Gift the Tradition's teachers favor (ADR-4659-A); it no longer gates the Gift pick |
-| `Tradition.favored_affinities` | `world/magic/models/gifts.py` | M2M to `Affinity`, blank; reverse name `favoring_traditions`. A student whose current dominant aura is one of these gets the affinity fit. Admin field on `TraditionAdmin` |
-| `Affinity.aura_type` | `world/magic/models/affinity.py` | See the `Affinity` row above; backfilled once in `0298_affinity_aura_type_backfill` for the three existing rows |
+| `Tradition.favored_affinities` | `world/magic/models/gifts.py` | M2M to `Affinity`, blank; reverse name `favoring_traditions`. A student whose Gift resonance's affinity is one of these gets the affinity fit. Admin field on `TraditionAdmin` |
 | `TraditionTeachingConfig` | `world/magic/models/teaching.py` | Singleton (pk=1, lazy-created): `gift_fit_training_bonus` (10), `affinity_fit_training_bonus` (10), `course_ease_gift_fit` (2), `course_ease_affinity_fit` (2). `clean()` requires the two training bonuses to be multiples of `SkillPointBudget.points_per_tier`. Kept apart from `GiftAcquisitionConfig`, which tunes technique acquisition |
-| `teaching_fit(tradition, gift, aura_type)` | `world/magic/services/teaching_fit.py` | The one resolver, returning a `TeachingFit` (`world/magic/types/teaching_fit.py`: `gift_fit`, `affinity_fit`, `favored_gift_name`, `favored_affinity_name`, `training_bonus(config)`, `course_ease(config)`). Gift fit is a `TraditionGiftGrant` for the pair; affinity fit is a favored Affinity whose `aura_type` equals the student's. A blank `aura_type` or no Tradition never fits |
-| `cg_aura_type(resonance)` / `character_aura_type(sheet)` | same file | The aura type character creation passes (the picked Gift resonance's affinity) and the one the Academy passes (`CharacterAura.dominant_affinity`); None when unset or the sheet has no aura |
+| `teaching_fit(tradition, gift, affinity)` | `world/magic/services/teaching_fit.py` | The one resolver, returning a `TeachingFit` (`world/magic/types/teaching_fit.py`: `gift_fit`, `affinity_fit`, `favored_gift_name`, `favored_affinity_name`, `training_bonus(config)`, `course_ease(config)`). Gift fit is a `TraditionGiftGrant` for the pair; affinity fit is the given `Affinity` row being in `favored_affinities` (by pk, through foreign keys only, never names). No affinity or no Tradition never fits |
+| `gift_affinity_for(sheet, gift)` / `student_traits(sheet)` | same file | The Academy's student: the Major Gift and the affinity of the resonance on the sheet's active GIFT thread for it (`specialization.services.gift_threads_for`), None without one. Character creation passes the picked Gift resonance's `affinity` directly. Fit by the character's aura is deferred to #4672 |
 | `major_gift_for(sheet)` | same file | The sheet's Major Gift (first `CharacterGift` of kind MAJOR), None when it has none |
 | `get_teaching_config()` | same file | Lazily creates and returns the `TraditionTeachingConfig` singleton |
 
@@ -816,10 +814,8 @@ or spends less than `required_spend`. Changing the Gift, Tradition, stance or re
 pool, so an allocation that no longer matches fails the stage and the draft cannot submit until it
 is fixed. `_check_no_magic_points` stays.
 
-**Starting aura.** A character created with a picked Gift resonance starts with `CharacterAura`'s 80
-on that resonance's affinity (matched by `Affinity.aura_type`), swapped with Primal: Abyssal starts
-Abyssal 80 / Primal 20 / Celestial 0, Celestial starts Celestial 80 / Primal 0 / Abyssal 20, Primal
-is unchanged. The Glimpse nudge then applies as before; an existing aura is never altered.
+**Starting aura.** A new character's `CharacterAura` starts at the model defaults; the Glimpse nudge
+then applies as before. A starting aura that follows the picked resonance is deferred to #4672.
 
 An orphaned Tradition's rank 1 carries Tradition Training's starting technique pick as a living
 one does. A pick the state no longer opens (switching a rank 2 draft to a TEACHERS_GONE Tradition)
@@ -832,11 +828,10 @@ distinction's `magic_training_points` effect, authored on the Distinction Builde
 and 2 row it shows a read-only "grants <n> magical training points." (rank 0 reads "Rank 0 trains
 none."). Favored Gifts are `TraditionGiftGrant` rows and favored affinities are the `favored_affinities`
 field on the Tradition admin; the tuning numbers are on the `TraditionTeachingConfig` admin page.
-The Required content dashboard has these rows (`required_content.py`; `affinity-aura-types` is REQUIRED, the rest TUNING):
+The Required content dashboard has these rows (`required_content.py`; all TUNING):
 
 | Key | Lists | Consumer |
 |-----|-------|----------|
-| `affinity-aura-types` | Affinities with a blank `aura_type` (a Tradition favoring one never fits a student) | `teaching_fit()` |
 | `schooling-magic-skill-floors` | Schooling ranks 1 and above that give no training points: no granted distinction, no `magic_training_points` effect, or one worth 0 or less at the rank, read through `schooling_training_points()` (key kept so the dashboard row is stable) | `schooling_training_points()` |
 | `magic-skill-courses` | Active Magic skills with no `SKILL_COURSE` offer on an active role that has a `faction_affiliation` (an inactive role's offers are never shown) | `run_skill_course_offer()` |
 | `path-suggestions-name-magic-skills` | `PathSkillSuggestion` rows naming a Magic skill (CG cannot take them) | `PathSkillSuggestionViewSet` |
@@ -881,7 +876,7 @@ including a botch that teaches nothing.
 
 *Teaching fit (slice 2 of #4659).* When the offer's role has `teaches_tradition`, `_course_ease`
 (`effects.py`) resolves `student_fit(tradition, student_traits(sheet))` (the sheet's Major Gift and
-aura type, then `teaching_fit`) and subtracts `course_ease(config)` from `check_difficulty` before the roll, with no floor. The fit
+the affinity of the resonance on its active GIFT thread for that Gift, then `teaching_fit`) and subtracts `course_ease(config)` from `check_difficulty` before the roll, with no floor. The fit
 changes the check only: the roll's outcome still decides the development gained. A role with no
 Tradition is neutral. The menu price (`OfferPrice`) carries two lines for such a course:
 `teaching_line` ("Taught in the manner of <Tradition>") and, when the learner fits,

@@ -27739,14 +27739,6 @@ export interface components {
       readonly name: string;
       /** @description Description of this affinity. */
       readonly description: string;
-      /**
-       * @description Which aura this affinity is, so a Tradition's favored affinities can be compared with a character's aura. Set once for each of the three.
-       *
-       *     * `celestial` - Celestial
-       *     * `primal` - Primal
-       *     * `abyssal` - Abyssal
-       */
-      readonly aura_type: components['schemas']['AuraTypeEnum'];
     };
     /** @description Schema-only shape of the beat line in an aftermath digest (#3551). */
     AftermathBeat: {
@@ -28262,13 +28254,6 @@ export interface components {
      * @enum {string}
      */
     AudienceEnum: 'owner' | 'other_side' | 'third_party' | 'staff';
-    /**
-     * @description * `celestial` - Celestial
-     *     * `primal` - Primal
-     *     * `abyssal` - Abyssal
-     * @enum {string}
-     */
-    AuraTypeEnum: 'celestial' | 'primal' | 'abyssal';
     /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
     AuthoredSecret: {
       readonly id: number;

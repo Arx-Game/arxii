@@ -13,8 +13,11 @@ gives a pool of magical training points and the player spends all of it on Magic
   modifier target (the schooling stance's granted distinction, plus any other distinction that
   carries the effect). `CharacterDraft.magic_training_pool` computes it live.
 - **Flat fit bonuses, only with some training.** When the base is above 0, a Tradition that favors
-  the student's Major Gift adds `gift_fit_training_bonus` and one that favors the student's aura
-  adds `affinity_fit_training_bonus` (`TraditionTeachingConfig`). A draft with no training gets
+  the student's Major Gift adds `gift_fit_training_bonus` and one whose `favored_affinities` holds
+  the affinity of the student's Gift resonance adds `affinity_fit_training_bonus`
+  (`TraditionTeachingConfig`). Character creation reads the picked Gift resonance's `affinity`;
+  the Academy reads the affinity of the resonance on the student's active GIFT thread for their
+  Major Gift. The fit compares `Affinity` rows by foreign key only. A draft with no training gets
   nothing, even when it fits both. The total is rounded down to one skill step.
 - **The ordinary price.** A Magic skill value costs its own value in points, 10 per step, as every
   skill does. Fit raises how much a student has to spend and never changes a price.
@@ -24,8 +27,10 @@ gives a pool of magical training points and the player spends all of it on Magic
   check's difficulty. The roll's outcome still decides how much development is gained.
 
 The fit is resolved in one place, `teaching_fit` in `world/magic/services/teaching_fit.py`, which
-character creation and the Academy both call. Migration 0299 carried each old stance floor into its
-distinction as `floor x active Magic skill count`, and 0300 dropped the column.
+character creation and the Academy both call. Migration 0298 dropped the old stance floor column with
+no carry, because production held no schooling lines (dump arxii-20261025T033001Z, 0 rows): data
+disposition "empty in production" (ADR-0237). Fit by the character's aura, and a starting aura that
+follows the picked resonance, are deferred to #4672, which normalizes the aura's three columns.
 
 ## Rejected
 
@@ -35,6 +40,9 @@ distinction as `floor x active Magic skill count`, and 0300 dropped the column.
 - **Fit as more development per Academy session.** Checks decide gain in this game; fit makes the
   check easier and the outcome decides the rest.
 - **A bonus proportional to the base.** It rounds to odd numbers that do not land on a skill step.
+- **A denormalized aura designation on `Affinity`** (`aura_type`, backfilled by matching names) so
+  the fit could compare a Tradition's affinities with the aura's hard-coded columns. It was a second
+  copy of each row's identity (owner ruling on PR #4671); the aura is normalized in #4672 instead.
 - **Keeping the uniform floor** (ADR-4457-A). One level for every Magic skill gave the player no
   choice of what their schooling was in, and had no place for a Tradition to teach some students
   better than others.

@@ -319,15 +319,17 @@ cuts the stance rows to the same ranks, and `reconcile_offer_picks` drops a pick
 opens. Each stance row carries `training_points` and `grants_distinction_name`.
 
 **Magical training pool (slice 2 of #4659, ADR-4659-B).** The old per-stance Magic skill floor is
-gone: `0299_schooling_floor_to_training_points` carried each floor into the stance distinction's
-`magic_training_points` effect (value `floor x active Magic skill count` at the stance's rank) and
-`0300_remove_schoolingline_magic_skill_floor` dropped the column and its check constraint.
+gone: `0298_remove_schoolingline_magic_skill_floor` dropped the column and its check constraint
+with no carry, because production held no schooling lines (dump arxii-20261025T033001Z, 0 rows):
+disposition "empty in production" (ADR-0237). A stance's points come from its granted
+distinction's `magic_training_points` effect.
 `CharacterDraft.magic_training_pool` sums the draft's distinction effects on that target (`base`),
 then adds the Tradition's flat fit bonuses from `TraditionTeachingConfig` (`gift_fit_training_bonus`
 when the Tradition favors the picked Gift, `affinity_fit_training_bonus` when it favors the picked
 Gift resonance's affinity), only when `base > 0`, and rounds the total down to a multiple of
 `SkillPointBudget.points_per_tier`. Fit comes from `world.magic.services.teaching_fit.teaching_fit`,
-with the aura type from `cg_aura_type(resonance)`. A Magic skill value costs its own value in points,
+given the picked resonance's `affinity` (the `Resonance.affinity` foreign key; the fit compares
+`Affinity` rows, never names). A Magic skill value costs its own value in points,
 the ordinary 10 per step. `required_spend` is `min(total, active Magic skill count x
 max_skill_value)`.
 
@@ -344,8 +346,8 @@ allocation fails the stage and the draft cannot submit; the funnel step reopens 
 teach any Major Gift, ADR-4659-A).
 
 Finalize: `_create_skill_values` writes exactly the allocated Magic skills (CHARACTER_CREATION
-provenance), replacing the floor write. `magic_writer._glimpse` starts a new `CharacterAura` with its
-80 on the picked resonance's affinity (`Affinity.aura_type`), swapped with Primal. The skills stage
+provenance), replacing the floor write. `magic_writer._glimpse` starts a new `CharacterAura` at the model
+defaults (Primal 80); a starting aura that follows the picked resonance waits on #4672. The skills stage
 refuses points in a Magic skill or one of its specializations (`CharacterDraft._check_no_magic_points`,
 from `validate_path_skills`), so the training pool is the only creation source of Magic skills. Full
 account: [magic.md](magic.md), "Tradition training and Academy skill courses".

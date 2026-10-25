@@ -36,16 +36,18 @@
 - **Tradition training and Academy skill courses (#4457, ADR-4457-A; pool and fit #4659,
   ADR-4659-B):** a Tradition's schooling stance gives magical training points to spend on Magic
   skills at creation (the granted distinction's `magic_training_points` effect, read by
-  `CharacterDraft.magic_training_pool`; the old `SchoolingLine.magic_skill_floor` column was carried
-  into it by migration 0299 and dropped by 0300). A Tradition's teaching fit
-  (`world/magic/services/teaching_fit.py`: `teaching_fit`, `cg_aura_type`, `character_aura_type`,
-  `major_gift_for`, `student_traits`, `student_fit` (the Academy's entry),
-  `get_teaching_config`) comes from `TraditionGiftGrant` (favored Gifts),
-  `Tradition.favored_affinities` and `Affinity.aura_type`, tuned by the `TraditionTeachingConfig`
+  `CharacterDraft.magic_training_pool`; the old `SchoolingLine.magic_skill_floor` column was dropped
+  by migration 0298 with no carry, since production held no schooling lines, ADR-0237 "empty in
+  production"). A Tradition's teaching fit
+  (`world/magic/services/teaching_fit.py`: `teaching_fit`, `major_gift_for`, `gift_affinity_for`,
+  `student_traits`, `student_fit` (the Academy's entry), `get_teaching_config`) comes from
+  `TraditionGiftGrant` (favored Gifts) and `Tradition.favored_affinities` (compared with an
+  `Affinity` row by foreign key: the picked Gift resonance's in character creation, the resonance on
+  the student's Major Gift thread in the Academy), tuned by the `TraditionTeachingConfig`
   singleton. Fit adds a flat bonus to the pool only when the draft has some training, and eases
   Academy course checks; it never gates. The Gift stage validates `draft_data["magic_skills"]`
-  against the pool, finalize writes it, and a new character's starting aura follows the picked
-  resonance's affinity. `SCHOOLING_MAX_RANK_BY_STATE`
+  against the pool and finalize writes it. Aura-based fit and starting aura are #4672.
+  `SCHOOLING_MAX_RANK_BY_STATE`
   (`character_creation/constants.py`) sets which states open which stances: LIVING_MASTERS up to
   rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. CG skill points never buy a Magic skill or
   one of its specializations. A character catches up by use, weekly training, or an Academy
