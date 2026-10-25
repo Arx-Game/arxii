@@ -156,7 +156,7 @@ class Migration(migrations.Migration):
             name="min_crossing_level",
             field=models.PositiveSmallIntegerField(
                 default=3,
-                help_text="Thread level at which this bonus becomes selectable. Any level from 0 up; low levels are the early flourishes (#4099). Default 3.",
+                help_text="Shown thread level (the number players see; a thread stored at 30 shows 3). The bonus becomes selectable here; low levels are the early flourishes (#4099). Default 3.",
             ),
         ),
         migrations.AlterField(

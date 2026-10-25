@@ -11,6 +11,7 @@ from evennia.utils.create import create_object
 from world.magic.constants import EffectKind, MagicActivity, TargetKind
 from world.magic.services.magic_skills import activity_skill_terms
 from world.magic.services.pull_effects import get_pull_effects_for_thread
+from world.magic.services.threads import shown_thread_level
 
 if TYPE_CHECKING:
     from world.battles.models import Battle, BattleSide, BattleVehicle
@@ -101,13 +102,14 @@ def companion_capacity(character_sheet: CharacterSheet, gift: Gift) -> int:
     """Total Companion Capacity character_sheet has via gift's Thread level.
 
     Sums tier-0 (passive, always-on) FLAT_BONUS ThreadPullEffect rows whose
-    min_thread_level is at or below the thread's current level — mirrors the
-    ``row.min_thread_level > thread.level`` skip idiom in world/magic/handlers.py.
+    min_thread_level is at or below the thread's shown level (stored // 10, #4585),
+    mirroring the skip idiom in world/magic/handlers.py.
     Adds a flat Stables capacity bonus (#1863).
     """
     thread = _companion_thread(character_sheet, gift)
     rows = get_pull_effects_for_thread(thread, tier=0, effect_kind=EffectKind.FLAT_BONUS)
-    base = sum(row.flat_bonus_amount for row in rows if row.min_thread_level <= thread.level)
+    shown_level = shown_thread_level(thread.level)
+    base = sum(row.flat_bonus_amount for row in rows if row.min_thread_level <= shown_level)
     return base + stables_capacity_bonus_for_sheet(character_sheet)
 
 

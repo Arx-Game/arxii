@@ -14,7 +14,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
   Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501); and Magic skill floor (#4457,
-  ADR-4457-A; Tradition Training gains it)
+  ADR-4457-A; Tradition Training gains it); and Shown thread level / level cap (#4585)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md) - also holds the #4581 vow added effect terms
   (ADR-4581-A): Vow added effect, Upgrade (of a vow added effect), Added-effect firing
   (_Avoid_: vow rider, vow switch)

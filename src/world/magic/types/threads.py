@@ -32,7 +32,7 @@ class ThreadImbueResult:
         "NONE",
         "XP_LOCK",
         "ANCHOR_CAP",
-        "PATH_CAP",
+        "LEVEL_CAP",
         "INSUFFICIENT_BUCKET",
         "CROSSING_REQUIREMENT",
     ]

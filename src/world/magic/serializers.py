@@ -999,9 +999,9 @@ class ThreadSerializer(serializers.ModelSerializer):
     account (staff may pass any sheet).
 
     Read-only computed fields (SerializerMethodFields):
-    - path_cap: the path-side cap (compute_path_cap)
+    - level_cap: the character-level cap (compute_level_cap)
     - anchor_cap: the anchor-side cap (compute_anchor_cap)
-    - effective_cap: min(path_cap, anchor_cap)
+    - effective_cap: min(level_cap, anchor_cap)
     """
 
     resonance_name = serializers.CharField(source=_SOURCE_RESONANCE_NAME, read_only=True)
@@ -1016,7 +1016,7 @@ class ThreadSerializer(serializers.ModelSerializer):
     character_sheet_id = serializers.IntegerField(write_only=True, required=True)
     name = serializers.CharField(required=False, allow_blank=True, default="")
     description = serializers.CharField(required=False, allow_blank=True, default="")
-    path_cap = serializers.SerializerMethodField()
+    level_cap = serializers.SerializerMethodField()
     anchor_cap = serializers.SerializerMethodField()
     effective_cap = serializers.SerializerMethodField()
 
@@ -1035,7 +1035,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "description",
             "level",
             "developed_points",
-            "path_cap",
+            "level_cap",
             "anchor_cap",
             "effective_cap",
             "retired_at",
@@ -1047,7 +1047,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "owner",
             "level",
             "developed_points",
-            "path_cap",
+            "level_cap",
             "anchor_cap",
             "effective_cap",
             "retired_at",
@@ -1055,11 +1055,11 @@ class ThreadSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-    def get_path_cap(self, obj: Thread) -> int:
-        """Return the path-side cap for this thread's owner."""
-        from world.magic.services.threads import compute_path_cap  # noqa: PLC0415
+    def get_level_cap(self, obj: Thread) -> int:
+        """Return the character-level cap for this thread's owner (#4585)."""
+        from world.magic.services.threads import compute_level_cap  # noqa: PLC0415
 
-        return compute_path_cap(obj.owner)
+        return compute_level_cap(obj.owner)
 
     def get_anchor_cap(self, obj: Thread) -> int:
         """Return the anchor-side cap for this thread."""
@@ -1068,13 +1068,10 @@ class ThreadSerializer(serializers.ModelSerializer):
         return compute_anchor_cap(obj)
 
     def get_effective_cap(self, obj: Thread) -> int:
-        """Return min(path_cap, anchor_cap)."""
-        from world.magic.services.threads import (  # noqa: PLC0415
-            compute_anchor_cap,
-            compute_path_cap,
-        )
+        """Return min(level_cap, anchor_cap)."""
+        from world.magic.services.threads import compute_effective_cap  # noqa: PLC0415
 
-        return min(compute_path_cap(obj.owner), compute_anchor_cap(obj))
+        return compute_effective_cap(obj)
 
     def validate_target_kind(self, value: str) -> str:
         """Ensure the discriminator is a valid TargetKind."""
@@ -2106,7 +2103,7 @@ class SoulTetherDetailSerializer(serializers.Serializer):
         return thread.hollow_current if thread is not None else 0
 
     def get_hollow_max(self, obj: object) -> int:
-        """Return the Sinner's Hollow maximum (thread.level * 10)."""
+        """Return the Sinner's Hollow maximum (``_compute_hollow_max``, shown level × mult)."""
         from world.magic.constants import TargetKind  # noqa: PLC0415
         from world.magic.models import Thread  # noqa: PLC0415
 
@@ -2123,7 +2120,11 @@ class SoulTetherDetailSerializer(serializers.Serializer):
             target_capstone=capstone,
             retired_at__isnull=True,
         ).first()
-        return thread.level * 10 if thread is not None else 0
+        if thread is None:
+            return 0
+        from world.magic.services.soul_tether import _compute_hollow_max  # noqa: PLC0415
+
+        return _compute_hollow_max(thread)
 
     def get_sineater_lifetime_helped(self, obj: object) -> int:
         """Return the Sineater's total lifetime_helped across all resonances for this bond."""

@@ -395,19 +395,12 @@ ANCHOR_CAP_FACET_DIVISOR: int = 50
 500 lifetime resonance → cap level 10. Tunable via playtest.
 """
 
-ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE: int = 20
-"""Hard ceiling on FACET anchor cap, scaled by character path stage.
+PATH_LEVEL_CAP_MULTIPLIER: int = 10
+"""Stored points per character level, for caps keyed on character level.
 
-path_stage × 20 = ceiling. At stage 1, hard max = 20 (well above path cap of 10).
-At stage 6, hard max = 120 (well above path cap of 60). Prevents runaway at the
-extreme tail of lifetime accumulation.
-"""
-
-ANCHOR_CAP_GIFT_PER_STAGE: int = 10
-"""GIFT thread anchor cap per path stage (#1580).
-
-path_stage × 10 = GIFT anchor cap. At stage 2, cap = 20 (matches path cap of 20).
-A species gift thread can grow in lockstep with the character's path progression.
+Thread level cap: ``get_character_path_level(character) * PATH_LEVEL_CAP_MULTIPLIER``
+(#4585), so a level-4 character's threads stop at stored 40 (shown 4). The sanctum
+Homecoming cap (``services/sanctum_lvm.py``) reads the same constant.
 """
 
 

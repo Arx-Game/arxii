@@ -813,7 +813,8 @@ admin all converge on the same service layer.
   `ThreadWeavingUnlock` — the anchor cap (`sanctum.feature_instance.level × 10`)
   is the only gate at imbue time.
 - `ThreadCrossingThreshold` - Authored gate at thread-level PathStage crossing
-  levels (3, 6, 11, 16, 21). Keyed on `(target_kind, level)` so a level-3 GIFT
+  levels (3, 6, 11, 16, 21), on the SHOWN thread scale (stored 30 = shown 3, #4585).
+  Keyed on `(target_kind, level)` so a level-3 GIFT
   crossing can require different things than a level-3 COVENANT_ROLE crossing.
   Requirements attach via the polymorphic `thread_crossing_threshold` FK on
   `AbstractUnlockRequirement` (the generalized base formerly
@@ -823,7 +824,18 @@ admin all converge on the same service layer.
   before advancing to a crossing level; if requirements are unmet, it sets
   `blocked_by="CROSSING_REQUIREMENT"` and stops. `is_crossing_level(level)`
   in `world/classes/services.py` is the single source of truth for crossing
-  detection.
+  detection, applied to `shown_thread_level(next_level)` only when `next_level % 10 == 0`.
+- **Thread caps (#4585).** `compute_level_cap(sheet)` = character level ×
+  `PATH_LEVEL_CAP_MULTIPLIER` (10; never 0, since `get_character_path_level` returns at
+  least 1). `compute_effective_cap` = min(level cap, anchor cap) is the ONLY place the
+  level cap applies; anchor caps hold only what the anchor imposes (ORGANIZATION = the
+  org grant cap, GIFT = the level cap, FACET = `lifetime // ANCHOR_CAP_FACET_DIVISOR`).
+  No cap reads Path stage. Blocked reason `LEVEL_CAP`; serializer field `level_cap`.
+- **Shown thread level (#4585).** Stored levels are ×10; every authored thread threshold
+  (crossings, `unlock_thread_level` on variants/sub-roles/`CovenantRoleGiftGrant`/
+  `VowAddedEffect`, `min_crossing_level`, `ThreadPullEffect.min_thread_level`,
+  `CREATION_PERSONALIZATION_MAX_LEVEL`) is a shown level. Compare through
+  `shown_thread_level(level)` (`services/threads.py`), never the raw `thread.level`.
 - `ImbuingProseTemplate` - Fallback prose for the Imbuing ritual keyed on
   `(resonance, target_kind)`. The row with both NULL is the universal fallback.
 - `Ritual` - Authored magical procedure. Dispatch kinds: `SERVICE` →
@@ -1042,8 +1054,8 @@ also standalone-callable. (`world/covenants/discovery.py` re-exports it as
 - `Gift.resonances` is repurposed to the **supported set** (weave constraint, not the
   cast-time value) per ADR-0052.
 
-**GIFT anchor cap (#1580):** `compute_anchor_cap` now handles `TargetKind.GIFT`:
-`_current_path_stage(thread.owner) × ANCHOR_CAP_GIFT_PER_STAGE` (=10). GIFT threads are
+**GIFT anchor cap (#1580, #4585):** `compute_anchor_cap` handles `TargetKind.GIFT` by
+returning `compute_level_cap(thread.owner)` (character level × 10). GIFT threads are
 always in-action (`_ALWAYS_IN_ACTION_KINDS`; a species gift is intrinsic). The frontend CG
 resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
 `selected_gift_resonance_id`). Proven end-to-end by

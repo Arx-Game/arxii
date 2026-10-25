@@ -171,6 +171,7 @@ def _court_pull_would_have_effect(thread: Thread, target_persona_id: int) -> boo
         _regard_polarity_matches,
         _resolve_court_leader_persona,
     )
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
     from world.npc_services.regard import get_regard  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
@@ -192,7 +193,9 @@ def _court_pull_would_have_effect(thread: Thread, target_persona_id: int) -> boo
     if regard == 0:
         return False
 
-    rows = get_pull_effects_for_thread(thread, min_thread_level__lte=thread.level)
+    rows = get_pull_effects_for_thread(
+        thread, min_thread_level__lte=shown_thread_level(thread.level)
+    )
     return any(_regard_polarity_matches(row.regard_polarity, regard) for row in rows)
 
 

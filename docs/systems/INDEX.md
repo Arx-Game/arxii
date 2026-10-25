@@ -444,11 +444,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - ThreadWeaving acquisition: `compute_thread_weaving_xp_cost(character_sheet, unlock) -> int`,
     `accept_thread_weaving_unlock(character_sheet, unlock, teacher=None)`
   - Cap helpers: `compute_anchor_cap(thread) -> int` (FACET uses
-    `lifetime_earned // DIVISOR` capped at `path_stage × HARD_MAX_PER_STAGE`;
-    COVENANT_ROLE uses `current_level × 10`; SANCTUM uses
-    `sanctum.feature_instance.level × 10`; GIFT: `path_stage × ANCHOR_CAP_GIFT_PER_STAGE`
-    (=10) — built #1580),
-    `compute_path_cap(character_sheet) -> int`, `compute_effective_cap(thread) -> int`
+    `lifetime_earned // DIVISOR`; COVENANT_ROLE uses `current_level × 10`; SANCTUM uses
+    `sanctum.feature_instance.level × 10`; GIFT: the owner's level cap; ORGANIZATION: the
+    org's granted cap), `compute_level_cap(character_sheet) -> int` (character level ×
+    10, #4585), `compute_effective_cap(thread) -> int` (min of the two),
+    `shown_thread_level(level) -> int` (`level // 10`; every thread threshold compares
+    against it, #4585)
   - Specialization engine (ADR-0055 — #1578, `world/magic/specialization/services.py`):
     `resolve_specialized_variant(*, entity, character)` (the one resolver — Technique →
     `_ResolvedTechnique` value object with variant deltas; CovenantRole → cached-handler

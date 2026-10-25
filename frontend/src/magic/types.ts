@@ -155,7 +155,7 @@ export interface ImbueResponse {
   new_developed_points?: number;
   /**
    * Why the imbue was blocked (or "NONE" if it succeeded fully).
-   * NONE | XP_LOCK | ANCHOR_CAP | PATH_CAP | INSUFFICIENT_BUCKET
+   * NONE | XP_LOCK | ANCHOR_CAP | LEVEL_CAP | INSUFFICIENT_BUCKET
    */
   blocked_by?: string;
 }
