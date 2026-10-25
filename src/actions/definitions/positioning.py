@@ -34,8 +34,10 @@ from world.areas.positioning.services import (
     take_position,
 )
 from world.areas.positioning.traversal import best_crossing_cost, traversals_of
+from world.combat.services.held_ground import held_position_ids_against, holder_names
 from world.combat.services.movement_budget import (
     active_combat_participant,
+    hops_for,
     hops_left,
     spend_combat_hop,
 )
@@ -44,6 +46,8 @@ from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.combat.models import CombatParticipant
+
+STOPPED_BY_HOLDER = "You are stopped by {name}."
 
 
 @dataclass
@@ -102,20 +106,39 @@ class MoveToPositionAction(Action):
                     message=f"That crossing takes {cost} hops; you have {left} left.",
                 )
 
+        # Read before the move: a mover's own place never counts as held against her.
+        held = held_position_ids_against(actor) if participant is not None else frozenset()
         try:
             move_to_position(actor, target, traversals=traversals)
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
         # The prerequisite let a DECLARING-round move through; it now costs its hops.
+        message = None
         if participant is not None:
             spend_combat_hop(participant, cost)
+            message = _stop_in_held_ground(actor, participant, target, held)
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         send_room_state(actor_state)
 
-        return ActionResult(success=True)
+        return ActionResult(success=True, message=message)
+
+
+def _stop_in_held_ground(
+    actor: ObjectDB, participant: CombatParticipant, target: Position, held: frozenset[int]
+) -> str | None:
+    """Entering a place a ready enemy holds ends the actor's movement this round (#4663).
+
+    Spends every hop she has left and returns "You are stopped by <enemy>.", or None when
+    ``target`` is not in ``held`` (``held_position_ids_against`` read before the move).
+    """
+    if target.pk not in held:
+        return None
+    participant.hops_used = hops_for(participant.character_sheet)
+    participant.save(update_fields=["hops_used"])
+    return STOPPED_BY_HOLDER.format(name=holder_names(actor).get(target.pk, ""))
 
 
 def _declaring_participant(actor: ObjectDB) -> CombatParticipant | None:

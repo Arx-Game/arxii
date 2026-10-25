@@ -8,7 +8,8 @@ the ones movers rely on: a route starts at the origin and ends at the goal, ever
 crosses an edge that ``edge_crossing_cost`` opens to that mover, ``step_costs`` agrees
 with it, and only a flier ever stands on an aerial position. On the ground alone, the
 positions a walker can route to are exactly the ones ``reachable_positions`` (the walker
-rule's own search) finds.
+rule's own search) finds. With a random set of held places (``stop_at``, #4663), no
+route ever stands on a held place anywhere but its last position.
 """
 
 from __future__ import annotations
@@ -150,3 +151,27 @@ class PathServiceHoldsItsContract(HypothesisTestCase):
             if find_path(origin, lambda p, goal=goal: p == goal, traversal=walks) is not None
         }
         self.assertEqual(routed, reachable_positions(walker) | {origin})
+
+    @given(rooms(), traversals, st.data())
+    def test_held_ground_only_ever_ends_a_route(
+        self,
+        room: tuple[int, list[tuple[int, int, str, bool]]],
+        traversal: str,
+        data: st.DataObject,
+    ) -> None:
+        ground = self.build(*room)
+        held = data.draw(st.sets(st.sampled_from(range(len(ground)))))
+        stop_at = frozenset(ground[i].pk for i in held)
+        for origin in ground:
+            for goal in ground:
+                path = find_path(
+                    origin,
+                    lambda p, goal=goal: p == goal,
+                    traversal=traversal,
+                    stop_at=stop_at,
+                )
+                if path is None:
+                    continue
+                self.assertEqual((path[0], path[-1]), (origin, goal))
+                walked_through = [p.name for p in path[1:-1] if p.pk in stop_at]
+                self.assertEqual(walked_through, [], "a route walked on past held ground")

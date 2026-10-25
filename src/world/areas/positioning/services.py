@@ -1089,6 +1089,7 @@ def find_path(
     *,
     traversal: str,
     through_barriers: bool = False,
+    stop_at: frozenset[int] = frozenset(),
 ) -> list[Position] | None:
     """The cheapest route from ``origin`` to the first position ``goal_test`` accepts.
 
@@ -1103,6 +1104,9 @@ def find_path(
     ``through_barriers`` (#4609) is the barrier-ignoring route an NPC weighs before it
     bashes: a ground wall that damage can bring down (``is_breakable_barrier``) counts
     as open at 1 hop. An indestructible seal stays closed.
+
+    ``stop_at`` (#4663) is held ground: a position there (other than the origin) may be
+    the goal, but the route never walks on past it, so it only ever ends a route.
     """
     graph = _room_graph(origin)
     best: dict[int, tuple[int, int]] = {origin.pk: (0, 0)}
@@ -1116,6 +1120,8 @@ def find_path(
         done.add(pk)
         if goal_test(graph.nodes[pk]):
             return _walk_back(graph, parent, pk)
+        if pk in stop_at and pk != origin.pk:
+            continue  # held ground: a walker who enters stops there
         for other, edge in graph.neighbours[pk]:
             hop = _hop_cost(graph, edge, traversal, through_barriers=through_barriers)
             if hop is None or other in done:

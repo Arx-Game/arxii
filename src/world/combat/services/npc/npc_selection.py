@@ -24,6 +24,7 @@ from world.combat.models import (
     ThreatRecord,
 )
 from world.combat.services.damage.swarm import swarm_attack_count
+from world.combat.services.held_ground import routing_profile
 from world.combat.services.npc.companion_orders import _COMPANION_HOLD, _apply_companion_order
 from world.combat.services.npc.npc_attack import _execute_npc_attack
 from world.combat.services.npc.npc_cooldowns import _batch_fetch_cooldown_data
@@ -57,7 +58,7 @@ from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
-    from world.combat.types import TacticsInputs
+    from world.combat.types import MovementProfile, TacticsInputs
 
 
 @dataclass
@@ -402,7 +403,7 @@ def plan_opponent_round(
         return []  # a companion HOLD order
     target_pool, targeting_participants = resolved
 
-    profile = opponent.movement_profile
+    profile = routing_profile(opponent)
     grounding = ctx.tactics.grounding_entry_ids
     pool_entries = ctx.entries_by_pool.get(opponent.threat_pool_id, [])
     usable = usable_entries(pool_entries, profile, grounding)
@@ -437,7 +438,14 @@ def plan_opponent_round(
         )
         if not strikeable:
             _plan_with_no_one_in_reach(
-                opponent, ctx, origin, target_pool, eligible, usable, shelter=shelter
+                opponent,
+                ctx,
+                origin,
+                target_pool,
+                eligible,
+                usable,
+                shelter=shelter,
+                profile=profile,
             )
             return []
         grounder = grounding_strike(
@@ -525,9 +533,12 @@ def _plan_with_no_one_in_reach(  # noqa: PLR0913 - the ladder's per-opponent inp
     usable: list[ThreatPoolEntry],
     *,
     shelter: Position | None,
+    profile: MovementProfile,
 ) -> None:
-    """The move plan of an opponent no hostile is in reach of this round."""
-    profile = opponent.movement_profile
+    """The move plan of an opponent no hostile is in reach of this round.
+
+    ``profile`` is the opponent's routing profile, held ground included (#4663).
+    """
     if shelter is not None:
         write_plan(opponent, ctx, kind=OpponentMoveKind.SHELTER, goal_position=shelter)
     elif eligible:

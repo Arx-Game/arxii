@@ -37,6 +37,7 @@ from world.combat.models import (
     CombatParticipant,
     ThreatPoolEntry,
 )
+from world.combat.services.held_ground import routing_profile
 from world.combat.services.npc.npc_targeting import (
     _npc_action_target_pool,
     _select_opponent_targets,
@@ -110,7 +111,7 @@ def _cheapest_route(
     profile: MovementProfile,
 ) -> list[Position] | None:
     """The cheapest route to a goal node, or None; the route may exceed the hop budget."""
-    return find_path(origin, goal_test, traversal=profile.traversal)
+    return find_path(origin, goal_test, traversal=profile.traversal, stop_at=profile.stop_at)
 
 
 def can_strike_this_round(
@@ -438,7 +439,7 @@ def advance_opponent(
                 opponent=opponent, round_number=move_row.round_number
             ).select_related("threat_entry")
         )
-    profile = opponent.movement_profile
+    profile = routing_profile(opponent)
     with mover_origin(opponent, profile) as origin:
         if origin is None:
             return None

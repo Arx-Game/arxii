@@ -608,11 +608,15 @@ class MovementProfile:
     Read from its CreatureTemplate, or the NPC defaults when it has none
     (``CombatOpponent.movement_profile``). Values are ``CreatureTactics`` and
     ``CreatureTraversal`` members.
+
+    ``stop_at`` is the held ground its routes end in and never walk past (#4663): empty
+    on the bare profile, filled for one planning pass by ``held_ground.routing_profile``.
     """
 
     tactics: str
     speed_hops: int
     traversal: str
+    stop_at: frozenset[int] = frozenset()
 
 
 @dataclass

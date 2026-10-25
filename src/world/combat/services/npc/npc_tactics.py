@@ -69,6 +69,7 @@ from world.combat.models import (
     NpcTacticsConfig,
     ThreatPoolEntry,
 )
+from world.combat.services.held_ground import routing_profile
 from world.combat.services.npc.npc_movement import (
     ReachMemo,
     _is_live,
@@ -383,7 +384,7 @@ def _answers_from_its_place(
     opponent: CombatOpponent, attacker_pos: Position, entries: list[ThreatPoolEntry]
 ) -> bool:
     """Whether ``opponent`` can hit ``attacker_pos`` with an entry it would use."""
-    profile = opponent.movement_profile
+    profile = routing_profile(opponent)
     if is_mindless(profile):
         entries = [e for e in entries if not entry_grounds_fliers(e)]
     with mover_origin(opponent, profile) as origin:
@@ -449,10 +450,12 @@ def shelter_goal(  # noqa: PLR0913 - the ladder's per-opponent inputs
                 memo.reaches(node, pos, StrikeDelivery.MELEE) for pos in ally_positions
             )
 
-        path = find_path(origin, covered_with_ally, traversal=profile.traversal)
+        path = find_path(
+            origin, covered_with_ally, traversal=profile.traversal, stop_at=profile.stop_at
+        )
         if path is not None and _route_cost(path, profile) <= profile.speed_hops:
             return path[-1]
-    path = find_path(origin, covered, traversal=profile.traversal)
+    path = find_path(origin, covered, traversal=profile.traversal, stop_at=profile.stop_at)
     return path[-1] if path is not None else None
 
 
@@ -588,8 +591,14 @@ def plan_approach(  # noqa: PLR0913 - the ladder's steps 4 to 8 read as one tabl
         return
     deliveries = {e.delivery for e in usable} or {StrikeDelivery.MELEE}
     approach = _approach_test(hostiles, deliveries, ctx.reach_memo)
-    free = find_path(origin, approach, traversal=profile.traversal)
-    wall = find_path(origin, approach, traversal=profile.traversal, through_barriers=True)
+    free = find_path(origin, approach, traversal=profile.traversal, stop_at=profile.stop_at)
+    wall = find_path(
+        origin,
+        approach,
+        traversal=profile.traversal,
+        through_barriers=True,
+        stop_at=profile.stop_at,
+    )
     blocking = None
     if wall is not None:
         blocking = first_closed_edge(wall, traversal=profile.traversal)
@@ -703,7 +712,10 @@ def _retreat_route(
     best = max(own, key=lambda pk: (distance(pk), -own[pk], -pk))
     if distance(best) <= distance(origin.pk):
         return None, in_reach
-    return find_path(origin, lambda n: n.pk == best, traversal=profile.traversal), in_reach
+    path = find_path(
+        origin, lambda n: n.pk == best, traversal=profile.traversal, stop_at=profile.stop_at
+    )
+    return path, in_reach
 
 
 def plan_retreat(opponent: CombatOpponent, ctx: NpcRoundContext) -> bool:
@@ -724,7 +736,7 @@ def plan_retreat(opponent: CombatOpponent, ctx: NpcRoundContext) -> bool:
         allegiances=ctx.allegiances,
         active_opponents=ctx.all_active,
     )
-    profile = opponent.movement_profile
+    profile = routing_profile(opponent)
     with mover_origin(opponent, profile) as origin:
         if origin is None or not _placed(hostiles):
             _flee(opponent, announce=False)
@@ -818,19 +830,25 @@ def _run_shelter(
     opponent: CombatOpponent, move: CombatOpponentMove, on_hop: HopHook | None
 ) -> bool:
     """Walk for the planned cover (or, when that is gone, the nearest covered position)."""
-    profile = opponent.movement_profile
+    profile = routing_profile(opponent)
     goal = move.goal_position
     with mover_origin(opponent, profile) as origin:
         if origin is None:
             return False
         path = None
         if goal is not None:
-            path = find_path(origin, lambda n: n.pk == goal.pk, traversal=profile.traversal)
+            path = find_path(
+                origin,
+                lambda n: n.pk == goal.pk,
+                traversal=profile.traversal,
+                stop_at=profile.stop_at,
+            )
         if path is None:
             path = find_path(
                 origin,
                 lambda n: n.is_roofed or n.screens_ranged,
                 traversal=profile.traversal,
+                stop_at=profile.stop_at,
             )
         if path is None:
             return False
@@ -848,7 +866,7 @@ def _run_bash(
     edge = PositionEdge.objects.select_related(
         "gating_challenge__template", "source_rampart__element_profile"
     ).get(pk=move.barrier_edge_id)
-    profile = opponent.movement_profile
+    profile = routing_profile(opponent)
     if not is_breakable_barrier(edge) or edge.is_passable:
         advance = CombatOpponentMove(
             opponent=opponent, round_number=move.round_number, kind=OpponentMoveKind.ADVANCE
@@ -864,7 +882,9 @@ def _run_bash(
         if origin is None:
             return
         if origin.pk not in ends:
-            path = find_path(origin, lambda n: n.pk in ends, traversal=profile.traversal)
+            path = find_path(
+                origin, lambda n: n.pk in ends, traversal=profile.traversal, stop_at=profile.stop_at
+            )
             if path is not None:
                 result.moved = walk_and_announce(opponent, path, profile, on_hop=on_hop) is not None
         here = target_position(opponent)
@@ -924,7 +944,7 @@ def _run_retreat(
     """Back away, then leave the fight when no enemy can strike it where it ends
     (``_can_strike_at``: a player's best technique reach, an opponent's deliveries) or
     the retreat limit is hit."""
-    profile = opponent.movement_profile
+    profile = routing_profile(opponent)
     hostiles, _ = _live_target_pool(opponent)
     memo = ReachMemo()
     with mover_origin(opponent, profile) as origin:

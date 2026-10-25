@@ -1119,6 +1119,29 @@ def _hops_left_note(character: ObjectDB) -> str:
 _CROSSING_VERB = {CreatureTraversal.CLIMBS: "Climb over", CreatureTraversal.LEAPS: "Leap over"}
 
 
+_HELD_BY_NOTE = "Held by {name}: you'd stop there."
+
+
+def _held_place_holders(character: ObjectDB) -> dict[int, str]:
+    """Who holds each place held against ``character``, by position pk (#4663)."""
+    from world.combat.services.held_ground import (  # noqa: PLC0415
+        held_position_ids_against,
+        holder_names,
+    )
+
+    held = held_position_ids_against(character)
+    if not held:
+        return {}
+    return {pk: name for pk, name in holder_names(character).items() if pk in held}
+
+
+def _move_description(neighbor: Position, move_note: str, holders: dict[int, str]) -> str:
+    """A move entry's note: who holds the place, else the hops left, else its description."""
+    if neighbor.pk in holders:
+        return _HELD_BY_NOTE.format(name=holders[neighbor.pk])
+    return move_note if move_note else neighbor.description
+
+
 def _declaring_hops_left(character: ObjectDB) -> int | None:
     """Hops left this round in a declaring encounter, or None outside one."""
     from world.combat.services.movement_budget import (  # noqa: PLC0415
@@ -1230,6 +1253,9 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     # a refusal shows on every move, and a live declaring round shows the hops left.
     move_met, move_reason = CombatMovementPrerequisite().is_met(character)
     move_note = _hops_left_note(character) if move_met else ""
+    # A place a ready enemy holds ends her movement on entry (#4663); only a declaring
+    # round with hops left has a note, and only then does held ground matter.
+    holders = _held_place_holders(character) if move_note else {}
 
     # Only an airborne mover steps onto an AERIAL position; nobody else is offered one.
     airborne = is_aerial(character)
@@ -1251,7 +1277,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
                 backend=ActionBackend.REGISTRY,
                 display_name=f"Move to {neighbor.name}",
                 ref=ref,
-                description=move_note if move_note else neighbor.description,
+                description=_move_description(neighbor, move_note, holders),
                 action_category=ActionCategory.PHYSICAL,
                 prerequisite_met=move_met,
                 prerequisite_reasons=[] if move_met else [move_reason],
