@@ -243,11 +243,11 @@ describe('BattleMap', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it('moves to the square under a clicked token in a target place', () => {
+  it('moves with no square when a token in a target place is clicked', () => {
     const props = renderMap();
     const tokens = screen.getAllByTestId('occupant-token');
     fireEvent.click(tokens.find((t) => t.textContent?.includes('Harrow'))!);
-    expect(props.onDispatchMove).toHaveBeenCalledWith(props.moveActions[0], { x: 7, y: 3 });
+    expect(props.onDispatchMove).toHaveBeenCalledWith(props.moveActions[0], null);
   });
 
   it('says a place with no authored area has no squares when the viewer stands in it', () => {

@@ -1,6 +1,6 @@
 /**
  * CombatTacticalMap — spatial rendering of the encounter's Position graph
- * (#2006), mounted as a rail tab in CombatRail alongside CombatTurnPanel
+ * (#2006), the main-column view of a fight (CombatMainMap sets its height)
  * (CombatRail renders in-scene on /scenes/:id — #2197). Drawn by BattleMap
  * (#4670): places as areas of squares, combatants as tokens on squares.
  *
@@ -57,9 +57,9 @@ export interface CombatTacticalMapProps {
   characterId: number;
   /**
    * Cast-time position-targeting shape for the currently selected focused
-   * technique (#2206), lifted to CombatRail so this map tab can
+   * technique (#2206), lifted to CombatRail so this map can
    * highlight pickable nodes and consume clicks while a position-shaped
-   * technique is selected in the sibling "Your Turn" tab. Defaults to 'none'
+   * technique is selected in the rail's "Your Turn" tab. Defaults to 'none'
    * (today's move-only behavior) when the caller omits it.
    */
   positionShape?: PositionTargetShape;
@@ -317,7 +317,7 @@ export function CombatTacticalMap({
 
   return (
     <div
-      className="relative flex h-[480px] flex-col overflow-hidden rounded-lg border border-border bg-card"
+      className="relative flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card"
       data-testid="combat-tactical-map"
     >
       {hopsLine !== null && (

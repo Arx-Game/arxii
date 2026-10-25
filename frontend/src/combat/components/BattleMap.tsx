@@ -199,7 +199,7 @@ function PlaceArea({
           clipId={`${uid}-clip-${node.id}-${index}`}
           aerial={false}
           rampartElement={node.rampart_element}
-          onClick={() => onPlace(node.id, { x: t.x, y: t.y })}
+          onClick={() => onPlace(node.id, null)}
         />
       ))}
       <LabelChip
