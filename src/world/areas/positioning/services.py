@@ -770,6 +770,21 @@ def position_of(objectdb: ObjectDB) -> Position | None:
         return None
 
 
+def square_of(objectdb: ObjectDB) -> tuple[int, int] | None:
+    """Return the battle-map square objectdb stands on, or None when it has none (#4651).
+
+    Reads the ``object_position`` row the caller already loaded; no query of its own
+    when it was select_related.
+    """
+    try:
+        row = objectdb.object_position
+    except ObjectPosition.DoesNotExist:
+        return None
+    if row.square_x is None or row.square_y is None:
+        return None
+    return row.square_x, row.square_y
+
+
 def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
     """Return the ADJACENT-reach adjacency map for every position in *room*.
 
@@ -832,6 +847,12 @@ class PositionNode:
     rampart_crack_state: str | None
     is_roofed: bool = False
     screens_ranged: bool = False
+    area_x: int | None = None
+    area_y: int | None = None
+    area_w: int | None = None
+    area_h: int | None = None
+    terrain_name: str | None = None
+    terrain_art_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -861,6 +882,8 @@ class PositionGraph:
 
 
 def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
+    terrain = position.terrain if position.terrain_id else None
+    art = terrain.art if terrain is not None and terrain.art_id else None
     return PositionNode(
         id=position.pk,
         name=position.name,
@@ -874,6 +897,12 @@ def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
         rampart_crack_state=rampart.crack_state if rampart else None,
         is_roofed=position.is_roofed,
         screens_ranged=position.screens_ranged,
+        area_x=position.area_x,
+        area_y=position.area_y,
+        area_w=position.area_w,
+        area_h=position.area_h,
+        terrain_name=terrain.name if terrain is not None else None,
+        terrain_art_url=art.cloudinary_url if art is not None else None,
     )
 
 

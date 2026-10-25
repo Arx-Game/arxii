@@ -7,8 +7,9 @@ Drawing only: nothing here changes a rule.
 
 from __future__ import annotations
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 
 from evennia_extensions.factories import MediaFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
@@ -22,8 +23,12 @@ from world.areas.positioning.services import (
     place_in_position,
     position_of,
 )
-from world.combat.constants import ParticipantStatus
-from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.combat.constants import OpponentStatus, ParticipantStatus
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+)
 from world.combat.models import CombatParticipant
 from world.conditions.constants import FoundationalCapability
 from world.conditions.models import CapabilityType
@@ -231,3 +236,107 @@ class StandingOnASquare(JourneyCase):
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertEqual(position_of(cal), self.hall)
         self.assertEqual(self.square_of(cal), (7, 5))
+
+
+class TheEncounterPayloadCarriesTheDrawing(JourneyCase):
+    """What the map reads over REST: areas, terrain art, squares and held ground."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.room = self.make_room("The Manor")
+        self.art = MediaFactory()
+        self.terrain = MapTerrainFactory(name="Flagstones", art=self.art)
+        self.hall = PositionFactory(
+            room=self.room,
+            name="Hall",
+            area_x=2,
+            area_y=2,
+            area_w=6,
+            area_h=4,
+            terrain=self.terrain,
+        )
+        self.porch = PositionFactory(room=self.room, name="Porch")
+        self.cellar = PositionFactory(room=self.room, name="Cellar")
+        self.encounter = CombatEncounterFactory(
+            status=RoundStatus.DECLARING, round_number=1, room=self.room
+        )
+        self.ann = self.make_player("Ann", room=self.room)
+        CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.ann.sheet_data,
+            status=ParticipantStatus.ACTIVE,
+        )
+        place_in_position(self.ann, self.hall, square=(3, 4))
+
+    def opponent_at(self, position, name: str, **kwargs):
+        opponent = CombatOpponentFactory(encounter=self.encounter, name=name, **kwargs)
+        place_in_position(opponent.objectdb, position)
+        return opponent
+
+    def body(self) -> dict:
+        response = self.api(self.account_of(self.ann)).get(f"/api/combat/{self.encounter.pk}/")
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def test_the_drawing_and_the_standing_square_are_in_the_payload(self):
+        body = self.body()
+
+        nodes = {node["name"]: node for node in body["position_nodes"]}
+        hall = nodes["Hall"]
+        self.assertEqual(
+            (hall["area_x"], hall["area_y"], hall["area_w"], hall["area_h"]), (2, 2, 6, 4)
+        )
+        self.assertEqual(hall["terrain_name"], "Flagstones")
+        self.assertEqual(hall["terrain_art_url"], self.art.cloudinary_url)
+        porch = nodes["Porch"]
+        self.assertIsNone(porch["area_x"])
+        self.assertIsNone(porch["terrain_name"])
+        self.assertIsNone(porch["terrain_art_url"])
+        ann = body["participants"][0]
+        self.assertEqual(ann["current_square"], {"x": 3, "y": 4})
+
+    def test_an_opponent_reports_its_square_and_none_without_one(self):
+        self.opponent_at(self.porch, "Brute")
+        row = next(o for o in self.body()["opponents"] if o["name"] == "Brute")
+
+        self.assertIsNone(row["current_square"])
+
+    def test_a_ready_enemy_holds_its_place_and_a_defeated_one_does_not(self):
+        self.opponent_at(self.porch, "Brute")
+        self.opponent_at(self.cellar, "Ghoul", status=OpponentStatus.DEFEATED)
+
+        held = self.body()["held_positions"]
+
+        self.assertEqual(held, [{"position_id": self.porch.pk, "holder_names": ["Brute"]}])
+
+    @staticmethod
+    def reads(captured) -> int:
+        """Queries the payload made, leaving out the session row's own bookkeeping."""
+        return sum(
+            1
+            for query in captured.captured_queries
+            if "django_session" not in query["sql"] and "SAVEPOINT" not in query["sql"]
+        )
+
+    def add_nooks(self, count: int, start: int) -> None:
+        for index in range(start, start + count):
+            PositionFactory(
+                room=self.room,
+                name=f"Nook {index}",
+                area_x=index,
+                area_y=0,
+                area_w=1,
+                area_h=1,
+                terrain=MapTerrainFactory(art=MediaFactory()),
+            )
+
+    def test_the_query_count_does_not_grow_with_the_number_of_positions(self):
+        self.body()  # warm content types
+        self.add_nooks(1, start=0)  # saving a place drops the room's cached graph
+        with CaptureQueriesContext(connection) as few:
+            self.body()
+        self.add_nooks(4, start=1)
+        with CaptureQueriesContext(connection) as many:
+            self.body()
+
+        self.assertEqual(self.reads(many), self.reads(few))

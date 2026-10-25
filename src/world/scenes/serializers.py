@@ -481,19 +481,28 @@ class SceneDetailSerializer(SceneListSerializer):
         """
         if obj.location is None:
             return []
-        from world.areas.positioning.services import position_of  # noqa: PLC0415
+        from world.areas.positioning.services import position_of, square_of  # noqa: PLC0415
 
         personas = self._collect_personas(obj, only_real_names=False)
         result = []
         for persona in personas:
             position = None
+            square = None
             if persona.character_sheet is not None:
                 character = persona.character_sheet.character
                 if character is not None:
                     pos = position_of(character)
                     if pos is not None:
                         position = PositionSummarySerializer(pos).data
-            result.append({"persona_id": persona.pk, "position": position})
+                        square = square_of(character)
+            result.append(
+                {
+                    "persona_id": persona.pk,
+                    "position": position,
+                    "square_x": square[0] if square else None,
+                    "square_y": square[1] if square else None,
+                }
+            )
         return result
 
     @extend_schema_field(SceneRoundSerializer(allow_null=True))
