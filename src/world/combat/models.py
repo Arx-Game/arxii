@@ -1851,6 +1851,18 @@ class CombatOpponentAction(SharedMemoryModel):
             "same-round action."
         ),
     )
+    covered_position = models.ForeignKey(
+        "arxii.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The place a place-covering attack lands on, copied from its wind-up at "
+            "maturation (#4676). Null for any other attack: a place-covering attack "
+            "with no wind-up covers its target's place when it resolves."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.opponent.name} Round {self.round_number}: {self.threat_entry.name}"
