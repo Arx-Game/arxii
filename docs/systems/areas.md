@@ -683,8 +683,9 @@ for an ALLY opponent, ACTIVE ENEMY opponents (by stored `allegiance`). The mover
 never held against her, so starting in held ground and leaving costs a normal hop.
 `held_position_ids_against(mover)` returns the set; `encounter_holds(encounter)` returns an
 `EncounterHolds` read once per planning pass, from which `against_opponent(opponent)` derives an
-opponent's set. A walker (a PC, or an NPC whose traversal is WALKS or CLIMBS) who enters a held
-place stops there: a PC's `hops_used` becomes `hops_for(sheet)` and she is told "You are stopped
+opponent's set. A player character is stopped however she moves on the ground (walking, climbing or leaping),
+and her way past is the pass roll; only NPCs skip the roll, so an NPC walker or climber stops
+and an NPC flier or leaper passes. Entering a held place stops her: a PC's `hops_used` becomes `hops_for(sheet)` and she is told "You are stopped
 by <name>.". A mover in the air, or an NPC leaper or flier, is not stopped. NPC routing uses
 `routing_profile(opponent, holds)` (the opponent's `MovementProfile` with `stop_at` filled by
 `npc_stop_at`), so `find_path`, `path_costs_from` and the tactics ladder treat a held place as

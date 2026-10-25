@@ -398,9 +398,11 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   clean, past at the template's price, or stopped in the place. Staff set the challenge on the
   `MovementConfig` row; none authored means no pass. Capabilities raised by sheet modifiers now
   count as challenge capability sources, one action per approach from the strongest source.
-  A walking PC who enters held ground stops there and gets past by the pass roll (capability
-  plus roll); NPCs do not roll, so an NPC that flies or leaps passes and one that walks or
-  climbs stops. Journeys: `test_moving_by_capability_journeys.py`,
+  A player character is stopped by held ground however she moves on the ground (walking,
+  climbing or leaping), and her way past is the pass roll (a capability matching an approach on
+  the pass template, plus the roll); only NPCs skip the roll, so an NPC that flies or leaps
+  passes and one that walks or climbs stops. A mover in the air is not stopped by ground held
+  below her. Journeys: `test_moving_by_capability_journeys.py`,
   `test_holding_ground_journeys.py`, `test_crossing_a_wall_journeys.py`.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)

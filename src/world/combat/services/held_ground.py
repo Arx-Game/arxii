@@ -1,10 +1,12 @@
 """Held ground: a ready enemy holds the place it stands in (#4663, slice 2 of #4651).
 
-A walker (or climber) who enters a place an enemy able to act stands in stops there for
-the round. One who starts the round there may walk out; a flier or a leaper passes over.
-Player characters and NPCs obey the same rule: ``MoveToPositionAction`` ends a player's
-movement for the round on entering a held place, and every NPC route search treats held
-places as ones it may end in but never walks through (``find_path(..., stop_at=...)``).
+A player character who enters a place an enemy able to act stands in on the ground stops
+there for the round, however she moves (walking, climbing or leaping); her way past is the
+pass roll (``held_ground_pass``). One who starts the round there may walk out, and a mover
+in the air is not stopped by ground held below. ``MoveToPositionAction`` ends a player's
+movement for the round on entering a held place. NPCs do not roll: an NPC walker or climber
+stops (every NPC route search treats held places as ones it may end in but never walks
+through, ``find_path(..., stop_at=...)``) and an NPC flier or leaper passes (``npc_stop_at``).
 
 Outside a live encounter there is no held ground.
 """
