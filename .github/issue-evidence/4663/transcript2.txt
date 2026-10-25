@@ -20,7 +20,7 @@
 [Hobb]     Marn has entered the game.
 [Dace]     Marn has entered the game.
 --- DB read (participants, round 1, continued) ---
-     db_key  | enc | hops_used |   pos   | health 
+     db_key  | enc | hops_used |   pos   | health
     ---------+-----+-----------+---------+--------
      Dace    |   1 |         5 | Bar     |     95
      Hobb    |   1 |         5 | Bar     |    100
@@ -31,7 +31,7 @@
      Tamsin  |   2 |         0 | Yard    |     90
     (7 rows)
 --- DB read (opponents, round 1, continued) ---
-         name     | enc | pos  | status 
+         name     | enc | pos  | status
     --------------+-----+------+--------
      Bandit       |   1 | Bar  | active
      Leaping Wolf |   2 | Gate | active
@@ -62,7 +62,7 @@ ITEM 1/2 WEB (rerun): Wren on the Gallery takes flight, lands, then has one hop
 [web:wren3] screenshots w25-wren-landed-one-hop-panel.png, w25-wren-landed-one-hop-page.png
 [web:wren3] exit=0
 --- DB read (participants, after Wren's flight and landing) ---
-     db_key  | enc | hops_used |   pos   | health 
+     db_key  | enc | hops_used |   pos   | health
     ---------+-----+-----------+---------+--------
      Dace    |   1 |         5 | Bar     |     95
      Hobb    |   1 |         5 | Bar     |    100
@@ -73,7 +73,7 @@ ITEM 1/2 WEB (rerun): Wren on the Gallery takes flight, lands, then has one hop
      Tamsin  |   2 |         0 | Yard    |     90
     (7 rows)
 --- DB read (opponents, after Wren's flight and landing) ---
-         name     | enc | pos  | status 
+         name     | enc | pos  | status
     --------------+-----+------+--------
      Bandit       |   1 | Bar  | active
      Leaping Wolf |   2 | Gate | active
@@ -111,7 +111,7 @@ ROUND 1 ENDS: Marn resolves the Velvet Cellar round
 [Marn] >>> encounter begin
 [Marn]     Round begins.
 --- DB read (participants, round 2 open) ---
-     db_key  | enc | hops_used |   pos   | health 
+     db_key  | enc | hops_used |   pos   | health
     ---------+-----+-----------+---------+--------
      Dace    |   1 |         0 | Bar     |     95
      Hobb    |   1 |         0 | Bar     |    100
@@ -122,14 +122,14 @@ ROUND 1 ENDS: Marn resolves the Velvet Cellar round
      Tamsin  |   2 |         0 | Yard    |     90
     (7 rows)
 --- DB read (opponents, round 2 open) ---
-         name     | enc | pos  | status 
+         name     | enc | pos  | status
     --------------+-----+------+--------
      Bandit       |   1 | Bar  | active
      Leaping Wolf |   2 | Gate | active
      Walking Wolf |   2 | Yard | active
     (3 rows)
 --- DB read (encounters) ---
-     id | round_number |     status     
+     id | round_number |     status
     ----+--------------+----------------
       2 |            1 | between_rounds
       1 |            2 | declaring
@@ -143,7 +143,7 @@ ITEM 4: staff raise Slip Past severity to 90 in the admin (to see a stopped outc
 [web:admin-severity] admin messages: ["The challenge template “Slip Past” was changed successfully."]
 [web:admin-severity] exit=0
 --- DB read (template) ---
-     id |   name    | severity 
+     id |   name    | severity
     ----+-----------+----------
       1 | Slip Past |       90
     (1 row)
@@ -174,7 +174,7 @@ ITEM 4 TELNET round 2: Dace walks out of the Bar and rolls to get back in
 [Dace]     Bandit stops Dace Morrow in Bar.
 [Dace]     Bandit stops you.
 --- DB read (participants, after Dace round-2 pass 1) ---
-     db_key  | enc | hops_used |   pos   | health 
+     db_key  | enc | hops_used |   pos   | health
     ---------+-----+-----------+---------+--------
      Dace    |   1 |         5 | Bar     |     95
      Hobb    |   1 |         0 | Bar     |    100
@@ -185,7 +185,7 @@ ITEM 4 TELNET round 2: Dace walks out of the Bar and rolls to get back in
      Tamsin  |   2 |         0 | Yard    |     90
     (7 rows)
 --- DB read (opponents, after Dace round-2 pass 1) ---
-         name     | enc | pos  | status 
+         name     | enc | pos  | status
     --------------+-----+------+--------
      Bandit       |   1 | Bar  | active
      Leaping Wolf |   2 | Gate | active
@@ -225,7 +225,7 @@ Call log:
     at async /tmp/claude-1000/-workspaces-arxii/63aef41e-a4bb-4338-ab96-b210d0e527b2/scratchpad/4651/rt4663/web_phase.cjs:136:7
 [web:kestrel2] exit=1
 --- DB read (participants, after Kestrel round 2) ---
-     db_key  | enc | hops_used |   pos   | health 
+     db_key  | enc | hops_used |   pos   | health
     ---------+-----+-----------+---------+--------
      Dace    |   1 |         5 | Bar     |     95
      Hobb    |   1 |         0 | Bar     |    100
@@ -236,7 +236,7 @@ Call log:
      Tamsin  |   2 |         0 | Yard    |     90
     (7 rows)
 --- DB read (opponents, after Kestrel round 2) ---
-         name     | enc | pos  | status 
+         name     | enc | pos  | status
     --------------+-----+------+--------
      Bandit       |   1 | Bar  | active
      Leaping Wolf |   2 | Gate | active

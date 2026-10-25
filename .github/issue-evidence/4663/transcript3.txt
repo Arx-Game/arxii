@@ -24,7 +24,7 @@ ITEM 4 WEB round 2: Kestrel on the Floor rolls against severity 90
 [web:kestrel3] screenshots w39-kestrel-after-hard-pass-panel.png, w39-kestrel-after-hard-pass-page.png
 [web:kestrel3] exit=0
 --- DB read (participants, after Kestrel's hard pass) ---
-     db_key  | enc | hops_used |   pos   | health 
+     db_key  | enc | hops_used |   pos   | health
     ---------+-----+-----------+---------+--------
      Dace    |   1 |         5 | Bar     |     95
      Hobb    |   1 |         0 | Bar     |    100
@@ -35,7 +35,7 @@ ITEM 4 WEB round 2: Kestrel on the Floor rolls against severity 90
      Tamsin  |   2 |         0 | Yard    |     90
     (7 rows)
 --- DB read (opponents, after Kestrel's hard pass) ---
-         name     | enc | pos  | status 
+         name     | enc | pos  | status
     --------------+-----+------+--------
      Bandit       |   1 | Bar  | active
      Leaping Wolf |   2 | Gate | active
