@@ -25,7 +25,7 @@ pressure 5 against 3 integrity, the Rampart's duration of 1 round, and the chall
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
 
@@ -47,6 +47,7 @@ from world.areas.positioning.services import (
     position_of,
     raise_rampart,
 )
+from world.checks.services import perform_check
 from world.checks.test_helpers import force_check_outcome
 from world.combat.clash import run_clash_round
 from world.combat.constants import ParticipantStatus, TargetingMode, TargetSelection
@@ -61,7 +62,9 @@ from world.combat.factories import (
     WardClashFactory,
 )
 from world.combat.services import begin_declaration_phase, resolve_round
+from world.conditions.factories import ConditionCapabilityEffectFactory, ConditionTemplateFactory
 from world.conditions.models import CapabilityType
+from world.conditions.services import apply_condition
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.distinctions.services import grant_distinction
 from world.distinctions.types import DistinctionOrigin
@@ -91,6 +94,9 @@ RAMPART_INTEGRITY = 10
 BRUTE_SWING = 12
 CLASH_PRESSURE = 5
 CLASH_RAMPART_INTEGRITY = 3
+WALL_RUNNER = 4  # traversal from the Wall-Runner distinction at rank 1
+SURE_GRIP = 2  # traversal from the Sure Grip condition
+CHALLENGE_PERFORM_CHECK = "world.mechanics.challenge_resolution.perform_check"
 BLOCKED = "The way is blocked."
 GATED = f"Crossing that requires getting past {CONJURED_BARRIER_CHALLENGE_NAME}."
 
@@ -244,7 +250,7 @@ class ADistinctionClimbsTheBarricade(ClimbingABarricade):
                 target_capability=traversal,
             )
         wall_runner = DistinctionFactory(name="Wall-Runner")
-        DistinctionEffectFactory(distinction=wall_runner, target=target, value_per_rank=4)
+        DistinctionEffectFactory(distinction=wall_runner, target=target, value_per_rank=WALL_RUNNER)
         grant_distinction(self.hobb.sheet_data, wall_runner, origin=DistinctionOrigin.GM_AWARD)
 
     def test_a_distinction_climber_is_offered_climb_over(self) -> None:
@@ -262,6 +268,40 @@ class ADistinctionClimbsTheBarricade(ClimbingABarricade):
 
         self.assertEqual(len(offered), 1, [a.display_name for a in offered])
         self.assertEqual(offered[0].ref.challenge_instance_id, gate.pk)
+
+    def test_two_ways_to_climb_offer_one_climb_rolled_with_the_stronger(self) -> None:
+        """A Sure Grip condition (+2 traversal) beside Wall-Runner (+4): one entry, rolls 4."""
+        sure_grip = ConditionTemplateFactory(name="Sure Grip")
+        ConditionCapabilityEffectFactory(
+            condition=sure_grip,
+            capability=CapabilityType.objects.get(name="traversal"),
+            value=SURE_GRIP,
+        )
+        apply_condition(self.hobb, sure_grip)
+        self.raise_the_barricade()
+        gate = self.edge(self.west, self.middle).gating_challenge
+        climb = ChallengeApproach.objects.get(
+            challenge_template=gate.template, display_name="Climb Over"
+        )
+
+        names = [action.display_name for action in get_player_actions(self.hobb)]
+        with (
+            force_check_outcome(CheckOutcome.objects.get(name="Success")),
+            patch(CHALLENGE_PERFORM_CHECK, wraps=perform_check) as rolled,
+        ):
+            dispatch_player_action(
+                self.hobb,
+                ActionRef(
+                    backend=ActionBackend.CHALLENGE,
+                    challenge_instance_id=gate.pk,
+                    approach_id=climb.pk,
+                ),
+                {},
+            )
+
+        self.assertEqual(names.count("Climb Over"), 1, names)
+        self.assertEqual(rolled.call_args.kwargs["extra_modifiers"], WALL_RUNNER)
+        self.assertFalse(ChallengeInstance.objects.get(pk=gate.pk).is_active)
 
 
 class AHardSeal(_TheYard):

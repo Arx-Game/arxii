@@ -32,9 +32,11 @@ Expected values are the rows built here; "You are stopped by {name}." and
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
+from django.utils import timezone
 
 from actions.player_interface import get_player_actions
 from integration_tests.harness import JourneyCase
@@ -80,7 +82,7 @@ from world.conditions.factories import (
     DamageTypeFactory,
 )
 from world.conditions.models import CapabilityType
-from world.conditions.services import apply_condition
+from world.conditions.services import apply_condition, get_effective_capability_value
 from world.magic.factories import CharacterAnimaFactory
 from world.mechanics.challenge_resolution import resolve_challenge
 from world.mechanics.factories import (
@@ -100,6 +102,7 @@ from world.mechanics.models import (
     ModifierSource,
     ModifierTarget,
 )
+from world.mechanics.services import get_capability_sources_for_character
 from world.scenes.constants import RoundStatus
 from world.seeds.checks import seed_check_resolution_tables
 from world.traits.factories import CheckOutcomeFactory
@@ -589,6 +592,48 @@ class AnAcrobatGetsPast(_TheCauseway):
         self.assertEqual(result.detail.message, GOT_PAST.format(name="Bandit"))
         self.assertEqual(position_of(kit), self.yard)
         self.assertEqual(forced.call_args.kwargs["extra_modifiers"], CAPABILITY_RAISE)
+
+    def test_an_expired_acrobatics_modifier_counts_nowhere(self) -> None:
+        """A lapsed modifier offers no pass and leaves her effective acrobatics at zero."""
+        self.designate()
+        kit = self.fighter("Kit", at=self.gate)
+        self.raise_capability(kit, self.acrobatics, CAPABILITY_RAISE)
+        lapsed = CharacterModifier.objects.get(
+            character=kit.sheet_data, target__target_capability=self.acrobatics
+        )
+        lapsed.expires_at = timezone.now() - timedelta(minutes=1)
+        lapsed.save(update_fields=["expires_at"])
+
+        moves = [action.display_name for action in get_player_actions(kit)]
+        result = self.web(kit, "pass_held_ground", position_id=self.yard.pk)
+
+        self.assertFalse([name for name in moves if name.startswith("Get past")], moves)
+        self.assertFalse(result.detail.success)
+        self.assertEqual(result.detail.message, NO_WAY_OF_HERS)
+        self.assertEqual(get_effective_capability_value(kit.sheet_data, self.acrobatics), 0)
+
+    def test_modifiers_on_one_capability_sum_into_one_source(self) -> None:
+        """Two raises (+2, +1) are one source of 3; a raise and a larger cut give none."""
+        kit = self.fighter("Kit", at=self.gate)
+        self.raise_capability(kit, self.acrobatics, 2)
+        self.raise_capability(kit, self.acrobatics, 1)
+        wren = self.fighter("Wren", at=self.gate)
+        self.raise_capability(wren, self.acrobatics, 2)
+        self.raise_capability(wren, self.acrobatics, -5)
+
+        kit_sources = [
+            source
+            for source in get_capability_sources_for_character(kit)
+            if source.capability_id == self.acrobatics.pk
+        ]
+        wren_sources = [
+            source
+            for source in get_capability_sources_for_character(wren)
+            if source.capability_id == self.acrobatics.pk
+        ]
+
+        self.assertEqual([source.value for source in kit_sources], [3])
+        self.assertEqual(wren_sources, [])
 
     def test_pass_by_telnet(self) -> None:
         self.designate()

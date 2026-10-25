@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Prefetch, Q, Sum
-from django.utils import timezone
 
 from typeclasses.characters import Character
 from world.checks.modifier_values import ValueTable, load_value_table
@@ -1559,11 +1558,8 @@ def _get_modifier_sources(character: ObjectDB) -> list[CapabilitySource]:
     except ObjectDoesNotExist:
         return []
     rows = (
-        CharacterModifier.objects.filter(
-            character=sheet,
-            target__target_capability__isnull=False,
-        )
-        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
+        CharacterModifier.objects.active()
+        .filter(character=sheet, target__target_capability__isnull=False)
         .values("target__target_capability_id", "target__target_capability__name")
         .annotate(total=Sum("value"))
         .order_by("target__target_capability_id")
@@ -1646,7 +1642,35 @@ def get_available_actions(
 
     actions.extend(_bare_object_actions(character, location, cap_id_to_sources))
 
-    return actions
+    return _strongest_source_per_action(actions)
+
+
+def _strongest_source_per_action(actions: list[AvailableAction]) -> list[AvailableAction]:
+    """One action per approach on a challenge (or per application on a bare object) (#4663).
+
+    A capability can come from several sources (a technique, a condition, a modifier), and
+    each source matches the same approach. The player gets one entry per approach, carrying
+    the source the roll should use: one whose prerequisite is met before one whose is not,
+    then the highest value, then the first built. CHALLENGE dispatch and deferred round
+    resolution both look the action up by approach, so they roll this same source. Order
+    is otherwise kept.
+    """
+    best: dict[tuple[int | None, ...], AvailableAction] = {}
+    for action in actions:
+        if action.challenge_instance_id is not None:
+            key: tuple[int | None, ...] = (action.challenge_instance_id, action.approach_id)
+        else:
+            target_id = action.target_object.pk if action.target_object is not None else None
+            key = (None, action.application_id, target_id)
+        held = best.get(key)
+        if held is None or _source_rank(action) > _source_rank(held):
+            best[key] = action
+    return list(best.values())
+
+
+def _source_rank(action: AvailableAction) -> tuple[bool, int]:
+    """How strongly an action's source should win: prerequisite met first, then value."""
+    return (action.prerequisite_met, action.capability_source.value)
 
 
 def _build_action_for_source(  # noqa: PLR0913
