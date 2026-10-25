@@ -113,16 +113,20 @@ describe('GiftStage (folio)', () => {
   });
 
   describe('the magical training step (#4659)', () => {
-    const trainedDraft = (allocated: number, giftId: number | null = 1) =>
+    const trainedDraft = (
+      allocated: number,
+      { giftId = 1, resonanceId = 1 }: { giftId?: number | null; resonanceId?: number | null } = {}
+    ) =>
       createMockDraft({
         selected_path: mockPath,
         selected_tradition: mockTradition,
-        draft_data: { selected_gift_id: giftId },
+        draft_data: { selected_gift_id: giftId, selected_gift_resonance_id: resonanceId },
         magic_training: {
           ...createMockDraft().magic_training,
-          base_sources: [{ name: 'Tradition Training', rank: 1, points: 20 }],
+          base_sources: [{ name: 'Tradition Training', rank: 1, points: 20, show_rank: true }],
           total: 20,
           required_spend: 20,
+          step: 10,
           allocated,
           skills: [{ id: 3, name: 'Occult', value: allocated, max: 30 }],
         },
@@ -132,20 +136,24 @@ describe('GiftStage (folio)', () => {
     const funnelSteps = () =>
       Array.from(screen.getByRole('list', { name: 'Gift steps' }).children) as HTMLElement[];
 
-    it('is its own step after the Gift, open while the pool is unspent', () => {
+    it('is its own step after the Resonance, open while the pool is unspent', () => {
       renderWithCharacterCreationProviders(
         <GiftStage draft={trainedDraft(0)} onRegisterBeforeLeave={vi.fn()} />
       );
       const steps = funnelSteps();
       expect(steps).toHaveLength(6);
-      const training = steps[2];
+      // Its affinity bonus reads the resonance, so it comes after that step.
+      expect(steps[3]).toHaveTextContent('Resonance');
+      expect(steps[3]).not.toHaveTextContent('taught you');
+      const training = steps[4];
       expect(training).toHaveTextContent('What The Whispering Path taught you');
-      expect(training).toHaveTextContent('Step 3 of 6');
+      expect(training).toHaveTextContent('Step 5 of 6');
       expect(training.querySelector('details')).toHaveAttribute('open');
       // The Tradition step above it is closed once chosen; the block is not inside it.
       expect(steps[0].querySelector('details')).not.toHaveAttribute('open');
       expect(steps[0]).not.toHaveTextContent('taught you');
-      expect(steps[3]).toHaveTextContent('Step 4 of 6');
+      expect(steps[5]).toHaveTextContent('Step 6 of 6');
+      expect(steps[5]).toHaveTextContent('Anima Check');
       expect(screen.getByText(/Remaining/)).toHaveTextContent('Remaining 20');
     });
 
@@ -153,16 +161,27 @@ describe('GiftStage (folio)', () => {
       renderWithCharacterCreationProviders(
         <GiftStage draft={trainedDraft(20)} onRegisterBeforeLeave={vi.fn()} />
       );
-      const training = funnelSteps()[2];
+      const training = funnelSteps()[4];
       expect(training.querySelector('details')).not.toHaveAttribute('open');
       expect(training).toHaveClass('chosen');
     });
 
+    it('is gated until a resonance is chosen', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage draft={trainedDraft(0, { resonanceId: null })} onRegisterBeforeLeave={vi.fn()} />
+      );
+      const training = funnelSteps()[4];
+      expect(training).toHaveClass('closed');
+      expect(training).toHaveTextContent('Choose a resonance first');
+      expect(training.querySelector('details')).not.toHaveAttribute('open');
+      expect(screen.queryByText(/Remaining/)).not.toBeInTheDocument();
+    });
+
     it('is gated until a Gift is chosen', () => {
       renderWithCharacterCreationProviders(
-        <GiftStage draft={trainedDraft(0, null)} onRegisterBeforeLeave={vi.fn()} />
+        <GiftStage draft={trainedDraft(0, { giftId: null })} onRegisterBeforeLeave={vi.fn()} />
       );
-      const training = funnelSteps()[2];
+      const training = funnelSteps()[4];
       expect(training).toHaveClass('closed');
       expect(training).toHaveTextContent('Choose a gift first');
       expect(training.querySelector('details')).not.toHaveAttribute('open');

@@ -1,8 +1,9 @@
 /**
  * Stage 6: Gift (#3630).
  *
- * The Gift funnel — Tradition, Gift, magical training (#4659, only for a draft
- * with training), Techniques, Resonance, Anima Check — as nested index entries: each step is an `Entry` in an `EntryList`,
+ * The Gift funnel — Tradition, Gift, Techniques, Resonance, magical training (#4659,
+ * only for a draft with training; after the Resonance, whose affinity its bonus reads),
+ * Anima Check — as nested index entries: each step is an `Entry` in an `EntryList`,
  * closed and unreadable (`gated`) until the step before it is done, and its
  * own body holds that step's picker. Motif is a field below the funnel;
  * the Glimpse is mounted via `GlimpseSection` (#2427; folio-grammar
@@ -187,14 +188,16 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const resonanceName = resonances.find((r) => r.id === selectedResonanceId)?.name;
   const techniqueCountLine = `${selectedTechniqueIds.length} of ${picks} chosen`;
 
-  // Magical training (#4659) is its own step after the Gift, whose fit bonus it counts;
-  // it exists only for a draft with training (or a stale allocation) and stays open
-  // until the allocation spends exactly what it must.
+  // Magical training (#4659) is its own step after the Resonance: its fit bonuses count
+  // the Gift and the resonance's affinity, so it opens only once both are picked. It
+  // exists only for a draft with training (or a stale allocation) and stays open until
+  // the allocation spends exactly what it must.
   const training = draft.magic_training;
   const showTraining = hasMagicTraining(training);
   const trainingSpent = showTraining && isTrainingSpent(training);
   const stepCount = showTraining ? 6 : 5;
-  const afterGift = showTraining ? 1 : 0;
+  const afterResonance = showTraining ? 1 : 0;
+  const trainingReady = completion.gift && completion.resonance;
   const trainingValue = showTraining ? `${training.allocated} of ${training.total}` : undefined;
 
   // The Tradition row names the schooling stance under it, when one is
@@ -342,23 +345,8 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           <GiftSelector draft={draft} />
         </FunnelStep>
 
-        {showTraining && (
-          <FunnelStep
-            n={3}
-            total={stepCount}
-            name={trainingHeading(copy, draft.selected_tradition?.name ?? '')}
-            value={trainingValue}
-            done={trainingSpent}
-            gated={!completion.gift}
-            gateReason="Choose a gift first"
-            open={completion.gift && !trainingSpent}
-          >
-            <MagicTrainingBlock draft={draft} />
-          </FunnelStep>
-        )}
-
         <FunnelStep
-          n={3 + afterGift}
+          n={3}
           total={stepCount}
           name="Techniques"
           value={completion.gift ? techniqueCountLine : undefined}
@@ -371,7 +359,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
         </FunnelStep>
 
         <FunnelStep
-          n={4 + afterGift}
+          n={4}
           total={stepCount}
           name="Resonance"
           value={resonanceName}
@@ -405,8 +393,23 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           </EntryList>
         </FunnelStep>
 
+        {showTraining && (
+          <FunnelStep
+            n={5}
+            total={stepCount}
+            name={trainingHeading(copy, draft.selected_tradition?.name ?? '')}
+            value={trainingValue}
+            done={trainingSpent}
+            gated={!trainingReady}
+            gateReason={completion.gift ? 'Choose a resonance first' : 'Choose a gift first'}
+            open={trainingReady && !trainingSpent}
+          >
+            <MagicTrainingBlock draft={draft} />
+          </FunnelStep>
+        )}
+
         <FunnelStep
-          n={5 + afterGift}
+          n={5 + afterResonance}
           total={stepCount}
           name={copy?.anima_check_heading ?? 'Anima Check'}
           value={animaCheckLine}

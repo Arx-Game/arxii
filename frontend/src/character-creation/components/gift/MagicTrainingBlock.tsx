@@ -4,9 +4,11 @@
  * "What <Tradition> taught you" heading (`trainingHeading`).
  *
  * Reads `draft.magic_training`: one breakdown line per (distinction, rank) that feeds the
- * pool ("Tradition Training, rank 1"), a "Fits:" line for each teaching-fit bonus, the
+ * pool ("Tradition Training, rank 1"; a one-rank distinction is just its name, "Studious",
+ * per the server's `show_rank`), a "Fits:" line for each teaching-fit bonus, the
  * total, then a ledger that must reach exactly 0 (under- and overspending are both
- * flagged) and one `StatRow` per Magic skill. Each step writes the whole
+ * flagged) and one `StatRow` per Magic skill, stepping by the server's `step` (the
+ * active budget's points per tier). Each step writes the whole
  * `draft_data.magic_skills` map (the draft PATCH merges `draft_data` at the top level).
  * Renders nothing for a draft with no training and nothing allocated.
  */
@@ -14,11 +16,13 @@
 import type { ReactNode } from 'react';
 import { InstrumentFrame, StatRow } from '../../folio';
 import { useCGExplanations, useUpdateDraft } from '../../queries';
-import type { CGExplanations, CharacterDraft, MagicTrainingSkill } from '../../types';
+import type {
+  CGExplanations,
+  CharacterDraft,
+  MagicTrainingSkill,
+  MagicTrainingSource,
+} from '../../types';
 import { hasMagicTraining } from './magicTraining';
-
-/** Magic skills rise in the same steps of ten as every other skill. */
-const STEP = 10;
 
 interface MagicTrainingBlockProps {
   draft: CharacterDraft;
@@ -62,10 +66,13 @@ export function MagicTrainingBlock({ draft }: MagicTrainingBlockProps) {
   const remaining = Math.max(training.required_spend - training.allocated, 0);
   const fitLine = (name: string) =>
     (copy?.gift_training_fits ?? 'Fits: {name}').replace('{name}', name);
-  const sourceLine = (name: string, rank: number) =>
-    (copy?.gift_training_source ?? '{name}, rank {rank}')
-      .replace('{name}', name)
-      .replace('{rank}', String(rank));
+  const sourceLine = (source: MagicTrainingSource) =>
+    source.show_rank
+      ? (copy?.gift_training_source ?? '{name}, rank {rank}')
+          .replace('{name}', source.name)
+          .replace('{rank}', String(source.rank))
+      : source.name;
+  const step = training.step;
 
   const handleChange = (skill: MagicTrainingSkill, value: number) => {
     const allocation: Record<string, number> = {};
@@ -84,7 +91,7 @@ export function MagicTrainingBlock({ draft }: MagicTrainingBlockProps) {
       <div className="breakdown">
         {training.base_sources.map((source, index) => (
           <div key={`${index}-${source.name}-${source.rank}`}>
-            <span>{sourceLine(source.name, source.rank)}</span>
+            <span>{sourceLine(source)}</span>
             <span>{index === 0 ? source.points : `+${source.points}`}</span>
           </div>
         ))}
@@ -122,11 +129,11 @@ export function MagicTrainingBlock({ draft }: MagicTrainingBlockProps) {
               name={skill.name}
               value={skill.value}
               max={skill.max}
-              step={STEP}
+              step={step}
               onChange={(value) => handleChange(skill, value)}
               canDecrease={skill.value > 0 && !updateDraft.isPending}
               canIncrease={
-                !atCap && training.allocated + STEP <= training.total && !updateDraft.isPending
+                !atCap && training.allocated + step <= training.total && !updateDraft.isPending
               }
               increaseTitle={increaseTitleFor(atCap, skill.max, copy)}
             />

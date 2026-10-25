@@ -83,9 +83,11 @@ character-creation/
     │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=); a Gift the
     │   │                        #   Tradition favors is tagged "Teaches well" (#4659)
     │   ├── MagicTrainingBlock.tsx # Body of GiftStage's own "What <Tradition> taught you"
-    │   │                        #   funnel step (#4659), after the Gift step, gated on a Gift,
-    │   │                        #   open until the pool is spent exactly: the breakdown
-    │   │                        #   ("<distinction>, rank N" sources, "Fits:" bonuses,
+    │   │                        #   funnel step (#4659), after the Resonance step, gated on
+    │   │                        #   a Gift and a resonance (its bonuses read both), open
+    │   │                        #   until the pool is spent exactly: the breakdown
+    │   │                        #   ("<distinction>, rank N" sources, the rank only when
+    │   │                        #   `show_rank`; "Fits:" bonuses,
     │   │                        #   total), a "Spend all of it" ledger flagged when under or
     │   │                        #   over, and a StatRow per Magic skill writing
     │   │                        #   draft_data.magic_skills. The step is absent with no

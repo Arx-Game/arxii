@@ -82,7 +82,7 @@ describe('NPCInteractionDialog price line (#4457)', () => {
 
   it("prints a course's Tradition line, then its fit line, under its price (#4659)", async () => {
     const TAUGHT = 'Taught in the manner of Smiling Shadows';
-    const FIT = 'Teaches well: your Shadowcraft and Abyssal affinity. Sessions are easier for you.';
+    const FIT = 'Fits your Shadowcraft and Abyssal aura. Sessions are easier for you.';
     startInteraction.mockResolvedValue({
       closed: false,
       last_result_message: null,
@@ -136,6 +136,6 @@ describe('NPCInteractionDialog price line (#4457)', () => {
     expect(course).toHaveTextContent(
       `Course: Theology${ENROLL_LINE}Taught in the manner of The Vigil`
     );
-    expect(course).not.toHaveTextContent(/Teaches well/);
+    expect(course).not.toHaveTextContent(/Sessions are easier/);
   });
 });

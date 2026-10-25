@@ -582,6 +582,8 @@ export interface MagicTrainingSource {
   name: string;
   rank: number;
   points: number;
+  /** True only for a distinction with more than one rank: "Tradition Training, rank 1" vs "Studious". */
+  show_rank: boolean;
 }
 
 /** A Magic skill the training pool is spent on, with its allocated value (#4659). */
@@ -604,6 +606,8 @@ export interface MagicTraining {
   favored_affinity_name: string | null;
   total: number;
   required_spend: number;
+  /** How far one press moves a Magic skill: the active budget's points per tier. */
+  step: number;
   allocated: number;
   skills: MagicTrainingSkill[];
 }

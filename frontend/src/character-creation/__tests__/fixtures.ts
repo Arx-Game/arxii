@@ -788,6 +788,7 @@ export const mockEmptyDraft: CharacterDraft = {
     favored_affinity_name: null,
     total: 0,
     required_spend: 0,
+    step: 10,
     allocated: 0,
     skills: [],
   },

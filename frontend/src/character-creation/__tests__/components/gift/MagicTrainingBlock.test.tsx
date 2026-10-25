@@ -28,8 +28,8 @@ vi.mock('../../../api', () => ({
 
 const training: MagicTraining = {
   base_sources: [
-    { name: 'Tradition Training', rank: 1, points: 20 },
-    { name: 'Studious', rank: 1, points: 10 },
+    { name: 'Tradition Training', rank: 1, points: 20, show_rank: true },
+    { name: 'Studious', rank: 1, points: 10, show_rank: false },
   ],
   gift_bonus: 10,
   affinity_bonus: 10,
@@ -37,6 +37,7 @@ const training: MagicTraining = {
   favored_affinity_name: 'Abyssal',
   total: 50,
   required_spend: 50,
+  step: 10,
   allocated: 50,
   skills: [
     { id: 3, name: 'Occult', value: 30, max: 30 },
@@ -72,7 +73,9 @@ describe('MagicTrainingBlock', () => {
     renderBlock(draftWith(training));
 
     expect(screen.getByText('Tradition Training, rank 1')).toBeInTheDocument();
-    expect(screen.getByText('Studious, rank 1')).toBeInTheDocument();
+    // A one-rank distinction is named without its rank, per the server's show_rank.
+    expect(screen.getByText('Studious')).toBeInTheDocument();
+    expect(screen.queryByText('Studious, rank 1')).not.toBeInTheDocument();
     expect(screen.getByText('Fits: Shadowcraft')).toBeInTheDocument();
     expect(screen.getByText('Fits: Abyssal')).toBeInTheDocument();
     expect(screen.getByText('Magical training')).toBeInTheDocument();
@@ -134,6 +137,32 @@ describe('MagicTrainingBlock', () => {
     await waitFor(() => {
       expect(updateDraftMock).toHaveBeenCalledWith(1, {
         draft_data: { magic_skills: { '3': 30, '4': 30 } },
+      });
+    });
+  });
+
+  it("steps by the payload's step, not a fixed ten", async () => {
+    const user = userEvent.setup();
+    renderBlock(
+      draftWith({
+        ...training,
+        step: 5,
+        allocated: 45,
+        skills: [
+          { id: 3, name: 'Occult', value: 30, max: 30 },
+          { id: 4, name: 'Ritualism', value: 15, max: 30 },
+        ],
+      })
+    );
+
+    // 5 left: a step of 10 would disable +, a step of 5 allows it.
+    const raise = screen.getByRole('button', { name: 'Raise Ritualism' });
+    expect(raise).toBeEnabled();
+    await user.click(raise);
+
+    await waitFor(() => {
+      expect(updateDraftMock).toHaveBeenCalledWith(1, {
+        draft_data: { magic_skills: { '3': 30, '4': 20 } },
       });
     });
   });

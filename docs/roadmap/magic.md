@@ -1010,7 +1010,8 @@ students better than others.
   finalize. A new character's starting aura follows the picked resonance's affinity.
 - Academy: a course taught under a Tradition lowers the session check's difficulty for a fitting
   student (`_course_ease`), and the offer shows `teaching_line` and `fit_line` on the web and in telnet.
-- Frontend: a training step on the Gift stage, "Teaches well" tags on Tradition and Gift cards, the
+- Frontend: a training step on the Gift stage (after the Resonance step, stepping by the payload's
+  `step`), "Teaches well" tags on Tradition and Gift cards, the
   stance training-points line, the Skills stage Magic group, and the two offer lines.
 - Admin: the `affinity-aura-types` Required content row lists any `Affinity` with a blank
   `aura_type` (a blank one never fits); the tradition slate shows a stance's points read-only; the `schooling-magic-skill-floors`
