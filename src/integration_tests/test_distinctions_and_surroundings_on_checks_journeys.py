@@ -451,8 +451,13 @@ class StaffSizeDistinctionsAndSurroundings(JourneyCase):
             paramount.forms[0].errors["size"],
         )
 
-        # Rank 1 is the effect's own size, so the constraint refuses it.
-        self.assertFalse(submit(1, ModifierSize.LARGE).is_valid())
+        # Rank 1 is the effect's own size, refused in words, not by constraint name.
+        rank_one = submit(1, ModifierSize.LARGE)
+        self.assertFalse(rank_one.is_valid())
+        self.assertEqual(
+            ["Rank 1 is the effect's own size. Rank sizes start at rank 2."],
+            rank_one.forms[0].errors["rank"],
+        )
 
         unsized = DistinctionEffectFactory(
             distinction=DistinctionFactory(name="Old Habits", slug="old-habits", max_rank=3),

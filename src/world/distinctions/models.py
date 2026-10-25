@@ -572,9 +572,15 @@ class DistinctionEffectRankSize(NaturalKeyMixin, RelatedCacheClearingMixin, Shar
         return f"{self.effect} rank {self.rank}: {self.get_size_display()}"
 
     def clean(self) -> None:
-        """Refuse Paramount, a rank past the distinction's maximum, and an unsized effect."""
+        """Refuse rank 1, Paramount, a rank past the maximum, and an unsized effect.
+
+        Rank 1 and Paramount are also database constraints; refusing them here gives staff
+        a sentence instead of the constraint's name.
+        """
         super().clean()
         errors: dict[str, str] = {}
+        if self.rank is not None and self.rank < 2:  # noqa: PLR2004 - rank 1 is modifier_size
+            errors["rank"] = "Rank 1 is the effect's own size. Rank sizes start at rank 2."
         if self.size == ModifierSize.PARAMOUNT:
             errors["size"] = "Paramount is reached only through a vow's size step."
         if self.effect_id is not None:
