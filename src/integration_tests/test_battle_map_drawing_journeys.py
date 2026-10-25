@@ -7,8 +7,6 @@ Drawing only: nothing here changes a rule.
 
 from __future__ import annotations
 
-from unittest import mock
-
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 
@@ -27,6 +25,10 @@ from world.areas.positioning.services import (
 from world.combat.constants import ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.models import CombatParticipant
+from world.conditions.constants import FoundationalCapability
+from world.conditions.models import CapabilityType
+from world.mechanics.factories import ModifierCategoryFactory
+from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 from world.scenes.constants import RoundStatus
 from world.vitals.seeds import ensure_foundational_capabilities
 
@@ -197,8 +199,25 @@ class StandingOnASquare(JourneyCase):
     def test_an_actor_who_cannot_move_cannot_step(self) -> None:
         place_in_position(self.ann, self.hall, square=(2, 2))
 
-        with mock.patch("world.areas.positioning.services._can_move", return_value=False):
-            result = self.web(self.ann, "step_to_square", square_x=5, square_y=5)
+        movement = CapabilityType.objects.get(name=FoundationalCapability.MOVEMENT)
+        target, _ = ModifierTarget.objects.get_or_create(
+            name=f"capability_{movement.pk}",
+            category=ModifierCategoryFactory(name="capability"),
+            defaults={
+                "description": "",
+                "display_order": 0,
+                "is_active": True,
+                "target_capability": movement,
+            },
+        )
+        CharacterModifier.objects.create(  # baseline 5 minus 5: rooted
+            character=self.ann.sheet_data,
+            target=target,
+            value=-5,
+            source=ModifierSource.objects.create(),
+        )
+
+        result = self.web(self.ann, "step_to_square", square_x=5, square_y=5)
 
         self.assertFalse(result.detail.success)
         self.assertEqual(result.detail.message, "You cannot move.")
