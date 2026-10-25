@@ -25,6 +25,7 @@ class Migration(migrations.Migration):
                     "gift_fit_training_bonus",
                     models.PositiveSmallIntegerField(
                         default=10,
+                        verbose_name="Gift fit training bonus",
                         help_text="Added to a student's magical training when the Tradition favors their Major Gift. Only given to a student with some training.",
                     ),
                 ),
@@ -32,19 +33,24 @@ class Migration(migrations.Migration):
                     "affinity_fit_training_bonus",
                     models.PositiveSmallIntegerField(
                         default=10,
+                        verbose_name="Affinity fit training bonus",
                         help_text="Added when the Tradition favors the student's current dominant aura. Only given to a student with some training.",
                     ),
                 ),
                 (
                     "course_ease_gift_fit",
                     models.PositiveSmallIntegerField(
-                        default=2, help_text="Lowers the session check's difficulty."
+                        default=2,
+                        verbose_name="Course ease, Gift fit",
+                        help_text="Lowers the session check's difficulty.",
                     ),
                 ),
                 (
                     "course_ease_affinity_fit",
                     models.PositiveSmallIntegerField(
-                        default=2, help_text="Lowers the session check's difficulty."
+                        default=2,
+                        verbose_name="Course ease, affinity fit",
+                        help_text="Lowers the session check's difficulty.",
                     ),
                 ),
             ],

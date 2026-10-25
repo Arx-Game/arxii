@@ -191,6 +191,10 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         _GIFT_MODEL,
         on_delete=models.PROTECT,
         related_name="tradition_grants",
+        help_text=(
+            "A Gift listed here is one this Tradition favors. "
+            "Any Gift can still be picked under any Tradition."
+        ),
     )
     special_techniques = models.ManyToManyField(
         "arxii.Technique",

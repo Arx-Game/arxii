@@ -201,7 +201,10 @@ class NPCRole(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "techniques for (#2440). Gates TRAIN-offer signature-technique "
             "availability to learners who belong to the same Tradition "
             "(CharacterTradition membership). Blank = the role only trains "
-            "shared (Path × Gift) pool techniques, no tradition signatures."
+            "shared (Path × Gift) pool techniques, no tradition signatures. "
+            "A skill course this role offers is taught in this Tradition's manner, so a "
+            "student whose Major Gift or current aura it favors finds the course "
+            "sessions easier. Blank: this role's courses are neutral for every student."
         ),
     )
     is_active = models.BooleanField(

@@ -4,6 +4,7 @@ from django.contrib.admin import helpers
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Prefetch
 from django.forms.models import BaseInlineFormSet
+from django.http import HttpRequest
 from django.template.response import TemplateResponse
 from django.utils.html import format_html
 
@@ -2055,6 +2056,12 @@ class TraditionTeachingConfigAdmin(admin.ModelAdmin):
         "course_ease_gift_fit",
         "course_ease_affinity_fit",
     ]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
+        return not TraditionTeachingConfig.objects.filter(pk=1).exists()
+
+    def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:  # noqa: ARG002
+        return False
 
 
 @admin.register(TechniqueGrant)
