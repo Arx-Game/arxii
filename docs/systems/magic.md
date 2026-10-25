@@ -80,7 +80,7 @@ and the 5-axis Thread model no longer exist.
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
-| `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target` |
+| `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target`, `aura_type` (`AffinityType`, blank until set, unique when set: which aura axis this authored row is, so the teaching fit compares by field and never by name; slice 2 of #4659) |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne |
 
 **Note:** `Affinity` and `Resonance` are proper first-class domain models in
@@ -756,24 +756,70 @@ options. (Tradition skill grants came in #4457, next section.) See `docs/roadmap
 
 ### Tradition training and Academy skill courses (#4457, ADR-4457-A) [BUILT & WIRED]
 
-A Tradition's schooling stance sets what level every Magic skill starts at; CG points never buy a
-Magic skill; a character who starts behind catches up in play, fastest through an Academy course.
-Slice 1 above made rolls add skills; this slice gives a schooled character those skills.
+A Tradition's schooling stance gives a character magical training points to spend on Magic skills at
+character creation; CG skill points never buy a Magic skill; a character who starts behind catches up
+in play, fastest through an Academy course. Slice 1 above made rolls add skills; this slice gives a
+schooled character those skills. Slice 2 of #4659 (ADR-4659-B) replaced the original fixed "floor"
+(every Magic skill raised to one level) with a pool the player spends and a Tradition teaching fit
+that grows the pool and eases Academy courses.
 
-**The floor.** `SchoolingLine.magic_skill_floor` (`PositiveSmallIntegerField`, default 0) is the
-level each stance lifts every active Magic skill to (migration `0273_skill_courses_and_schooling_floor`).
-Rank 0 carries none: check constraint `schooling_rank_zero_grants_no_floor`. The set is every skill
-in `magic_category_skills()`, the same for every Tradition; a per-Tradition list is deferred.
+**Training points.** The stance's granted distinction carries a `DistinctionEffect` on the
+`magic_training_points` `ModifierTarget` (category `character_creation`, seeded by
+`wire_magic_training_points_target`). `CharacterDraft.magic_training_pool` sums those effects with the
+fit bonuses below. `SchoolingLine.magic_skill_floor` and its check constraint were removed
+(migration `0298_schooling_floor_to_training_points` carried each floor into the distinction's
+effect as `floor x active Magic skill count`, so a rank that bought a floor still buys the same
+total; `0299_remove_schoolingline_magic_skill_floor` dropped the column). The set of skills is
+still every skill in `magic_category_skills()`, the same for every Tradition.
+
+**Teaching fit.** Three authored inputs say how well a Tradition teaches a given student:
 
 | Surface | Location | Purpose |
 |---------|----------|---------|
-| `SCHOOLING_MAX_RANK_BY_STATE` / `schooling_max_rank(state)` | `world/character_creation/constants.py` | Which Tradition states open which stances: LIVING_MASTERS up to rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. A game rule, not tuning; #4536 replaces it when the training level becomes its own fact. Read by the offers module, `TraditionSerializer.get_schooling` and `schooling_magic_skill_floor` |
-| `schooling_magic_skill_floor(draft)` | `world/character_creation/offers.py` | The highest `magic_skill_floor` among the Tradition Step offers the draft picked, counting a pick only when its schooling line grants the very distinction the pick holds; 0 when the slate state opens no stances. Computed on every call, never memoised |
-| `CharacterDraft.starting_magic_skill_floor` | `world/character_creation/models.py` | Property over the function above; exposed read-only on `CharacterDraftSerializer` |
-| `_create_skill_values` | `world/character_creation/services.py` | At finalize, writes every `magic_category_skills()` skill at the floor through `set_skill_values` (source `CHARACTER_CREATION`, caps off), so each gets a `CharacterTraitValue` and one `CharacterTraitChange`. A self-taught draft writes no Magic rows |
-| `CharacterDraft._check_no_magic_points` | `world/character_creation/models.py` | Refuses points in a Magic skill or in a specialization whose parent is one, naming them (`MAGIC_SKILL_POINTS_REFUSAL`), from `validate_path_skills` |
-| `SchoolingLineSerializer.magic_skill_floor` | `world/character_creation/serializers.py` | Each stance row in `GET /api/character-creation/traditions/?beginning_id=...` carries its floor; `schooling` is cut to the ranks the Tradition's state opens |
-| `starting_magic_skill_floor` | `CharacterDraftSerializer` | Read-only integer on `GET /api/character-creation/drafts/<id>/` |
+| `TraditionGiftGrant` | `world/magic/models/grants.py` | A row now means a Gift the Tradition's teachers favor (ADR-4659-A); it no longer gates the Gift pick |
+| `Tradition.favored_affinities` | `world/magic/models/gifts.py` | M2M to `Affinity`, blank; reverse name `favoring_traditions`. A student whose current dominant aura is one of these gets the affinity fit. Admin field on `TraditionAdmin` |
+| `Affinity.aura_type` | `world/magic/models/affinity.py` | See the `Affinity` row above; backfilled once in `0297_affinity_aura_type_backfill` for the three existing rows |
+| `TraditionTeachingConfig` | `world/magic/models/teaching.py` | Singleton (pk=1, lazy-created): `gift_fit_training_bonus` (10), `affinity_fit_training_bonus` (10), `course_ease_gift_fit` (2), `course_ease_affinity_fit` (2). `clean()` requires the two training bonuses to be multiples of `SkillPointBudget.points_per_tier`. Kept apart from `GiftAcquisitionConfig`, which tunes technique acquisition |
+| `teaching_fit(tradition, gift, aura_type)` | `world/magic/services/teaching_fit.py` | The one resolver, returning a `TeachingFit` (`world/magic/types/teaching_fit.py`: `gift_fit`, `affinity_fit`, `favored_gift_name`, `favored_affinity_name`, `training_bonus(config)`, `course_ease(config)`). Gift fit is a `TraditionGiftGrant` for the pair; affinity fit is a favored Affinity whose `aura_type` equals the student's. A blank `aura_type` or no Tradition never fits |
+| `cg_aura_type(resonance)` / `character_aura_type(sheet)` | same file | The aura type character creation passes (the picked Gift resonance's affinity) and the one the Academy passes (`CharacterAura.dominant_affinity`); None when unset or the sheet has no aura |
+| `major_gift_for(sheet)` | same file | The sheet's Major Gift (first `CharacterGift` of kind MAJOR), None when it has none |
+| `get_teaching_config()` | same file | Lazily creates and returns the `TraditionTeachingConfig` singleton |
+
+Character creation and the Academy both go through `teaching_fit`, so the two places cannot
+disagree. The fit gives bonuses and ease, never a gate.
+
+| Surface | Location | Purpose |
+|---------|----------|---------|
+| `SCHOOLING_MAX_RANK_BY_STATE` / `schooling_max_rank(state)` | `world/character_creation/constants.py` | Which Tradition states open which stances: LIVING_MASTERS up to rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. A game rule, not tuning; #4536 replaces it when the training level becomes its own fact. Read by the offers module and `TraditionSerializer.get_schooling` |
+| `schooling_training_points(lines)` | `world/character_creation/offers.py` | The training points each stance gives keyed by rank: the granted distinction's `magic_training_points` effect at the stance's rank, 0 for rank 0 or a line that grants nothing. One query. Read by the Tradition serializer and the tradition slate page |
+| `CharacterDraft.magic_training_pool` | `world/character_creation/models.py` | Property returning a `MagicTrainingPool` (`base`, `gift_bonus`, `affinity_bonus`, `total`, `required_spend`, `fit`, `sources`). Computed on every call, never memoised. See "The pool" below |
+| `compute_magic_errors` / `_magic_skill_allocation_errors` | `world/character_creation/validators.py` | Gift-stage validation of `draft_data["magic_skills"]` |
+| `_create_skill_values` | `world/character_creation/services.py` | At finalize, writes exactly the allocated `magic_skills` through `set_skill_values` (source `CHARACTER_CREATION`, caps off), one `CharacterTraitChange` each; a Magic skill with no allocation is not written |
+| `_glimpse` | `world/character_creation/magic_writer.py` | A new `CharacterAura` starts with its 80 on the picked resonance's affinity (below) |
+| `CharacterDraft._check_no_magic_points` | `world/character_creation/models.py` | Refuses points in a Magic skill or in a specialization whose parent is one, naming them (`MAGIC_SKILL_POINTS_REFUSAL`), from `validate_path_skills`. Magic skills are bought only from the training pool |
+| `TraditionSerializer` | `world/character_creation/serializers.py` | Each Tradition row carries `favored_gift_names` and `favored_affinity_names` (one query each for the list, built in `TraditionViewSet.get_serializer_context`); each stance row carries `training_points` and `grants_distinction_name`. Gift options carry `favored` |
+| `CharacterDraftSerializer.magic_training` | `world/character_creation/serializers.py` | Read-only breakdown on `GET /api/character-creation/drafts/<id>/`: `base_sources` (name, rank, points), `gift_bonus`, `affinity_bonus`, `favored_gift_name`, `favored_affinity_name`, `total`, `required_spend`, `allocated`, and `skills` (id, name, value, max) |
+
+**The pool.** `base` is the sum of the draft's `magic_training_points` distinction effects.
+`total = base + gift bonus + affinity bonus`, where each bonus is the config value when that fit
+holds and `base > 0` (a draft with no training gets nothing, even when it fits both), rounded down to
+a multiple of `SkillPointBudget.points_per_tier`. A Magic skill value costs its own value in points
+(10 per step, the ordinary skill price). `required_spend = min(total, active Magic skill count x
+max_skill_value)`, so a pool larger than the skills can hold never blocks submission. Example with
+Tradition Training rank 1 = 20, a Studious +10 distinction and both bonuses at 10: a draft that fits
+both has 50 to spend, a Gift-only or affinity-only fit 40, no fit 30, no training distinction 0.
+
+**Validation.** The Gift stage reads `draft_data["magic_skills"]` (skill id to value). It fails the
+stage when the value is malformed, names a skill that is not an active Magic skill, holds a value
+that is not a multiple of `points_per_tier` or exceeds `max_skill_value`, spends more than `total`,
+or spends less than `required_spend`. Changing the Gift, Tradition, stance or resonance changes the
+pool, so an allocation that no longer matches fails the stage and the draft cannot submit until it
+is fixed. `_check_no_magic_points` stays.
+
+**Starting aura.** A character created with a picked Gift resonance starts with `CharacterAura`'s 80
+on that resonance's affinity (matched by `Affinity.aura_type`), swapped with Primal: Abyssal starts
+Abyssal 80 / Primal 20 / Celestial 0, Celestial starts Celestial 80 / Primal 0 / Abyssal 20, Primal
+is unchanged. The Glimpse nudge then applies as before; an existing aura is never altered.
 
 An orphaned Tradition's rank 1 carries Tradition Training's starting technique pick as a living
 one does. A pick the state no longer opens (switching a rank 2 draft to a TEACHERS_GONE Tradition)
@@ -781,28 +827,27 @@ is dropped by the existing `reconcile_offer_picks`. A `DistinctionOffer` saved w
 schooling stance is never offered (the database does not require one). Joining a Tradition in play
 grants nothing retroactively (#2441).
 
-**Staff.** The tradition slate page gives each schooling stance of rank 1 and 2 a "Magic skill floor"
-input (`SchoolingLineForm`; refused above `SkillPointBudget.max_skill_value`, the creation skill
-cap) and a read-only line naming the Magic skills it trains ("Derived, read-only: trains occult,
-ritualism, theology to 20."; the text after the colon is `live.schooling_floor_preview`, "trains
-none." while the floor is 0). Rank 0 has no input and reads "Rank 0 trains none." Three TUNING rows were added to
-the Required content dashboard (`required_content.py`):
+**Staff.** The tradition slate page has no training input on a stance: the points are the granted
+distinction's `magic_training_points` effect, authored on the Distinction Builder. Under each rank 1
+and 2 row it shows a read-only "grants <n> magical training points." (rank 0 reads "Rank 0 trains
+none."). Favored Gifts are `TraditionGiftGrant` rows and favored affinities are the `favored_affinities`
+field on the Tradition admin; the tuning numbers are on the `TraditionTeachingConfig` admin page.
+The Required content dashboard has these TUNING rows (`required_content.py`):
 
 | Key | Lists | Consumer |
 |-----|-------|----------|
-| `schooling-magic-skill-floors` | Schooling ranks 1 and 2 whose `magic_skill_floor` is still 0 | `schooling_magic_skill_floor()` |
+| `schooling-magic-skill-floors` | Schooling ranks 1 and above whose granted distinction has no `magic_training_points` effect (key kept so the dashboard row is stable) | `schooling_training_points()` |
 | `magic-skill-courses` | Active Magic skills with no `SKILL_COURSE` offer on an active role that has a `faction_affiliation` (an inactive role's offers are never shown) | `run_skill_course_offer()` |
 | `path-suggestions-name-magic-skills` | `PathSkillSuggestion` rows naming a Magic skill (CG cannot take them) | `PathSkillSuggestionViewSet` |
 
-**Frontend.** `SkillsSection` hides Magic skills from the point groups and shows a read-only group
-(`StatRow readOnly`) at the floor under "From your Tradition training", or a muted line when the
-floor is 0; Path suggestions naming a Magic skill and Magic ids loaded from an older draft are
-dropped. `SchoolingStances` shows each stance's floor; rank 0 reads "No magic skills", and a rank 1
-or 2 stance whose floor is still 0 shows no Magic line until staff set one. The CG copy keys
-(`CGExplanation`, each with the literal fallback shown) are `skills_magic_granted_heading` ("From
-your Tradition training"), `skills_magic_granted_none` (the line shown when the floor is 0),
-`offers_magic_skill_floor` ("Magic skills {floor}") and `offers_magic_skill_floor_none` ("No magic
-skills").
+**Frontend.** The Gift stage has its own training step after the Gift pick (its Gift bonus depends
+on the pick): `MagicTrainingBlock` lists the pool lines (each source with its rank, the Gift and
+affinity bonuses, the total), the remaining count, and a row per Magic skill; an overspend or an
+underspend is flagged and the step stays open until `allocated` equals `required_spend`. Tradition
+and Gift cards carry "Teaches well" tags from `favored_gift_names`, `favored_affinity_names` and
+`favored`. `SchoolingStances` shows each stance's training points. `SkillsSection` hides Magic skills
+from the point groups and shows the allocation as a read-only Magic group; Path suggestions naming
+a Magic skill and Magic ids loaded from an older draft are dropped.
 
 #### Academy skill courses
 
@@ -830,6 +875,15 @@ the course, because the course was paid for up front, and the session after a br
 continues it. A skill the character has no row for starts at 10 (`DP_BASE_LEVEL`). The enrollment is
 stamped complete when `development_remaining` reaches 0. The AP is spent on any rolled outcome,
 including a botch that teaches nothing.
+
+*Teaching fit (slice 2 of #4659).* When the offer's role has `teaches_tradition`, `_course_ease`
+(`effects.py`) resolves `teaching_fit(tradition, major_gift_for(sheet), character_aura_type(sheet))`
+and subtracts `course_ease(config)` from `check_difficulty` before the roll, with no floor. The fit
+changes the check only: the roll's outcome still decides the development gained. A role with no
+Tradition is neutral. The menu price (`OfferPrice`) carries two lines for such a course:
+`teaching_line` ("Taught in the manner of <Tradition>") and, when the learner fits,
+`fit_line` ("Teaches well: your <Gift> and <Affinity> affinity. Sessions are easier for you."); both
+ride `OfferPriceSerializer`, `NPCInteractionDialog` shows them and telnet `hire` prints them.
 
 *Refusals charge nothing.* Every refusal is checked before anything is charged, in this order:
 debt or no Academy (`_academy_for`), then (under the AP pool lock) already trained in this course
