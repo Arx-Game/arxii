@@ -162,11 +162,14 @@ class _CrossXpLockSetupMixin:
         thread_level: int = 10,
         xp_available: int = 500,
         trait_value: int = 100,
-        path_stage: int = 10,
+        class_level: int = 10,
     ) -> tuple[Thread, ExperiencePointsData]:
-        """Helper: thread + seeded XP on an account linked to the character."""
+        """Helper: thread + seeded XP on an account linked to the character.
+
+        ``class_level`` sets the level cap (class_level × 10, #4585).
+        """
         account = AccountFactory()
-        sheet = CharacterSheetFactory(_path_stage=path_stage)
+        sheet = CharacterSheetFactory(_class_level=class_level)
         # Link the account to the character (Evennia pattern)
         sheet.character.account = account
         # Persist by adding to the M2M through AccountDB
@@ -220,10 +223,10 @@ class CrossThreadXpLockTests(_CrossXpLockSetupMixin, TestCase):
             cross_thread_xp_lock(thread.owner, thread, 20)
 
     def test_boundary_above_effective_cap_raises(self) -> None:
-        # trait_value=20 → anchor_cap=20. path_stage=2 → path_cap=20.
+        # trait_value=20 → anchor_cap=20. class level 2 → level_cap=20.
         # effective_cap=20. boundary=30 > 20 → AnchorCapExceeded.
         thread, _ = self._make_thread_with_xp(
-            thread_level=10, xp_available=500, trait_value=20, path_stage=2
+            thread_level=10, xp_available=500, trait_value=20, class_level=2
         )
         ThreadXPLockedLevelFactory(level=30, xp_cost=200)
         with self.assertRaises(AnchorCapExceeded):
@@ -399,8 +402,8 @@ class UpdateThreadNarrativeTests(TestCase):
 
 class ImbuReadyThreadsTests(TestCase):
     def test_returns_thread_with_balance_below_cap(self) -> None:
-        """Thread at level 5 with cap=10 (path_cap=10, anchor_cap=100) and balance > 0."""
-        sheet = CharacterSheetFactory(_path_stage=1)  # path_cap = max(1,1)*10 = 10
+        """Thread at level 5 with cap=10 (level_cap=10, anchor_cap=100) and balance > 0."""
+        sheet = CharacterSheetFactory()  # no class level → level_cap = 1 × 10 = 10
         res = ResonanceFactory()
         # trait_value=100, so anchor_cap=100, effective_cap=min(10,100)=10. level=5<10
         thread = ThreadFactory(owner=sheet, resonance=res, level=5, _trait_value=100)
@@ -412,7 +415,7 @@ class ImbuReadyThreadsTests(TestCase):
 
     def test_excludes_thread_at_cap(self) -> None:
         """Thread at effective cap is excluded."""
-        sheet = CharacterSheetFactory(_path_stage=1)  # path_cap=10
+        sheet = CharacterSheetFactory()  # level_cap=10
         res = ResonanceFactory()
         # trait_value=100, effective_cap=10, level=10 → at cap
         thread = ThreadFactory(owner=sheet, resonance=res, level=10, _trait_value=100)
@@ -468,7 +471,7 @@ class NearXpLockThreadsTests(TestCase):
 class ThreadsBlockedByCapTests(TestCase):
     def test_returns_thread_at_cap(self) -> None:
         """Thread at effective_cap is returned."""
-        sheet = CharacterSheetFactory(_path_stage=1)  # path_cap=10
+        sheet = CharacterSheetFactory()  # level_cap=10
         res = ResonanceFactory()
         # trait_value=100, effective_cap=min(10,100)=10, level=10 → at cap
         thread = ThreadFactory(owner=sheet, resonance=res, level=10, _trait_value=100)
@@ -477,7 +480,7 @@ class ThreadsBlockedByCapTests(TestCase):
 
     def test_excludes_thread_below_cap(self) -> None:
         """Thread below effective_cap is excluded."""
-        sheet = CharacterSheetFactory(_path_stage=1)  # path_cap=10
+        sheet = CharacterSheetFactory()  # level_cap=10
         res = ResonanceFactory()
         # level=5 < cap=10 → below cap
         thread = ThreadFactory(owner=sheet, resonance=res, level=5, _trait_value=100)
@@ -514,10 +517,13 @@ class ComputeAnchorCapFacetCovenantTests(TestCase):
         # 100 // 50 = 2, hard_max = 1 * 20 = 20, so result = min(2, 20) = 2
         self.assertEqual(compute_anchor_cap(thread), 2)
 
-    def test_facet_cap_capped_by_path_stage_x_20(self) -> None:
-        """lifetime_earned=10000 would give 200 from division; path_stage=1 hard_max=20 wins."""
+    def test_facet_anchor_cap_has_no_stage_hard_max(self) -> None:
+        """lifetime_earned=10000 → anchor cap 200; no Path-stage hard max (#4585).
+
+        The character-level cap binds in compute_effective_cap instead.
+        """
         from world.magic.models import CharacterResonance, Thread
-        from world.magic.services.threads import compute_anchor_cap
+        from world.magic.services.threads import compute_anchor_cap, compute_effective_cap
 
         sheet = CharacterSheetFactory(_path_stage=1)
         res = ResonanceFactory()
@@ -532,8 +538,9 @@ class ComputeAnchorCapFacetCovenantTests(TestCase):
         CharacterResonance.objects.create(
             character_sheet=sheet, resonance=res, balance=0, lifetime_earned=10000
         )
-        # 10000 // 50 = 200, hard_max = 1 * 20 = 20, so result = min(200, 20) = 20
-        self.assertEqual(compute_anchor_cap(thread), 20)
+        # 10000 // 50 = 200; the level-1 owner's level cap (10) binds the effective cap.
+        self.assertEqual(compute_anchor_cap(thread), 200)
+        self.assertEqual(compute_effective_cap(thread), 10)
 
     def test_covenant_role_cap_equals_covenant_level_x_10(self) -> None:
         """max(covenant.level) across CCR rows for this role × 10.
@@ -621,80 +628,98 @@ class ProtagonismLockResonanceSpendTests(TestCase):
 
 
 class CrossingThresholdImbuingTests(TestCase):
-    """spend_resonance_for_imbuing gates at PathStage crossing levels (3, 6, 11, 16, 21)
-    when a ThreadCrossingThreshold exists with unmet requirements."""
+    """spend_resonance_for_imbuing gates at PathStage crossings (shown 3, 6, 11, 16, 21)
+    when a ThreadCrossingThreshold exists with unmet requirements.
+
+    Thread levels are stored ×10 (#4585): the shown-3 crossing is stored 30, so these
+    tests imbue across stored 29 → 30. Every XP boundary is pre-unlocked and the owner is
+    level 10 so neither the XP lock nor the level cap is what stops the imbue.
+    """
 
     def setUp(self) -> None:
         from world.magic.services import spend_resonance_for_imbuing
 
         self.spend = spend_resonance_for_imbuing
-        self.sheet = CharacterSheetFactory()
+        self.sheet = CharacterSheetFactory(_class_level=10)
         self.resonance = ResonanceFactory()
         CharacterResonanceFactory(
-            character_sheet=self.sheet, resonance=self.resonance, balance=9999
+            character_sheet=self.sheet, resonance=self.resonance, balance=99999
         )
         self.template = ItemTemplateFactory()
 
+    def _unlock_boundaries(self, thread: Thread) -> None:
+        for boundary in range(10, 110, 10):
+            ThreadLevelUnlock.objects.create(thread=thread, unlocked_level=boundary, xp_spent=0)
+
     def _make_thread_at_level(self, level: int) -> Thread:
-        """Create a TRAIT thread at the given level with enough dp to advance.
+        """Create a TRAIT thread at stored ``level`` with every XP boundary unlocked.
 
         Sets a high trait value so the anchor cap doesn't block advancement.
         """
-        return ThreadFactory(
+        thread = ThreadFactory(
             owner=self.sheet,
             resonance=self.resonance,
             level=level,
             developed_points=0,
             _trait_value=999,
         )
+        self._unlock_boundaries(thread)
+        return thread
 
-    def test_blocks_at_crossing_when_requirement_unmet(self) -> None:
-        """Imbuing from level 2→3 blocks at the level-3 crossing when requirement unmet."""
+    def _gate(self, level: int) -> None:
         from world.magic.models import ThreadCrossingThreshold
         from world.progression.models import ItemRequirement
 
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
+        threshold = ThreadCrossingThreshold.objects.create(
+            target_kind=TargetKind.TRAIT, level=level
+        )
         ItemRequirement.objects.create(
             thread_crossing_threshold=threshold,
             item_template=self.template,
             quantity=1,
         )
-        thread = self._make_thread_at_level(2)
-        result = self.spend(self.sheet, thread, 3)
+
+    def test_blocks_at_crossing_when_requirement_unmet(self) -> None:
+        """Imbuing stored 29→30 blocks at the shown-3 crossing when requirement unmet."""
+        self._gate(3)
+        thread = self._make_thread_at_level(29)
+        result = self.spend(self.sheet, thread, 2000)
 
         assert result.blocked_by == "CROSSING_REQUIREMENT"
-        assert result.new_level == 2  # did NOT cross to 3
+        assert result.new_level == 29  # did NOT cross to stored 30
         assert result.levels_gained == 0
         assert len(result.blocked_requirement_messages) == 1
         assert "Need" in result.blocked_requirement_messages[0]
 
-    def test_advances_through_crossing_when_requirement_met(self) -> None:
-        """Imbuing from level 2→3 advances when the item requirement is satisfied."""
-        from world.items.factories import ItemInstanceFactory
-        from world.magic.models import ThreadCrossingThreshold
-        from world.progression.models import ItemRequirement
-
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
-        ItemRequirement.objects.create(
-            thread_crossing_threshold=threshold,
-            item_template=self.template,
-            quantity=1,
-        )
-        ItemInstanceFactory(template=self.template, holder_character_sheet=self.sheet)
+    def test_stored_three_is_not_a_crossing(self) -> None:
+        """Stored 3 shows 0.3: a shown-3 gate never stops a thread at stored 2→3."""
+        self._gate(3)
         thread = self._make_thread_at_level(2)
         result = self.spend(self.sheet, thread, 1)
 
         assert result.blocked_by == "NONE"
         assert result.new_level == 3
+
+    def test_advances_through_crossing_when_requirement_met(self) -> None:
+        """Imbuing stored 29→30 advances when the item requirement is satisfied."""
+        from world.items.factories import ItemInstanceFactory
+
+        self._gate(3)
+        ItemInstanceFactory(template=self.template, holder_character_sheet=self.sheet)
+        thread = self._make_thread_at_level(29)
+        result = self.spend(self.sheet, thread, 2000)
+
+        assert result.blocked_by == "NONE"
+        assert result.new_level == 30
         assert result.levels_gained == 1
 
     def test_fail_open_when_no_threshold_authored(self) -> None:
         """No ThreadCrossingThreshold row for (TRAIT, 3) → advance freely."""
-        thread = self._make_thread_at_level(2)
-        result = self.spend(self.sheet, thread, 1)
+        thread = self._make_thread_at_level(29)
+        result = self.spend(self.sheet, thread, 2000)
 
         assert result.blocked_by == "NONE"
-        assert result.new_level == 3
+        assert result.new_level == 30
         assert result.blocked_requirement_messages == []
 
     def test_fail_open_when_threshold_has_no_requirements(self) -> None:
@@ -702,55 +727,40 @@ class CrossingThresholdImbuingTests(TestCase):
         from world.magic.models import ThreadCrossingThreshold
 
         ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
-        thread = self._make_thread_at_level(2)
-        result = self.spend(self.sheet, thread, 1)
+        thread = self._make_thread_at_level(29)
+        result = self.spend(self.sheet, thread, 2000)
 
         assert result.blocked_by == "NONE"
-        assert result.new_level == 3
+        assert result.new_level == 30
 
     def test_partial_advance_below_crossing(self) -> None:
         """Resonance is spent and levels below the crossing are gained.
 
-        From level 0 with amount=3: levels 0→1, 1→2 cost 1 dp each (2 dp),
-        then the level-3 crossing blocks. Resonance is still deducted.
+        From stored 27: 27→28 costs 1800 dp, 28→29 costs 1900, then the shown-3
+        crossing at stored 30 blocks. Resonance is still deducted.
         """
-        from world.magic.models import ThreadCrossingThreshold
-        from world.progression.models import ItemRequirement
-
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
-        ItemRequirement.objects.create(
-            thread_crossing_threshold=threshold,
-            item_template=self.template,
-            quantity=1,
-        )
-        thread = self._make_thread_at_level(0)
-        result = self.spend(self.sheet, thread, 3)
+        self._gate(3)
+        thread = self._make_thread_at_level(27)
+        result = self.spend(self.sheet, thread, 6000)
 
         assert result.blocked_by == "CROSSING_REQUIREMENT"
-        assert result.new_level == 2  # advanced 0→1→2, blocked at 3
+        assert result.new_level == 29  # advanced 27→28→29, blocked at 30
         assert result.levels_gained == 2
-        assert result.resonance_spent == 3
+        assert result.resonance_spent == 6000
 
     def test_item_not_consumed_when_requirement_met(self) -> None:
         """The qualifying item is retained (possession-only, #1859 Decision 4)."""
         from world.items.factories import ItemInstanceFactory
         from world.items.models import ItemInstance
-        from world.magic.models import ThreadCrossingThreshold
-        from world.progression.models import ItemRequirement
 
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
-        ItemRequirement.objects.create(
-            thread_crossing_threshold=threshold,
-            item_template=self.template,
-            quantity=1,
-        )
+        self._gate(3)
         ItemInstanceFactory(template=self.template, holder_character_sheet=self.sheet)
         count_before = ItemInstance.objects.filter(
             holder_character_sheet=self.sheet, template=self.template
         ).count()
 
-        thread = self._make_thread_at_level(2)
-        self.spend(self.sheet, thread, 3)
+        thread = self._make_thread_at_level(29)
+        self.spend(self.sheet, thread, 2000)
 
         count_after = ItemInstance.objects.filter(
             holder_character_sheet=self.sheet, template=self.template
@@ -758,46 +768,32 @@ class CrossingThresholdImbuingTests(TestCase):
         assert count_before == count_after
 
     def test_blocks_at_level_6_crossing(self) -> None:
-        """The gate fires at the level-6 crossing too."""
-        from world.magic.models import ThreadCrossingThreshold
-        from world.progression.models import ItemRequirement
-
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=6)
-        ItemRequirement.objects.create(
-            thread_crossing_threshold=threshold,
-            item_template=self.template,
-            quantity=1,
-        )
-        thread = self._make_thread_at_level(5)
-        result = self.spend(self.sheet, thread, 1)
+        """The gate fires at the shown-6 crossing (stored 60) too."""
+        self._gate(6)
+        thread = self._make_thread_at_level(59)
+        result = self.spend(self.sheet, thread, 5000)
 
         assert result.blocked_by == "CROSSING_REQUIREMENT"
-        assert result.new_level == 5
+        assert result.new_level == 59
 
     def test_per_kind_scoping(self) -> None:
         """A TRAIT threshold at level 3 does not block a GIFT thread."""
         from world.magic.factories import GiftFactory
-        from world.magic.models import ThreadCrossingThreshold
         from world.magic.specialization.services import provision_latent_gift_thread
-        from world.progression.models import ItemRequirement
 
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
-        ItemRequirement.objects.create(
-            thread_crossing_threshold=threshold,
-            item_template=self.template,
-            quantity=1,
-        )
-        # A GIFT thread at level 2 should NOT be gated by a TRAIT threshold
+        self._gate(3)
+        # A GIFT thread at stored 29 should NOT be gated by a TRAIT threshold
         gift = GiftFactory()
         provision_latent_gift_thread(self.sheet, gift, resonance=self.resonance)
         thread = next(
             t for t in self.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
         )
-        thread.level = 2
+        thread.level = 29
         thread.save(update_fields=["level"])
-        result = self.spend(self.sheet, thread, 1)
+        self._unlock_boundaries(thread)
+        result = self.spend(self.sheet, thread, 2000)
         assert result.blocked_by == "NONE"
-        assert result.new_level == 3
+        assert result.new_level == 30
 
 
 # =============================================================================

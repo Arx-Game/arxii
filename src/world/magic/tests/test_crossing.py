@@ -232,7 +232,7 @@ class TraitCrossingHandlerTests(TestCase):
         self.thread.level = 3
         with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
             handler = TraitCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+            handler.execute(thread=self.thread, starting_level=20, new_level=30)
             mock_beat.assert_called_once()
         self.assertTrue(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
 
@@ -242,7 +242,7 @@ class TraitCrossingHandlerTests(TestCase):
         self.thread.level = 4
         with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
             handler = TraitCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=3, new_level=4)
+            handler.execute(thread=self.thread, starting_level=30, new_level=40)
             mock_beat.assert_not_called()
         self.assertFalse(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
 
@@ -269,7 +269,7 @@ class TraitCrossingHandlerTests(TestCase):
         self.thread.level = 11
         with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
             handler = TraitCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=11)
+            handler.execute(thread=self.thread, starting_level=20, new_level=110)
         self.assertTrue(
             CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
         )
@@ -286,7 +286,7 @@ class TraitCrossingHandlerTests(TestCase):
         self.thread.level = 5
         with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
             handler = TraitCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=3, new_level=5)
+            handler.execute(thread=self.thread, starting_level=30, new_level=50)
             mock_beat.assert_not_called()
 
 
@@ -324,7 +324,7 @@ class FacetCrossingHandlerTests(TestCase):
         self.thread.level = 3
         with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
             handler = FacetCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+            handler.execute(thread=self.thread, starting_level=20, new_level=30)
             mock_beat.assert_called_once()
         self.assertTrue(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
 
@@ -496,7 +496,7 @@ class RelationshipTrackCrossingHandlerTests(TestCase):
         self.thread.level = 3
         with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
             handler = RelationshipTrackCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+            handler.execute(thread=self.thread, starting_level=20, new_level=30)
             mock_beat.assert_called_once()
         self.assertTrue(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
 
@@ -506,7 +506,7 @@ class RelationshipTrackCrossingHandlerTests(TestCase):
         self.thread.level = 4
         with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
             handler = RelationshipTrackCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=3, new_level=4)
+            handler.execute(thread=self.thread, starting_level=30, new_level=40)
             mock_beat.assert_not_called()
         self.assertFalse(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
 
@@ -533,7 +533,7 @@ class RelationshipTrackCrossingHandlerTests(TestCase):
         self.thread.level = 11
         with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
             handler = RelationshipTrackCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=11)
+            handler.execute(thread=self.thread, starting_level=20, new_level=110)
         self.assertTrue(
             CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
         )
@@ -578,7 +578,7 @@ class RelationshipCapstoneCrossingHandlerTests(TestCase):
         self.thread.level = 3
         with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
             handler = RelationshipCapstoneCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+            handler.execute(thread=self.thread, starting_level=20, new_level=30)
             mock_beat.assert_called_once()
         self.assertTrue(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
 
@@ -605,7 +605,7 @@ class RelationshipCapstoneCrossingHandlerTests(TestCase):
         self.thread.level = 11
         with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
             handler = RelationshipCapstoneCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=11)
+            handler.execute(thread=self.thread, starting_level=20, new_level=110)
         self.assertTrue(
             CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
         )
@@ -734,7 +734,7 @@ class SoulTetherNonInterferenceTests(TestCase):
         self.thread.level = 3
         with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
             handler = RelationshipCapstoneCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+            handler.execute(thread=self.thread, starting_level=20, new_level=30)
 
         self.thread.refresh_from_db()
         self.assertEqual(self.thread.hollow_current, 5)
@@ -907,7 +907,7 @@ class MantleCrossingHandlerTests(TestCase):
         self.thread.level = 3
         with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
             handler = MantleCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+            handler.execute(thread=self.thread, starting_level=20, new_level=30)
         self.assertTrue(
             PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=3).exists()
         )
@@ -922,7 +922,7 @@ class MantleCrossingHandlerTests(TestCase):
         self.thread.level = 11
         with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
             handler = MantleCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=11)
+            handler.execute(thread=self.thread, starting_level=20, new_level=110)
         self.assertTrue(
             PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=11).exists()
         )
@@ -933,7 +933,7 @@ class MantleCrossingHandlerTests(TestCase):
         from world.magic.models.crossing import PendingCrossingOffer
 
         handler = MantleCrossingHandler()
-        handler.execute(thread=self.thread, starting_level=3, new_level=3)
+        handler.execute(thread=self.thread, starting_level=30, new_level=30)
         self.assertFalse(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
 
 
@@ -1066,7 +1066,7 @@ class SanctumCrossingHandlerTests(TestCase):
         self.thread.level = 3
         with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
             handler = SanctumCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+            handler.execute(thread=self.thread, starting_level=20, new_level=30)
             mock_beat.assert_called_once()
         self.assertTrue(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
 
@@ -1076,7 +1076,7 @@ class SanctumCrossingHandlerTests(TestCase):
         self.thread.level = 4
         with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
             handler = SanctumCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=3, new_level=4)
+            handler.execute(thread=self.thread, starting_level=30, new_level=40)
             mock_beat.assert_not_called()
         self.assertFalse(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
 
@@ -1103,7 +1103,7 @@ class SanctumCrossingHandlerTests(TestCase):
         self.thread.level = 11
         with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
             handler = SanctumCrossingHandler()
-            handler.execute(thread=self.thread, starting_level=2, new_level=11)
+            handler.execute(thread=self.thread, starting_level=20, new_level=110)
         self.assertTrue(
             CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
         )

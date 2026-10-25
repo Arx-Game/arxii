@@ -29,8 +29,8 @@ class CompanionBindJourneyTests(EvenniaTestCase):
         self.thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )
-        # min_thread_level 10 and 20 tiers both apply at level 20 (flat_bonus 10 + 20 = 30
-        # total Companion Capacity) — see world/companions/content.py's _CAPACITY_TIERS.
+        # The shown-level 1 and 2 tiers both apply at stored 20 / shown 2 (flat_bonus
+        # 10 + 20 = 30 total Companion Capacity) — see content.py's _CAPACITY_TIERS.
         self.thread.level = 20
         self.thread.save(update_fields=["level"])
 

@@ -1,4 +1,4 @@
-"""Tests for cap helpers: compute_anchor_cap, compute_path_cap, compute_effective_cap.
+"""Tests for cap helpers: compute_anchor_cap, compute_level_cap, compute_effective_cap.
 
 Spec A §2.4. TDD: written before the implementation.
 """
@@ -9,7 +9,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import SanctumSlotKind, TargetKind
 from world.magic.factories import ResonanceFactory, ThreadFactory
 from world.magic.models import SanctumDetails, SanctumOwnerMode
-from world.magic.services import compute_anchor_cap, compute_effective_cap, compute_path_cap
+from world.magic.services import compute_anchor_cap, compute_effective_cap, compute_level_cap
 from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
 
 
@@ -199,20 +199,30 @@ class CovenantRoleAnchorCapTests(TestCase):
         self.assertEqual(cap_engaged, cap_disengaged)
 
 
-class PathCapTests(TestCase):
-    def test_no_path_history_returns_ten(self) -> None:
-        sheet = CharacterSheetFactory()
-        self.assertEqual(compute_path_cap(sheet), 10)
+class LevelCapTests(TestCase):
+    """compute_level_cap = character level × 10 (#4585); Path stage is not read."""
 
-    def test_stage_n_returns_n_times_ten(self) -> None:
+    def test_no_class_level_returns_ten(self) -> None:
+        sheet = CharacterSheetFactory()
+        self.assertEqual(compute_level_cap(sheet), 10)
+
+    def test_level_n_returns_n_times_ten(self) -> None:
+        sheet = CharacterSheetFactory(_class_level=4)
+        self.assertEqual(compute_level_cap(sheet), 40)
+
+    def test_path_stage_does_not_raise_the_cap(self) -> None:
         sheet = CharacterSheetFactory(_path_stage=3)
-        self.assertEqual(compute_path_cap(sheet), 30)
+        self.assertEqual(compute_level_cap(sheet), 10)
 
 
 class EffectiveCapTests(TestCase):
-    def test_returns_min_of_path_and_anchor(self) -> None:
-        # anchor=50 (technique level 5 × 10), path=20 (stage 2 × 10) → 20
-        thread = ThreadFactory(as_technique_thread=True, _technique_level=5, _path_stage=2)
+    def test_returns_min_of_level_and_anchor(self) -> None:
+        # anchor=50 (technique level 5 × 10), level cap=20 (level 2 × 10) → 20
+        thread = ThreadFactory(as_technique_thread=True, _technique_level=5, _class_level=2)
+        self.assertEqual(compute_effective_cap(thread), 20)
+
+    def test_anchor_binds_when_lower_than_level(self) -> None:
+        thread = ThreadFactory(as_technique_thread=True, _technique_level=2, _class_level=6)
         self.assertEqual(compute_effective_cap(thread), 20)
 
 
@@ -251,5 +261,5 @@ class SanctumSerializerCapTests(TestCase):
         thread = self._make_sanctum_thread(level=3)
         data = ThreadSerializer(thread).data
         self.assertIsInstance(data["effective_cap"], int)
-        # effective_cap = min(path_cap, anchor_cap); path_cap ≥ 10, anchor_cap = 30
-        self.assertEqual(data["effective_cap"], min(data["path_cap"], 30))
+        # effective_cap = min(level_cap, anchor_cap); level_cap ≥ 10, anchor_cap = 30
+        self.assertEqual(data["effective_cap"], min(data["level_cap"], 30))

@@ -52,14 +52,14 @@ class TechniqueVariantResolutionTests(TestCase):
     def test_matching_variant_none_below_threshold(self) -> None:
         self._make_variant(unlock_level=3)
         result = TechniqueVariant.matching_variant(
-            self.parent_technique, resonance=self.resonance, thread_level=2
+            self.parent_technique, resonance=self.resonance, thread_level=20
         )
         self.assertIsNone(result)
 
     def test_matching_variant_at_threshold(self) -> None:
         v3 = self._make_variant(unlock_level=3)
         result = TechniqueVariant.matching_variant(
-            self.parent_technique, resonance=self.resonance, thread_level=3
+            self.parent_technique, resonance=self.resonance, thread_level=30
         )
         self.assertEqual(result, v3)
 
@@ -67,7 +67,7 @@ class TechniqueVariantResolutionTests(TestCase):
         self._make_variant(unlock_level=3)
         v5 = self._make_variant(unlock_level=5)
         result = TechniqueVariant.matching_variant(
-            self.parent_technique, resonance=self.resonance, thread_level=5
+            self.parent_technique, resonance=self.resonance, thread_level=50
         )
         self.assertEqual(result, v5)
 
@@ -75,7 +75,7 @@ class TechniqueVariantResolutionTests(TestCase):
         self._make_variant(unlock_level=3)
         other = ResonanceFactory()
         result = TechniqueVariant.matching_variant(
-            self.parent_technique, resonance=other, thread_level=5
+            self.parent_technique, resonance=other, thread_level=50
         )
         self.assertIsNone(result)
 
@@ -85,8 +85,8 @@ class TechniqueVariantResolutionTests(TestCase):
         crossed = TechniqueVariant.newly_crossed_variants(
             self.parent_technique,
             resonance_id=self.resonance.pk,
-            starting_level=2,
-            new_level=5,
+            starting_level=20,
+            new_level=50,
         )
         self.assertEqual(set(crossed), {v3, v5})
 
@@ -95,8 +95,8 @@ class TechniqueVariantResolutionTests(TestCase):
         crossed = TechniqueVariant.newly_crossed_variants(
             self.parent_technique,
             resonance_id=self.resonance.pk,
-            starting_level=5,
-            new_level=5,
+            starting_level=50,
+            new_level=50,
         )
         self.assertEqual(list(crossed), [])
 

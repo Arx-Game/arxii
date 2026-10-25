@@ -14,9 +14,8 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueVariantFactory,
 )
-from world.magic.models import CharacterResonance, CharacterTechnique, Thread
+from world.magic.models import CharacterTechnique, Thread
 from world.magic.serializers import TechniqueFormSerializer
-from world.magic.services.resonance import spend_resonance_for_imbuing
 from world.magic.services.signature import (
     available_signature_bonuses,
     next_signature_bonus,
@@ -127,7 +126,7 @@ class EarlyFormTests(TestCase):
         thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )
-        thread.level = 2
+        thread.level = 20  # stored; shows 2 (#4585)
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
 
@@ -142,7 +141,7 @@ class EarlyFormTests(TestCase):
         thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )
-        thread.level = 1
+        thread.level = 10  # stored; shows 1 (#4585)
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
 
@@ -177,9 +176,11 @@ class GradualSignatureTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.sheet = CharacterSheetFactory()
+        # Thread levels are stored x10 (#4585): the level-3 character and level-3
+        # technique leave room up to stored 30, so the caps never bind here.
+        cls.sheet = CharacterSheetFactory(_class_level=3)
         cls.resonance = ResonanceFactory()
-        cls.technique = TechniqueFactory(level=1)  # TECHNIQUE anchor cap = level x 10
+        cls.technique = TechniqueFactory(level=3)  # TECHNIQUE anchor cap = level x 10
         CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
         seed_motif_from_gift_resonance(cls.sheet, cls.resonance)
         cls.modest = SignatureMotifBonusFactory(
@@ -191,34 +192,33 @@ class GradualSignatureTests(TestCase):
 
     def test_flourish_at_level_one_needs_no_crossing(self) -> None:
         thread = weave_creation_technique_thread(
-            self.sheet, self.technique, self.resonance, level=1
+            self.sheet, self.technique, self.resonance, level=10
         )
         set_signature_bonus(thread, self.modest)
         self.assertEqual(thread.signature_bonus, self.modest)
 
     def test_weaving_further_unlocks_the_next_flourish(self) -> None:
         thread = weave_creation_technique_thread(
-            self.sheet, self.technique, self.resonance, level=1
+            self.sheet, self.technique, self.resonance, level=10
         )
         catalog = [self.modest, self.stronger]
         self.assertEqual(next_signature_bonus(thread, catalog), self.stronger)
         self.assertNotIn(self.stronger, available_signature_bonuses(self.sheet, thread=thread))
 
-        cr, _ = CharacterResonance.objects.get_or_create(
-            character_sheet=self.sheet, resonance=self.resonance
-        )
-        cr.balance = 9999
-        cr.save(update_fields=["balance"])
-        spend_resonance_for_imbuing(self.sheet, thread, 2)  # 1 -> 3
+        # Stored 29 still shows 2: the level-3 flourish stays locked until stored 30.
+        thread.level = 29
+        thread.save(update_fields=["level"])
+        self.assertNotIn(self.stronger, available_signature_bonuses(self.sheet, thread=thread))
 
-        self.assertEqual(thread.level, 3)
+        thread.level = 30
+        thread.save(update_fields=["level"])
         self.assertIn(self.stronger, available_signature_bonuses(self.sheet, thread=thread))
         self.assertIsNone(next_signature_bonus(thread, catalog))
         set_signature_bonus(thread, self.stronger)
 
     def test_creation_thread_never_reaches_a_crossing(self) -> None:
         with self.assertRaises(CreationThreadLevelTooHigh):
-            weave_creation_technique_thread(self.sheet, self.technique, self.resonance, level=3)
+            weave_creation_technique_thread(self.sheet, self.technique, self.resonance, level=30)
 
     def test_creation_thread_is_a_technique_thread(self) -> None:
         thread = weave_creation_technique_thread(
@@ -228,13 +228,13 @@ class GradualSignatureTests(TestCase):
         self.assertEqual(thread.target_technique, self.technique)
 
     def test_weaving_at_exactly_level_two_succeeds(self) -> None:
-        """CREATION_PERSONALIZATION_MAX_LEVEL (2) is the inclusive ceiling."""
+        """CREATION_PERSONALIZATION_MAX_LEVEL (shown 2, stored 20) is the inclusive ceiling."""
         thread = weave_creation_technique_thread(
-            self.sheet, self.technique, self.resonance, level=2
+            self.sheet, self.technique, self.resonance, level=20
         )
-        self.assertEqual(thread.level, 2)
+        self.assertEqual(thread.level, 20)
 
     def test_creation_weave_of_unowned_technique_raises_technique_not_owned(self) -> None:
         unowned_technique = TechniqueFactory(level=1)
         with self.assertRaises(TechniqueNotOwned):
-            weave_creation_technique_thread(self.sheet, unowned_technique, self.resonance, level=1)
+            weave_creation_technique_thread(self.sheet, unowned_technique, self.resonance, level=10)
