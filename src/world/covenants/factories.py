@@ -1237,11 +1237,11 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
 
     # ------------------------------------------------------------------
     # Per resonance: a tier-1 FLAT_BONUS pull, authored at min_thread_level=1
-    # so the PACT is the real gate (#1589 final review). A servant with no
-    # active pact gets granted cap 0 → their Court-role thread cannot imbue
-    # above level 0 → this min-level-1 effect does NOT apply → the pull yields
-    # no Court bonus. Keyed (target_kind, resonance, tier, min_thread_level) —
-    # the unique lookup.
+    # (shown; stored 10, #4585) so the PACT is the real gate (#1589 final
+    # review). A servant with no active pact gets granted cap 0 → their
+    # Court-role thread cannot imbue above level 0 → this min-level-1 effect
+    # does NOT apply → the pull yields no Court bonus. Keyed (target_kind,
+    # resonance, tier, min_thread_level) — the unique lookup.
     #
     # FLAT_BONUS effects carry NO narrative_snippet: the combat-commit snapshot
     # (CombatPullResolvedEffect's flat_bonus_payload CheckConstraint) requires

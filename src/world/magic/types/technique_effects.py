@@ -145,9 +145,10 @@ class TechniqueFormPayload(TypedDict):
     #: authored numbers so the deepening reads as a goal, and are omitted from
     #: the in-scene cast list.
     is_locked: bool
-    #: Thread level that unlocks this form; 0 for the base form.
+    #: Shown thread level that unlocks this form; 0 for the base form.
     unlock_thread_level: int
-    #: The caster's current level on the thread this form resolves through.
+    #: The caster's current SHOWN level (stored // 10, #4585) on the thread this
+    #: form resolves through, on the same scale as ``unlock_thread_level``.
     thread_level: int
     #: True when this form applies because it was bought early, #4099 — the
     #: caster's ``CharacterTechnique.early_form`` reached it before their thread
@@ -192,6 +193,7 @@ class TechniqueNextSignaturePayload(TypedDict):
     """The next flourish weaving this technique's thread will unlock (#4099)."""
 
     name: str
+    #: Both shown thread levels (stored // 10, #4585).
     min_level: int
     thread_level: int
 

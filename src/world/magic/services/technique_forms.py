@@ -141,7 +141,7 @@ def _variant_form(  # noqa: PLR0913
         is_default=is_default,
         is_locked=is_locked,
         unlock_thread_level=variant.unlock_thread_level,
-        thread_level=thread_level,
+        thread_level=shown_thread_level(thread_level),
         is_early=is_early,
         effect_summary=variant.cached_effect_summary,
     )
@@ -347,6 +347,8 @@ def next_signatures_by_technique(
             pairs, key=lambda pair: (pair[0].min_crossing_level, pair[0].name, pair[0].pk)
         )
         result[technique_id] = TechniqueNextSignaturePayload(
-            name=bonus.name, min_level=bonus.min_crossing_level, thread_level=thread.level
+            name=bonus.name,
+            min_level=bonus.min_crossing_level,
+            thread_level=shown_thread_level(thread.level),
         )
     return result
