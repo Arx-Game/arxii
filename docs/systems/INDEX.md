@@ -1769,7 +1769,7 @@ consequence effects for graph mutation and flight), and Rampart living barriers
 - **Frontend (#2006):** `TacticalMap` (shared read-only `@xyflow/react` canvas,
   `frontend/src/areas/components/`) + `SceneTacticalMap` (scene wrapper, replaces the old
   `RoomPositionsPanel`, `frontend/src/scenes/components/`) + `CombatTacticalMap` (combat
-  wrapper — occupants from `current_position` not `persona_positions` — since #4670 drawn as
+  wrapper: occupants from `current_position` not `persona_positions`; since #4670 drawn as
   the SVG `BattleMap` and mounted as the main view of a fight by `CombatMainMap`, with the rail
   holding "Your Turn"/`CombatTurnPanel` and, for a GM, "GM" (#2197: `CombatRail`
   renders in-scene on `SceneDetailPage`'s `/scenes/:id`, not a dedicated route,
