@@ -466,6 +466,11 @@ class StaffSizeDistinctionsAndSurroundings(JourneyCase):
         )
         refused = submit(2, ModifierSize.LARGE, unsized)
         self.assertFalse(refused.is_valid())
+        # Form-wide, where the tabular inline shows it; the effect field is hidden there.
+        self.assertEqual(
+            ["This effect has no size, so it has no rank sizes. Give it a rank-1 size first."],
+            refused.forms[0].non_field_errors(),
+        )
 
         accepted = submit(3, ModifierSize.LARGE)
         self.assertTrue(accepted.is_valid(), accepted.errors)

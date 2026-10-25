@@ -17,7 +17,7 @@ defining characteristics (merits/flaws equivalent):
 
 from typing import ClassVar
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -586,7 +586,9 @@ class DistinctionEffectRankSize(NaturalKeyMixin, RelatedCacheClearingMixin, Shar
         if self.effect_id is not None:
             effect = self.effect
             if effect.modifier_size is None:
-                errors["effect"] = (
+                # A form-wide error: the effect is a hidden field in the admin inline, and
+                # an error on a hidden field is never shown to staff (#4660 live run).
+                errors[NON_FIELD_ERRORS] = (
                     "This effect has no size, so it has no rank sizes. Give it a rank-1 size first."
                 )
             max_rank = effect.distinction.max_rank
