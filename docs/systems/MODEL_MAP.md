@@ -534,6 +534,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - terrain -> areas.MapTerrain [FK] (nullable)
   - blueprint -> areas.PositionBlueprint [FK]
 **Pointed to by:**
   - edges_as_a <- areas.BlueprintEdge
@@ -557,6 +558,12 @@
   - details -> areas.CleanupProjectDetails [FK]
   - outcome_tier -> traits.CheckOutcome [FK]
 
+### MapTerrain
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - art -> evennia_extensions.Media [FK] (nullable)
+
 ### ObjectPosition
 **Foreign Keys:**
   - objectdb -> evennia.ObjectDB [OneToOne]
@@ -564,6 +571,7 @@
 
 ### Position
 **Foreign Keys:**
+  - terrain -> areas.MapTerrain [FK] (nullable)
   - room -> evennia.ObjectDB [FK]
   - elevation_anchor -> areas.Position [FK] (nullable)
 **Pointed to by:**

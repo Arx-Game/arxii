@@ -662,7 +662,7 @@ closing telnet's gap with the web `AddOpponentDialog`, which has taken a positio
 
 - `TacticalMap` (`frontend/src/areas/components/TacticalMap.tsx`) — shared read-only `@xyflow/react` canvas rendering a Position graph: occupant avatars per node (`PositionMapNode.tsx`), edges styled by passability/gating (`edgeStyle`; a conjured wall's label carries its strength, "Conjured Barrier 7/12", #4606), click-to-move via the caller-supplied `moveActions`/`onDispatchMove`. Auto-layout (`tacticalLayout.ts`'s `computeTacticalLayout`, a pure BFS-ring placement) is used per-node when `layout_x`/`layout_y` are both null; explicit cosmetic coordinates take precedence. Dragging is disabled — coordinate authoring is out of scope for #2006. The canvas opens with `fitView` and a `minZoom` of 0.1 (React Flow's default floor of 0.5 stopped the fit at half scale, so a room wider than twice the sidebar never fit, on open or from the fit button, #4641). `PositionMapNode` also renders a rampart ring overlay when a node carries `rampart_element` (#2209): solid border when INTACT, dashed when CRACKED, faint pulsing dashed when CRUMBLING, colored by element (stone=slate, wind=sky, fire=orange, thorn=green, neutral fallback for unrecognized elements), with a `title` tooltip (`"Stone Rampart 18/24"`). Optional `onGMPlace?: (positionId) => boolean` prop (#3385) — consumed in `handleClick` right after the #2206 `onPickPosition` cast-targeting hook and before move-dispatch; a `true` return consumes the click. **Tactical overlays (#3555):** each occupant avatar can carry `marks` (`OccupantMark {kind: 'locked' | 'covering' | 'covered', title}`), rendered as small titled glyphs on the avatar, and every occupant of a node with a rampart gets a behind-cover glyph derived from the node's own `rampart_element` (a `Rampart` is deleted at zero integrity, so present means still cover). An optional `links?: OccupantLink[]` prop (`{id, positionAId, positionBId, label}`) draws an animated rose overlay edge (`link-<id>`) between two positions; a same-position pair draws no edge since both marks already sit on one node. `CombatTacticalMap` builds both from `EncounterDetail.engagement_locks` (both sides marked, link between their positions) and `current_round_actions` rows with `maneuver: 'cover'` (coverer and covered ally marked; visibility is whatever the backend's covenant/GM scoping already returns). `SceneTacticalMap` passes neither.
 - `SceneTacticalMap` (`frontend/src/scenes/components/SceneTacticalMap.tsx`) — non-combat wrapper; builds `occupantsByPosition` from the scene's `persona_positions`, renders nothing when the room has no positions. Replaced the old `RoomPositionsPanel` text-list UI (#2006). GM-place picker (#3385): when `gm_place_in_position` `PlayerAction`s are present in the scene's available actions (the same "am I GM" signal `setTheStageAction` already uses — no separate prop), a "Place" toggle + target `<select>` appear above the map; targets are built from `persona_positions`' co-located personas via `character_sheet` (the persona's character ObjectDB pk); selecting a target and clicking a node dispatches `gm_place_in_position` with `target_object_id` in the kwargs.
-- `CombatTacticalMap` (`frontend/src/combat/components/CombatTacticalMap.tsx`) — combat wrapper; builds `occupantsByPosition` from `Participant.current_position`/`Opponent.current_position` instead of `persona_positions`. Mounted as a "Map" tab in `CombatRail`'s right rail, alongside the existing "Your Turn" tab (`CombatTurnPanel`) — tab defaults to "Your Turn" (#2006). `CombatRail` renders in-scene on `/scenes/:id`, not a dedicated route (#2197). Same GM-place picker as `SceneTacticalMap` (#3385); targets are built from `encounter.participants` (`character_sheet_id`) and `encounter.opponents` (`objectdb_id`), both already on `EncounterDetail`.
+- `CombatTacticalMap` (`frontend/src/combat/components/CombatTacticalMap.tsx`) — combat wrapper; builds `occupantsByPosition` from `Participant.current_position`/`Opponent.current_position` instead of `persona_positions`. Since #4670 it renders `BattleMap` (an SVG, not `TacticalMap`) and is the main view of a fight: `CombatMainMap` mounts it in the wide column of `SceneDetailPage` and `GamePage` while an encounter is on, and `CombatRail` keeps only "Your Turn" (and "GM" for a scene GM). `CombatRail` renders in-scene on `/scenes/:id`, not a dedicated route (#2197). Same GM-place picker as `SceneTacticalMap` (#3385); targets are built from `encounter.participants` (`character_sheet_id`) and `encounter.opponents` (`objectdb_id`), both already on `EncounterDetail`.
 - `MovementActions` — shared component (extracted from combat; lives in `frontend/src/combat/components/`); renders adjacent-position move buttons (a non-map fallback list still used elsewhere). Since #4663 it lists every move entry `roundActionHelpers.isMoveAction` admits (`move_to_position`, `take_flight`, `land`, `pass_held_ground`), keyed by `registry_key` and position (a step and a pass roll can name the same place), shows each entry's note (e.g. "Held by Bandit: you'd stop there.", a pass's approach) and toasts the result's message on success. `hopsLeftLine` finds the "N hops left this round." line on any move entry. On the map a click on a held place takes the plain step; the pass roll stays a panel choice.
 
 ### Movement by capability and held ground [BUILT & WIRED] (#4663, slice 2 of #4651)
@@ -736,6 +736,69 @@ one entry carrying the higher value.
 Journeys: `src/integration_tests/test_moving_by_capability_journeys.py`,
 `test_holding_ground_journeys.py`, `test_crossing_a_wall_journeys.py`; fuzz in
 `integration_tests/fuzz/test_path_service_fuzz.py`.
+
+### The battle map drawing [BUILT & WIRED] (#4670, slice 1 of #4651, ADR-4670)
+
+The combat map is a drawing of the position graph. The place is still the rule: hops, held
+ground, walls and reach read places and edges, never squares. Nothing below changes a roll,
+a cost or a reach.
+
+**Columns** (`world/areas/positioning/models.py`, migration 0297).
+- `PositionNodeBase.area_x`, `area_y`, `area_w`, `area_h` (`Position` and `BlueprintPosition`):
+  the rectangle a place is drawn as, in map squares. All four are set or all four are null,
+  and a set width and height are at least 1 (`_area_constraint`, one `CheckConstraint` per
+  table). A place with no area is drawn as a derived 3x2 area at its layout point by the
+  frontend (`battleMapLayout.ts`), and takes no square.
+- `PositionNodeBase.terrain`: FK to `MapTerrain`, null allowed, `SET_NULL`.
+- `MapTerrain` (`name` unique, `art` FK to `Media`): a named ground look staff author in admin
+  (`MapTerrainAdmin`, `world/areas/admin.py`). It is drawing only: no rule, roll or cost reads
+  it.
+- `ObjectPosition.square_x`, `square_y`: the square a token stands on inside the place's area.
+  Both set or both null (`object_position_square_both_or_neither`). Null means the map arranges
+  the token itself.
+- `instantiate_blueprint` copies `area_*` and `terrain` from each `BlueprintPosition` to the live
+  `Position`.
+
+**Services** (`world/areas/positioning/services.py`).
+- `validate_square(position, square, *, mover)` refuses a square the mover cannot stand on:
+  "{place} has no squares to pick." (the place has no area), "That square is outside {place}.",
+  "Someone is standing there." (another `ObjectPosition` holds it; the mover's own row is
+  excluded).
+- `place_in_position`, `take_position` and `move_to_position` take an optional `square`,
+  validated before the commit. `_commit_position` stores it. Any move without a square clears
+  the stored square, so a plain move never leaves a stale one.
+- `step_to_square(objectdb, square)` stands the actor on another square of the place she
+  already holds. It costs no hop and works in any phase. It needs the actor to be placed
+  ("You aren't standing anywhere.") and able to move (`_can_move`, so a rooted or defeated actor
+  cannot re-tile).
+- `square_of(objectdb)` reads the stored square from the loaded `object_position`.
+
+**Actions** (`actions/definitions/positioning.py`). `MoveToPositionAction` and
+`TakePositionAction` accept `square_x` and `square_y` kwargs (both or neither, else "Pick a
+square with both coordinates."; `MoveToPositionAction` validates the square before it spends a
+hop). `StepToSquareAction` (key `step_to_square`) is dispatched by registry key from the map and
+is not in the available-actions list. Squares have no telnet verb.
+
+**Payload fields.**
+- Each `position_nodes` entry (`PositionNodeSerializer`, scene and encounter): `area_x`,
+  `area_y`, `area_w`, `area_h`, `terrain_name`, `terrain_art_url` (the terrain art's Cloudinary
+  URL).
+- Encounter `participants[]` and `opponents[]`: `current_square` (`{x, y}` or null).
+- Encounter `held_positions[]`: `{position_id, holder_names}` for each place a ready enemy
+  holds (`held_ground.enemy_held_places`). The same for every viewer, since the holders stand
+  in plain sight.
+- Scene `persona_positions[]`: `square_x`, `square_y` beside `position`.
+
+**Frontend.** `BattleMap` (`frontend/src/combat/components/BattleMap.tsx`, pieces in
+`battleMapPieces.tsx`, palette in `combat/battleMapPalette.ts`) is a plain SVG: place areas over
+tiled terrain art, a grid, gated and impassable routes with labels, lock links, rampart rings,
+held places tinted with "Held by ...", and tokens on squares. `battleMapLayout.ts` places
+derived areas (`placeAreas`), fills token squares (`tokenSquares`, an occupant without a stored
+square gets a free one) and computes the viewBox. A click on a square in the viewer's own place
+dispatches `step_to_square`; a click on a square in another place dispatches the move with
+`square_x`/`square_y`. A place with no area moves without a square.
+
+Journeys: `src/integration_tests/test_battle_map_drawing_journeys.py`.
 
 ### Rampart — Living Barriers [BUILT & WIRED] (#2209, epic #2040 decision 3)
 

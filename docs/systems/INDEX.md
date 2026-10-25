@@ -1769,8 +1769,9 @@ consequence effects for graph mutation and flight), and Rampart living barriers
 - **Frontend (#2006):** `TacticalMap` (shared read-only `@xyflow/react` canvas,
   `frontend/src/areas/components/`) + `SceneTacticalMap` (scene wrapper, replaces the old
   `RoomPositionsPanel`, `frontend/src/scenes/components/`) + `CombatTacticalMap` (combat
-  wrapper — occupants from `current_position` not `persona_positions` — mounted as a "Map"
-  tab in `CombatRail`'s right rail alongside "Your Turn"/`CombatTurnPanel` (#2197: `CombatRail`
+  wrapper — occupants from `current_position` not `persona_positions` — since #4670 drawn as
+  the SVG `BattleMap` and mounted as the main view of a fight by `CombatMainMap`, with the rail
+  holding "Your Turn"/`CombatTurnPanel` and, for a GM, "GM" (#2197: `CombatRail`
   renders in-scene on `SceneDetailPage`'s `/scenes/:id`, not a dedicated route,
   `frontend/src/combat/components/`) + `MovementActions` (shared adjacent-position button
   list, `frontend/src/combat/components/`). `PositionMapNode` renders a covering Rampart as
@@ -1780,7 +1781,7 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   "Place" toggle + target picker over the room's co-located participants/opponents/personas
   when a `gm_place_in_position` `PlayerAction` is available.
   **#3557:** while an encounter is active `SceneDetailPage` unmounts `SceneTacticalMap`
-  and `CombatTacticalMap` is the page's only map; it takes `sceneId`, reads the page's
+  and `CombatTacticalMap` is the page's only map (#4670: in the wide column, not the rail); it takes `sceneId`, reads the page's
   cached scene detail, and draws non-combatant personas as dimmed bystanders
   (`OccupantSummary.bystander`). `CombatRail` gained a GM tab (`CombatGMTab`: encounter
   controls + the combat `GMAdjudicationPanel` tabs), and the idle header panels fold
@@ -8805,6 +8806,22 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - Capability sources: `CapabilitySourceType.MODIFIER` / `_get_modifier_sources`;
     `CharacterModifierQuerySet.active()`; `get_available_actions` keeps the strongest source per
     approach. Detail in `docs/systems/areas.md`, "Movement by capability and held ground".
+- **The battle map drawing (#4670, slice 1 of #4651, ADR-4670) [BUILT & WIRED]:**
+  - Models (migration 0297): `MapTerrain` (`name`, `art` FK Media; drawing only, no rule reads
+    it), `PositionNodeBase.area_x/area_y/area_w/area_h` (all four or none) and `terrain`,
+    `ObjectPosition.square_x/square_y` (both or neither). `instantiate_blueprint` copies area and
+    terrain to the live place.
+  - Services (`positioning/services.py`): `validate_square`, `step_to_square` (free, needs
+    movement), `square_of`; `place_in_position` / `take_position` / `move_to_position` take
+    `square=`, and a move without one clears it. Action `step_to_square` (`StepToSquareAction`,
+    dispatched by registry key, not in the available-actions list); `move_to_position` and
+    `take_position` accept `square_x`/`square_y`.
+  - Payload: node `area_*`, `terrain_name`, `terrain_art_url`; `current_square` on encounter
+    participants and opponents; encounter `held_positions` (`enemy_held_places`, the same for
+    every viewer); scene `persona_positions[].square_x/square_y`.
+  - Frontend: `BattleMap` (SVG) via `CombatTacticalMap`, mounted by `CombatMainMap` as the main
+    view of a fight; pick state in `CombatPickProvider` / `useCombatPick`. Detail in
+    `docs/systems/areas.md`, "The battle map drawing".
 - **The waiting strike (#4608, slice 3 of #4576) [BUILT & WIRED]:**
   - Declaration: `declare_await_opening(participant, technique, *, confirm_soulfray_risk)`
     (`world/combat/services/declarations/await_opening.py`) writes the round action with
