@@ -28,8 +28,8 @@ vi.mock('../../../api', () => ({
 
 const training: MagicTraining = {
   base_sources: [
-    { name: 'Tradition Training', points: 20 },
-    { name: 'Studious', points: 10 },
+    { name: 'Tradition Training', rank: 1, points: 20 },
+    { name: 'Studious', rank: 1, points: 10 },
   ],
   gift_bonus: 10,
   affinity_bonus: 10,
@@ -71,16 +71,24 @@ describe('MagicTrainingBlock', () => {
   it('lists each source, each fit and the total, and reads Remaining 0 when spent exactly', () => {
     renderBlock(draftWith(training));
 
-    expect(screen.getByText('What The Whispering Path taught you')).toBeInTheDocument();
-    expect(screen.getByText('Tradition Training')).toBeInTheDocument();
-    expect(screen.getByText('Studious')).toBeInTheDocument();
+    expect(screen.getByText('Tradition Training, rank 1')).toBeInTheDocument();
+    expect(screen.getByText('Studious, rank 1')).toBeInTheDocument();
     expect(screen.getByText('Fits: Shadowcraft')).toBeInTheDocument();
     expect(screen.getByText('Fits: Abyssal')).toBeInTheDocument();
     expect(screen.getByText('Magical training')).toBeInTheDocument();
     expect(screen.getByText('50')).toBeInTheDocument();
     expect(screen.getByText('Spend all of it')).toBeInTheDocument();
     expect(screen.getByText(/Remaining/)).toHaveTextContent('Remaining 0');
+    expect(screen.getByText(/Remaining/)).not.toHaveClass('over');
     expect(screen.getByLabelText('Occult')).toHaveTextContent('30');
+  });
+
+  it('flags an underspent pool the same way as an overspent one', () => {
+    renderBlock(draftWith({ ...training, allocated: 30, skills: training.skills.slice(0, 2) }));
+
+    const ledger = screen.getByText(/Remaining/);
+    expect(ledger).toHaveTextContent('Remaining 20');
+    expect(ledger).toHaveClass('over');
   });
 
   it('reads Over by 10 when the allocation is over the total', () => {
@@ -96,13 +104,16 @@ describe('MagicTrainingBlock', () => {
 
     expect(screen.queryByText('Fits: Shadowcraft')).not.toBeInTheDocument();
     expect(screen.getByText(/Over by/)).toHaveTextContent('Over by 10');
+    expect(screen.getByText(/Over by/)).toHaveClass('over');
   });
 
-  it('disables + at the cap and when nothing is left to spend', () => {
+  it('disables + on a skill at its cap, with the cap tooltip, while another can still rise', () => {
     renderBlock(draftWith({ ...training, allocated: 40, skills: training.skills.slice(0, 2) }));
 
     // Occult sits at its max of 30; Ritualism has room and 10 is left.
-    expect(screen.getByRole('button', { name: 'Raise Occult' })).toBeDisabled();
+    const occult = screen.getByRole('button', { name: 'Raise Occult' });
+    expect(occult).toBeDisabled();
+    expect(occult).toHaveAttribute('title', 'At 30, the most it can be');
     expect(screen.getByRole('button', { name: 'Raise Ritualism' })).toBeEnabled();
   });
 
@@ -136,14 +147,19 @@ describe('MagicTrainingBlock', () => {
   });
 
   it('reads its labels from the explanation copy when staff wrote them', () => {
-    renderBlock(draftWith(training), {
-      gift_training_heading: 'Lessons of {tradition}',
+    renderBlock(draftWith({ ...training, allocated: 40, skills: training.skills.slice(0, 2) }), {
+      gift_training_source: '{name} (rank {rank})',
       gift_training_total: 'Training',
       gift_training_spend: 'Use it all',
       gift_training_fits: 'Suits: {name}',
+      gift_training_at_cap: 'Full at {max}',
     });
 
-    expect(screen.getByText('Lessons of The Whispering Path')).toBeInTheDocument();
+    expect(screen.getByText('Tradition Training (rank 1)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Raise Occult' })).toHaveAttribute(
+      'title',
+      'Full at 30'
+    );
     expect(screen.getByText('Training')).toBeInTheDocument();
     expect(screen.getByText('Use it all')).toBeInTheDocument();
     expect(screen.getByText('Suits: Shadowcraft')).toBeInTheDocument();

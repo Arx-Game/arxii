@@ -577,9 +577,10 @@ export interface Tradition {
   favored_affinity_names: string[];
 }
 
-/** One distinction's contribution to the Magic training pool (#4659). */
+/** One distinction, at one rank, and what it adds to the Magic training pool (#4659). */
 export interface MagicTrainingSource {
   name: string;
+  rank: number;
   points: number;
 }
 

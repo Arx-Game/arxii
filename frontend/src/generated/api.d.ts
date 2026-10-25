@@ -39504,6 +39504,7 @@ export interface components {
       development_total: number | null;
       training_points: number | null;
       teaching_line: string | null;
+      fit_line: string | null;
       display: string;
     };
     /** @description Serializer for a directed-offer summons (#2050). */

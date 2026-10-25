@@ -36,6 +36,12 @@ from world.currency.services import (
     transfer,
 )
 from world.game_clock.week_services import advance_game_week
+from world.magic.factories import (
+    CharacterGiftFactory,
+    GiftFactory,
+    TraditionFactory,
+    TraditionGiftGrantFactory,
+)
 from world.magic.models import TrainingOutcomeAward
 from world.npc_services.constants import OfferKind
 from world.npc_services.factories import (
@@ -565,6 +571,23 @@ class TheTrainersMenu(_AcademyCourseCase):
         self.assertRegex(menu, rf"Course: Occult.*{self.NEXT}")
         self.assertNotIn("next week", menu)
 
+    def test_telnet_prints_the_tradition_line_then_the_fit_line(self) -> None:
+        """A tutor who teaches a Tradition says so, then what of her it teaches well (#4659)."""
+        gift = GiftFactory(name="Lantern Gift")
+        CharacterGiftFactory(character=self.sheet, gift=gift)
+        tradition = TraditionFactory(name="House of Dawn")
+        TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+        self.role.teaches_tradition = tradition
+        self.role.save()
+
+        menu = self.menu()
+
+        self.assertRegex(
+            menu,
+            rf"Course: Occult.*{self.ENROLL}\s+Taught in the manner of House of Dawn\s+"
+            r"Teaches well: your Lantern Gift\. Sessions are easier for you\.",
+        )
+
     def test_a_free_course_names_only_the_hare(self) -> None:
         self.course.coin_cost = 0
         self.course.save()
@@ -586,6 +609,7 @@ class TheTrainersMenu(_AcademyCourseCase):
                 "development_total": None,
                 "training_points": None,
                 "teaching_line": None,
+                "fit_line": None,
                 "display": self.ENROLL,
             },
         )

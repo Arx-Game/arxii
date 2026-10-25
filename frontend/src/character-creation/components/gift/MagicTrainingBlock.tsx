@@ -1,17 +1,21 @@
 /**
  * MagicTrainingBlock (#4659): what the chosen Tradition taught the character, spent on
- * Magic skills.
+ * Magic skills. The body of the Gift stage's own training funnel step, which carries the
+ * "What <Tradition> taught you" heading (`trainingHeading`).
  *
- * Reads `draft.magic_training`: one breakdown line per distinction that feeds the pool,
- * a "Fits:" line for each teaching-fit bonus, the total, then a ledger that must reach
- * exactly 0 and one `StatRow` per Magic skill. Each step writes the whole
+ * Reads `draft.magic_training`: one breakdown line per (distinction, rank) that feeds the
+ * pool ("Tradition Training, rank 1"), a "Fits:" line for each teaching-fit bonus, the
+ * total, then a ledger that must reach exactly 0 (under- and overspending are both
+ * flagged) and one `StatRow` per Magic skill. Each step writes the whole
  * `draft_data.magic_skills` map (the draft PATCH merges `draft_data` at the top level).
  * Renders nothing for a draft with no training and nothing allocated.
  */
 
+import type { ReactNode } from 'react';
 import { InstrumentFrame, StatRow } from '../../folio';
 import { useCGExplanations, useUpdateDraft } from '../../queries';
-import type { CharacterDraft, MagicTrainingSkill } from '../../types';
+import type { CGExplanations, CharacterDraft, MagicTrainingSkill } from '../../types';
+import { hasMagicTraining } from './magicTraining';
 
 /** Magic skills rise in the same steps of ten as every other skill. */
 const STEP = 10;
@@ -20,8 +24,31 @@ interface MagicTrainingBlockProps {
   draft: CharacterDraft;
 }
 
-function increaseTitleFor(atCap: boolean, max: number): string | undefined {
-  return atCap ? `At ${max}, the most it can be` : undefined;
+function increaseTitleFor(
+  atCap: boolean,
+  max: number,
+  copy: CGExplanations | undefined
+): string | undefined {
+  if (!atCap) return undefined;
+  return (copy?.gift_training_at_cap ?? 'At {max}, the most it can be').replace(
+    '{max}',
+    String(max)
+  );
+}
+
+function ledgerRight(over: number, remaining: number, copy: CGExplanations | undefined): ReactNode {
+  if (over > 0) {
+    return (
+      <>
+        {copy?.gift_training_over ?? 'Over by'} <b>{over}</b>
+      </>
+    );
+  }
+  return (
+    <>
+      {copy?.gift_training_remaining ?? 'Remaining'} <b>{remaining}</b>
+    </>
+  );
 }
 
 export function MagicTrainingBlock({ draft }: MagicTrainingBlockProps) {
@@ -29,13 +56,16 @@ export function MagicTrainingBlock({ draft }: MagicTrainingBlockProps) {
   const { data: copy } = useCGExplanations();
   const training = draft.magic_training;
 
-  if (!training || (training.total === 0 && training.allocated === 0)) return null;
+  if (!hasMagicTraining(training)) return null;
 
-  const traditionName = draft.selected_tradition?.name ?? '';
   const over = training.allocated - training.total;
-  const remaining = training.required_spend - training.allocated;
+  const remaining = Math.max(training.required_spend - training.allocated, 0);
   const fitLine = (name: string) =>
     (copy?.gift_training_fits ?? 'Fits: {name}').replace('{name}', name);
+  const sourceLine = (name: string, rank: number) =>
+    (copy?.gift_training_source ?? '{name}, rank {rank}')
+      .replace('{name}', name)
+      .replace('{rank}', String(rank));
 
   const handleChange = (skill: MagicTrainingSkill, value: number) => {
     const allocation: Record<string, number> = {};
@@ -50,17 +80,11 @@ export function MagicTrainingBlock({ draft }: MagicTrainingBlockProps) {
   };
 
   return (
-    <section aria-labelledby="magic-training-heading">
-      <h3 className="section-h" id="magic-training-heading">
-        {(copy?.gift_training_heading ?? 'What {tradition} taught you').replace(
-          '{tradition}',
-          traditionName
-        )}
-      </h3>
+    <div>
       <div className="breakdown">
         {training.base_sources.map((source, index) => (
-          <div key={source.name}>
-            <span>{source.name}</span>
+          <div key={`${index}-${source.name}-${source.rank}`}>
+            <span>{sourceLine(source.name, source.rank)}</span>
             <span>{index === 0 ? source.points : `+${source.points}`}</span>
           </div>
         ))}
@@ -85,17 +109,8 @@ export function MagicTrainingBlock({ draft }: MagicTrainingBlockProps) {
         label={copy?.gift_training_skills ?? 'Magic skills'}
         ledger={{
           left: copy?.gift_training_spend ?? 'Spend all of it',
-          right:
-            over > 0 ? (
-              <>
-                {copy?.gift_training_over ?? 'Over by'} <b>{over}</b>
-              </>
-            ) : (
-              <>
-                {copy?.gift_training_remaining ?? 'Remaining'} <b>{Math.max(remaining, 0)}</b>
-              </>
-            ),
-          over: over > 0 || remaining < 0,
+          right: ledgerRight(over, remaining, copy),
+          over: over > 0 || remaining > 0,
         }}
       >
         {training.skills.map((skill) => {
@@ -113,11 +128,11 @@ export function MagicTrainingBlock({ draft }: MagicTrainingBlockProps) {
               canIncrease={
                 !atCap && training.allocated + STEP <= training.total && !updateDraft.isPending
               }
-              increaseTitle={increaseTitleFor(atCap, skill.max)}
+              increaseTitle={increaseTitleFor(atCap, skill.max, copy)}
             />
           );
         })}
       </InstrumentFrame>
-    </section>
+    </div>
   );
 }

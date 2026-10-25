@@ -112,31 +112,70 @@ describe('GiftStage (folio)', () => {
     expect(screen.getByText('Whispers of Shadow', { selector: '.tag' })).toBeInTheDocument();
   });
 
-  it('mounts the training block after the tradition once the draft has training (#4659)', () => {
-    const draft = createMockDraft({
-      selected_path: mockPath,
-      selected_tradition: mockTradition,
-      magic_training: {
-        ...createMockDraft().magic_training,
-        base_sources: [{ name: 'Tradition Training', points: 20 }],
-        total: 20,
-        required_spend: 20,
-        skills: [{ id: 3, name: 'Occult', value: 0, max: 30 }],
-      },
+  describe('the magical training step (#4659)', () => {
+    const trainedDraft = (allocated: number, giftId: number | null = 1) =>
+      createMockDraft({
+        selected_path: mockPath,
+        selected_tradition: mockTradition,
+        draft_data: { selected_gift_id: giftId },
+        magic_training: {
+          ...createMockDraft().magic_training,
+          base_sources: [{ name: 'Tradition Training', rank: 1, points: 20 }],
+          total: 20,
+          required_spend: 20,
+          allocated,
+          skills: [{ id: 3, name: 'Occult', value: allocated, max: 30 }],
+        },
+      });
+
+    /** The funnel's own steps, in order (each a direct child of the Gift steps list). */
+    const funnelSteps = () =>
+      Array.from(screen.getByRole('list', { name: 'Gift steps' }).children) as HTMLElement[];
+
+    it('is its own step after the Gift, open while the pool is unspent', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage draft={trainedDraft(0)} onRegisterBeforeLeave={vi.fn()} />
+      );
+      const steps = funnelSteps();
+      expect(steps).toHaveLength(6);
+      const training = steps[2];
+      expect(training).toHaveTextContent('What The Whispering Path taught you');
+      expect(training).toHaveTextContent('Step 3 of 6');
+      expect(training.querySelector('details')).toHaveAttribute('open');
+      // The Tradition step above it is closed once chosen; the block is not inside it.
+      expect(steps[0].querySelector('details')).not.toHaveAttribute('open');
+      expect(steps[0]).not.toHaveTextContent('taught you');
+      expect(steps[3]).toHaveTextContent('Step 4 of 6');
+      expect(screen.getByText(/Remaining/)).toHaveTextContent('Remaining 20');
     });
-    renderWithCharacterCreationProviders(
-      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
-    );
-    expect(screen.getByText('What The Whispering Path taught you')).toBeInTheDocument();
-    expect(screen.getByText(/Remaining/)).toHaveTextContent('Remaining 20');
+
+    it('closes and reads as chosen once the pool is spent exactly', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage draft={trainedDraft(20)} onRegisterBeforeLeave={vi.fn()} />
+      );
+      const training = funnelSteps()[2];
+      expect(training.querySelector('details')).not.toHaveAttribute('open');
+      expect(training).toHaveClass('chosen');
+    });
+
+    it('is gated until a Gift is chosen', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage draft={trainedDraft(0, null)} onRegisterBeforeLeave={vi.fn()} />
+      );
+      const training = funnelSteps()[2];
+      expect(training).toHaveClass('closed');
+      expect(training).toHaveTextContent('Choose a gift first');
+      expect(training.querySelector('details')).not.toHaveAttribute('open');
+    });
   });
 
-  it('mounts no training block when the draft has no training', () => {
+  it('has no training step when the draft has no training', () => {
     const draft = createMockDraft({ selected_path: mockPath, selected_tradition: mockTradition });
     renderWithCharacterCreationProviders(
       <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
     );
     expect(screen.queryByText(/taught you/)).not.toBeInTheDocument();
+    expect(screen.getByText('Step 1 of 5')).toBeInTheDocument();
   });
 
   it('mounts the schooling stances under a chosen living-masters tradition', () => {

@@ -5,7 +5,7 @@
  * Lists the gifts pickable for the draft's chosen tradition + path
  * (GET /api/character-creation/gifts/?draft_id=). Selecting a gift resets any
  * previously chosen techniques, since the technique catalog is scoped per-gift.
- * A Gift the draft's Tradition favors carries "Teaches well" in its tag (#4659).
+ * A Gift the draft's Tradition favors carries its own "Teaches well" tag (#4659).
  */
 
 import { useEffect } from 'react';
@@ -88,11 +88,8 @@ export function GiftSelector({ draft }: GiftSelectorProps) {
           <Entry
             key={gift.id}
             name={gift.name}
-            tag={
-              gift.favored
-                ? `${gift.kind} · ${copy?.gift_teaches_well ?? 'Teaches well'}`
-                : gift.kind
-            }
+            tag={gift.kind}
+            tags={gift.favored ? [copy?.gift_teaches_well ?? 'Teaches well'] : undefined}
             chosen={isSelected}
             open={isSelected}
             onChoose={() => handleSelect(gift.id)}

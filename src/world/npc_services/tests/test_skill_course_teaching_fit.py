@@ -88,34 +88,45 @@ class SkillCourseTeachingFitTests(TestCase):
         )
         sheet = self._student(gift=self.gift, aura=AffinityType.CELESTIAL)
         self.assertEqual(self._difficulty_rolled(sheet, course), DIFFICULTY)
-        self.assertIsNone(_offer_price(course.offer, sheet, {}, None).teaching_line)
+        price = _offer_price(course.offer, sheet, {}, None)
+        self.assertIsNone(price.teaching_line)
+        self.assertIsNone(price.fit_line)
 
-    def test_menu_line_names_gift_and_affinity(self) -> None:
+    def test_menu_lines_name_the_tradition_then_gift_and_affinity(self) -> None:
         sheet = self._student(gift=self.gift, aura=AffinityType.CELESTIAL)
         payload = _offer_price_payload(self.course.offer, sheet, {}, None)
+        self.assertEqual(payload["teaching_line"], "Taught in the manner of House of Dawn")
         self.assertEqual(
-            payload["teaching_line"],
-            "Taught in the manner of House of Dawn. Teaches well: your Lantern Gift and "
-            "your Dawn affinity. Sessions are easier for you.",
+            payload["fit_line"],
+            "Teaches well: your Lantern Gift and Dawn affinity. Sessions are easier for you.",
         )
 
-    def test_menu_line_with_only_the_affinity(self) -> None:
+    def test_fit_line_with_only_the_gift(self) -> None:
+        sheet = self._student(gift=self.gift, aura=AffinityType.ABYSSAL)
+        price = _offer_price(self.course.offer, sheet, {}, None)
+        self.assertEqual(
+            price.fit_line, "Teaches well: your Lantern Gift. Sessions are easier for you."
+        )
+
+    def test_fit_line_with_only_the_affinity(self) -> None:
         sheet = self._student(aura=AffinityType.CELESTIAL)
-        line = _offer_price(self.course.offer, sheet, {}, None).teaching_line
+        price = _offer_price(self.course.offer, sheet, {}, None)
         self.assertEqual(
-            line,
-            "Taught in the manner of House of Dawn. Teaches well: your Dawn affinity. "
-            "Sessions are easier for you.",
+            price.fit_line, "Teaches well: your Dawn affinity. Sessions are easier for you."
         )
 
-    def test_menu_line_for_a_non_fitting_student_names_only_the_tradition(self) -> None:
+    def test_non_fitting_student_sees_only_the_tradition(self) -> None:
         sheet = self._student()
-        line = _offer_price(self.course.offer, sheet, {}, None).teaching_line
-        self.assertEqual(line, "Taught in the manner of House of Dawn")
+        price = _offer_price(self.course.offer, sheet, {}, None)
+        self.assertEqual(price.teaching_line, "Taught in the manner of House of Dawn")
+        self.assertIsNone(price.fit_line)
 
-    def test_enrolled_student_still_sees_the_line(self) -> None:
+    def test_enrolled_student_still_sees_both_lines(self) -> None:
         sheet = self._student(gift=self.gift)
         enrollment = SkillCourseEnrollmentFactory(character_sheet=sheet, course=self.course)
         price = _offer_price(self.course.offer, sheet, {self.course.offer_id: enrollment}, None)
-        self.assertIn("Teaches well: your Lantern Gift.", price.teaching_line)
+        self.assertEqual(price.teaching_line, "Taught in the manner of House of Dawn")
+        self.assertEqual(
+            price.fit_line, "Teaches well: your Lantern Gift. Sessions are easier for you."
+        )
         self.assertNotIn("House of Dawn", format_offer_price(price))

@@ -1543,7 +1543,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             for skill in magic_category_skills().select_related("trait").order_by("trait__name")
         ]
         return {
-            "base_sources": [{"name": name, "points": points} for name, points in pool.sources],
+            "base_sources": [
+                {"name": source.name, "rank": source.rank, "points": source.points}
+                for source in pool.sources
+            ],
             "gift_bonus": pool.gift_bonus,
             "affinity_bonus": pool.affinity_bonus,
             "favored_gift_name": pool.fit.favored_gift_name,

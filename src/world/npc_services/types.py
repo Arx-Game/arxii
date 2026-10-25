@@ -39,8 +39,10 @@ class OfferPrice:
     ``next_session_next_week`` is True when her open enrollment already ran a
     session this game week, so the next one waits for the week to turn. It only
     changes the menu line, and is not sent on the wire on its own.
-    ``teaching_line`` is the menu's Tradition teaching-fit line for a skill course whose
-    role teaches a Tradition (None otherwise); it rides the wire as ``teaching_line``.
+    ``teaching_line`` names the Tradition a skill course's role teaches ("Taught in the
+    manner of X", None when it teaches none); ``fit_line`` says what of the learner that
+    Tradition teaches well and that sessions are easier (None when nothing fits). Both
+    ride the wire under their own names (#4659).
 
     A TRAIN offer charges no AP on acceptance (``ap`` 0): its Hare and coin are paid
     now, and its ``learn_ap_cost`` only sizes the training meter (``training_points``,
@@ -58,3 +60,4 @@ class OfferPrice:
     training_points: int | None = None
     next_session_next_week: bool = False
     teaching_line: str | None = None
+    fit_line: str | None = None

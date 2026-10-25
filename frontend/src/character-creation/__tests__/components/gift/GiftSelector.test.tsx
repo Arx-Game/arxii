@@ -72,8 +72,11 @@ describe('GiftSelector', () => {
     });
     renderSelector(draft);
 
-    expect(screen.getByText('major · Teaches well')).toBeInTheDocument();
-    expect(screen.getAllByText('major')).toHaveLength(1);
+    // A tag of its own beside the kind, never folded into it.
+    const tag = screen.getByText('Teaches well');
+    expect(tag).toHaveClass('tag');
+    expect(screen.getAllByText('Teaches well')).toHaveLength(1);
+    expect(screen.getAllByText('major')).toHaveLength(2);
   });
 
   it('shows a prompt instead of gift cards when no tradition is selected', () => {

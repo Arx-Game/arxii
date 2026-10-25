@@ -22,7 +22,11 @@ import { NPCInteractionDialog } from './NPCInteractionDialog';
 
 const ENROLL_LINE = 'Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now';
 
-const price = (display: string, teaching_line: string | null = null) => ({
+const price = (
+  display: string,
+  teaching_line: string | null = null,
+  fit_line: string | null = null
+) => ({
   ap: 6,
   coppers: 200,
   golden_hares: 1,
@@ -31,6 +35,7 @@ const price = (display: string, teaching_line: string | null = null) => ({
   development_total: null,
   training_points: null,
   teaching_line,
+  fit_line,
   display,
 });
 
@@ -75,9 +80,9 @@ describe('NPCInteractionDialog price line (#4457)', () => {
     expect(mission).toHaveTextContent(/^Ask for work$/);
   });
 
-  it("prints a course's teaching line under its price (#4659)", async () => {
-    const TEACHING =
-      'Taught in the manner of Smiling Shadows. Teaches well: your Shadowcraft. Sessions are easier for you.';
+  it("prints a course's Tradition line, then its fit line, under its price (#4659)", async () => {
+    const TAUGHT = 'Taught in the manner of Smiling Shadows';
+    const FIT = 'Teaches well: your Shadowcraft and Abyssal affinity. Sessions are easier for you.';
     startInteraction.mockResolvedValue({
       closed: false,
       last_result_message: null,
@@ -86,7 +91,7 @@ describe('NPCInteractionDialog price line (#4457)', () => {
           id: 1,
           label: 'Course: Occult',
           kind: 'skill_course',
-          price: price(ENROLL_LINE, TEACHING),
+          price: price(ENROLL_LINE, TAUGHT, FIT),
         },
       ],
     });
@@ -100,6 +105,37 @@ describe('NPCInteractionDialog price line (#4457)', () => {
     );
 
     const course = await screen.findByRole('button', { name: /Course: Occult/ });
-    expect(course).toHaveTextContent(`Course: Occult${ENROLL_LINE}${TEACHING}`);
+    expect(course).toHaveTextContent(`Course: Occult${ENROLL_LINE}${TAUGHT}${FIT}`);
+    expect(screen.getByText(TAUGHT)).toHaveClass('text-muted-foreground');
+    expect(screen.getByText(FIT)).not.toHaveClass('text-muted-foreground');
+  });
+
+  it('prints the Tradition line alone when nothing fits', async () => {
+    startInteraction.mockResolvedValue({
+      closed: false,
+      last_result_message: null,
+      available_offers: [
+        {
+          id: 1,
+          label: 'Course: Theology',
+          kind: 'skill_course',
+          price: price(ENROLL_LINE, 'Taught in the manner of The Vigil'),
+        },
+      ],
+    });
+    render(
+      <NPCInteractionDialog
+        roleId={12}
+        title="Academy Trainer"
+        open
+        onOpenChange={() => undefined}
+      />
+    );
+
+    const course = await screen.findByRole('button', { name: /Course: Theology/ });
+    expect(course).toHaveTextContent(
+      `Course: Theology${ENROLL_LINE}Taught in the manner of The Vigil`
+    );
+    expect(course).not.toHaveTextContent(/Teaches well/);
   });
 });

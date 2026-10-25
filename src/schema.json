@@ -69772,6 +69772,9 @@ components:
         teaching_line:
           type: string
           nullable: true
+        fit_line:
+          type: string
+          nullable: true
         display:
           type: string
       required:
@@ -69780,6 +69783,7 @@ components:
       - development_remaining
       - development_total
       - display
+      - fit_line
       - golden_hares
       - per_session_ap
       - teaching_line

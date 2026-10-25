@@ -212,6 +212,12 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         self._select(draft, self.living)
         self.assertEqual(self._sync(draft, 2).status_code, 200)
         self.assertEqual(self._training_base(draft), 40)
+        # The breakdown line names the rank held: "Tradition Training, rank 2" (#4659).
+        sources = self.client.get(self._draft_url(draft)).json()["magic_training"]["base_sources"]
+        self.assertEqual(
+            [(s["name"], s["rank"], s["points"]) for s in sources],
+            [(self.training.name, 2, 40)],
+        )
 
         total = self._allocate_pool(draft, self.thaumaturgy)
         self.assertGreater(total, 0)

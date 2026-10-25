@@ -7,6 +7,7 @@ from world.character_creation.constants import (
     MAGIC_TRAINING_POINTS_TARGET,
 )
 from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.types import DistinctionBonusSource
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.magic.factories import (
     AffinityFactory,
@@ -59,7 +60,13 @@ class MagicTrainingPoolTest(TestCase):
         pool = self._draft([self.training, self.studious]).magic_training_pool
         self.assertEqual((pool.base, pool.gift_bonus, pool.affinity_bonus), (30, 10, 10))
         self.assertEqual(pool.total, 50)
-        self.assertEqual(pool.sources, [("Studious", 10), ("Tradition Training", 20)])
+        self.assertEqual(
+            pool.sources,
+            [
+                DistinctionBonusSource(name="Studious", rank=1, points=10),
+                DistinctionBonusSource(name="Tradition Training", rank=1, points=20),
+            ],
+        )
 
     def test_gift_only(self) -> None:
         pool = self._draft([self.training, self.studious], affinity=False).magic_training_pool
@@ -75,6 +82,16 @@ class MagicTrainingPoolTest(TestCase):
         pool = self._draft([]).magic_training_pool
         self.assertEqual((pool.base, pool.total, pool.required_spend), (0, 0, 0))
         self.assertEqual(pool.sources, [])
+
+    def test_sources_name_the_rank_held(self) -> None:
+        """A rank-2 stance reads "Tradition Training, rank 2" in the breakdown (#4659)."""
+        draft = CharacterDraftFactory(
+            draft_data={"distinctions": [{"distinction_id": self.training.id, "rank": 2}]},
+        )
+        sources = draft.magic_training_pool.sources
+        self.assertEqual(len(sources), 1)
+        self.assertEqual((sources[0].name, sources[0].rank), ("Tradition Training", 2))
+        self.assertEqual(sources[0].points, draft.magic_training_pool.base)
 
     def test_total_rounds_down_to_tier(self) -> None:
         review = DistinctionFactory(name="Review Focus")

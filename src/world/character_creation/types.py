@@ -132,14 +132,23 @@ class CGPointBreakdownEntry(TypedDict):
 
 
 @dataclass(frozen=True)
+class DistinctionBonusSource:
+    """One distinction, at one rank, feeding a ModifierTarget: what its effect adds."""
+
+    name: str
+    rank: int
+    points: int
+
+
+@dataclass(frozen=True)
 class MagicTrainingPool:
     """The points a draft spends on Magic skills, with the breakdown (slice 2 of #4659).
 
     ``base`` is the distinctions' sum; ``gift_bonus`` / ``affinity_bonus`` are the
     Tradition's fit bonuses (0 when ``base`` is 0). ``total`` is rounded down to a whole
     skill tier; ``required_spend`` is what the draft must spend (capped by what the
-    Magic skills can hold). ``sources`` is one ``(distinction name, points)`` per
-    contributing distinction.
+    Magic skills can hold). ``sources`` is one ``DistinctionBonusSource`` per
+    contributing (distinction, rank).
     """
 
     base: int
@@ -148,4 +157,4 @@ class MagicTrainingPool:
     total: int
     required_spend: int
     fit: "TeachingFit"
-    sources: list[tuple[str, int]]
+    sources: list[DistinctionBonusSource]

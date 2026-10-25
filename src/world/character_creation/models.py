@@ -62,6 +62,7 @@ from world.character_creation.constants import (
 )
 from world.character_creation.types import (
     CGPointBreakdownEntry,
+    DistinctionBonusSource,
     MagicTrainingPool,
     StageValidationErrors,
 )
@@ -1869,14 +1870,15 @@ class CharacterDraft(SharedMemoryModel):
     def _get_distinction_bonus(self, modifier_target_name: str, category_name: str) -> int:
         """Sum distinction effect values targeting a specific ModifierTarget."""
         sources = self._distinction_bonus_sources(modifier_target_name, category_name)
-        return sum(points for _, points in sources)
+        return sum(source.points for source in sources)
 
     def _distinction_bonus_sources(
         self, modifier_target_name: str, category_name: str
-    ) -> list[tuple[str, int]]:
-        """One ``(distinction name, points)`` per distinction feeding a ModifierTarget.
+    ) -> list[DistinctionBonusSource]:
+        """One source per (distinction, rank) feeding a ModifierTarget, ordered by name, rank.
 
-        Points sum every rank the distinction is held at; ordered by name.
+        A distinction held at one rank more than once (per feature) sums into one source,
+        so the points total stays every holding's value.
         """
         from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
 
@@ -1900,12 +1902,14 @@ class CharacterDraft(SharedMemoryModel):
             target__category__name=category_name,
         ).select_related("target", "distinction")
 
-        by_name: dict[str, int] = defaultdict(int)
+        by_key: dict[tuple[str, int], int] = defaultdict(int)
         for effect in effects:
-            by_name[effect.distinction.name] += sum(
-                effect.get_value_at_rank(rank) for rank in ranks[effect.distinction_id]
-            )
-        return sorted(by_name.items())
+            for rank in ranks[effect.distinction_id]:
+                by_key[(effect.distinction.name, rank)] += effect.get_value_at_rank(rank)
+        return [
+            DistinctionBonusSource(name=name, rank=rank, points=points)
+            for (name, rank), points in sorted(by_key.items())
+        ]
 
     @property
     def magic_training_pool(self) -> MagicTrainingPool:
@@ -1926,7 +1930,7 @@ class CharacterDraft(SharedMemoryModel):
         sources = self._distinction_bonus_sources(
             MAGIC_TRAINING_POINTS_TARGET, CG_MODIFIER_CATEGORY
         )
-        base = sum(points for _, points in sources)
+        base = sum(source.points for source in sources)
         gift_id = self.draft_data.get("selected_gift_id")
         resonance_id = self.draft_data.get("selected_gift_resonance_id")
         gift = Gift.objects.filter(pk=gift_id).first() if gift_id else None

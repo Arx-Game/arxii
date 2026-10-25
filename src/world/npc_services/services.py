@@ -897,10 +897,13 @@ def _open_enrollments_by_offer(sheet: CharacterSheet) -> dict[int, SkillCourseEn
     }
 
 
-def _teaching_line(offer: NPCServiceOffer, sheet: CharacterSheet) -> str | None:
-    """The menu line naming the Tradition a course is taught in and how it fits ``sheet``.
+def _teaching_lines(offer: NPCServiceOffer, sheet: CharacterSheet) -> tuple[str | None, str | None]:
+    """The menu's two Tradition lines for a course: who it is taught by, and how it fits.
 
-    None when the offer's role teaches no Tradition (slice 2 of #4659).
+    ``(teaching_line, fit_line)``. ``teaching_line`` names the Tradition the offer's role
+    teaches ("Taught in the manner of X"); ``fit_line`` names what of ``sheet`` the
+    Tradition teaches well and that sessions are easier, None when nothing fits. Both
+    None when the role teaches no Tradition (slice 2 of #4659).
     """
     from world.magic.services.teaching_fit import (  # noqa: PLC0415
         character_aura_type,
@@ -910,17 +913,19 @@ def _teaching_line(offer: NPCServiceOffer, sheet: CharacterSheet) -> str | None:
 
     tradition = offer.role.teaches_tradition
     if tradition is None:
-        return None
+        return None, None
     fit = teaching_fit(tradition, major_gift_for(sheet), character_aura_type(sheet))
-    line = f"Taught in the manner of {tradition.name}"
-    favored = []
-    if fit.favored_gift_name is not None:
-        favored.append(f"your {fit.favored_gift_name}")
-    if fit.favored_affinity_name is not None:
-        favored.append(f"your {fit.favored_affinity_name} affinity")
-    if favored:
-        line += f". Teaches well: {' and '.join(favored)}. Sessions are easier for you."
-    return line
+    teaching_line = f"Taught in the manner of {tradition.name}"
+    gift, affinity = fit.favored_gift_name, fit.favored_affinity_name
+    if gift is not None and affinity is not None:
+        favored = f"your {gift} and {affinity} affinity"
+    elif gift is not None:
+        favored = f"your {gift}"
+    elif affinity is not None:
+        favored = f"your {affinity} affinity"
+    else:
+        return teaching_line, None
+    return teaching_line, f"Teaches well: {favored}. Sessions are easier for you."
 
 
 def _offer_price(
@@ -938,8 +943,8 @@ def _offer_price(
     (its coin and Hare now; its ``learn_ap_cost`` is not an AP charge, see
     :class:`~world.npc_services.types.OfferPrice`). An offer whose details row was
     never authored names no price either. A skill course
-    whose role teaches a Tradition also carries the ``teaching_line`` for ``sheet``;
-    the price itself is the same for everyone.
+    whose role teaches a Tradition also carries the ``teaching_line`` and, when ``sheet``
+    fits it, the ``fit_line``; the price itself is the same for everyone.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -947,7 +952,7 @@ def _offer_price(
         if offer.kind == OfferKind.SKILL_COURSE:
             course = offer.skill_course_offer_details
             enrollment = open_enrollments.get(offer.pk)
-            teaching_line = _teaching_line(offer, sheet)
+            teaching_line, fit_line = _teaching_lines(offer, sheet)
             if enrollment is not None:
                 return OfferPrice(
                     ap=course.session_ap_cost,
@@ -961,6 +966,7 @@ def _offer_price(
                         and enrollment.last_session_week_id == current_week_pk
                     ),
                     teaching_line=teaching_line,
+                    fit_line=fit_line,
                 )
             return OfferPrice(
                 ap=course.session_ap_cost,
@@ -970,6 +976,7 @@ def _offer_price(
                 development_remaining=None,
                 development_total=None,
                 teaching_line=teaching_line,
+                fit_line=fit_line,
             )
         if offer.kind == OfferKind.TRAIN:
             train = offer.train_offer_details
