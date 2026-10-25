@@ -926,6 +926,10 @@ class HeldGroundPassOutcome(models.TextChoices):
 HELD_GROUND_GOT_PAST: Final = "You get past {name}."
 HELD_GROUND_GOT_PAST_PARTLY: Final = "You get past {name}, but not cleanly."
 HELD_GROUND_STOPS_YOU: Final = "{name} stops you."
+# What the room is told of the same roll (#4663): the roller, the holder, the place.
+HELD_GROUND_ROOM_GOT_PAST: Final = "{name} gets past {holder} into {place}."
+HELD_GROUND_ROOM_GOT_PAST_PARTLY: Final = "{name} gets past {holder} into {place}, but not cleanly."
+HELD_GROUND_ROOM_STOPPED: Final = "{holder} stops {name} in {place}."
 # Why a roll to get past held ground is refused (#4663), one message per cause.
 HELD_GROUND_NOT_IN_FIGHT: Final = "There is no fight here to get past anyone in."
 HELD_GROUND_NO_CHALLENGE: Final = "There is no way past them."

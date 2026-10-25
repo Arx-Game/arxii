@@ -21,7 +21,7 @@ from django.db.models import F
 from world.areas.positioning.constants import CreatureTraversal
 from world.areas.positioning.models import ObjectPosition
 from world.areas.positioning.services import position_of
-from world.combat.constants import CombatAllegiance, OpponentStatus, ParticipantStatus
+from world.combat.constants import CombatAllegiance, OpponentStatus
 from world.combat.models import CombatOpponent, CombatParticipant
 from world.combat.services.movement_budget import active_combat_participant
 from world.scenes.constants import RoundStatus
@@ -100,13 +100,16 @@ def encounter_holds(
 
 
 def _acting_participants(encounter: CombatEncounter) -> list[CombatParticipant]:
-    """The encounter's ACTIVE participants who can act (``can_act`` reads each sheet)."""
-    from world.vitals.services import can_act  # noqa: PLC0415
+    """The encounter's PCs who hold ground: ACTIVE, able to act, and not intangible.
 
-    participants = CombatParticipant.objects.filter(
-        encounter=encounter, status=ParticipantStatus.ACTIVE
-    ).select_related("character_sheet")
-    return [p for p in participants if can_act(p.character_sheet)]
+    The planning pass's own filter (``npc_targeting._targetable_participants``, the list
+    ``NpcRoundContext.active_participants`` carries), so resolution and planning agree.
+    """
+    from world.combat.services.npc.npc_targeting import (  # noqa: PLC0415
+        _targetable_participants,
+    )
+
+    return _targetable_participants(encounter)
 
 
 def held_position_ids_against(
@@ -188,3 +191,16 @@ def holder_names(mover: ObjectDB) -> dict[int, str]:  # noqa: OBJECTDB_PARAM - t
     )
     # Descending pk, so the lowest pk standing in a place is the last write for it.
     return {holder.held_position_id: holder.name for holder in holders}
+
+
+def held_place_holders(mover: ObjectDB) -> dict[int, str]:  # noqa: OBJECTDB_PARAM - the PC mover
+    """Who holds each place held against a player character, by position pk (#4663).
+
+    ``held_position_ids_against`` narrowed to ``holder_names``: the move list's
+    "Held by <name>" note and telnet's ``position`` listing both read it. Empty when
+    nothing is held against her.
+    """
+    held = held_position_ids_against(mover)
+    if not held:
+        return {}
+    return {pk: name for pk, name in holder_names(mover).items() if pk in held}

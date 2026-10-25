@@ -1125,15 +1125,9 @@ _HELD_BY_NOTE = "Held by {name}: you'd stop there."
 
 def _held_place_holders(character: ObjectDB) -> dict[int, str]:
     """Who holds each place held against ``character``, by position pk (#4663)."""
-    from world.combat.services.held_ground import (  # noqa: PLC0415
-        held_position_ids_against,
-        holder_names,
-    )
+    from world.combat.services.held_ground import held_place_holders  # noqa: PLC0415
 
-    held = held_position_ids_against(character)
-    if not held:
-        return {}
-    return {pk: name for pk, name in holder_names(character).items() if pk in held}
+    return held_place_holders(character)
 
 
 def _move_description(neighbor: Position, move_note: str, holders: dict[int, str]) -> str:
@@ -1179,8 +1173,13 @@ def _crossing_entry(  # noqa: PLR0913 - the list's shared refusal state rides al
     hops: int | None,
     move_met: bool,
     move_reason: str,
+    move_note: str,
+    holders: dict[int, str],
 ) -> PlayerAction:
-    """A climber's or leaper's way over a wall with a way past it (#4663)."""
+    """A climber's or leaper's way over a wall with a way past it (#4663).
+
+    Its note is a step's (``_move_description``): who holds the place, else the hops left.
+    """
     verb = _CROSSING_VERB.get(traversal, "Cross")
     met, reasons = move_met, [] if move_met else [move_reason]
     if met and hops is not None and cost > hops:
@@ -1193,7 +1192,7 @@ def _crossing_entry(  # noqa: PLR0913 - the list's shared refusal state rides al
             registry_key="move_to_position",
             position_id=neighbor.pk,
         ),
-        description=neighbor.description,
+        description=_move_description(neighbor, move_note, holders),
         action_category=ActionCategory.PHYSICAL,
         prerequisite_met=met,
         prerequisite_reasons=reasons,
@@ -1365,6 +1364,8 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
                     hops,
                     move_met,
                     move_reason,
+                    move_note,
+                    holders,
                 )
             )
             result.extend(

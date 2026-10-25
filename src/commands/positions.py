@@ -56,6 +56,15 @@ class CmdPosition(ArxCommand):
         position/fly
         position/land
         position/pass <name>
+
+    Bare ``position`` lists the places here, who stands in each, and which an enemy
+    holds against you in a fight ("held by <name>": stepping in stops you there).
+
+    Switches:
+        /fly    take flight into the air above where you stand.
+        /land   come down onto the ground below you.
+        /pass   roll to get past the enemy holding <name>, a place next to you.
+        /place  (GM) set <target> in <position name>.
     """
 
     key = "position"
@@ -95,6 +104,7 @@ class CmdPosition(ArxCommand):
     def _list_positions(self) -> None:
         from world.areas.positioning.models import ObjectPosition, Position  # noqa: PLC0415
         from world.areas.positioning.services import room_position_adjacency  # noqa: PLC0415
+        from world.combat.services.held_ground import held_place_holders  # noqa: PLC0415
 
         room = self.caller.location
         if room is None:
@@ -113,6 +123,9 @@ class CmdPosition(ArxCommand):
         ):
             occupants_by_position.setdefault(obj_pos.position_id, []).append(obj_pos.objectdb.key)
 
+        # Places an enemy holds against her in a live fight, read once (#4663).
+        holders = held_place_holders(self.caller)
+
         lines = ["Positions here:"]
         for p in positions:
             occupants = occupants_by_position.get(p.pk, [])
@@ -121,9 +134,10 @@ class CmdPosition(ArxCommand):
                 name_by_id[pid] for pid in adjacency.get(p.pk, []) if pid in name_by_id
             ]
             adjacent_text = ", ".join(adjacent_names) if adjacent_names else "none"
+            held_text = f"; held by {holders[p.pk]}" if p.pk in holders else ""
             lines.append(
                 f"  {p.name} ({p.get_kind_display()}) — "
-                f"occupants: {occupants_text}; adjacent: {adjacent_text}"
+                f"occupants: {occupants_text}; adjacent: {adjacent_text}{held_text}"
             )
         self.msg("\n".join(lines))
 

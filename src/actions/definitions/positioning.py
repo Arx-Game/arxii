@@ -37,6 +37,9 @@ from world.areas.positioning.traversal import best_crossing_cost, traversals_of
 from world.combat.constants import (
     HELD_GROUND_GOT_PAST,
     HELD_GROUND_GOT_PAST_PARTLY,
+    HELD_GROUND_ROOM_GOT_PAST,
+    HELD_GROUND_ROOM_GOT_PAST_PARTLY,
+    HELD_GROUND_ROOM_STOPPED,
     HELD_GROUND_STOPS_YOU,
     HeldGroundPassOutcome,
 )
@@ -138,6 +141,11 @@ _PASS_MESSAGES = {
     HeldGroundPassOutcome.PARTIAL: HELD_GROUND_GOT_PAST_PARTLY,
     HeldGroundPassOutcome.STOPPED: HELD_GROUND_STOPS_YOU,
 }
+_PASS_ROOM_LINES = {
+    HeldGroundPassOutcome.CLEAN: HELD_GROUND_ROOM_GOT_PAST,
+    HeldGroundPassOutcome.PARTIAL: HELD_GROUND_ROOM_GOT_PAST_PARTLY,
+    HeldGroundPassOutcome.STOPPED: HELD_GROUND_ROOM_STOPPED,
+}
 
 
 @dataclass
@@ -196,10 +204,27 @@ class PassHeldGroundAction(Action):
                 participant.hops_used = hops_for(participant.character_sheet)
                 participant.save(update_fields=["hops_used"])
 
+        _narrate_pass(actor, target, result.outcome, result.holder_name)
         sdm = context.scene_data if context else SceneDataManager()
         send_room_state(sdm.initialize_state_for_object(actor))
         message = _PASS_MESSAGES[result.outcome].format(name=result.holder_name)
         return ActionResult(success=True, message=message)
+
+
+def _narrate_pass(actor: ObjectDB, target: Position, outcome: str, holder_name: str) -> None:
+    """Tell the room how the roll to get past went: a Narrator line in the scene (#4663)."""
+    from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    room = actor.location
+    if room is None:
+        return
+    # Her presented persona's name, as the scene shows her; never str(model).
+    name = persona_names_for_sheets([actor.pk]).get(actor.pk, actor.key)
+    narrate_room_outcome(
+        room,
+        _PASS_ROOM_LINES[outcome].format(name=name, holder=holder_name, place=target.name),
+    )
 
 
 def _stop_in_held_ground(
@@ -314,7 +339,8 @@ class LandAction(Action):
     """Come down from the air onto the ground below (#4663).
 
     ``leave_aerial`` sets the actor down on the position she was flying over. In a live
-    encounter it costs one hop in a declaring round.
+    encounter it costs one hop in a declaring round, and landing in a place a ready enemy
+    holds stops her there like any entry (``_stop_in_held_ground``).
 
     Dispatch convention: REGISTRY ActionRef ``registry_key="land"``.
     """
@@ -335,15 +361,23 @@ class LandAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        participant = _declaring_participant(actor)
+        # Read before landing, as a step does: landing into held ground stops her (#4663).
+        held = held_position_ids_against(actor) if participant is not None else frozenset()
         try:
             ground = leave_aerial(actor)
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        _spend_one_hop(actor)
+        message = f"You land at {ground.position.name}."
+        if participant is not None:
+            spend_combat_hop(participant)
+            stopped = _stop_in_held_ground(actor, participant, ground.position, held)
+            if stopped:
+                message = f"{message} {stopped}"
 
         sdm = context.scene_data if context else SceneDataManager()
         send_room_state(sdm.initialize_state_for_object(actor))
-        return ActionResult(success=True, message=f"You land at {ground.position.name}.")
+        return ActionResult(success=True, message=message)
 
 
 @dataclass

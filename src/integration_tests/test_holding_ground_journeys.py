@@ -13,7 +13,11 @@ edges, with a fight in DECLARING round 1.
 - A Bandit already DEFEATED holds nothing: Kit walks into the Yard and keeps two hops.
 - Kit starting the round in the Yard beside the Bandit walks out to the Hall for one hop.
 - Kit in the air above the Gate flies on above the Yard and is not stopped.
-- Kit's move list marks the Yard: "Held by Bandit: you'd stop there."
+- Kit's move list marks the Yard: "Held by Bandit: you'd stop there."; so does a climb
+  over a hedge onto a held Ledge, and telnet's ``position`` listing ("; held by Bandit").
+- Kit flying above the Yard lands in it and is stopped, as any entry.
+- When Kit rolls to get past, Wren in the room is told how it went.
+- A phased Hobb (intangible) holds nothing, in planning and in resolution alike.
 - Kit climbs a Thorn Hedge (a 2-hop crossing) onto the Ledge the Bandit holds: her
   three hops are spent once, all of them, not two and then three more.
 - A Bandit fighting on Kit's side (ALLY) holds nothing against her.
@@ -78,6 +82,7 @@ from world.conditions.constants import FoundationalCapability
 from world.conditions.factories import (
     CapabilityTypeFactory,
     ConditionCapabilityEffectFactory,
+    ConditionCategoryFactory,
     ConditionTemplateFactory,
     DamageTypeFactory,
 )
@@ -127,6 +132,10 @@ NOT_THAT_WAY = "You cannot get past them that way."
 NOT_IN_FIGHT = "There is no fight here to get past anyone in."
 NO_PATH = "There is no path to there."
 GET_PAST_ENTRY = "Get past {name} into {place}"
+ROOM_GOT_PAST = "{name} gets past {holder} into {place}."
+ROOM_GOT_PAST_PARTLY = "{name} gets past {holder} into {place}, but not cleanly."
+ROOM_STOPPED = "{holder} stops {name} in {place}."
+LISTED_HELD = "; held by {name}"
 STUMBLE = 5  # the partial pass's authored strike, below the interpose threshold (10)
 CHALLENGE_PERFORM_CHECK = "world.mechanics.challenge_resolution.perform_check"
 
@@ -328,6 +337,60 @@ class AWalkerStopsInHeldGround(_TheCauseway):
         self.assertNotIn("stopped", result.detail.message or "")
         self.assertEqual(self.participant(kit).hops_used, 1)
 
+    def test_the_position_listing_marks_held_places(self) -> None:
+        self.creature("Bandit", at=self.yard)
+        kit = self.fighter("Kit", at=self.gate)
+
+        said = self.telnet(kit, "position")
+
+        yard_line = next(line for line in said.splitlines() if line.strip().startswith("Yard"))
+        lane_line = next(line for line in said.splitlines() if line.strip().startswith("Lane"))
+        self.assertTrue(yard_line.endswith(LISTED_HELD.format(name="Bandit")), yard_line)
+        self.assertNotIn("held by", lane_line)
+
+    def test_landing_in_held_ground_stops_her(self) -> None:
+        bandit = self.creature("Bandit", at=self.yard)
+        kit = self.fighter("Kit", at=self.gate, flies=True)
+        movement = CapabilityType.objects.get(name=FoundationalCapability.MOVEMENT)
+        self.raise_capability(kit, movement, 5)  # four hops: up, across, down, one spare
+        self.telnet(kit, "position/fly")
+        above_yard = self.room.positions.get(kind=PositionKind.AERIAL, elevation_anchor=self.yard)
+        self.web(kit, "move_to_position", position_id=above_yard.pk)
+
+        result = self.web(kit, "land")
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertIn(STOPPED_BY.format(name=bandit.name), result.detail.message)
+        self.assertEqual(position_of(kit), self.yard)
+        self.assertEqual(hops_left(self.participant(kit)), 0)
+
+    def test_landing_on_open_ground_keeps_her_spare_hop(self) -> None:
+        kit = self.fighter("Kit", at=self.gate, flies=True)
+        movement = CapabilityType.objects.get(name=FoundationalCapability.MOVEMENT)
+        self.raise_capability(kit, movement, 5)
+        self.telnet(kit, "position/fly")
+
+        result = self.web(kit, "land")
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertNotIn("stopped", result.detail.message)
+        self.assertEqual(hops_left(self.participant(kit)), 2)
+
+    def test_a_climb_into_held_ground_is_marked_held(self) -> None:
+        ledge = PositionFactory(room=self.room, name="Ledge")
+        hedge = ChallengeInstanceFactory(
+            template=ChallengeTemplateFactory(name="Thorn Hedge"), location=self.room
+        )
+        connect_positions(self.gate, ledge, is_passable=False, gating_challenge=hedge)
+        self.creature("Bandit", at=ledge)
+        kit = self.fighter("Kit", at=self.gate, climbs=True)
+
+        moves = {action.display_name: action for action in get_player_actions(kit)}
+
+        climb = next(action for name, action in moves.items() if name.startswith("Climb over"))
+        self.assertEqual(climb.description, HELD_BY.format(name="Bandit"))
+        self.assertEqual(moves["Move to Lane"].description, "3 hops left this round.")
+
     def test_move_list_marks_held_places(self) -> None:
         self.creature("Bandit", at=self.yard)
         kit = self.fighter("Kit", at=self.gate)
@@ -394,6 +457,18 @@ class AnNpcStopsInHeldGround(_TheCauseway):
             unconscious = ensure_unconscious_condition()
         apply_condition(self.hobb, unconscious)
         self.assertFalse(can_act(self.hobb.sheet_data))
+        wolf = self.wolf_going_for_wren(CreatureTraversal.WALKS)
+
+        self.resolve()
+
+        self.assertEqual(position_of(wolf.objectdb), self.gate)
+
+    def test_a_phased_pc_holds_nothing(self) -> None:
+        """Planning and resolution read the same holders: an intangible PC blocks nobody."""
+        phased = ConditionTemplateFactory(
+            name="Phased", category=ConditionCategoryFactory(grants_intangibility=True)
+        )
+        apply_condition(self.hobb, phased)
         wolf = self.wolf_going_for_wren(CreatureTraversal.WALKS)
 
         self.resolve()
@@ -524,6 +599,34 @@ class AnAcrobatGetsPast(_TheCauseway):
 
         self.assertTrue(onward.detail.success, onward.detail.message)
         self.assertEqual(position_of(kit), self.hall)
+
+    def test_the_room_sees_her_get_past(self) -> None:
+        self.designate()
+        kit = self.acrobat()
+        wren = self.fighter("Wren", at=self.lane)
+        self.watch(wren)
+
+        with self.roll(self.clean):
+            self.web(kit, "pass_held_ground", position_id=self.yard.pk)
+
+        self.assertTold(wren, ROOM_GOT_PAST.format(name="Kit", holder="Bandit", place="Yard"))
+
+    def test_the_room_sees_her_get_past_partly_or_stopped(self) -> None:
+        self.designate()
+        kit = self.acrobat()
+        wren = self.fighter("Wren", at=self.lane)
+        pell = self.acrobat("Pell")
+        self.watch(wren)
+
+        with self.roll(self.partly):
+            self.web(kit, "pass_held_ground", position_id=self.yard.pk)
+        with self.roll(self.stopped):
+            self.web(pell, "pass_held_ground", position_id=self.yard.pk)
+
+        self.assertTold(
+            wren, ROOM_GOT_PAST_PARTLY.format(name="Kit", holder="Bandit", place="Yard")
+        )
+        self.assertTold(wren, ROOM_STOPPED.format(name="Pell", holder="Bandit", place="Yard"))
 
     def test_acrobat_passes_held_ground_partially(self) -> None:
         self.designate()
