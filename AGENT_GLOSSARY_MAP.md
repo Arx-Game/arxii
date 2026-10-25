@@ -102,7 +102,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [forms](src/world/forms/AGENT_GLOSSARY.md)
 - [ships](src/world/ships/AGENT_GLOSSARY.md)
 - [assets](src/world/assets/AGENT_GLOSSARY.md)
-- [distinctions](src/world/distinctions/AGENT_GLOSSARY.md)
+- [distinctions](src/world/distinctions/AGENT_GLOSSARY.md) - also holds rank size, the size a sized effect steps to at a rank (#4660)
 - [narrative](src/world/narrative/AGENT_GLOSSARY.md)
 - [boards](src/world/boards/AGENT_GLOSSARY.md)
 

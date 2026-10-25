@@ -125,12 +125,16 @@ The walk only reaches a check whose scoped `ModifierTarget` is in an
   inline (Paramount refused). The CHARACTER block calls
   `get_modifier_breakdown(sheet, scoped_target, value_lane=ModifierLane.CHECK)`; a distinction
   row whose effect has a size reads the value table at the holder's `CharacterSheet.current_level`
-  and the effect's size, signed like the effect's rank-1 value (`ValueTable.signed_value`). Rank
-  scales the table's number the way it scales the authored one: the ratio of
-  `get_value_at_rank(rank)` to `get_value_at_rank(1)`, so rank 2 of a per-rank effect is twice
-  its rank-1 table number (rounded half up). Amplification (`amplifies_sources_by`) and immunity
-  then apply to the table number exactly as they did to the flat one. The detail row, and so the
-  contribution, carries `level`/`size` only when the table priced it. No class level (level 0),
+  and the size its held rank names, signed like the effect's rank-1 value
+  (`ValueTable.signed_value`). Rank steps the size and never multiplies the number (#4660,
+  ADR-4660-A, superseding ADR-4638-A's rank ratio): `DistinctionEffect.size_at_rank` takes the
+  highest authored `DistinctionEffectRankSize` at or below the held rank, else `modifier_size`
+  (the rank-1 size), so a sized effect with no rank rows is worth the same at every rank, and
+  `value_per_rank`/`scaling_values` scale only unsized effects. The breakdown query prefetches
+  the rank rows into `DistinctionEffect.cached_rank_sizes`. Amplification
+  (`amplifies_sources_by`) and immunity then apply to the table number exactly as they did to the
+  flat one. The detail row, and so the contribution, carries `level`/`size` (the stepped size)
+  only when the table priced it. No class level (level 0),
   no value row or no size keeps the flat `CharacterModifier.value`. Every other caller of
   `get_modifier_breakdown` (stats, power, soak, levers) passes no lane and reads flat values.
 - *Source kind.* Distinction rows stay in the CHARACTER kind and taper in its pile with the other

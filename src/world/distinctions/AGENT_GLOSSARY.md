@@ -47,6 +47,13 @@ rather than once, so `CharacterDistinction` carries the feature it names
 (`feature_trait` or `feature_marking`, never both).
 _Avoid_: repeatable distinction, stackable.
 
+**Rank size** (#4660, ADR-4660-A):
+`DistinctionEffectRankSize` — the size a sized `DistinctionEffect` has from one rank up, on
+the `ModifierSize` ladder. Rank 1 is the effect's own `modifier_size`; a rank with no row keeps
+the nearest lower one. On checks a distinction's rank steps the size of each effect this way and
+never multiplies its value. Say "steps up a size", never "scales" or "multiplies".
+_Avoid_: rank multiplier, size per rank flag, tier.
+
 **Offer** (#3675):
 Not a `distinctions` app concept: CG-time distinction picks are gated by a
 `character_creation.DistinctionOffer` row, never added directly. See "Offer" in

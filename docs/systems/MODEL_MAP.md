@@ -3904,6 +3904,11 @@
   - target -> mechanics.ModifierTarget [FK]
 **Pointed to by:**
   - modifier_sources <- mechanics.ModifierSource
+  - rank_sizes <- distinctions.DistinctionEffectRankSize
+
+### DistinctionEffectRankSize
+**Foreign Keys:**
+  - effect -> distinctions.DistinctionEffect [FK]
 
 ### DistinctionTag
 **Pointed to by:**

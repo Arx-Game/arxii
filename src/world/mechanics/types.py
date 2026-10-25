@@ -53,8 +53,9 @@ class ModifierSourceDetail:
 
     ``level`` and ``size`` (#4638) are set only when a sized distinction effect was valued
     from a lane's value table (``get_modifier_breakdown(value_lane=...)``): the holder's
-    level and the effect's ``ModifierSize``. ``base_value`` is then the table's number,
-    scaled by rank. Every other source leaves both None and keeps its flat value.
+    level and the ``ModifierSize`` the held rank names (#4660: rank steps the size, never
+    multiplies the number). ``base_value`` is then the table's number. Every other source
+    leaves both None and keeps its flat value.
     """
 
     source_name: str
