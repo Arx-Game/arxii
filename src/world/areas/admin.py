@@ -4,10 +4,13 @@ from world.admin_utils import OneRowPerFormSet
 from world.areas.models import Area, AreaElevationRequirement
 from world.areas.positioning.models import (
     BlueprintEdge,
+    BlueprintFeature,
     BlueprintPosition,
     BlueprintPositionShelter,
+    FeatureType,
     MapTerrain,
     PositionBlueprint,
+    PositionFeature,
     RampartElementProfile,
     RampartElementResistance,
 )
@@ -67,6 +70,38 @@ class PositionBlueprintAdmin(admin.ModelAdmin):
     inlines = [BlueprintPositionInline, BlueprintEdgeInline]
 
 
+@admin.register(FeatureType)
+class FeatureTypeAdmin(admin.ModelAdmin):
+    """#4675 - a feature staff attach to any place; its template is what a stunt rolls."""
+
+    list_display = ["name", "reach", "challenge_template", "art"]
+    list_filter = ["reach"]
+    search_fields = ["name"]
+    list_select_related = ["challenge_template", "art"]
+    autocomplete_fields = ["art", "challenge_template"]
+
+
+class BlueprintFeatureInline(admin.TabularInline):
+    """#4675 - the features a blueprint place carries."""
+
+    model = BlueprintFeature
+    extra = 1
+    autocomplete_fields = ["feature_type"]
+    fields = ["feature_type", "square_x", "square_y"]
+
+
+@admin.register(PositionFeature)
+class PositionFeatureAdmin(admin.ModelAdmin):
+    """#4675 - features standing in live places, for staff fixes."""
+
+    list_display = ["feature_type", "position", "square_x", "square_y"]
+    list_filter = ["feature_type"]
+    search_fields = ["feature_type__name", "position__name"]
+    list_select_related = ["feature_type", "position"]
+    autocomplete_fields = ["feature_type"]
+    raw_id_fields = ["position"]
+
+
 @admin.register(BlueprintPosition)
 class BlueprintPositionAdmin(admin.ModelAdmin):
     """#3831 - a position-node template belonging to a PositionBlueprint."""
@@ -76,6 +111,7 @@ class BlueprintPositionAdmin(admin.ModelAdmin):
     search_fields = ["name", "blueprint__name"]
     list_select_related = ["blueprint"]
     autocomplete_fields = ["blueprint"]
+    inlines = [BlueprintFeatureInline]
 
 
 @admin.register(BlueprintEdge)

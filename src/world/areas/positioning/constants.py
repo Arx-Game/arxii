@@ -80,6 +80,15 @@ class RampartSignature(models.TextChoices):
     GRASPING = "grasping", "Grasping"
 
 
+class FeatureReach(models.TextChoices):
+    """Where a feature's stunt can take someone, measured from the feature's own place."""
+
+    ADJACENT = "adjacent", "A place next to its own"
+    ANY_PLACE = "any_place", "Any place in the room"
+    SAME_TYPE = "same_type", "Another place with the same feature"
+    ELEVATED_ADJACENT = "elevated_adjacent", "A raised place next to its own"
+
+
 class RampartCrackState(models.TextChoices):
     """Coarse integrity band for a Rampart, read off ``Rampart.crack_state``."""
 

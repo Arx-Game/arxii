@@ -31,11 +31,14 @@ from world.areas.positioning.constants import (
 from world.areas.positioning.exceptions import PositionError, PositionTransitionError
 from world.areas.positioning.models import (
     BlueprintEdge,
+    BlueprintFeature,
     BlueprintPosition,
+    FeatureType,
     ObjectPosition,
     Position,
     PositionBlueprint,
     PositionEdge,
+    PositionFeature,
     PositionShelter,
     Rampart,
     RampartElementProfile,
@@ -641,7 +644,48 @@ def instantiate_blueprint(
             if shelter_rows:
                 PositionShelter.objects.bulk_create(shelter_rows)
 
+        # Clone feature templates in one bulk write (the blueprint's features load
+        # with one query; replace=True already cascaded the old layout's features).
+        feature_rows = [
+            PositionFeature(
+                position=live_map[bp_feature.blueprint_position.name],
+                feature_type=bp_feature.feature_type,
+                square_x=bp_feature.square_x,
+                square_y=bp_feature.square_y,
+            )
+            for bp_feature in BlueprintFeature.objects.filter(
+                blueprint_position__blueprint=blueprint
+            ).select_related("blueprint_position", "feature_type")
+        ]
+        if feature_rows:
+            PositionFeature.objects.bulk_create(feature_rows)
+            invalidate_position_graph_caches(room)
+
         return list(live_map.values())
+
+
+def attach_feature(
+    position: Position,
+    feature_type: FeatureType,
+    *,
+    square: tuple[int, int] | None = None,
+) -> PositionFeature:
+    """Put a feature in a live place, optionally on one of its squares."""
+    square_x, square_y = square if square is not None else (None, None)
+    feature = PositionFeature(
+        position=position, feature_type=feature_type, square_x=square_x, square_y=square_y
+    )
+    feature.full_clean()
+    feature.save()
+    invalidate_position_graph_caches(position.room)
+    return feature
+
+
+def detach_feature(feature: PositionFeature) -> None:
+    """Remove a feature from its place."""
+    room = feature.position.room
+    feature.delete()
+    invalidate_position_graph_caches(room)
 
 
 # ---------------------------------------------------------------------------

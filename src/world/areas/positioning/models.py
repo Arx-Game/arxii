@@ -13,7 +13,12 @@ from django.utils.functional import cached_property
 from core.descriptors import ReverseOneToOneOrNone
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.areas.positioning.constants import PositionKind, RampartCrackState, RampartSignature
+from world.areas.positioning.constants import (
+    FeatureReach,
+    PositionKind,
+    RampartCrackState,
+    RampartSignature,
+)
 from world.contributors.models import CreditedContent
 
 _DAMAGE_TYPE_MODEL = "arxii.DamageType"
@@ -71,6 +76,65 @@ class MapTerrain(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class FeatureType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """A thing a place can hold that a stunt uses (chandelier, rope, balcony rail).
+
+    Defined once and attached to any place (#4675, slice 3 of #4651). ``reach`` says
+    where a stunt from it can end; ``challenge_template`` is what is rolled against,
+    so its approaches decide who can use it and its consequences decide a miss.
+    """
+
+    name = models.CharField(max_length=60, unique=True)
+    art = models.ForeignKey(
+        "arxii.Media", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    reach = models.CharField(max_length=20, choices=FeatureReach.choices)
+    challenge_template = models.ForeignKey(
+        "arxii.ChallengeTemplate", on_delete=models.PROTECT, related_name="+"
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+        dependencies = ["arxii.Media", "arxii.ChallengeTemplate"]
+
+    class Meta:
+        app_label = "arxii"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+def _feature_square_constraint(name: str) -> models.CheckConstraint:
+    """A feature's square is both coordinates or neither."""
+    return models.CheckConstraint(
+        name=name,
+        condition=(
+            Q(square_x__isnull=True, square_y__isnull=True)
+            | Q(square_x__isnull=False, square_y__isnull=False)
+        ),
+        violation_error_message="Fill in both square numbers, or leave both blank.",
+    )
+
+
+def _check_feature_square(place: Any, square_x: int | None, square_y: int | None) -> None:
+    """Refuse a feature square that does not lie inside the place's authored area."""
+    if square_x is None or square_y is None:
+        return
+    if place.area_x is None:
+        msg = f"{place.name} has no drawn area, so a feature there cannot sit on a square."
+        raise ValidationError(msg)
+    inside = (
+        place.area_x <= square_x < place.area_x + place.area_w
+        and place.area_y <= square_y < place.area_y + place.area_h
+    )
+    if not inside:
+        msg = f"That square is outside {place.name}."
+        raise ValidationError(msg)
 
 
 class PositionNodeBase(SharedMemoryModel):
@@ -545,6 +609,56 @@ class ObjectPosition(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.objectdb_id} @ {self.position_id}"
+
+
+class BlueprintFeature(SharedMemoryModel):
+    """A feature a blueprint place carries, cloned into PositionFeature on staging."""
+
+    blueprint_position = models.ForeignKey(
+        BlueprintPosition, on_delete=models.CASCADE, related_name="features"
+    )
+    feature_type = models.ForeignKey(FeatureType, on_delete=models.PROTECT, related_name="+")
+    square_x = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    square_y = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+
+    class Meta:
+        app_label = "arxii"
+        constraints = [_feature_square_constraint("blueprint_feature_square_both_or_none")]
+
+    def clean(self) -> None:
+        super().clean()
+        _check_feature_square(self.blueprint_position, self.square_x, self.square_y)
+
+    def __str__(self) -> str:
+        return f"{self.feature_type_id} @ bp_pos:{self.blueprint_position_id}"
+
+
+class PositionFeature(SharedMemoryModel):
+    """A feature standing in a live place; stunts are made from it."""
+
+    position = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="features")
+    feature_type = models.ForeignKey(FeatureType, on_delete=models.PROTECT, related_name="+")
+    square_x = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    square_y = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+
+    class Meta:
+        app_label = "arxii"
+        constraints = [_feature_square_constraint("position_feature_square_both_or_none")]
+
+    def clean(self) -> None:
+        super().clean()
+        _check_feature_square(self.position, self.square_x, self.square_y)
+
+    def __str__(self) -> str:
+        return f"{self.feature_type_id} @ pos:{self.position_id}"
 
 
 class PositionShelter(SharedMemoryModel):
