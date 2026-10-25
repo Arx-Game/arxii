@@ -331,6 +331,17 @@ class Tradition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Display ordering within lists (lower numbers appear first).",
     )
 
+    favored_affinities = models.ManyToManyField(
+        "arxii.Affinity",
+        blank=True,
+        related_name="favoring_traditions",
+        help_text=(
+            "Students whose current dominant aura is checked here get extra magical "
+            "training and find this Tradition's courses easier. None checked: "
+            "affinity never helps."
+        ),
+    )
+
     objects = TraditionManager()
 
     class NaturalKeyConfig:

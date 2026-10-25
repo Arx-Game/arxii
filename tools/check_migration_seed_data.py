@@ -82,6 +82,10 @@ ALLOWED_MIGRATIONS: set[str] = {
     # for the owner to author. Numeric configuration only; no prose is invented, and a
     # fresh database gets the same rows from world.seeds.checks instead.
     "world/migrations/0284_monotonic_result_charts_and_deeper_charts.py",
+    # #4665 (slice 2 of #4659): one-off designation of which of the three
+    # Affinity rows is which aura (sets Affinity.aura_type by name). The name
+    # match lives only in this migration; runtime code reads the field.
+    "world/migrations/0297_affinity_aura_type_backfill.py",
 }
 
 # Patterns that suggest seed data in migrations

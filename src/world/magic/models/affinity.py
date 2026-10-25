@@ -11,6 +11,7 @@ from django.utils.functional import cached_property
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
+from world.magic.types.aura import AffinityType
 
 
 class AffinityManager(NaturalKeyManager):
@@ -34,6 +35,15 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         help_text="Description of this affinity.",
     )
+    aura_type = models.CharField(
+        max_length=16,
+        choices=AffinityType.choices,
+        blank=True,
+        help_text=(
+            "Which aura this affinity is, so a Tradition's favored affinities can be "
+            "compared with a character's aura. Set once for each of the three."
+        ),
+    )
     objects = AffinityManager()
 
     class NaturalKeyConfig:
@@ -42,6 +52,13 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     class Meta:
         verbose_name_plural = "Affinities"
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["aura_type"],
+                condition=~models.Q(aura_type=""),
+                name="unique_affinity_aura_type",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name

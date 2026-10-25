@@ -130,6 +130,7 @@ from world.magic.models import (
     Tradition,
     TraditionGiftGrant,
     TraditionRitualGrant,
+    TraditionTeachingConfig,
 )
 from world.magic.models.appetites import (
     AppetiteUpkeep,
@@ -162,7 +163,7 @@ from world.magic.specialization.models import (
 
 @admin.register(Affinity)
 class AffinityAdmin(admin.ModelAdmin):
-    list_display = ["name", "description"]
+    list_display = ["name", "aura_type", "description"]
     search_fields = ["name"]
 
 
@@ -1031,6 +1032,7 @@ class TraditionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     list_filter = ["is_active"]
     search_fields = ["name", "description"]
     list_editable = ["sort_order", "is_active"]
+    filter_horizontal = ["favored_affinities"]
     inlines = [TraditionCodexGrantInline, TraditionGiftGrantInline]
 
     @admin.display(description="Current members")
@@ -2042,6 +2044,16 @@ class GiftAcquisitionConfigAdmin(admin.ModelAdmin):
         "cross_path_cost_multiplier",
         "weekly_training_cap",
         "cross_path_cap_divisor",
+    ]
+
+
+@admin.register(TraditionTeachingConfig)
+class TraditionTeachingConfigAdmin(admin.ModelAdmin):
+    list_display = [
+        "gift_fit_training_bonus",
+        "affinity_fit_training_bonus",
+        "course_ease_gift_fit",
+        "course_ease_affinity_fit",
     ]
 
 
