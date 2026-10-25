@@ -89,6 +89,7 @@ from actions.types import (
     TargetSpec,
     TargetType,
 )
+from world.areas.positioning.constants import CreatureTraversal
 from world.magic.models import CharacterTechnique
 from world.mechanics.services import get_available_actions
 
@@ -97,6 +98,7 @@ if TYPE_CHECKING:
 
     from actions.base import Action
     from actions.models import ActionTemplate
+    from world.areas.positioning.models import Position
     from world.character_sheets.models import CharacterSheet
     from world.consent.models import SocialConsentCategory
     from world.magic.models import CharacterAnima
@@ -1108,6 +1110,17 @@ def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
 
 def _hops_left_note(character: ObjectDB) -> str:
     """ "2 hops left this round." for a character in a declaring encounter, else ""."""
+    left = _declaring_hops_left(character)
+    if left is None:
+        return ""
+    return f"{left} hop left this round." if left == 1 else f"{left} hops left this round."
+
+
+_CROSSING_VERB = {CreatureTraversal.CLIMBS: "Climb over", CreatureTraversal.LEAPS: "Leap over"}
+
+
+def _declaring_hops_left(character: ObjectDB) -> int | None:
+    """Hops left this round in a declaring encounter, or None outside one."""
     from world.combat.services.movement_budget import (  # noqa: PLC0415
         active_combat_participant,
         hops_left,
@@ -1116,9 +1129,51 @@ def _hops_left_note(character: ObjectDB) -> str:
 
     participant = active_combat_participant(character)
     if participant is None or participant.encounter.status != RoundStatus.DECLARING:
-        return ""
-    left = hops_left(participant)
-    return f"{left} hop left this round." if left == 1 else f"{left} hops left this round."
+        return None
+    return hops_left(participant)
+
+
+def _flight_entry(
+    key: str, label: str, move_met: bool, move_reason: str, move_note: str
+) -> PlayerAction:
+    """A take-off or landing entry for the move list (#4663)."""
+    return PlayerAction(
+        backend=ActionBackend.REGISTRY,
+        display_name=label,
+        ref=ActionRef(backend=ActionBackend.REGISTRY, registry_key=key),
+        description=move_note,
+        action_category=ActionCategory.PHYSICAL,
+        prerequisite_met=move_met,
+        prerequisite_reasons=[] if move_met else [move_reason],
+    )
+
+
+def _crossing_entry(  # noqa: PLR0913 - the list's shared refusal state rides along
+    neighbor: Position,
+    cost: int,
+    traversal: str | None,
+    hops: int | None,
+    move_met: bool,
+    move_reason: str,
+) -> PlayerAction:
+    """A climber's or leaper's way over a wall with a way past it (#4663)."""
+    verb = _CROSSING_VERB.get(traversal, "Cross")
+    met, reasons = move_met, [] if move_met else [move_reason]
+    if met and hops is not None and cost > hops:
+        met, reasons = False, [f"That crossing takes {cost} hops; you have {hops} left."]
+    return PlayerAction(
+        backend=ActionBackend.REGISTRY,
+        display_name=f"{verb} to {neighbor.name} ({cost} hops)",
+        ref=ActionRef(
+            backend=ActionBackend.REGISTRY,
+            registry_key="move_to_position",
+            position_id=neighbor.pk,
+        ),
+        description=neighbor.description,
+        action_category=ActionCategory.PHYSICAL,
+        prerequisite_met=met,
+        prerequisite_reasons=reasons,
+    )
 
 
 def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
@@ -1144,6 +1199,11 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
         is_aerial,
         position_of,
         roof_between,
+    )
+    from world.areas.positioning.traversal import (  # noqa: PLC0415
+        best_crossing_cost,
+        cheapest_traversal,
+        traversals_of,
     )
 
     current = position_of(character)
@@ -1199,9 +1259,19 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
             )
         )
 
+    # Take off or land (#4663): a character with a flight capability above its baseline
+    # rises into the air above where she stands; an airborne one comes down.
+    traversals = traversals_of(character)
+    if airborne:
+        result.append(_flight_entry("land", "Land", move_met, move_reason, move_note))
+    elif CreatureTraversal.FLIES in traversals:
+        result.append(_flight_entry("take_flight", "Take flight", move_met, move_reason, move_note))
+
     # Surface gated (locked) edges as non-actionable entries so the player
     # can see that a path exists but is currently blocked by a challenge. A
     # sealed wall with a challenge lists too (#4606): its climb is the way over.
+    # A climber or leaper goes over it instead, for its crossing cost (#4663).
+    hops = _declaring_hops_left(character)
     gated_edges = PositionEdge.objects.filter(
         Q(position_a=current) | Q(position_b=current),
         gating_challenge__isnull=False,
@@ -1209,6 +1279,19 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     ).select_related("position_a", "position_b", "gating_challenge__template")
     for edge in gated_edges:
         neighbor = edge.position_b if edge.position_a_id == current.pk else edge.position_a
+        cost = best_crossing_cost(edge, traversals)
+        if cost is not None:
+            result.append(
+                _crossing_entry(
+                    neighbor,
+                    cost,
+                    cheapest_traversal(edge, traversals),
+                    hops,
+                    move_met,
+                    move_reason,
+                )
+            )
+            continue
         challenge_name = edge.gating_challenge.template.name
         # Point the ref at the gating challenge so the UI can offer the approach.
         ref = ActionRef(

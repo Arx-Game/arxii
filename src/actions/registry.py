@@ -432,8 +432,10 @@ from actions.definitions.places import JoinPlaceAction, LeavePlaceAction
 from actions.definitions.portals import DissolvePortalAnchorAction, InstallPortalAnchorAction
 from actions.definitions.positioning import (
     GMPlaceInPositionAction,
+    LandAction,
     MoveToPositionAction,
     SetTheStageAction,
+    TakeFlightAction,
     TakePositionAction,
 )
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
@@ -812,6 +814,8 @@ _ALL_ACTIONS: list[Action] = [
     HomeAction(),
     MoveToPositionAction(),
     TakePositionAction(),
+    TakeFlightAction(),
+    LandAction(),
     GMPlaceInPositionAction(),
     SetTheStageAction(),
     SetSituationAction(),

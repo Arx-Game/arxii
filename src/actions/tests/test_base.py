@@ -243,6 +243,8 @@ class ActionRegistryTests(TestCase):
             "cut_gem",
             "move_to_position",
             "take_position",
+            "take_flight",
+            "land",
             "gm_place_in_position",
             "set_the_stage",
             "set_situation",

@@ -1359,15 +1359,26 @@ def take_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
     return place_in_position(objectdb, position)
 
 
-def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
+def move_to_position(
+    objectdb: ObjectDB,
+    target: Position,
+    *,
+    traversals: frozenset[str] = frozenset({CreatureTraversal.WALKS}),
+) -> ObjectPosition:
     """Voluntary move from current position to target position.
+
+    ``traversals`` are the mover's ways of crossing (``traversal.player_traversals``
+    for a player character, #4663); the default is a walker.
 
     Validation order (each failure raises PositionTransitionError):
     1. target is in the same room as objectdb
     2. objectdb is currently placed in a position
     3. an edge exists between current and target
-    4. the edge does not block a walker (``edge_blocks_crossing``): an active
-       gating challenge names itself; a hard seal is "The way is blocked."
+    4. the edge does not block the mover: a wall a walker cannot cross
+       (``edge_blocks_crossing``) passes only when one of ``traversals`` can cross it
+       (``best_crossing_cost``, a climber or leaper at a wall with a way past it).
+       Otherwise an active gating challenge names itself; a hard seal is
+       "The way is blocked."
     5. an AERIAL target needs the mover to hold the ``aerial`` property: "You cannot fly."
     6. no roof stands between the two (``roof_between``): "A roof is in the way." (#4608)
     7. the actor's MOVEMENT capability > 0 (characters only)
@@ -1383,7 +1394,7 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     if edge is None:
         raise PositionTransitionError(_ERR_MOVE_NO_PATH)
 
-    if edge_blocks_crossing(edge):
+    if edge_blocks_crossing(edge) and not _traversals_cross(edge, traversals):
         if edge.gating_challenge_id is not None:
             challenge_name = edge.gating_challenge.template.name
             msg = f"Crossing that requires getting past {challenge_name}."
@@ -1400,6 +1411,13 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
         raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
 
     return _commit_position(objectdb, target)
+
+
+def _traversals_cross(edge: PositionEdge, traversals: frozenset[str]) -> bool:
+    """Whether any of ``traversals`` crosses ``edge`` (lazy: traversal imports this module)."""
+    from world.areas.positioning.traversal import best_crossing_cost
+
+    return best_crossing_cost(edge, traversals) is not None
 
 
 def is_aerial(objectdb: ObjectDB) -> bool:

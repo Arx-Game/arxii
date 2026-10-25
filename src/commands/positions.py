@@ -8,6 +8,10 @@ falling back to a unique prefix match, mirroring ``CmdPlaces``) and
 dispatches ``TakePositionAction`` when the caller is not yet placed anywhere,
 or ``MoveToPositionAction`` when already placed.
 
+``position/fly`` dispatches ``TakeFlightAction`` and ``position/land``
+``LandAction`` (#4663): a character with a flight capability takes off into the
+air above where she stands, and comes back down.
+
 ``position/place <target>=<position name>`` (#3385) dispatches
 ``GMPlaceInPositionAction`` -- staff/GM-fiat unchecked placement of any
 co-located object. No business logic here: the command resolves ``<target>``
@@ -21,7 +25,9 @@ from __future__ import annotations
 
 from actions.definitions.positioning import (
     GMPlaceInPositionAction,
+    LandAction,
     MoveToPositionAction,
+    TakeFlightAction,
     TakePositionAction,
 )
 from commands.command import ArxCommand
@@ -29,6 +35,8 @@ from commands.exceptions import CommandError
 from commands.utils.gm_resolution import resolve_position_by_name
 
 _SWITCH_PLACE = "place"
+_SWITCH_FLY = "fly"
+_SWITCH_LAND = "land"
 _USAGE_PLACE = "Usage: position/place <target>=<position name>"
 _NOT_ANYWHERE = "You aren't anywhere."
 
@@ -40,6 +48,8 @@ class CmdPosition(ArxCommand):
         position
         position <name>
         position/place <target>=<position name>
+        position/fly
+        position/land
     """
 
     key = "position"
@@ -52,6 +62,12 @@ class CmdPosition(ArxCommand):
                 self._do_place()
             except CommandError as err:
                 self.msg(str(err))
+            return
+        if _SWITCH_FLY in self.switches or _SWITCH_LAND in self.switches:
+            action = TakeFlightAction() if _SWITCH_FLY in self.switches else LandAction()
+            result = action.run(self.caller)
+            if result.message:
+                self.msg(result.message)
             return
 
         raw = (self.args or "").strip()

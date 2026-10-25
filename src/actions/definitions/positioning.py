@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from evennia.objects.models import ObjectDB
 
@@ -18,17 +18,32 @@ from actions.types import ActionContext, ActionResult, TargetType
 from commands.utils.gm_resolution import resolve_account_or_none
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import send_room_state
+from world.areas.positioning.constants import CreatureTraversal
 from world.areas.positioning.exceptions import PositionError
 from world.areas.positioning.models import Position, PositionBlueprint
 from world.areas.positioning.services import (
+    edge_between,
+    edge_blocks_crossing,
+    enter_aerial,
     instantiate_blueprint,
+    is_aerial,
+    leave_aerial,
     move_to_position,
     place_in_position,
+    position_of,
     take_position,
 )
-from world.combat.services.movement_budget import active_combat_participant, spend_combat_hop
+from world.areas.positioning.traversal import best_crossing_cost, traversals_of
+from world.combat.services.movement_budget import (
+    active_combat_participant,
+    hops_left,
+    spend_combat_hop,
+)
 from world.gm.constants import GMLevel
 from world.scenes.constants import RoundStatus
+
+if TYPE_CHECKING:
+    from world.combat.models import CombatParticipant
 
 
 @dataclass
@@ -76,21 +91,152 @@ class MoveToPositionAction(Action):
         except Position.DoesNotExist:
             return ActionResult(success=False, message=_ERR_POSITION_NOT_FOUND)
 
+        traversals = traversals_of(actor)
+        cost = _move_cost(actor, target, traversals)
+        participant = _declaring_participant(actor)
+        if participant is not None and cost > 1:
+            left = hops_left(participant)
+            if cost > left:
+                return ActionResult(
+                    success=False,
+                    message=f"That crossing takes {cost} hops; you have {left} left.",
+                )
+
         try:
-            move_to_position(actor, target)
+            move_to_position(actor, target, traversals=traversals)
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
-        # The prerequisite let a DECLARING-round move through; it now costs its hop.
-        participant = active_combat_participant(actor)
-        if participant is not None and participant.encounter.status == RoundStatus.DECLARING:
-            spend_combat_hop(participant)
+        # The prerequisite let a DECLARING-round move through; it now costs its hops.
+        if participant is not None:
+            spend_combat_hop(participant, cost)
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         send_room_state(actor_state)
 
         return ActionResult(success=True)
+
+
+def _declaring_participant(actor: ObjectDB) -> CombatParticipant | None:
+    """The actor's participant row while its encounter is declaring a round, else None."""
+    participant = active_combat_participant(actor)
+    if participant is None or participant.encounter.status != RoundStatus.DECLARING:
+        return None
+    return participant
+
+
+def _move_cost(actor: ObjectDB, target: Position, traversals: frozenset[str]) -> int:
+    """Hops the step to ``target`` costs: one, or a wall's crossing cost for a climber.
+
+    A step ``move_to_position`` will refuse is costed at one; the refusal is its to give.
+    """
+    current = position_of(actor)
+    edge = edge_between(current, target) if current is not None else None
+    if edge is None or not edge_blocks_crossing(edge):
+        return 1
+    return best_crossing_cost(edge, traversals) or 1
+
+
+class CanFlyPrerequisite(Prerequisite):
+    """The actor holds a flight capability above its baseline and is on the ground (#4663)."""
+
+    def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
+        if CreatureTraversal.FLIES not in traversals_of(actor):
+            return False, _ERR_CANNOT_FLY
+        if is_aerial(actor):
+            return False, _ERR_ALREADY_AIRBORNE
+        return True, ""
+
+
+class AirbornePrerequisite(Prerequisite):
+    """The actor is in the air (#4663)."""
+
+    def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
+        if not is_aerial(actor):
+            return False, _ERR_NOT_AIRBORNE
+        return True, ""
+
+
+def _spend_one_hop(actor: ObjectDB) -> None:
+    participant = _declaring_participant(actor)
+    if participant is not None:
+        spend_combat_hop(participant)
+
+
+@dataclass
+class TakeFlightAction(Action):
+    """Rise into the air above the actor's position (#4663).
+
+    A character with a flight capability above its baseline takes off into the AERIAL
+    twin of where she stands (``enter_aerial``). In a live encounter it costs one hop in
+    a declaring round, as a step does.
+
+    Dispatch convention: REGISTRY ActionRef ``registry_key="take_flight"``.
+    """
+
+    key: str = "take_flight"
+    name: str = "Take flight"
+    icon: str = "feather"
+    category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CombatMovementPrerequisite(), CanFlyPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        try:
+            enter_aerial(actor)
+        except PositionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        _spend_one_hop(actor)
+
+        sdm = context.scene_data if context else SceneDataManager()
+        send_room_state(sdm.initialize_state_for_object(actor))
+        return ActionResult(success=True, message="You take flight.")
+
+
+@dataclass
+class LandAction(Action):
+    """Come down from the air onto the ground below (#4663).
+
+    ``leave_aerial`` sets the actor down on the position she was flying over. In a live
+    encounter it costs one hop in a declaring round.
+
+    Dispatch convention: REGISTRY ActionRef ``registry_key="land"``.
+    """
+
+    key: str = "land"
+    name: str = "Land"
+    icon: str = "arrow-down"
+    category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CombatMovementPrerequisite(), AirbornePrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        try:
+            ground = leave_aerial(actor)
+        except PositionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        _spend_one_hop(actor)
+
+        sdm = context.scene_data if context else SceneDataManager()
+        send_room_state(sdm.initialize_state_for_object(actor))
+        return ActionResult(success=True, message=f"You land at {ground.position.name}.")
 
 
 @dataclass
@@ -152,6 +298,9 @@ _ERR_NO_TARGET = "Place which object?"
 _ERR_TARGET_NOT_FOUND = "That object does not exist."
 _ERR_TARGET_NOT_CO_LOCATED = "That object is not here."
 _ERR_POSITION_NOT_FOUND = "That position does not exist."
+_ERR_CANNOT_FLY = "You cannot fly."
+_ERR_ALREADY_AIRBORNE = "You are already in the air."
+_ERR_NOT_AIRBORNE = "You are not in the air."
 
 
 def _actor_may_gm_place(actor: ObjectDB) -> bool:
