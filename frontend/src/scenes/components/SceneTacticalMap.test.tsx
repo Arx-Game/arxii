@@ -127,8 +127,8 @@ const MOCK_SCENE = {
     { position_id: 102, adjacent_position_ids: [101] },
   ],
   persona_positions: [
-    { persona_id: 1, position: { id: 101, name: 'North Wall' } },
-    { persona_id: 2, position: null },
+    { persona_id: 1, square_x: null, square_y: null, position: { id: 101, name: 'North Wall' } },
+    { persona_id: 2, square_x: null, square_y: null, position: null },
   ],
   personas: [
     { id: 1, name: 'Alice Persona' },

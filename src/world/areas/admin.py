@@ -6,6 +6,7 @@ from world.areas.positioning.models import (
     BlueprintEdge,
     BlueprintPosition,
     BlueprintPositionShelter,
+    MapTerrain,
     PositionBlueprint,
     RampartElementProfile,
     RampartElementResistance,
@@ -32,12 +33,20 @@ class AreaElevationRequirementAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 
+@admin.register(MapTerrain)
+class MapTerrainAdmin(admin.ModelAdmin):
+    list_display = ["name", "art"]
+    search_fields = ["name"]
+    autocomplete_fields = ["art"]
+
+
 class BlueprintPositionInline(admin.TabularInline):
     """#3831 - the position nodes belonging to a blueprint."""
 
     model = BlueprintPosition
     formset = OneRowPerFormSet
     extra = 1
+    autocomplete_fields = ["terrain"]
 
 
 class BlueprintEdgeInline(admin.TabularInline):

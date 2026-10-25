@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
@@ -46,6 +47,32 @@ def invalidate_position_graph_caches(room: Any) -> None:
             position.__dict__.pop(name, None)
 
 
+class MapTerrain(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """A named ground look on the battle map (wood planks, flagstones, grass).
+
+    Drawing only (#4651): no rule, roll or cost reads terrain. ``art`` is the
+    tile image drawn under a place's rectangle; staff author the rows.
+    """
+
+    name = models.CharField(max_length=60, unique=True)
+    art = models.ForeignKey(
+        "arxii.Media", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+        dependencies = ["arxii.Media"]
+
+    class Meta:
+        app_label = "arxii"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class PositionNodeBase(SharedMemoryModel):
     """Abstract base for position-node models (positioned tactical regions).
 
@@ -77,8 +104,48 @@ class PositionNodeBase(SharedMemoryModel):
         ),
     )
 
+    # Battle-map drawing (#4651): the rectangle a place is drawn as, in map squares,
+    # and its ground look. Drawing only; the place stays the rule. All four area
+    # columns are set together or all null (a place with none draws from layout).
+    area_x = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    area_y = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    area_w = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    area_h = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    terrain = models.ForeignKey(
+        MapTerrain, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
     class Meta:
         abstract = True
+
+
+def _area_constraint(name: str) -> models.CheckConstraint:
+    """All four area columns null, or all set with a width and height of at least 1."""
+    return models.CheckConstraint(
+        name=name,
+        condition=(
+            Q(area_x__isnull=True, area_y__isnull=True, area_w__isnull=True, area_h__isnull=True)
+            | Q(
+                area_x__isnull=False,
+                area_y__isnull=False,
+                area_w__isnull=False,
+                area_h__isnull=False,
+                area_w__gte=1,
+                area_h__gte=1,
+            )
+        ),
+        violation_error_message=(
+            "Fill in all four area numbers (width and height at least 1), or leave all four blank."
+        ),
+    )
 
 
 class PositionEdgeBase(SharedMemoryModel):
@@ -147,6 +214,7 @@ class Position(PositionNodeBase):
         app_label = "arxii"
         constraints = [
             models.UniqueConstraint(fields=["room", "name"], name="unique_position_per_room"),
+            _area_constraint("position_area_all_or_none"),
         ]
         ordering = ["room", "name"]
 
@@ -374,6 +442,7 @@ class BlueprintPosition(NaturalKeyMixin, CreditedContent, PositionNodeBase):
             models.UniqueConstraint(
                 fields=["blueprint", "name"], name="unique_blueprint_position_per_blueprint"
             ),
+            _area_constraint("blueprint_position_area_all_or_none"),
         ]
         ordering = ["blueprint", "name"]
 
@@ -456,9 +525,23 @@ class ObjectPosition(SharedMemoryModel):
         related_name="object_position",
     )
     position = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="occupants")
+    # Battle-map square inside the place's area (#4651). Drawing only; null = not placed.
+    square_x = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    square_y = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
 
     class Meta:
         app_label = "arxii"
+        constraints = [
+            models.CheckConstraint(
+                name="object_position_square_both_or_neither",
+                condition=Q(square_x__isnull=True, square_y__isnull=True)
+                | Q(square_x__isnull=False, square_y__isnull=False),
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.objectdb_id} @ {self.position_id}"

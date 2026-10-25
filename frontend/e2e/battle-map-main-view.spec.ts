@@ -3,9 +3,11 @@ import { test, expect, type Page } from '@playwright/test';
 import { mockRestRoutes, reachReadySession } from './support/gameHarness';
 
 /**
- * #4641: the battle map in the play sidebar. The sidebar's resize handle used
- * to be a 44px strip over the pane's inner edge, on top of the map's zoom and
- * fit buttons, and the map opened showing three of a room's ten positions.
+ * #4641, reworked for #4670: the battle map is the main view of a fight, in
+ * the center column, and the play sidebar sits beside it. The map must open
+ * with the whole room drawn, the sidebar's resize handle (a 44px grip on touch
+ * screens) must never cover it, and dragging the sidebar wider must not push
+ * it under the map.
  */
 
 const ENCOUNTER_ID = 77;
@@ -30,6 +32,12 @@ function positionNode(id: number, name: string) {
     elevation_anchor_id: null,
     layout_x: null,
     layout_y: null,
+    area_x: null,
+    area_y: null,
+    area_w: null,
+    area_h: null,
+    terrain_name: null,
+    terrain_art_url: null,
     rampart_element: null,
     rampart_integrity: null,
     rampart_max_integrity: null,
@@ -99,6 +107,7 @@ async function openBattleMap(page: Page, side: Side): Promise<void> {
         position_nodes: NODES,
         position_edges: EDGES,
         position_adjacency: [],
+        held_positions: [],
       },
     });
   });
@@ -109,11 +118,8 @@ async function openBattleMap(page: Page, side: Side): Promise<void> {
     await page.route(`**/api/${path}**`, (route) => route.fulfill({ json: emptyPage }));
   }
   await reachReadySession(page);
-  await page
-    .getByRole('navigation', { name: 'Sidebar modes' })
-    .getByRole('button', { name: 'Combat', exact: true })
-    .click();
-  await page.getByTestId('rail-tab-map').click();
+  await expect(page.getByTestId('combat-main-map')).toBeVisible();
+  await expect(page.getByTestId('combat-tactical-map')).toBeVisible();
   await expect(page.getByTestId('tactical-map-node-1')).toBeVisible();
 }
 
@@ -124,34 +130,24 @@ for (const side of ['right', 'left'] as const) {
   // Dragging toward the story widens the sidebar.
   const widen = side === 'right' ? -60 : 60;
 
-  test.describe(`#4641 battle map in the sidebar (${side})`, () => {
-    test('the map opens with the whole room inside the visible sidebar', async ({ page }) => {
+  test.describe(`#4670 battle map in the main column (${side} sidebar)`, () => {
+    test('the map opens with the whole room drawn in the main column', async ({ page }) => {
       await openBattleMap(page, side);
+      const map = await page.getByTestId('combat-main-map').boundingBox();
       const pane = await page.locator('.play-sidebar-pane').boundingBox();
+      expect(map).not.toBeNull();
       expect(pane).not.toBeNull();
       for (const node of NODES) {
         const box = await page.getByTestId(`tactical-map-node-${node.id}`).boundingBox();
         expect(box, node.name).not.toBeNull();
-        expect(box!.x, `${node.name} left edge`).toBeGreaterThanOrEqual(pane!.x);
+        expect(box!.x, `${node.name} left edge`).toBeGreaterThanOrEqual(map!.x);
         expect(box!.x + box!.width, `${node.name} right edge`).toBeLessThanOrEqual(
-          pane!.x + pane!.width
+          map!.x + map!.width
         );
       }
-    });
-
-    test('the zoom and fit buttons take a real mouse click', async ({ page }) => {
-      await openBattleMap(page, side);
-      const yard = page.getByTestId('tactical-map-node-1');
-      const before = await yard.boundingBox();
-      // A plain click, no force: it fails if anything sits over the button.
-      await page.locator('.react-flow__controls-zoomin').click();
-      await expect
-        .poll(async () => (await yard.boundingBox())!.width)
-        .toBeGreaterThan(before!.width);
-      await page.locator('.react-flow__controls-fitview').click();
-      await expect
-        .poll(async () => (await yard.boundingBox())!.width)
-        .toBeLessThan(before!.width + 1);
+      // The map and the sidebar sit side by side, never over each other.
+      const apart = map!.x + map!.width <= pane!.x + 1 || pane!.x + pane!.width <= map!.x + 1;
+      expect(apart).toBe(true);
     });
 
     test('the sidebar still resizes from its edge', async ({ page }) => {
@@ -166,6 +162,12 @@ for (const side of ['right', 'left'] as const) {
       });
       await page.mouse.up();
       await expect.poll(async () => (await pane.boundingBox())!.width).toBeGreaterThan(before + 40);
+      // Widening the sidebar leaves the map clear of it.
+      const map = (await page.getByTestId('combat-main-map').boundingBox())!;
+      const widened = (await pane.boundingBox())!;
+      expect(map.x + map.width <= widened.x + 1 || widened.x + widened.width <= map.x + 1).toBe(
+        true
+      );
     });
 
     test('a touch screen gets a 44px grip at the middle of the edge only', async ({ page }) => {
@@ -179,10 +181,12 @@ for (const side of ['right', 'left'] as const) {
         return { width: style.width, height: style.height, inset: style[gripEdge] };
       }, edge);
       expect(grip).toEqual({ width: '44px', height: '44px', inset: '0px' });
-      // The grip sits at mid-height, clear of the map's buttons at the foot.
-      const controls = (await page.locator('.react-flow__controls').boundingBox())!;
+      // The grip lives on the sidebar's edge, which is not over the map.
+      const map = (await page.getByTestId('combat-main-map').boundingBox())!;
       const box = (await handle.boundingBox())!;
-      expect(controls.y).toBeGreaterThan(box.y + box.height / 2 + 22);
+      const gripLeft = box.x + box.width / 2 - 22;
+      const gripRight = box.x + box.width / 2 + 22;
+      expect(gripRight <= map.x + 22 || gripLeft >= map.x + map.width - 22).toBe(true);
     });
   });
 }

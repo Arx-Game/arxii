@@ -10,11 +10,27 @@ class PositionSummarySerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
 
 
+class SquareSerializer(serializers.Serializer):
+    """A battle-map square inside a place (#4651): drawing only."""
+
+    x = serializers.IntegerField(read_only=True)
+    y = serializers.IntegerField(read_only=True)
+
+
+class HeldPositionSerializer(serializers.Serializer):
+    """A place an enemy able to act holds, and who holds it (#4670)."""
+
+    position_id = serializers.IntegerField(read_only=True)
+    holder_names = serializers.ListField(child=serializers.CharField(), read_only=True)
+
+
 class PersonaPositionSerializer(serializers.Serializer):
     """A scene persona and the Position it currently occupies (or null)."""
 
     persona_id = serializers.IntegerField(read_only=True)
     position = PositionSummarySerializer(read_only=True, allow_null=True)
+    square_x = serializers.IntegerField(read_only=True, allow_null=True)
+    square_y = serializers.IntegerField(read_only=True, allow_null=True)
 
 
 class PositionAdjacencyItemSerializer(serializers.Serializer):
@@ -43,6 +59,12 @@ class PositionNodeSerializer(serializers.Serializer):
     rampart_crack_state = serializers.CharField(read_only=True, allow_null=True)
     is_roofed = serializers.BooleanField(read_only=True)
     screens_ranged = serializers.BooleanField(read_only=True)
+    area_x = serializers.IntegerField(read_only=True, allow_null=True)
+    area_y = serializers.IntegerField(read_only=True, allow_null=True)
+    area_w = serializers.IntegerField(read_only=True, allow_null=True)
+    area_h = serializers.IntegerField(read_only=True, allow_null=True)
+    terrain_name = serializers.CharField(read_only=True, allow_null=True)
+    terrain_art_url = serializers.CharField(read_only=True, allow_null=True)
 
 
 class PositionEdgeSerializer(serializers.Serializer):

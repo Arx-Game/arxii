@@ -31,6 +31,12 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   renders — and, per Finding I1, `lingeringEncounterId`/`dismissedEncounterId`,
   which keep `CombatRail` mounted after `useEncounterForScene`'s poll drops a
   completed encounter, until the player dismisses the outcome banner.
+- **Battle map in the game page (#4670)**: `GamePage` wraps its layout in `CombatPickProvider`
+  (`frontend/src/combat/CombatPickContext.tsx`; read it with `useCombatPick` from
+  `combat/combatPick.ts`) and `GameCenter` renders `CombatMainMap` above `GameWindow` while
+  `showCombatRail` is true (`mapEncounterId`). The map is the main view of a fight; `CombatRail`
+  keeps "Your Turn" and, for a GM, "GM", and shares cast-position picks with the map through the
+  provider. `SceneTacticalMap` shows only outside a fight (on `SceneDetailPage`).
 - **`GameWindow.tsx`**: Central communication hub with session tabs and
   command input. When the composition root passes a `sceneFeed` prop (an
   active scene), the center renders the structured prose-line feed

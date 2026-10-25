@@ -12,6 +12,7 @@ from world.areas.positioning.constants import FALL_TRIGGER_NAME, PositionKind, R
 from world.areas.positioning.models import (
     BlueprintEdge,
     BlueprintPosition,
+    MapTerrain,
     ObjectPosition,
     Position,
     PositionBlueprint,
@@ -395,3 +396,12 @@ def wire_fall_triggers() -> None:
     staff seed content. Safe to call repeatedly.
     """
     FallToPlummetTriggerDefinitionFactory()
+
+
+class MapTerrainFactory(factory.django.DjangoModelFactory):
+    """Factory for MapTerrain; ``name`` is a Sequence. Pass ``art=`` for a Media row."""
+
+    class Meta:
+        model = MapTerrain
+
+    name = factory.Sequence(lambda n: f"terrain_{n}")

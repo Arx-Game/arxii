@@ -436,6 +436,7 @@ from actions.definitions.positioning import (
     MoveToPositionAction,
     PassHeldGroundAction,
     SetTheStageAction,
+    StepToSquareAction,
     TakeFlightAction,
     TakePositionAction,
 )
@@ -816,6 +817,7 @@ _ALL_ACTIONS: list[Action] = [
     MoveToPositionAction(),
     PassHeldGroundAction(),
     TakePositionAction(),
+    StepToSquareAction(),
     TakeFlightAction(),
     LandAction(),
     GMPlaceInPositionAction(),

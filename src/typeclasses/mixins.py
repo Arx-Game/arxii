@@ -106,7 +106,9 @@ class ObjectParent:
 
         passable = PositionEdge.objects.filter(is_passable=True)
         return list(
-            self.positions.select_related("rampart__element_profile").prefetch_related(
+            self.positions.select_related(
+                "rampart__element_profile", "terrain__art"
+            ).prefetch_related(
                 Prefetch("edges_as_a", queryset=passable, to_attr="passable_edges_as_a"),
                 Prefetch("edges_as_b", queryset=passable, to_attr="passable_edges_as_b"),
                 Prefetch(

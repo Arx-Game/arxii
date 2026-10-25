@@ -48,7 +48,7 @@ A player's `CreatureTraversal` set, read from her capabilities: WALKS always, pl
 
 **Hop** (#4607):
 One step along a `PositionEdge`, the unit of movement on the battle map. Crossing a wall with a way past it costs a climber or leaper two hops, and taking off into the aerial layer or landing costs one.
-_Avoid_: square, tile, step (in code)
+_Avoid_: tile, step (in code). A **square** is not a hop; see **Square**.
 
 **Strike reach** (#4607):
 Whether a strike lands from one position on another, by its delivery (`strike_reaches`): melee needs the same or an adjacent position, and a missile reaches anywhere in the room. A combatant with no position is always in reach. PC techniques keep their own reach value through `technique_can_reach`; both read `position_reachable`.
@@ -65,3 +65,15 @@ _Avoid_: concealed, hidden (concealment is a casting term), blind
 **Grounding** (#4608):
 Knocking a flier out of the air (`REMOVE_FLIGHT`, `ground_flier`). It is a fall through the plummet rules, not the soft landing `leave_aerial` gives: a character gets the catch window and lands at the end-of-round tick; a combat opponent lands at once with the fall damage on its health. The fall has no source, so it never kills.
 _Avoid_: landing, knockdown
+
+**Place area** (#4670, slice 1 of #4651):
+The rectangle a place is drawn as on the battle map, in map squares: `area_x`, `area_y`, `area_w`, `area_h` on `Position` and `BlueprintPosition`. All four are set or all four are null; a width and height are at least 1. A place with no area is drawn as a derived 3x2 box and takes no square. Drawing only: the place stays the rule.
+_Avoid_: zone, room box, region
+
+**Square** (#4670):
+One cell of the battle map's grid. A token stands on a square inside its place's area (`ObjectPosition.square_x`, `square_y`, both or neither). `step_to_square` moves to another square of the same place for free; a move that names no square clears it. Drawing only: no hop, reach, hold or roll reads a square. Not a **Hop**.
+_Avoid_: tile, cell, hex, grid position
+
+**Map terrain** (#4670):
+A named ground look (`MapTerrain`: a name and tile art) that staff set on a place so the map draws wood planks or flagstones under its area. Drawing only: no rule, roll or cost reads it.
+_Avoid_: tile, ground type, biome, floor
