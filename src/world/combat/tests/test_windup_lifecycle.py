@@ -52,6 +52,13 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
+def _only_text(mock_msg: mock.MagicMock) -> str:
+    """The one plain-text line a telnet listener was sent (a web push carries none)."""
+    texts = [c.args[0] for c in mock_msg.call_args_list if c.args]
+    assert len(texts) == 1, texts
+    return texts[0]
+
+
 class WindupDeclarationTests(TestCase):
     def setUp(self) -> None:
         self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
@@ -108,8 +115,7 @@ class WindupDeclarationTests(TestCase):
             select_npc_actions(self.encounter)
 
         self.assertTrue(mock_broadcast.called)
-        self.assertGreaterEqual(mock_msg.call_count, 1)
-        sent_text = mock_msg.call_args.args[0]
+        sent_text = _only_text(mock_msg)
         self.assertIn("winds up something huge", sent_text)
 
     @mock.patch("world.scenes.interaction_services._broadcast_to_location")
@@ -121,7 +127,7 @@ class WindupDeclarationTests(TestCase):
         with mock.patch.object(listener, "msg") as mock_msg:
             select_npc_actions(self.encounter)
 
-        sent_text = mock_msg.call_args.args[0]
+        sent_text = _only_text(mock_msg)
         self.assertIn("begins something enormous", sent_text)
 
     @mock.patch("world.scenes.interaction_services._broadcast_to_location")
@@ -133,7 +139,7 @@ class WindupDeclarationTests(TestCase):
         with mock.patch.object(listener, "msg") as mock_msg:
             select_npc_actions(self.encounter)
 
-        sent_text = mock_msg.call_args.args[0]
+        sent_text = _only_text(mock_msg)
         self.assertIn("bearing down on", sent_text)
         self.assertIn(str(self.sheet.character), sent_text)
 
@@ -147,7 +153,7 @@ class WindupDeclarationTests(TestCase):
         with mock.patch.object(listener, "msg") as mock_msg:
             select_npc_actions(self.encounter)
 
-        sent_text = mock_msg.call_args.args[0]
+        sent_text = _only_text(mock_msg)
         self.assertIn("winds up something huge!", sent_text)
         self.assertIn(f"It is aimed at {self.sheet.character}.", sent_text)
 
@@ -163,7 +169,7 @@ class WindupDeclarationTests(TestCase):
         with mock.patch.object(listener, "msg") as mock_msg:
             select_npc_actions(self.encounter)
 
-        sent_text = mock_msg.call_args.args[0]
+        sent_text = _only_text(mock_msg)
         self.assertIn(f"turns on {self.sheet.character} with a roar!", sent_text)
         self.assertNotIn("It is aimed at", sent_text)
 
@@ -182,7 +188,7 @@ class WindupDeclarationTests(TestCase):
         with mock.patch.object(listener, "msg") as mock_msg:
             _create_pending_opponent_attack(self.opponent, self.entry, self.encounter, None)
 
-        sent_text = mock_msg.call_args.args[0]
+        sent_text = _only_text(mock_msg)
         self.assertIn("no one in particular", sent_text)
         self.assertEqual(sent_text.count("It is aimed at"), 1)
 
