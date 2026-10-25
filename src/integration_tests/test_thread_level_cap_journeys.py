@@ -177,6 +177,22 @@ class TheThreadStopsAtHerLevel(_ThreadCase):
         self.assertEqual(thread.level, 40)
 
 
+class TheCapStopsAnImbuePartway(_ThreadCase):
+    def test_she_is_told_why_and_the_rest_stays_banked(self) -> None:
+        """Level 2, stored 15, paying for 25: she stops at 20, is told her level
+        stopped her, and the points past 20 stay on the thread for later."""
+        self.her_level_is(2)
+        thread = self.trait_thread(15)
+        self.boundaries_paid(thread, 30)
+
+        told = self.imbue(thread, imbue_cost(15, 25))
+
+        self.assertIn("Your character level limits this thread's growth.", told)
+        self.assertIn("The rest stays banked in the thread.", told)
+        self.assertEqual(thread.level, 20)
+        self.assertEqual(thread.developed_points, imbue_cost(20, 25))
+
+
 class AnOrganizationThreadTakesTheLowerCap(_ThreadCase):
     def _org_thread(self, level: int) -> Thread:
         from world.magic.factories import GiftFactory

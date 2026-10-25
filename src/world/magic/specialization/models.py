@@ -274,6 +274,11 @@ class TechniqueVariant(NaturalKeyMixin, CreditedContent, AbstractSpecializedVari
                     unlock_thread_level__lte=CREATION_PERSONALIZATION_MAX_LEVEL,
                 ),
                 name="technique_variant_creation_cost_early_level",
+                violation_error_message=(
+                    "A form offered in creation needs an unlock thread level of "
+                    f"{CREATION_PERSONALIZATION_MAX_LEVEL}: a new character's threads stop "
+                    "there."
+                ),
             ),
         ]
 

@@ -97,6 +97,11 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
                 check=models.Q(creation_point_cost__isnull=True)
                 | models.Q(min_crossing_level__lte=CREATION_PERSONALIZATION_MAX_LEVEL),
                 name="signature_bonus_creation_cost_below_crossing",
+                violation_error_message=(
+                    "A flourish offered in creation needs a minimum crossing level of "
+                    f"{CREATION_PERSONALIZATION_MAX_LEVEL}: a new character's threads stop "
+                    "there."
+                ),
             ),
         ]
 
