@@ -611,6 +611,27 @@ class AnAcrobatGetsPast(_TheCauseway):
 
         self.assertTold(wren, ROOM_GOT_PAST.format(name="Kit", holder="Bandit", place="Yard"))
 
+    def test_the_room_line_names_her_persona_not_her_character_key(self) -> None:
+        from world.scenes.constants import PersonaType
+        from world.scenes.models import Persona
+
+        self.designate()
+        kit = self.acrobat()
+        persona = Persona.objects.get(
+            character_sheet=kit.sheet_data, persona_type=PersonaType.PRIMARY
+        )
+        persona.name = "The Grey Masque"
+        persona.save(update_fields=["name"])
+        wren = self.fighter("Wren", at=self.lane)
+        self.watch(wren)
+
+        with self.roll(self.clean):
+            self.web(kit, "pass_held_ground", position_id=self.yard.pk)
+
+        line = ROOM_GOT_PAST.format(name="The Grey Masque", holder="Bandit", place="Yard")
+        self.assertTold(wren, line)
+        self.assertNotTold(wren, "Kit gets past")
+
     def test_the_room_sees_her_get_past_partly_or_stopped(self) -> None:
         self.designate()
         kit = self.acrobat()

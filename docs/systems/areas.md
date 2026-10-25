@@ -687,7 +687,7 @@ opponent's set. A player character is stopped however she moves on the ground (w
 and her way past is the pass roll; only NPCs skip the roll, so an NPC walker or climber stops
 and an NPC flier or leaper passes. Entering a held place stops her: a PC's `hops_used` becomes `hops_for(sheet)` and she is told "You are stopped
 by <name>.". She is not stopped by ground held below her while she is in the air; landing in
-a held place is an entry and stops her like any other. An NPC leaper or flier is not stopped. NPC routing uses
+a held place is an entry and stops her like any other. NPC routing uses
 `routing_profile(opponent, holds)` (the opponent's `MovementProfile` with `stop_at` filled by
 `npc_stop_at`), so `find_path`, `path_costs_from` and the tactics ladder treat a held place as
 the end of a route. A walker whose every route is closed by held ground this round walks the

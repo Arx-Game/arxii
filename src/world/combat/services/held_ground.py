@@ -3,8 +3,9 @@
 A player character who enters a place an enemy able to act stands in on the ground stops
 there for the round, however she moves (walking, climbing or leaping); her way past is the
 pass roll (``held_ground_pass``). One who starts the round there may walk out, and a mover
-in the air is not stopped by ground held below. ``MoveToPositionAction`` ends a player's
-movement for the round on entering a held place. NPCs do not roll: an NPC walker or climber
+in the air is not stopped by ground held below; landing in a held place is an entry and
+stops her (``LandAction``). ``MoveToPositionAction`` ends a player's movement for the round
+on entering a held place. NPCs do not roll: an NPC walker or climber
 stops (every NPC route search treats held places as ones it may end in but never walks
 through, ``find_path(..., stop_at=...)``) and an NPC flier or leaper passes (``npc_stop_at``).
 

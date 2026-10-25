@@ -1131,10 +1131,13 @@ def _held_place_holders(character: ObjectDB) -> dict[int, str]:
 
 
 def _move_description(neighbor: Position, move_note: str, holders: dict[int, str]) -> str:
-    """A move entry's note: who holds the place, else the hops left, else its description."""
+    """A move entry's note: who holds the place, else the hops left, else nothing.
+
+    The place's own prose is not repeated on the button; the map already shows it.
+    """
     if neighbor.pk in holders:
         return _HELD_BY_NOTE.format(name=holders[neighbor.pk])
-    return move_note if move_note else neighbor.description
+    return move_note
 
 
 def _declaring_hops_left(character: ObjectDB) -> int | None:
