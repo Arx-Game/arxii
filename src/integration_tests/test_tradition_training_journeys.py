@@ -25,6 +25,7 @@ from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     MAGIC_SKILL_POINTS_REFUSAL,
     MAGIC_TRAINING_POINTS_TARGET,
+    ApplicationStatus,
     OfferChapter,
     TraditionState,
 )
@@ -32,6 +33,7 @@ from world.character_creation.factories import (
     BeginningTraditionFactory,
     CharacterDraftFactory,
     DistinctionOfferFactory,
+    DraftApplicationFactory,
     SchoolingLineFactory,
 )
 from world.character_creation.models import CharacterDraft, DistinctionOffer
@@ -51,7 +53,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
-from world.magic.models import CharacterAnima
+from world.magic.models import CharacterAnima, Resonance
 from world.magic.seeds_cast import get_standalone_cast_template
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.scenes.factories import SceneFactory
@@ -451,18 +453,26 @@ class MagicTrainingAllocationJourney(JourneyCase):
             SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC)) for _ in range(3)
         ]
         cls.account = AccountFactory()
-        cls.draft = CharacterDraftFactory(
+        cls.resonance = ResonanceFactory()
+        cls.path, cls.tradition = path, tradition
+        cls.draft_data = {
+            "distinctions": [{"distinction_id": training.pk, "rank": 1}],
+            "selected_gift_id": gift.pk,
+            "selected_technique_ids": [technique.pk],
+            "selected_gift_resonance_id": cls.resonance.pk,
+            "anima_check_stat_id": StatTraitFactory(name="strength").pk,
+            "anima_check_skill_id": SkillFactory().pk,
+        }
+        cls.draft = cls._new_draft()
+
+    @classmethod
+    def _new_draft(cls, **drop: bool) -> CharacterDraft:
+        data = {key: value for key, value in cls.draft_data.items() if key not in drop}
+        return CharacterDraftFactory(
             account=cls.account,
-            selected_path=path,
-            selected_tradition=tradition,
-            draft_data={
-                "distinctions": [{"distinction_id": training.pk, "rank": 1}],
-                "selected_gift_id": gift.pk,
-                "selected_technique_ids": [technique.pk],
-                "selected_gift_resonance_id": ResonanceFactory().pk,
-                "anima_check_stat_id": StatTraitFactory(name="strength").pk,
-                "anima_check_skill_id": SkillFactory().pk,
-            },
+            selected_path=cls.path,
+            selected_tradition=cls.tradition,
+            draft_data=data,
         )
 
     def _patch(self, magic_skills: dict[str, int]) -> dict:
@@ -493,3 +503,44 @@ class MagicTrainingAllocationJourney(JourneyCase):
         values = {s["id"]: s["value"] for s in body["magic_training"]["skills"]}
         self.assertEqual(values[self.skills[0].pk], 20)
         self.assertEqual(values[self.skills[2].pk], 0)
+
+    def test_resonance_picker_lists_rows_a_player_can_save(self) -> None:
+        """The Gift stage's Resonance step: list resonances, save one, the error clears."""
+        draft = self._new_draft(selected_gift_resonance_id=True)
+        client = self.api(self.account)
+        url = f"/api/character-creation/drafts/{draft.pk}/"
+        stage = str(CharacterDraft.Stage.GIFT)
+        self.assertIn("Select a gift resonance", client.get(url).json()["stage_errors"][stage])
+
+        listed = client.get("/api/magic/resonances/")
+        self.assertEqual(listed.status_code, 200, listed.content)
+        rows = {row["id"]: row for row in listed.json()}
+        self.assertEqual(set(rows), set(Resonance.objects.values_list("pk", flat=True)))
+        self.assertEqual(rows[self.resonance.pk]["affinity_name"], self.resonance.affinity.name)
+
+        response = client.patch(
+            url, {"draft_data": {"selected_gift_resonance_id": self.resonance.pk}}, format="json"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        errors = client.get(url).json()["stage_errors"][stage]
+        self.assertNotIn("Select a gift resonance", errors)
+
+    def test_resubmit_refuses_a_draft_that_cannot_submit(self) -> None:
+        """Revisions that leave the training pool unspent cannot be resubmitted."""
+        draft = self._new_draft()
+        application = DraftApplicationFactory(
+            draft=draft, status=ApplicationStatus.REVISIONS_REQUESTED
+        )
+        client = self.api(self.account)
+        url = f"/api/character-creation/drafts/{draft.pk}/"
+        stage = str(CharacterDraft.Stage.GIFT)
+        self.assertEqual(
+            client.get(url).json()["stage_errors"][stage],
+            ["Spend all of your magical training: 30 left"],
+        )
+
+        response = client.post(f"{url}resubmit/", {}, format="json")
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.json()["detail"], "Draft is not complete enough to submit.")
+        application.refresh_from_db()
+        self.assertEqual(application.status, ApplicationStatus.REVISIONS_REQUESTED)

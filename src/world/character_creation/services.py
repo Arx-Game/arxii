@@ -2686,12 +2686,19 @@ def resubmit_draft(application: DraftApplication, *, comment: str = "") -> None:
         comment: Optional message from the player about changes made.
 
     Raises:
-        ValueError: If the application is not in REVISIONS_REQUESTED status.
+        CharacterCreationError: If the application is not in REVISIONS_REQUESTED
+            status, or the draft can no longer submit.
     """
     from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
 
     if application.status != ApplicationStatus.REVISIONS_REQUESTED:
         msg = "Can only resubmit applications that are in Revisions Requested status."
+        raise CharacterCreationError(msg)
+
+    # Same gate as submit_draft_for_review: a revision can leave a stage failing
+    # (an unspent magical training pool, a dropped required pick).
+    if not application.draft.can_submit():
+        msg = "Draft is not complete enough to submit."
         raise CharacterCreationError(msg)
 
     if comment:

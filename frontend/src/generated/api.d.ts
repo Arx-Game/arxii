@@ -13594,6 +13594,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/affinities/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only list of the three Affinities, for pickers (character creation). */
+    get: operations['magic_affinities_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/affinities/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only list of the three Affinities, for pickers (character creation). */
+    get: operations['magic_affinities_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/applicable-pulls/': {
     parameters: {
       query?: never;
@@ -15059,6 +15093,50 @@ export interface paths {
      *     Filter params: source, resonance (PK), granted_after, granted_before.
      */
     get: operations['magic_resonance_grants_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/resonances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only list of Resonance rows with their Affinity, for pickers.
+     *
+     *     The character-creation Gift stage lists every Resonance and stores the chosen
+     *     pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+     */
+    get: operations['magic_resonances_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/resonances/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only list of Resonance rows with their Affinity, for pickers.
+     *
+     *     The character-creation Gift stage lists every Resonance and stores the chosen
+     *     pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+     */
+    get: operations['magic_resonances_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -27654,6 +27732,22 @@ export interface components {
       target_companion_id?: number;
       journal_entry_id: number;
     };
+    /** @description Serializer for Affinity records (Celestial, Primal, Abyssal). */
+    Affinity: {
+      readonly id: number;
+      /** @description Affinity name (e.g., 'Celestial', 'Abyssal', 'Primal'). */
+      readonly name: string;
+      /** @description Description of this affinity. */
+      readonly description: string;
+      /**
+       * @description Which aura this affinity is, so a Tradition's favored affinities can be compared with a character's aura. Set once for each of the three.
+       *
+       *     * `celestial` - Celestial
+       *     * `primal` - Primal
+       *     * `abyssal` - Abyssal
+       */
+      readonly aura_type: components['schemas']['AuraTypeEnum'];
+    };
     /** @description Schema-only shape of the beat line in an aftermath digest (#3551). */
     AftermathBeat: {
       outcome: string;
@@ -28168,6 +28262,13 @@ export interface components {
      * @enum {string}
      */
     AudienceEnum: 'owner' | 'other_side' | 'third_party' | 'staff';
+    /**
+     * @description * `celestial` - Celestial
+     *     * `primal` - Primal
+     *     * `abyssal` - Abyssal
+     * @enum {string}
+     */
+    AuraTypeEnum: 'celestial' | 'primal' | 'abyssal';
     /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
     AuthoredSecret: {
       readonly id: number;
@@ -72473,6 +72574,47 @@ export interface operations {
       };
     };
   };
+  magic_affinities_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Affinity'][];
+        };
+      };
+    };
+  };
+  magic_affinities_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this affinity. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Affinity'];
+        };
+      };
+    };
+  };
   magic_applicable_pulls_create: {
     parameters: {
       query?: never;
@@ -74390,6 +74532,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ResonanceGrant'];
+        };
+      };
+    };
+  };
+  magic_resonances_list: {
+    parameters: {
+      query?: {
+        affinity?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Resonance'][];
+        };
+      };
+    };
+  };
+  magic_resonances_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this resonance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Resonance'];
         };
       };
     };

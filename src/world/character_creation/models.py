@@ -1929,8 +1929,11 @@ class CharacterDraft(SharedMemoryModel):
         )
         from world.skills.models import SkillPointBudget  # noqa: PLC0415
 
-        sources = self._distinction_bonus_sources(
-            MAGIC_TRAINING_POINTS_TARGET, CG_MODIFIER_CATEGORY
+        # The breakdown reads biggest first ("Tradition Training, rank 1 20" before
+        # "Studious +10"), then by name.
+        sources = sorted(
+            self._distinction_bonus_sources(MAGIC_TRAINING_POINTS_TARGET, CG_MODIFIER_CATEGORY),
+            key=lambda source: (-source.points, source.name),
         )
         base = sum(source.points for source in sources)
         gift_id = self.draft_data.get("selected_gift_id")

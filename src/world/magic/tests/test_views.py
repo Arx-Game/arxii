@@ -8,6 +8,7 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
+    AffinityFactory,
     CharacterGiftFactory,
     EffectTypeFactory,
     GiftFactory,
@@ -51,6 +52,54 @@ class TechniqueStyleViewSetTest(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["name"], "Test Manifestation")
+
+
+class AffinityAndResonanceListTest(APITestCase):
+    """The CG Gift stage's pickers list real Affinity and Resonance rows (#4665)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = AccountFactory()
+        cls.primal = AffinityFactory(name="Primal")
+        cls.abyssal = AffinityFactory(name="Abyssal")
+        cls.flame = ResonanceFactory(name="Flame", affinity=cls.primal, description="Heat.")
+        cls.shadow = ResonanceFactory(name="Shadow", affinity=cls.abyssal)
+
+    def test_resonances_require_auth(self):
+        response = self.client.get(reverse("magic:resonance-list"))
+        self.assertIn(
+            response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN]
+        )
+
+    def test_resonances_list_with_their_affinity(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/magic/resonances/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = {row["id"]: row for row in response.json()}
+        self.assertEqual(
+            rows[self.flame.pk],
+            {
+                "id": self.flame.pk,
+                "name": "Flame",
+                "affinity": self.primal.pk,
+                "affinity_name": "Primal",
+                "description": "Heat.",
+                "codex_entry_id": None,
+            },
+        )
+        self.assertEqual(rows[self.shadow.pk]["affinity_name"], "Abyssal")
+
+    def test_resonances_filter_by_affinity(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/magic/resonances/?affinity={self.abyssal.pk}")
+        self.assertEqual([row["id"] for row in response.json()], [self.shadow.pk])
+
+    def test_affinities_list(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/magic/affinities/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = [row["name"] for row in response.json()]
+        self.assertEqual(names, ["Abyssal", "Primal"])
 
 
 class EffectTypeViewSetTest(APITestCase):

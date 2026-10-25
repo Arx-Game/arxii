@@ -63,8 +63,9 @@ class MagicTrainingPoolTest(TestCase):
         self.assertEqual(
             pool.sources,
             [
-                DistinctionBonusSource(name="Studious", rank=1, points=10, max_rank=1),
+                # Biggest first, then by name (slice 2 of #4659 demo).
                 DistinctionBonusSource(name="Tradition Training", rank=1, points=20, max_rank=3),
+                DistinctionBonusSource(name="Studious", rank=1, points=10, max_rank=1),
             ],
         )
 
@@ -77,6 +78,12 @@ class MagicTrainingPoolTest(TestCase):
             [self.training, self.studious], gift=False, affinity=False
         ).magic_training_pool
         self.assertEqual(pool.total, 30)
+
+    def test_equal_points_order_by_name(self) -> None:
+        scholar = DistinctionFactory(name="Bookish")
+        DistinctionEffectFactory(distinction=scholar, target=self.target, value_per_rank=10)
+        names = [s.name for s in self._draft([self.studious, scholar]).magic_training_pool.sources]
+        self.assertEqual(names, ["Bookish", "Studious"])
 
     def test_no_training_gives_nothing(self) -> None:
         pool = self._draft([]).magic_training_pool

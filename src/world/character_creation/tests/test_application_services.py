@@ -150,11 +150,16 @@ class ResubmitDraftTests(TestCase):
     def setUpTestData(cls):
         cls.account = AccountFactory()
 
-    def test_resubmit_sets_submitted(self):
-        """Sets status to SUBMITTED."""
+    def _revisions_requested(self):
         app = DraftApplicationFactory(
             draft__account=self.account, status=ApplicationStatus.REVISIONS_REQUESTED
         )
+        app.draft.can_submit = lambda: True
+        return app
+
+    def test_resubmit_sets_submitted(self):
+        """Sets status to SUBMITTED."""
+        app = self._revisions_requested()
         resubmit_draft(app)
 
         app.refresh_from_db()
@@ -162,9 +167,7 @@ class ResubmitDraftTests(TestCase):
 
     def test_creates_message_and_status_comments(self):
         """Creates MESSAGE (if comment provided) + STATUS_CHANGE."""
-        app = DraftApplicationFactory(
-            draft__account=self.account, status=ApplicationStatus.REVISIONS_REQUESTED
-        )
+        app = self._revisions_requested()
         resubmit_draft(app, comment="Fixed the backstory.")
 
         comments = list(
@@ -184,9 +187,7 @@ class ResubmitDraftTests(TestCase):
 
     def test_resubmit_without_comment(self):
         """Only creates STATUS_CHANGE, no MESSAGE."""
-        app = DraftApplicationFactory(
-            draft__account=self.account, status=ApplicationStatus.REVISIONS_REQUESTED
-        )
+        app = self._revisions_requested()
         resubmit_draft(app)
 
         comments = DraftApplicationComment.objects.filter(application=app)
@@ -204,6 +205,20 @@ class ResubmitDraftTests(TestCase):
 
         with self.assertRaises(CharacterCreationError):
             resubmit_draft(app)
+
+    def test_raises_if_draft_cannot_submit(self):
+        """A revision that leaves a stage failing is refused, as at first submit."""
+        app = DraftApplicationFactory(
+            draft__account=self.account, status=ApplicationStatus.REVISIONS_REQUESTED
+        )
+        app.draft.can_submit = lambda: False
+
+        with self.assertRaisesMessage(
+            CharacterCreationError, "Draft is not complete enough to submit."
+        ):
+            resubmit_draft(app)
+        app.refresh_from_db()
+        self.assertEqual(app.status, ApplicationStatus.REVISIONS_REQUESTED)
 
 
 class WithdrawDraftTests(TestCase):

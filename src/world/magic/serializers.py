@@ -40,6 +40,7 @@ from world.magic.constants import (
     is_imbuing_ritual,
 )
 from world.magic.models import (
+    Affinity,
     CharacterAnima,
     CharacterAura,
     CharacterCrossingText,
@@ -160,6 +161,15 @@ def _resolve_account_sheet(
 # =============================================================================
 # Lookup Table Serializers (Read-Only)
 # =============================================================================
+
+
+class AffinitySerializer(serializers.ModelSerializer):
+    """Serializer for Affinity records (Celestial, Primal, Abyssal)."""
+
+    class Meta:
+        model = Affinity
+        fields = ["id", "name", "description", "aura_type"]
+        read_only_fields = fields
 
 
 class ResonanceSerializer(serializers.ModelSerializer):
