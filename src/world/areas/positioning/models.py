@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
@@ -106,10 +107,18 @@ class PositionNodeBase(SharedMemoryModel):
     # Battle-map drawing (#4651): the rectangle a place is drawn as, in map squares,
     # and its ground look. Drawing only; the place stays the rule. All four area
     # columns are set together or all null (a place with none draws from layout).
-    area_x = models.PositiveSmallIntegerField(null=True, blank=True)
-    area_y = models.PositiveSmallIntegerField(null=True, blank=True)
-    area_w = models.PositiveSmallIntegerField(null=True, blank=True)
-    area_h = models.PositiveSmallIntegerField(null=True, blank=True)
+    area_x = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    area_y = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    area_w = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    area_h = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
     terrain = models.ForeignKey(
         MapTerrain, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
@@ -514,8 +523,12 @@ class ObjectPosition(SharedMemoryModel):
     )
     position = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="occupants")
     # Battle-map square inside the place's area (#4651). Drawing only; null = not placed.
-    square_x = models.PositiveSmallIntegerField(null=True, blank=True)
-    square_y = models.PositiveSmallIntegerField(null=True, blank=True)
+    square_x = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
+    square_y = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(200)]
+    )
 
     class Meta:
         app_label = "arxii"
