@@ -49,6 +49,12 @@ const node = (
   rampart_crack_state: null,
   is_roofed: false,
   screens_ranged: false,
+  area_x: null,
+  area_y: null,
+  area_w: null,
+  area_h: null,
+  terrain_name: null,
+  terrain_art_url: null,
   ...overrides,
 });
 

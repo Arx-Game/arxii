@@ -1225,7 +1225,7 @@ Web surfaces (both render-or-vanish - no image, no backdrop, never a card):
   (`scene.art_url`). Position nodes already render on opaque `bg-card` boxes, so their
   legibility is unaffected either way. The React Flow dot `<Background>` is skipped when a
   backdrop is present (the dots and the art fought visually) and restored otherwise - so
-  `CombatTacticalMap.tsx`, which never passes `artUrl`, renders byte-identical to before.
+  `CombatTacticalMap.tsx`, which never passes `artUrl` (since #4670 it draws `BattleMap`, not `TacticalMap`), renders byte-identical to before.
 
 ### Lifecycle Actions
 

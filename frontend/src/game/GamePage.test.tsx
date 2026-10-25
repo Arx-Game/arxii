@@ -286,6 +286,16 @@ vi.mock('@/combat/queries', () => ({
   },
 }));
 
+vi.mock('@/combat/components/CombatTacticalMap', () => ({
+  CombatTacticalMap: ({ encounterId, sceneId }: { encounterId: number; sceneId: number }) => (
+    <div
+      data-testid="combat-tactical-map"
+      data-encounter-id={encounterId}
+      data-scene-id={sceneId}
+    />
+  ),
+}));
+
 vi.mock('@/battles/queries', () => ({
   useBattleForSceneQuery: vi.fn().mockReturnValue({ data: null, isLoading: false, isError: false }),
 }));
@@ -1707,6 +1717,39 @@ describe('GamePage', () => {
       await waitFor(() => {
         expect(screen.getByTestId('rail-tab-gm')).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('battle map in the center (#4670)', () => {
+    it('renders the map above the feed during a fight', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 7 },
+        isLoading: false,
+        isError: false,
+      });
+
+      renderWithProviders(<GamePage />);
+
+      const map = await screen.findByTestId('combat-tactical-map');
+      expect(map).toHaveAttribute('data-encounter-id', '7');
+      expect(screen.getByTestId('combat-main-map')).toBeInTheDocument();
+    });
+
+    it('renders no map outside a fight', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({
+        data: null,
+        isLoading: false,
+        isError: false,
+      });
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByLabelText('Conversations');
+      expect(screen.queryByTestId('combat-tactical-map')).not.toBeInTheDocument();
     });
   });
 

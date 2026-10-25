@@ -11,10 +11,12 @@ from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
 from world.areas.positioning.serializers import (
+    HeldPositionSerializer,
     PositionAdjacencyItemSerializer,
     PositionEdgeSerializer,
     PositionNodeSerializer,
     PositionSummarySerializer,
+    SquareSerializer,
 )
 from world.checks.serializers import ConsequenceOutcomeSerializer
 from world.combat.constants import (
@@ -119,6 +121,16 @@ def _serialize_active_conditions(
 # ---------------------------------------------------------------------------
 
 
+def _square_payload(
+    objectdb: ObjectDB | None,  # noqa: OBJECTDB_PARAM - a PC or an NPC's game object
+) -> dict[str, int] | None:
+    """The ``{x, y}`` of the battle-map square an object stands on, or None (#4651)."""
+    from world.areas.positioning.services import square_of  # noqa: PLC0415
+
+    square = square_of(objectdb) if objectdb is not None else None
+    return {"x": square[0], "y": square[1]} if square is not None else None
+
+
 class OpponentSerializer(serializers.ModelSerializer):
     """Read serializer for combat opponents.
 
@@ -157,6 +169,7 @@ class OpponentSerializer(serializers.ModelSerializer):
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
     current_position = PositionSummarySerializer(read_only=True, allow_null=True)
+    current_square = serializers.SerializerMethodField()
     # The in-world ObjectDB pk, distinct from this opponent's own pk (``id``).
     # ``id`` is the CombatOpponent PK the focused-target dispatch sends as
     # ``focused_opponent_target_id``; ``objectdb_id`` is the ObjectDB pk the
@@ -203,8 +216,13 @@ class OpponentSerializer(serializers.ModelSerializer):
             "thumbnail_url",
             "thumbnail_media_url",
             "current_position",
+            "current_square",
             "mirrors_participant_id",
         ]
+
+    @extend_schema_field(SquareSerializer(allow_null=True))
+    def get_current_square(self, obj: CombatOpponent) -> dict[str, int] | None:
+        return _square_payload(obj.objectdb)
 
     def _is_gm_or_staff(self) -> bool:
         request = self.context.get("request")
@@ -437,6 +455,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     intensity_modifier = serializers.SerializerMethodField()
     control_modifier = serializers.SerializerMethodField()
     current_position = PositionSummarySerializer(read_only=True, allow_null=True)
+    current_square = serializers.SerializerMethodField()
     aftermath = serializers.SerializerMethodField()
     reactions_used = serializers.SerializerMethodField(required=False)
     reactions_remaining = serializers.SerializerMethodField(required=False)
@@ -460,10 +479,15 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "intensity_modifier",
             "control_modifier",
             "current_position",
+            "current_square",
             "aftermath",
             "reactions_used",
             "reactions_remaining",
         ]
+
+    @extend_schema_field(SquareSerializer(allow_null=True))
+    def get_current_square(self, obj: CombatParticipant) -> dict[str, int] | None:
+        return _square_payload(obj.character_sheet.character)
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
         """Check if the requesting user can see this participant's vitals.
@@ -1284,6 +1308,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     position_adjacency = serializers.SerializerMethodField()
     position_nodes = serializers.SerializerMethodField()
     position_edges = serializers.SerializerMethodField()
+    held_positions = serializers.SerializerMethodField()
     volatile_objects = serializers.SerializerMethodField()
     objective = serializers.SerializerMethodField(required=False)
     pending_selections = serializers.SerializerMethodField(required=False)
@@ -1356,6 +1381,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "position_adjacency",
             "position_nodes",
             "position_edges",
+            "held_positions",
             "volatile_objects",
             "objective",
             "pending_selections",
@@ -1843,6 +1869,17 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         graph = position_graph(obj.room)
         return PositionEdgeSerializer(graph.edges, many=True).data  # type: ignore[return-value]
+
+    @extend_schema_field(HeldPositionSerializer(many=True))
+    def get_held_positions(self, obj: CombatEncounter) -> list[dict[str, object]]:
+        """Places a ready enemy holds and who holds them (#4670); the same for every viewer."""
+        from world.combat.services.held_ground import enemy_held_places  # noqa: PLC0415
+
+        held = enemy_held_places(obj)
+        return [
+            {"position_id": position_id, "holder_names": names}
+            for position_id, names in sorted(held.items())
+        ]
 
     @extend_schema_field(VolatileObjectSerializer(many=True))
     def get_volatile_objects(self, obj: CombatEncounter) -> list[dict[str, object]]:

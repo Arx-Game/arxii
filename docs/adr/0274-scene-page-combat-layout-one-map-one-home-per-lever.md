@@ -1,5 +1,7 @@
 # During an encounter the scene page has one map and one home per GM lever
 
+> **Superseded in part by ADR-4670 (2026-10-25).** The combat map moved from the rail to the main column; one map and one home per GM lever still stand.
+
 While a `CombatEncounter` is active, `SceneDetailPage` (#3557) unmounts the header
 `SceneTacticalMap` and makes the rail's `CombatTacticalMap` the only map, drawing
 non-combatant scene personas dimmed as bystanders from the scene's cached
