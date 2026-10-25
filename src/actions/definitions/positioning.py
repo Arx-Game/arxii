@@ -35,6 +35,12 @@ from world.areas.positioning.services import (
 )
 from world.areas.positioning.traversal import best_crossing_cost, traversals_of
 from world.combat.services.held_ground import held_position_ids_against, holder_names
+from world.combat.services.held_ground_pass import (
+    GOT_PAST_CLEANLY,
+    GOT_PAST_PARTLY,
+    WAS_STOPPED,
+    attempt_pass,
+)
 from world.combat.services.movement_budget import (
     active_combat_participant,
     hops_for,
@@ -123,6 +129,75 @@ class MoveToPositionAction(Action):
         actor_state = sdm.initialize_state_for_object(actor)
         send_room_state(actor_state)
 
+        return ActionResult(success=True, message=message)
+
+
+_PASS_MESSAGES = {
+    GOT_PAST_CLEANLY: "You get past {name}.",
+    GOT_PAST_PARTLY: "You get past {name}, but not cleanly.",
+    WAS_STOPPED: "{name} stops you.",
+}
+
+
+@dataclass
+class PassHeldGroundAction(Action):
+    """Roll to get past the enemy holding an adjacent place (#4663).
+
+    A character whose capability matches an approach on the designated pass challenge
+    (``MovementConfig.held_ground_challenge``) rolls instead of being stopped
+    (``held_ground_pass.attempt_pass``). The step must be one a walk could take; it costs
+    the step's hops (one for an open edge). Past cleanly or partly, she keeps the rest;
+    stopped, she is in the held place with no movement left this round.
+
+    Dispatch convention: REGISTRY ActionRef ``registry_key="pass_held_ground"``,
+    ``position_id=<Position.pk>``, optional ``approach_id=<ChallengeApproach.pk>``.
+    """
+
+    key: str = "pass_held_ground"
+    name: str = "Get past"
+    icon: str = "running"
+    category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CombatMovementPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        position_id = kwargs.get("position_id")
+        if position_id is None:
+            return ActionResult(success=False, message="Get past into where?")
+        try:
+            target = Position.objects.get(pk=position_id)
+        except Position.DoesNotExist:
+            return ActionResult(success=False, message=_ERR_POSITION_NOT_FOUND)
+
+        cost = _move_cost(actor, target, traversals_of(actor))
+        participant = _declaring_participant(actor)
+        if participant is not None and cost > hops_left(participant):
+            return ActionResult(
+                success=False,
+                message=f"That crossing takes {cost} hops; you have {hops_left(participant)} left.",
+            )
+        try:
+            result = attempt_pass(actor, target, approach_id=kwargs.get("approach_id"))
+        except PositionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        if participant is not None:
+            spend_combat_hop(participant, cost)
+            if result.outcome == WAS_STOPPED:
+                participant.hops_used = hops_for(participant.character_sheet)
+                participant.save(update_fields=["hops_used"])
+
+        sdm = context.scene_data if context else SceneDataManager()
+        send_room_state(sdm.initialize_state_for_object(actor))
+        message = _PASS_MESSAGES[result.outcome].format(name=result.holder_name)
         return ActionResult(success=True, message=message)
 
 

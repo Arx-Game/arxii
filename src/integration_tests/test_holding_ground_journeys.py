@@ -31,7 +31,7 @@ Expected values are the rows built here; "You are stopped by {name}." and
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
 
@@ -40,6 +40,9 @@ from integration_tests.harness import JourneyCase
 from world.areas.positioning.constants import CreatureTraversal, PositionKind
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.services import connect_positions, place_in_position, position_of
+from world.checks.constants import EffectType
+from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+from world.checks.types import CheckResult
 from world.combat.constants import (
     CombatAllegiance,
     OpponentMoveKind,
@@ -63,25 +66,40 @@ from world.combat.models import (
     CombatOpponentAction,
     CombatOpponentMove,
     CombatParticipant,
+    MovementConfig,
 )
 from world.combat.services import resolve_round, select_npc_actions
 from world.combat.services.boss.creature_spawn import spawn_from_creature_template
 from world.combat.services.movement_budget import hops_left
 from world.conditions.constants import FoundationalCapability
-from world.conditions.factories import CapabilityTypeFactory
+from world.conditions.factories import (
+    CapabilityTypeFactory,
+    ConditionCapabilityEffectFactory,
+    ConditionTemplateFactory,
+    DamageTypeFactory,
+)
 from world.conditions.models import CapabilityType
 from world.conditions.services import apply_condition
 from world.magic.factories import CharacterAnimaFactory
 from world.mechanics.factories import (
     AerialPropertyFactory,
+    ApplicationFactory,
+    ChallengeApproachFactory,
     ChallengeInstanceFactory,
+    ChallengeTemplateConsequenceFactory,
     ChallengeTemplateFactory,
     CharacterEngagementFactory,
     ModifierCategoryFactory,
 )
-from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
+from world.mechanics.models import (
+    ChallengeInstance,
+    CharacterModifier,
+    ModifierSource,
+    ModifierTarget,
+)
 from world.scenes.constants import RoundStatus
 from world.seeds.checks import seed_check_resolution_tables
+from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 from world.vitals.seeds import ensure_foundational_capabilities, ensure_unconscious_condition
 from world.vitals.services import can_act
@@ -93,6 +111,13 @@ CAPABILITY_RAISE = 3
 STOPPED_BY = "You are stopped by {name}."
 HELD_BY = "Held by {name}: you'd stop there."
 NO_MOVEMENT_LEFT = "You have no movement left this round."
+GOT_PAST = "You get past {name}."
+GOT_PAST_PARTLY = "You get past {name}, but not cleanly."
+STOPS_YOU = "{name} stops you."
+NO_WAY_PAST = "There is no way past them."
+GET_PAST_ENTRY = "Get past {name} into {place}"
+STUMBLE = 5  # the partial pass's authored strike, below the interpose threshold (10)
+CHALLENGE_PERFORM_CHECK = "world.mechanics.challenge_resolution.perform_check"
 
 
 def _full_strength(*args: object, **kwargs: object) -> MagicMock:
@@ -405,3 +430,149 @@ class ABrokenBanditBacksAwayPastHeldGround(_TheCauseway):
         plan = CombatOpponentMove.objects.get(opponent=bandit, round_number=1)
         self.assertEqual(plan.kind, OpponentMoveKind.RETREAT)
         self.assertEqual(plan.goal_position, self.lane)
+
+
+class AnAcrobatGetsPast(_TheCauseway):
+    """Kit, tumbling by a Tumbler's Poise condition, rolls to get past the Bandit in the Yard.
+
+    The pass challenge is "Slip Past", designated on MovementConfig, with one approach by
+    acrobatics. Its partial outcome carries a 5-point stumble (DEAL_DAMAGE on the roller).
+    Kit has three hops; the pass costs one, and being stopped spends them all.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.acrobatics = CapabilityTypeFactory(name="acrobatics", innate_baseline=0)
+        self.slip_past = ChallengeTemplateFactory(name="Slip Past")
+        ChallengeApproachFactory(
+            challenge_template=self.slip_past,
+            application=ApplicationFactory(name="Tumble", capability=self.acrobatics),
+            display_name="Tumble past",
+        )
+        self.clean = CheckOutcomeFactory(name="Slip-Clean", success_level=1)
+        self.partly = CheckOutcomeFactory(name="Slip-Partial", success_level=0)
+        self.stopped = CheckOutcomeFactory(name="Slip-Stopped", success_level=-1)
+        stumble = ConsequenceFactory(outcome_tier=self.partly, label="Stumble past")
+        ConsequenceEffectFactory(
+            consequence=stumble,
+            effect_type=EffectType.DEAL_DAMAGE,
+            damage_amount=STUMBLE,
+            damage_type=DamageTypeFactory(name="blunt"),
+            target="self",
+        )
+        ChallengeTemplateConsequenceFactory(challenge_template=self.slip_past, consequence=stumble)
+        self.poise = ConditionTemplateFactory(name="Tumbler's Poise")
+        ConditionCapabilityEffectFactory(condition=self.poise, capability=self.acrobatics, value=10)
+        self.bandit = self.creature("Bandit", at=self.yard)
+
+    def designate(self) -> None:
+        MovementConfig.objects.create(pk=1, held_ground_challenge=self.slip_past)
+
+    def acrobat(self, name: str = "Kit"):
+        character = self.fighter(name, at=self.gate)
+        apply_condition(character, self.poise)
+        return character
+
+    def roll(self, outcome):
+        def forced(_character, check_type, *_args: object, **_kwargs: object) -> CheckResult:
+            return CheckResult(
+                check_type=check_type,
+                outcome=outcome,
+                chart=None,
+                roller_rank=None,
+                target_rank=None,
+                rank_difference=0,
+                trait_points=0,
+                aspect_bonus=0,
+                total_points=0,
+            )
+
+        return patch(CHALLENGE_PERFORM_CHECK, side_effect=forced)
+
+    def health(self, character) -> int:
+        return CharacterVitals.objects.get(character_sheet=character.sheet_data).health
+
+    def test_acrobat_passes_held_ground_cleanly(self) -> None:
+        self.designate()
+        kit = self.acrobat()
+
+        with self.roll(self.clean):
+            result = self.web(kit, "pass_held_ground", position_id=self.yard.pk)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, GOT_PAST.format(name="Bandit"))
+        self.assertEqual(position_of(kit), self.yard)
+        self.assertEqual(self.participant(kit).hops_used, 1)
+        self.assertEqual(self.health(kit), FULL_HEALTH)
+        # One-shot: the minted pass challenge is spent.
+        minted = ChallengeInstance.objects.get(template=self.slip_past)
+        self.assertEqual(minted.target_object, self.bandit.objectdb)
+        self.assertFalse(minted.is_active)
+
+        onward = self.web(kit, "move_to_position", position_id=self.hall.pk)
+
+        self.assertTrue(onward.detail.success, onward.detail.message)
+        self.assertEqual(position_of(kit), self.hall)
+
+    def test_acrobat_passes_held_ground_partially(self) -> None:
+        self.designate()
+        kit = self.acrobat()
+
+        with self.roll(self.partly):
+            result = self.web(kit, "pass_held_ground", position_id=self.yard.pk)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, GOT_PAST_PARTLY.format(name="Bandit"))
+        self.assertEqual(position_of(kit), self.yard)
+        self.assertEqual(self.participant(kit).hops_used, 1)
+        self.assertEqual(self.health(kit), FULL_HEALTH - STUMBLE)
+
+    def test_acrobat_is_stopped(self) -> None:
+        self.designate()
+        kit = self.acrobat()
+
+        with self.roll(self.stopped):
+            result = self.web(kit, "pass_held_ground", position_id=self.yard.pk)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, STOPS_YOU.format(name="Bandit"))
+        self.assertEqual(position_of(kit), self.yard)
+        self.assertEqual(self.participant(kit).hops_used, 3)
+        self.assertEqual(hops_left(self.participant(kit)), 0)
+
+    def test_no_pass_offered_without_config(self) -> None:
+        kit = self.acrobat()
+
+        moves = [action.display_name for action in get_player_actions(kit)]
+        result = self.web(kit, "pass_held_ground", position_id=self.yard.pk)
+
+        self.assertFalse([name for name in moves if name.startswith("Get past")], moves)
+        self.assertFalse(result.detail.success)
+        self.assertEqual(result.detail.message, NO_WAY_PAST)
+        self.assertEqual(position_of(kit), self.gate)
+        self.assertEqual(self.participant(kit).hops_used, 0)
+
+    def test_pass_is_offered_by_capability(self) -> None:
+        self.designate()
+        kit = self.acrobat()
+        wren = self.fighter("Wren", at=self.gate)
+
+        kit_moves = {action.display_name: action for action in get_player_actions(kit)}
+        wren_moves = [action.display_name for action in get_player_actions(wren)]
+
+        entry = kit_moves[GET_PAST_ENTRY.format(name="Bandit", place="Yard")]
+        self.assertEqual(entry.ref.registry_key, "pass_held_ground")
+        self.assertEqual(entry.ref.position_id, self.yard.pk)
+        self.assertTrue(entry.prerequisite_met)
+        self.assertFalse([name for name in wren_moves if name.startswith("Get past")], wren_moves)
+
+    def test_pass_by_telnet(self) -> None:
+        self.designate()
+        kit = self.acrobat()
+
+        with self.roll(self.clean):
+            said = self.telnet(kit, "position/pass Yard")
+
+        self.assertIn(GOT_PAST.format(name="Bandit"), said)
+        self.assertEqual(position_of(kit), self.yard)
+        self.assertEqual(self.participant(kit).hops_used, 1)

@@ -1199,6 +1199,47 @@ def _crossing_entry(  # noqa: PLR0913 - the list's shared refusal state rides al
     )
 
 
+def _pass_entry(  # noqa: PLR0913 - the list's shared refusal state rides along
+    character: ObjectDB,
+    neighbor: Position,
+    holders: dict[int, str],
+    cost: int,
+    hops: int | None,
+    move_met: bool,
+    move_reason: str,
+) -> list[PlayerAction]:
+    """ "Get past <holder> into <place>" when ``neighbor`` is held and she has a way past.
+
+    Empty unless a pass challenge is designated and one of its approaches matches a
+    capability she holds (``held_ground_pass.pass_options``, #4663). The description
+    names the approach she would roll.
+    """
+    if neighbor.pk not in holders:
+        return []
+    from world.combat.services.held_ground_pass import pass_options  # noqa: PLC0415
+
+    options = pass_options(character, neighbor)
+    if not options:
+        return []
+    met, reasons = move_met, [] if move_met else [move_reason]
+    if met and hops is not None and cost > hops:
+        met, reasons = False, [f"That crossing takes {cost} hops; you have {hops} left."]
+    entry = PlayerAction(
+        backend=ActionBackend.REGISTRY,
+        display_name=f"Get past {holders[neighbor.pk]} into {neighbor.name}",
+        ref=ActionRef(
+            backend=ActionBackend.REGISTRY,
+            registry_key="pass_held_ground",
+            position_id=neighbor.pk,
+        ),
+        description=options[0].approach.display_name,
+        action_category=ActionCategory.PHYSICAL,
+        prerequisite_met=met,
+        prerequisite_reasons=reasons,
+    )
+    return [entry]
+
+
 def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     """Surface a move_to_position ``PlayerAction`` for each directly adjacent open position.
 
@@ -1257,6 +1298,8 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     # round with hops left has a note, and only then does held ground matter.
     holders = _held_place_holders(character) if move_note else {}
 
+    hops = _declaring_hops_left(character)
+
     # Only an airborne mover steps onto an AERIAL position; nobody else is offered one.
     airborne = is_aerial(character)
     result: list[PlayerAction] = []
@@ -1283,6 +1326,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
                 prerequisite_reasons=[] if move_met else [move_reason],
             )
         )
+        result.extend(_pass_entry(character, neighbor, holders, 1, hops, move_met, move_reason))
 
     # Take off or land (#4663): a character with a flight capability above its baseline
     # rises into the air above where she stands; an airborne one comes down.
@@ -1298,7 +1342,6 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     # can see that a path exists but is currently blocked by a challenge. A
     # sealed wall with a challenge lists too (#4606): its climb is the way over.
     # A climber or leaper goes over it instead, for its crossing cost (#4663).
-    hops = _declaring_hops_left(character)
     gated_edges = PositionEdge.objects.filter(
         Q(position_a=current) | Q(position_b=current),
         gating_challenge__isnull=False,
@@ -1318,6 +1361,9 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
                     move_met,
                     move_reason,
                 )
+            )
+            result.extend(
+                _pass_entry(character, neighbor, holders, cost, hops, move_met, move_reason)
             )
             continue
         challenge_name = edge.gating_challenge.template.name

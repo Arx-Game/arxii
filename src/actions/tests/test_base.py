@@ -242,6 +242,7 @@ class ActionRegistryTests(TestCase):
             "craft_create_item",
             "cut_gem",
             "move_to_position",
+            "pass_held_ground",
             "take_position",
             "take_flight",
             "land",

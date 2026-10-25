@@ -10,7 +10,9 @@ or ``MoveToPositionAction`` when already placed.
 
 ``position/fly`` dispatches ``TakeFlightAction`` and ``position/land``
 ``LandAction`` (#4663): a character with a flight capability takes off into the
-air above where she stands, and comes back down.
+air above where she stands, and comes back down. ``position/pass <name>``
+dispatches ``PassHeldGroundAction`` (#4663): roll to get past the enemy holding
+that adjacent place, with her best matching approach.
 
 ``position/place <target>=<position name>`` (#3385) dispatches
 ``GMPlaceInPositionAction`` -- staff/GM-fiat unchecked placement of any
@@ -27,6 +29,7 @@ from actions.definitions.positioning import (
     GMPlaceInPositionAction,
     LandAction,
     MoveToPositionAction,
+    PassHeldGroundAction,
     TakeFlightAction,
     TakePositionAction,
 )
@@ -37,6 +40,8 @@ from commands.utils.gm_resolution import resolve_position_by_name
 _SWITCH_PLACE = "place"
 _SWITCH_FLY = "fly"
 _SWITCH_LAND = "land"
+_SWITCH_GET_PAST = "pass"
+_USAGE_GET_PAST = "Usage: position/pass <position name>"
 _USAGE_PLACE = "Usage: position/place <target>=<position name>"
 _NOT_ANYWHERE = "You aren't anywhere."
 
@@ -50,6 +55,7 @@ class CmdPosition(ArxCommand):
         position/place <target>=<position name>
         position/fly
         position/land
+        position/pass <name>
     """
 
     key = "position"
@@ -71,6 +77,12 @@ class CmdPosition(ArxCommand):
             return
 
         raw = (self.args or "").strip()
+        if _SWITCH_GET_PAST in self.switches:
+            try:
+                self._do_pass(raw)
+            except CommandError as err:
+                self.msg(str(err))
+            return
         if not raw:
             self._list_positions()
             return
@@ -128,6 +140,17 @@ class CmdPosition(ArxCommand):
             result = TakePositionAction().run(self.caller, position_id=position.pk)
         else:
             result = MoveToPositionAction().run(self.caller, position_id=position.pk)
+        if result.message:
+            self.msg(result.message)
+
+    def _do_pass(self, name: str) -> None:
+        if not name:
+            raise CommandError(_USAGE_GET_PAST)
+        room = self.caller.location
+        if room is None:
+            raise CommandError(_NOT_ANYWHERE)
+        position = resolve_position_by_name(room, name)
+        result = PassHeldGroundAction().run(self.caller, position_id=position.pk)
         if result.message:
             self.msg(result.message)
 

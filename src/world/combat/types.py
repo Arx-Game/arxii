@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from world.magic.types.power_ledger import PowerLedger
 from world.vitals.types import DamageConsequenceResult
@@ -37,7 +37,8 @@ if TYPE_CHECKING:
     from world.magic.models import Affinity, FuryTier
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
-    from world.mechanics.types import ChallengeResolutionResult
+    from world.mechanics.models import ChallengeApproach
+    from world.mechanics.types import CapabilitySource, ChallengeResolutionResult
     from world.scenes.models import Interaction
     from world.societies.models import LegendEntry
     from world.stories.models import BeatCompletion
@@ -617,6 +618,33 @@ class MovementProfile:
     speed_hops: int
     traversal: str
     stop_at: frozenset[int] = frozenset()
+
+
+@dataclass(frozen=True)
+class PassOption:
+    """One way a character may try to get past held ground (#4663).
+
+    An approach on ``MovementConfig.held_ground_challenge`` whose capability the
+    character holds, paired with her best source of it (its value is the roll's bonus).
+    Built by ``held_ground_pass.pass_options``.
+    """
+
+    approach: ChallengeApproach
+    capability_source: CapabilitySource
+
+
+@dataclass(frozen=True)
+class PassResult:
+    """How a roll to get past held ground went (#4663, ``held_ground_pass.attempt_pass``).
+
+    ``outcome`` reads the roll's success level: above 0 ``clean``, 0 ``partial`` (past,
+    with whatever the challenge's authored consequence does), below 0 ``stopped`` (in the
+    held place, movement over for the round). ``holder_name`` is who held it.
+    """
+
+    outcome: Literal["clean", "partial", "stopped"]
+    resolution: ChallengeResolutionResult
+    holder_name: str
 
 
 @dataclass

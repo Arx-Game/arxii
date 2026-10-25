@@ -1397,6 +1397,22 @@ def move_to_position(
     6. no roof stands between the two (``roof_between``): "A roof is in the way." (#4608)
     7. the actor's MOVEMENT capability > 0 (characters only)
     """
+    check_move_to_position(objectdb, target, traversals=traversals)
+    return _commit_position(objectdb, target)
+
+
+def check_move_to_position(
+    objectdb: ObjectDB,
+    target: Position,
+    *,
+    traversals: frozenset[str] = frozenset({CreatureTraversal.WALKS}),
+) -> None:
+    """Raise PositionTransitionError if ``move_to_position`` would refuse this step.
+
+    ``move_to_position``'s whole validation, without the move: a caller that must roll
+    before it commits the step (the pass past held ground, #4663) validates here first,
+    then commits through ``force_move_to_position``.
+    """
     if target.room_id != objectdb.db_location_id:
         raise PositionTransitionError(_ERR_MOVE_CROSS_ROOM)
 
@@ -1423,8 +1439,6 @@ def move_to_position(
 
     if not _can_move(objectdb):
         raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
-
-    return _commit_position(objectdb, target)
 
 
 def _traversals_cross(edge: PositionEdge, traversals: frozenset[str]) -> bool:
