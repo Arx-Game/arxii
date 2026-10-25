@@ -271,11 +271,12 @@ class AMarkPaysOff(JourneyCase):
 
     Mira and Tomas share a covenant; Ilse is in none. Tomas's engaged role carries a perk of
     +10 tenths per thread level on his own checks when the target is marked by an ally, and his
-    thread sits at level 3, so the authored bonus is 3 x 10 / 10 = +3 points. The captain has
-    500 health, so nobody ends the fight.
+    thread is shown at level 3. The perk scales by the stored thread level (stored 30, #4585), so
+    the authored bonus is 30 x 10 / 10 = +30 points. The captain has 500 health, so nobody ends
+    the fight.
     """
 
-    PAYOFF = 3
+    PAYOFF = 30
 
     def setUp(self) -> None:
         super().setUp()

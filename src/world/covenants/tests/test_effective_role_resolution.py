@@ -43,7 +43,7 @@ class ResolveEffectiveRoleTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=level,
+            level=level * 10,  # ``level`` is shown; stored × 10 (#4585)
         )
         if retired:
             t.retired_at = timezone.now()
@@ -83,7 +83,7 @@ class ResolveEffectiveRoleTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=5,
+            level=50,  # stored; shows 5 (#4585)
         )
         char2.threads.invalidate()
         result = resolve_effective_role(character=char2, role=self.parent_role)
@@ -107,7 +107,7 @@ class ResolveEffectiveRoleTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=parent,
             target_trait=None,
-            level=5,
+            level=50,  # stored; shows 5 (#4585)
         )
         char.threads.invalidate()
         result = resolve_effective_role(character=char, role=parent)
@@ -128,7 +128,7 @@ class ResolveEffectiveRoleTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=5,
+            level=50,  # stored; shows 5 (#4585)
         )
         char.threads.invalidate()
         result = resolve_effective_role(character=char, role=self.parent_role)
@@ -147,7 +147,7 @@ class ResolveEffectiveRoleTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
         t.retired_at = timezone.now()
         t.save(update_fields=["retired_at"])
@@ -200,7 +200,7 @@ class HandlerCurrentlyEngagedRolesResolutionTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
         self.character.threads.invalidate()
         self.character.covenant_roles.invalidate()
@@ -217,7 +217,7 @@ class HandlerCurrentlyEngagedRolesResolutionTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=2,
+            level=20,  # stored; shows 2 (#4585)
         )
         self.character.threads.invalidate()
         self.character.covenant_roles.invalidate()
@@ -298,7 +298,7 @@ class PassiveCapabilityGrantAnchorTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=cls.parent_role,
             target_trait=None,
-            level=5,
+            level=50,  # stored; shows 5 (#4585)
         )
 
         cls.capability = CapabilityTypeFactory()

@@ -55,7 +55,7 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     ThreadPullCostFactory,
 )
-from world.magic.models import Thread
+from world.magic.models import Thread, ThreadLevelUnlock
 from world.magic.services.resonance import spend_resonance_for_imbuing
 from world.magic.types.pull import CastPullDeclaration
 from world.npc_services.models import NPCStanding
@@ -78,7 +78,7 @@ class EmergencyDrawE2ETests(TestCase):
         self.resonance = self.flat_bonus_rows[0].resonance
 
         swear_court_pact(
-            covenant=self.covenant, servant_sheet=self.servant_sheet, granted_pull_cap=2
+            covenant=self.covenant, servant_sheet=self.servant_sheet, granted_pull_cap=10
         )
         # Seat + engage the servant on the Court's role — required by
         # _anchor_in_action's COVENANT_ROLE branch before any pull is attempted.
@@ -108,13 +108,14 @@ class EmergencyDrawE2ETests(TestCase):
         # min_thread_level=1 (the pact-granted-cap IS the real gate, #1589 final
         # review) — the pull-effect eligibility check reads the thread's REAL
         # level (never the beseech-boosted effective level), so the thread must
-        # actually be imbued to level 1 (within the pact's granted_pull_cap=2)
+        # actually be imbued to stored 10, shown 1 (#4585; the pact's granted_pull_cap=10)
         # for there to be any applicable effect to scale at all. The emergency
         # draw only affects the multiplier of an ALREADY-unlocked effect.
-        spend_resonance_for_imbuing(self.servant_sheet, self.thread, 1)
+        ThreadLevelUnlock.objects.create(thread=self.thread, unlocked_level=10, xp_spent=0)
+        spend_resonance_for_imbuing(self.servant_sheet, self.thread, 10)
         self.thread.refresh_from_db()
         self.starting_thread_level = self.thread.level
-        self.assertEqual(self.starting_thread_level, 1)
+        self.assertEqual(self.starting_thread_level, 10)
 
         # Wires CourtGrantConfig.petition_check_type — required by
         # _resolve_emergency_draw or it degrades to (None, 0).

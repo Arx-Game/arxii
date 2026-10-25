@@ -1357,6 +1357,9 @@ def engage_vow_with_thread(  # noqa: PLR0913 - mirrors the vow's own shape
 ) -> CharacterCovenantRole:
     """An engaged vow on ``role`` plus its COVENANT_ROLE thread at ``thread_level`` (#4581).
 
+    ``thread_level`` is the SHOWN level, the scale every vow and sub-role unlock is
+    authored on; the thread is stored at ``thread_level × 10`` (#4585).
+
     The thread sits on the role's anchor (its ``parent_role`` for a sub-role,
     else the role itself), where COVENANT_ROLE threads always key, with
     ``resonance`` or a fresh one. The character's covenant-role handler is
@@ -1378,7 +1381,7 @@ def engage_vow_with_thread(  # noqa: PLR0913 - mirrors the vow's own shape
         target_kind=TargetKind.COVENANT_ROLE,
         target_trait=None,
         target_covenant_role=anchor,
-        level=thread_level,
+        level=thread_level * 10,
     )
     sheet.character.covenant_roles.invalidate()
     return membership
