@@ -2,9 +2,10 @@
  * MovementActions — reusable move-to-position button list.
  *
  * Extracted from YourTurn.tsx (lines 655–685) to share with the
- * non-combat SceneTacticalMap.  Renders one button per move action;
- * clicking dispatches `{ ref, kwargs: {} }` via the caller-supplied
- * dispatchAction function.
+ * non-combat SceneTacticalMap.  Renders one button per move action (a step,
+ * a take-off or landing, a pass roll into held ground, #4663) with the
+ * server's note under it; clicking dispatches `{ ref, kwargs: {} }` via the
+ * caller-supplied dispatchAction function and toasts the result's message.
  */
 
 import { toast } from 'sonner';
@@ -44,12 +45,17 @@ export function MovementActions({
       {actions.map((action) => {
         const positionId = action.ref.position_id;
         const refused = !action.prerequisite_met;
+        // A move and a pass roll can name the same place, so the key carries both (#4663).
+        const key = `${action.ref.registry_key ?? 'move'}-${positionId ?? 'here'}`;
+        // The hops line already shows above; any other note is this entry's own.
+        const note =
+          action.description && action.description !== hopsLine ? action.description : '';
         return (
           <button
-            key={positionId ?? action.display_name}
+            key={key}
             type="button"
             disabled={isLocked || refused}
-            data-testid={`move-btn-${positionId ?? 'unknown'}`}
+            data-testid={`move-btn-${key}`}
             onClick={() => {
               dispatchAction({ ref: action.ref, kwargs: {} })
                 .then((result) => {
@@ -57,6 +63,7 @@ export function MovementActions({
                     toast.error(result.message ?? 'Move rejected.');
                     return;
                   }
+                  if (result.message) toast.success(result.message);
                   onDispatched?.();
                 })
                 .catch((err: unknown) => {
@@ -72,6 +79,11 @@ export function MovementActions({
             )}
           >
             {action.display_name}
+            {note && !refused && (
+              <span className="block text-[11px] font-normal" data-testid={`move-note-${key}`}>
+                {note}
+              </span>
+            )}
             {refused && action.prerequisite_reasons[0] && (
               <span className="block text-[11px] font-normal">
                 {action.prerequisite_reasons[0]}

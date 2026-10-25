@@ -1499,7 +1499,7 @@ describe('YourTurn — Task 8 move-to-position actions', () => {
       wrapper: createWrapper(),
     });
 
-    await userEvent.click(screen.getByTestId('move-btn-7'));
+    await userEvent.click(screen.getByTestId('move-btn-move_to_position-7'));
 
     expect(mockMutateAsync).toHaveBeenCalledWith({
       ref: {

@@ -154,7 +154,9 @@ export function TacticalMap({
   const moveActionByPositionId = useMemo(() => {
     const map = new Map<number, PlayerAction>();
     for (const action of moveActions) {
-      if (action.ref.position_id != null) {
+      // The plain move comes first; a pass roll into the same held place stays a
+      // panel choice, so a click never rolls by surprise (#4663).
+      if (action.ref.position_id != null && !map.has(action.ref.position_id)) {
         map.set(action.ref.position_id, action);
       }
     }

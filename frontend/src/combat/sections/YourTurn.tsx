@@ -29,7 +29,7 @@ import type {
 import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
 import { MovementActions } from '../components/MovementActions';
 import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
-import { waitingStrikeTechniques } from '../roundActionHelpers';
+import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
 import { FuryDeclaration } from '../components/FuryDeclaration';
@@ -1935,12 +1935,10 @@ export function YourTurn({
   );
 
   // ---------------------------------------------------------------------------
-  // Move-to-position actions from availableActions (registry backend, #532)
+  // Movement actions from availableActions (registry backend, #532; flight and pass, #4663)
   // ---------------------------------------------------------------------------
 
-  const moveActions = availableActions.filter(
-    (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'move_to_position'
-  );
+  const moveActions = availableActions.filter(isMoveAction);
 
   // ---------------------------------------------------------------------------
   // Combos

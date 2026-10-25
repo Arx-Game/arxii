@@ -512,7 +512,7 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 | `adjacent_open_positions(position)` | Edges a walker can cross from `position` (`edge_blocks_crossing`) |
 | `reachable_positions(objectdb)` | Multi-hop BFS over the edges a walker can cross |
 | `edge_crossing_cost(edge, traversal) -> int \| None` | The traversal rule (#4607): hops a mover of `CreatureTraversal` pays to cross an edge, None when closed. The vertical edge between a roofed position and the air above it is closed to everyone (#4608). An edge touching an AERIAL node is open to FLIES only; an open ground edge costs 1; a wall with an active gating challenge costs CLIMBS/LEAPS `GATED_CROSSING_HOPS` (2) and is closed to WALKS/FLIES; a hard seal is closed to all. |
-| `find_path(origin, goal_test, *, traversal, through_barriers=False) -> list[Position] \| None` | Cheapest route (Dijkstra over `edge_crossing_cost`, ties to fewer steps then lower pk) from `origin` to the first position `goal_test` accepts, origin included (`[origin]` when it already passes). Reads the room's positions and edges from the database (two queries), never the prefetched `positions_cached`/`all_edges_as_a` lists, which a long-running server can hold from before the aerial layer was built. Only a FLIES mover enters AERIAL nodes, and only through a layer already materialized (it never builds one). No capacity limit. `through_barriers` (#4609) treats a ground wall damage can bring down (`is_breakable_barrier`) as open at 1 hop: the route an NPC weighs before it bashes. |
+| `find_path(origin, goal_test, *, traversal, through_barriers=False, stop_at=frozenset()) -> list[Position] \| None` | Cheapest route (Dijkstra over `edge_crossing_cost`, ties to fewer steps then lower pk) from `origin` to the first position `goal_test` accepts, origin included (`[origin]` when it already passes). Reads the room's positions and edges from the database (two queries), never the prefetched `positions_cached`/`all_edges_as_a` lists, which a long-running server can hold from before the aerial layer was built. Only a FLIES mover enters AERIAL nodes, and only through a layer already materialized (it never builds one). No capacity limit. `through_barriers` (#4609) treats a ground wall damage can bring down (`is_breakable_barrier`) as open at 1 hop: the route an NPC weighs before it bashes. `stop_at` (#4663, held ground) is a set of position pks that may end a route but are never expanded past; `path_costs_from` takes it too. |
 | `step_costs(path, *, traversal, through_barriers=False) -> list[int]` | Hop cost of each step of a route, so a caller can cut it to a hop budget; `PositionError` on a step with no open edge. `through_barriers` prices a barrier-ignoring route as `find_path` does. |
 | `path_costs_from(origin, *, traversal) -> dict[int, int]` | Hops from `origin` to every position a mover of `traversal` can reach, keyed by pk (#4609; the same costs `find_path` routes over). An NPC retreating measures path distance from its enemies with it. |
 | `first_closed_edge(path, *, traversal) -> PositionEdge \| None` | The first edge along a route that is closed to the mover: on a barrier-ignoring route, the wall an NPC would bash (#4609). |
@@ -560,7 +560,9 @@ challenge's approaches beside it.
 |----------|---------|
 | `place_in_position(objectdb, position)` | Idempotent unconditional placement (staff / setup); the UNCHECKED primitive — bypasses entry-kind + mobility (#2005) |
 | `take_position(objectdb, position)` | Voluntary entry onto the position graph for an UNPLACED actor — restricted to PRIMARY/FEATURE entry kinds + MOVEMENT capability (#2005) |
-| `move_to_position(objectdb, target)` | Voluntary move — validates same room, current placement, adjacency, the walker rule (`edge_blocks_crossing`: an active gate answers "Crossing that requires getting past <challenge>.", a hard seal "The way is blocked."), an AERIAL target needs the `aerial` property ("You cannot fly.", #4607), no roof between the two positions ("A roof is in the way.", #4608), MOVEMENT capability. Like `place_in_position` and `force_move_to_position` it writes through `_commit_position`, the one position writer, which also drops the identity-mapped `current_position` cache of the object's `CombatOpponent`/`CombatParticipant` rows (#4607) and, once the move commits, pings each open combat encounter in the room so its battle maps refetch (`notify_room_encounters_on_commit`, #4644) |
+| `move_to_position(objectdb, target, *, traversals=frozenset({WALKS}))` | Voluntary move (#4663: `traversals` is the mover's set, from `traversal.player_traversals`; the action passes it): validates same room, current placement, adjacency, the walker rule (`edge_blocks_crossing`: an active gate answers "Crossing that requires getting past <challenge>.", a hard seal "The way is blocked."), an AERIAL target needs the `aerial` property ("You cannot fly.", #4607), no roof between the two positions ("A roof is in the way.", #4608), MOVEMENT capability. A walled edge passes when `best_crossing_cost(edge, traversals)` is not None. The validation is `check_move_to_position(objectdb, target, *, traversals)` (raises `PositionError`, changes nothing), which `move_to_position` calls before `_commit_position`, and which the held-ground pass calls before it rolls. Like `place_in_position` and `force_move_to_position` it writes through `_commit_position`, the one position writer, which also drops the identity-mapped `current_position` cache of the object's `CombatOpponent`/`CombatParticipant` rows (#4607) and, once the move commits, pings each open combat encounter in the room so its battle maps refetch (`notify_room_encounters_on_commit`, #4644) |
+| `player_traversals(sheet) -> frozenset[str]` | `world/areas/positioning/traversal.py`, #4663. WALKS plus each `CapabilityType.traversal` whose `get_effective_capability_value(sheet, capability)` is above its `innate_baseline` (one query for the capability rows that name a traversal). `traversals_of(objectdb)` is the same for any object (WALKS only without a sheet) |
+| `cheapest_crossing(edge, traversals) -> tuple[int, str] \| None` / `best_crossing_cost(edge, traversals) -> int \| None` | #4663. The cheapest `edge_crossing_cost` over the mover's traversals and which traversal gave it (ties go to declaration order, so CLIMBS before LEAPS); None when none crosses. The move list's "Climb over" / "Leap over" label reads it |
 | `force_move_to_position(objectdb, target)` | Bypass capability + edge checks (staff/consequence) |
 
 ### Actions [BUILT & WIRED]
@@ -569,7 +571,10 @@ challenge's approaches beside it.
 
 | Action | Registry Key | Prerequisite | Notes |
 |--------|-------------|--------------|-------|
-| `MoveToPositionAction` | `move_to_position` | `CombatMovementPrerequisite` (#4607: in an active encounter, only while DECLARING and with a hop left; the move spends one) | Dispatched with `ActionRef(registry_key="move_to_position", position_id=<pk>)`; surfaced via `get_player_actions` |
+| `MoveToPositionAction` | `move_to_position` | `CombatMovementPrerequisite` (#4607: in an active encounter, only while DECLARING and with a hop left; the move spends one, or the crossing cost over a wall, #4663: "That crossing takes N hops; you have M left." when short) | Dispatched with `ActionRef(registry_key="move_to_position", position_id=<pk>)`; surfaced via `get_player_actions` |
+| `TakeFlightAction` | `take_flight` | `CombatMovementPrerequisite` + `CanFlyPrerequisite` ("You cannot fly." without FLIES among her traversals, "You are already in the air.", "A roof is in the way." under a roofed position) | #4663. Calls `enter_aerial`; spends one hop in a DECLARING round; no kwargs. The move list offers "Take flight" to a ground flier |
+| `LandAction` | `land` | `CombatMovementPrerequisite` + `AirbornePrerequisite` ("You are not in the air.", "A roof is in the way." over a roofed anchor) | #4663. Calls `leave_aerial`; one hop in a DECLARING round; no kwargs |
+| `PassHeldGroundAction` | `pass_held_ground` | `CombatMovementPrerequisite` | #4663. Kwargs `position_id`, optional `approach_id`. Rolls to get past the enemy holding an adjacent place (see "Held ground" below); costs what a walk to that place costs (1 hop, or the crossing cost over a wall) and is refused with fewer hops left |
 | `TakePositionAction` | `take_position` | none | Voluntary entry for an UNPLACED actor; dispatched with `ActionRef(registry_key="take_position", position_id=<pk>)`; surfaced via `get_player_actions` for PRIMARY/FEATURE positions only (#2005) |
 | `GMPlaceInPositionAction` | `gm_place_in_position` | none (gate is in-body, not a `Prerequisite`) | Staff OR active-scene GM (mirrors `_actor_may_gm_battle`; no active scene means staff-only) — wraps the unchecked `place_in_position`. `ActionRef(registry_key="gm_place_in_position", position_id=<pk>, target_object_id=<ObjectDB pk co-located with actor>)` (#2005) |
 | `SetTheStageAction` | `set_the_stage` | `MinimumGMLevelPrerequisite(GMLevel.STARTING)` (staff bypass preserved, #2117) | Dispatched with `ActionRef(registry_key="set_the_stage", blueprint_id=<pk>, replace=False)`; surfaced via `get_player_actions` when the room's `RoomProfile.default_blueprint` is set. `ActionRef` carries a `blueprint_id` field for this. |
@@ -600,6 +605,9 @@ position graph, mirroring `CmdPlaces`' shape:
   (`position_of(caller) is None`), else `MoveToPositionAction().run(caller, position_id=...)`.
   Ineligible-kind, non-adjacent, and gated/immobile failures surface the action's own
   `ActionResult.message` verbatim (no separate telnet error copy).
+- `position/fly`, `position/land` (#4663): dispatch `TakeFlightAction` / `LandAction`.
+  `position/pass <name>` (#4663): resolves the place with `resolve_position_by_name` and
+  dispatches `PassHeldGroundAction` (no `approach_id`: the best matching approach is rolled).
 - `position/place <target>=<position name>` (#3385) — dispatches `GMPlaceInPositionAction`.
   `<target>` resolves via `self.caller.search(target_name, location=self.caller.location)`
   (co-located search only); `<position name>` resolves via the shared
@@ -655,7 +663,79 @@ closing telnet's gap with the web `AddOpponentDialog`, which has taken a positio
 - `TacticalMap` (`frontend/src/areas/components/TacticalMap.tsx`) — shared read-only `@xyflow/react` canvas rendering a Position graph: occupant avatars per node (`PositionMapNode.tsx`), edges styled by passability/gating (`edgeStyle`; a conjured wall's label carries its strength, "Conjured Barrier 7/12", #4606), click-to-move via the caller-supplied `moveActions`/`onDispatchMove`. Auto-layout (`tacticalLayout.ts`'s `computeTacticalLayout`, a pure BFS-ring placement) is used per-node when `layout_x`/`layout_y` are both null; explicit cosmetic coordinates take precedence. Dragging is disabled — coordinate authoring is out of scope for #2006. The canvas opens with `fitView` and a `minZoom` of 0.1 (React Flow's default floor of 0.5 stopped the fit at half scale, so a room wider than twice the sidebar never fit, on open or from the fit button, #4641). `PositionMapNode` also renders a rampart ring overlay when a node carries `rampart_element` (#2209): solid border when INTACT, dashed when CRACKED, faint pulsing dashed when CRUMBLING, colored by element (stone=slate, wind=sky, fire=orange, thorn=green, neutral fallback for unrecognized elements), with a `title` tooltip (`"Stone Rampart 18/24"`). Optional `onGMPlace?: (positionId) => boolean` prop (#3385) — consumed in `handleClick` right after the #2206 `onPickPosition` cast-targeting hook and before move-dispatch; a `true` return consumes the click. **Tactical overlays (#3555):** each occupant avatar can carry `marks` (`OccupantMark {kind: 'locked' | 'covering' | 'covered', title}`), rendered as small titled glyphs on the avatar, and every occupant of a node with a rampart gets a behind-cover glyph derived from the node's own `rampart_element` (a `Rampart` is deleted at zero integrity, so present means still cover). An optional `links?: OccupantLink[]` prop (`{id, positionAId, positionBId, label}`) draws an animated rose overlay edge (`link-<id>`) between two positions; a same-position pair draws no edge since both marks already sit on one node. `CombatTacticalMap` builds both from `EncounterDetail.engagement_locks` (both sides marked, link between their positions) and `current_round_actions` rows with `maneuver: 'cover'` (coverer and covered ally marked; visibility is whatever the backend's covenant/GM scoping already returns). `SceneTacticalMap` passes neither.
 - `SceneTacticalMap` (`frontend/src/scenes/components/SceneTacticalMap.tsx`) — non-combat wrapper; builds `occupantsByPosition` from the scene's `persona_positions`, renders nothing when the room has no positions. Replaced the old `RoomPositionsPanel` text-list UI (#2006). GM-place picker (#3385): when `gm_place_in_position` `PlayerAction`s are present in the scene's available actions (the same "am I GM" signal `setTheStageAction` already uses — no separate prop), a "Place" toggle + target `<select>` appear above the map; targets are built from `persona_positions`' co-located personas via `character_sheet` (the persona's character ObjectDB pk); selecting a target and clicking a node dispatches `gm_place_in_position` with `target_object_id` in the kwargs.
 - `CombatTacticalMap` (`frontend/src/combat/components/CombatTacticalMap.tsx`) — combat wrapper; builds `occupantsByPosition` from `Participant.current_position`/`Opponent.current_position` instead of `persona_positions`. Mounted as a "Map" tab in `CombatRail`'s right rail, alongside the existing "Your Turn" tab (`CombatTurnPanel`) — tab defaults to "Your Turn" (#2006). `CombatRail` renders in-scene on `/scenes/:id`, not a dedicated route (#2197). Same GM-place picker as `SceneTacticalMap` (#3385); targets are built from `encounter.participants` (`character_sheet_id`) and `encounter.opponents` (`objectdb_id`), both already on `EncounterDetail`.
-- `MovementActions` — shared component (extracted from combat; lives in `frontend/src/combat/components/`); renders adjacent-position move buttons (a non-map fallback list still used elsewhere).
+- `MovementActions` — shared component (extracted from combat; lives in `frontend/src/combat/components/`); renders adjacent-position move buttons (a non-map fallback list still used elsewhere). Since #4663 it lists every move entry `roundActionHelpers.isMoveAction` admits (`move_to_position`, `take_flight`, `land`, `pass_held_ground`), keyed by `registry_key` and position (a step and a pass roll can name the same place), shows each entry's note (e.g. "Held by Bandit: you'd stop there.", a pass's approach) and toasts the result's message on success. `hopsLeftLine` finds the "N hops left this round." line on any move entry. On the map a click on a held place takes the plain step; the pass roll stays a panel choice.
+
+### Movement by capability and held ground [BUILT & WIRED] (#4663, slice 2 of #4651)
+
+**Player traversal.** `CapabilityType.traversal` (blank, or a `CreatureTraversal` value) marks a
+capability as a way of moving. A character moves that way while her effective capability value is
+above the row's `innate_baseline`, from a technique, condition, species, distinction or gear
+(`get_effective_capability_value` folds in `CharacterModifier` rows that have not expired). The
+roll for a wall's gating challenge is unchanged; what changed is that a climber or leaper's
+crossing is priced and offered: the move list gives "Climb over to X (N hops)" for a gated edge
+she can cross, and "Move to X (blocked: ...)" stays for a mover who cannot. Taking off and
+landing are `take_flight` and `land`; both refuse under a roof, as `edge_crossing_cost` does.
+
+**Held ground** (`world/combat/services/held_ground.py`). In a live encounter a place is held
+against a mover when a ready enemy stands in it: for a PC, the places of ACTIVE ENEMY opponents;
+for an ENEMY opponent, the places of ACTIVE participants who can act plus ACTIVE ALLY opponents;
+for an ALLY opponent, ACTIVE ENEMY opponents (by stored `allegiance`). The mover's own place is
+never held against her, so starting in held ground and leaving costs a normal hop.
+`held_position_ids_against(mover)` returns the set; `encounter_holds(encounter)` returns an
+`EncounterHolds` read once per planning pass, from which `against_opponent(opponent)` derives an
+opponent's set. A player character is stopped however she moves on the ground (walking, climbing or leaping),
+and her way past is the pass roll; only NPCs skip the roll, so an NPC walker or climber stops
+and an NPC flier or leaper passes. Entering a held place stops her: a PC's `hops_used` becomes `hops_for(sheet)` and she is told "You are stopped
+by <name>.". She is not stopped by ground held below her while she is in the air; landing in
+a held place is an entry and stops her like any other. NPC routing uses
+`routing_profile(opponent, holds)` (the opponent's `MovementProfile` with `stop_at` filled by
+`npc_stop_at`), so `find_path`, `path_costs_from` and the tactics ladder treat a held place as
+the end of a route. A walker whose every route is closed by held ground this round walks the
+unheld route up to the first held place and goes on next round. Planning and resolution read the
+same holders: `encounter_holds` takes the planning pass's PCs (`NpcRoundContext.active_participants`)
+or, at resolution, the same filter (`npc_targeting._targetable_participants`: able to act and not
+intangible). `held_place_holders(mover)` names who holds each place held against a PC; the move
+list's "Held by <name>: you'd stop there." note (on a step and on a climb or leap alike) and
+telnet's bare `position` listing ("; held by <name>") read it.
+
+**The pass** (`world/combat/services/held_ground_pass.py`). `MovementConfig` is a singleton
+(pk 1, `cached_singleton()`, admin under combat) whose `held_ground_challenge` is the
+`ChallengeTemplate` rolled to get past held ground; with no row or no template no pass is
+offered. `pass_choices(actor)` pairs each approach on the template whose capability the actor
+holds with her strongest source for that capability, best value first; `pass_options(actor,
+target)` adds the held check. `attempt_pass(actor, target, *, approach_id)` checks everything
+first (live fight, the walk check `check_move_to_position`, template present, place held,
+capability, approach), then inside one transaction mints the challenge instance against the
+holder, resolves it with the chosen source, deactivates it, and moves her with
+`force_move_to_position`. Outcome by success level: above 0 `CLEAN` ("You get past <name>."),
+0 `PARTIAL` ("You get past <name>, but not cleanly."), below 0 or no check result `STOPPED`
+("<name> stops you."; she is in the held place with no hops left, as after a plain walk in).
+Constants: `HeldGroundPassOutcome` and the `HELD_GROUND_*` messages in
+`world/combat/constants.py`; result types `PassOption` and `PassResult` in `combat/types.py`.
+Refusals, in check order: "There is no fight here to get past anyone in.", the walk check's own
+message, "There is no way past them.", "No one holds that place.", "You have no way past them.",
+"You cannot get past them that way.".
+
+**Authoring the pass template** (staff, `ChallengeTemplate` in admin, then set it on
+`MovementConfig`). Give it an approach for each capability that should get past (acrobatics,
+a flight capability, and so on). The partial outcome's consequence is whatever the template's
+partial effect authors, and the challenge instance targets the holder, so a `DEAL_DAMAGE`
+effect meant to hit the roller must have its target set to `self`; left on the target it
+damages the holder. A `DEAL_DAMAGE` at or above `sudden_harm_interpose_threshold` (10) can be
+held for an Interpose beat instead of applying at once.
+
+**Capability sources.** `CapabilitySourceType.MODIFIER` (`world/mechanics/constants.py`):
+`_get_modifier_sources` (`world/mechanics/services.py`) turns a sheet's `CharacterModifier`
+rows on a capability target into one source per capability, summing live rows
+(`CharacterModifierQuerySet.active()`: `expires_at` null or in the future, the one expiry rule
+`get_effective_capability_value` shares). `get_available_actions` keeps one action per approach,
+the one from the strongest source (`_strongest_source_per_action`, ranked by
+`(prerequisite_met, value)`), so a technique and a trait that reach the same approach offer
+one entry carrying the higher value.
+
+Journeys: `src/integration_tests/test_moving_by_capability_journeys.py`,
+`test_holding_ground_journeys.py`, `test_crossing_a_wall_journeys.py`; fuzz in
+`integration_tests/fuzz/test_path_service_fuzz.py`.
 
 ### Rampart — Living Barriers [BUILT & WIRED] (#2209, epic #2040 decision 3)
 
@@ -724,7 +804,7 @@ edges that would block ground movement.
 |----------|---------|
 | `materialize_aerial_layer(room)` | Build the full AERIAL twin graph over every ground position (idempotent; no-op when already present). Ends by dropping every in-room position's cached edge lists (`invalidate_position_graph_caches`), so a map or route read after it sees the new edges (#4607) |
 | `teardown_aerial_layer(room)` | Delete all AERIAL positions in the room (cascades edges + occupancy); called when the last airborne occupant lands |
-| `enter_aerial(objectdb)` | Move `objectdb` to the AERIAL twin above its current ground position; materializes the layer if needed; sets the `"aerial"` `ObjectProperty` on the object |
+| `enter_aerial(objectdb)` | Move `objectdb` to the AERIAL twin above its current ground position; materializes the layer if needed, and draws a twin (a vertical edge plus aerial edges over neighbours whose edge does not block flight) for a ground position staged after the layer was built (#4663, `_aerial_twin`); sets the `"aerial"` `ObjectProperty` on the object |
 | `leave_aerial(objectdb)` | Return `objectdb` to its `elevation_anchor` ground position; clears the `"aerial"` property; tears down the layer when no AERIAL node retains occupants. The voluntary, soft landing |
 | `ground_flier(objectdb, *, allow_catch=True) -> int \| None` | `plummet.py`, #4608. Knock a flier out of the air: no-op unless it stands on an AERIAL position; clears the `"aerial"` property and hands it to `begin_plummet` from there, so it falls (catch window for a character with someone present; `allow_catch=False`, a combat opponent, lands at once). Returns the impact damage when the fall resolved in the call. `REMOVE_FLIGHT` calls it; for an opponent the handler applies the returned damage to its health (`apply_damage_to_opponent`, fall damage type, no source, soak bypassed) |
 

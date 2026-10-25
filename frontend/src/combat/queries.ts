@@ -15,6 +15,7 @@ import type {
 } from './types';
 import { availableActionsKeys, useAvailableActionsQuery } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
+import { isMoveAction } from '@/combat/roundActionHelpers';
 import { useAppSelector } from '@/store/hooks';
 import { markTargetMenusStale } from '@/game/target-menu/targetMenuApi';
 
@@ -252,14 +253,9 @@ export function useUpgradeCombo(encounterId: number) {
 // Available actions hook (combat-scoped)
 //
 // Fetches all PlayerActions for the character and filters to COMBAT backend,
-// plus the move_to_position moves YourTurn lists (#4607).
+// plus the moves YourTurn lists (#4607; take-off, landing and pass roll, #4663).
 // Clash-contribution actions appear here too with ref.clash_id !== null.
 // ---------------------------------------------------------------------------
-
-/** A registry move a fighter makes during declaration, at a hop a move (#4607). */
-function isMoveAction(a: PlayerAction): boolean {
-  return a.ref.backend === 'registry' && a.ref.registry_key === 'move_to_position';
-}
 
 /**
  * COMBAT-backend PlayerActions for the character, plus its moves, which carry the

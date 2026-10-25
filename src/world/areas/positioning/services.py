@@ -1089,6 +1089,7 @@ def find_path(
     *,
     traversal: str,
     through_barriers: bool = False,
+    stop_at: frozenset[int] = frozenset(),
 ) -> list[Position] | None:
     """The cheapest route from ``origin`` to the first position ``goal_test`` accepts.
 
@@ -1103,6 +1104,9 @@ def find_path(
     ``through_barriers`` (#4609) is the barrier-ignoring route an NPC weighs before it
     bashes: a ground wall that damage can bring down (``is_breakable_barrier``) counts
     as open at 1 hop. An indestructible seal stays closed.
+
+    ``stop_at`` (#4663) is held ground: a position there (other than the origin) may be
+    the goal, but the route never walks on past it, so it only ever ends a route.
     """
     graph = _room_graph(origin)
     best: dict[int, tuple[int, int]] = {origin.pk: (0, 0)}
@@ -1116,6 +1120,8 @@ def find_path(
         done.add(pk)
         if goal_test(graph.nodes[pk]):
             return _walk_back(graph, parent, pk)
+        if pk in stop_at and pk != origin.pk:
+            continue  # held ground: a walker who enters stops there
         for other, edge in graph.neighbours[pk]:
             hop = _hop_cost(graph, edge, traversal, through_barriers=through_barriers)
             if hop is None or other in done:
@@ -1128,12 +1134,18 @@ def find_path(
     return None
 
 
-def path_costs_from(origin: Position, *, traversal: str) -> dict[int, int]:
+def path_costs_from(
+    origin: Position, *, traversal: str, stop_at: frozenset[int] = frozenset()
+) -> dict[int, int]:
     """Hops from ``origin`` to every position a mover of ``traversal`` can reach, by pk.
 
     The same costs ``find_path`` routes over (``edge_crossing_cost``); the origin costs
     0, and a position the mover cannot reach is absent. Used to measure path distance
     (an NPC retreating from its enemies, #4609).
+
+    ``stop_at`` is held ground, as in ``find_path`` (#4663): such a position (other than
+    the origin) is reached but never expanded past, so this maps exactly the positions
+    ``find_path`` with the same ``stop_at`` can route to.
     """
     graph = _room_graph(origin)
     best: dict[int, int] = {origin.pk: 0}
@@ -1144,6 +1156,8 @@ def path_costs_from(origin: Position, *, traversal: str) -> dict[int, int]:
         if pk in done:
             continue
         done.add(pk)
+        if pk in stop_at and pk != origin.pk:
+            continue  # held ground: reached, never walked past
         for other, edge in graph.neighbours[pk]:
             hop = graph.cost(edge, traversal)
             if hop is None or other in done:
@@ -1359,18 +1373,45 @@ def take_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
     return place_in_position(objectdb, position)
 
 
-def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
+def move_to_position(
+    objectdb: ObjectDB,
+    target: Position,
+    *,
+    traversals: frozenset[str] = frozenset({CreatureTraversal.WALKS}),
+) -> ObjectPosition:
     """Voluntary move from current position to target position.
+
+    ``traversals`` are the mover's ways of crossing (``traversal.player_traversals``
+    for a player character, #4663); the default is a walker.
 
     Validation order (each failure raises PositionTransitionError):
     1. target is in the same room as objectdb
     2. objectdb is currently placed in a position
     3. an edge exists between current and target
-    4. the edge does not block a walker (``edge_blocks_crossing``): an active
-       gating challenge names itself; a hard seal is "The way is blocked."
+    4. the edge does not block the mover: a wall a walker cannot cross
+       (``edge_blocks_crossing``) passes only when one of ``traversals`` can cross it
+       (``best_crossing_cost``, a climber or leaper at a wall with a way past it).
+       Otherwise an active gating challenge names itself; a hard seal is
+       "The way is blocked."
     5. an AERIAL target needs the mover to hold the ``aerial`` property: "You cannot fly."
     6. no roof stands between the two (``roof_between``): "A roof is in the way." (#4608)
     7. the actor's MOVEMENT capability > 0 (characters only)
+    """
+    check_move_to_position(objectdb, target, traversals=traversals)
+    return _commit_position(objectdb, target)
+
+
+def check_move_to_position(
+    objectdb: ObjectDB,
+    target: Position,
+    *,
+    traversals: frozenset[str] = frozenset({CreatureTraversal.WALKS}),
+) -> None:
+    """Raise PositionTransitionError if ``move_to_position`` would refuse this step.
+
+    ``move_to_position``'s whole validation, without the move: a caller that must roll
+    before it commits the step (the pass past held ground, #4663) validates here first,
+    then commits through ``force_move_to_position``.
     """
     if target.room_id != objectdb.db_location_id:
         raise PositionTransitionError(_ERR_MOVE_CROSS_ROOM)
@@ -1383,7 +1424,7 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     if edge is None:
         raise PositionTransitionError(_ERR_MOVE_NO_PATH)
 
-    if edge_blocks_crossing(edge):
+    if edge_blocks_crossing(edge) and not _traversals_cross(edge, traversals):
         if edge.gating_challenge_id is not None:
             challenge_name = edge.gating_challenge.template.name
             msg = f"Crossing that requires getting past {challenge_name}."
@@ -1399,7 +1440,12 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     if not _can_move(objectdb):
         raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
 
-    return _commit_position(objectdb, target)
+
+def _traversals_cross(edge: PositionEdge, traversals: frozenset[str]) -> bool:
+    """Whether any of ``traversals`` crosses ``edge`` (lazy: traversal imports this module)."""
+    from world.areas.positioning.traversal import best_crossing_cost
+
+    return best_crossing_cost(edge, traversals) is not None
 
 
 def is_aerial(objectdb: ObjectDB) -> bool:
@@ -1505,6 +1551,40 @@ def teardown_aerial_layer(room: ObjectDB) -> None:
     invalidate_position_graph_caches(room)
 
 
+def _aerial_twin(room: ObjectDB, ground: Position) -> Position:
+    """The AERIAL twin above ``ground``, drawn now if ``ground`` was added after the layer.
+
+    ``materialize_aerial_layer`` builds the whole layer once, so a ground position staged
+    later has no twin until the layer is torn down. This adds that one twin the way the
+    layer builder would: the vertical edge, and an aerial edge to each existing twin over
+    a ground neighbour whose edge does not block flight (#4663).
+    """
+    above = Position.objects.filter(
+        room=room, kind=PositionKind.AERIAL, elevation_anchor=ground
+    ).first()
+    if above is not None:
+        return above
+    above = create_position(room, f"Above {ground.name}", kind=PositionKind.AERIAL)
+    above.elevation_anchor = ground
+    above.save(update_fields=["elevation_anchor"])
+    connect_positions(ground, above)  # vertical
+    twins = {
+        twin.elevation_anchor_id: twin
+        for twin in Position.objects.filter(room=room, kind=PositionKind.AERIAL).exclude(
+            pk=above.pk
+        )
+    }
+    for edge in PositionEdge.objects.filter(Q(position_a=ground) | Q(position_b=ground)):
+        if edge.blocks_flight:
+            continue
+        neighbour_id = edge.position_b_id if edge.position_a_id == ground.pk else edge.position_a_id
+        neighbour_twin = twins.get(neighbour_id)
+        if neighbour_twin is not None:
+            connect_positions(above, neighbour_twin)
+    invalidate_position_graph_caches(room)
+    return above
+
+
 def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:
     """Move objectdb to the AERIAL twin above its current position.
 
@@ -1524,7 +1604,7 @@ def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:
         return objectdb.object_position
     room = objectdb.location
     materialize_aerial_layer(room)
-    above = Position.objects.get(room=room, kind=PositionKind.AERIAL, elevation_anchor=ground)
+    above = _aerial_twin(room, ground)
     ObjectProperty.objects.update_or_create(
         object=objectdb,
         property=_aerial_property(),

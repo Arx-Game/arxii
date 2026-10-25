@@ -33,6 +33,7 @@ from world.combat.models import (
     EscalationCurve,
     FleeConfig,
     FleeTierModifier,
+    MovementConfig,
     NpcTacticsConfig,
     OpponentTierTemplate,
     PendingSelection,
@@ -556,6 +557,26 @@ class FleeConfigAdmin(admin.ModelAdmin):
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""
         return not FleeConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(MovementConfig)
+class MovementConfigAdmin(admin.ModelAdmin):
+    """#4663 - the singleton authored movement wiring (the held-ground pass)."""
+
+    list_display = ["pk", "held_ground_challenge", "updated_at"]
+    autocomplete_fields = ["held_ground_challenge", "updated_by"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not MovementConfig.objects.exists()
 
     def has_delete_permission(
         self,

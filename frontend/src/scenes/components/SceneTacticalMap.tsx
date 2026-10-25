@@ -23,6 +23,7 @@ import { fetchScene, sceneKeys } from '../queries';
 import { useAvailableActionsQuery } from '../actionQueries';
 import type { SceneDetail } from '../types';
 import type { PlayerAction } from '../actionTypes';
+import { isMoveAction } from '@/combat/roundActionHelpers';
 
 interface Props {
   sceneId: string;
@@ -58,8 +59,7 @@ export function SceneTacticalMap({ sceneId }: Props) {
 
   const moveActions = availableActions.filter(
     (a) =>
-      a.ref.backend === 'registry' &&
-      (a.ref.registry_key === 'move_to_position' || a.ref.registry_key === 'take_position')
+      isMoveAction(a) || (a.ref.backend === 'registry' && a.ref.registry_key === 'take_position')
   );
 
   const setTheStageAction =

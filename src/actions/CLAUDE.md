@@ -160,7 +160,15 @@ They do not use the command system, dispatchers, or handlers.
   DECLARING and `movement_budget.hops_left` is above 0, and `execute()` then spends one hop
   (`spend_combat_hop`); RESOLVING and BETWEEN_ROUNDS refuse with a reason. `_positioning_actions`
   builds move entries by hand, so it asks the prerequisite itself and puts the refusal or the
-  "N hops left this round." line on each entry. `positioning.py`'s `SetTheStageAction` names what it staged ("You set the stage with Lone
+  "N hops left this round." line on each entry. `positioning.py` (#4663) also holds `take_flight` (`TakeFlightAction`, `CanFlyPrerequisite`), `land`
+  (`LandAction`, `AirbornePrerequisite`) and `pass_held_ground` (`PassHeldGroundAction`, kwargs
+  `position_id`, optional `approach_id`); each carries `CombatMovementPrerequisite` and spends hops in a
+  DECLARING round. `MoveToPositionAction` derives the mover's traversals (`player_traversals`) and spends a
+  wall crossing's cost; entering held ground stops a player character however she moves on the
+  ground, landing included ("You are stopped by <name>."; NPC walkers and climbers stop, NPC fliers
+  and leapers pass). The pass roll is narrated to the room ("<name> gets past <holder> into
+  <place>."). Telnet
+  `position/fly`, `/land`, `/pass <name>`. `positioning.py`'s `SetTheStageAction` names what it staged ("You set the stage with Lone
   Dais: Center."; it had answered with no message), and `distinctions.py`'s
   `GMAwardDistinctionAction` searches quietly and answers an absent name itself ("Could not
   find 'Nobody'.", as `GrantItemAction` does) and refuses a distinction already at its
