@@ -48734,9 +48734,17 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        favored:
+          type: boolean
+          description: |-
+            Whether the draft's Tradition favors this Gift: a ``TraditionGiftGrant`` (#4659).
+
+            The view passes the favored Gift ids in context (one query for the list).
+          readOnly: true
       required:
       - codex_entry_id
       - description
+      - favored
       - id
       - kind
       - name
@@ -50742,8 +50750,9 @@ components:
         starting_technique_picks:
           type: integer
           readOnly: true
-        starting_magic_skill_floor:
-          type: integer
+        magic_training:
+          type: object
+          additionalProperties: {}
           readOnly: true
         age_min:
           type: integer
@@ -50817,6 +50826,7 @@ components:
       - ic_month_names
       - id
       - introductions_offered
+      - magic_training
       - public_worship
       - second_parent_species
       - secret_worship
@@ -50831,7 +50841,6 @@ components:
       - served_house
       - stage_completion
       - stage_errors
-      - starting_magic_skill_floor
       - starting_technique_picks
       - stat_bonuses
       - stats_budget
@@ -69760,6 +69769,9 @@ components:
         training_points:
           type: integer
           nullable: true
+        teaching_line:
+          type: string
+          nullable: true
         display:
           type: string
       required:
@@ -69770,6 +69782,7 @@ components:
       - display
       - golden_hares
       - per_session_ap
+      - teaching_line
       - training_points
     OfferSummons:
       type: object
@@ -87872,17 +87885,20 @@ components:
           type: integer
         techniques:
           type: integer
-        magic_skill_floor:
+        training_points:
           type: integer
         grants_distinction_id:
           type: integer
+          nullable: true
+        grants_distinction_name:
+          type: string
           nullable: true
         offer_id:
           type: integer
           nullable: true
       required:
       - grants_distinction_id
-      - magic_skill_floor
+      - grants_distinction_name
       - name
       - offer_id
       - player_line
@@ -87890,6 +87906,7 @@ components:
       - rank
       - schooling_line_id
       - techniques
+      - training_points
     Scope77bEnum:
       enum:
       - appear
@@ -95603,9 +95620,25 @@ components:
           items:
             $ref: '#/components/schemas/SchoolingLine'
           readOnly: true
+        favored_gift_names:
+          type: array
+          items:
+            type: string
+          description: 'The Gifts this Tradition teaches well (its ``TraditionGiftGrant``
+            rows, #4659).'
+          readOnly: true
+        favored_affinity_names:
+          type: array
+          items:
+            type: string
+          description: 'The affinities this Tradition teaches well (``favored_affinities``,
+            #4659).'
+          readOnly: true
       required:
       - codex_entry_ids
       - description
+      - favored_affinity_names
+      - favored_gift_names
       - id
       - is_active
       - name

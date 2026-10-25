@@ -29467,6 +29467,12 @@ export interface components {
        */
       readonly kind: components['schemas']['CGGiftOptionKindEnum'];
       readonly codex_entry_id: number | null;
+      /**
+       * @description Whether the draft's Tradition favors this Gift: a ``TraditionGiftGrant`` (#4659).
+       *
+       *     The view passes the favored Gift ids in context (one query for the list).
+       */
+      readonly favored: boolean;
     };
     /**
      * @description * `MAJOR` - Major (CG-chosen)
@@ -30379,7 +30385,9 @@ export interface components {
       /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
       readonly starting_technique_picks: number;
-      readonly starting_magic_skill_floor: number;
+      readonly magic_training: {
+        [key: string]: unknown;
+      };
       readonly age_min: number;
       readonly age_max: number;
       readonly ic_month_names: string[];
@@ -39495,6 +39503,7 @@ export interface components {
       development_remaining: number | null;
       development_total: number | null;
       training_points: number | null;
+      teaching_line: string | null;
       display: string;
     };
     /** @description Serializer for a directed-offer summons (#2050). */
@@ -49438,8 +49447,9 @@ export interface components {
       player_line: string;
       price: number;
       techniques: number;
-      magic_skill_floor: number;
+      training_points: number;
       grants_distinction_id: number | null;
+      grants_distinction_name: string | null;
       offer_id: number | null;
     };
     /**
@@ -53043,6 +53053,10 @@ export interface components {
       readonly own_wording: string;
       readonly refund: number;
       readonly schooling: components['schemas']['SchoolingLine'][];
+      /** @description The Gifts this Tradition teaches well (its ``TraditionGiftGrant`` rows, #4659). */
+      readonly favored_gift_names: string[];
+      /** @description The affinities this Tradition teaches well (``favored_affinities``, #4659). */
+      readonly favored_affinity_names: string[];
     };
     /** @description Read-only serializer for a character's training allocation. */
     TrainingAllocation: {

@@ -3,6 +3,7 @@ Character Creation serializers.
 """
 
 from collections import defaultdict
+from collections.abc import Iterable
 
 from django.db.models import Q
 from drf_spectacular.utils import extend_schema_field
@@ -60,7 +61,7 @@ from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.game_clock.constants import IC_MONTH_NAMES
 from world.game_clock.services import get_ic_now
-from world.magic.models import Gift, GlimpseTag, Technique, Tradition
+from world.magic.models import Gift, GlimpseTag, Technique, Tradition, TraditionGiftGrant
 from world.magic.serializers import TechniqueEffectSummarySerializer
 from world.magic.types.personalization import PersonalizationOptionSet
 from world.mechanics.constants import GOAL_CATEGORY_NAME
@@ -350,6 +351,7 @@ class SchoolingLineSerializer(serializers.Serializer):
     techniques = serializers.IntegerField()
     training_points = serializers.IntegerField()
     grants_distinction_id = serializers.IntegerField(allow_null=True)
+    grants_distinction_name = serializers.CharField(allow_null=True)
     offer_id = serializers.IntegerField(allow_null=True)
 
 
@@ -386,10 +388,41 @@ def schooling_rows() -> list[dict]:
             "techniques": 1 + line.rank,
             "training_points": training_points[line.rank],
             "grants_distinction_id": line.grants_id,
+            "grants_distinction_name": line.grants.name if line.grants is not None else None,
             "offer_id": offer_by_line_id.get(line.id),
         }
         for line in lines
     ]
+
+
+def favored_gift_names_by_tradition(tradition_ids: Iterable[int]) -> dict[int, list[str]]:
+    """Each Tradition's favored Gift names, from its ``TraditionGiftGrant`` rows (#4659).
+
+    One query for the whole list. Built per request in
+    ``TraditionViewSet.get_serializer_context`` (key ``"favored_gift_names"``), not
+    prefetched onto the identity-mapped Tradition, so a grant staff add shows on the
+    next request.
+    """
+    names: dict[int, list[str]] = {}
+    grants = TraditionGiftGrant.objects.filter(tradition_id__in=list(tradition_ids))
+    for tradition_id, gift_name in grants.order_by("gift__name").values_list(
+        "tradition_id", "gift__name"
+    ):
+        names.setdefault(tradition_id, []).append(gift_name)
+    return names
+
+
+def favored_affinity_names_by_tradition(tradition_ids: Iterable[int]) -> dict[int, list[str]]:
+    """Each Tradition's ``favored_affinities`` names (#4659); one query for the list."""
+    names: dict[int, list[str]] = {}
+    links = Tradition.favored_affinities.through.objects.filter(
+        tradition_id__in=list(tradition_ids)
+    )
+    for tradition_id, affinity_name in links.order_by("affinity__name").values_list(
+        "tradition_id", "affinity__name"
+    ):
+        names.setdefault(tradition_id, []).append(affinity_name)
+    return names
 
 
 class TraditionSerializer(serializers.ModelSerializer):
@@ -401,6 +434,8 @@ class TraditionSerializer(serializers.ModelSerializer):
     own_wording = serializers.SerializerMethodField()
     refund = serializers.SerializerMethodField()
     schooling = serializers.SerializerMethodField()
+    favored_gift_names = serializers.SerializerMethodField()
+    favored_affinity_names = serializers.SerializerMethodField()
 
     class Meta:
         model = Tradition
@@ -416,6 +451,8 @@ class TraditionSerializer(serializers.ModelSerializer):
             "own_wording",
             "refund",
             "schooling",
+            "favored_gift_names",
+            "favored_affinity_names",
         ]
         read_only_fields = fields
 
@@ -493,6 +530,20 @@ class TraditionSerializer(serializers.ModelSerializer):
             rows = schooling_rows()
         return [row for row in rows if row["rank"] <= max_rank]
 
+    def get_favored_gift_names(self, obj) -> list[str]:
+        """The Gifts this Tradition teaches well (its ``TraditionGiftGrant`` rows, #4659)."""
+        names = self.context.get("favored_gift_names")
+        if names is None:
+            names = favored_gift_names_by_tradition([obj.pk])
+        return names.get(obj.pk, [])
+
+    def get_favored_affinity_names(self, obj) -> list[str]:
+        """The affinities this Tradition teaches well (``favored_affinities``, #4659)."""
+        names = self.context.get("favored_affinity_names")
+        if names is None:
+            names = favored_affinity_names_by_tradition([obj.pk])
+        return names.get(obj.pk, [])
+
 
 class CGGiftOptionSerializer(serializers.ModelSerializer):
     """Gift row for the CG gift-options list (#2426).
@@ -503,11 +554,19 @@ class CGGiftOptionSerializer(serializers.ModelSerializer):
     """
 
     codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
+    favored = serializers.SerializerMethodField()
 
     class Meta:
         model = Gift
-        fields = ["id", "name", "description", "kind", "codex_entry_id"]
+        fields = ["id", "name", "description", "kind", "codex_entry_id", "favored"]
         read_only_fields = fields
+
+    def get_favored(self, obj: Gift) -> bool:
+        """Whether the draft's Tradition favors this Gift: a ``TraditionGiftGrant`` (#4659).
+
+        The view passes the favored Gift ids in context (one query for the list).
+        """
+        return obj.pk in self.context.get("favored_gift_ids", frozenset())
 
 
 class CGTechniqueOptionSerializer(serializers.ModelSerializer):
