@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from world.magic.types.power_ledger import PowerLedger
 from world.vitals.types import DamageConsequenceResult
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from world.checks.models import Consequence
     from world.checks.outcome_models import ConsequenceOutcome
     from world.checks.types import CheckResult
+    from world.combat.constants import HeldGroundPassOutcome
     from world.combat.models import (
         Clash,
         ClashContribution,
@@ -637,12 +638,13 @@ class PassOption:
 class PassResult:
     """How a roll to get past held ground went (#4663, ``held_ground_pass.attempt_pass``).
 
-    ``outcome`` reads the roll's success level: above 0 ``clean``, 0 ``partial`` (past,
-    with whatever the challenge's authored consequence does), below 0 ``stopped`` (in the
-    held place, movement over for the round). ``holder_name`` is who held it.
+    ``outcome`` reads the roll's success level: above 0 CLEAN, 0 PARTIAL (past, with
+    whatever the challenge's authored consequence does), below 0 or no check at all
+    STOPPED (in the held place, movement over for the round). ``holder_name`` is who
+    held it.
     """
 
-    outcome: Literal["clean", "partial", "stopped"]
+    outcome: HeldGroundPassOutcome
     resolution: ChallengeResolutionResult
     holder_name: str
 

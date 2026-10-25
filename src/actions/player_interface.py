@@ -100,6 +100,7 @@ if TYPE_CHECKING:
     from actions.models import ActionTemplate
     from world.areas.positioning.models import Position
     from world.character_sheets.models import CharacterSheet
+    from world.combat.types import PassOption
     from world.consent.models import SocialConsentCategory
     from world.magic.models import CharacterAnima
     from world.mechanics.types import AvailableAction
@@ -1199,27 +1200,29 @@ def _crossing_entry(  # noqa: PLR0913 - the list's shared refusal state rides al
     )
 
 
+def _pass_ways(character: ObjectDB) -> list[PassOption]:
+    """Her ways past held ground (``held_ground_pass.pass_choices``, #4663)."""
+    from world.combat.services.held_ground_pass import pass_choices  # noqa: PLC0415
+
+    return pass_choices(character)
+
+
 def _pass_entry(  # noqa: PLR0913 - the list's shared refusal state rides along
-    character: ObjectDB,
     neighbor: Position,
     holders: dict[int, str],
+    options: list[PassOption],
     cost: int,
     hops: int | None,
     move_met: bool,
     move_reason: str,
 ) -> list[PlayerAction]:
-    """ "Get past <holder> into <place>" when ``neighbor`` is held and she has a way past.
+    """Offer "Get past <holder> into <place>" when ``neighbor`` is held and she has a way.
 
-    Empty unless a pass challenge is designated and one of its approaches matches a
-    capability she holds (``held_ground_pass.pass_options``, #4663). The description
-    names the approach she would roll.
+    ``options`` is her ``held_ground_pass.pass_choices``, read once per list (#4663):
+    empty unless a pass challenge is designated and one of its approaches matches a
+    capability she holds. The description names the approach she would roll.
     """
-    if neighbor.pk not in holders:
-        return []
-    from world.combat.services.held_ground_pass import pass_options  # noqa: PLC0415
-
-    options = pass_options(character, neighbor)
-    if not options:
+    if neighbor.pk not in holders or not options:
         return []
     met, reasons = move_met, [] if move_met else [move_reason]
     if met and hops is not None and cost > hops:
@@ -1297,6 +1300,8 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     # A place a ready enemy holds ends her movement on entry (#4663); only a declaring
     # round with hops left has a note, and only then does held ground matter.
     holders = _held_place_holders(character) if move_note else {}
+    # Her ways past held ground, read once for every held neighbour (#4663).
+    pass_ways = _pass_ways(character) if holders else []
 
     hops = _declaring_hops_left(character)
 
@@ -1326,7 +1331,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
                 prerequisite_reasons=[] if move_met else [move_reason],
             )
         )
-        result.extend(_pass_entry(character, neighbor, holders, 1, hops, move_met, move_reason))
+        result.extend(_pass_entry(neighbor, holders, pass_ways, 1, hops, move_met, move_reason))
 
     # Take off or land (#4663): a character with a flight capability above its baseline
     # rises into the air above where she stands; an airborne one comes down.
@@ -1363,7 +1368,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
                 )
             )
             result.extend(
-                _pass_entry(character, neighbor, holders, cost, hops, move_met, move_reason)
+                _pass_entry(neighbor, holders, pass_ways, cost, hops, move_met, move_reason)
             )
             continue
         challenge_name = edge.gating_challenge.template.name

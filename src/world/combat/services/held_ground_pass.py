@@ -16,10 +16,21 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.areas.positioning.exceptions import PositionError
 from world.areas.positioning.services import check_move_to_position, force_move_to_position
 from world.areas.positioning.traversal import traversals_of
-from world.combat.constants import CombatAllegiance, OpponentStatus
+from world.combat.constants import (
+    HELD_GROUND_NO_CAPABILITY,
+    HELD_GROUND_NO_CHALLENGE,
+    HELD_GROUND_NOT_HELD,
+    HELD_GROUND_NOT_IN_FIGHT,
+    HELD_GROUND_NOT_THAT_WAY,
+    CombatAllegiance,
+    HeldGroundPassOutcome,
+    OpponentStatus,
+)
 from world.combat.models import CombatOpponent, MovementConfig
 from world.combat.services.held_ground import held_position_ids_against
 from world.combat.services.movement_budget import active_combat_participant
@@ -32,16 +43,9 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.areas.positioning.models import Position
+    from world.combat.models import CombatParticipant
     from world.mechanics.models import ChallengeTemplate
-    from world.mechanics.types import CapabilitySource
-
-NO_WAY_PAST = "There is no way past them."
-NOT_THAT_WAY = "You cannot get past them that way."
-
-# PassResult.outcome values: past cleanly, past with the partial consequence, stopped.
-GOT_PAST_CLEANLY = "clean"
-GOT_PAST_PARTLY = "partial"
-WAS_STOPPED = "stopped"
+    from world.mechanics.types import CapabilitySource, ChallengeResolutionResult
 
 
 def pass_template() -> ChallengeTemplate | None:
@@ -52,19 +56,21 @@ def pass_template() -> ChallengeTemplate | None:
     return config.held_ground_challenge
 
 
-def pass_options(
+def pass_choices(
     actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the PC mover, as held_position_ids_against
-    target: Position,
+    template: ChallengeTemplate | None = None,
 ) -> list[PassOption]:
-    """The ways ``actor`` may try to get past whoever holds ``target``, best first.
+    """Every way ``actor`` could try to get past held ground, best first; no place read.
 
-    Each approach on the designated challenge whose capability the actor holds, paired
-    with her highest-valued source of it; ordered by that value, highest first. Empty
-    when no challenge is designated or ``target`` is not held against her.
+    Each approach on the designated challenge (``template``, read from the config when
+    not handed in) whose capability the actor holds, paired with her highest-valued
+    source of it, ordered by that value, highest first. Empty when no challenge is
+    designated. The move list reads this once and offers it at every held neighbour.
     """
-    template = pass_template()
-    if template is None or target.pk not in held_position_ids_against(actor):
-        return []
+    if template is None:
+        template = pass_template()
+        if template is None:
+            return []
     best: dict[int, CapabilitySource] = {}
     for source in get_capability_sources_for_character(actor):
         held = best.get(source.capability_id)
@@ -74,7 +80,7 @@ def pass_options(
         return []
     approaches = ChallengeApproach.objects.filter(
         challenge_template=template, application__capability_id__in=best
-    ).select_related("application", "check_type")
+    ).select_related("application", "check_type", "challenge_template")
     options = [
         PassOption(approach=approach, capability_source=best[approach.application.capability_id])
         for approach in approaches
@@ -82,11 +88,21 @@ def pass_options(
     return sorted(options, key=lambda option: (-option.capability_source.value, option.approach.pk))
 
 
-def _holder_in(actor: ObjectDB, target: Position) -> CombatOpponent | None:  # noqa: OBJECTDB_PARAM
-    """The lowest-pk ACTIVE ENEMY opponent standing in ``target`` in the actor's fight."""
-    participant = active_combat_participant(actor)
-    if participant is None:
-        return None
+def pass_options(
+    actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the PC mover, as held_position_ids_against
+    target: Position,
+) -> list[PassOption]:
+    """The ways ``actor`` may try to get past whoever holds ``target``, best first.
+
+    ``pass_choices`` when ``target`` is held against her, else empty.
+    """
+    if target.pk not in held_position_ids_against(actor):
+        return []
+    return pass_choices(actor)
+
+
+def _holder_in(participant: CombatParticipant, target: Position) -> CombatOpponent | None:
+    """The lowest-pk ACTIVE ENEMY opponent standing in ``target`` in the participant's fight."""
     return (
         CombatOpponent.objects.filter(
             encounter=participant.encounter,
@@ -100,6 +116,34 @@ def _holder_in(actor: ObjectDB, target: Position) -> CombatOpponent | None:  # n
     )
 
 
+def _choose(options: list[PassOption], approach_id: int | None) -> PassOption:
+    """The option for ``approach_id``, or the best one when none is named."""
+    if not options:
+        raise PositionError(HELD_GROUND_NO_CAPABILITY)
+    if approach_id is None:
+        return options[0]
+    for option in options:
+        if option.approach.pk == approach_id:
+            return option
+    raise PositionError(HELD_GROUND_NOT_THAT_WAY)
+
+
+def _outcome_of(resolution: ChallengeResolutionResult) -> HeldGroundPassOutcome:
+    """Clean above success level 0, partial at 0, stopped below it.
+
+    A resolution with no check result (an approach whose action template stopped at a
+    gate or paused) never got her past: stopped.
+    """
+    if resolution.check_result is None:
+        return HeldGroundPassOutcome.STOPPED
+    level = resolution.check_result.success_level
+    if level > 0:
+        return HeldGroundPassOutcome.CLEAN
+    if level == 0:
+        return HeldGroundPassOutcome.PARTIAL
+    return HeldGroundPassOutcome.STOPPED
+
+
 def attempt_pass(
     actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the PC mover
     target: Position,
@@ -108,40 +152,46 @@ def attempt_pass(
 ) -> PassResult:
     """Roll to get past the enemy holding ``target``, then step into it.
 
-    Validates the step as a walk would (``check_move_to_position`` with the actor's
-    traversals) before rolling. Mints a one-shot instance of the designated challenge
-    aimed at the holder, resolves it with the chosen approach (``approach_id``, else the
-    best option), deactivates it, and moves the actor into ``target`` whatever the
-    outcome: stopped means stopped there. Raises ``PositionError`` with a player-facing
-    message when there is no way past or the step is refused.
+    Refuses, before anything changes, with ``PositionError`` naming the cause: not in a
+    live fight, a step a walk could not take (``check_move_to_position`` with her
+    traversals), no pass challenge designated, ``target`` not held, no capability
+    matching an approach, or an ``approach_id`` that is not one of hers.
+
+    Then, in one transaction: mints a one-shot instance of the designated challenge
+    aimed at the holder, resolves it with the chosen approach (the best when
+    ``approach_id`` is None), deactivates it whatever happens, and moves the actor into
+    ``target`` whatever the outcome: stopped means stopped there.
     """
-    options = pass_options(actor, target)
-    holder = _holder_in(actor, target) if options else None
-    if holder is None:
-        raise PositionError(NO_WAY_PAST)
-    if approach_id is None:
-        option = options[0]
-    else:
-        option = next((o for o in options if o.approach.pk == approach_id), None)
-        if option is None:
-            raise PositionError(NOT_THAT_WAY)
+    participant = active_combat_participant(actor)
+    if participant is None:
+        raise PositionError(HELD_GROUND_NOT_IN_FIGHT)
     check_move_to_position(actor, target, traversals=traversals_of(actor))
-
-    instance = instantiate_challenge(
-        option.approach.challenge_template,
-        location=actor.location,
-        target_object=holder.objectdb,
+    template = pass_template()
+    if template is None:
+        raise PositionError(HELD_GROUND_NO_CHALLENGE)
+    holder = (
+        _holder_in(participant, target) if target.pk in held_position_ids_against(actor) else None
     )
-    # Every pass is announced in the open: a hidden pass challenge would refuse the roll.
-    if not instance.is_revealed:
-        instance.is_revealed = True
-        instance.save(update_fields=["is_revealed"])
-    resolution = resolve_challenge(actor, instance, option.approach, option.capability_source)
-    if instance.is_active:
-        instance.is_active = False
-        instance.save(update_fields=["is_active"])
+    if holder is None:
+        raise PositionError(HELD_GROUND_NOT_HELD)
+    option = _choose(pass_choices(actor, template), approach_id)
 
-    force_move_to_position(actor, target)
-    level = resolution.check_result.success_level
-    outcome = GOT_PAST_CLEANLY if level > 0 else GOT_PAST_PARTLY if level == 0 else WAS_STOPPED
+    with transaction.atomic():
+        instance = instantiate_challenge(
+            template, location=actor.location, target_object=holder.objectdb
+        )
+        try:
+            # Every pass is rolled in the open: a hidden instance would refuse the roll.
+            if not instance.is_revealed:
+                instance.is_revealed = True
+                instance.save(update_fields=["is_revealed"])
+            resolution = resolve_challenge(
+                actor, instance, option.approach, option.capability_source
+            )
+        finally:
+            if instance.is_active:
+                instance.is_active = False
+                instance.save(update_fields=["is_active"])
+        outcome = _outcome_of(resolution)
+        force_move_to_position(actor, target)
     return PassResult(outcome=outcome, resolution=resolution, holder_name=holder.name)

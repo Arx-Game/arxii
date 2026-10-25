@@ -34,13 +34,14 @@ from world.areas.positioning.services import (
     take_position,
 )
 from world.areas.positioning.traversal import best_crossing_cost, traversals_of
-from world.combat.services.held_ground import held_position_ids_against, holder_names
-from world.combat.services.held_ground_pass import (
-    GOT_PAST_CLEANLY,
-    GOT_PAST_PARTLY,
-    WAS_STOPPED,
-    attempt_pass,
+from world.combat.constants import (
+    HELD_GROUND_GOT_PAST,
+    HELD_GROUND_GOT_PAST_PARTLY,
+    HELD_GROUND_STOPS_YOU,
+    HeldGroundPassOutcome,
 )
+from world.combat.services.held_ground import held_position_ids_against, holder_names
+from world.combat.services.held_ground_pass import attempt_pass
 from world.combat.services.movement_budget import (
     active_combat_participant,
     hops_for,
@@ -133,9 +134,9 @@ class MoveToPositionAction(Action):
 
 
 _PASS_MESSAGES = {
-    GOT_PAST_CLEANLY: "You get past {name}.",
-    GOT_PAST_PARTLY: "You get past {name}, but not cleanly.",
-    WAS_STOPPED: "{name} stops you.",
+    HeldGroundPassOutcome.CLEAN: HELD_GROUND_GOT_PAST,
+    HeldGroundPassOutcome.PARTIAL: HELD_GROUND_GOT_PAST_PARTLY,
+    HeldGroundPassOutcome.STOPPED: HELD_GROUND_STOPS_YOU,
 }
 
 
@@ -191,7 +192,7 @@ class PassHeldGroundAction(Action):
 
         if participant is not None:
             spend_combat_hop(participant, cost)
-            if result.outcome == WAS_STOPPED:
+            if result.outcome == HeldGroundPassOutcome.STOPPED:
                 participant.hops_used = hops_for(participant.character_sheet)
                 participant.save(update_fields=["hops_used"])
 

@@ -31,6 +31,7 @@ Expected values are the rows built here; "You are stopped by {name}." and
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
@@ -81,6 +82,7 @@ from world.conditions.factories import (
 from world.conditions.models import CapabilityType
 from world.conditions.services import apply_condition
 from world.magic.factories import CharacterAnimaFactory
+from world.mechanics.challenge_resolution import resolve_challenge
 from world.mechanics.factories import (
     AerialPropertyFactory,
     ApplicationFactory,
@@ -93,6 +95,7 @@ from world.mechanics.factories import (
 )
 from world.mechanics.models import (
     ChallengeInstance,
+    CharacterChallengeRecord,
     CharacterModifier,
     ModifierSource,
     ModifierTarget,
@@ -115,6 +118,11 @@ GOT_PAST = "You get past {name}."
 GOT_PAST_PARTLY = "You get past {name}, but not cleanly."
 STOPS_YOU = "{name} stops you."
 NO_WAY_PAST = "There is no way past them."
+NO_WAY_OF_HERS = "You have no way past them."
+NOT_HELD = "No one holds that place."
+NOT_THAT_WAY = "You cannot get past them that way."
+NOT_IN_FIGHT = "There is no fight here to get past anyone in."
+NO_PATH = "There is no path to there."
 GET_PAST_ENTRY = "Get past {name} into {place}"
 STUMBLE = 5  # the partial pass's authored strike, below the interpose threshold (10)
 CHALLENGE_PERFORM_CHECK = "world.mechanics.challenge_resolution.perform_check"
@@ -576,3 +584,112 @@ class AnAcrobatGetsPast(_TheCauseway):
         self.assertIn(GOT_PAST.format(name="Bandit"), said)
         self.assertEqual(position_of(kit), self.yard)
         self.assertEqual(self.participant(kit).hops_used, 1)
+
+    def minted(self):
+        return ChallengeInstance.objects.filter(template=self.slip_past)
+
+    def test_a_roll_that_never_reaches_a_check_stops_her(self) -> None:
+        """An approach whose action template stops at a gate resolves with no check."""
+        self.designate()
+        kit = self.acrobat()
+
+        def gate_only(*args: object, **kwargs: object):
+            return replace(resolve_challenge(*args, **kwargs), check_result=None)
+
+        with (
+            self.roll(self.clean),
+            patch("world.combat.services.held_ground_pass.resolve_challenge", gate_only),
+        ):
+            result = self.web(kit, "pass_held_ground", position_id=self.yard.pk)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, STOPS_YOU.format(name="Bandit"))
+        self.assertEqual(position_of(kit), self.yard)
+        self.assertEqual(self.participant(kit).hops_used, 3)
+        self.assertFalse(self.minted().get().is_active)
+
+    def test_she_rolls_the_approach_she_names(self) -> None:
+        self.designate()
+        vaulting = CapabilityTypeFactory(name="vaulting", innate_baseline=0)
+        vault = ChallengeApproachFactory(
+            challenge_template=self.slip_past,
+            application=ApplicationFactory(name="Vault", capability=vaulting),
+            display_name="Vault past",
+        )
+        springy = ConditionTemplateFactory(name="Springy Step")
+        ConditionCapabilityEffectFactory(condition=springy, capability=vaulting, value=5)
+        kit = self.acrobat()
+        apply_condition(kit, springy)
+
+        with self.roll(self.clean):
+            result = self.web(
+                kit, "pass_held_ground", position_id=self.yard.pk, approach_id=vault.pk
+            )
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        record = CharacterChallengeRecord.objects.get(character=kit.sheet_data)
+        self.assertEqual(record.approach, vault)
+
+    def test_an_approach_she_has_no_capability_for_is_refused(self) -> None:
+        self.designate()
+        soar = ChallengeApproachFactory(
+            challenge_template=self.slip_past,
+            application=ApplicationFactory(name="Soar", capability=self.flight),
+            display_name="Soar past",
+        )
+        kit = self.acrobat()
+
+        result = self.web(kit, "pass_held_ground", position_id=self.yard.pk, approach_id=soar.pk)
+
+        self.assertFalse(result.detail.success)
+        self.assertEqual(result.detail.message, NOT_THAT_WAY)
+        self.assertEqual(position_of(kit), self.gate)
+        self.assertEqual(self.participant(kit).hops_used, 0)
+        self.assertFalse(self.minted().exists())
+
+    def test_a_pass_over_a_wall_costs_the_crossing(self) -> None:
+        self.designate()
+        ledge = PositionFactory(room=self.room, name="Ledge")
+        hedge = ChallengeInstanceFactory(
+            template=ChallengeTemplateFactory(name="Thorn Hedge"), location=self.room
+        )
+        connect_positions(self.gate, ledge, is_passable=False, gating_challenge=hedge)
+        self.creature("Brigand", at=ledge)
+        kit = self.fighter("Kit", at=self.gate, climbs=True)
+        apply_condition(kit, self.poise)
+
+        with self.roll(self.clean):
+            result = self.web(kit, "pass_held_ground", position_id=ledge.pk)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, GOT_PAST.format(name="Brigand"))
+        self.assertEqual(position_of(kit), ledge)
+        self.assertEqual(self.participant(kit).hops_used, 2)
+
+    def test_a_step_a_walk_could_not_take_rolls_nothing(self) -> None:
+        self.designate()
+        self.creature("Brigand", at=self.hall)  # the Hall is two steps from the Gate
+        kit = self.acrobat()
+
+        result = self.web(kit, "pass_held_ground", position_id=self.hall.pk)
+
+        self.assertFalse(result.detail.success)
+        self.assertEqual(result.detail.message, NO_PATH)
+        self.assertEqual(position_of(kit), self.gate)
+        self.assertFalse(self.minted().exists())
+
+    def test_each_refusal_names_its_cause(self) -> None:
+        self.designate()
+        kit = self.acrobat()
+        wren = self.fighter("Wren", at=self.gate)
+        bystander = self.make_player("Pell", room=self.room)
+        place_in_position(bystander, self.gate)
+
+        not_held = self.web(kit, "pass_held_ground", position_id=self.lane.pk)
+        no_way = self.web(wren, "pass_held_ground", position_id=self.yard.pk)
+        no_fight = self.web(bystander, "pass_held_ground", position_id=self.yard.pk)
+
+        self.assertEqual(not_held.detail.message, NOT_HELD)
+        self.assertEqual(no_way.detail.message, NO_WAY_OF_HERS)
+        self.assertEqual(no_fight.detail.message, NOT_IN_FIGHT)
+        self.assertFalse(self.minted().exists())
