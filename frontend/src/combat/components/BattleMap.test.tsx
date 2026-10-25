@@ -192,6 +192,73 @@ describe('BattleMap', () => {
     expect(toast.error).toHaveBeenCalledWith("You can't move there this turn.");
   });
 
+  it('shows a gate’s name on its route', () => {
+    renderMap();
+    expect(screen.getByTestId('battle-map-route-label-1-3')).toHaveTextContent('Locked Gate');
+  });
+
+  it('keeps mark titles reachable and reads them in the place’s label', () => {
+    renderMap({
+      occupantsByPosition: new Map([
+        [
+          1,
+          [
+            occupant('Malvaine', {
+              square: { x: 3, y: 3 },
+              marks: [{ kind: 'locked', title: 'Malvaine: locked with Harrow' }],
+            }),
+            occupant('Bram'),
+          ],
+        ],
+      ]),
+    });
+    const mark = screen.getByTestId('occupant-mark-locked');
+    expect(mark).toHaveAttribute('pointer-events', 'auto');
+    expect(mark.querySelector('title')).toHaveTextContent('Malvaine: locked with Harrow');
+    expect(screen.getByTestId('tactical-map-node-1')).toHaveAttribute(
+      'aria-label',
+      'Floor: Malvaine (locked with Harrow), Bram'
+    );
+  });
+
+  it('draws a lock link to someone in the air, from its anchor', () => {
+    renderMap({
+      links: [
+        { id: 'lock-9', positionAId: 4, positionBId: 2, label: 'Liraveth locked with Harrow' },
+      ],
+    });
+    const link = screen.getByTestId('battle-map-link-lock-9');
+    expect(link).toHaveAttribute('aria-label', 'Liraveth locked with Harrow');
+    expect(link.querySelector('title')).toHaveTextContent('Liraveth locked with Harrow');
+  });
+
+  it('does nothing on a click of the viewer’s own square', () => {
+    const props = renderMap();
+    fireEvent.click(screen.getByTestId('battle-map-square-1-3-3'));
+    const tokens = screen.getAllByTestId('occupant-token');
+    fireEvent.click(tokens.find((t) => t.textContent?.includes('Malvaine'))!);
+    expect(props.onStepToSquare).not.toHaveBeenCalled();
+    expect(props.onDispatchMove).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('moves to the square under a clicked token in a target place', () => {
+    const props = renderMap();
+    const tokens = screen.getAllByTestId('occupant-token');
+    fireEvent.click(tokens.find((t) => t.textContent?.includes('Harrow'))!);
+    expect(props.onDispatchMove).toHaveBeenCalledWith(props.moveActions[0], { x: 7, y: 3 });
+  });
+
+  it('says a place with no authored area has no squares when the viewer stands in it', () => {
+    const props = renderMap({ ownPositionId: 3 });
+    const square = screen
+      .getByTestId('tactical-map-node-3')
+      .querySelector('[data-testid^="battle-map-square-3-"]')!;
+    fireEvent.click(square);
+    expect(props.onStepToSquare).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith('This place has no squares to pick.');
+  });
+
   it('hands a click to position picking first', () => {
     const onPickPosition = vi.fn(() => true);
     const props = renderMap({ onPickPosition });

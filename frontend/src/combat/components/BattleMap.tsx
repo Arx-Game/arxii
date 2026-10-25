@@ -15,7 +15,6 @@
 import { useId, useMemo } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { toast } from 'sonner';
-import { EyeOff, House, Shield, ShieldCheck, ShieldPlus, Swords } from 'lucide-react';
 
 import { computeTacticalLayout } from '@/areas/tacticalLayout';
 import type {
@@ -23,20 +22,35 @@ import type {
   PositionEdgeLike,
   PositionNodeLike,
 } from '@/areas/components/TacticalMap';
-import type { OccupantMarkKind, OccupantSummary } from '@/areas/components/PositionMapNode';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import { CELL, isAerialOverlay, mapBounds, placeAreas, tokenSquares } from '../battleMapLayout';
 import type { MapArea, PlacedToken, Square } from '../battleMapLayout';
+import {
+  AIR,
+  AIR_INSET,
+  AIR_LIFT,
+  BACKGROUND,
+  GOLD,
+  HELD,
+  LABEL_TEXT,
+  LabelChip,
+  CoverBadges,
+  RouteLabel,
+  TARGET_OUTLINE_HOVER,
+  TARGET_OUTLINE_PICKING,
+  TERRAIN_TILE,
+  Token,
+  center,
+  chipWidth,
+  kindFill,
+  kindTint,
+  placeAriaLabel,
+  rampartRing,
+  routeStyle,
+} from './battleMapPieces';
+import type { BattleOccupant } from './battleMapPieces';
 
-export type CombatSide = 'ally' | 'enemy' | 'bystander';
-
-export interface BattleOccupant extends OccupantSummary {
-  side: CombatSide;
-  /** The square the server holds for this occupant; null when it stands on none. */
-  square: Square | null;
-  /** The viewer's own token: drawn with a dashed gold halo. */
-  isViewer?: boolean;
-}
+export type { BattleOccupant, CombatSide } from './battleMapPieces';
 
 export interface HeldPlace {
   position_id: number;
@@ -62,333 +76,236 @@ export interface BattleMapProps {
   links?: OccupantLink[];
 }
 
-// Demo palette (Screen 1).
-const BACKGROUND = '#1d1712';
-const LABEL_BG = '#120d0a';
-const LABEL_TEXT = '#f1e3c8';
-const GOLD = '#f4d27a';
-const AIR = '#9fd3ff';
-const HELD = '#d64a5c';
-const SIDE_RING: Record<CombatSide, string> = {
-  ally: '#d6a650',
-  enemy: '#d64a5c',
-  bystander: '#9a9a9a',
-};
-const DISPLAY_FONT = 'Cinzel, Georgia, serif';
-const TAG_FONT = '"IBM Plex Mono", ui-monospace, monospace';
+const keyOf = (x: number, y: number) => `${x},${y}`;
+const NO_SQUARES = 'This place has no squares to pick.';
+const CANNOT_MOVE = "You can't move there this turn.";
 
-// A place with no terrain art: a muted fill and an outline tint by kind.
-const KIND_FILL: Record<string, string> = {
-  primary: '#3b2e22',
-  feature: '#352b21',
-  elevated: '#2c333a',
-  chasm: '#1a0c0e',
-  barrier_side: '#2f2b26',
-};
-const KIND_TINT: Record<string, string> = {
-  primary: '#e0c48f',
-  feature: '#d9b36f',
-  elevated: '#a9b7c4',
-  chasm: '#d64a5c',
-  barrier_side: '#b8b0a2',
-};
-const DEFAULT_FILL = '#352b21';
-const DEFAULT_TINT = '#d9b36f';
-
-const RAMPART_COLOR: Record<string, string> = {
-  stone: '#94a3b8',
-  wind: '#38bdf8',
-  fire: '#fb923c',
-  thorn: '#4ade80',
-};
-const RAMPART_FALLBACK = '#a1a1aa';
-// Solid when intact, dashed when cracked, sparse when crumbling.
-const RAMPART_DASH: Record<string, string> = { cracked: '6 3', crumbling: '2 4' };
-
-// One terrain tile spans this many squares, so the art reads at map scale.
-const TERRAIN_TILE = 3 * CELL;
-const TOKEN_R = 16;
-const AIR_LIFT = 6;
-const AIR_INSET = 0.2;
-
-const MARK_STYLE: Record<OccupantMarkKind, { icon: typeof Swords; fill: string }> = {
-  locked: { icon: Swords, fill: '#e11d48' },
-  covering: { icon: ShieldPlus, fill: '#0284c7' },
-  covered: { icon: ShieldCheck, fill: '#0284c7' },
-};
-
-function colorForName(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = Math.trunc(hash * 31 + name.charCodeAt(i));
-  return `hsl(${Math.abs(hash) % 360}, 55%, 35%)`;
+interface PlaceHandlers {
+  onPlace: (positionId: number, square: Square | null) => void;
+  onKey: (positionId: number) => (event: KeyboardEvent) => void;
 }
 
-function center(area: MapArea): { x: number; y: number } {
-  return { x: (area.x + area.w / 2) * CELL, y: (area.y + area.h / 2) * CELL };
-}
-
-function edgeStroke(edge: PositionEdgeLike): {
-  stroke: string;
-  dash?: string;
-  opacity: number;
-  title?: string;
-} {
-  const strength =
-    edge.integrity != null && edge.max_integrity != null
-      ? `${edge.integrity}/${edge.max_integrity}`
-      : null;
-  if (edge.gating_challenge_name) {
-    return {
-      stroke: '#f59e0b',
-      dash: '6 5',
-      opacity: 0.85,
-      title: strength ? `${edge.gating_challenge_name} ${strength}` : edge.gating_challenge_name,
-    };
+function PlaceArea({
+  node,
+  area,
+  tokens,
+  holders,
+  canMove,
+  picking,
+  ariaLabel,
+  uid,
+  onPlace,
+  onKey,
+}: PlaceHandlers & {
+  node: PositionNodeLike;
+  area: MapArea;
+  tokens: PlacedToken<BattleOccupant>[];
+  holders: readonly string[] | undefined;
+  canMove: boolean;
+  picking: boolean;
+  ariaLabel: string;
+  uid: string;
+}) {
+  const held = (holders?.length ?? 0) > 0;
+  const tint = kindTint(node.kind);
+  const ring = rampartRing(node);
+  const label = held ? `${node.name} · Held by ${holders!.join(', ')}` : node.name;
+  const squares: ReactNode[] = [];
+  for (let row = 0; row < area.h; row++) {
+    for (let col = 0; col < area.w; col++) {
+      const sx = area.x + col;
+      const sy = area.y + row;
+      squares.push(
+        <rect
+          key={keyOf(sx, sy)}
+          data-testid={`battle-map-square-${node.id}-${sx}-${sy}`}
+          x={sx * CELL}
+          y={sy * CELL}
+          width={CELL}
+          height={CELL}
+          fill="transparent"
+          onClick={(event) => {
+            event.stopPropagation();
+            onPlace(node.id, { x: sx, y: sy });
+          }}
+        />
+      );
+    }
   }
-  if (!edge.is_passable) {
-    return { stroke: HELD, dash: '2 4', opacity: 0.75, title: strength ?? undefined };
-  }
-  return { stroke: LABEL_TEXT, opacity: 0.22 };
-}
-
-function rampartRing(
-  node: PositionNodeLike
-): { stroke: string; dash?: string; title: string } | null {
-  if (node.rampart_element == null) return null;
-  const stroke = RAMPART_COLOR[node.rampart_element.toLowerCase()] ?? RAMPART_FALLBACK;
-  const dash = RAMPART_DASH[node.rampart_crack_state ?? ''];
-  return {
-    stroke,
-    dash,
-    title: `${node.rampart_element} Rampart ${node.rampart_integrity ?? '?'}/${node.rampart_max_integrity ?? '?'}`,
-  };
-}
-
-/** A dark chip with the place's name, at a point in viewBox units. */
-function LabelChip({
-  x,
-  y,
-  text,
-  color,
-  badges,
-  anchor = 'start',
-}: {
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  badges?: ReactNode;
-  anchor?: 'start' | 'end';
-}) {
-  const width = text.length * 6.6 + 8;
-  const left = anchor === 'end' ? x - width : x;
-  return (
-    <g pointerEvents="none">
-      <rect
-        x={left - 3}
-        y={y - 11}
-        width={width}
-        height={15}
-        rx={3}
-        fill={LABEL_BG}
-        fillOpacity={0.75}
-      />
-      <text x={left} y={y} fontFamily={DISPLAY_FONT} fontSize={11} letterSpacing={0.5} fill={color}>
-        {text}
-      </text>
-      {badges && (
-        <g transform={`translate(${left + width - 1}, ${y - 11})`} pointerEvents="auto">
-          {badges}
-        </g>
-      )}
-    </g>
-  );
-}
-
-function CoverBadges({ node }: { node: PositionNodeLike }) {
-  if (!node.is_roofed && !node.screens_ranged) return null;
-  return (
-    <>
-      {node.is_roofed && (
-        <g data-testid="position-roof-badge" aria-label="Roofed">
-          <title>Roofed</title>
-          <rect width={15} height={15} rx={3} fill={LABEL_BG} fillOpacity={0.75} />
-          <House x={2} y={2} width={11} height={11} color="#fcd34d" aria-hidden="true" />
-        </g>
-      )}
-      {node.screens_ranged && (
-        <g
-          data-testid="position-screen-badge"
-          aria-label="Screened"
-          transform={`translate(${node.is_roofed ? 17 : 0}, 0)`}
-        >
-          <title>Screened</title>
-          <rect width={15} height={15} rx={3} fill={LABEL_BG} fillOpacity={0.75} />
-          <EyeOff x={2} y={2} width={11} height={11} color="#7dd3fc" aria-hidden="true" />
-        </g>
-      )}
-    </>
-  );
-}
-
-function MarkGlyph({
-  kind,
-  title,
-  cx,
-  cy,
-  icon: Icon,
-  fill,
-  testId,
-}: {
-  kind: string;
-  title: string;
-  cx: number;
-  cy: number;
-  icon: typeof Swords;
-  fill: string;
-  testId: string;
-}) {
-  return (
-    <g data-testid={testId} data-mark={kind} aria-label={title} role="img">
-      <title>{title}</title>
-      <circle cx={cx} cy={cy} r={6} fill={fill} stroke={LABEL_BG} strokeWidth={1} />
-      <Icon x={cx - 4} y={cy - 4} width={8} height={8} color="#fff" aria-hidden="true" />
-    </g>
-  );
-}
-
-function Token({
-  occupant,
-  cx,
-  cy,
-  clipId,
-  aerial,
-  rampartElement,
-  interactive = false,
-}: {
-  occupant: BattleOccupant;
-  cx: number;
-  cy: number;
-  clipId: string;
-  aerial: boolean;
-  rampartElement: string | null;
-  /** Tokens over the air take clicks (for their place); ground tokens let them through. */
-  interactive?: boolean;
-}) {
-  const url = occupant.thumbnailMediaUrl ?? occupant.thumbnailUrl ?? null;
-  const ring = aerial ? AIR : SIDE_RING[occupant.side];
-  const bystander = occupant.side === 'bystander';
-  const tagWidth = occupant.name.length * 5.4 + 8;
-  const title = bystander ? `${occupant.name} (bystander)` : occupant.name;
   return (
     <g
-      data-testid="occupant-token"
-      data-side={occupant.side}
-      data-bystander={bystander ? 'true' : undefined}
-      data-viewer={occupant.isViewer ? 'true' : undefined}
-      data-aerial={aerial ? 'true' : undefined}
-      opacity={bystander ? 0.45 : 1}
-      pointerEvents={interactive ? 'auto' : 'none'}
+      role="button"
+      tabIndex={0}
+      aria-label={ariaLabel}
+      data-testid={`tactical-map-node-${node.id}`}
+      data-position-id={node.id}
+      data-position-kind={node.kind}
+      data-can-move={canMove ? 'true' : undefined}
+      data-held={held ? 'true' : undefined}
+      data-derived={area.derived ? 'true' : undefined}
+      className="group cursor-pointer outline-none"
+      onClick={() => onPlace(node.id, null)}
+      onKeyDown={onKey(node.id)}
     >
-      <title>{title}</title>
-      <defs>
-        <clipPath id={clipId}>
-          <circle cx={cx} cy={cy} r={TOKEN_R} />
-        </clipPath>
-      </defs>
-      {occupant.isViewer && (
-        <circle
-          data-testid="viewer-halo"
-          cx={cx}
-          cy={cy}
-          r={TOKEN_R + 6}
-          fill="none"
-          stroke={GOLD}
-          strokeWidth={2}
-          strokeDasharray="3 3"
-        />
-      )}
-      <circle
-        cx={cx}
-        cy={cy + (aerial ? AIR_LIFT + 4 : 2)}
-        r={TOKEN_R + 1}
-        fill="#000"
-        opacity={aerial ? 0.3 : 0.5}
+      <rect
+        x={area.x * CELL}
+        y={area.y * CELL}
+        width={area.w * CELL}
+        height={area.h * CELL}
+        fill={held ? HELD : tint}
+        fillOpacity={held ? 0.22 : 0.1}
+        stroke={held ? HELD : tint}
+        strokeOpacity={held ? 0.7 : 1}
+        strokeWidth={1.5}
+        strokeDasharray="6 4"
       />
-      <circle cx={cx} cy={cy} r={TOKEN_R} fill={colorForName(occupant.name)} />
-      {url ? (
-        <image
-          href={url}
-          x={cx - TOKEN_R}
-          y={cy - TOKEN_R}
-          width={TOKEN_R * 2}
-          height={TOKEN_R * 2}
-          preserveAspectRatio="xMidYMid slice"
-          clipPath={`url(#${clipId})`}
-          role="img"
-          aria-label={occupant.name}
-        />
-      ) : (
-        <text
-          x={cx}
-          y={cy + 5}
-          textAnchor="middle"
-          fontSize={14}
-          fontWeight={600}
-          fill="#fff"
-          aria-hidden="true"
+      {squares}
+      {ring && (
+        <rect
+          data-testid="rampart-ring"
+          data-rampart-crack-state={node.rampart_crack_state ?? undefined}
+          x={area.x * CELL - 3}
+          y={area.y * CELL - 3}
+          width={area.w * CELL + 6}
+          height={area.h * CELL + 6}
+          rx={4}
+          fill="none"
+          stroke={ring.stroke}
+          strokeWidth={2.5}
+          strokeDasharray={ring.dash}
+          pointerEvents="stroke"
         >
-          {(occupant.name.trim()[0] ?? '?').toUpperCase()}
-        </text>
+          <title>{ring.title}</title>
+        </rect>
       )}
-      <circle cx={cx} cy={cy} r={TOKEN_R} fill="none" stroke={ring} strokeWidth={2.5} />
-      {rampartElement != null && (
-        <MarkGlyph
-          kind="cover"
-          testId="occupant-mark-cover"
-          title={`${occupant.name}: behind ${rampartElement} rampart`}
-          cx={cx - TOKEN_R + 2}
-          cy={cy + TOKEN_R - 2}
-          icon={Shield}
-          fill="#047857"
+      {(canMove || picking) && (
+        <rect
+          data-testid={`battle-map-target-${node.id}`}
+          x={area.x * CELL}
+          y={area.y * CELL}
+          width={area.w * CELL}
+          height={area.h * CELL}
+          fill={GOLD}
+          fillOpacity={0.12}
+          stroke={GOLD}
+          strokeWidth={3}
+          pointerEvents="none"
+          className={picking ? TARGET_OUTLINE_PICKING : TARGET_OUTLINE_HOVER}
         />
       )}
-      {(occupant.marks ?? []).map((mark) => (
-        <MarkGlyph
-          key={mark.kind}
-          kind={mark.kind}
-          testId={`occupant-mark-${mark.kind}`}
-          title={mark.title}
-          cx={cx + TOKEN_R - 2}
-          cy={mark.kind === 'locked' ? cy - TOKEN_R + 2 : cy + TOKEN_R - 2}
-          icon={MARK_STYLE[mark.kind].icon}
-          fill={MARK_STYLE[mark.kind].fill}
+      {tokens.map((t, index) => (
+        <Token
+          key={`tok-${node.id}-${index}`}
+          occupant={t.occupant}
+          cx={(t.x + 0.5) * CELL}
+          cy={(t.y + 0.5) * CELL}
+          clipId={`${uid}-clip-${node.id}-${index}`}
+          aerial={false}
+          rampartElement={node.rampart_element}
+          onClick={() => onPlace(node.id, { x: t.x, y: t.y })}
         />
       ))}
-      <rect
-        x={cx - tagWidth / 2}
-        y={cy + TOKEN_R + 1}
-        width={tagWidth}
-        height={11}
-        rx={3}
-        fill={LABEL_BG}
-        fillOpacity={0.8}
+      <LabelChip
+        x={area.x * CELL + 6}
+        y={area.y * CELL + 15}
+        text={label}
+        color={held ? '#ff9aa6' : LABEL_TEXT}
+        badges={<CoverBadges node={node} />}
       />
-      <text
-        x={cx}
-        y={cy + TOKEN_R + 9.5}
-        textAnchor="middle"
-        fontFamily={TAG_FONT}
-        fontSize={8.5}
-        fill={LABEL_TEXT}
-      >
-        {occupant.name}
-      </text>
     </g>
   );
 }
 
-const keyOf = (x: number, y: number) => `${x},${y}`;
+function AirInset({
+  node,
+  anchorArea,
+  label,
+  tokens,
+  canMove,
+  picking,
+  ariaLabel,
+  uid,
+  onPlace,
+  onKey,
+}: PlaceHandlers & {
+  node: PositionNodeLike;
+  anchorArea: MapArea;
+  label: string;
+  tokens: PlacedToken<BattleOccupant>[];
+  canMove: boolean;
+  picking: boolean;
+  ariaLabel: string;
+  uid: string;
+}) {
+  const x = (anchorArea.x + AIR_INSET) * CELL;
+  const y = (anchorArea.y + AIR_INSET) * CELL;
+  const w = (anchorArea.w - 2 * AIR_INSET) * CELL;
+  const h = (anchorArea.h - 2 * AIR_INSET) * CELL;
+  const width = chipWidth(label);
+  return (
+    <g
+      role="button"
+      tabIndex={0}
+      aria-label={ariaLabel}
+      data-testid={`tactical-map-node-${node.id}`}
+      data-position-id={node.id}
+      data-position-kind={node.kind}
+      data-can-move={canMove ? 'true' : undefined}
+      className="group cursor-pointer outline-none"
+      onClick={() => onPlace(node.id, null)}
+      onKeyDown={onKey(node.id)}
+    >
+      <rect
+        x={x}
+        y={y}
+        width={w}
+        height={h}
+        fill={AIR}
+        fillOpacity={0.08}
+        stroke={AIR}
+        strokeOpacity={0.6}
+        strokeWidth={1.5}
+        strokeDasharray="4 4"
+        pointerEvents="none"
+      />
+      {(canMove || picking) && (
+        <rect
+          x={x}
+          y={y}
+          width={w}
+          height={h}
+          fill="none"
+          stroke={GOLD}
+          strokeWidth={3}
+          pointerEvents="none"
+          className={picking ? TARGET_OUTLINE_PICKING : TARGET_OUTLINE_HOVER}
+        />
+      )}
+      {/* The chip is the air's own click target; the ground below stays clickable. */}
+      <rect
+        data-testid={`battle-map-air-chip-${node.id}`}
+        x={x + w - width - 6}
+        y={y + 4}
+        width={width}
+        height={15}
+        fill="transparent"
+      />
+      <LabelChip x={x + w - 3} y={y + 15} text={label} color={AIR} anchor="end" />
+      {tokens.map((t, index) => (
+        <Token
+          key={`air-tok-${node.id}-${index}`}
+          occupant={t.occupant}
+          cx={(t.x + 0.5) * CELL}
+          cy={(t.y + 0.5) * CELL - AIR_LIFT}
+          clipId={`${uid}-airclip-${node.id}-${index}`}
+          aerial
+          rampartElement={null}
+          onClick={() => onPlace(node.id, null)}
+        />
+      ))}
+    </g>
+  );
+}
 
 export function BattleMap({
   nodes,
@@ -457,19 +374,39 @@ export function BattleMap({
   }
   const aerialTokens = new Map<number, PlacedToken<BattleOccupant>[]>();
   for (const node of aerialNodes) {
-    const anchorArea = areas.get(node.elevation_anchor_id!)!;
     const occupants = (occupantsByPosition.get(node.id) ?? []).map((o) => ({
       ...o,
       square: null,
     }));
     aerialTokens.set(
       node.id,
-      tokenSquares(anchorArea, occupants, {
+      tokenSquares(areas.get(node.elevation_anchor_id!)!, occupants, {
         blocked: drawnSquares.get(node.elevation_anchor_id!),
         fromEnd: true,
       })
     );
   }
+  const viewerSquare =
+    ownPositionId === null
+      ? undefined
+      : groundTokens.get(ownPositionId)?.find((t) => t.occupant.isViewer);
+
+  // A route or link end: the place's area centre; the air resolves to its anchor, lifted.
+  const routePoint = (positionId: number): { x: number; y: number } | null => {
+    const area = areas.get(positionId);
+    if (area) return center(area);
+    const node = nodesById.get(positionId);
+    const anchorArea = node?.elevation_anchor_id != null && areas.get(node.elevation_anchor_id);
+    if (!anchorArea) return null;
+    const p = center(anchorArea);
+    return { x: p.x, y: p.y - AIR_LIFT };
+  };
+  const routeEnds = (aId: number, bId: number) => {
+    const p = routePoint(aId);
+    const q = routePoint(bId);
+    if (!p || !q || (p.x === q.x && p.y === q.y)) return null;
+    return { p, q };
+  };
 
   const handlePlace = (positionId: number, square: Square | null) => {
     if (onPickPosition?.(positionId)) return;
@@ -477,7 +414,13 @@ export function BattleMap({
     const area = areas.get(positionId);
     const hasSquares = area !== undefined && !area.derived;
     if (positionId === ownPositionId) {
-      if (square && hasSquares) onStepToSquare(square);
+      if (square === null) return;
+      if (!hasSquares) {
+        toast.error(NO_SQUARES);
+        return;
+      }
+      if (viewerSquare && viewerSquare.x === square.x && viewerSquare.y === square.y) return;
+      onStepToSquare(square);
       return;
     }
     const action = moveActionByPositionId.get(positionId);
@@ -485,7 +428,7 @@ export function BattleMap({
       onDispatchMove(action, hasSquares ? square : null);
       return;
     }
-    toast.error("You can't move there this turn.");
+    toast.error(CANNOT_MOVE);
   };
 
   const handleKey = (positionId: number) => (event: KeyboardEvent) => {
@@ -496,10 +439,6 @@ export function BattleMap({
   };
 
   const picking = onPickPosition !== undefined;
-  const ariaLabel = (name: string, positionId: number) => {
-    const names = (occupantsByPosition.get(positionId) ?? []).map((o) => o.name);
-    return names.length > 0 ? `${name}: ${names.join(', ')}` : name;
-  };
 
   const gridLines: ReactNode[] = [];
   for (let x = bounds.x; x <= bounds.x + bounds.w; x += CELL) {
@@ -557,7 +496,7 @@ export function BattleMap({
               y={area.y * CELL}
               width={area.w * CELL}
               height={area.h * CELL}
-              fill={patternId ? `url(#${patternId})` : (KIND_FILL[node.kind] ?? DEFAULT_FILL)}
+              fill={patternId ? `url(#${patternId})` : kindFill(node.kind)}
             />
           );
         })}
@@ -569,254 +508,113 @@ export function BattleMap({
         {/* Routes between places. */}
         <g pointerEvents="none">
           {edges.map((edge, index) => {
-            const a = areas.get(edge.position_a_id);
-            const b = areas.get(edge.position_b_id);
-            if (!a || !b) return null;
-            const p = center(a);
-            const q = center(b);
-            const style = edgeStroke(edge);
+            const ends = routeEnds(edge.position_a_id, edge.position_b_id);
+            if (!ends) return null;
+            const style = routeStyle(edge);
             return (
               <line
                 key={`edge-${edge.position_a_id}-${edge.position_b_id}-${index}`}
                 data-testid={`battle-map-edge-${edge.position_a_id}-${edge.position_b_id}`}
-                x1={p.x}
-                y1={p.y}
-                x2={q.x}
-                y2={q.y}
+                x1={ends.p.x}
+                y1={ends.p.y}
+                x2={ends.q.x}
+                y2={ends.q.y}
                 stroke={style.stroke}
                 strokeOpacity={style.opacity}
                 strokeWidth={2}
                 strokeDasharray={style.dash}
               >
-                {style.title && <title>{style.title}</title>}
+                {style.label && <title>{style.label}</title>}
               </line>
             );
           })}
-          {(links ?? [])
-            .filter((link) => link.positionAId !== link.positionBId)
-            .map((link) => {
-              const a = areas.get(link.positionAId);
-              const b = areas.get(link.positionBId);
-              if (!a || !b) return null;
-              const p = center(a);
-              const q = center(b);
-              return (
+        </g>
+
+        {/* Places: tint, outline, label, clickable squares and their tokens. */}
+        {groundNodes.map((node) => (
+          <PlaceArea
+            key={`area-${node.id}`}
+            node={node}
+            area={areas.get(node.id)!}
+            tokens={groundTokens.get(node.id) ?? []}
+            holders={heldBy.get(node.id)}
+            canMove={moveActionByPositionId.has(node.id)}
+            picking={picking}
+            ariaLabel={placeAriaLabel(node.name, occupantsByPosition.get(node.id) ?? [])}
+            uid={uid}
+            onPlace={handlePlace}
+            onKey={handleKey}
+          />
+        ))}
+
+        {/* Gate and wall labels, over the places so they stay readable. */}
+        {edges.map((edge, index) => {
+          const style = routeStyle(edge);
+          const ends = style.label ? routeEnds(edge.position_a_id, edge.position_b_id) : null;
+          if (!ends || !style.label) return null;
+          return (
+            <RouteLabel
+              key={`route-label-${edge.position_a_id}-${edge.position_b_id}-${index}`}
+              testId={`battle-map-route-label-${edge.position_a_id}-${edge.position_b_id}`}
+              x={(ends.p.x + ends.q.x) / 2}
+              y={(ends.p.y + ends.q.y) / 2}
+              text={style.label}
+              color={style.stroke}
+            />
+          );
+        })}
+
+        {/* Engagement locks: a dashed rose line, with a wide invisible stroke for its title. */}
+        {(links ?? [])
+          .filter((link) => link.positionAId !== link.positionBId)
+          .map((link) => {
+            const ends = routeEnds(link.positionAId, link.positionBId);
+            if (!ends) return null;
+            return (
+              <g key={link.id} data-testid={`battle-map-link-${link.id}`} aria-label={link.label}>
                 <line
-                  key={link.id}
-                  data-testid={`battle-map-link-${link.id}`}
-                  aria-label={link.label}
-                  x1={p.x}
-                  y1={p.y}
-                  x2={q.x}
-                  y2={q.y}
+                  x1={ends.p.x}
+                  y1={ends.p.y}
+                  x2={ends.q.x}
+                  y2={ends.q.y}
                   stroke="#f43f5e"
                   strokeWidth={2}
                   strokeDasharray="8 4"
+                  pointerEvents="none"
+                />
+                <line
+                  x1={ends.p.x}
+                  y1={ends.p.y}
+                  x2={ends.q.x}
+                  y2={ends.q.y}
+                  stroke="transparent"
+                  strokeWidth={10}
+                  pointerEvents="stroke"
                 >
                   <title>{link.label}</title>
                 </line>
-              );
-            })}
-        </g>
-
-        {/* Places: tint, outline, label and clickable squares. */}
-        {groundNodes.map((node) => {
-          const area = areas.get(node.id)!;
-          const tint = KIND_TINT[node.kind] ?? DEFAULT_TINT;
-          const holders = heldBy.get(node.id);
-          const canMove = moveActionByPositionId.has(node.id);
-          const ring = rampartRing(node);
-          const label = holders?.length
-            ? `${node.name} · Held by ${holders.join(', ')}`
-            : node.name;
-          const squares: ReactNode[] = [];
-          for (let row = 0; row < area.h; row++) {
-            for (let col = 0; col < area.w; col++) {
-              const sx = area.x + col;
-              const sy = area.y + row;
-              squares.push(
-                <rect
-                  key={keyOf(sx, sy)}
-                  data-testid={`battle-map-square-${node.id}-${sx}-${sy}`}
-                  x={sx * CELL}
-                  y={sy * CELL}
-                  width={CELL}
-                  height={CELL}
-                  fill="transparent"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handlePlace(node.id, { x: sx, y: sy });
-                  }}
-                />
-              );
-            }
-          }
-          return (
-            <g
-              key={`area-${node.id}`}
-              role="button"
-              tabIndex={0}
-              aria-label={ariaLabel(node.name, node.id)}
-              data-testid={`tactical-map-node-${node.id}`}
-              data-position-id={node.id}
-              data-position-kind={node.kind}
-              data-can-move={canMove ? 'true' : undefined}
-              data-held={holders?.length ? 'true' : undefined}
-              data-derived={area.derived ? 'true' : undefined}
-              className="group cursor-pointer outline-none"
-              onClick={() => handlePlace(node.id, null)}
-              onKeyDown={handleKey(node.id)}
-            >
-              <rect
-                x={area.x * CELL}
-                y={area.y * CELL}
-                width={area.w * CELL}
-                height={area.h * CELL}
-                fill={holders?.length ? HELD : tint}
-                fillOpacity={holders?.length ? 0.22 : 0.1}
-                stroke={holders?.length ? HELD : tint}
-                strokeOpacity={holders?.length ? 0.7 : 1}
-                strokeWidth={1.5}
-                strokeDasharray="6 4"
-              />
-              {squares}
-              {ring && (
-                <rect
-                  data-testid="rampart-ring"
-                  data-rampart-crack-state={node.rampart_crack_state ?? undefined}
-                  x={area.x * CELL - 3}
-                  y={area.y * CELL - 3}
-                  width={area.w * CELL + 6}
-                  height={area.h * CELL + 6}
-                  rx={4}
-                  fill="none"
-                  stroke={ring.stroke}
-                  strokeWidth={2.5}
-                  strokeDasharray={ring.dash}
-                  pointerEvents="none"
-                >
-                  <title>{ring.title}</title>
-                </rect>
-              )}
-              {(canMove || picking) && (
-                <rect
-                  data-testid={`battle-map-target-${node.id}`}
-                  x={area.x * CELL}
-                  y={area.y * CELL}
-                  width={area.w * CELL}
-                  height={area.h * CELL}
-                  fill={GOLD}
-                  fillOpacity={0.12}
-                  stroke={GOLD}
-                  strokeWidth={3}
-                  pointerEvents="none"
-                  className={
-                    picking
-                      ? 'opacity-70'
-                      : 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100'
-                  }
-                />
-              )}
-              {(groundTokens.get(node.id) ?? []).map((t, index) => (
-                <Token
-                  key={`tok-${node.id}-${index}`}
-                  occupant={t.occupant}
-                  cx={(t.x + 0.5) * CELL}
-                  cy={(t.y + 0.5) * CELL}
-                  clipId={`${uid}-clip-${node.id}-${index}`}
-                  aerial={false}
-                  rampartElement={node.rampart_element}
-                />
-              ))}
-              <LabelChip
-                x={area.x * CELL + 6}
-                y={area.y * CELL + 15}
-                text={label}
-                color={holders?.length ? '#ff9aa6' : LABEL_TEXT}
-                badges={<CoverBadges node={node} />}
-              />
-            </g>
-          );
-        })}
+              </g>
+            );
+          })}
 
         {/* The air above a place: an inset over its anchor, with lifted tokens. */}
         {aerialNodes.map((node) => {
           const anchor = nodesById.get(node.elevation_anchor_id!);
-          const area = areas.get(node.elevation_anchor_id!)!;
-          const x = (area.x + AIR_INSET) * CELL;
-          const y = (area.y + AIR_INSET) * CELL;
-          const w = (area.w - 2 * AIR_INSET) * CELL;
-          const h = (area.h - 2 * AIR_INSET) * CELL;
-          const canMove = moveActionByPositionId.has(node.id);
           const label = `Above ${anchor?.name ?? node.name}`;
-          const chipWidth = label.length * 6.6 + 8;
           return (
-            <g
+            <AirInset
               key={`air-${node.id}`}
-              role="button"
-              tabIndex={0}
-              aria-label={ariaLabel(label, node.id)}
-              data-testid={`tactical-map-node-${node.id}`}
-              data-position-id={node.id}
-              data-position-kind={node.kind}
-              data-can-move={canMove ? 'true' : undefined}
-              className="group cursor-pointer outline-none"
-              onClick={() => handlePlace(node.id, null)}
-              onKeyDown={handleKey(node.id)}
-            >
-              <rect
-                x={x}
-                y={y}
-                width={w}
-                height={h}
-                fill={AIR}
-                fillOpacity={0.08}
-                stroke={AIR}
-                strokeOpacity={0.6}
-                strokeWidth={1.5}
-                strokeDasharray="4 4"
-                pointerEvents="none"
-              />
-              {(canMove || picking) && (
-                <rect
-                  x={x}
-                  y={y}
-                  width={w}
-                  height={h}
-                  fill="none"
-                  stroke={GOLD}
-                  strokeWidth={3}
-                  pointerEvents="none"
-                  className={
-                    picking
-                      ? 'opacity-70'
-                      : 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100'
-                  }
-                />
-              )}
-              {/* The chip is the air's own click target; the ground below stays clickable. */}
-              <rect
-                data-testid={`battle-map-air-chip-${node.id}`}
-                x={x + w - chipWidth - 6}
-                y={y + 4}
-                width={chipWidth}
-                height={15}
-                fill="transparent"
-              />
-              <LabelChip x={x + w - 3} y={y + 15} text={label} color={AIR} anchor="end" />
-              {(aerialTokens.get(node.id) ?? []).map((t, index) => (
-                <Token
-                  key={`air-tok-${node.id}-${index}`}
-                  occupant={t.occupant}
-                  cx={(t.x + 0.5) * CELL}
-                  cy={(t.y + 0.5) * CELL - AIR_LIFT}
-                  clipId={`${uid}-airclip-${node.id}-${index}`}
-                  aerial
-                  rampartElement={null}
-                  interactive
-                />
-              ))}
-            </g>
+              node={node}
+              anchorArea={areas.get(node.elevation_anchor_id!)!}
+              label={label}
+              tokens={aerialTokens.get(node.id) ?? []}
+              canMove={moveActionByPositionId.has(node.id)}
+              picking={picking}
+              ariaLabel={placeAriaLabel(label, occupantsByPosition.get(node.id) ?? [])}
+              uid={uid}
+              onPlace={handlePlace}
+              onKey={handleKey}
+            />
           );
         })}
       </svg>
