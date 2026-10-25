@@ -922,8 +922,8 @@ class SeedCanonicalAffinitiesTests(TestCase):
             },
         )
 
-    def test_fills_blank_aura_type_and_keeps_a_set_one(self) -> None:
-        """An existing blank row is designated; an existing set row is not overwritten."""
+    def test_never_writes_aura_type_on_an_existing_row(self) -> None:
+        """Authored rows are left as they are: blank stays blank, a set value is kept."""
         from world.magic.models.affinity import Affinity
         from world.magic.types.aura import AffinityType
 
@@ -932,8 +932,10 @@ class SeedCanonicalAffinitiesTests(TestCase):
 
         seed_canonical_affinities()
 
-        self.assertEqual(Affinity.objects.get(name="Celestial").aura_type, AffinityType.CELESTIAL)
+        self.assertEqual(Affinity.objects.get(name="Celestial").aura_type, "")
         self.assertEqual(Affinity.objects.get(name="Primal").aura_type, AffinityType.ABYSSAL)
+        # The created Abyssal row does not reuse a value another row holds.
+        self.assertEqual(Affinity.objects.get(name="Abyssal").aura_type, "")
 
     def test_idempotent(self) -> None:
         seed_canonical_affinities()

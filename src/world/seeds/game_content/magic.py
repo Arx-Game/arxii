@@ -1669,20 +1669,17 @@ def seed_canonical_affinities() -> None:
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # Each canonical row carries its aura designation (slice 2 of #4659): the
-    # 0297 backfill runs before any seeding, so a fresh database only gets it
-    # here. A blank designation on an existing row is filled; a set one is kept,
-    # and a value another row already holds is left alone (unique constraint).
+    # 0297 backfill runs before any seeding, so a sample row this seeder creates
+    # gets it here, through the create defaults only. An existing (authored) row is
+    # never written to: staff set a blank one from the affinity-aura-types Required
+    # content row. A value another row already holds is not reused (unique constraint).
     for name, aura_type in (
         ("Celestial", AffinityType.CELESTIAL),
         ("Primal", AffinityType.PRIMAL),
         ("Abyssal", AffinityType.ABYSSAL),
     ):
         free = not Affinity.objects.filter(aura_type=aura_type).exists()
-        defaults = {"aura_type": aura_type} if free else {}
-        affinity = authored_or_sample(Affinity, defaults, name=name)
-        if affinity is not None and not affinity.aura_type and free:
-            affinity.aura_type = aura_type
-            affinity.save(update_fields=["aura_type"])
+        authored_or_sample(Affinity, {"aura_type": aura_type} if free else {}, name=name)
 
 
 # Task RC1 — directed RPS affinity interaction matrix
