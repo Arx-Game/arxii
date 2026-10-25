@@ -142,6 +142,9 @@ def _area_constraint(name: str) -> models.CheckConstraint:
                 area_h__gte=1,
             )
         ),
+        violation_error_message=(
+            "Fill in all four area numbers (width and height at least 1), or leave all four blank."
+        ),
     )
 
 
