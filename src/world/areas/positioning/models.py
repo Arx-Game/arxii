@@ -127,6 +127,8 @@ def _area_constraint(name: str) -> models.CheckConstraint:
             | Q(
                 area_x__isnull=False,
                 area_y__isnull=False,
+                area_w__isnull=False,
+                area_h__isnull=False,
                 area_w__gte=1,
                 area_h__gte=1,
             )

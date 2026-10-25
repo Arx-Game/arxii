@@ -11,7 +11,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from evennia_extensions.factories import MediaFactory, RoomProfileFactory
-from world.areas.positioning.factories import MapTerrainFactory
+from world.areas.positioning.factories import MapTerrainFactory, PositionFactory
 from world.areas.positioning.services import (
     add_blueprint_position,
     create_blueprint,
@@ -51,3 +51,16 @@ class BlueprintAreaAndTerrainJourneys(TestCase):
         bp_pos.area_x, bp_pos.area_y, bp_pos.area_w, bp_pos.area_h = 1, 1, 0, 3
         with self.assertRaises(IntegrityError), transaction.atomic():
             bp_pos.save()
+
+    def test_an_area_missing_its_height_is_refused(self):
+        blueprint = create_blueprint("Barn")
+        bp_pos = add_blueprint_position(blueprint, "Loft")
+        bp_pos.area_x, bp_pos.area_y, bp_pos.area_w = 1, 1, 3
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            bp_pos.save()
+
+    def test_a_live_place_missing_its_height_is_refused(self):
+        position = PositionFactory()
+        position.area_x, position.area_y, position.area_w = 1, 1, 3
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            position.save()
