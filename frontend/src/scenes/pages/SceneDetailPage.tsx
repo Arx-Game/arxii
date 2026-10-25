@@ -439,12 +439,13 @@ export function SceneDetailPage() {
 
           {/* Combat rail fold-in (#2197): a two-column C-frame grid while an active
           encounter exists (or the GM story rail is shown); single column
-          otherwise. The rail's GM tab (#3557) hosts the encounter controls. */}
+          otherwise, and stacked below 860px so the map keeps the phone's width
+          (#4670). The rail's GM tab (#3557) hosts the encounter controls. */}
           <div
             className={cn(
               'min-h-0 flex-1',
               showCombatRail || showStoryRail
-                ? 'grid grid-cols-[1fr_360px] gap-4 px-4 pb-4'
+                ? 'grid grid-cols-1 gap-4 px-4 pb-4 min-[860px]:grid-cols-[1fr_360px]'
                 : 'flex flex-col'
             )}
           >
