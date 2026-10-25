@@ -23,7 +23,7 @@ from world.areas.positioning.services import (
     place_in_position,
     position_of,
 )
-from world.combat.constants import OpponentStatus, ParticipantStatus
+from world.combat.constants import CombatAllegiance, OpponentStatus, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -243,6 +243,8 @@ class TheEncounterPayloadCarriesTheDrawing(JourneyCase):
 
     def setUp(self) -> None:
         super().setUp()
+        with override_settings(SEED_SAMPLE_CONTENT=True):  # the movement capability
+            ensure_foundational_capabilities()
         self.room = self.make_room("The Manor")
         self.art = MediaFactory()
         self.terrain = MapTerrainFactory(name="Flagstones", art=self.art)
@@ -268,9 +270,9 @@ class TheEncounterPayloadCarriesTheDrawing(JourneyCase):
         )
         place_in_position(self.ann, self.hall, square=(3, 4))
 
-    def opponent_at(self, position, name: str, **kwargs):
+    def opponent_at(self, position, name: str, *, square=None, **kwargs):
         opponent = CombatOpponentFactory(encounter=self.encounter, name=name, **kwargs)
-        place_in_position(opponent.objectdb, position)
+        place_in_position(opponent.objectdb, position, square=square)
         return opponent
 
     def body(self) -> dict:
@@ -295,19 +297,39 @@ class TheEncounterPayloadCarriesTheDrawing(JourneyCase):
         ann = body["participants"][0]
         self.assertEqual(ann["current_square"], {"x": 3, "y": 4})
 
-    def test_an_opponent_reports_its_square_and_none_without_one(self):
-        self.opponent_at(self.porch, "Brute")
-        row = next(o for o in self.body()["opponents"] if o["name"] == "Brute")
+    def test_an_opponent_reports_the_square_it_stands_on(self):
+        brute = self.opponent_at(self.hall, "Brute", square=(5, 3))
+
+        row = next(o for o in self.body()["opponents"] if o["id"] == brute.pk)
+
+        self.assertEqual(row["current_square"], {"x": 5, "y": 3})
+
+    def test_an_opponent_in_a_place_without_a_square_reports_none(self):
+        brute = self.opponent_at(self.porch, "Brute")
+
+        row = next(o for o in self.body()["opponents"] if o["id"] == brute.pk)
 
         self.assertIsNone(row["current_square"])
 
-    def test_a_ready_enemy_holds_its_place_and_a_defeated_one_does_not(self):
+    def test_a_step_to_another_square_shows_in_the_payload(self):
+        self.assertEqual(self.body()["participants"][0]["current_square"], {"x": 3, "y": 4})
+
+        result = self.web(self.ann, "step_to_square", square_x=4, square_y=4)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(self.body()["participants"][0]["current_square"], {"x": 4, "y": 4})
+
+    def test_ready_enemies_hold_their_place_and_others_do_not(self):
         self.opponent_at(self.porch, "Brute")
+        self.opponent_at(self.porch, "Bruiser")
         self.opponent_at(self.cellar, "Ghoul", status=OpponentStatus.DEFEATED)
+        self.opponent_at(self.hall, "Hound", allegiance=CombatAllegiance.ALLY)
 
         held = self.body()["held_positions"]
 
-        self.assertEqual(held, [{"position_id": self.porch.pk, "holder_names": ["Brute"]}])
+        self.assertEqual(
+            held, [{"position_id": self.porch.pk, "holder_names": ["Brute", "Bruiser"]}]
+        )
 
     @staticmethod
     def reads(captured) -> int:
