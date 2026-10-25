@@ -15,7 +15,9 @@ from world.classes.models import PathStage
 
 
 class MaturationStatCap(SharedMemoryModel):
-    """Authored per-stage cap on any single stat's value (PLACEHOLDER tuning).
+    """Authored per-stage band caps on any single stat's and skill's value.
+
+    Stat caps are PLACEHOLDER tuning.
 
     Seeded 5/6/11/16/21/25 for PROSPECT..TRANSCENDENT (#3001 ruling). Shared by
     the maturation spend path and the level stat point spend path (#3001) — a
@@ -24,6 +26,11 @@ class MaturationStatCap(SharedMemoryModel):
     (stat storage is internal ×10 — #2894; the spend service multiplies at the
     comparison). The cap binds the maturation spend path; CG's
     ``STAT_MAX_VALUE`` (5) is the PROSPECT row enforced at creation time.
+
+    ``skill_cap`` (#4585) is the same ceiling for skills and their specializations,
+    also in shown units (stored ``skill_cap * 10``, converted at the comparison).
+    Blank means no cap. Every post-creation skill raise path reads it through
+    ``world.progression.services.maturation.skill_cap_for``.
     """
 
     path_stage = models.PositiveSmallIntegerField(
@@ -34,10 +41,15 @@ class MaturationStatCap(SharedMemoryModel):
     stat_cap = models.PositiveSmallIntegerField(
         help_text="Maximum value any single stat may reach at this stage.",
     )
+    skill_cap = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Highest shown skill value this band allows. Blank means no cap.",
+    )
 
     class Meta:
-        verbose_name = "Maturation stat cap"
-        verbose_name_plural = "Maturation stat caps"
+        verbose_name = "Band cap"
+        verbose_name_plural = "Band caps"
         ordering = ["path_stage"]
 
     def __str__(self) -> str:

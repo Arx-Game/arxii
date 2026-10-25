@@ -224,7 +224,10 @@ class DevelopmentPoints(SharedMemoryModel):
         levels <= 10).
 
         A LANGUAGE trait stops one rating below an authored ``TraitRatingUnlock``
-        (#4090); surplus dp there dissipates.
+        (#4090); surplus dp there dissipates. A SKILL trait stops at its level band's
+        skill cap (#4585, ``world.skills.services.stored_skill_cap``) the same way;
+        :meth:`at_skill_cap` tells a caller to say so. Stats and other traits are
+        unaffected.
 
         Args:
             amount: Development points to award.
@@ -243,6 +246,7 @@ class DevelopmentPoints(SharedMemoryModel):
         from world.skills.services import (  # noqa: PLC0415 - skills.services imports this module
             reconcile_skill_stores,
             set_skill_sheet_value,
+            stored_skill_cap,
         )
 
         skill = self._skill()
@@ -258,10 +262,13 @@ class DevelopmentPoints(SharedMemoryModel):
         starting_level: int = trait_value.value
         current_level: int = starting_level
         ceiling = self._language_rating_ceiling(starting_level)
+        skill_cap = stored_skill_cap(self.character_sheet) if skill is not None else None
 
         while True:
             next_level = current_level + 1
             if ceiling is not None and next_level >= ceiling:
+                break
+            if skill_cap is not None and next_level > skill_cap:
                 break
             dp_needed = cumulative_dp_for_level(next_level)
             if self.total_earned >= dp_needed:
@@ -270,14 +277,13 @@ class DevelopmentPoints(SharedMemoryModel):
             else:
                 break
 
-        if ceiling is not None and current_level == ceiling - 1:
-            # Parked at an XP lock: surplus dp dissipates instead of banking (the
-            # 2026-07-09 ephemerality ruling skills follow), so buying the breakthrough
-            # never back-pays development earned while gated.
-            parked_cap = cumulative_dp_for_level(current_level)
-            if self.total_earned > parked_cap:
-                self.total_earned = parked_cap
-                self.save(update_fields=["total_earned"])
+        # Parked at an XP lock, or at the band's skill cap (#4585): surplus dp
+        # dissipates instead of banking (the 2026-07-09 ephemerality ruling skills
+        # follow), so neither a breakthrough nor a higher band back-pays development
+        # earned while stopped.
+        parked = ceiling is not None and current_level == ceiling - 1
+        if parked or (skill_cap is not None and current_level >= skill_cap):
+            self._dissipate_above(current_level)
 
         if level_ups:
             trait_value.value = current_level
@@ -298,6 +304,31 @@ class DevelopmentPoints(SharedMemoryModel):
             set_skill_sheet_value(self.character_sheet, skill, trait_value.value)
 
         return level_ups
+
+    def _dissipate_above(self, level: int) -> None:
+        """Drop ``total_earned`` to what ``level`` cost, discarding any surplus."""
+        parked_total = cumulative_dp_for_level(level)
+        if self.total_earned > parked_total:
+            self.total_earned = parked_total
+            self.save(update_fields=["total_earned"])
+
+    def at_skill_cap(self) -> int | None:
+        """The stored band skill cap this tracker's skill sits at, else ``None`` (#4585).
+
+        For a caller of :meth:`award_points` that tells the player development stopped.
+        ``None`` for a non-skill trait, an uncapped band, or a skill below its cap.
+        """
+        from world.skills.services import stored_skill_cap  # noqa: PLC0415
+
+        if self._skill() is None:
+            return None
+        cap = stored_skill_cap(self.character_sheet)
+        if cap is None:
+            return None
+        row = CharacterTraitValue.objects.filter(
+            character=self.character_sheet, trait=self.trait
+        ).first()
+        return cap if row is not None and row.value >= cap else None
 
     def _skill(self) -> "Skill | None":
         """The ``Skill`` this tracker's trait belongs to, ``None`` for any other trait."""
