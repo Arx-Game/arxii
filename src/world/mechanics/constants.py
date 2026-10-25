@@ -113,6 +113,9 @@ class CapabilitySourceType(models.TextChoices):
     TRAIT = "trait", "Trait"
     CONDITION = "condition", "Condition"
     EQUIPMENT = "equipment", "Equipment"
+    # The sheet's CharacterModifier rows aimed at the capability's ModifierTarget
+    # (species gifts, distinctions, worn gear), summed into one source (#4663).
+    MODIFIER = "modifier", "Modifier"
 
 
 class EngagementType(models.TextChoices):

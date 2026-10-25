@@ -14,7 +14,8 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch, Q, Sum
+from django.utils import timezone
 
 from typeclasses.characters import Character
 from world.checks.modifier_values import ValueTable, load_value_table
@@ -1296,6 +1297,7 @@ def get_capability_sources_for_character(
     sources.extend(_get_technique_sources(character))
     sources.extend(_get_trait_sources(character))
     sources.extend(_get_condition_sources(character))
+    sources.extend(_get_modifier_sources(character))
     return sources
 
 
@@ -1539,6 +1541,45 @@ def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
         )
 
     return sources
+
+
+def _get_modifier_sources(character: ObjectDB) -> list[CapabilitySource]:
+    """One source per capability raised by the sheet's CharacterModifier rows (#4663).
+
+    A species gift, a distinction or worn gear raises a capability through a
+    ``CharacterModifier`` aimed at that capability's ``ModifierTarget``; the agency oracle
+    (``get_effective_capability_value``) already counts these, and this is the same
+    reading for the availability oracle, so the capability is offered as an approach.
+    Rows are summed per capability in one query (all modifiers stack), expired rows left
+    out; a sum above zero is one MODIFIER source. ``get_all_capability_values`` (the
+    condition source) does not read these rows, so nothing is counted twice.
+    """
+    try:
+        sheet = character.sheet_data
+    except ObjectDoesNotExist:
+        return []
+    rows = (
+        CharacterModifier.objects.filter(
+            character=sheet,
+            target__target_capability__isnull=False,
+        )
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
+        .values("target__target_capability_id", "target__target_capability__name")
+        .annotate(total=Sum("value"))
+        .order_by("target__target_capability_id")
+    )
+    return [
+        CapabilitySource(
+            capability_name=row["target__target_capability__name"],
+            capability_id=row["target__target_capability_id"],
+            value=row["total"],
+            source_type=CapabilitySourceType.MODIFIER,
+            source_name="",  # Modifiers aggregate; no single source name
+            source_id=0,
+        )
+        for row in rows
+        if row["total"] > 0
+    ]
 
 
 # =============================================================================

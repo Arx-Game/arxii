@@ -574,6 +574,22 @@ class AnAcrobatGetsPast(_TheCauseway):
         self.assertTrue(entry.prerequisite_met)
         self.assertFalse([name for name in wren_moves if name.startswith("Get past")], wren_moves)
 
+    def test_a_species_acrobat_is_offered_the_pass(self) -> None:
+        """Acrobatics raised by a sheet modifier alone (a species gift) offers and rolls it."""
+        self.designate()
+        kit = self.fighter("Kit", at=self.gate)
+        self.raise_capability(kit, self.acrobatics, CAPABILITY_RAISE)
+
+        moves = {action.display_name: action for action in get_player_actions(kit)}
+        with self.roll(self.clean) as forced:
+            result = self.web(kit, "pass_held_ground", position_id=self.yard.pk)
+
+        self.assertIn(GET_PAST_ENTRY.format(name="Bandit", place="Yard"), moves)
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, GOT_PAST.format(name="Bandit"))
+        self.assertEqual(position_of(kit), self.yard)
+        self.assertEqual(forced.call_args.kwargs["extra_modifiers"], CAPABILITY_RAISE)
+
     def test_pass_by_telnet(self) -> None:
         self.designate()
         kit = self.acrobat()

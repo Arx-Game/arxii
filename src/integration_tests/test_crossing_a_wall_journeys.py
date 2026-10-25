@@ -62,6 +62,9 @@ from world.combat.factories import (
 )
 from world.combat.services import begin_declaration_phase, resolve_round
 from world.conditions.models import CapabilityType
+from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
+from world.distinctions.services import grant_distinction
+from world.distinctions.types import DistinctionOrigin
 from world.magic.effect_palette_content import OBSTACLE_TECHNIQUE_NAME, ensure_obstacle_content
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -70,8 +73,12 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models import Technique
-from world.mechanics.factories import CharacterEngagementFactory
-from world.mechanics.models import ChallengeApproach, ChallengeInstance
+from world.mechanics.factories import (
+    CharacterEngagementFactory,
+    ModifierCategoryFactory,
+    ModifierTargetFactory,
+)
+from world.mechanics.models import ChallengeApproach, ChallengeInstance, ModifierTarget
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneOwnerParticipationFactory
 from world.seeds.checks import seed_check_resolution_tables
@@ -163,8 +170,10 @@ class ClimbingABarricade(_TheYard):
             character=self.maren.sheet_data,
             technique=Technique.objects.get(name=OBSTACLE_TECHNIQUE_NAME),
         )
-        # Hobb can climb: a known technique grants him the traversal capability the
-        # "Climb Over" approach is matched on.
+        self.let_hobb_climb()
+
+    def let_hobb_climb(self) -> None:
+        """A known technique grants Hobb the traversal capability "Climb Over" matches on."""
         climbing = TechniqueFactory(damage_profile=False)
         TechniqueCapabilityGrantFactory(
             technique=climbing,
@@ -216,6 +225,43 @@ class ClimbingABarricade(_TheYard):
         told = self.telnet(self.hobb, "position Middle")
         self.assertNotIn(GATED, told)
         self.assertEqual(position_of(self.hobb), self.middle)
+
+
+class ADistinctionClimbsTheBarricade(ClimbingABarricade):
+    """Hobb climbs by a Wall-Runner distinction, not a technique, and is offered Climb Over.
+
+    The distinction's one effect raises traversal by 4 at rank 1 through the capability's
+    modifier target, the way a species gift or worn gear raises a capability.
+    """
+
+    def let_hobb_climb(self) -> None:
+        traversal = CapabilityType.objects.get(name="traversal")
+        target = ModifierTarget.objects.filter(target_capability=traversal).first()
+        if target is None:
+            target = ModifierTargetFactory(
+                name="traversal",
+                category=ModifierCategoryFactory(name="capability"),
+                target_capability=traversal,
+            )
+        wall_runner = DistinctionFactory(name="Wall-Runner")
+        DistinctionEffectFactory(distinction=wall_runner, target=target, value_per_rank=4)
+        grant_distinction(self.hobb.sheet_data, wall_runner, origin=DistinctionOrigin.GM_AWARD)
+
+    def test_a_distinction_climber_is_offered_climb_over(self) -> None:
+        self.raise_the_barricade()
+        gate = self.edge(self.west, self.middle).gating_challenge
+        climb = ChallengeApproach.objects.get(
+            challenge_template=gate.template, display_name="Climb Over"
+        )
+
+        offered = [
+            action
+            for action in get_player_actions(self.hobb)
+            if action.ref.backend == ActionBackend.CHALLENGE and action.ref.approach_id == climb.pk
+        ]
+
+        self.assertEqual(len(offered), 1, [a.display_name for a in offered])
+        self.assertEqual(offered[0].ref.challenge_instance_id, gate.pk)
 
 
 class AHardSeal(_TheYard):
