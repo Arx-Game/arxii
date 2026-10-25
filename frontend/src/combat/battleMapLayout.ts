@@ -160,6 +160,15 @@ export function tokenSquares<T extends SquaredOccupant>(
   });
 }
 
+/** Two areas share a border (or overlap): a route between them needs no line. */
+export function areasTouch(a: MapArea, b: MapArea): boolean {
+  const xOverlap = a.x < b.x + b.w && b.x < a.x + a.w;
+  const yOverlap = a.y < b.y + b.h && b.y < a.y + a.h;
+  const xAbut = a.x + a.w === b.x || b.x + b.w === a.x;
+  const yAbut = a.y + a.h === b.y || b.y + b.h === a.y;
+  return (xOverlap && yOverlap) || (xAbut && yOverlap) || (yAbut && xOverlap);
+}
+
 /** The viewBox (in px) around every area, with one square of margin. */
 export function mapBounds(areas: Iterable<MapArea>): {
   x: number;

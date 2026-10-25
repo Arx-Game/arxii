@@ -116,6 +116,13 @@ export function rampartRing(
 
 export const chipWidth = (text: string) => text.length * 6.6 + 8;
 
+/** The text cut with an ellipsis so its chip fits `maxWidth`; unchanged when it fits. */
+export function fitChipText(text: string, maxWidth: number): string {
+  if (chipWidth(text) <= maxWidth) return text;
+  const chars = Math.max(1, Math.floor((maxWidth - 8) / 6.6) - 1);
+  return `${text.slice(0, chars).trimEnd()}…`;
+}
+
 /**
  * A place's screen-reader label: "<place>: <name> (<mark>), <name>". A mark title
  * reads "<name>: locked with X"; the name prefix is dropped inside the brackets.

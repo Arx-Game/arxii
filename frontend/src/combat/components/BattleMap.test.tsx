@@ -147,9 +147,12 @@ describe('BattleMap', () => {
     expect(svg).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
   });
 
-  it('labels a held place with its holders', () => {
-    renderMap();
-    expect(screen.getByText('Stage · Held by Harrow, Blade')).toBeInTheDocument();
+  it('labels a held place with its holders, on a line of its own', () => {
+    renderMap({ heldPositions: [{ position_id: 2, holder_names: ['Harrow'] }] });
+    // Stage is three squares wide: "Stage · Held by Harrow" would spill past it.
+    expect(screen.getByText('Stage')).toBeInTheDocument();
+    expect(screen.getByText('Held by Harrow')).toBeInTheDocument();
+    expect(screen.queryByText(/Stage · Held/)).not.toBeInTheDocument();
     expect(screen.getByTestId('tactical-map-node-2')).toHaveAttribute('data-held', 'true');
   });
 
@@ -161,6 +164,56 @@ describe('BattleMap', () => {
     expect(screen.getByTestId('battle-map-terrain-2').getAttribute('fill')).toMatch(/^url\(#/);
     expect(screen.getByTestId('battle-map-terrain-1').getAttribute('fill')).not.toMatch(/url/);
     expect(screen.getByTestId('battle-map-edge-1-3')).toHaveTextContent('Locked Gate');
+  });
+
+  it('cuts a name wider than its area, keeping the full text in its title', () => {
+    renderMap({
+      nodes: [place(9, 'The Long Gallery Stair', { area_x: 0, area_y: 0, area_w: 2, area_h: 3 })],
+      edges: [],
+      occupantsByPosition: new Map(),
+      heldPositions: [{ position_id: 9, holder_names: ['Harrow'] }],
+      moveActions: [],
+    });
+    const area = screen.getByTestId('tactical-map-node-9');
+    const texts = [...area.querySelectorAll('text')].map((t) => t.textContent ?? '');
+    expect(texts.every((t) => t.length * 6.6 + 8 <= 2 * 40 - 8)).toBe(true);
+    expect(texts.some((t) => t.endsWith('…'))).toBe(true);
+    expect(area.querySelector(':scope > title')).toHaveTextContent(
+      'The Long Gallery Stair. Held by Harrow'
+    );
+    expect(area).toHaveAttribute('aria-label', 'The Long Gallery Stair');
+  });
+
+  it('draws no line for a plain route between touching places', () => {
+    renderMap();
+    // Floor (2..6) and Stage (6..9) share a border.
+    expect(screen.queryByTestId('battle-map-edge-1-2')).not.toBeInTheDocument();
+  });
+
+  it('draws a gated route even between places that touch', () => {
+    renderMap({
+      edges: [{ ...EDGES[0], gating_challenge_name: 'Velvet Rope' }],
+    });
+    expect(screen.getByTestId('battle-map-edge-1-2')).toBeInTheDocument();
+    expect(screen.getByTestId('battle-map-route-label-1-2')).toHaveTextContent('Velvet Rope');
+  });
+
+  it('draws a plain route between places that do not touch', () => {
+    renderMap({
+      nodes: [FLOOR, place(5, 'Balcony', { area_x: 2, area_y: 8, area_w: 3, area_h: 2 })],
+      edges: [
+        {
+          position_a_id: 1,
+          position_b_id: 5,
+          is_passable: true,
+          blocks_flight: false,
+          gating_challenge_name: null,
+        },
+      ],
+      occupantsByPosition: new Map(),
+      heldPositions: [],
+    });
+    expect(screen.getByTestId('battle-map-edge-1-5')).toBeInTheDocument();
   });
 
   it('steps to a square in the viewer’s own place', () => {

@@ -23,7 +23,14 @@ import type {
   PositionNodeLike,
 } from '@/areas/components/TacticalMap';
 import type { PlayerAction } from '@/scenes/actionTypes';
-import { CELL, isAerialOverlay, mapBounds, placeAreas, tokenSquares } from '../battleMapLayout';
+import {
+  CELL,
+  areasTouch,
+  isAerialOverlay,
+  mapBounds,
+  placeAreas,
+  tokenSquares,
+} from '../battleMapLayout';
 import type { MapArea, PlacedToken, Square } from '../battleMapLayout';
 import {
   AIR,
@@ -38,6 +45,7 @@ import {
   TERRAIN_TILE,
   center,
   chipWidth,
+  fitChipText,
   kindFill,
   kindTint,
   placeAriaLabel,
@@ -106,7 +114,12 @@ function PlaceArea({
   const held = (holders?.length ?? 0) > 0;
   const tint = kindTint(node.kind);
   const ring = rampartRing(node);
-  const label = held ? `${node.name} · Held by ${holders!.join(', ')}` : node.name;
+  // A narrow area cuts its name; the held line gets a chip of its own beneath it.
+  const chipRoom = area.w * CELL - 8;
+  const nameText = fitChipText(node.name, chipRoom);
+  const heldFull = held ? `Held by ${holders!.join(', ')}` : null;
+  const heldText = heldFull ? fitChipText(heldFull, chipRoom) : null;
+  const cut = nameText !== node.name || heldText !== heldFull;
   const squares: ReactNode[] = [];
   for (let row = 0; row < area.h; row++) {
     for (let col = 0; col < area.w; col++) {
@@ -202,13 +215,17 @@ function PlaceArea({
           onClick={() => onPlace(node.id, null)}
         />
       ))}
+      {cut && <title>{heldFull ? `${node.name}. ${heldFull}` : node.name}</title>}
       <LabelChip
         x={area.x * CELL + 6}
         y={area.y * CELL + 15}
-        text={label}
+        text={nameText}
         color={held ? '#ff9aa6' : LABEL_TEXT}
         badges={<CoverBadges node={node} />}
       />
+      {heldText && (
+        <LabelChip x={area.x * CELL + 6} y={area.y * CELL + 32} text={heldText} color="#ff9aa6" />
+      )}
     </g>
   );
 }
@@ -398,6 +415,22 @@ export function BattleMap({
     const p = center(anchorArea);
     return { x: p.x, y: p.y - AIR_LIFT };
   };
+  // The area a route end sits in: its own, or for the air its anchor's.
+  const routeArea = (positionId: number): MapArea | undefined => {
+    const area = areas.get(positionId);
+    if (area) return area;
+    const anchorId = nodesById.get(positionId)?.elevation_anchor_id;
+    return anchorId != null ? areas.get(anchorId) : undefined;
+  };
+  // A route is drawn only when it says something: a gate or a wall, or a way between
+  // places whose areas do not meet (older rooms, or areas set apart).
+  const routeDrawn = (edge: PositionEdgeLike): boolean => {
+    if (edge.gating_challenge_name || !edge.is_passable) return true;
+    const a = routeArea(edge.position_a_id);
+    const b = routeArea(edge.position_b_id);
+    if (!a || !b) return false;
+    return a.derived || b.derived || !areasTouch(a, b);
+  };
   const routeEnds = (aId: number, bId: number) => {
     const p = routePoint(aId);
     const q = routePoint(bId);
@@ -510,7 +543,9 @@ export function BattleMap({
         {/* Routes between places. */}
         <g pointerEvents="none">
           {edges.map((edge, index) => {
-            const ends = routeEnds(edge.position_a_id, edge.position_b_id);
+            const ends = routeDrawn(edge)
+              ? routeEnds(edge.position_a_id, edge.position_b_id)
+              : null;
             if (!ends) return null;
             const style = routeStyle(edge);
             return (

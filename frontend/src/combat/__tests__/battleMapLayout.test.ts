@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CELL, mapBounds, placeAreas, tokenSquares } from '../battleMapLayout';
+import { CELL, areasTouch, mapBounds, placeAreas, tokenSquares } from '../battleMapLayout';
 import type { AreaNode, MapArea } from '../battleMapLayout';
 
 function node(overrides: Partial<AreaNode> & { id: number }): AreaNode {
@@ -129,5 +129,17 @@ describe('mapBounds', () => {
         { x: 4, y: -1, w: 3, h: 2, derived: true },
       ])
     ).toEqual({ x: -CELL, y: -2 * CELL, w: 9 * CELL, h: 5 * CELL });
+  });
+});
+
+describe('areasTouch', () => {
+  const a: MapArea = { x: 0, y: 0, w: 2, h: 2, derived: false };
+  it('is true for areas sharing a side', () => {
+    expect(areasTouch(a, { x: 2, y: 1, w: 2, h: 2, derived: false })).toBe(true);
+    expect(areasTouch(a, { x: 0, y: 2, w: 1, h: 1, derived: false })).toBe(true);
+  });
+  it('is false for areas apart or meeting only at a corner', () => {
+    expect(areasTouch(a, { x: 3, y: 0, w: 2, h: 2, derived: false })).toBe(false);
+    expect(areasTouch(a, { x: 2, y: 2, w: 2, h: 2, derived: false })).toBe(false);
   });
 });
