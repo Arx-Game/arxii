@@ -503,11 +503,10 @@ class EnsureOrphanedTraditionDistinctionTests(TestCase):
 class SeedMetallicOrderTraditionTests(TestCase):
     """Tests for ``seed_metallic_order_tradition()`` (#2428 Task 5).
 
-    Covers: the defensive skip when the magic cluster hasn't run yet, the
-    shape of the created rows (Tradition + its 5 TraditionGiftGrant rows +
-    Arx-scoped BeginningTradition rows gated by the orphaned drawback),
-    idempotency, and that seeding Metallic Order never touches Unbound's own
-    rows.
+    Covers: the shape of the created rows (a Tradition with no favored Gift
+    rows, since any Tradition may teach any Major Gift (#4659), + Arx-scoped
+    BeginningTradition rows gated by the orphaned drawback), idempotency, and that
+    seeding Metallic Order never touches Unbound's own rows.
 
     distinctions.distinction/distinctioncategory are content-repo-owned
     (#2698); ``ensure_orphaned_tradition_distinction()`` only invents the
@@ -529,30 +528,11 @@ class SeedMetallicOrderTraditionTests(TestCase):
         area = StartingAreaFactory(realm=realm)
         return BeginningsFactory(starting_area=area)
 
-    def test_skips_silently_when_unbound_tradition_not_seeded(self) -> None:
-        from world.magic.models import Tradition
-
-        result = seed_metallic_order_tradition()
-
-        self.assertIsNone(result)
-        self.assertFalse(Tradition.objects.filter(name="Metallic Order").exists())
-
-    def test_skips_silently_when_unbound_has_no_starter_grants(self) -> None:
-        from world.magic.factories import TraditionFactory
-        from world.magic.models import Tradition
-
-        TraditionFactory(name="Unbound")
-
-        result = seed_metallic_order_tradition()
-
-        self.assertIsNone(result)
-        self.assertFalse(Tradition.objects.filter(name="Metallic Order").exists())
-
-    def test_creates_tradition_grants_and_beginning_traditions(self) -> None:
+    def test_creates_tradition_and_beginning_traditions_without_gift_rows(self) -> None:
         from world.character_creation.models import BeginningTradition
         from world.magic.models.grants import TraditionGiftGrant
 
-        _unbound, gifts = self._seed_unbound_with_starter_grants()
+        self._seed_unbound_with_starter_grants()
         beginning = self._arx_beginning()
         other_realm_beginning = BeginningsFactory()  # default realm != "Arx"
 
@@ -562,10 +542,7 @@ class SeedMetallicOrderTraditionTests(TestCase):
         self.assertEqual(tradition.name, "Metallic Order")
         self.assertTrue(tradition.is_active)
 
-        granted_gift_ids = set(
-            TraditionGiftGrant.objects.filter(tradition=tradition).values_list("gift_id", flat=True)
-        )
-        self.assertEqual(granted_gift_ids, {gift.id for gift in gifts})
+        self.assertFalse(TraditionGiftGrant.objects.filter(tradition=tradition).exists())
 
         bt = BeginningTradition.objects.get(beginning=beginning, tradition=tradition)
         self.assertEqual(bt.state, TraditionState.TEACHERS_GONE)
@@ -580,9 +557,7 @@ class SeedMetallicOrderTraditionTests(TestCase):
     def test_idempotent_second_call_creates_no_duplicates(self) -> None:
         from world.character_creation.models import BeginningTradition
         from world.magic.models import Tradition
-        from world.magic.models.grants import TraditionGiftGrant
 
-        self._seed_unbound_with_starter_grants()
         self._arx_beginning()
 
         seed_metallic_order_tradition()
@@ -590,16 +565,12 @@ class SeedMetallicOrderTraditionTests(TestCase):
 
         self.assertEqual(Tradition.objects.filter(name="Metallic Order").count(), 1)
         self.assertEqual(
-            TraditionGiftGrant.objects.filter(tradition__name="Metallic Order").count(), 5
-        )
-        self.assertEqual(
             BeginningTradition.objects.filter(tradition__name="Metallic Order").count(), 1
         )
 
     def test_does_not_overwrite_a_staff_adjusted_row(self) -> None:
         from world.character_creation.models import BeginningTradition
 
-        self._seed_unbound_with_starter_grants()
         self._arx_beginning()
         seed_metallic_order_tradition()
 

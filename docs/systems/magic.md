@@ -225,8 +225,9 @@ Gift. `TraditionGiftGrant.special_techniques` no longer adds to a pool: a techni
 Tradition grant lists is open to every Tradition, and one listed by one or more is open only
 to those Traditions. The pool for Tradition T on Path P picking Gift G is the techniques on
 P's list for G that no Tradition grant lists, or T's does (`get_technique_options` returns
-the two halves as `pool` and `tradition`). `get_gift_options` offers G when T has a grant
-for it and that pool holds a takeable technique. The restriction half is
+the two halves as `pool` and `tradition`). `get_gift_options` offers every Major Gift G whose
+pool holds a takeable technique; a grant row for (T, G) is not needed, since a row now marks a
+Gift T favors rather than one it allows (#4659). The restriction half is
 `cg_catalog.tradition_listings` / `offered_to_tradition`, shared with Academy training
 (`_technique_available_to_learner`, through `get_technique_options`) and `grant_path_magic`,
 which skips a technique the character's active Tradition may not take. The
@@ -241,8 +242,9 @@ required-content sentinel (`web/admin/tuning/required_content.py`, #3712) report
 such `(path, gift)` pair and names the traditions it leaks through — 8 pairs across 17
 combinations at the time it was added. A `TraditionGiftGrant` carrying no specials is
 deliberately never reported: that is a legitimate authored state meaning "this tradition
-teaches this gift and adds no extras of its own", it creates no availability of its own,
-and 39 of 69 authored rows are in it.
+favors this gift and adds no extras of its own" (#4659), and it creates no availability of
+its own. The `cg-gift-pools-takeable` row lists each path and Major Gift no active tradition
+can take there, and counts tradition and path pairings left with no Gift at all.
 
 **"Non-empty" means a technique a player can take (#4545).** `cg_technique_queryset`
 (`cg_catalog.py`) is the one CG readiness rule: never an ultimate, an `action_template`

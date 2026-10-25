@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0294_distinction_effect_rank_sizes"),
+        ("arxii", "0295_remove_self_taught_tradition_gift_grants"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

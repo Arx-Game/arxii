@@ -354,10 +354,10 @@ def _probe_path_gift_starter_pools() -> ProbeResult:
     offer whose techniques are all unready still has its path pools checked.
 
     Deliberately NOT reported: a `TraditionGiftGrant` carrying no specials. That
-    is a legitimate authored state meaning "this tradition teaches this gift and
-    adds no unique extras of its own", the gift still reaches the player through
-    the path pool, and 39 of 69 authored rows are in it - folding them in would
-    bury the real gaps.
+    is a legitimate authored state meaning "this tradition favors this gift and
+    adds no unique extras of its own" (#4659); the gift reaches the player through
+    the path pool either way, and `_probe_cg_gift_pools_takeable` covers every
+    Major Gift's path pools.
     """
     from world.classes.models import Path  # noqa: PLC0415
     from world.magic.admin import GAP_NOT_CASTABLE  # noqa: PLC0415
@@ -412,28 +412,29 @@ def _probe_path_gift_starter_pools() -> ProbeResult:
 
 
 def _probe_cg_gift_pools_takeable() -> ProbeResult:
-    """Every gift a tradition grants has a technique a player can take on every path.
+    """Every Major Gift has a technique a player can take on every path.
 
     Consumer: `world/magic/services/cg_catalog.py` `get_gift_options()` (#4545).
-    For each active tradition and each active Prospect path (the ones character
-    creation lets a player pick), a gift the tradition grants is offered only
-    when the path's list for that gift holds a technique offered to that
-    tradition (listed by no tradition grant, or by this one's,
+    Any tradition may teach any Major Gift (#4659), so the gift catalog offers a
+    Major Gift on a path when the path's list for it holds a technique offered to
+    the draft's tradition (listed by no tradition grant, or by this one's,
     `cg_catalog.offered_to_tradition`, #4555) that
-    `cg_catalog.cg_takeable_techniques()` lets through. Those are the rules the
-    gift catalog applies, so this row and the character creation screen cannot
-    disagree. A path with no `PathGiftGrant` for the gift contributes nothing,
-    exactly as `get_gift_options` reads it, so a gift the tradition grants and the
-    path never authored is reported too. A tradition and path pairing with no gift
-    offered at all leaves a new character nothing to pick at the Gift stage.
+    `cg_catalog.cg_takeable_techniques()` lets through. A path and Major Gift
+    reported here is hidden from every active tradition: the path's list holds
+    nothing takeable, or only techniques an inactive tradition keeps. A path with
+    no `PathGiftGrant` for the gift is reported too. A gift one tradition keeps to
+    itself is not a gap for the others; it is how a tradition's own techniques
+    work. A tradition and path pairing with no gift offered at all leaves a new
+    character nothing to pick at the Gift stage, so the detail counts those.
 
     A fixed query count whatever the catalog size: one per requirement type for
-    the gated-technique ids, then the path lists, the tradition listings, the paths
-    and the tradition grants.
+    the gated-technique ids, then the path lists, the tradition listings, the
+    paths, the Major Gifts and the active traditions.
     """
     from world.classes.models import Path, PathStage  # noqa: PLC0415
     from world.magic.admin import GAP_NOT_CASTABLE  # noqa: PLC0415
-    from world.magic.models import PathGiftGrant, TraditionGiftGrant  # noqa: PLC0415
+    from world.magic.constants import GiftKind  # noqa: PLC0415
+    from world.magic.models import Gift, PathGiftGrant, Tradition  # noqa: PLC0415
     from world.magic.services.cg_catalog import (  # noqa: PLC0415
         cg_takeable_techniques,
         offered_to_tradition,
@@ -452,32 +453,35 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
         .order_by("name")
         .values_list("id", "name")
     )
-    tradition_grants = TraditionGiftGrant.objects.filter(tradition__is_active=True).values_list(
-        "tradition_id", "tradition__name", "gift_id", "gift__name"
-    )
+    gifts = list(Gift.objects.filter(kind=GiftKind.MAJOR).values_list("id", "name"))
+    tradition_ids = list(Tradition.objects.filter(is_active=True).values_list("id", flat=True))
 
-    blocked: list[tuple[str, str, str]] = []
-    pairings: set[tuple[int, int]] = set()
+    hidden: list[tuple[str, str]] = []
     offering: set[tuple[int, int]] = set()
-    for tradition_id, tradition_name, gift_id, gift_name in tradition_grants:
-        for path_id, path_name in paths:
-            pairings.add((tradition_id, path_id))
-            if any(
-                offered_to_tradition(technique_id, tradition_id, listings)
-                for technique_id in path_ready.get((path_id, gift_id), ())
-            ):
-                offering.add((tradition_id, path_id))
-            else:
-                blocked.append((tradition_name, path_name, gift_name))
-    if not blocked:
+    for path_id, path_name in paths:
+        for gift_id, gift_name in gifts:
+            ready = path_ready.get((path_id, gift_id), ())
+            offered_to = {
+                tradition_id
+                for tradition_id in tradition_ids
+                if any(
+                    offered_to_tradition(technique_id, tradition_id, listings)
+                    for technique_id in ready
+                )
+            }
+            offering.update((tradition_id, path_id) for tradition_id in offered_to)
+            if not offered_to:
+                hidden.append((path_name, gift_name))
+    empty = len(tradition_ids) * len(paths) - len(offering)
+    if not hidden and not empty:
         return ProbeResult(present=True, admin_url=link)
 
-    missing = tuple(f"{t} / {p} / {g}" for t, p, g in sorted(blocked))
+    missing = tuple(f"{p} / {g}" for p, g in sorted(hidden))
     detail = (
-        f"{len(missing)} tradition / path / gift combination(s) hold no technique a "
-        "player can take at character creation: none on the path's list for the gift "
-        "that is open to the tradition, has a cast template, is not an ultimate and has "
-        "no requirement. "
+        f"{len(missing)} path / Major Gift combination(s) hold no technique a player "
+        "under any active tradition can take at character creation: none on the path's "
+        "list for the gift that is open to the tradition, has a cast template, is not an "
+        "ultimate and has no requirement. "
     )
     if not offering:
         detail += (
@@ -485,7 +489,6 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
             "at the Gift stage."
         )
     else:
-        empty = len(pairings - offering)
         detail += (
             f"{empty} tradition and path pairing(s) offer no gift at all, which blocks "
             "a new character who picks one at the Gift stage."
@@ -2501,8 +2504,8 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/services/cg_catalog.py get_gift_options()",
             consequence=(
-                "The gift is never offered at character creation under that tradition "
-                "and path. When a tradition and path offer no gift at all, it blocks "
+                "The gift is never offered at character creation on that path, under "
+                "any tradition. When a tradition and path offer no gift at all, it blocks "
                 "every new character who picks them at the Gift stage."
             ),
             probe=CustomProbe(fn=_probe_cg_gift_pools_takeable),
