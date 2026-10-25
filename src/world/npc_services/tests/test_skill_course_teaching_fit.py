@@ -113,7 +113,7 @@ class SkillCourseTeachingFitTests(TestCase):
         self.assertEqual(payload["teaching_line"], "Taught in the manner of House of Dawn")
         self.assertEqual(
             payload["fit_line"],
-            "Fits your Lantern Gift and Dawn aura. Sessions are easier for you.",
+            "Fits your Lantern Gift and its Dawn affinity. Sessions are easier for you.",
         )
 
     def test_fit_line_with_only_the_gift(self) -> None:
@@ -124,7 +124,9 @@ class SkillCourseTeachingFitTests(TestCase):
     def test_fit_line_with_only_the_affinity(self) -> None:
         sheet = self._student(affinity=self.affinity)
         price = _offer_price(self.course.offer, sheet, {}, None)
-        self.assertEqual(price.fit_line, "Fits your Dawn aura. Sessions are easier for you.")
+        self.assertEqual(
+            price.fit_line, "Fits your Gift's Dawn affinity. Sessions are easier for you."
+        )
 
     def test_non_fitting_student_sees_only_the_tradition(self) -> None:
         sheet = self._student()
@@ -161,7 +163,7 @@ class SkillCourseTeachingFitTests(TestCase):
         for payload in payloads:
             self.assertEqual(
                 payload["fit_line"],
-                "Fits your Lantern Gift and Dawn aura. Sessions are easier for you.",
+                "Fits your Lantern Gift and its Dawn affinity. Sessions are easier for you.",
             )
         return sum(
             1 for q in ctx.captured_queries if any(f'FROM "{t}"' in q["sql"] for t in tables)

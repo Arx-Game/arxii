@@ -880,7 +880,7 @@ the affinity of the resonance on its active GIFT thread for that Gift, then `tea
 changes the check only: the roll's outcome still decides the development gained. A role with no
 Tradition is neutral. The menu price (`OfferPrice`) carries two lines for such a course:
 `teaching_line` ("Taught in the manner of <Tradition>") and, when the learner fits,
-`fit_line` ("Fits your <Gift> and <Affinity> aura. Sessions are easier for you.", or just the part
+`fit_line` ("Fits your <Gift> and its <Affinity> affinity. Sessions are easier for you.", or just the part
 that fits; omitted when the fit's `course_ease` is 0, so staff zeroing both eases removes the claim).
 The menu (`serialize_npc_session_state`) reads the student's traits once and resolves one fit per
 teaching Tradition (`_menu_teaching_fits`, a local dict passed down), not one per offer. Both

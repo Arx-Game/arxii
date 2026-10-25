@@ -82,7 +82,7 @@ describe('NPCInteractionDialog price line (#4457)', () => {
 
   it("prints a course's Tradition line, then its fit line, under its price (#4659)", async () => {
     const TAUGHT = 'Taught in the manner of Smiling Shadows';
-    const FIT = 'Fits your Shadowcraft and Abyssal aura. Sessions are easier for you.';
+    const FIT = 'Fits your Shadowcraft and its Abyssal affinity. Sessions are easier for you.';
     startInteraction.mockResolvedValue({
       closed: false,
       last_result_message: null,

@@ -948,11 +948,11 @@ def _teaching_lines(
         return teaching_line, None
     gift, affinity = fit.favored_gift_name, fit.favored_affinity_name
     if gift is not None and affinity is not None:
-        fits = f"your {gift} and {affinity} aura"
+        fits = f"your {gift} and its {affinity} affinity"
     elif gift is not None:
         fits = f"your {gift}"
     else:
-        fits = f"your {affinity} aura"
+        fits = f"your Gift's {affinity} affinity"
     return teaching_line, f"Fits {fits}. Sessions are easier for you."
 
 
