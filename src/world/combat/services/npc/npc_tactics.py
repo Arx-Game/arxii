@@ -69,7 +69,7 @@ from world.combat.models import (
     NpcTacticsConfig,
     ThreatPoolEntry,
 )
-from world.combat.services.held_ground import routing_profile
+from world.combat.services.held_ground import EncounterHolds, encounter_holds, routing_profile
 from world.combat.services.npc.npc_movement import (
     ReachMemo,
     _is_live,
@@ -364,6 +364,9 @@ def apply_unanswered_hit_morale(attacker: Combatant, outcome: ActionOutcome) -> 
         for o in plannable_opponents(CombatOpponent.objects.filter(pk__in=victims))
         if not (isinstance(attacker, CombatOpponent) and attacker.pk == o.pk)
     ]
+    if not struck:
+        return
+    holds = encounter_holds(struck[0].encounter)  # one read for every struck opponent
     entries_by_pool: dict[int, list[ThreatPoolEntry]] = defaultdict(list)
     for entry in ThreatPoolEntry.objects.filter(
         pool_id__in={o.threat_pool_id for o in struck if o.threat_pool_id}
@@ -372,7 +375,7 @@ def apply_unanswered_hit_morale(attacker: Combatant, outcome: ActionOutcome) -> 
     unanswered = [
         o
         for o in struck
-        if not _answers_from_its_place(o, attacker_pos, entries_by_pool[o.threat_pool_id])
+        if not _answers_from_its_place(o, attacker_pos, entries_by_pool[o.threat_pool_id], holds)
     ]
     for opponent in unanswered:
         amount = _unanswered_morale(opponent, victims.count(opponent.pk))
@@ -381,10 +384,13 @@ def apply_unanswered_hit_morale(attacker: Combatant, outcome: ActionOutcome) -> 
 
 
 def _answers_from_its_place(
-    opponent: CombatOpponent, attacker_pos: Position, entries: list[ThreatPoolEntry]
+    opponent: CombatOpponent,
+    attacker_pos: Position,
+    entries: list[ThreatPoolEntry],
+    holds: EncounterHolds,
 ) -> bool:
     """Whether ``opponent`` can hit ``attacker_pos`` with an entry it would use."""
-    profile = routing_profile(opponent)
+    profile = routing_profile(opponent, holds)
     if is_mindless(profile):
         entries = [e for e in entries if not entry_grounds_fliers(e)]
     with mover_origin(opponent, profile) as origin:
@@ -708,7 +714,8 @@ def _retreat_route(
     def distance(pk: int) -> int:
         return min((m.get(pk, _UNREACHABLE) for m in maps), default=_UNREACHABLE)
 
-    own = path_costs_from(origin, traversal=profile.traversal)
+    # Only places it can actually walk to: held ground ends a route (#4663).
+    own = path_costs_from(origin, traversal=profile.traversal, stop_at=profile.stop_at)
     best = max(own, key=lambda pk: (distance(pk), -own[pk], -pk))
     if distance(best) <= distance(origin.pk):
         return None, in_reach
@@ -736,7 +743,7 @@ def plan_retreat(opponent: CombatOpponent, ctx: NpcRoundContext) -> bool:
         allegiances=ctx.allegiances,
         active_opponents=ctx.all_active,
     )
-    profile = routing_profile(opponent)
+    profile = routing_profile(opponent, ctx.holds)
     with mover_origin(opponent, profile) as origin:
         if origin is None or not _placed(hostiles):
             _flee(opponent, announce=False)
@@ -871,7 +878,9 @@ def _run_bash(
         advance = CombatOpponentMove(
             opponent=opponent, round_number=move.round_number, kind=OpponentMoveKind.ADVANCE
         )
-        result.moved = advance_opponent(opponent, advance, [], on_hop=on_hop) is not None
+        result.moved = (
+            advance_opponent(opponent, advance, [], on_hop=on_hop, profile=profile) is not None
+        )
         if not result.stopped:
             row = _strike_in_reach(opponent, move)
             if row is not None:

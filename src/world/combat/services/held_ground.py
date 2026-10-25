@@ -11,7 +11,7 @@ Outside a live encounter there is no held ground.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from django.db.models import F
@@ -34,47 +34,77 @@ if TYPE_CHECKING:
 _STOPPED_TRAVERSALS = frozenset({CreatureTraversal.WALKS, CreatureTraversal.CLIMBS})
 
 
-def _live_opponent_row(
-    mover: ObjectDB,  # noqa: OBJECTDB_PARAM - an NPC mover has no sheet
-) -> CombatOpponent | None:
-    """The mover's ACTIVE opponent row in a live encounter, or None."""
-    return (
-        CombatOpponent.objects.filter(objectdb=mover, status=OpponentStatus.ACTIVE)
-        .exclude(encounter__status=RoundStatus.COMPLETED)
-        .select_related("encounter")
-        .first()
-    )
+@dataclass(frozen=True)
+class EncounterHolds:
+    """Where each side's combatants able to act stand in one encounter, read once.
 
-
-def _opponent_positions(encounter: CombatEncounter, allegiance: str) -> set[int]:
-    """Positions of the encounter's ACTIVE opponents of ``allegiance``. One query."""
-    return set(
-        ObjectPosition.objects.filter(
-            objectdb__combat_opponent_rows__encounter=encounter,
-            objectdb__combat_opponent_rows__status=OpponentStatus.ACTIVE,
-            objectdb__combat_opponent_rows__allegiance=allegiance,
-        ).values_list("position_id", flat=True)
-    )
-
-
-def _participant_positions(encounter: CombatEncounter) -> set[int]:
-    """Positions of the encounter's ACTIVE participants who can act. One query.
-
-    ``can_act`` reads each sheet's own vitals and awareness; a fight holds a handful of
-    player characters.
+    Built by ``encounter_holds`` once per planning pass (on ``NpcRoundContext``) or once
+    per resolution slot, where positions change between slots; every opponent's held set
+    is derived from it without another query.
     """
+
+    enemy_opponents: frozenset[int]
+    ally_opponents: frozenset[int]
+    acting_pcs: frozenset[int]
+
+    def against_opponent(self, opponent: CombatOpponent) -> frozenset[int]:
+        """The places held against ``opponent``, by its stored allegiance, its own excluded.
+
+        An ENEMY opponent is held by player characters who can act and by ALLY opponents;
+        an ALLY opponent by ENEMY opponents.
+        """
+        if opponent.allegiance == CombatAllegiance.ALLY:
+            held = self.enemy_opponents
+        else:
+            held = self.acting_pcs | self.ally_opponents
+        own = position_of(opponent.objectdb) if opponent.objectdb is not None else None
+        return held - {own.pk} if own is not None else held
+
+
+def encounter_holds(
+    encounter: CombatEncounter,
+    *,
+    acting_participants: list[CombatParticipant] | None = None,
+) -> EncounterHolds:
+    """Read the encounter's held places: two queries, plus ``can_act`` per participant
+    when ``acting_participants`` (the round's PCs who can act) is not handed in.
+
+    ``NpcRoundContext.active_participants`` is that list for a planning pass (PCs who can
+    act and are not intangible: an incorporeal or phased PC blocks nobody).
+    """
+    enemy: set[int] = set()
+    ally: set[int] = set()
+    for allegiance, position_id in CombatOpponent.objects.filter(
+        encounter=encounter,
+        status=OpponentStatus.ACTIVE,
+        objectdb__object_position__isnull=False,
+    ).values_list("allegiance", "objectdb__object_position__position_id"):
+        (ally if allegiance == CombatAllegiance.ALLY else enemy).add(position_id)
+    if acting_participants is None:
+        acting_participants = _acting_participants(encounter)
+    sheet_ids = [p.character_sheet_id for p in acting_participants]
+    acting = (
+        ObjectPosition.objects.filter(objectdb_id__in=sheet_ids).values_list(
+            "position_id", flat=True
+        )
+        if sheet_ids
+        else []
+    )
+    return EncounterHolds(
+        enemy_opponents=frozenset(enemy),
+        ally_opponents=frozenset(ally),
+        acting_pcs=frozenset(acting),
+    )
+
+
+def _acting_participants(encounter: CombatEncounter) -> list[CombatParticipant]:
+    """The encounter's ACTIVE participants who can act (``can_act`` reads each sheet)."""
     from world.vitals.services import can_act  # noqa: PLC0415
 
     participants = CombatParticipant.objects.filter(
         encounter=encounter, status=ParticipantStatus.ACTIVE
-    ).select_related("character_sheet__character__object_position")
-    held: set[int] = set()
-    for participant in participants:
-        sheet = participant.character_sheet
-        position = position_of(sheet.character)
-        if position is not None and can_act(sheet):
-            held.add(position.pk)
-    return held
+    ).select_related("character_sheet")
+    return [p for p in participants if can_act(p.character_sheet)]
 
 
 def held_position_ids_against(
@@ -83,41 +113,56 @@ def held_position_ids_against(
     """The positions an enemy able to act holds against ``mover``, its own excluded.
 
     For a player character: where her encounter's ACTIVE ENEMY opponents stand. For an
-    ENEMY opponent: where ACTIVE participants who can act stand, and ACTIVE ALLY
-    opponents. For an ALLY opponent: where ACTIVE ENEMY opponents stand. Empty when the
-    mover is in no live encounter.
+    opponent, ``EncounterHolds.against_opponent``. Empty when the mover is in no live
+    encounter.
     """
     participant = active_combat_participant(mover)
     if participant is not None:
-        held = _opponent_positions(participant.encounter, CombatAllegiance.ENEMY)
-    else:
-        opponent = _live_opponent_row(mover)
-        if opponent is None:
-            return frozenset()
-        if opponent.allegiance == CombatAllegiance.ALLY:
-            held = _opponent_positions(opponent.encounter, CombatAllegiance.ENEMY)
-        else:
-            held = _participant_positions(opponent.encounter) | _opponent_positions(
-                opponent.encounter, CombatAllegiance.ALLY
-            )
-    own = position_of(mover)
-    if own is not None:
-        held.discard(own.pk)
-    return frozenset(held)
+        held = set(
+            CombatOpponent.objects.filter(
+                encounter=participant.encounter,
+                status=OpponentStatus.ACTIVE,
+                allegiance=CombatAllegiance.ENEMY,
+                objectdb__object_position__isnull=False,
+            ).values_list("objectdb__object_position__position_id", flat=True)
+        )
+        own = position_of(mover)
+        if own is not None:
+            held.discard(own.pk)
+        return frozenset(held)
+    opponent = (
+        CombatOpponent.objects.filter(objectdb=mover, status=OpponentStatus.ACTIVE)
+        .exclude(encounter__status=RoundStatus.COMPLETED)
+        .select_related("encounter")
+        .first()
+    )
+    if opponent is None:
+        return frozenset()
+    return encounter_holds(opponent.encounter).against_opponent(opponent)
 
 
-def npc_stop_at(opponent: CombatOpponent) -> frozenset[int]:
-    """The held places an opponent's routes stop in: none for a flier or a leaper."""
+def npc_stop_at(opponent: CombatOpponent, holds: EncounterHolds | None = None) -> frozenset[int]:
+    """The held places an opponent's routes stop in: none for a flier or a leaper.
+
+    ``holds`` is the pass's ``EncounterHolds``; read fresh when not handed in.
+    """
     if opponent.objectdb is None:
         return frozenset()
     if opponent.movement_profile.traversal not in _STOPPED_TRAVERSALS:
         return frozenset()
-    return held_position_ids_against(opponent.objectdb)
+    if holds is None:
+        holds = encounter_holds(opponent.encounter)
+    return holds.against_opponent(opponent)
 
 
-def routing_profile(opponent: CombatOpponent) -> MovementProfile:
-    """The opponent's movement profile with the held ground its routes stop in, read now."""
-    return replace(opponent.movement_profile, stop_at=npc_stop_at(opponent))
+def routing_profile(
+    opponent: CombatOpponent, holds: EncounterHolds | None = None
+) -> MovementProfile:
+    """The opponent's movement profile with the held ground its routes stop in.
+
+    Pass the planning pass's ``holds`` so a round's opponents share one read.
+    """
+    return replace(opponent.movement_profile, stop_at=npc_stop_at(opponent, holds))
 
 
 def holder_names(mover: ObjectDB) -> dict[int, str]:  # noqa: OBJECTDB_PARAM - the PC mover

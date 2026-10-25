@@ -14,9 +14,16 @@ edges, with a fight in DECLARING round 1.
 - Kit starting the round in the Yard beside the Bandit walks out to the Hall for one hop.
 - Kit in the air above the Gate flies on above the Yard and is not stopped.
 - Kit's move list marks the Yard: "Held by Bandit: you'd stop there."
+- Kit climbs a Thorn Hedge (a 2-hop crossing) onto the Ledge the Bandit holds: her
+  three hops are spent once, all of them, not two and then three more.
+- A Bandit fighting on Kit's side (ALLY) holds nothing against her.
 - A Grey Wolf (three hops) at the Tower goes for Wren at the Lane. Hobb stands in the
   Yard between them: the walking wolf stops in the Yard. A leaping wolf goes past him to
-  the Gate, beside Wren. With Hobb unconscious, the walking wolf goes past him too.
+  the Gate, beside Wren. With Hobb unconscious, the walking wolf goes past him too. A
+  Bandit fighting on the players' side in the Yard stops the walking wolf the same way.
+- A broken Bandit in the Yard backs away from Hobb in the Hall. The far end past Hobb
+  (Tower - Spire - Peak - Summit) is farther, but Hobb holds the way: it heads for the
+  Lane instead of being cornered.
 
 Expected values are the rows built here; "You are stopped by {name}." and
 "Held by {name}: you'd stop there." are the spec's copy.
@@ -34,6 +41,8 @@ from world.areas.positioning.constants import CreatureTraversal, PositionKind
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.services import connect_positions, place_in_position, position_of
 from world.combat.constants import (
+    CombatAllegiance,
+    OpponentMoveKind,
     OpponentStatus,
     OpponentTier,
     ParticipantStatus,
@@ -49,8 +58,13 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
-from world.combat.models import CombatOpponent, CombatOpponentAction, CombatParticipant
-from world.combat.services import resolve_round
+from world.combat.models import (
+    CombatOpponent,
+    CombatOpponentAction,
+    CombatOpponentMove,
+    CombatParticipant,
+)
+from world.combat.services import resolve_round, select_npc_actions
 from world.combat.services.boss.creature_spawn import spawn_from_creature_template
 from world.combat.services.movement_budget import hops_left
 from world.conditions.constants import FoundationalCapability
@@ -60,6 +74,8 @@ from world.conditions.services import apply_condition
 from world.magic.factories import CharacterAnimaFactory
 from world.mechanics.factories import (
     AerialPropertyFactory,
+    ChallengeInstanceFactory,
+    ChallengeTemplateFactory,
     CharacterEngagementFactory,
     ModifierCategoryFactory,
 )
@@ -102,6 +118,9 @@ class _TheCauseway(JourneyCase):
         self.flight = CapabilityTypeFactory(
             name="winged flight", innate_baseline=0, traversal=CreatureTraversal.FLIES
         )
+        self.climbing = CapabilityTypeFactory(
+            name="climbing", innate_baseline=0, traversal=CreatureTraversal.CLIMBS
+        )
         self.room = self.make_room("The Causeway")
         self.lane = PositionFactory(room=self.room, name="Lane")
         self.gate = PositionFactory(room=self.room, name="Gate")
@@ -135,7 +154,7 @@ class _TheCauseway(JourneyCase):
             source=ModifierSource.objects.create(),
         )
 
-    def fighter(self, name: str, *, at, flies: bool = False):
+    def fighter(self, name: str, *, at, flies: bool = False, climbs: bool = False):
         character = self.make_player(name, room=self.room)
         sheet = character.sheet_data
         CharacterVitals.objects.create(
@@ -150,6 +169,8 @@ class _TheCauseway(JourneyCase):
         self.raise_capability(character, movement, EXTRA_MOVEMENT)
         if flies:
             self.raise_capability(character, self.flight, CAPABILITY_RAISE)
+        if climbs:
+            self.raise_capability(character, self.climbing, CAPABILITY_RAISE)
         place_in_position(character, at)
         return character
 
@@ -179,6 +200,11 @@ class _TheCauseway(JourneyCase):
         return CombatParticipant.objects.get(
             encounter=self.encounter, character_sheet=character.sheet_data
         )
+
+    def on_our_side(self, opponent: CombatOpponent) -> CombatOpponent:
+        opponent.allegiance = CombatAllegiance.ALLY
+        opponent.save(update_fields=["allegiance"])
+        return opponent
 
     def resolve(self) -> None:
         resolve_round(self.encounter, defense_check_fn=_full_strength, offense_check_fn=_clean_hit)
@@ -239,6 +265,33 @@ class AWalkerStopsInHeldGround(_TheCauseway):
         self.assertEqual(position_of(kit), above_yard)
         self.assertEqual(self.participant(kit).hops_used, 2)
 
+    def test_a_climb_into_held_ground_spends_the_hops_once(self) -> None:
+        ledge = PositionFactory(room=self.room, name="Ledge")
+        hedge = ChallengeInstanceFactory(
+            template=ChallengeTemplateFactory(name="Thorn Hedge"), location=self.room
+        )
+        connect_positions(self.gate, ledge, is_passable=False, gating_challenge=hedge)
+        self.creature("Bandit", at=ledge)
+        kit = self.fighter("Kit", at=self.gate, climbs=True)
+
+        result = self.web(kit, "move_to_position", position_id=ledge.pk)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, STOPPED_BY.format(name="Bandit"))
+        self.assertEqual(position_of(kit), ledge)
+        self.assertEqual(self.participant(kit).hops_used, 3)  # all three, spent once
+        self.assertEqual(hops_left(self.participant(kit)), 0)
+
+    def test_an_opponent_on_her_side_holds_nothing(self) -> None:
+        self.on_our_side(self.creature("Bandit", at=self.yard))
+        kit = self.fighter("Kit", at=self.gate)
+
+        result = self.web(kit, "move_to_position", position_id=self.yard.pk)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertNotIn("stopped", result.detail.message or "")
+        self.assertEqual(self.participant(kit).hops_used, 1)
+
     def test_move_list_marks_held_places(self) -> None:
         self.creature("Bandit", at=self.yard)
         kit = self.fighter("Kit", at=self.gate)
@@ -279,6 +332,27 @@ class AnNpcStopsInHeldGround(_TheCauseway):
 
         self.assertEqual(position_of(wolf.objectdb), self.gate)
 
+    def test_a_planning_pass_reads_held_ground_once_for_every_opponent(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        for index in range(3):
+            self.creature(f"Grey Wolf {index}", at=self.tower, hops=3)
+
+        with CaptureQueriesContext(connection) as queries:
+            select_npc_actions(self.encounter)
+
+        # The one read of where each side's opponents stand (it selects their allegiance
+        # beside their places), shared by all three wolves' plans.
+        reads = [
+            q["sql"]
+            for q in queries.captured_queries
+            if "objectposition" in q["sql"].lower()
+            and "combatopponent" in q["sql"].lower()
+            and '"allegiance"' in q["sql"].lower()
+        ]
+        self.assertEqual(len(reads), 1, reads)
+
     def test_an_unconscious_pc_holds_nothing(self) -> None:
         with override_settings(SEED_SAMPLE_CONTENT=True):
             unconscious = ensure_unconscious_condition()
@@ -289,3 +363,45 @@ class AnNpcStopsInHeldGround(_TheCauseway):
         self.resolve()
 
         self.assertEqual(position_of(wolf.objectdb), self.gate)
+
+
+class AnAllyHoldsTheWay(_TheCauseway):
+    """No player stands between: a Bandit fighting on the players' side holds the Yard."""
+
+    def test_an_ally_opponent_stops_an_enemy_walker(self) -> None:
+        wren = self.fighter("Wren", at=self.lane)
+        bandit = self.on_our_side(self.creature("Bandit", at=self.yard))
+        wolf = self.creature("Grey Wolf", at=self.tower, hops=3)
+        bite = CombatOpponentAction.objects.create(
+            opponent=wolf, round_number=1, threat_entry=wolf.threat_pool.entries.get()
+        )
+        bite.targets.set([self.participant(wren)])
+
+        self.resolve()
+
+        # The bandit may step up to meet it first; wherever it stands, the wolf stops there
+        # and never reaches the Gate beside Wren.
+        self.assertEqual(position_of(wolf.objectdb), position_of(bandit.objectdb))
+        self.assertNotEqual(position_of(wolf.objectdb), self.gate)
+
+
+class ABrokenBanditBacksAwayPastHeldGround(_TheCauseway):
+    def test_a_broken_walker_heads_for_the_farthest_place_it_can_reach(self) -> None:
+        spire = PositionFactory(room=self.room, name="Spire")
+        peak = PositionFactory(room=self.room, name="Peak")
+        summit = PositionFactory(room=self.room, name="Summit")
+        connect_positions(self.tower, spire)
+        connect_positions(spire, peak)
+        connect_positions(peak, summit)
+        self.fighter("Hobb", at=self.hall)
+        bandit = self.creature("Bandit", at=self.yard)
+        bandit.morale = 20  # at or below BREAK_MORALE_THRESHOLD (25)
+        bandit.save(update_fields=["morale"])
+
+        self.resolve()
+
+        # From the Hall the Summit is four away and the Lane three; Hobb holds the way to
+        # the Summit, so the bandit backs off toward the Lane rather than being cornered.
+        plan = CombatOpponentMove.objects.get(opponent=bandit, round_number=1)
+        self.assertEqual(plan.kind, OpponentMoveKind.RETREAT)
+        self.assertEqual(plan.goal_position, self.lane)

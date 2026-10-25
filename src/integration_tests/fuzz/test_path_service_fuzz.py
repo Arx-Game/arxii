@@ -9,7 +9,8 @@ crosses an edge that ``edge_crossing_cost`` opens to that mover, ``step_costs`` 
 with it, and only a flier ever stands on an aerial position. On the ground alone, the
 positions a walker can route to are exactly the ones ``reachable_positions`` (the walker
 rule's own search) finds. With a random set of held places (``stop_at``, #4663), no
-route ever stands on a held place anywhere but its last position.
+route ever stands on a held place anywhere but its last position, and ``path_costs_from``
+with the same held places maps exactly the positions a route can end in.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from world.areas.positioning.services import (
     edge_crossing_cost,
     find_path,
     materialize_aerial_layer,
+    path_costs_from,
     place_in_position,
     reachable_positions,
     step_costs,
@@ -163,6 +165,7 @@ class PathServiceHoldsItsContract(HypothesisTestCase):
         held = data.draw(st.sets(st.sampled_from(range(len(ground)))))
         stop_at = frozenset(ground[i].pk for i in held)
         for origin in ground:
+            costs = path_costs_from(origin, traversal=traversal, stop_at=stop_at)
             for goal in ground:
                 path = find_path(
                     origin,
@@ -170,6 +173,8 @@ class PathServiceHoldsItsContract(HypothesisTestCase):
                     traversal=traversal,
                     stop_at=stop_at,
                 )
+                # The distance map covers exactly the places a route can end in.
+                self.assertEqual(path is not None, goal.pk in costs, goal.name)
                 if path is None:
                     continue
                 self.assertEqual((path[0], path[-1]), (origin, goal))

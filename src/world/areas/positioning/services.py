@@ -1134,12 +1134,18 @@ def find_path(
     return None
 
 
-def path_costs_from(origin: Position, *, traversal: str) -> dict[int, int]:
+def path_costs_from(
+    origin: Position, *, traversal: str, stop_at: frozenset[int] = frozenset()
+) -> dict[int, int]:
     """Hops from ``origin`` to every position a mover of ``traversal`` can reach, by pk.
 
     The same costs ``find_path`` routes over (``edge_crossing_cost``); the origin costs
     0, and a position the mover cannot reach is absent. Used to measure path distance
     (an NPC retreating from its enemies, #4609).
+
+    ``stop_at`` is held ground, as in ``find_path`` (#4663): such a position (other than
+    the origin) is reached but never expanded past, so this maps exactly the positions
+    ``find_path`` with the same ``stop_at`` can route to.
     """
     graph = _room_graph(origin)
     best: dict[int, int] = {origin.pk: 0}
@@ -1150,6 +1156,8 @@ def path_costs_from(origin: Position, *, traversal: str) -> dict[int, int]:
         if pk in done:
             continue
         done.add(pk)
+        if pk in stop_at and pk != origin.pk:
+            continue  # held ground: reached, never walked past
         for other, edge in graph.neighbours[pk]:
             hop = graph.cost(edge, traversal)
             if hop is None or other in done:
