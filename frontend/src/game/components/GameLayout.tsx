@@ -146,6 +146,7 @@ export function GameLayout({ topBar, center, sidebar, rail, accountId }: GameLay
                 aria-valuenow={preferences.railWidth}
                 aria-valuetext={`${preferences.railWidth}px`}
                 data-testid="rail-resize"
+                data-edge="right"
                 aria-orientation="vertical"
                 role="separator"
                 className="play-sidebar-resize absolute right-0 top-0 z-10 h-full w-3 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -178,9 +179,10 @@ export function GameLayout({ topBar, center, sidebar, rail, accountId }: GameLay
             aria-valuenow={sidebarWidth}
             aria-valuetext={`${sidebarWidth}px`}
             data-testid="sidebar-resize"
+            data-edge={sidebarSide === 'left' ? 'right' : 'left'}
             aria-orientation="vertical"
             role="separator"
-            className={`play-sidebar-resize absolute top-0 z-10 h-full w-11 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${sidebarSide === 'left' ? 'right-0' : 'left-0'}`}
+            className={`play-sidebar-resize absolute top-0 z-10 h-full w-3 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${sidebarSide === 'left' ? 'right-0' : 'left-0'}`}
             onPointerDown={resizeSidebar}
             onKeyDown={(event) => {
               if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
