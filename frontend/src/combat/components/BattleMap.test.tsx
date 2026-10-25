@@ -1,0 +1,210 @@
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlayerAction } from '@/scenes/actionTypes';
+import type { PositionEdgeLike, PositionNodeLike } from '@/areas/components/TacticalMap';
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+import { toast } from 'sonner';
+import { BattleMap } from './BattleMap';
+import type { BattleMapProps, BattleOccupant } from './BattleMap';
+
+function place(
+  id: number,
+  name: string,
+  overrides: Partial<PositionNodeLike> = {}
+): PositionNodeLike {
+  return {
+    id,
+    name,
+    kind: 'feature',
+    elevation_anchor_id: null,
+    layout_x: null,
+    layout_y: null,
+    rampart_element: null,
+    rampart_integrity: null,
+    rampart_max_integrity: null,
+    rampart_crack_state: null,
+    is_roofed: false,
+    screens_ranged: false,
+    area_x: null,
+    area_y: null,
+    area_w: null,
+    area_h: null,
+    terrain_name: null,
+    terrain_art_url: null,
+    ...overrides,
+  } as PositionNodeLike;
+}
+
+function moveAction(positionId: number): PlayerAction {
+  return {
+    backend: 'registry',
+    display_name: 'Move',
+    description: '',
+    difficulty: null,
+    prerequisite_met: true,
+    prerequisite_reasons: [],
+    check_type: { id: 1, name: 'Standard' },
+    action_template: null,
+    ref: {
+      backend: 'registry',
+      challenge_instance_id: null,
+      approach_id: null,
+      technique_id: null,
+      registry_key: 'move_to_position',
+      position_id: positionId,
+    },
+    target_spec: null,
+    enhancements: [],
+    strain: null,
+  };
+}
+
+const FLOOR = place(1, 'Floor', { kind: 'primary', area_x: 2, area_y: 2, area_w: 4, area_h: 3 });
+const STAGE = place(2, 'Stage', {
+  area_x: 6,
+  area_y: 2,
+  area_w: 3,
+  area_h: 3,
+  terrain_name: 'Rug',
+  terrain_art_url: 'https://example.com/rug.png',
+});
+// Built before areas: drawn from its layout point.
+const DOORWAY = place(3, 'Doorway', { layout_x: -200, layout_y: 80 });
+const AIR = place(4, 'Above Floor', { kind: 'aerial', elevation_anchor_id: 1 });
+const EDGES: PositionEdgeLike[] = [
+  {
+    position_a_id: 1,
+    position_b_id: 2,
+    is_passable: true,
+    blocks_flight: false,
+    gating_challenge_name: null,
+  },
+  {
+    position_a_id: 1,
+    position_b_id: 3,
+    is_passable: true,
+    blocks_flight: false,
+    gating_challenge_name: 'Locked Gate',
+  },
+];
+
+function occupant(name: string, overrides: Partial<BattleOccupant> = {}): BattleOccupant {
+  return { name, side: 'ally', square: null, ...overrides };
+}
+
+function renderMap(overrides: Partial<BattleMapProps> = {}) {
+  const props: BattleMapProps = {
+    nodes: [FLOOR, STAGE, DOORWAY, AIR],
+    edges: EDGES,
+    occupantsByPosition: new Map([
+      [1, [occupant('Malvaine', { isViewer: true, square: { x: 3, y: 3 } })]],
+      [2, [occupant('Harrow', { side: 'enemy', square: { x: 7, y: 3 } })]],
+      [3, [occupant('Barkeep', { side: 'bystander', bystander: true })]],
+      [4, [occupant('Liraveth')]],
+    ]),
+    heldPositions: [{ position_id: 2, holder_names: ['Harrow', 'Blade'] }],
+    moveActions: [moveAction(2), moveAction(3), moveAction(4)],
+    ownPositionId: 1,
+    onDispatchMove: vi.fn(),
+    onStepToSquare: vi.fn(),
+    ...overrides,
+  };
+  render(<BattleMap {...props} />);
+  return props;
+}
+
+describe('BattleMap', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('draws every combatant, including one in a place with no authored area and one in the air', () => {
+    renderMap();
+    for (const name of ['Malvaine', 'Harrow', 'Barkeep', 'Liraveth']) {
+      expect(screen.getAllByText(name).length).toBeGreaterThan(0);
+    }
+    expect(screen.getByTestId('tactical-map-node-3')).toHaveAttribute('data-derived', 'true');
+    const air = screen.getByTestId('tactical-map-node-4');
+    expect(air).toHaveAttribute('aria-label', 'Above Floor: Liraveth');
+    expect(within(air).getByTestId('occupant-token')).toHaveAttribute('data-aerial', 'true');
+  });
+
+  it('marks sides, the viewer and bystanders on their tokens', () => {
+    renderMap();
+    const tokens = screen.getAllByTestId('occupant-token');
+    const byName = (name: string) => tokens.find((t) => t.textContent?.includes(name))!;
+    expect(byName('Malvaine')).toHaveAttribute('data-viewer', 'true');
+    expect(within(byName('Malvaine')).getByTestId('viewer-halo')).toBeInTheDocument();
+    expect(byName('Harrow')).toHaveAttribute('data-side', 'enemy');
+    expect(byName('Barkeep')).toHaveAttribute('data-bystander', 'true');
+  });
+
+  it('labels a held place with its holders', () => {
+    renderMap();
+    expect(screen.getByText('Stage · Held by Harrow, Blade')).toBeInTheDocument();
+    expect(screen.getByTestId('tactical-map-node-2')).toHaveAttribute('data-held', 'true');
+  });
+
+  it('fills a place with its terrain art and names a gate on its route', () => {
+    renderMap();
+    expect(screen.getByTestId('battle-map-terrain-2').getAttribute('fill')).toMatch(/^url\(#/);
+    expect(screen.getByTestId('battle-map-terrain-1').getAttribute('fill')).not.toMatch(/url/);
+    expect(screen.getByTestId('battle-map-edge-1-3')).toHaveTextContent('Locked Gate');
+  });
+
+  it('steps to a square in the viewer’s own place', () => {
+    const props = renderMap();
+    fireEvent.click(screen.getByTestId('battle-map-square-1-5-4'));
+    expect(props.onStepToSquare).toHaveBeenCalledWith({ x: 5, y: 4 });
+    expect(props.onDispatchMove).not.toHaveBeenCalled();
+  });
+
+  it('moves to the clicked square of a place a move reaches', () => {
+    const props = renderMap();
+    fireEvent.click(screen.getByTestId('battle-map-square-2-8-4'));
+    expect(props.onDispatchMove).toHaveBeenCalledWith(props.moveActions[0], { x: 8, y: 4 });
+  });
+
+  it('moves into a place with no authored area without a square', () => {
+    const props = renderMap();
+    const door = screen.getByTestId('tactical-map-node-3');
+    const square = door.querySelector('[data-testid^="battle-map-square-3-"]')!;
+    fireEvent.click(square);
+    expect(props.onDispatchMove).toHaveBeenCalledWith(props.moveActions[1], null);
+  });
+
+  it('moves into the air from its chip', () => {
+    const props = renderMap();
+    fireEvent.click(screen.getByTestId('battle-map-air-chip-4'));
+    expect(props.onDispatchMove).toHaveBeenCalledWith(props.moveActions[2], null);
+  });
+
+  it('moves to a place with Enter, without a square', () => {
+    const props = renderMap();
+    fireEvent.keyDown(screen.getByTestId('tactical-map-node-2'), { key: 'Enter' });
+    expect(props.onDispatchMove).toHaveBeenCalledWith(props.moveActions[0], null);
+  });
+
+  it('refuses a place no move reaches', () => {
+    const props = renderMap({ moveActions: [] });
+    fireEvent.click(screen.getByTestId('battle-map-square-2-8-4'));
+    expect(props.onDispatchMove).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith("You can't move there this turn.");
+  });
+
+  it('hands a click to position picking first', () => {
+    const onPickPosition = vi.fn(() => true);
+    const props = renderMap({ onPickPosition });
+    fireEvent.click(screen.getByTestId('battle-map-square-2-8-4'));
+    expect(onPickPosition).toHaveBeenCalledWith(2);
+    expect(props.onDispatchMove).not.toHaveBeenCalled();
+  });
+
+  it('hands a click to GM placement before moving', () => {
+    const onGMPlace = vi.fn(() => true);
+    const props = renderMap({ onGMPlace });
+    fireEvent.click(screen.getByTestId('battle-map-square-1-5-4'));
+    expect(onGMPlace).toHaveBeenCalledWith(1);
+    expect(props.onStepToSquare).not.toHaveBeenCalled();
+  });
+});
