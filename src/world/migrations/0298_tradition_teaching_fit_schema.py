@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0296_movement_traversal_and_config"),
+        ("arxii", "0297_mapterrain_blueprintposition_area_h_and_more"),
     ]
 
     operations = [

@@ -113,6 +113,32 @@ def _acting_participants(encounter: CombatEncounter) -> list[CombatParticipant]:
     return _targetable_participants(encounter)
 
 
+def enemy_held_places(encounter: CombatEncounter) -> dict[int, list[str]]:
+    """Each place a ready enemy holds, by position pk, with who holds it (#4670).
+
+    The places are ``encounter_holds``' enemy set, so a defeated or incapacitated
+    opponent holds nothing, and the answer is the same for every viewer. Holder names
+    are the opponents' combat names in pk order; two queries (the places, the names).
+    """
+    places = encounter_holds(encounter, acting_participants=[]).enemy_opponents
+    if not places:
+        return {}
+    held: dict[int, list[str]] = {}
+    for position_id, name in (
+        CombatOpponent.objects.filter(
+            encounter=encounter,
+            status=OpponentStatus.ACTIVE,
+            allegiance=CombatAllegiance.ENEMY,
+            objectdb__object_position__position_id__in=places,
+        )
+        .annotate(held_position_id=F("objectdb__object_position__position_id"))
+        .order_by("pk")
+        .values_list("held_position_id", "name")
+    ):
+        held.setdefault(position_id, []).append(name)
+    return held
+
+
 def held_position_ids_against(
     mover: ObjectDB,  # noqa: OBJECTDB_PARAM - a PC or an NPC's game object
 ) -> frozenset[int]:

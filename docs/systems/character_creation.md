@@ -319,7 +319,7 @@ cuts the stance rows to the same ranks, and `reconcile_offer_picks` drops a pick
 opens. Each stance row carries `training_points` and `grants_distinction_name`.
 
 **Magical training pool (slice 2 of #4659, ADR-4659-B).** The old per-stance Magic skill floor is
-gone: `0298_remove_schoolingline_magic_skill_floor` dropped the column and its check constraint
+gone: `0299_remove_schoolingline_magic_skill_floor` dropped the column and its check constraint
 with no carry, because production held no schooling lines (dump arxii-20261025T033001Z, 0 rows):
 disposition "empty in production" (ADR-0237). A stance's points come from its granted
 distinction's `magic_training_points` effect.

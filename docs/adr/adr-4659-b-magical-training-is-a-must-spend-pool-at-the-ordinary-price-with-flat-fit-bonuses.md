@@ -27,7 +27,7 @@ gives a pool of magical training points and the player spends all of it on Magic
   check's difficulty. The roll's outcome still decides how much development is gained.
 
 The fit is resolved in one place, `teaching_fit` in `world/magic/services/teaching_fit.py`, which
-character creation and the Academy both call. Migration 0298 dropped the old stance floor column with
+character creation and the Academy both call. Migration 0299 dropped the old stance floor column with
 no carry, because production held no schooling lines (dump arxii-20261025T033001Z, 0 rows): data
 disposition "empty in production" (ADR-0237). Fit by the character's aura, and a starting aura that
 follows the picked resonance, are deferred to #4672, which normalizes the aura's three columns.

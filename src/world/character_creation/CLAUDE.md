@@ -200,7 +200,7 @@ for the five-branch validation gate this data must satisfy before submission.
   `_magic_skill_allocation_errors` (in `compute_magic_errors`) requires exactly `required_spend`;
   `_create_skill_values` writes the allocation; `_glimpse` starts a new aura at the model defaults
   (a starting aura that follows the picked resonance is #4672). `SchoolingLine.magic_skill_floor`
-  is gone (migration 0298, no carry: production held no schooling lines, ADR-0237 "empty in
+  is gone (migration 0299, no carry: production held no schooling lines, ADR-0237 "empty in
   production"). Any
   Tradition may teach any Major Gift: `get_gift_options` does not read `TraditionGiftGrant`.
 - **Technique personalization (#4099, ADR-4099).** `_finalize_technique_personalizations`

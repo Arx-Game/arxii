@@ -291,8 +291,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   read-only `@xyflow/react` canvas with occupant avatars per node, edges styled by
   passability/gating, and click-to-move via the existing `move_to_position`/
   `take_position` actions. `SceneTacticalMap` replaced the old `RoomPositionsPanel`
-  text-list UI on the scene page; `CombatTacticalMap` mounts as a "Map" tab in
-  `CombatRail`'s right rail (default tab stays "Your Turn") — `CombatRail` renders
+  text-list UI on the scene page; `CombatTacticalMap` mounted as a "Map" tab in
+  `CombatRail`'s right rail until #4670 made it the main view of a fight; `CombatRail` renders
   in-scene on `/scenes/:id` (#2197; the dedicated `CombatScenePage` route is gone).
   Both `SceneDetail`
   and `EncounterDetail` now serve the full node+edge graph (`position_nodes`/
@@ -402,6 +402,20 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   count as challenge capability sources, one action per approach from the strongest source.
   She is not stopped by ground held below her while in the air. Journeys: `test_moving_by_capability_journeys.py`,
   `test_holding_ground_journeys.py`, `test_crossing_a_wall_journeys.py`.
+- **The battle map is the main view of a fight (#4670, slice 1 of #4651, ADR-4670) [BUILT &
+  WIRED].** The combat map is now an SVG drawing, not a React Flow graph. Staff give a place a
+  rectangle (`area_x/y/w/h`, in map squares) and a `MapTerrain` ground look (admin; both on
+  `Position` and `BlueprintPosition`, copied when a blueprint is staged). A fighter stands on a
+  square inside the place (`ObjectPosition.square_x/y`): a move can name a square, and
+  `step_to_square` re-tiles inside the place she holds for free. A place with no area is drawn
+  as a derived 3x2 box and takes no square. Squares are drawing only: hops, held ground, walls
+  and reach still read places. The encounter payload carries `current_square` and
+  `held_positions` (who holds each enemy-held place), and the scene payload carries persona
+  squares. The map (`BattleMap`, `CombatMainMap`) sits in the wide column of the scene page and
+  the game page for the whole fight; the rail keeps Your Turn, and GM for a GM. Outside a
+  fight the scene map is still `SceneTacticalMap`. Journeys:
+  `test_battle_map_drawing_journeys.py`. Not built: staff tools to draw areas on a canvas
+  (areas are authored as numbers in admin), and the slice-3 and slice-4 work of #4651.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips

@@ -81,6 +81,13 @@ export interface PositionNode {
   /** Cover facts (#4608): overhead cover, and a line-of-sight break. */
   is_roofed: boolean;
   screens_ranged: boolean;
+  /** Battle-map drawing (#4651): the place's rectangle in map squares, all null or all set. */
+  area_x: number | null;
+  area_y: number | null;
+  area_w: number | null;
+  area_h: number | null;
+  terrain_name: string | null;
+  terrain_art_url: string | null;
 }
 
 /** A position-graph edge — passability/gating state for obstacle visibility (#2006). */
@@ -98,6 +105,8 @@ export interface PositionEdgeInfo {
 export interface PersonaPosition {
   persona_id: number;
   position: PositionSummary | null;
+  square_x: number | null;
+  square_y: number | null;
 }
 
 /** Round resolution mode wire values (matches SceneRoundMode TextChoices). */

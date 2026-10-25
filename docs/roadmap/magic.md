@@ -1001,7 +1001,7 @@ students better than others.
 **Built:**
 - The floor became training points: `magic_training_points` modifier target, read by
   `CharacterDraft.magic_training_pool`; `SchoolingLine.magic_skill_floor` and its constraint removed
-  (column dropped by 0298 with no carry: the production dump arxii-20261025T033001Z held 0 schooling
+  (column dropped by 0299 with no carry: the production dump arxii-20261025T033001Z held 0 schooling
   lines, so the disposition is "empty in production", ADR-0237).
 - Teaching fit: `Tradition.favored_affinities`, the `TraditionTeachingConfig` singleton and
   `world/magic/services/teaching_fit.py`, comparing `Affinity` rows by foreign key only: character

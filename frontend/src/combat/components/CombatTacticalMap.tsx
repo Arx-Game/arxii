@@ -1,7 +1,8 @@
 /**
  * CombatTacticalMap — spatial rendering of the encounter's Position graph
- * (#2006), mounted as a rail tab in CombatRail alongside CombatTurnPanel
- * (CombatRail renders in-scene on /scenes/:id — #2197).
+ * (#2006), the main-column view of a fight (CombatMainMap sets its height)
+ * (CombatRail renders in-scene on /scenes/:id — #2197). Drawn by BattleMap
+ * (#4670): places as areas of squares, combatants as tokens on squares.
  *
  * Occupants are built from participants'/opponents' current_position, plus
  * (#3557) non-combatant scene personas from the scene's persona_positions,
@@ -16,16 +17,33 @@ import { toast } from 'sonner';
 import { combatKeys, useCombatEncounter, useDispatchPlayerAction } from '../queries';
 import { isDispatchFailure } from '../types';
 import type { EncounterDetail, RoundActionTyped } from '../types';
-import { useAvailableActionsQuery } from '@/scenes/actionQueries';
+import { availableActionsKeys, useAvailableActionsQuery } from '@/scenes/actionQueries';
 import { fetchScene, sceneKeys } from '@/scenes/queries';
 import type { SceneDetail } from '@/scenes/types';
-import { TacticalMap } from '@/areas/components/TacticalMap';
 import { GMPlacementControls } from '@/areas/components/GMPlacementControls';
 import type { OccupantLink } from '@/areas/components/TacticalMap';
-import type { OccupantMark, OccupantSummary } from '@/areas/components/PositionMapNode';
-import type { PlayerAction } from '@/scenes/actionTypes';
+import type { OccupantMark } from '@/areas/components/PositionMapNode';
+import type { ActionRef, PlayerAction } from '@/scenes/actionTypes';
+import { BattleMap } from './BattleMap';
+import type { BattleOccupant } from './BattleMap';
+import type { Square } from '../battleMapLayout';
 import type { PositionTargetShape } from '@/actions/types';
 import { hopsLeftLine, isMoveAction } from '../roundActionHelpers';
+
+/** Standing on another square of one's own place: free, never in the actions list (#4670). */
+const STEP_TO_SQUARE_REF: ActionRef = {
+  backend: 'registry',
+  registry_key: 'step_to_square',
+  challenge_instance_id: null,
+  approach_id: null,
+  technique_id: null,
+};
+
+const ALLY_ALLEGIANCE = 'ally';
+
+function squareKwargs(square: Square | null): Record<string, number> {
+  return square ? { square_x: square.x, square_y: square.y } : {};
+}
 
 export interface CombatTacticalMapProps {
   /**
@@ -39,15 +57,15 @@ export interface CombatTacticalMapProps {
   characterId: number;
   /**
    * Cast-time position-targeting shape for the currently selected focused
-   * technique (#2206), lifted to CombatRail so this map tab can
-   * highlight pickable nodes and consume clicks while a position-shaped
-   * technique is selected in the sibling "Your Turn" tab. Defaults to 'none'
+   * technique (#2206), held by CombatPickProvider (combat/combatPick.ts) so
+   * this map can highlight pickable nodes and consume clicks while a
+   * position-shaped technique is selected in the rail's "Your Turn" tab. Defaults to 'none'
    * (today's move-only behavior) when the caller omits it.
    */
   positionShape?: PositionTargetShape;
   /**
    * Called when the player clicks a map node while `positionShape !== 'none'`.
-   * Only forwarded to TacticalMap when picking is active — see the
+   * Only forwarded to BattleMap when picking is active — see the
    * presence-gated `onPickPosition` handoff below.
    */
   onPickPosition?: (positionId: number) => boolean;
@@ -121,9 +139,10 @@ function buildLockLinks(encounter: EncounterDetail): OccupantLink[] {
  */
 function buildBystanders(
   encounter: EncounterDetail,
-  scene: SceneDetail | undefined
-): Map<number, OccupantSummary[]> {
-  const map = new Map<number, OccupantSummary[]>();
+  scene: SceneDetail | undefined,
+  characterId: number
+): Map<number, BattleOccupant[]> {
+  const map = new Map<number, BattleOccupant[]>();
   if (!scene) return map;
   const combatantIds = new Set<number>();
   for (const p of encounter.participants ?? []) {
@@ -139,7 +158,14 @@ function buildBystanders(
     if (!persona || persona.character_sheet == null) continue;
     if (combatantIds.has(persona.character_sheet)) continue;
     const occupants = map.get(pp.position.id) ?? [];
-    occupants.push({ name: persona.name, bystander: true });
+    occupants.push({
+      name: persona.name,
+      bystander: true,
+      side: 'bystander',
+      square:
+        pp.square_x != null && pp.square_y != null ? { x: pp.square_x, y: pp.square_y } : null,
+      isViewer: persona.character_sheet === characterId,
+    });
     map.set(pp.position.id, occupants);
   }
   return map;
@@ -186,10 +212,14 @@ export function CombatTacticalMap({
   const refreshMapSources = () => {
     queryClient.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
     queryClient.invalidateQueries({ queryKey: sceneKeys.detail(sceneId) }).catch(() => {});
+    // The hops line and move targets come from the available actions.
+    queryClient
+      .invalidateQueries({ queryKey: availableActionsKeys.forCharacter(characterId) })
+      .catch(() => {});
   };
 
   const occupantsByPosition = useMemo(() => {
-    const map = new Map<number, OccupantSummary[]>();
+    const map = new Map<number, BattleOccupant[]>();
     if (!encounter) return map;
     const marks = buildOccupantMarks(encounter);
     for (const participant of encounter.participants ?? []) {
@@ -200,6 +230,9 @@ export function CombatTacticalMap({
           thumbnailUrl: participant.thumbnail_url,
           thumbnailMediaUrl: participant.thumbnail_media_url,
           marks: marks.get(`p-${participant.id}`),
+          side: 'ally',
+          square: participant.current_square,
+          isViewer: participant.character_sheet_id === characterId,
         });
         map.set(participant.current_position.id, occupants);
       }
@@ -212,15 +245,25 @@ export function CombatTacticalMap({
           thumbnailUrl: opponent.thumbnail_url,
           thumbnailMediaUrl: opponent.thumbnail_media_url,
           marks: marks.get(`o-${opponent.id}`),
+          side: opponent.allegiance === ALLY_ALLEGIANCE ? 'ally' : 'enemy',
+          square: opponent.current_square,
         });
         map.set(opponent.current_position.id, occupants);
       }
     }
-    for (const [positionId, bystanders] of buildBystanders(encounter, scene)) {
+    for (const [positionId, bystanders] of buildBystanders(encounter, scene, characterId)) {
       map.set(positionId, [...(map.get(positionId) ?? []), ...bystanders]);
     }
     return map;
-  }, [encounter, scene]);
+  }, [encounter, scene, characterId]);
+
+  // The viewer's own place: a click on one of its squares is a free step.
+  const ownPositionId = useMemo(() => {
+    for (const [positionId, occupants] of occupantsByPosition) {
+      if (occupants.some((o) => o.isViewer)) return positionId;
+    }
+    return null;
+  }, [occupantsByPosition]);
 
   const lockLinks = useMemo(() => (encounter ? buildLockLinks(encounter) : []), [encounter]);
 
@@ -232,8 +275,8 @@ export function CombatTacticalMap({
     );
   }
 
-  const handleDispatchMove = (action: PlayerAction) => {
-    dispatchAction({ ref: action.ref, kwargs: {} })
+  const dispatchMove = (ref: ActionRef, square: Square | null) => {
+    dispatchAction({ ref, kwargs: squareKwargs(square) })
       .then((result) => {
         if (isDispatchFailure(result)) {
           toast.error(result.message ?? 'Move rejected.');
@@ -247,9 +290,15 @@ export function CombatTacticalMap({
         toast.error(err instanceof Error ? err.message : 'Move failed.');
       });
   };
+  const handleDispatchMove = (action: PlayerAction, square: Square | null) => {
+    dispatchMove(action.ref, square);
+  };
+  const handleStepToSquare = (square: Square) => {
+    dispatchMove(STEP_TO_SQUARE_REF, square);
+  };
 
-  // Only hand TacticalMap a defined onPickPosition while a position-shaped
-  // technique is actually selected (#2206) — TacticalMap treats the prop's
+  // Only hand BattleMap a defined onPickPosition while a position-shaped
+  // technique is actually selected (#2206) — BattleMap treats the prop's
   // mere presence as "picking is active" for its highlight styling, so
   // passing undefined here keeps today's move-only behavior byte-for-byte
   // whenever no position-shaped technique is selected.
@@ -272,7 +321,7 @@ export function CombatTacticalMap({
 
   return (
     <div
-      className="relative h-[480px] rounded-lg border border-border bg-card"
+      className="relative flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card"
       data-testid="combat-tactical-map"
     >
       {hopsLine !== null && (
@@ -292,13 +341,16 @@ export function CombatTacticalMap({
         }}
       >
         {(onGMPlace) => (
-          <TacticalMap
+          <BattleMap
             nodes={encounter.position_nodes ?? []}
             edges={encounter.position_edges ?? []}
             occupantsByPosition={occupantsByPosition}
+            heldPositions={encounter.held_positions ?? []}
             links={lockLinks}
             moveActions={moveActions}
+            ownPositionId={ownPositionId}
             onDispatchMove={handleDispatchMove}
+            onStepToSquare={handleStepToSquare}
             onPickPosition={isPositionPickActive ? onPickPosition : undefined}
             onGMPlace={onGMPlace}
           />

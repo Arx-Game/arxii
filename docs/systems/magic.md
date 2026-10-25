@@ -767,7 +767,7 @@ that grows the pool and eases Academy courses.
 `magic_training_points` `ModifierTarget` (category `character_creation`, seeded by
 `wire_magic_training_points_target`). `CharacterDraft.magic_training_pool` sums those effects with the
 fit bonuses below. `SchoolingLine.magic_skill_floor` and its check constraint were removed by
-`0298_remove_schoolingline_magic_skill_floor` with no carry: production held no schooling lines
+`0299_remove_schoolingline_magic_skill_floor` with no carry: production held no schooling lines
 (dump arxii-20261025T033001Z, 0 rows), so the data disposition is "empty in production" (ADR-0237). The set of skills is
 still every skill in `magic_category_skills()`, the same for every Tradition.
 

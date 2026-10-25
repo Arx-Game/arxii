@@ -12,7 +12,10 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
   "Room art backdrop" section.
 - **`SceneTacticalMap.tsx`**: wraps `frontend/src/areas/components/TacticalMap.tsx`, passing
   `scene.art_url` as its `artUrl` prop for the same room-art backdrop behind the node graph
-  (#3556). `CombatTacticalMap.tsx` shares the same `TacticalMap` but never passes `artUrl`.
+  (#3556). Outside a fight only: during an encounter the scene page's map is `CombatMainMap`
+  (`frontend/src/combat/components/`), in the left column above the pose log, and
+  `SceneTacticalMap` is not mounted (#4670). `CombatTacticalMap.tsx` no longer uses `TacticalMap`;
+  it draws the SVG `BattleMap` (place areas, terrain art, tokens on squares).
 - **`SceneMessages.tsx`**: Scene interaction/dialogue display using the Interaction system;
   passes `onReply` through to each pose's play menu (#4128).
 - **`PoseUnit.tsx`** (POSE branch since #4128, ADR-4128): one prose line. The avatar floats
