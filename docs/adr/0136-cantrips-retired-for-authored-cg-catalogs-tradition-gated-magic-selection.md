@@ -26,4 +26,5 @@ personalization now starts in creation and grows with the thread.)
 > Status: accepted · Source: #2426, Tehom design ruling 2026-07-16 · Confidence: built
 > and wired — `TraditionGiftGrant`/`cg_catalog` services/`GiftStage` funnel; `Cantrip`
 > model and its API/admin/frontend stack fully removed. · Superseded in part by
-> ADR-4099 (mechanical personalization now starts at creation)
+> ADR-4099 (mechanical personalization now starts at creation); superseded in part by ADR-4659-A (a Tradition no longer gates
+> which Major Gift a character picks; a grant row marks a favored Gift)

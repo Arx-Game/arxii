@@ -79,7 +79,8 @@ class MagicStageValidationTest(TestCase):
             [*cls.pool_techniques, cls.unready_technique, cls.special_technique]
         )
 
-        # A gift with no TraditionGiftGrant for this tradition — never a valid pick.
+        # A gift with no technique on this Path's list - never a valid pick (#4659: a
+        # grant row no longer gates; any Tradition may teach any Major Gift).
         cls.other_gift = GiftFactory(name="Not Granted")
         cls.species = SpeciesFactory(name="Species Technique Test")
         cls.species_gift = GiftFactory(name="Species Minor Gift", kind=GiftKind.MINOR)

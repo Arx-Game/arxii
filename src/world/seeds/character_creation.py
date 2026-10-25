@@ -1109,10 +1109,9 @@ def seed_metallic_order_tradition():
     - A ``Tradition`` row (get_or_create by name; PLACEHOLDER description,
       content-overridable — real Metallic Order lore is a lore-repo authoring
       pass per the #2428 vision).
-    - ``TraditionGiftGrant`` rows granting it the same starter Gifts Unbound
-      grants — reads Unbound's own ``TraditionGiftGrant`` rows (real lore-repo
-      content, loaded via ``load_world_content()``) rather than hardcoding gift
-      names, so this stays in sync with the starter catalog automatically.
+    - No ``TraditionGiftGrant`` rows: any Tradition may teach any Major Gift
+      (#4659), and a grant row now marks a Gift the Tradition favors, which is
+      staff's call for real Metallic Order lore.
     - ``BeginningTradition`` rows for every Arx-realm ``Beginnings`` (``starting_
       area__realm__name="Arx"`` — the #2428 vision names Arx as the realm with
       "many orphans" and ancient traditions like this one), each carrying
@@ -1122,34 +1121,11 @@ def seed_metallic_order_tradition():
       ``state=TraditionState.LIVING_MASTERS`` on these rows), and CG reflects the
       change automatically, no code change needed.
 
-    Skips (logged) if the Unbound tradition or its starter gift grants aren't
-    seeded yet — mirrors ``seed_beginning_traditions``'s defensive skip;
-    content-repo load running before any cluster seeder (#2474 Decision 5)
-    guarantees this can't happen via the Big Button. Idempotent throughout via
-    get_or_create; never overwrites a staff-adjusted row.
+    Idempotent throughout via get_or_create; never overwrites a staff-adjusted row.
     """
     from world.character_creation.constants import TraditionState  # noqa: PLC0415
     from world.character_creation.models import BeginningTradition  # noqa: PLC0415
     from world.magic.models import Tradition  # noqa: PLC0415
-    from world.magic.models.grants import TraditionGiftGrant  # noqa: PLC0415
-
-    unbound = Tradition.objects.filter(name=_UNBOUND_TRADITION_NAME).first()
-    if unbound is None:
-        logger.warning(
-            "Skipping %r tradition seeding: %r tradition is not seeded.",
-            _METALLIC_ORDER_TRADITION_NAME,
-            _UNBOUND_TRADITION_NAME,
-        )
-        return None
-
-    starter_grants = list(TraditionGiftGrant.objects.filter(tradition=unbound))
-    if not starter_grants:
-        logger.warning(
-            "Skipping %r tradition seeding: no starter TraditionGiftGrant rows found for %r.",
-            _METALLIC_ORDER_TRADITION_NAME,
-            _UNBOUND_TRADITION_NAME,
-        )
-        return None
 
     ensure_orphaned_tradition_distinction()
 
@@ -1166,9 +1142,6 @@ def seed_metallic_order_tradition():
             "sort_order": 1,
         },
     )
-
-    for grant in starter_grants:
-        TraditionGiftGrant.objects.get_or_create(tradition=tradition, gift=grant.gift)
 
     for beginning in Beginnings.objects.filter(starting_area__realm__name="Arx"):
         BeginningTradition.objects.get_or_create(

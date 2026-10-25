@@ -879,7 +879,7 @@ class TraditionFactory(factory.django.DjangoModelFactory):
 
 
 class TraditionGiftGrantFactory(factory.django.DjangoModelFactory):
-    """Factory for TraditionGiftGrant — the (tradition x gift) CG-availability pool row."""
+    """Factory for TraditionGiftGrant - a Gift a Tradition favors (#4659)."""
 
     class Meta:
         model = TraditionGiftGrant

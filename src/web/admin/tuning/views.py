@@ -54,8 +54,8 @@ from world.classes.models import Path, PathStage
 from world.combat import simulation
 from world.combat.constants import OpponentTier, RiskLevel
 from world.combat.simulation import SimulationParams, SimulationReport
+from world.magic.constants import GiftKind
 from world.magic.models.gifts import Gift, Tradition
-from world.magic.models.grants import TraditionGiftGrant
 from world.magic.services.technique_effects import technique_catalog_revision
 from world.species.models import Species
 
@@ -409,7 +409,6 @@ INTENT_EVALUATE = "evaluate"
 INTENT_REFRESH = "refresh"
 INTENT_KIT = "kit"
 _KIT_TRADITION_NOT_OFFERED = "This Beginning does not offer that tradition."
-_KIT_GIFT_NOT_GRANTED = "This tradition does not grant that gift."
 _KIT_SPECIES_NOT_OFFERED = "This Beginning does not offer that species."
 
 
@@ -426,7 +425,9 @@ class StartingKitForm(forms.Form):
     path = forms.ModelChoiceField(
         queryset=Path.objects.filter(stage=PathStage.PROSPECT, is_active=True).order_by("name")
     )
-    gift = forms.ModelChoiceField(queryset=Gift.objects.order_by("name"))
+    gift = forms.ModelChoiceField(
+        queryset=Gift.objects.filter(kind=GiftKind.MAJOR).order_by("name")
+    )
     species = forms.ModelChoiceField(
         queryset=Species.objects.order_by("name"), required=False, label="Species (optional)"
     )
@@ -448,16 +449,11 @@ class StartingKitForm(forms.Form):
         cleaned = super().clean()
         beginning = cleaned.get("beginning")
         tradition = cleaned.get("tradition")
-        gift = cleaned.get("gift")
         species = cleaned.get("species")
         if beginning is not None and tradition is not None:
             offered = {row.tradition_id for row in beginning.cached_beginning_traditions}
             if tradition.pk not in offered:
                 self.add_error("tradition", _KIT_TRADITION_NOT_OFFERED)
-        if tradition is not None and gift is not None:
-            granted = TraditionGiftGrant.objects.filter(tradition=tradition, gift=gift).exists()
-            if not granted:
-                self.add_error("gift", _KIT_GIFT_NOT_GRANTED)
         if beginning is not None and species is not None:
             offered_species = beginning.get_available_species().filter(pk=species.pk).exists()
             if not offered_species:
