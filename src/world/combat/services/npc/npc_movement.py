@@ -483,7 +483,6 @@ def _broadcast_moves_to(opponent: CombatOpponent, position: Position) -> None:
         encounter=opponent.encounter,
         narration=MOVES_TO_LINE.format(name=opponent.name, position=position.name),
         target_personas=[],
-        deliver_telnet=True,
     )
 
 
@@ -561,5 +560,4 @@ def broadcast_cannot_reach(opponent: CombatOpponent) -> None:
         encounter=opponent.encounter,
         narration=CANNOT_REACH_LINE.format(name=opponent.name),
         target_personas=[],
-        deliver_telnet=True,
     )

@@ -212,9 +212,7 @@ def _broadcast_break_celebration(encounter: CombatEncounter, boss: CombatOpponen
     """Broadcast the break moment naming every distinct contributor this encounter (#2642).
 
     Mirrors ``render_combo_finisher_narration``'s contributor-naming style.
-    Broadcasts on both channels — the persisted-interaction/WS payload (web)
-    and ``room.msg_contents`` (telnet parity) — since a boss wall breaking is
-    exactly the kind of PLAY moment that needs telnet parity.
+    ``broadcast_action_outcome`` reaches both channels, web and telnet (#4640).
     """
     from world.combat.interaction_services import (  # noqa: PLC0415
         broadcast_action_outcome,
@@ -228,9 +226,6 @@ def _broadcast_break_celebration(encounter: CombatEncounter, boss: CombatOpponen
     names = join_labels(contributor_labels)
     narration = f"{boss.name}'s wall breaks — {names} broke through!"
     broadcast_action_outcome(encounter=encounter, narration=narration)
-    room = encounter.room
-    if room is not None:
-        room.msg_contents(narration)
 
 
 def _break_bar_contributor_labels(boss: CombatOpponent) -> list[str]:

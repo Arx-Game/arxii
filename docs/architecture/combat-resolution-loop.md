@@ -574,8 +574,9 @@ Soulfray-derived pacing floor).
 #### Narrated engine state (#3552)
 
 Two room lines cover engine-driven state the table could not otherwise see,
-both dual-dispatched via `_dual_dispatch_combat_narration` (persisted OUTCOME
-interaction over WS plus `room.msg_contents` for telnet parity):
+both sent via `_dual_dispatch_combat_narration` (a persisted OUTCOME
+interaction through `broadcast_action_outcome`, which reaches web and telnet
+sessions both, #4640):
 
 - **Phase line** - fires inside `check_and_advance_boss_phase`, right after
   `_surge_on_phase_transition`, so it lands wherever that function is called

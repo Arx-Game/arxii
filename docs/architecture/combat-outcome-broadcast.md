@@ -183,16 +183,15 @@ clause when both kinds of overcome opponent exist in the same fight. No violence
 this clause; a field won over entirely this way reads only the won-over clause and the standing
 side's own line.
 
-**Telnet parity is synchronous here, unlike every per-action caller.** `broadcast_action_outcome`
-takes a `deliver_telnet: bool = False` kwarg; every per-action narration caller (flee, technique
-cast, NPC actions, windup, sustained rituals, cleanup) leaves it `False` and keeps the
-WebSocket-only behavior this doc's scope describes. Only `_broadcast_encounter_outcome` passes
-`deliver_telnet=True`: after the room broadcast, it also sends `interaction.content` as plain
-text to every non-web session in the room, synchronously
-(`world.scenes.interaction_services.send_outcome_text_to_non_web`), so a bare telnet session
-reads the top-level encounter result (including the won-over clause) and so the push order stays
-outcome line, then the private aftermath digest, on both web and telnet. Fixing telnet parity for
-the rest of the per-action callers is a separate, broader gap, left out of scope here.
+**Telnet parity is synchronous, for every caller (#4640).** After its web push,
+`broadcast_action_outcome` sends `interaction.content` as plain text to every non-web session
+the row reaches, synchronously (`world.scenes.interaction_services.send_outcome_text_to_non_web`):
+the room for an unconcealed row, and the receivers for each concealed-cast tier. So a telnet
+player in a fight reads each per-action line (their strike, the hits they take, flee, windups,
+combos, defeats) as the web log shows it, and the top-level encounter result (including the
+won-over clause) lands before the private aftermath digest on both web and telnet. There is no
+opt-in flag, and a caller never adds a `room.msg_contents` copy of its own: that would reach
+telnet twice and web sessions a second time as raw text.
 
 ## Scope / follow-ups
 

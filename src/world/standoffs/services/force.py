@@ -328,9 +328,7 @@ def _send_line(encounter: CombatEncounter, line: str, sink: list[str] | None) ->
 
     from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 
-    transaction.on_commit(
-        partial(broadcast_action_outcome, encounter=encounter, narration=line, deliver_telnet=True)
-    )
+    transaction.on_commit(partial(broadcast_action_outcome, encounter=encounter, narration=line))
 
 
 def _completed_by_settling(encounter: CombatEncounter) -> bool:

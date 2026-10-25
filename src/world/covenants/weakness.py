@@ -169,9 +169,6 @@ def _announce_reading(
     )
     encounter = opponent.encounter
     broadcast_action_outcome(encounter=encounter, narration=narration)
-    room = encounter.room
-    if room is not None and narration:
-        room.msg_contents(narration)
 
 
 def _character_name(sheet: CharacterSheet) -> str:
@@ -257,6 +254,3 @@ def _announce_actualization(
 
     encounter = opponent.encounter
     broadcast_action_outcome(encounter=encounter, narration=narration)
-    room = encounter.room
-    if room is not None and narration:
-        room.msg_contents(narration)

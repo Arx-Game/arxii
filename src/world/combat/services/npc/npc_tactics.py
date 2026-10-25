@@ -267,9 +267,7 @@ def barrier_label(edge: PositionEdge) -> str:
 def _say(encounter: CombatEncounter, line: str) -> None:
     from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 
-    broadcast_action_outcome(
-        encounter=encounter, narration=line, target_personas=[], deliver_telnet=True
-    )
+    broadcast_action_outcome(encounter=encounter, narration=line, target_personas=[])
 
 
 def _traversal_of(combatant: Combatant) -> str:

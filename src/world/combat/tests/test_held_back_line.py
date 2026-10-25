@@ -47,9 +47,9 @@ def _declare_passive(participant) -> CombatRoundAction:
 
 class HeldBackLineTests(TestCase):
     def _resolve_capturing(self, encounter) -> list[str]:
-        with patch.object(encounter.room, "msg_contents") as mock_msg:
+        with patch("world.scenes.interaction_services._broadcast_to_location") as mock_push:
             resolve_round(encounter)
-        return [c.args[0] for c in mock_msg.call_args_list]
+        return [c.args[1]["content"] for c in mock_push.call_args_list]
 
     def test_manual_pace_names_the_silent_participant(self) -> None:
         encounter = _make_encounter(PaceMode.MANUAL)

@@ -13,6 +13,8 @@ from world.combat.factories import (
 from world.combat.models import BossPhase, CombatOpponent
 from world.combat.services import check_and_advance_boss_phase
 
+_BROADCAST = "world.scenes.interaction_services._broadcast_to_location"
+
 
 class CheckAndAdvanceBossPhaseTests(TestCase):
     """Tests for check_and_advance_boss_phase."""
@@ -147,9 +149,9 @@ class CheckAndAdvanceBossPhaseTests(TestCase):
             health_trigger_percentage=0.5,
             description="The dragon's scales blacken with rage.",
         )
-        with patch.object(boss.encounter.room, "msg_contents") as mock_msg:
+        with patch(_BROADCAST) as mock_msg:
             check_and_advance_boss_phase(boss)
-        sent = [c.args[0] for c in mock_msg.call_args_list]
+        sent = [c.args[1]["content"] for c in mock_msg.call_args_list]
         self.assertIn("The dragon's scales blacken with rage.", sent)
 
     def test_transition_without_description_uses_generic_line(self) -> None:
@@ -160,9 +162,9 @@ class CheckAndAdvanceBossPhaseTests(TestCase):
             threat_pool=self.pool_p2,
             health_trigger_percentage=0.5,
         )
-        with patch.object(boss.encounter.room, "msg_contents") as mock_msg:
+        with patch(_BROADCAST) as mock_msg:
             check_and_advance_boss_phase(boss)
-        sent = [c.args[0] for c in mock_msg.call_args_list]
+        sent = [c.args[1]["content"] for c in mock_msg.call_args_list]
         self.assertIn("Dragon shifts - the fight changes.", sent)
 
     def test_enraging_transition_adds_enrage_line(self) -> None:
@@ -174,9 +176,9 @@ class CheckAndAdvanceBossPhaseTests(TestCase):
             health_trigger_percentage=0.5,
             damage_multiplier=Decimal("1.5"),
         )
-        with patch.object(boss.encounter.room, "msg_contents") as mock_msg:
+        with patch(_BROADCAST) as mock_msg:
             check_and_advance_boss_phase(boss)
-        sent = [c.args[0] for c in mock_msg.call_args_list]
+        sent = [c.args[1]["content"] for c in mock_msg.call_args_list]
         self.assertIn("Dragon is enraged.", sent)
 
     def test_no_transition_broadcasts_nothing(self) -> None:
@@ -187,6 +189,6 @@ class CheckAndAdvanceBossPhaseTests(TestCase):
             threat_pool=self.pool_p2,
             health_trigger_percentage=0.5,
         )
-        with patch.object(boss.encounter.room, "msg_contents") as mock_msg:
+        with patch(_BROADCAST) as mock_msg:
             check_and_advance_boss_phase(boss)
         mock_msg.assert_not_called()

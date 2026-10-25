@@ -9,6 +9,7 @@ and the auto-callout v1 shape.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest import mock
 
 from django.test import TestCase
@@ -43,6 +44,9 @@ from world.covenants.factories import (
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
 # ---------------------------------------------------------------------------
 # Declaration: windup_rounds > 0 defers to a PendingOpponentAttack
 # ---------------------------------------------------------------------------
@@ -66,6 +70,16 @@ class WindupDeclarationTests(TestCase):
         )
         CharacterVitals.objects.create(character_sheet=self.sheet, health=100, max_health=100)
 
+    def _telnet_listener(self) -> ObjectDB:
+        """A character in the room with one bare telnet session."""
+        listener = CharacterFactory(location=self.encounter.room)
+        sessions = mock.patch.object(
+            listener.sessions, "all", return_value=[mock.MagicMock(protocol_key="telnet")]
+        )
+        sessions.start()
+        self.addCleanup(sessions.stop)
+        return listener
+
     @mock.patch("world.scenes.interaction_services._broadcast_to_location")
     def test_windup_entry_creates_pending_attack_not_same_round_action(
         self, mock_broadcast
@@ -85,44 +99,41 @@ class WindupDeclarationTests(TestCase):
     def test_telegraph_dispatches_ws_and_reaches_a_real_listener_unmocked(
         self, mock_broadcast
     ) -> None:
-        """Telnet half runs genuinely unmocked (HARD parity precedent):
-        a real character standing in the room receives the line via its
-        own .msg(), not a mocked room.msg_contents."""
-        listener = CharacterFactory(location=self.encounter.room)
+        """Telnet half runs genuinely unmocked (HARD parity precedent): a
+        character with a telnet session standing in the room receives the line
+        as plain text via its own .msg() (#4640)."""
+        listener = self._telnet_listener()
 
         with mock.patch.object(listener, "msg") as mock_msg:
             select_npc_actions(self.encounter)
 
         self.assertTrue(mock_broadcast.called)
         self.assertGreaterEqual(mock_msg.call_count, 1)
-        _args, kwargs = mock_msg.call_args
-        sent_text, _outkwargs = kwargs["text"]
+        sent_text = mock_msg.call_args.args[0]
         self.assertIn("winds up something huge", sent_text)
 
     @mock.patch("world.scenes.interaction_services._broadcast_to_location")
     def test_blank_telegraph_falls_back_to_generic_line(self, mock_broadcast) -> None:  # noqa: ARG002
         self.entry.windup_telegraph = ""
         self.entry.save(update_fields=["windup_telegraph"])
-        listener = CharacterFactory(location=self.encounter.room)
+        listener = self._telnet_listener()
 
         with mock.patch.object(listener, "msg") as mock_msg:
             select_npc_actions(self.encounter)
 
-        _args, kwargs = mock_msg.call_args
-        sent_text, _outkwargs = kwargs["text"]
+        sent_text = mock_msg.call_args.args[0]
         self.assertIn("begins something enormous", sent_text)
 
     @mock.patch("world.scenes.interaction_services._broadcast_to_location")
     def test_generic_telegraph_names_the_target(self, mock_broadcast) -> None:  # noqa: ARG002
         self.entry.windup_telegraph = ""
         self.entry.save(update_fields=["windup_telegraph"])
-        listener = CharacterFactory(location=self.encounter.room)
+        listener = self._telnet_listener()
 
         with mock.patch.object(listener, "msg") as mock_msg:
             select_npc_actions(self.encounter)
 
-        _args, kwargs = mock_msg.call_args
-        sent_text, _outkwargs = kwargs["text"]
+        sent_text = mock_msg.call_args.args[0]
         self.assertIn("bearing down on", sent_text)
         self.assertIn(str(self.sheet.character), sent_text)
 
@@ -131,13 +142,12 @@ class WindupDeclarationTests(TestCase):
         self,
         mock_broadcast,  # noqa: ARG002
     ) -> None:
-        listener = CharacterFactory(location=self.encounter.room)
+        listener = self._telnet_listener()
 
         with mock.patch.object(listener, "msg") as mock_msg:
             select_npc_actions(self.encounter)
 
-        _args, kwargs = mock_msg.call_args
-        sent_text, _outkwargs = kwargs["text"]
+        sent_text = mock_msg.call_args.args[0]
         self.assertIn("winds up something huge!", sent_text)
         self.assertIn(f"It is aimed at {self.sheet.character}.", sent_text)
 
@@ -148,13 +158,12 @@ class WindupDeclarationTests(TestCase):
     ) -> None:
         self.entry.windup_telegraph = "{opponent} turns on {target} with a roar!"
         self.entry.save(update_fields=["windup_telegraph"])
-        listener = CharacterFactory(location=self.encounter.room)
+        listener = self._telnet_listener()
 
         with mock.patch.object(listener, "msg") as mock_msg:
             select_npc_actions(self.encounter)
 
-        _args, kwargs = mock_msg.call_args
-        sent_text, _outkwargs = kwargs["text"]
+        sent_text = mock_msg.call_args.args[0]
         self.assertIn(f"turns on {self.sheet.character} with a roar!", sent_text)
         self.assertNotIn("It is aimed at", sent_text)
 
@@ -168,13 +177,12 @@ class WindupDeclarationTests(TestCase):
         null (services.py:4688-4690) instead of a single participant FK; the
         telegraph must still land with an explicit label rather than a
         silently blank target (#3572)."""
-        listener = CharacterFactory(location=self.encounter.room)
+        listener = self._telnet_listener()
 
         with mock.patch.object(listener, "msg") as mock_msg:
             _create_pending_opponent_attack(self.opponent, self.entry, self.encounter, None)
 
-        _args, kwargs = mock_msg.call_args
-        sent_text, _outkwargs = kwargs["text"]
+        sent_text = mock_msg.call_args.args[0]
         self.assertIn("no one in particular", sent_text)
         self.assertEqual(sent_text.count("It is aimed at"), 1)
 

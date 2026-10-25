@@ -57,7 +57,7 @@ def _announce(encounter: CombatEncounter, *lines: str) -> None:
 
     for line in lines:
         if line:
-            broadcast_action_outcome(encounter=encounter, narration=line, deliver_telnet=True)
+            broadcast_action_outcome(encounter=encounter, narration=line)
 
 
 @dataclass
