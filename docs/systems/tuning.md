@@ -296,11 +296,11 @@ away from character creation holding." A kit is priced at level 1 and gift threa
   panel's own last-submitted knobs, read only from that panel's already-cached corpus
   (`anchor_params`) and never triggering a fresh evaluation of its own. `anchor_de` is
   `None` when the catalog panel has not been run yet.
-- `StartingKitForm.clean()` rejects three combinations no character creation can ever
+- `StartingKitForm.clean()` rejects two combinations no character creation can ever
   reach, each as a field error rather than a silent no-op: a tradition the chosen
-  Beginning does not offer, a gift the chosen tradition does not grant (a
-  `TraditionGiftGrant` row must exist for that pair), and a species the chosen Beginning
-  does not offer (`Beginnings.get_available_species()`). An unset species stays valid.
+  Beginning does not offer, and a species the chosen Beginning does not offer
+  (`Beginnings.get_available_species()`). An unset species stays valid. The gift picker
+  lists Major Gifts only, and any of them is valid under any tradition (#4659).
 
 Below the kit report, a separate pool scan surfaces every character-creation starter pool
 (a `PathGiftGrant` whose path is an active PROSPECT-stage path - the same paths

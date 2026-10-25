@@ -96,7 +96,6 @@ class GiftReadinessDashboardJourney(TestCase):
 
         link = f'href="{reverse("admin:arxii_technique_changelist")}?authoring_gap=not_castable"'
         self.assertIn(f"{link}>{CG_ROW}</a>", missing)
-        self.assertIn("Order of the Quiet Lamp / Path of Embers / Ashen Voice", missing)
         self.assertIn("blocks every new character at the Gift stage", missing)
         self.assertIn(f"{link}>{STARTER_ROW}</a>", missing)
         self.assertIn("Path of Embers / Ashen Voice", missing)
@@ -169,7 +168,7 @@ class GiftReadinessProbeTests(TestCase):
             TechniqueFactory(gift=self.gift, action_template=self.template)
         )
 
-        self.assertEqual(self._blocked(), ("Wardens of the Ford / Path of Reeds / River Tongue",))
+        self.assertEqual(self._blocked(), ("Path of Reeds / River Tongue",))
         self.assertEqual(get_gift_options(self.tradition, self.path), [])
 
     def test_a_pool_of_only_gated_or_ultimate_techniques_is_reported(self) -> None:
@@ -180,7 +179,9 @@ class GiftReadinessProbeTests(TestCase):
             UltimateTechniqueFactory(gift=self.gift, action_template=self.template)
         )
 
-        self.assertEqual(self._blocked(), ("Wardens of the Ford / Path of Reeds / River Tongue",))
+        # The requirement's own technique brings a second Major Gift with no path list,
+        # which is reported too; only River Tongue's row is this test's subject.
+        self.assertIn("Path of Reeds / River Tongue", self._blocked())
         self.assertEqual(get_gift_options(self.tradition, self.path), [])
 
     def test_a_pairing_with_another_gift_offered_is_counted_apart(self) -> None:
@@ -188,28 +189,25 @@ class GiftReadinessProbeTests(TestCase):
         PathGiftGrantFactory(path=self.path, gift=other).starter_techniques.add(
             TechniqueFactory(gift=other, action_template=self.template)
         )
-        TraditionGiftGrantFactory(tradition=self.tradition, gift=other)
 
         result = _resolve("cg-gift-pools-takeable")
 
-        self.assertEqual(result.missing, ("Wardens of the Ford / Path of Reeds / River Tongue",))
+        self.assertEqual(result.missing, ("Path of Reeds / River Tongue",))
         self.assertIn("0 tradition and path pairing(s) offer no gift at all", result.detail)
 
     def test_a_path_with_no_grant_for_the_gift_is_an_empty_pool(self) -> None:
-        """The authored shape on production: five traditions grant Radiance and Path of
-        Whispers has no Radiance grant, so with no tradition extras the gift never
-        reaches a Whispers character, and with no other gift the pairing offers none."""
+        """Path of Whispers has no Radiance grant, so Radiance never reaches a Whispers
+        character under any tradition, and with no other gift the pairing offers none."""
         whispers = PathFactory(name="Path of Whispers")
         radiance = GiftFactory(name="Radiance")
-        TraditionGiftGrantFactory(tradition=self.tradition, gift=radiance)
         PathGiftGrantFactory(path=self.path, gift=radiance).starter_techniques.add(
             TechniqueFactory(gift=radiance, action_template=self.template)
         )
 
         result = _resolve("cg-gift-pools-takeable")
 
-        self.assertIn("Wardens of the Ford / Path of Whispers / Radiance", result.missing)
-        self.assertNotIn("Wardens of the Ford / Path of Reeds / Radiance", result.missing)
+        self.assertIn("Path of Whispers / Radiance", result.missing)
+        self.assertNotIn("Path of Reeds / Radiance", result.missing)
         self.assertEqual(get_gift_options(self.tradition, whispers), [])
         self.assertEqual(get_gift_options(self.tradition, self.path), [radiance])
         self.assertIn("1 tradition and path pairing(s) offer no gift at all", result.detail)
@@ -221,7 +219,7 @@ class GiftReadinessProbeTests(TestCase):
         self.assertNotIn("Path of the Delta", " ".join(self._blocked()))
 
     def test_the_row_lists_exactly_the_combinations_the_catalog_hides(self) -> None:
-        """Parity: for every combination, reported iff `get_gift_options` drops the gift."""
+        """Parity, with one active tradition: reported iff `get_gift_options` drops the gift."""
         second_path = PathFactory(name="Path of Willows")
         PathGiftGrantFactory(path=second_path, gift=self.gift).starter_techniques.add(
             TechniqueFactory(gift=self.gift, action_template=self.template)
@@ -231,7 +229,7 @@ class GiftReadinessProbeTests(TestCase):
         ungranted_path = PathFactory(name="Path of Salt")
 
         hidden = {
-            f"{self.tradition.name} / {path.name} / {self.gift.name}"
+            f"{path.name} / {self.gift.name}"
             for path in (self.path, second_path, ungranted_path)
             if self.gift not in get_gift_options(self.tradition, path)
         }
@@ -240,19 +238,23 @@ class GiftReadinessProbeTests(TestCase):
         self.assertEqual(
             hidden,
             {
-                "Wardens of the Ford / Path of Reeds / River Tongue",
-                "Wardens of the Ford / Path of Salt / River Tongue",
+                "Path of Reeds / River Tongue",
+                "Path of Salt / River Tongue",
             },
         )
 
     def test_a_technique_another_tradition_keeps_does_not_offer_the_gift(self) -> None:
-        """#4555: the keeper is offered the gift on this path; nobody else is."""
+        """#4555: the keeper is offered the gift on this path; nobody else is. A gift a
+        tradition keeps to itself is not a gap, but the pairing left with nothing is."""
         kept = TechniqueFactory(gift=self.gift, action_template=self.template)
         self.path_grant.starter_techniques.add(kept)
         keeper = TraditionFactory(name="Lanterns of the Weir")
         TraditionGiftGrantFactory(tradition=keeper, gift=self.gift).special_techniques.add(kept)
 
-        self.assertEqual(self._blocked(), ("Wardens of the Ford / Path of Reeds / River Tongue",))
+        result = _resolve("cg-gift-pools-takeable")
+
+        self.assertEqual(result.missing, ())
+        self.assertIn("1 tradition and path pairing(s) offer no gift at all", result.detail)
         self.assertEqual(get_gift_options(self.tradition, self.path), [])
         self.assertEqual(get_gift_options(keeper, self.path), [self.gift])
 
@@ -275,8 +277,8 @@ class GiftReadinessProbeTests(TestCase):
                 TechniqueFactory(gift=gift)
             )
             TraditionGiftGrantFactory(tradition=TraditionFactory(), gift=gift)
-        # One query per requirement type for the gated ids, then four for the rest.
-        with self.assertNumQueries(len(list(concrete_requirement_types())) + 4):
+        # One query per requirement type for the gated ids, then five for the rest.
+        with self.assertNumQueries(len(list(concrete_requirement_types())) + 5):
             _resolve("cg-gift-pools-takeable")
 
 

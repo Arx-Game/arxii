@@ -997,13 +997,16 @@ class TraditionGiftGrantFormSet(OneRowPerFormSet):
     """Names the doubled gift and says where its techniques go (#4380)."""
 
     duplicate_hint = (
-        "A tradition grants each gift on one row; pick every special technique it "
-        "grants from that gift there."
+        "A tradition favors each gift on one row; pick every special technique it "
+        "keeps from that gift there."
     )
 
 
 class TraditionGiftGrantInline(admin.StackedInline):
-    """Gifts this tradition grants (sibling of TraditionCodexGrantInline above).
+    """Gifts this tradition favors (sibling of TraditionCodexGrantInline above).
+
+    Any tradition may teach any major gift (#4659); a row here marks one its teachers
+    are better at, and carries the techniques it keeps for its own members.
 
     One block per gift, with the gift's special techniques picked on that block.
     Stacked rather than tabular because the technique picker is the two-column
@@ -1015,6 +1018,8 @@ class TraditionGiftGrantInline(admin.StackedInline):
 
     model = TraditionGiftGrant
     formset = TraditionGiftGrantFormSet
+    verbose_name = "favored gift"
+    verbose_name_plural = "favored gifts"
     extra = 1
     autocomplete_fields = ["gift"]
     filter_horizontal = ["special_techniques"]

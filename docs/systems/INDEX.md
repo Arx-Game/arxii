@@ -471,8 +471,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     Proven by `test_path_crossing_grant_e2e.py` + `test_advancement.py::DuranceSemiCrossingTests`.
   - **CG catalog magic — Path → Tradition → Gift → Technique (#2426, ADR-0136):**
     `TraditionGiftGrant` (`world/magic/models/grants.py`, per `(tradition, gift)`
-    grant with a `signature_techniques` M2M — a tradition's CG gift list; the
-    self-taught `Unbound` tradition carries the common starter set, no extras).
+    grant with a `special_techniques` M2M — a Gift the tradition favors; since #4659 it no
+    longer gates the CG Gift pick, any tradition may teach any Major Gift).
     `PathGiftGrant.starter_techniques` is now read as CG pick *availability*
     (the techniques for that Path and Gift; a `TraditionGiftGrant` listing restricts a
     technique to the listing traditions, #4555, ADR-4555-A), not an automatic grant — `grant_path_magic`
