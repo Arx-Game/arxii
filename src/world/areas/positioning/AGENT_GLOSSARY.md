@@ -36,7 +36,7 @@ How a mover crosses the position graph (`CreatureTraversal`: WALKS, CLIMBS, LEAP
 _Avoid_: movement mode, locomotion, move type
 
 **Held ground** (#4663):
-A position a ready enemy stands in, seen from the mover's side (`held_position_ids_against`: for a PC the places of ACTIVE ENEMY opponents; for an opponent, the places of acting participants and ALLY opponents). A walker who enters it stops there and loses the rest of the round's hops; the mover's own place is never held against her. Routing treats it as the end of a route (`stop_at`). It is passed by a roll (see **Pass**), not by moving through it.
+A position a ready enemy stands in, seen from the mover's side (`held_position_ids_against`: for a PC the places of ACTIVE ENEMY opponents; for an opponent, the places of acting participants and ALLY opponents). A player character who enters it, however she moves on the ground (landing included), stops there and loses the rest of the round's hops (NPC walkers and climbers stop; NPC fliers and leapers pass); the mover's own place is never held against her. Routing treats it as the end of a route (`stop_at`). It is passed by a roll (see **Pass**), not by moving through it.
 _Avoid_: blocked place, zone of control, chokepoint
 
 **Pass** (#4663):

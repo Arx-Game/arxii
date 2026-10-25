@@ -164,7 +164,10 @@ They do not use the command system, dispatchers, or handlers.
   (`LandAction`, `AirbornePrerequisite`) and `pass_held_ground` (`PassHeldGroundAction`, kwargs
   `position_id`, optional `approach_id`); each carries `CombatMovementPrerequisite` and spends hops in a
   DECLARING round. `MoveToPositionAction` derives the mover's traversals (`player_traversals`) and spends a
-  wall crossing's cost; entering held ground stops a walker ("You are stopped by <name>."). Telnet
+  wall crossing's cost; entering held ground stops a player character however she moves on the
+  ground, landing included ("You are stopped by <name>."; NPC walkers and climbers stop, NPC fliers
+  and leapers pass). The pass roll is narrated to the room ("<name> gets past <holder> into
+  <place>."). Telnet
   `position/fly`, `/land`, `/pass <name>`. `positioning.py`'s `SetTheStageAction` names what it staged ("You set the stage with Lone
   Dais: Center."; it had answered with no message), and `distinctions.py`'s
   `GMAwardDistinctionAction` searches quietly and answers an absent name itself ("Could not

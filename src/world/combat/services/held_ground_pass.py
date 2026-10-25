@@ -1,6 +1,6 @@
 """Getting past held ground: the pass roll (#4663, slice 2 of #4651).
 
-A ready enemy holds the place it stands in, and a walker who enters stops there
+A ready enemy holds the place it stands in, and a player character who enters stops there
 (``held_ground``). A character whose capabilities match an approach on the challenge
 ``MovementConfig.held_ground_challenge`` designates may roll to get past instead. The
 roll is ``resolve_challenge`` on a one-shot instance aimed at the holder, with her best

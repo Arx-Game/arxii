@@ -8796,7 +8796,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     (`actions/definitions/positioning.py`); telnet `position/fly`, `position/land`,
     `position/pass <name>`. `enter_aerial` draws a missing aerial twin.
   - Held ground (`world/combat/services/held_ground.py`): `held_position_ids_against`,
-    `encounter_holds` / `EncounterHolds`, `npc_stop_at`, `routing_profile`, `holder_names`;
+    `encounter_holds` / `EncounterHolds`, `npc_stop_at`, `routing_profile`, `holder_names`, `held_place_holders`;
     `find_path` / `path_costs_from` take `stop_at`, `MovementProfile.stop_at`.
   - The pass (`world/combat/services/held_ground_pass.py`): `pass_choices`, `pass_options`,
     `attempt_pass` -> `PassResult` (`HeldGroundPassOutcome` CLEAN / PARTIAL / STOPPED);

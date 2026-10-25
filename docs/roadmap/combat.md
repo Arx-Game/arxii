@@ -392,8 +392,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   (`CapabilityType.traversal`), and holding it above baseline, from a technique, condition,
   species, distinction or gear, lets her climb or leap a walled edge for its hops, take flight
   and land (`take_flight`, `land`, telnet `position/fly`, `position/land`), with the roof rule
-  on both. Ground a ready enemy holds stops a walker who enters it, for PCs and NPCs alike
-  (`held_ground.py`; routing treats it as the end of a route), and a character with a matching
+  on both. Ground a ready enemy holds stops a player character who enters it, however she moves
+  on the ground (walking, climbing or leaping; landing in it too); NPCs do not roll, so an NPC
+  walker or climber stops there and an NPC flier or leaper passes (`held_ground.py`; routing
+  treats it as the end of a route). A character with a matching
   capability can roll to get past instead (`pass_held_ground`, telnet `position/pass <name>`):
   clean, past at the template's price, or stopped in the place. Staff set the challenge on the
   `MovementConfig` row; none authored means no pass. Capabilities raised by sheet modifiers now
