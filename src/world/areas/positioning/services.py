@@ -586,6 +586,11 @@ def instantiate_blueprint(
                 layout_x=bp_pos.layout_x,
                 layout_y=bp_pos.layout_y,
                 is_roofed=bp_pos.is_roofed,
+                area_x=bp_pos.area_x,
+                area_y=bp_pos.area_y,
+                area_w=bp_pos.area_w,
+                area_h=bp_pos.area_h,
+                terrain=bp_pos.terrain,
                 screens_ranged=bp_pos.screens_ranged,
             )
             for bp_pos in blueprint_positions
