@@ -1,4 +1,4 @@
-"""Schema for Academy skill courses and the schooling floor (#4457)."""
+"""Schema for Academy skill courses (#4457)."""
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -7,7 +7,6 @@ from django.urls import reverse
 from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
-from world.character_creation.factories import SchoolingLineFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.npc_services.constants import OfferKind
 from world.npc_services.factories import (
@@ -19,17 +18,6 @@ from world.npc_services.factories import (
 from world.skills.factories import SkillFactory
 from world.societies.factories import OrganizationFactory
 from world.traits.models import TraitCategory
-
-
-class SchoolingFloorConstraintTests(TestCase):
-    def test_rank_zero_floor_refused(self):
-        with transaction.atomic(), self.assertRaises(IntegrityError):
-            SchoolingLineFactory(rank=0, magic_skill_floor=10)
-
-    def test_ranked_line_carries_a_floor(self):
-        line = SchoolingLineFactory(rank=2, magic_skill_floor=20)
-        line.refresh_from_db()
-        self.assertEqual(line.magic_skill_floor, 20)
 
 
 class SkillCourseOfferDetailsTests(TestCase):

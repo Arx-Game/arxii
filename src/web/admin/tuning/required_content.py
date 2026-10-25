@@ -1015,23 +1015,39 @@ def _probe_minor_gift_technique_skills() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
-def _probe_schooling_magic_skill_floors() -> ProbeResult:
-    """Schooling ranks 1 and 2 each set a `magic_skill_floor` above 0 (#4457).
+def _probe_schooling_training_points() -> ProbeResult:
+    """Each rank 1+ schooling stance gives Magic-skill training points (slice 2 of #4659).
 
-    Consumer: `world/character_creation/offers.py:187` `schooling_magic_skill_floor()`.
-    A stance with floor 0 lifts no Magic skill at finalize, so a schooled character
-    starts with none. That is a legal state, not a failure, and it stays listed until
-    staff set the floor. A rank with no `SchoolingLine` row at all is skipped here:
-    `character_creation.tradition_schooling_lines` already reports it as REQUIRED.
-    Rank 0 grants nothing, so it carries no floor.
+    Consumer: `world/character_creation/models.py` `CharacterDraft.magic_training_pool`,
+    which sums the `magic_training_points` effects of the distinctions a draft holds. A
+    stance counts when its `grants` distinction has such an effect (in the
+    `character_creation` modifier category); a stance that grants nothing, or a
+    distinction without one, gives a schooled character no points to spend on Magic
+    skills. That is a legal state, not a failure, and it stays listed until staff add
+    the effect on the Distinction Builder. A rank with no `SchoolingLine` row at all is
+    skipped here: `character_creation.tradition_schooling_lines` already reports it as
+    REQUIRED. Rank 0 grants nothing, so it gives no points.
     """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        CG_MODIFIER_CATEGORY,
+        MAGIC_TRAINING_POINTS_TARGET,
+    )
     from world.character_creation.models import SchoolingLine  # noqa: PLC0415
+    from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
 
-    unset = SchoolingLine.objects.filter(rank__in=(1, 2), magic_skill_floor=0).order_by("rank")
+    trained = DistinctionEffect.objects.filter(
+        target__name=MAGIC_TRAINING_POINTS_TARGET,
+        target__category__name=CG_MODIFIER_CATEGORY,
+    ).values("distinction_id")
+    unset = (
+        SchoolingLine.objects.filter(rank__gte=1)
+        .exclude(grants__isnull=False, grants_id__in=trained)
+        .order_by("rank")
+    )
     missing = tuple(f"Rank {line.rank}" for line in unset)
     if not missing:
         return ProbeResult(present=True)
-    detail = f"{len(missing)} schooling stance(s) set no Magic skill floor."
+    detail = f"{len(missing)} schooling stance(s) give no magical training points."
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
@@ -2832,12 +2848,12 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="schooling-magic-skill-floors",
-            label="Schooling stances have a Magic skill floor",
+            label="Schooling stances give magical training points",
             tier=DependencyTier.TUNING,
-            consumer="world/character_creation/offers.py:187 schooling_magic_skill_floor()",
-            consequence="Schooled characters start with no Magic skills.",
-            probe=CustomProbe(fn=_probe_schooling_magic_skill_floors),
-            admin_model="SchoolingLine",
+            consumer="world/character_creation/models.py CharacterDraft.magic_training_pool",
+            consequence="Schooled characters get no training points to spend on Magic skills.",
+            probe=CustomProbe(fn=_probe_schooling_training_points),
+            admin_model="Distinction",
         ),
         ContentDependency(
             key="magic-skill-courses",

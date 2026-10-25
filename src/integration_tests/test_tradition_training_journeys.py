@@ -1,12 +1,14 @@
-"""Journeys for Tradition Training teaching the Magic skills at character creation (#4457).
+"""Journeys for Tradition Training teaching the Magic skills at character creation.
 
 A living Tradition offers three schooling stances, an orphaned one the first two, a
-self-taught one none; the stance a player pays for lifts every active Magic skill to its
-floor when the character is made, and CG skill points can never buy a Magic skill or one
-of its specializations. Driven over the REST seam the browser uses: the Tradition list,
-the distinctions sync, the draft PATCH and detail, and staff adding the draft to the roster.
-A finalized character's cast then rolls her Path's Magic skill at the stance floor, through
-``dispatch_player_action`` on ``cast_technique`` as the web client casts.
+self-taught one none (#4457); the stance a player pays for gives Magic training points
+(its distinction's ``magic_training_points`` effect at the stance's rank, slice 2 of
+#4659) that the player spends on Magic skills, and CG skill points can never buy a Magic
+skill or one of its specializations. Driven over the REST seam the browser uses: the
+Tradition list, the distinctions sync, the draft PATCH and detail, and staff adding the
+draft to the roster. A finalized character's cast then rolls her Path's Magic skill at the
+value she allocated, through ``dispatch_player_action`` on ``cast_technique`` as the web
+client casts.
 """
 
 from __future__ import annotations
@@ -72,8 +74,8 @@ from world.traits.models import (
 )
 from world.vitals.models import CharacterVitals
 
-#: Floors staff set per stance: rank 0 trains none, rank 1 a little, rank 2 more.
-FLOORS = {0: 0, 1: 20, 2: 30}
+#: Magic training points per rank of Tradition Training: rank 1 gives 20, rank 2 gives 40.
+POINTS_PER_RANK = 20
 
 
 class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
@@ -103,16 +105,17 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
             name=MAGIC_TRAINING_POINTS_TARGET,
             category=ModifierCategoryFactory(name=CG_MODIFIER_CATEGORY),
         )
-        DistinctionEffectFactory(distinction=cls.training, target=pool_target, value_per_rank=20)
+        DistinctionEffectFactory(
+            distinction=cls.training, target=pool_target, value_per_rank=POINTS_PER_RANK
+        )
         SkillPointBudgetFactory(pk=1)
         cls.offers = {}
-        for rank, floor in FLOORS.items():
+        for rank in (0, 1, 2):
             line = SchoolingLineFactory(
                 rank=rank,
                 name=f"Stance {rank}",
                 player_line="Years of it.",
                 grants=cls.training,
-                magic_skill_floor=floor,
             )
             cls.offers[rank] = DistinctionOfferFactory(
                 distinction=cls.training,
@@ -162,10 +165,11 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
             format="json",
         )
 
-    def _floor(self, draft) -> int:
+    def _training_base(self, draft) -> int:
+        """The draft's Magic training points from its distinctions, before fit bonuses."""
         response = self.client.get(self._draft_url(draft))
         self.assertEqual(response.status_code, 200, response.content)
-        return response.json()["starting_magic_skill_floor"]
+        return sum(source["points"] for source in response.json()["magic_training"]["base_sources"])
 
     def _finalize(self, draft):
         """Staff add the draft to the roster; returns the new character's sheet."""
@@ -173,7 +177,7 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         self.assertEqual(response.status_code, 200, response.content)
         return ObjectDB.objects.get(pk=response.json()["character_id"]).sheet_data
 
-    def test_stance_rows_show_floor_and_rank_cap(self) -> None:
+    def test_stance_rows_show_training_points_and_rank_cap(self) -> None:
         response = self.client.get(
             f"/api/character-creation/traditions/?beginning_id={self.beginnings.pk}"
         )
@@ -181,7 +185,8 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         rows = {row["id"]: row for row in response.json()}
         living = rows[self.living.pk]["schooling"]
         self.assertEqual([s["rank"] for s in living], [0, 1, 2])
-        self.assertEqual([s["magic_skill_floor"] for s in living], [0, 20, 30])
+        self.assertEqual([s["training_points"] for s in living], [0, 20, 40])
+        self.assertNotIn("magic_skill_floor", living[0])
         self.assertEqual([s["rank"] for s in rows[self.orphaned.pk]["schooling"]], [0, 1])
         self.assertEqual(rows[self.self_taught.pk]["schooling"], [])
 
@@ -206,7 +211,7 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         draft = self._create_base_draft()
         self._select(draft, self.living)
         self.assertEqual(self._sync(draft, 2).status_code, 200)
-        self.assertEqual(self._floor(draft), 30)
+        self.assertEqual(self._training_base(draft), 40)
 
         total = self._allocate_pool(draft, self.thaumaturgy)
         self.assertGreater(total, 0)
@@ -225,7 +230,7 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         )
         change = CharacterTraitChange.objects.get(character_sheet=sheet, trait=skill.trait)
         self.assertEqual(change.source, TraitChangeSource.CHARACTER_CREATION)
-        # Only allocated Magic skills are written; the floor no longer lifts the rest.
+        # Only allocated Magic skills are written; nothing lifts the rest.
         self.assertFalse(
             CharacterSkillValue.objects.filter(
                 character=sheet, skill__in=[self.geomancy, self.lapsed]
@@ -241,29 +246,29 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         self.assertIn("is not offered to you here", refused.json()["detail"])
 
         self.assertEqual(self._sync(draft, 1).status_code, 200)
-        self.assertEqual(self._floor(draft), 20)
+        self.assertEqual(self._training_base(draft), 20)
         total = self._allocate_pool(draft, self.geomancy)
         sheet = self._finalize(draft)
         self.assertEqual(
             CharacterSkillValue.objects.get(character=sheet, skill=self.geomancy).value, total
         )
 
-    def test_switching_tradition_drops_floor(self) -> None:
+    def test_switching_tradition_drops_training(self) -> None:
         draft = self._create_base_draft()
         self._select(draft, self.living)
         self.assertEqual(self._sync(draft, 2).status_code, 200)
-        self.assertEqual(self._floor(draft), 30)
+        self.assertEqual(self._training_base(draft), 40)
 
         self._select(draft, self.orphaned)
         draft.refresh_from_db()
-        self.assertEqual(self._floor(draft), 0)
+        self.assertEqual(self._training_base(draft), 0)
         self.assertNotIn(self.offers[2].pk, self._picked_offer_ids(draft))
 
         self._select(draft, self.living)
         self.assertEqual(self._sync(draft, 2).status_code, 200)
-        self.assertEqual(self._floor(draft), 30)
+        self.assertEqual(self._training_base(draft), 40)
         self._select(draft, self.self_taught)
-        self.assertEqual(self._floor(draft), 0)
+        self.assertEqual(self._training_base(draft), 0)
 
     @staticmethod
     def _picked_offer_ids(draft) -> set[int]:
@@ -278,7 +283,7 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
     def test_self_taught_writes_no_magic_rows(self) -> None:
         draft = self._create_base_draft()
         self._select(draft, self.self_taught)
-        self.assertEqual(self._floor(draft), 0)
+        self.assertEqual(self._training_base(draft), 0)
 
         sheet = self._finalize(draft)
 
@@ -410,13 +415,13 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         self.assertEqual(listing.status_code, 200, listing.content)
 
         # A legacy pick of that offer, written before the offers read refused it, still
-        # opens the draft, and lifts no Magic skill.
+        # opens the draft, and gives no Magic training points.
         draft.refresh_from_db()
         draft.draft_data["distinctions"] = [
             {"distinction_id": stranded.distinction_id, "rank": 1, "offer_ids": [stranded.pk]}
         ]
         draft.save(update_fields=["draft_data"])
-        self.assertEqual(self._floor(draft), 0)
+        self.assertEqual(self._training_base(draft), 0)
 
 
 class MagicTrainingAllocationJourney(JourneyCase):

@@ -1965,18 +1965,6 @@ class CharacterDraft(SharedMemoryModel):
             STARTING_TECHNIQUE_PICKS_TARGET, CG_MODIFIER_CATEGORY
         )
 
-    @property
-    def starting_magic_skill_floor(self) -> int:
-        """The level every Magic skill starts at, from the schooling stance picked (#4457).
-
-        Read live from the draft's Tradition Training pick on every call, never memoised;
-        finalize writes it as the floor of every Magic skill. 0 for a self-taught
-        character, rank 0, or a tradition whose state opens no stances.
-        """
-        from world.character_creation.offers import schooling_magic_skill_floor  # noqa: PLC0415
-
-        return schooling_magic_skill_floor(self)
-
     def calculate_stat_budget(self) -> int:
         """Total stat points = default * stat_count + net bonuses."""
         bonuses = self.get_all_stat_bonuses()
@@ -2583,10 +2571,9 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     slate page; read by the tradition serializer to draw the stances under a
     living tradition and by the offers module to open a Tradition Training offer.
 
-    ``magic_skill_floor`` (#4457) is the level every Magic-category skill starts at
-    for a character who picks this stance at character creation. It is a skill level,
-    not development points, and it is the same for every Tradition (the stances are
-    shared by every Beginning). Rank 0 grants no floor, since it grants nothing.
+    The Magic-skill training points a stance gives (slice 2 of #4659) are not a column
+    here: they are the ``magic_training_points`` effect of ``grants`` at this line's
+    rank, read by ``CharacterDraft.magic_training_pool``. Rank 0 grants nothing.
     """
 
     rank = models.PositiveSmallIntegerField(unique=True)
@@ -2600,14 +2587,6 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="granted_by_schooling_lines",
         help_text="The distinction this line grants, at this line's rank.",
     )
-    magic_skill_floor = models.PositiveSmallIntegerField(
-        default=0,
-        help_text=(
-            "The level every Magic-category skill starts at for a character who picks "
-            "this stance, the same for every Tradition. A skill level, not development. "
-            "0 = no Magic skills."
-        ),
-    )
 
     objects = NaturalKeyManager()
 
@@ -2615,12 +2594,6 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         verbose_name = "Schooling line"
         verbose_name_plural = "Schooling lines"
         ordering = ["rank"]
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(rank__gt=0) | models.Q(magic_skill_floor=0),
-                name="schooling_rank_zero_grants_no_floor",
-            ),
-        ]
 
     class NaturalKeyConfig:
         fields = ["rank"]

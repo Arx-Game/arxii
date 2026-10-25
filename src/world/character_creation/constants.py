@@ -123,9 +123,8 @@ SCHOOLING_MAX_RANK_BY_STATE: dict[TraditionState, int] = {
 def schooling_max_rank(state: str) -> int | None:
     """The highest schooling stance rank ``state`` opens, or None when it opens none.
 
-    Called by the offers module (which Tradition Training offers a draft sees), the
-    tradition serializer (which stances are drawn) and
-    ``CharacterDraft.starting_magic_skill_floor``.
+    Called by the offers module (which Tradition Training offers a draft sees)
+    and the tradition serializer (which stances are drawn).
     """
     return SCHOOLING_MAX_RANK_BY_STATE.get(TraditionState(state))
 

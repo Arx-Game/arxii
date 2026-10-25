@@ -46,8 +46,8 @@ from world.character_creation.models import (
     SchoolingLine,
     TraditionStateLine,
 )
+from world.character_creation.offers import schooling_training_points
 from world.contributors.models import ContentContributor
-from world.skills.models import SkillPointBudget
 
 #: Standard-line row order the demo approved: how a player is meant to read
 #: them, not the alphabetical order the model's own ``state`` field sorts to.
@@ -118,7 +118,7 @@ def _render_page(
     *,
     needs_setup: bool = False,
 ) -> HttpResponse:
-    magic_skill_names = live.magic_skill_names()
+    training_points = schooling_training_points(f.instance for f in forms.schooling.forms)
     return render(
         request,
         "admin/tradition_slate/page.html",
@@ -140,11 +140,10 @@ def _render_page(
                     f,
                     f.initial.get("rank"),
                     live.schooling_line_display(f.instance),
-                    live.schooling_floor_preview(f.instance, magic_skill_names),
+                    live.schooling_training_preview(training_points.get(f.initial.get("rank"), 0)),
                 )
                 for f in forms.schooling.forms
             ],
-            "floor_cap": SkillPointBudget.get_active_budget().max_skill_value,
             "slate_formset": forms.slate,
             "needs_setup": needs_setup,
             "media": forms.media,

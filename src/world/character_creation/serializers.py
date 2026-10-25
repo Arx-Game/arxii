@@ -44,6 +44,7 @@ from world.character_creation.models import (
     StartingArea,
     TraditionStateLine,
 )
+from world.character_creation.offers import schooling_training_points
 from world.character_creation.services import (
     age_bounds,
     assign_route,
@@ -347,7 +348,7 @@ class SchoolingLineSerializer(serializers.Serializer):
     player_line = serializers.CharField()
     price = serializers.IntegerField()
     techniques = serializers.IntegerField()
-    magic_skill_floor = serializers.IntegerField()
+    training_points = serializers.IntegerField()
     grants_distinction_id = serializers.IntegerField(allow_null=True)
     offer_id = serializers.IntegerField(allow_null=True)
 
@@ -364,6 +365,7 @@ def schooling_rows() -> list[dict]:
     isn't set up (mirrors the ``get_required_distinction_id`` fallback this replaces).
     """
     lines = list(SchoolingLine.objects.select_related("grants").order_by("rank"))
+    training_points = schooling_training_points(lines)
     offers = DistinctionOffer.objects.filter(
         chapter=OfferChapter.TRADITION_STEP,
         schooling_line__in=lines,
@@ -382,7 +384,7 @@ def schooling_rows() -> list[dict]:
             "player_line": line.player_line,
             "price": line.price,
             "techniques": 1 + line.rank,
-            "magic_skill_floor": line.magic_skill_floor,
+            "training_points": training_points[line.rank],
             "grants_distinction_id": line.grants_id,
             "offer_id": offer_by_line_id.get(line.id),
         }
@@ -1319,7 +1321,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # base 1 + any distinction bonus; the GiftStage funnel's technique picker
     # needs it for the "n of m chosen" budget banner.
     starting_technique_picks = serializers.IntegerField(read_only=True)
-    starting_magic_skill_floor = serializers.IntegerField(read_only=True)
     # The Magic-skill training pool and the player's allocation of it (#4659).
     magic_training = serializers.SerializerMethodField()
     # The age range CG accepts for this draft: the general cap tightened by
@@ -1399,7 +1400,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
-            "starting_magic_skill_floor",
             "magic_training",
             "age_min",
             "age_max",
@@ -1431,7 +1431,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
-            "starting_magic_skill_floor",
             "magic_training",
             "bundled_distinctions",
             "derived_anchors",
