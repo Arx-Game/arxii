@@ -22,7 +22,9 @@ from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.classes.factories import PathFactory
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.magic.constants import GiftKind, MagicActivity
-from world.magic.factories import GiftFactory, MagicActivitySkillFactory
+from world.magic.factories import AffinityFactory, GiftFactory, MagicActivitySkillFactory
+from world.magic.models import Affinity
+from world.magic.types.aura import AffinityType
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.npc_services.constants import OfferKind
 from world.npc_services.factories import (
@@ -315,3 +317,29 @@ class CheckTypesWeightNoMagicSkillProbeTests(TestCase):
 
         self.assertTrue(result.present)
         self.assertIsNone(result.admin_url)
+
+
+class AffinityAuraTypeProbeTests(TestCase):
+    def _resolve(self) -> rc.ProbeResult:
+        return _dependency("affinity-aura-types").probe.resolve(None)
+
+    def test_declared_required_with_admin_link(self) -> None:
+        dependency = _dependency("affinity-aura-types")
+        self.assertEqual(dependency.tier, rc.DependencyTier.REQUIRED)
+        row = rc.DependencyRow(dependency, self._resolve())
+        self.assertIsNotNone(row.admin_url)
+
+    def test_blank_aura_type_is_listed_in_name_order(self) -> None:
+        AffinityFactory(name="Zeta Blank", aura_type="")
+        AffinityFactory(name="Alpha Blank", aura_type="")
+        result = self._resolve()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Alpha Blank", "Zeta Blank"))
+
+    def test_present_when_every_affinity_has_an_aura_type(self) -> None:
+        for affinity, (value, _label) in zip(
+            Affinity.objects.all(), AffinityType.choices, strict=False
+        ):
+            affinity.aura_type = value
+            affinity.save()
+        self.assertTrue(self._resolve().present)

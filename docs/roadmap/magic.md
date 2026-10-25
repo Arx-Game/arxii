@@ -1012,11 +1012,11 @@ students better than others.
   student (`_course_ease`), and the offer shows `teaching_line` and `fit_line` on the web and in telnet.
 - Frontend: a training step on the Gift stage, "Teaches well" tags on Tradition and Gift cards, the
   stance training-points line, the Skills stage Magic group, and the two offer lines.
-- Admin: the tradition slate shows a stance's points read-only; the `schooling-magic-skill-floors`
+- Admin: the `affinity-aura-types` Required content row lists any `Affinity` with a blank
+  `aura_type` (a blank one never fits); the tradition slate shows a stance's points read-only; the `schooling-magic-skill-floors`
   Required content row now lists stances whose distinction has no training effect.
 
-**Not built:** a Required content probe for an `Affinity` with no `aura_type` (a blank one never fits;
-the field is set once for the three existing rows); a per-Tradition skill list.
+**Not built:** a per-Tradition skill list.
 
 ## Magical skills: Magic skills only (#4547, BUILT 2026-10-21)
 

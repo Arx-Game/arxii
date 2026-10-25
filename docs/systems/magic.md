@@ -832,10 +832,11 @@ distinction's `magic_training_points` effect, authored on the Distinction Builde
 and 2 row it shows a read-only "grants <n> magical training points." (rank 0 reads "Rank 0 trains
 none."). Favored Gifts are `TraditionGiftGrant` rows and favored affinities are the `favored_affinities`
 field on the Tradition admin; the tuning numbers are on the `TraditionTeachingConfig` admin page.
-The Required content dashboard has these TUNING rows (`required_content.py`):
+The Required content dashboard has these rows (`required_content.py`; `affinity-aura-types` is REQUIRED, the rest TUNING):
 
 | Key | Lists | Consumer |
 |-----|-------|----------|
+| `affinity-aura-types` | Affinities with a blank `aura_type` (a Tradition favoring one never fits a student) | `teaching_fit()` |
 | `schooling-magic-skill-floors` | Schooling ranks 1 and above whose granted distinction has no `magic_training_points` effect (key kept so the dashboard row is stable) | `schooling_training_points()` |
 | `magic-skill-courses` | Active Magic skills with no `SKILL_COURSE` offer on an active role that has a `faction_affiliation` (an inactive role's offers are never shown) | `run_skill_course_offer()` |
 | `path-suggestions-name-magic-skills` | `PathSkillSuggestion` rows naming a Magic skill (CG cannot take them) | `PathSkillSuggestionViewSet` |
