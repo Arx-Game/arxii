@@ -286,6 +286,16 @@ vi.mock('@/combat/queries', () => ({
   },
 }));
 
+vi.mock('@/combat/components/CombatTacticalMap', () => ({
+  CombatTacticalMap: ({ encounterId, sceneId }: { encounterId: number; sceneId: number }) => (
+    <div
+      data-testid="combat-tactical-map"
+      data-encounter-id={encounterId}
+      data-scene-id={sceneId}
+    />
+  ),
+}));
+
 vi.mock('@/battles/queries', () => ({
   useBattleForSceneQuery: vi.fn().mockReturnValue({ data: null, isLoading: false, isError: false }),
 }));

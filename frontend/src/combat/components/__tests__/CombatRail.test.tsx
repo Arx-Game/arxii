@@ -58,28 +58,6 @@ vi.mock('@/combat/CombatTurnPanel', () => ({
   ),
 }));
 
-// Stub CombatTacticalMap - exposes encounterId/characterId/sceneId so we can assert them
-vi.mock('@/combat/components/CombatTacticalMap', () => ({
-  CombatTacticalMap: ({
-    encounterId,
-    characterId,
-    sceneId,
-  }: {
-    encounterId: number;
-    characterId: number;
-    sceneId: number;
-  }) => (
-    <div
-      data-testid="combat-tactical-map"
-      data-encounter-id={encounterId}
-      data-character-id={characterId}
-      data-scene-id={sceneId}
-    >
-      CombatTacticalMap [{encounterId}]
-    </div>
-  ),
-}));
-
 // Stub DeepLinkModalHost — has its own dedicated test; here it would otherwise
 // pull in useAppDispatch/useAppSelector against the deepLinkModal slice.
 vi.mock('@/combat/modals/DeepLinkModalHost', () => ({
@@ -110,13 +88,18 @@ vi.mock('@/combat/components/CombatGMTab', () => ({
 }));
 
 import { CombatRail } from '../CombatRail';
+import { CombatPickProvider } from '@/combat/CombatPickContext';
 
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <CombatPickProvider>{children}</CombatPickProvider>
+      </QueryClientProvider>
+    );
   };
 }
 
@@ -138,17 +121,9 @@ describe('CombatRail — smoke render', () => {
     expect(screen.queryByTestId('combat-tactical-map')).not.toBeInTheDocument();
   });
 
-  it('switches to the map tab and renders CombatTacticalMap', async () => {
-    const user = userEvent.setup();
+  it('has no Map tab; the map is the page main view (#4670)', () => {
     render(<CombatRail sceneId={42} encounterId={7} />, { wrapper: createWrapper() });
-
-    await user.click(screen.getByTestId('rail-tab-map'));
-
-    const map = screen.getByTestId('combat-tactical-map');
-    expect(map).toBeInTheDocument();
-    expect(map).toHaveAttribute('data-encounter-id', '7');
-    expect(map).toHaveAttribute('data-character-id', '10');
-    expect(screen.queryByTestId('combat-turn-panel-stub')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('rail-tab-map')).not.toBeInTheDocument();
   });
 
   it('passes characterId and characterSheetId from the active roster entry', () => {
@@ -181,7 +156,7 @@ describe('CombatRail - GM tab (#3557)', () => {
   it('has no GM tab when the viewer cannot GM the scene', () => {
     render(<CombatRail sceneId={1} encounterId={7} />, { wrapper: createWrapper() });
     expect(screen.queryByTestId('rail-tab-gm')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
   });
 
   it('shows a GM tab for a scene GM and still defaults to Your Turn', () => {
@@ -199,12 +174,5 @@ describe('CombatRail - GM tab (#3557)', () => {
     expect(tab).toHaveAttribute('data-scene-id', '1');
     expect(tab).toHaveAttribute('data-encounter-id', '7');
     expect(tab).toHaveAttribute('data-viewer-can-gm', 'true');
-  });
-
-  it('passes sceneId to the map tab so bystanders can be drawn', async () => {
-    const user = userEvent.setup();
-    render(<CombatRail sceneId={1} encounterId={7} />, { wrapper: createWrapper() });
-    await user.click(screen.getByTestId('rail-tab-map'));
-    expect(screen.getByTestId('combat-tactical-map')).toHaveAttribute('data-scene-id', '1');
   });
 });

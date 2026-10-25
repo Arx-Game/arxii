@@ -189,6 +189,16 @@ vi.mock('@/combat/queries', async (importOriginal) => {
   };
 });
 
+vi.mock('@/combat/components/CombatTacticalMap', () => ({
+  CombatTacticalMap: ({ encounterId, sceneId }: { encounterId: number; sceneId: number }) => (
+    <div
+      data-testid="combat-tactical-map"
+      data-encounter-id={encounterId}
+      data-scene-id={sceneId}
+    />
+  ),
+}));
+
 vi.mock('@/combat/components/CombatRail', () => ({
   CombatRail: ({
     sceneId,
@@ -689,6 +699,45 @@ describe('SceneDetailPage', () => {
     expect(rail).toBeInTheDocument();
     expect(rail).toHaveAttribute('data-encounter-id', '7');
     expect(rail).toHaveAttribute('data-scene-id', '1');
+  });
+
+  it('puts the battle map at the top of the left column in a fight (#4670)', () => {
+    mockUseEncounterForScene.mockReturnValue({
+      data: { id: 7 },
+      isLoading: false,
+      isError: false,
+    });
+
+    const { getByTestId } = renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    const left = getByTestId('scene-detail-left');
+    const map = getByTestId('combat-tactical-map');
+    expect(left).toContainElement(map);
+    expect(map).toHaveAttribute('data-encounter-id', '7');
+    expect(getByTestId('scene-detail-combat-rail')).not.toContainElement(map);
+  });
+
+  it('shows no battle map outside a fight (#4670)', () => {
+    mockUseEncounterForScene.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+    });
+
+    const { queryByTestId } = renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    expect(queryByTestId('combat-tactical-map')).not.toBeInTheDocument();
+    expect(queryByTestId('combat-main-map')).not.toBeInTheDocument();
   });
 
   it('does not render CombatRail when there is no active encounter (#2197)', () => {

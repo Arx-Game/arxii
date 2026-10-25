@@ -19,6 +19,8 @@ import { CeremonyRoomCard } from '@/ceremonies/CeremonyRoomCard';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
 import { useEncounterForScene, combatKeys } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
+import { CombatMainMap } from '@/combat/components/CombatMainMap';
+import { CombatPickProvider } from '@/combat/CombatPickContext';
 import { useBattleForSceneQuery } from '@/battles/queries';
 import { StoryTray } from '@/missions/components/StoryTray';
 import { JournalTab } from '@/journals/components/JournalTab';
@@ -391,12 +393,17 @@ interface GameCenterProps {
   sceneId?: string;
   accountId: number;
   gameWindow: ComponentProps<typeof GameWindow>;
+  /** The encounter whose battle map leads the center column while a fight is on (#4670). */
+  mapEncounterId?: number;
 }
 
-function GameCenter({ sceneId, accountId, gameWindow }: GameCenterProps) {
+function GameCenter({ sceneId, accountId, gameWindow, mapEncounterId }: GameCenterProps) {
   return (
     <>
       {sceneId && <ConsentPrompt sceneId={sceneId} />}
+      {sceneId && mapEncounterId ? (
+        <CombatMainMap sceneId={Number(sceneId)} encounterId={mapEncounterId} />
+      ) : null}
       <GameWindow {...gameWindow} draftScopePrefix={`account:${accountId}`} />
       {sceneId && <ActionPanel sceneId={sceneId} />}
     </>
@@ -1088,76 +1095,83 @@ export function GamePage() {
 
   return (
     <PersonaCardContext.Provider value={cardContextValue}>
-      <GameLayout
-        accountId={account?.id}
-        topBar={
-          <GameTopBar
-            characters={characters}
-            hasActiveEncounter={hasActiveEncounter}
-            encounterId={activeEncounter?.id}
-            onJumpToCombat={jumpToCombat}
-          />
-        }
-        rail={
-          activeSession ? (
-            <ConversationRail
-              accountId={account.id}
-              groups={railGroups}
-              selectedKey={activeThreadTab}
-              onSelect={handleRailSelect}
-              personActions={personActions}
-              find={findText}
-              onFindChange={setFindText}
+      <CombatPickProvider>
+        <GameLayout
+          accountId={account?.id}
+          topBar={
+            <GameTopBar
+              characters={characters}
+              hasActiveEncounter={hasActiveEncounter}
+              encounterId={activeEncounter?.id}
+              onJumpToCombat={jumpToCombat}
             />
-          ) : undefined
-        }
-        center={
-          <GameCenter sceneId={sceneId} accountId={account.id} gameWindow={gameWindowProps} />
-        }
-        sidebar={
-          <PlaySidebar
-            npcCards={
-              <NpcPlayCards
-                activeEntry={activeEntry}
-                interactions={allInteractions}
-                onPoseAs={handleReply}
-              />
-            }
-            accountId={account?.id}
-            mode={sidebarMode}
-            onModeChange={setSidebarMode}
-            hasActiveEncounter={hasActiveEncounter}
-            onJumpToCombat={jumpToCombat}
-            here={
-              <GameRightSidebar
+          }
+          rail={
+            activeSession ? (
+              <ConversationRail
                 accountId={account.id}
-                roomTabLabel={roomTabLabel}
-                isDreaming={isDreaming}
-                activeCharacterId={activeCharacterId}
-                active={active}
-                focus={focus}
-                roomData={roomData}
-                sceneData={sceneData}
-                hasActiveEncounter={hasActiveEncounter}
-                hasActiveBattle={hasActiveBattle}
-                showCombatRail={showCombatRail}
-                railEncounterId={railEncounterId}
-                combatSceneDetail={combatSceneDetail}
-                onDismissOutcome={handleDismissOutcome}
-                activeTab={hereActiveTab}
-                onTabChange={setHereActiveTab}
+                groups={railGroups}
+                selectedKey={activeThreadTab}
+                onSelect={handleRailSelect}
+                personActions={personActions}
+                find={findText}
+                onFindChange={setFindText}
               />
-            }
-            onOpenReference={openReference}
-          />
-        }
-      />
-      <CharacterCardDrawer
-        persona={cardPersona}
-        onClose={() => setCardPersona(null)}
-        viewerEntryId={viewerEntryId}
-        onWhisper={handleWhisper}
-      />
+            ) : undefined
+          }
+          center={
+            <GameCenter
+              sceneId={sceneId}
+              accountId={account.id}
+              gameWindow={gameWindowProps}
+              mapEncounterId={showCombatRail ? railEncounterId : undefined}
+            />
+          }
+          sidebar={
+            <PlaySidebar
+              npcCards={
+                <NpcPlayCards
+                  activeEntry={activeEntry}
+                  interactions={allInteractions}
+                  onPoseAs={handleReply}
+                />
+              }
+              accountId={account?.id}
+              mode={sidebarMode}
+              onModeChange={setSidebarMode}
+              hasActiveEncounter={hasActiveEncounter}
+              onJumpToCombat={jumpToCombat}
+              here={
+                <GameRightSidebar
+                  accountId={account.id}
+                  roomTabLabel={roomTabLabel}
+                  isDreaming={isDreaming}
+                  activeCharacterId={activeCharacterId}
+                  active={active}
+                  focus={focus}
+                  roomData={roomData}
+                  sceneData={sceneData}
+                  hasActiveEncounter={hasActiveEncounter}
+                  hasActiveBattle={hasActiveBattle}
+                  showCombatRail={showCombatRail}
+                  railEncounterId={railEncounterId}
+                  combatSceneDetail={combatSceneDetail}
+                  onDismissOutcome={handleDismissOutcome}
+                  activeTab={hereActiveTab}
+                  onTabChange={setHereActiveTab}
+                />
+              }
+              onOpenReference={openReference}
+            />
+          }
+        />
+        <CharacterCardDrawer
+          persona={cardPersona}
+          onClose={() => setCardPersona(null)}
+          viewerEntryId={viewerEntryId}
+          onWhisper={handleWhisper}
+        />
+      </CombatPickProvider>
     </PersonaCardContext.Provider>
   );
 }
