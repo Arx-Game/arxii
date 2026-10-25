@@ -1306,33 +1306,75 @@ _ERR_MOVE_CANNOT_FLY = "You cannot fly."
 _ERR_MOVE_ROOFED = "A roof is in the way."
 _ERR_TAKE_ALREADY_PLACED = "You are already placed somewhere — move instead."
 _ERR_TAKE_NOT_ENTRY = "You cannot enter the position graph there."
+_ERR_SQUARE_OUTSIDE = "That square is outside {place}."
+_ERR_SQUARE_TAKEN = "Someone is standing there."
+_ERR_SQUARE_NO_AREA = "{place} has no squares to pick."
+_ERR_STEP_UNPLACED = "You aren't standing anywhere."
+
+Square = tuple[int, int]
 
 
-def place_in_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
+def validate_square(position: Position, square: Square, *, mover: ObjectDB) -> None:
+    """Refuse a square the mover cannot stand on in ``position`` (#4670).
+
+    The place needs an area, the square must lie inside it, and no one else may hold it.
+    Drawing only: nothing else about the place is read.
+    """
+    if position.area_x is None:
+        raise PositionError(_ERR_SQUARE_NO_AREA.format(place=position.name))
+    x, y = square
+    inside = (
+        position.area_x <= x < position.area_x + position.area_w
+        and position.area_y <= y < position.area_y + position.area_h
+    )
+    if not inside:
+        raise PositionError(_ERR_SQUARE_OUTSIDE.format(place=position.name))
+    taken = (
+        ObjectPosition.objects.filter(position=position, square_x=x, square_y=y)
+        .exclude(objectdb=mover)
+        .exists()
+    )
+    if taken:
+        raise PositionError(_ERR_SQUARE_TAKEN)
+
+
+def place_in_position(
+    objectdb: ObjectDB, position: Position, *, square: Square | None = None
+) -> ObjectPosition:
     """Place objectdb in position (setup / staff teleport).
 
-    Raises PositionError if position.room != objectdb.location.
+    Raises PositionError if position.room != objectdb.location, or the square is refused.
     Uses update_or_create so calling twice is idempotent (updates occupancy).
     """
     if position.room_id != objectdb.db_location_id:
         raise PositionError(_ERR_PLACE_CROSS_ROOM)
-    return _commit_position(objectdb, position)
+    if square is not None:
+        validate_square(position, square, mover=objectdb)
+    return _commit_position(objectdb, position, square=square)
 
 
-def _commit_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
+def _commit_position(
+    objectdb: ObjectDB, position: Position, *, square: Square | None = None
+) -> ObjectPosition:
     """The one writer of an object's position (#4607).
 
     Writes the ``ObjectPosition`` row, drops the cached ``current_position`` of every
     combat opponent and participant this object is (the rows are identity-mapped, so
     a stale cache would outlive the move), tells the open battle maps in the room to
-    refetch once the move commits (#4644), then re-reconciles sunlight.
+    refetch once the move commits (#4644), then re-reconciles sunlight. ``square`` is where
+    the token stands inside the place; no square clears it and the map arranges the token
+    (#4670). The caller validates it first (``validate_square``).
     """
     from world.combat.models import CombatOpponent, CombatParticipant
     from world.combat.services.encounter.state_ping import notify_room_encounters_on_commit
 
     obj_pos, _ = ObjectPosition.objects.update_or_create(
         objectdb=objectdb,
-        defaults={"position": position},
+        defaults={
+            "position": position,
+            "square_x": square[0] if square else None,
+            "square_y": square[1] if square else None,
+        },
     )
     # Only identity-mapped rows can hold the cached property, so walk the map (no query).
     # CharacterSheet shares ObjectDB's pk, so a participant's sheet id is the object's pk.
@@ -1359,7 +1401,9 @@ def _reconcile_sun_after_position_change(objectdb: ObjectDB) -> None:
 _ENTRY_KINDS = (PositionKind.PRIMARY, PositionKind.FEATURE)
 
 
-def take_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
+def take_position(
+    objectdb: ObjectDB, position: Position, *, square: Square | None = None
+) -> ObjectPosition:
     """Voluntary entry onto the position graph for an UNPLACED actor (#2005).
 
     Restricted to ground entry-point kinds so voluntary entry can't bypass
@@ -1375,7 +1419,7 @@ def take_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
         raise PositionError(_ERR_TAKE_NOT_ENTRY)
     if not _can_move(objectdb):
         raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
-    return place_in_position(objectdb, position)
+    return place_in_position(objectdb, position, square=square)
 
 
 def move_to_position(
@@ -1383,6 +1427,7 @@ def move_to_position(
     target: Position,
     *,
     traversals: frozenset[str] = frozenset({CreatureTraversal.WALKS}),
+    square: Square | None = None,
 ) -> ObjectPosition:
     """Voluntary move from current position to target position.
 
@@ -1403,7 +1448,18 @@ def move_to_position(
     7. the actor's MOVEMENT capability > 0 (characters only)
     """
     check_move_to_position(objectdb, target, traversals=traversals)
-    return _commit_position(objectdb, target)
+    if square is not None:
+        validate_square(target, square, mover=objectdb)
+    return _commit_position(objectdb, target, square=square)
+
+
+def step_to_square(objectdb: ObjectDB, square: Square) -> ObjectPosition:
+    """Stand on another square of the place already held: free, no hop (#4670)."""
+    here = position_of(objectdb)
+    if here is None:
+        raise PositionError(_ERR_STEP_UNPLACED)
+    validate_square(here, square, mover=objectdb)
+    return _commit_position(objectdb, here, square=square)
 
 
 def check_move_to_position(

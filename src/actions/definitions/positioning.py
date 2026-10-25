@@ -31,7 +31,9 @@ from world.areas.positioning.services import (
     move_to_position,
     place_in_position,
     position_of,
+    step_to_square,
     take_position,
+    validate_square,
 )
 from world.areas.positioning.traversal import best_crossing_cost, traversals_of
 from world.combat.constants import (
@@ -58,6 +60,20 @@ if TYPE_CHECKING:
     from world.combat.models import CombatParticipant
 
 STOPPED_BY_HOLDER = "You are stopped by {name}."
+_ERR_SQUARE_PAIR = "Pick a square with both coordinates."
+
+
+def _square_from(kwargs: dict[str, Any]) -> tuple[int, int] | None:
+    """The optional ``square_x``/``square_y`` pair; both or neither (#4670)."""
+    x, y = kwargs.get("square_x"), kwargs.get("square_y")
+    if x is None and y is None:
+        return None
+    if x is None or y is None:
+        raise PositionError(_ERR_SQUARE_PAIR)
+    try:
+        return int(x), int(y)
+    except (TypeError, ValueError):
+        raise PositionError(_ERR_SQUARE_PAIR) from None
 
 
 @dataclass
@@ -105,6 +121,14 @@ class MoveToPositionAction(Action):
         except Position.DoesNotExist:
             return ActionResult(success=False, message=_ERR_POSITION_NOT_FOUND)
 
+        try:
+            square = _square_from(kwargs)
+            if square is not None:
+                # Before any hop is spent or the position written.
+                validate_square(target, square, mover=actor)
+        except PositionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
         traversals = traversals_of(actor)
         cost = _move_cost(actor, target, traversals)
         participant = _declaring_participant(actor)
@@ -119,7 +143,7 @@ class MoveToPositionAction(Action):
         # Read before the move: a mover's own place never counts as held against her.
         held = held_position_ids_against(actor) if participant is not None else frozenset()
         try:
-            move_to_position(actor, target, traversals=traversals)
+            move_to_position(actor, target, traversals=traversals, square=square)
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
@@ -422,7 +446,7 @@ class TakePositionAction(Action):
             return ActionResult(success=False, message=_ERR_POSITION_NOT_FOUND)
 
         try:
-            take_position(actor, target)
+            take_position(actor, target, square=_square_from(kwargs))
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
@@ -430,6 +454,41 @@ class TakePositionAction(Action):
         actor_state = sdm.initialize_state_for_object(actor)
         send_room_state(actor_state)
 
+        return ActionResult(success=True)
+
+
+@dataclass
+class StepToSquareAction(Action):
+    """Stand on another square of the place the actor already holds (#4670).
+
+    Free: no hop, no combat movement prerequisite. The battle map dispatches it directly
+    by registry key with ``square_x``/``square_y``; it is not in the available-actions
+    list, and the dispatch path accepts any registry key.
+    """
+
+    key: str = "step_to_square"
+    name: str = "Stand here"
+    icon: str = "map-marker"
+    category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        try:
+            square = _square_from(kwargs)
+            if square is None:
+                raise PositionError(_ERR_SQUARE_PAIR)
+            step_to_square(actor, square)
+        except PositionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        sdm = context.scene_data if context else SceneDataManager()
+        send_room_state(sdm.initialize_state_for_object(actor))
         return ActionResult(success=True)
 
 
