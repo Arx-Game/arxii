@@ -3,7 +3,7 @@
 Staff paste one row per distinction (pipe-separated, ``COLUMNS`` order); the view
 parses every row, resolves every name it carries against rows that already exist
 (a category, a modifier target, an enemy reason, an Appearance section, a Beginning,
-a Glimpse tag, an Upbringing answer, a schooling line), and shows a preview: each
+a Glimpse tag, an Upbringing answer, a schooling line, a Life beat), and shows a preview: each
 row reads ``create``, ``skip`` (its slug already exists, or an identical offer line
 does) or ``error``. Nothing is written until every row reads create or skip; then a
 digest-guarded confirm creates the rows in one transaction, crediting the operator.
@@ -39,6 +39,7 @@ from web.admin.tuning.views import superuser_required
 from world.character_creation.constants import (
     ENEMY_MARKING_DEGREES,
     ActorSheetPrompt,
+    LifeStage,
     OfferArrival,
     OfferChapter,
 )
@@ -47,6 +48,7 @@ from world.character_creation.models import (
     Beginnings,
     DistinctionOffer,
     EnemyReason,
+    LifeBeat,
     OriginTemplateSlotChoice,
     SchoolingLine,
 )
@@ -79,6 +81,7 @@ _PROMPT_WORDS = {
     **{p.value: p for p in ActorSheetPrompt},
 }
 _KIND_DEGREE = "degree"
+_KIND_BEAT = "beat"
 _EFFECT_RE = re.compile(r"^([+-])\s*(\d+)?\s*(.+)$")
 
 
@@ -204,8 +207,36 @@ _NAMED_OPENERS: dict[str, tuple[str, str, type, str]] = {
 }
 
 
+def _beat_spec(value: str, token: str) -> tuple[OfferSpec | None, str]:
+    """``beat:<stage>/<beat name>`` -> the Backgrounds answer on that beat (#4655).
+
+    A beat's name is unique only within its stage (three Defining Moments beats share
+    one), so the token carries both. The stage may be written as its value
+    (``adulthood``) or its label (``Before the Glimpse``). The beat must already exist:
+    the paste never creates a referenced row.
+    """
+    stage_text, slash, beat_name = (part.strip() for part in value.partition("/"))
+    if not slash or not stage_text or not beat_name:
+        example = "beat:childhood/Early Upbringing"
+        return None, f"beat {value!r} needs a stage and a name, like {example}"
+    stage_key = stage_text.lower().replace(" ", "_")
+    stages = [s for s in LifeStage if stage_key in (s.value, s.label.lower().replace(" ", "_"))]
+    if not stages:
+        known = ", ".join(s.value for s in LifeStage)
+        return None, f"unknown life stage {stage_text!r} in {token!r} (one of {known})"
+    beat, why = _one(
+        LifeBeat.objects.filter(life_stage=stages[0].value, name__iexact=beat_name),
+        f"beat {beat_name!r} in {stages[0].label}",
+    )
+    if beat is None:
+        return None, why
+    return OfferSpec(OfferChapter.BACKGROUNDS, OfferArrival.CHOICE, "beat_id", beat.pk, token), ""
+
+
 def _opener_spec(kind: str, value: str, token: str) -> tuple[OfferSpec | None, str]:
     """One ``offered_under`` token -> the offer line it names, or why it cannot."""
+    if kind == _KIND_BEAT:
+        return _beat_spec(value, token)
     if kind in _PROMPT_WORDS:
         prompt = _PROMPT_WORDS[kind]
         spec = OfferSpec(OfferChapter.ACTORS_SHEET, OfferArrival.CHOICE, "prompt", prompt, token)

@@ -654,7 +654,8 @@ files, URLs, gate, and credit rule.
 (`EnemyReason`, `AppearanceSection`), and the Builder's "Add from a table"
 (`web/admin/distinction_builder/paste.py`) lands scores of new distinctions at once, additions
 only (a row whose slug exists is skipped, never updated; nothing deleted; every referenced row must
-already exist; preview, then one transaction behind a digest-guarded confirm; superuser only):
+already exist; preview, then one transaction behind a digest-guarded confirm; superuser only;
+a `beat:<stage>/<beat name>` token places the card as an answer on an existing Life beat, #4655):
 one click from the Authoring Workbench's Builders panel and from the row each edits: the
 Distinction Builder (a distinction's own fields, effects, exclusions, and every offer naming
 it), the tradition slate page (the shared `TraditionStateLine`/`SchoolingLine` standard lines

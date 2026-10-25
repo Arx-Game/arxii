@@ -13,11 +13,12 @@ from web.admin.tests.test_distinction_builder import (
     emitted_classes,
     reachable_css,
 )
-from world.character_creation.constants import OfferArrival, OfferChapter
+from world.character_creation.constants import LifeStage, OfferArrival, OfferChapter
 from world.character_creation.factories import (
     AppearanceSectionFactory,
     BeginningsFactory,
     EnemyReasonFactory,
+    LifeBeatFactory,
 )
 from world.character_creation.models import DistinctionOffer
 from world.contributors.factories import ContentContributorFactory
@@ -196,6 +197,79 @@ class PasteViewTest(PasteTestCase):
         resp = self.client.post(self.url, {"text": ROW, "action": "create", "digest": again})
         assert resp.status_code == 200
         assert Distinction.objects.filter(slug="oath-bound").count() == 1
+
+
+LAP = "The Lap of Luxury | Personality | 15 | 1 | A great house. | Long prose. | +Bonds goals | "
+
+
+class BeatOpenerTest(PasteTestCase):
+    """``beat:<stage>/<beat>`` places a card on a Life beat (#4655)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.early = LifeBeatFactory(name="Early Upbringing", life_stage=LifeStage.CHILDHOOD)
+        cls.child_moments = LifeBeatFactory(name="Defining Moments", life_stage=LifeStage.CHILDHOOD)
+        cls.youth_moments = LifeBeatFactory(name="Defining Moments", life_stage=LifeStage.YOUTH)
+        cls.before = LifeBeatFactory(name="Past Careers", life_stage=LifeStage.ADULTHOOD)
+
+    def _offer(self, token: str):
+        (row,) = parse_table(LAP + token)
+        return row
+
+    def test_a_beat_token_resolves_to_a_backgrounds_choice_on_that_beat(self):
+        row = self._offer("beat:childhood/Early Upbringing")
+        assert row.status == "create"
+        (spec,) = row.offers
+        assert (spec.chapter, spec.arrives_as, spec.opener_field, spec.opener_value) == (
+            OfferChapter.BACKGROUNDS,
+            OfferArrival.CHOICE,
+            "beat_id",
+            self.early.pk,
+        )
+
+    def test_the_stage_picks_between_beats_that_share_a_name(self):
+        child = self._offer("beat:childhood/Defining Moments")
+        youth = self._offer("beat:youth/Defining Moments")
+        assert child.offers[0].opener_value == self.child_moments.pk
+        assert youth.offers[0].opener_value == self.youth_moments.pk
+
+    def test_the_stage_may_be_written_as_its_label_and_the_name_in_any_case(self):
+        row = self._offer("beat:Before the Glimpse/past careers")
+        assert row.status == "create"
+        assert row.offers[0].opener_value == self.before.pk
+
+    def test_a_beat_that_does_not_exist_is_an_error_and_is_not_created(self):
+        row = self._offer("beat:childhood/Nowhere")
+        assert row.status == "error"
+        assert "unknown beat 'Nowhere' in Childhood" in row.notes[0]
+
+    def test_a_name_without_a_stage_is_an_error_that_shows_the_form(self):
+        row = self._offer("beat:Early Upbringing")
+        assert row.status == "error"
+        assert "beat:childhood/Early Upbringing" in row.notes[0]
+
+    def test_an_unknown_stage_is_an_error_that_lists_the_stages(self):
+        row = self._offer("beat:midlife/Early Upbringing")
+        assert row.status == "error"
+        assert "unknown life stage 'midlife'" in row.notes[0]
+        assert "childhood" in row.notes[0]
+
+    def test_create_makes_the_answer_on_the_beat_with_the_players_line_and_credit(self):
+        self.client.force_login(self.author)
+        text = LAP + "beat:childhood/Early Upbringing; beat:youth/Defining Moments"
+        digest = table_digest(parse_table(text))
+        resp = self.client.post(self.url, {"text": text, "action": "create", "digest": digest})
+        assert resp.status_code == 302
+        card = Distinction.objects.get(slug="the-lap-of-luxury")
+        offers = DistinctionOffer.objects.filter(distinction=card).order_by("beat_id")
+        assert [o.beat for o in offers] == [self.early, self.youth_moments]
+        for offer in offers:
+            assert offer.chapter == OfferChapter.BACKGROUNDS
+            assert offer.arrives_as == OfferArrival.CHOICE
+            assert offer.player_line == "A great house."
+            assert offer.written_by == self.writer
+        assert [o.distinction for o in self.early.answers] == [card]
 
 
 class PasteStylingTest(PasteTestCase):
