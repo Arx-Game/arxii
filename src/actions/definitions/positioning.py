@@ -124,7 +124,7 @@ class MoveToPositionAction(Action):
         try:
             square = _square_from(kwargs)
             if square is not None:
-                # Before any hop is spent or the position written.
+                # Deliberately early: runs before any hop is spent; the service re-checks.
                 validate_square(target, square, mover=actor)
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)

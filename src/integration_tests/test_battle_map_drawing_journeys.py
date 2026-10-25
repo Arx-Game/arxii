@@ -7,6 +7,8 @@ Drawing only: nothing here changes a rule.
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 
@@ -191,3 +193,22 @@ class StandingOnASquare(JourneyCase):
 
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertEqual(self.square_of(self.ann), (None, None))
+
+    def test_an_actor_who_cannot_move_cannot_step(self) -> None:
+        place_in_position(self.ann, self.hall, square=(2, 2))
+
+        with mock.patch("world.areas.positioning.services._can_move", return_value=False):
+            result = self.web(self.ann, "step_to_square", square_x=5, square_y=5)
+
+        self.assertFalse(result.detail.success)
+        self.assertEqual(result.detail.message, "You cannot move.")
+        self.assertEqual(self.square_of(self.ann), (2, 2))
+
+    def test_taking_a_position_with_a_square_lands_on_it(self) -> None:
+        cal = self.make_player("Cal", room=self.room)
+
+        result = self.web(cal, "take_position", position_id=self.hall.pk, square_x=7, square_y=5)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(position_of(cal), self.hall)
+        self.assertEqual(self.square_of(cal), (7, 5))

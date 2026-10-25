@@ -1458,6 +1458,8 @@ def step_to_square(objectdb: ObjectDB, square: Square) -> ObjectPosition:
     here = position_of(objectdb)
     if here is None:
         raise PositionError(_ERR_STEP_UNPLACED)
+    if not _can_move(objectdb):
+        raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
     validate_square(here, square, mover=objectdb)
     return _commit_position(objectdb, here, square=square)
 
