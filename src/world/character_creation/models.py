@@ -34,6 +34,7 @@ from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     ENEMY_MARKING_DEGREES,
     MAGIC_SKILL_POINTS_REFUSAL,
+    MAGIC_TRAINING_POINTS_TARGET,
     REPUTATION_SEED_MAX,
     REPUTATION_SEED_MIN,
     REQUIRED_STATS,
@@ -61,6 +62,7 @@ from world.character_creation.constants import (
 )
 from world.character_creation.types import (
     CGPointBreakdownEntry,
+    MagicTrainingPool,
     StageValidationErrors,
 )
 from world.character_sheets.types import EnemyDegree, EnemyPowerTier
@@ -1866,11 +1868,21 @@ class CharacterDraft(SharedMemoryModel):
 
     def _get_distinction_bonus(self, modifier_target_name: str, category_name: str) -> int:
         """Sum distinction effect values targeting a specific ModifierTarget."""
+        sources = self._distinction_bonus_sources(modifier_target_name, category_name)
+        return sum(points for _, points in sources)
+
+    def _distinction_bonus_sources(
+        self, modifier_target_name: str, category_name: str
+    ) -> list[tuple[str, int]]:
+        """One ``(distinction name, points)`` per distinction feeding a ModifierTarget.
+
+        Points sum every rank the distinction is held at; ordered by name.
+        """
         from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
 
         distinctions_data = self.draft_data.get("distinctions", [])
         if not distinctions_data:
-            return 0
+            return []
 
         # A per-feature distinction (#3739) is held once per feature, so ranks are
         # collected as a list per distinction and every one of them pays: "Alluring 2"
@@ -1880,18 +1892,65 @@ class CharacterDraft(SharedMemoryModel):
             if d.get("distinction_id"):
                 ranks[d["distinction_id"]].append(d.get("rank", 1))
         if not ranks:
-            return 0
+            return []
 
         effects = DistinctionEffect.objects.filter(
             distinction_id__in=ranks.keys(),
             target__name=modifier_target_name,
             target__category__name=category_name,
-        ).select_related("target")
+        ).select_related("target", "distinction")
 
-        return sum(
-            effect.get_value_at_rank(rank)
-            for effect in effects
-            for rank in ranks[effect.distinction_id]
+        by_name: dict[str, int] = defaultdict(int)
+        for effect in effects:
+            by_name[effect.distinction.name] += sum(
+                effect.get_value_at_rank(rank) for rank in ranks[effect.distinction_id]
+            )
+        return sorted(by_name.items())
+
+    @property
+    def magic_training_pool(self) -> MagicTrainingPool:
+        """The Magic-skill points this draft spends, with the Tradition's fit bonuses.
+
+        Computed on every call, never memoised (drafts are idmapper-shared). The fit
+        bonuses only apply on top of some training (``base > 0``).
+        """
+        from world.magic.models import Gift, Resonance  # noqa: PLC0415
+        from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+        from world.magic.services.teaching_fit import (  # noqa: PLC0415
+            cg_aura_type,
+            get_teaching_config,
+            teaching_fit,
+        )
+        from world.skills.models import SkillPointBudget  # noqa: PLC0415
+
+        sources = self._distinction_bonus_sources(
+            MAGIC_TRAINING_POINTS_TARGET, CG_MODIFIER_CATEGORY
+        )
+        base = sum(points for _, points in sources)
+        gift_id = self.draft_data.get("selected_gift_id")
+        resonance_id = self.draft_data.get("selected_gift_resonance_id")
+        gift = Gift.objects.filter(pk=gift_id).first() if gift_id else None
+        resonance = (
+            Resonance.objects.select_related("affinity").filter(pk=resonance_id).first()
+            if resonance_id
+            else None
+        )
+        fit = teaching_fit(self.selected_tradition, gift, cg_aura_type(resonance))
+        config = get_teaching_config()
+        gift_bonus = config.gift_fit_training_bonus if base > 0 and fit.gift_fit else 0
+        affinity_bonus = config.affinity_fit_training_bonus if base > 0 and fit.affinity_fit else 0
+        budget = SkillPointBudget.get_active_budget()
+        total = base + gift_bonus + affinity_bonus
+        total -= total % budget.points_per_tier
+        required_spend = min(total, magic_category_skills().count() * budget.max_skill_value)
+        return MagicTrainingPool(
+            base=base,
+            gift_bonus=gift_bonus,
+            affinity_bonus=affinity_bonus,
+            total=total,
+            required_spend=required_spend,
+            fit=fit,
+            sources=sources,
         )
 
     @property

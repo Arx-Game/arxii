@@ -36,6 +36,9 @@ REQUIRED_STATS = PrimaryStat.get_all_stat_names()
 # contract between this app and that seed data.
 STARTING_TECHNIQUE_PICKS_TARGET = "starting_technique_picks"
 CG_MODIFIER_CATEGORY = "character_creation"
+# Magic training points (slice 2 of #4659): the pool a draft spends on Magic skills,
+# read by CharacterDraft.magic_training_pool via the same distinction-bonus seam.
+MAGIC_TRAINING_POINTS_TARGET = "magic_training_points"
 
 # Canonical fallback starting room (#2121). Seeded by
 # ``world.seeds.character_creation.ensure_canonical_fallback_room`` and wired onto

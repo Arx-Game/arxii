@@ -37,6 +37,7 @@ from world.character_creation.constants import (
     FIRST_JOURNAL_INSTITUTION,
     FIRST_JOURNAL_QUESTIONS,
     INTRODUCTIONS_INTRO,
+    MAGIC_TRAINING_POINTS_TARGET,
     OFFICIALLY_DEAD_HEADING,
     OFFICIALLY_DEAD_INTRO,
     STARTING_TECHNIQUE_PICKS_TARGET,
@@ -560,6 +561,27 @@ def wire_starting_technique_picks_target():
     )
 
 
+def wire_magic_training_points_target():
+    """Look up the 'magic_training_points' ModifierTarget (slice 2 of #4659).
+
+    Distinctions granting Magic-skill training points at character creation (the
+    schooling stances) target this row; ``CharacterDraft.magic_training_pool`` sums
+    it. Same ``authored_or_sample`` shape as ``wire_starting_technique_picks_target``.
+    """
+    from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    category = authored_or_sample(ModifierCategory, {}, name=CG_MODIFIER_CATEGORY)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {"description": "Points a draft spends on Magic skills at character creation."},
+        name=MAGIC_TRAINING_POINTS_TARGET,
+        category=category,
+    )
+
+
 def ensure_tradition_training_distinction() -> None:
     """Seed the 'Tradition Training' distinction (#2426).
 
@@ -587,6 +609,7 @@ def ensure_tradition_training_distinction() -> None:
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     target = wire_starting_technique_picks_target()
+    wire_magic_training_points_target()
 
     category = authored_or_sample(
         DistinctionCategory,
