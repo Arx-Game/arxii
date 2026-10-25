@@ -91,3 +91,24 @@ class FeatureJourneys(TestCase):
 
         detach_feature(feature)
         self.assertFalse(place.features.exists())
+
+    def test_attach_with_a_square_outside_the_place_is_refused_and_saves_nothing(self):
+        chandelier = FeatureTypeFactory(name="Chandelier")
+        blueprint, _ = _blueprint_with_floor()
+        room = RoomProfileFactory().objectdb
+        place = instantiate_blueprint(blueprint, room)[0]
+
+        with self.assertRaisesMessage(ValidationError, "That square is outside Floor."):
+            attach_feature(place, chandelier, square=(40, 4))
+
+        self.assertFalse(PositionFeature.objects.filter(position=place).exists())
+
+    def test_a_feature_with_only_one_square_number_is_refused(self):
+        chandelier = FeatureTypeFactory(name="Chandelier")
+        blueprint, _ = _blueprint_with_floor()
+        room = RoomProfileFactory().objectdb
+        place = instantiate_blueprint(blueprint, room)[0]
+        feature = PositionFeature(position=place, feature_type=chandelier, square_x=6)
+
+        with self.assertRaisesMessage(ValidationError, "Fill in both square numbers"):
+            feature.full_clean()

@@ -631,6 +631,8 @@ class BlueprintFeature(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
+        if self.blueprint_position_id is None:
+            return
         _check_feature_square(self.blueprint_position, self.square_x, self.square_y)
 
     def __str__(self) -> str:
@@ -655,6 +657,8 @@ class PositionFeature(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
+        if self.position_id is None:
+            return
         _check_feature_square(self.position, self.square_x, self.square_y)
 
     def __str__(self) -> str:
