@@ -1,7 +1,8 @@
 # ADR-4638-A: A distinction counts at its holder's level, scaled by rank, and stays a character modifier
 
 **Date:** 2026-10-24
-**Status:** Accepted (spec approved on #4551; this is its slice c, distinctions and scene surroundings)
+**Status:** Accepted (spec approved on #4551; this is its slice c, distinctions and scene surroundings).
+The Rank paragraph is superseded by ADR-4660-A (2026-10-25); the rest stands.
 **Issue:** #4638 (parent #4551). Extends ADR-4594-A and ADR-4628-A.
 
 ## Decision
@@ -18,7 +19,9 @@ becomes the table number and amplification and immunity apply to it unchanged. O
 seam passes a lane; every other reader of the breakdown keeps the flat authored values, and no
 other reader looks at a check-scoped target, so the two cannot disagree on one row.
 
-**Rank.** The spec does not say how a distinction's rank meets its size. The ruling is the smallest
+**Rank.** *Superseded by ADR-4660-A: rank now steps each sized effect up the size ladder through
+authored `DistinctionEffectRankSize` rows and never multiplies the table number. Kept for the
+record:* The spec does not say how a distinction's rank meets its size. The ruling is the smallest
 reading that keeps rank meaningful: rank scales the table number the way it scales the authored
 number, by the ratio `get_value_at_rank(rank) / get_value_at_rank(1)`. For a per-rank effect that is
 "rank 2 is twice rank 1"; for a `scaling_values` effect it follows the authored curve. The size is
@@ -47,7 +50,8 @@ distinctions and surroundings need no level rows of their own.
 
 - **Multiplying the table number by rank only for `value_per_rank` effects.** It would ignore the
   authored `scaling_values` curve.
-- **Ignoring rank once sized.** Buying rank 2 of a distinction would buy nothing on checks.
+- **Ignoring rank once sized.** Buying rank 2 of a distinction would buy nothing on checks. (Still
+  rejected by ADR-4660-A, which replaced the multiply with a per-rank size.)
 - **Pricing in the check seam from the breakdown's final values.** The seam would have to redo the
   amplification and immunity rules on the sized base.
 - **`get_character_path_level` as the holder's level.** It queries per call and floors at 1;

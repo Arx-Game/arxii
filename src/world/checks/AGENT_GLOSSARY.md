@@ -185,8 +185,8 @@ Exceptional (placeholder name), Paramount (placeholder name, reached only throug
 step). Authored on `TechniqueAppliedCondition.modifier_size`: a technique that only buffs is
 Large, one that also does something else is Minor or Moderate, narrow use is one step higher.
 Also authored on `ItemCheckModifier.modifier_size` for a worn item's check bonus (#4628),
-`DistinctionEffect.modifier_size` for a distinction's (the size at rank 1; rank scales the value
-like the authored one) and `SceneCheckModifier.modifier_size` for scene surroundings (#4638).
+`DistinctionEffect.modifier_size` for a distinction's (the size at rank 1; a later rank takes the
+size its `DistinctionEffectRankSize` row names, never a multiple, #4660) and `SceneCheckModifier.modifier_size` for scene surroundings (#4638).
 _Avoid_: magnitude, strength, small/big buff
 
 **Value table** (#4594, ADR-4594-A):
