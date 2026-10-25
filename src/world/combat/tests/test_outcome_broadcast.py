@@ -118,10 +118,8 @@ class OutcomeBroadcastTest(TestCase):
     def test_resolution_creates_and_broadcasts_outcome(self) -> None:
         # mook_health=15: the PC's 20-damage hit (SL=2, full multiplier) defeats
         # it this round, so the encounter actually completes as VICTORY and
-        # reaches _broadcast_encounter_outcome -- the only caller of
-        # broadcast_action_outcome that opts into deliver_telnet=True
-        # (a synchronous _broadcast_to_location plus a non-web text line,
-        # #4091 fix round 4).
+        # reaches _broadcast_encounter_outcome (a synchronous
+        # _broadcast_to_location plus a non-web text line, #4091 fix round 4).
         # Without this, the round never completes and the test's own name
         # ("...and_broadcasts_outcome") is proven only by the unrelated,
         # always-synchronous per-action ACTION-interaction push (#4091 fix

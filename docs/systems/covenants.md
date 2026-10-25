@@ -297,8 +297,9 @@ clients. `announce_fired_perks` dual-dispatches per firing — a persisted, Narr
 `combat.interaction_services.broadcast_action_outcome` uses, including its `scene=` link —
 resolved via `get_active_scene(location)` — so a perk announce appears in scene-log replay like
 the precedent it's modeled on) PLUS a direct `location.msg_contents(text)` text companion so bare
-telnet renders the identical line. `broadcast_action_outcome` alone is WS-only and was verified
-insufficient for this path — see ADR-0151 for why it isn't reused as-is. The telnet companion
+telnet renders the identical line. `broadcast_action_outcome` was WS-only when this was built
+(see ADR-0151 for why it wasn't reused); it reaches telnet itself since #4640, but takes an
+encounter, which a perk firing outside a fight does not have. The telnet companion
 calls `location.msg_contents` directly rather than `flows.service_functions.communication
 .message_location` — `message_location` resolves its broadcast room from its caller's own
 location, not from an explicit `location` argument, and this function has no single acting

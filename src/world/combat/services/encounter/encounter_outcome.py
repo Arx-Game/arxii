@@ -105,10 +105,7 @@ def _broadcast_encounter_outcome(
         ],
         won_over=[(name, verb) for name, verb, _src in won_over_labels(encounter)],
     )
-    # deliver_telnet=True: the top-level encounter outcome (including the
-    # won-over clause) must reach a bare telnet session too (#4091 fix round 2,
-    # #3807) -- unlike this function's other, per-action callers.
-    return broadcast_action_outcome(encounter=encounter, narration=narration, deliver_telnet=True)
+    return broadcast_action_outcome(encounter=encounter, narration=narration)
 
 
 def _emit_encounter_completed(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:

@@ -537,10 +537,10 @@ callback: it pushes the WebSocket payload via `push_interaction`, then sends the
 `interaction.content` as plain text to the non-web sessions of exactly the objects the push
 reached (telnet parity). That text half is its own function,
 `send_outcome_text_to_non_web(interaction, *, location)`, for a caller that must push
-synchronously instead: combat's encounter OUTCOME line (`broadcast_action_outcome(...,
-deliver_telnet=True)`) pushes via `_broadcast_to_location` and then sends the text at once,
-because `complete_encounter` pushes the aftermath digest immediately after it and a deferred
-push would land behind the digest (#4091). A social-check result additionally schedules the resolution-theater
+synchronously instead: every combat OUTCOME line (`broadcast_action_outcome`) pushes via
+`_broadcast_to_location` and then sends the text at once, because `complete_encounter` pushes
+the aftermath digest immediately after the encounter line and a deferred push would land
+behind the digest (#4091; every per-action line too since #4640). A social-check result additionally schedules the resolution-theater
 success-level wheel to the roller and target; see "Resolution theater" in
 `docs/systems/checks.md`.
 

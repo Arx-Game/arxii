@@ -243,10 +243,6 @@ class NpcInitiatedFightIsDeliveredTests(PredatorBase):
         lines = [call.kwargs["narration"] for call in broadcast.call_args_list]
         self.assertIn(f"The {self.creature.name} attack!", lines)
         self.assertTrue(result.message.endswith("They attack!"), result.message)
-        attack_call = next(
-            c for c in broadcast.call_args_list if c.kwargs["narration"].endswith("attack!")
-        )
-        self.assertTrue(attack_call.kwargs["deliver_telnet"])
 
 
 class NotInAStandoffTests(StandoffJourneyBase):

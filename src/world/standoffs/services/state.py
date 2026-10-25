@@ -202,7 +202,6 @@ def _announce_attack(encounter: CombatEncounter, attackers: list[StandoffGroup])
     broadcast_action_outcome(
         encounter=encounter,
         narration=attack_line(attackers),
-        deliver_telnet=True,
     )
 
 

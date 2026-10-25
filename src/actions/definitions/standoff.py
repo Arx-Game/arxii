@@ -88,18 +88,16 @@ def _announce(participant: CombatParticipant, line: str, outcome: StandoffAction
 
     if not outcome.success and outcome.success_level is None:
         return
-    broadcast_action_outcome(encounter=participant.encounter, narration=line, deliver_telnet=True)
+    broadcast_action_outcome(encounter=participant.encounter, narration=line)
     if outcome.morale_line:
         broadcast_action_outcome(
             encounter=participant.encounter,
             narration=outcome.morale_line,
-            deliver_telnet=True,
         )
     for cause_line in outcome.cause_lines:
         broadcast_action_outcome(
             encounter=participant.encounter,
             narration=cause_line,
-            deliver_telnet=True,
         )
 
 

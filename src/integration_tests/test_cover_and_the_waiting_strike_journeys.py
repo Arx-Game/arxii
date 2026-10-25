@@ -575,6 +575,44 @@ class HobbWaitsForAnOpening(_TheSteading):
         self.assertIsNone(self.waiting_row().focused_opponent_target)
 
 
+class HobbFightsOnTelnet(_TheSteading):
+    """Hobb plays on telnet and reads each round's outcome lines as the web log does (#4640)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        set_position_cover(self.barn, roofed=False, screens_ranged=False)
+        self.hobb = self.fighter("Hobb", at=self.barn)
+        self.technique(self.hobb, "Lunge")
+        self.connect_telnet(self.hobb)
+
+    def times_told(self, needle: str) -> int:
+        return sum(needle in line for line in self.mailbox(self.hobb).lines)
+
+    def test_his_strike_and_the_bite_he_takes_reach_his_telnet_once_each(self) -> None:
+        self.telnet(self.hobb, "combat await Lunge")
+        self.creature("Grey Wolf", at=self.yard)
+
+        self.resolve()
+
+        for line in (
+            WAITING_STRIKE.format(name="Hobb", mover="Grey Wolf"),
+            "Lunge strikes Grey Wolf for",
+            "strikes Hobb for",
+        ):
+            self.assertShownRow(self.hobb, line)
+            self.assertEqual(self.times_told(line), 1, self.said(self.hobb))
+
+    def test_a_wolf_his_strike_drops_reaches_his_telnet(self) -> None:
+        self.telnet(self.hobb, "combat await Lunge")
+        wolf = self.creature("Grey Wolf", at=self.yard)
+        wolf.health = 1
+        wolf.save(update_fields=["health"])
+
+        self.resolve()
+
+        self.assertEqual(self.times_told(STOPPED.format(name="Grey Wolf")), 1, self.said(self.hobb))
+
+
 class KnockedOutOfTheAir(_TheSteading):
     """Grounding is a fall, not a landing."""
 

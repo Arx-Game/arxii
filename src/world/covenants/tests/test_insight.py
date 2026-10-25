@@ -182,20 +182,25 @@ class InsightRiderTests(TestCase):
         assert has_condition(self.caster_sheet.character, entry.condition)
 
     def test_announce_reaches_telnet_unmocked(self) -> None:
-        """Real ``ObjectDB.msg_contents`` runs unmocked; only the listener's own
-        ``.msg()`` is patched — mirrors #2536 slice-1's non-mocked location test.
+        """A listener with a telnet session gets the prose as plain text, once;
+        only its own ``.msg()`` is patched (#4640).
         """
         InsightTableEntryFactory(
             target_kind=InsightTargetKind.SELF,
             prose="{caster} shares a vision with {target}!",
         )
         listener = CharacterFactory(location=self.encounter.room)
+        telnet = mock.MagicMock(protocol_key="telnet")
 
-        with mock.patch.object(listener, "msg") as mock_msg:
+        with (
+            mock.patch.object(listener.sessions, "all", return_value=[telnet]),
+            mock.patch.object(listener, "msg") as mock_msg,
+        ):
             fired = maybe_produce_insight(self.caster_sheet, self.technique, self.participant)
 
         assert fired is True
-        assert mock_msg.call_count >= 1
+        texts = [c.args[0] for c in mock_msg.call_args_list if c.args]
+        assert sum("shares a vision with" in text for text in texts) == 1, texts
 
     def test_announce_reaches_web_broadcast(self) -> None:
         InsightTableEntryFactory(target_kind=InsightTargetKind.SELF)

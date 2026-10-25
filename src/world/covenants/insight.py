@@ -166,10 +166,8 @@ def _announce_insight(
 ) -> None:
     """Announce the fired entry's prose on BOTH the web and telnet channels.
 
-    Mirrors ``world.combat.escalation``'s room-wide surge narration: the web
-    broadcast goes through ``broadcast_action_outcome`` (WS-only), and the
-    ``encounter.room.msg_contents`` call is the telnet-parity companion —
-    ``broadcast_action_outcome`` alone does not reach bare telnet clients.
+    ``broadcast_action_outcome`` pushes the web payload and the telnet line both
+    (#4640).
     """
     from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 
@@ -182,6 +180,3 @@ def _announce_insight(
 
     encounter = participant.encounter
     broadcast_action_outcome(encounter=encounter, narration=narration)
-    room = encounter.room
-    if room is not None and narration:
-        room.msg_contents(narration)

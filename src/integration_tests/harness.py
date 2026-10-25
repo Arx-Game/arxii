@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import sys
 from typing import TYPE_CHECKING, Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, tag
 from rest_framework.test import APIClient
@@ -176,6 +176,18 @@ class JourneyCase(TestCase):
         rows = self.mailbox(obj).rows
         if not any(needle in row for row in rows):
             self.fail(f"{obj.key} was never pushed a row with {needle!r}. Rows:\n{rows}")
+
+    def connect_telnet(self, character: ObjectDB) -> None:
+        """Give ``character`` one bare telnet session, as a telnet player has.
+
+        A journey character has no session, so a line the game sends only to
+        non-web sessions (``non_web_sessions``) never reaches it. With this, such
+        a line lands in ``said`` beside everything else the character was told.
+        """
+        session = MagicMock(protocol_key="telnet")
+        sessions_patch = patch.object(character.sessions, "all", return_value=[session])
+        sessions_patch.start()
+        self.addCleanup(sessions_patch.stop)
 
     def assertNotTold(self, obj: ObjectDB, needle: str) -> None:  # noqa: N802
         """``obj`` was told nothing containing ``needle``."""
