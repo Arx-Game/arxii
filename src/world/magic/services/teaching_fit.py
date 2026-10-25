@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 
+from world.magic.constants import GiftKind
 from world.magic.models import (
     Affinity,
+    CharacterGift,
     Gift,
     Resonance,
     Tradition,
@@ -76,3 +78,14 @@ def character_aura_type(sheet: CharacterSheet) -> str | None:
         return str(sheet.aura.dominant_affinity.value)
     except ObjectDoesNotExist:
         return None
+
+
+def major_gift_for(sheet: CharacterSheet) -> Gift | None:
+    """The sheet's Major Gift (the CharacterGift whose Gift is MAJOR), None when it has none."""
+    row = (
+        CharacterGift.objects.filter(character=sheet, gift__kind=GiftKind.MAJOR)
+        .select_related("gift")
+        .order_by("pk")
+        .first()
+    )
+    return row.gift if row is not None else None

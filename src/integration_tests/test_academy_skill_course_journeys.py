@@ -585,6 +585,7 @@ class TheTrainersMenu(_AcademyCourseCase):
                 "development_remaining": None,
                 "development_total": None,
                 "training_points": None,
+                "teaching_line": None,
                 "display": self.ENROLL,
             },
         )

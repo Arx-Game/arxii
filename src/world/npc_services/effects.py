@@ -1012,6 +1012,26 @@ def _enroll_in_course(
     )
 
 
+def _course_ease(offer: NPCServiceOffer, sheet: CharacterSheet) -> int:
+    """How many difficulty steps off a session a student who fits the Tradition gets.
+
+    Zero when the offer's role teaches no Tradition. Otherwise the student's Major Gift
+    and aura type are weighed against it (slice 2 of #4659).
+    """
+    from world.magic.services.teaching_fit import (  # noqa: PLC0415
+        character_aura_type,
+        get_teaching_config,
+        major_gift_for,
+        teaching_fit,
+    )
+
+    tradition = offer.role.teaches_tradition
+    if tradition is None:
+        return 0
+    fit = teaching_fit(tradition, major_gift_for(sheet), character_aura_type(sheet))
+    return fit.course_ease(get_teaching_config())
+
+
 def _run_course_session(  # noqa: PLR0913 - one session's inputs, all already resolved
     offer: NPCServiceOffer,
     course: SkillCourseOfferDetails,
@@ -1037,7 +1057,9 @@ def _run_course_session(  # noqa: PLR0913 - one session's inputs, all already re
 
     skill = course.skill
     check_result = perform_check_with_modifiers(
-        sheet.character, course.check_type, target_difficulty=course.check_difficulty
+        sheet.character,
+        course.check_type,
+        target_difficulty=course.check_difficulty - _course_ease(offer, sheet),
     )
     award = (
         TrainingOutcomeAward.objects.filter(outcome_tier=check_result.outcome).first()

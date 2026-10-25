@@ -897,9 +897,35 @@ def _open_enrollments_by_offer(sheet: CharacterSheet) -> dict[int, SkillCourseEn
     }
 
 
+def _teaching_line(offer: NPCServiceOffer, sheet: CharacterSheet) -> str | None:
+    """The menu line naming the Tradition a course is taught in and how it fits ``sheet``.
+
+    None when the offer's role teaches no Tradition (slice 2 of #4659).
+    """
+    from world.magic.services.teaching_fit import (  # noqa: PLC0415
+        character_aura_type,
+        major_gift_for,
+        teaching_fit,
+    )
+
+    tradition = offer.role.teaches_tradition
+    if tradition is None:
+        return None
+    fit = teaching_fit(tradition, major_gift_for(sheet), character_aura_type(sheet))
+    line = f"Taught in the manner of {tradition.name}"
+    favored = []
+    if fit.favored_gift_name is not None:
+        favored.append(f"your {fit.favored_gift_name}")
+    if fit.favored_affinity_name is not None:
+        favored.append(f"your {fit.favored_affinity_name} affinity")
+    if favored:
+        line += f". Teaches well: {' and '.join(favored)}. Sessions are easier for you."
+    return line
+
+
 def _offer_price(
     offer: NPCServiceOffer,
-    sheet: CharacterSheet,  # noqa: ARG001
+    sheet: CharacterSheet,
     open_enrollments: dict[int, SkillCourseEnrollment],
     current_week_pk: int | None,
 ) -> OfferPrice | None:
@@ -911,8 +937,9 @@ def _offer_price(
     in ``current_week_pk``, the handler's own one-a-week rule) and TRAIN
     (its coin and Hare now; its ``learn_ap_cost`` is not an AP charge, see
     :class:`~world.npc_services.types.OfferPrice`). An offer whose details row was
-    never authored names no price either. ``sheet`` is part of the signature because
-    the price is a learner's, though today both kinds quote the same price to everyone.
+    never authored names no price either. A skill course
+    whose role teaches a Tradition also carries the ``teaching_line`` for ``sheet``;
+    the price itself is the same for everyone.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -920,6 +947,7 @@ def _offer_price(
         if offer.kind == OfferKind.SKILL_COURSE:
             course = offer.skill_course_offer_details
             enrollment = open_enrollments.get(offer.pk)
+            teaching_line = _teaching_line(offer, sheet)
             if enrollment is not None:
                 return OfferPrice(
                     ap=course.session_ap_cost,
@@ -932,6 +960,7 @@ def _offer_price(
                         current_week_pk is not None
                         and enrollment.last_session_week_id == current_week_pk
                     ),
+                    teaching_line=teaching_line,
                 )
             return OfferPrice(
                 ap=course.session_ap_cost,
@@ -940,6 +969,7 @@ def _offer_price(
                 per_session_ap=course.session_ap_cost,
                 development_remaining=None,
                 development_total=None,
+                teaching_line=teaching_line,
             )
         if offer.kind == OfferKind.TRAIN:
             train = offer.train_offer_details

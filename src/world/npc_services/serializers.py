@@ -202,6 +202,7 @@ class OfferPriceSerializer(serializers.Serializer):
     development_remaining = serializers.IntegerField(allow_null=True)
     development_total = serializers.IntegerField(allow_null=True)
     training_points = serializers.IntegerField(allow_null=True)
+    teaching_line = serializers.CharField(allow_null=True)
     display = serializers.CharField()
 
 

@@ -250,6 +250,8 @@ class CmdHire(ArxCommand):
             line = f"  [#{offer['id']}] {offer['label']}{marker} [{offer['kind']}]"
             if offer["price"] is not None:
                 line += f" - {offer['price']['display']}"
+                if offer["price"].get("teaching_line"):
+                    line += f"\n      {offer['price']['teaching_line']}"
             lines.append(line)
         self.msg("\n".join(lines))
 

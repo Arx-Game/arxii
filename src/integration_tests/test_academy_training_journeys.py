@@ -180,6 +180,7 @@ class TrainingAtTheAcademy(JourneyCase):
                 "development_remaining": None,
                 "development_total": None,
                 "training_points": 5,
+                "teaching_line": None,
                 "display": MENU_LINE,
             },
         )
