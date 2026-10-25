@@ -2717,6 +2717,38 @@ class FleeConfig(SharedMemoryModel):
         return f"FleeConfig(pk={self.pk})"
 
 
+class MovementConfig(SharedMemoryModel):
+    """Singleton (pk=1): authored movement wiring (#4663).
+
+    The pass is optional content: read with cached_singleton() and treat DoesNotExist
+    as "no pass offered", not an error.
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    held_ground_challenge = models.ForeignKey(
+        "arxii.ChallengeTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Challenge rolled to get past ground a ready enemy holds. Unset: no pass is offered."
+        ),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="movement_config_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"MovementConfig(pk={self.pk})"
+
+
 class FleeTierModifier(SharedMemoryModel):
     """Authored flee-difficulty modifier per opponent tier (#878).
 

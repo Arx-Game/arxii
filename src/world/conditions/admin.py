@@ -46,7 +46,7 @@ class CapabilityTypeAdmin(admin.ModelAdmin):
     ``military``, ``missions``, ``mechanics`` and ``conditions`` itself — see
     ``get_connections`` (#3679)."""
 
-    list_display = ["name"]
+    list_display = ["name", "traversal"]
     search_fields = ["name"]
     readonly_fields = ["get_connections"]
 

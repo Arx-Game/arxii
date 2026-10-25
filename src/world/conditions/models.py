@@ -22,6 +22,7 @@ from django.utils.functional import cached_property
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.areas.positioning.constants import CreatureTraversal
 from world.checks.constants import ModifierSize
 from world.conditions.constants import (
     Allegiance,
@@ -148,6 +149,15 @@ class CapabilityType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "unimpaired mortal. Foundational capacities (awareness, movement, "
             "limb_use) and the senses (sight, hearing) set this to 5; "
             "granted/specialty capabilities leave it 0."
+        ),
+    )
+    traversal = models.CharField(
+        max_length=20,
+        choices=CreatureTraversal.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "If set, a character with this capability above its innate baseline moves this way."
         ),
     )
     prerequisite = models.ForeignKey(
