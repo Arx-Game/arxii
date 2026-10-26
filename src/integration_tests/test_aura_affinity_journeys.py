@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.urls import reverse
 from evennia.objects.models import ObjectDB
 from rest_framework import status
 
@@ -129,32 +130,46 @@ class AuraAffinityAtTheAcademy(_AcademyCourseCase):
         offers = {offer["label"]: offer for offer in response.data["available_offers"]}
         return offers["Course: Occult"]["price"]["fit_line"]
 
-    def test_the_fit_line_follows_the_dominant_affinity_of_her_aura(self) -> None:
-        before = self.fit_line()
-        self.assertEqual(before, "Fits your Lantern Gift. Sessions are easier for you.")
-
+    def test_renaming_an_affinity_in_the_admin_keeps_every_share(self) -> None:
+        """A two-sided aura: Dawn 100 and Abyssal 50 earned is 66.67 / 33.33. Staff then
+        rename Dawn through the admin change page; the next grant recomputes on the row."""
         grant_resonance(self.sheet, self.dawn_resonance, 100, source=GainSource.STAFF_GRANT)
-
-        self.assertEqual(
-            self.fit_line(),
-            "Fits your Lantern Gift and its Dawn affinity. Sessions are easier for you.",
+        grant_resonance(
+            self.sheet,
+            ResonanceFactory(affinity=self.abyssal),
+            50,
+            source=GainSource.STAFF_GRANT,
         )
+        before = self.aura_payload()
+        self.assertEqual(_shares(before), {"Dawn": Decimal("66.67"), "Abyssal": Decimal("33.33")})
 
-    def test_renaming_an_affinity_changes_nothing_but_the_name_shown(self) -> None:
-        grant_resonance(self.sheet, self.dawn_resonance, 100, source=GainSource.STAFF_GRANT)
-
-        self.dawn.name = "Daybreak"  # a staff edit in the admin
-        self.dawn.save()
-        grant_resonance(self.sheet, self.dawn_resonance, 100, source=GainSource.STAFF_GRANT)
-
-        response = self.api(self.account_of(self.ysmay)).get(
-            f"/api/magic/character-auras/?character={self.sheet.pk}"
+        staff = AccountFactory(is_staff=True, is_superuser=True)
+        self.client.force_login(staff)
+        url = reverse("admin:arxii_affinity_change", args=[self.dawn.pk])
+        response = self.client.post(
+            url,
+            {
+                "name": "Daybreak",
+                "description": self.dawn.description,
+                "corruption_coefficient": self.dawn.corruption_coefficient,
+            },
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        payload = response.json()[0]
-        self.assertEqual(_shares(payload), {"Daybreak": Decimal(100)})
-        self.assertEqual(payload["dominant_affinity"], "Daybreak")
+        self.assertEqual(response.status_code, 302, response.content[:2000])
+
+        grant_resonance(self.sheet, self.dawn_resonance, 50, source=GainSource.STAFF_GRANT)
+
+        # Dawn row now holds 150 of 200 earned, Abyssal 50: 75 / 25.
+        after = self.aura_payload()
+        self.assertEqual(_shares(after), {"Daybreak": Decimal(75), "Abyssal": Decimal(25)})
+        self.assertEqual(after["dominant_affinity"], "Daybreak")
         self.assertEqual(
             self.fit_line(),
             "Fits your Lantern Gift and its Daybreak affinity. Sessions are easier for you.",
         )
+
+    def aura_payload(self) -> dict:
+        response = self.api(self.account_of(self.ysmay)).get(
+            f"/api/magic/character-auras/?character={self.sheet.pk}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        return response.json()[0]
