@@ -473,7 +473,7 @@ class Migration(BatchedCreateModelMigration):
                 (
                     "crossing_level",
                     models.PositiveSmallIntegerField(
-                        help_text="PathStage crossing level (3, 6, 11, 16, 21)."
+                        help_text="Shown thread level (the number players see; a thread stored at 30 shows 3). A crossing level: 3, 6, 11, 16 or 21."
                     ),
                 ),
                 (

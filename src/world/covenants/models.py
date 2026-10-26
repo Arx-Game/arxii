@@ -1290,6 +1290,7 @@ class CovenantRoleGiftGrant(NaturalKeyMixin, SharedMemoryModel):
     unlock_thread_level = models.PositiveIntegerField(
         default=0,
         help_text=(
+            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
             "The COVENANT_ROLE thread level at which this gift's techniques "
             "become available while engaged. 0 = always available."
         ),
@@ -2339,7 +2340,10 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
     )
     unlock_thread_level = models.PositiveIntegerField(
         default=0,
-        help_text="The holder's vow thread level this effect needs.",
+        help_text=(
+            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
+            "The holder's vow thread level this effect needs."
+        ),
     )
     severity_per_thread_level = models.PositiveIntegerField(
         default=0,

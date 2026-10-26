@@ -13,7 +13,7 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   description: '',
   level: 30,
   developed_points: 50,
-  path_cap: 10,
+  level_cap: 10,
   anchor_cap: 30,
   effective_cap: 10,
   retired_at: null,

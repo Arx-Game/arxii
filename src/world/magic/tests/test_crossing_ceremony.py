@@ -84,7 +84,7 @@ class TechniqueCrossingHandlerTests(TestCase):
         try:
             with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
                 handler = TechniqueCrossingHandler()
-                handler.execute(thread=thread, starting_level=2, new_level=3)
+                handler.execute(thread=thread, starting_level=20, new_level=30)
                 mock_beat.assert_called_once()
                 call_kwargs = mock_beat.call_args.kwargs
                 self.assertIsNone(call_kwargs.get("achievement"))
@@ -111,7 +111,7 @@ class TechniqueCrossingHandlerTests(TestCase):
         try:
             with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
                 handler = TechniqueCrossingHandler()
-                handler.execute(thread=thread, starting_level=5, new_level=6)
+                handler.execute(thread=thread, starting_level=50, new_level=60)
                 mock_beat.assert_not_called()
         finally:
             thread.delete()
@@ -131,7 +131,7 @@ class TechniqueCrossingHandlerTests(TestCase):
         try:
             with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
                 handler = TechniqueCrossingHandler()
-                handler.execute(thread=thread, starting_level=3, new_level=4)
+                handler.execute(thread=thread, starting_level=30, new_level=40)
                 mock_beat.assert_not_called()
         finally:
             thread.delete()
@@ -162,8 +162,8 @@ class ExecuteCrossingCeremoniesTests(TestCase):
             with patch("world.magic.crossing.ceremony.logger") as mock_logger:
                 execute_crossing_ceremonies(
                     thread=thread,
-                    starting_level=2,
-                    new_level=3,
+                    starting_level=20,
+                    new_level=30,
                 )
                 mock_logger.debug.assert_called_once()
         finally:
@@ -185,8 +185,8 @@ class ExecuteCrossingCeremoniesTests(TestCase):
         # Should not raise even with a handler that expects level gain.
         execute_crossing_ceremonies(
             thread=thread,
-            starting_level=3,
-            new_level=3,
+            starting_level=30,
+            new_level=30,
         )
 
 

@@ -26,10 +26,13 @@ _BEAST_ARCHETYPES = [
     ("Direwolf", "A massive, fearsome hunter.", 50, 20),
 ]
 
+# (min_thread_level, flat_bonus_amount). min_thread_level is the SHOWN thread
+# level (stored // 10, #4585): a thread stored at 20 shows 2 and has both of the
+# first two tiers.
 _CAPACITY_TIERS = [
-    (10, 10),
-    (20, 20),
-    (30, 35),
+    (1, 10),
+    (2, 20),
+    (3, 35),
 ]
 
 

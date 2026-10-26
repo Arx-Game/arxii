@@ -1,5 +1,6 @@
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -15,7 +16,12 @@ from world.character_creation.factories import (
 )
 from world.character_creation.models import Beginnings, BeginningTradition
 from world.distinctions.factories import DistinctionFactory
-from world.magic.factories import TraditionFactory
+from world.magic.factories import (
+    AffinityFactory,
+    GiftFactory,
+    TraditionFactory,
+    TraditionGiftGrantFactory,
+)
 
 
 class BeginningTraditionTests(TestCase):
@@ -250,10 +256,67 @@ class TraditionListLeakTests(TestCase):
         assert living_row["schooling"][1]["offer_id"] == offer.id
         assert living_row["schooling"][0]["offer_id"] is None
         assert living_row["schooling"][2]["offer_id"] is None
+        # The stance names the distinction it grants, for "Tradition Training 1" (#4659).
+        assert living_row["schooling"][1]["grants_distinction_name"] == "Tradition Training"
+        assert living_row["schooling"][0]["grants_distinction_name"] is None
 
         unlined_row = rows[unlined_tradition.id]
         assert unlined_row["state_line"] == ""
         assert unlined_row["refund"] == 0
+
+
+class TraditionTeachesWellTests(TestCase):
+    """Tradition rows name the Gifts and affinities the Tradition teaches well (#4659)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.beginning = BeginningsFactory(name="TeachesWellBeginning")
+        cls.favoring = TraditionFactory(name="TeachesWellFavoring")
+        cls.plain = TraditionFactory(name="TeachesWellPlain")
+        BeginningTraditionFactory(beginning=cls.beginning, tradition=cls.favoring)
+        BeginningTraditionFactory(beginning=cls.beginning, tradition=cls.plain)
+        TraditionGiftGrantFactory(tradition=cls.favoring, gift=GiftFactory(name="Zephyrcraft"))
+        TraditionGiftGrantFactory(tradition=cls.favoring, gift=GiftFactory(name="Ashcraft"))
+        cls.favoring.favored_affinities.add(AffinityFactory(name="TeachesWellAbyssal"))
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def test_rows_carry_favored_gift_and_affinity_names(self):
+        response = self.client.get(
+            "/api/character-creation/traditions/", {"beginning_id": self.beginning.id}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        rows = {row["id"]: row for row in response.data}
+        assert rows[self.favoring.id]["favored_gift_names"] == ["Ashcraft", "Zephyrcraft"]
+        assert rows[self.favoring.id]["favored_affinity_names"] == ["TeachesWellAbyssal"]
+        assert rows[self.plain.id]["favored_gift_names"] == []
+        assert rows[self.plain.id]["favored_affinity_names"] == []
+
+    def test_favored_names_cost_a_fixed_query_count(self):
+        """The names come from one query each for the whole list, not one per row."""
+        url = "/api/character-creation/traditions/"
+        self.client.get(url, {"beginning_id": self.beginning.id})
+        with CaptureQueriesContext(connection) as two_rows:
+            self.client.get(url, {"beginning_id": self.beginning.id})
+
+        third = TraditionFactory(name="TeachesWellThird")
+        BeginningTraditionFactory(beginning=self.beginning, tradition=third)
+        TraditionGiftGrantFactory(tradition=third, gift=GiftFactory(name="Thirdcraft"))
+        third.favored_affinities.add(AffinityFactory(name="TeachesWellCelestial"))
+        # The view reads the identity-mapped Beginning; drop its cached BT list.
+        Beginnings.objects.get(pk=self.beginning.pk).__dict__.pop(
+            "cached_beginning_traditions", None
+        )
+        self.client.get(url, {"beginning_id": self.beginning.id})
+        with CaptureQueriesContext(connection) as three_rows:
+            response = self.client.get(url, {"beginning_id": self.beginning.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(three_rows.captured_queries) == len(two_rows.captured_queries)
 
 
 class SelectTraditionTests(TestCase):

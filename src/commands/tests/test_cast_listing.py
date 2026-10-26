@@ -140,6 +140,7 @@ class CastListingFormsTests(TestCase):
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
 
     def _unlock_variant(self, level: int) -> TechniqueVariant:
+        """A shown-3 variant and the GIFT thread SHOWN at ``level`` (stored × 10, #4585)."""
         variant = TechniqueVariant.objects.create(
             parent_technique=self.technique,
             resonance=self.resonance,
@@ -150,7 +151,7 @@ class CastListingFormsTests(TestCase):
         thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )
-        thread.level = level
+        thread.level = level * 10
         thread.save(update_fields=["level"])
         self.character.threads.invalidate()
         return variant

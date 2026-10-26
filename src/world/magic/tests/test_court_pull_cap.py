@@ -138,8 +138,8 @@ class CourtPullEffectGateTests(TestCase):
         )
 
     def test_level_one_thread_yields_court_flat_bonus(self) -> None:
-        """With a pact lifting the cap (thread level ≥ 1) the FLAT_BONUS applies."""
-        thread = self._court_thread(1)
+        """With a pact lifting the cap (thread shown ≥ 1, stored 10) the FLAT_BONUS applies."""
+        thread = self._court_thread(10)
         flat = self._flat_bonuses(thread)
         self.assertTrue(
             flat,

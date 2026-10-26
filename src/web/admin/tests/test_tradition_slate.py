@@ -11,7 +11,12 @@ from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import PlayerData
-from world.character_creation.constants import OfferChapter, TraditionState
+from world.character_creation.constants import (
+    CG_MODIFIER_CATEGORY,
+    MAGIC_TRAINING_POINTS_TARGET,
+    OfferChapter,
+    TraditionState,
+)
 from world.character_creation.factories import (
     BeginningsFactory,
     BeginningTraditionFactory,
@@ -26,11 +31,9 @@ from world.character_creation.models import (
     TraditionStateLine,
 )
 from world.contributors.factories import ContentContributorFactory
-from world.distinctions.factories import DistinctionFactory
+from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.magic.factories import TraditionFactory
-from world.skills.factories import SkillFactory
-from world.skills.models import SkillPointBudget
-from world.traits.models import TraitCategory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
 
 def _superuser(name: str) -> AccountDB:
@@ -258,11 +261,6 @@ class SlatePostDataMixin:
                 "player_line", line.player_line or "A line."
             )
             data[f"schooling-{i}-grants"] = str(grants_pk or "")
-            # Rank 0 has no floor input, so an ordinary post carries none for it.
-            if line.rank != 0 or "magic_skill_floor" in override:
-                data[f"schooling-{i}-magic_skill_floor"] = str(
-                    override.get("magic_skill_floor", line.magic_skill_floor)
-                )
         for i, row in enumerate(slate_rows):
             data[f"slate-{i}-tradition"] = str(row["tradition"].pk)
             data[f"slate-{i}-state"] = row["state"]
@@ -359,8 +357,6 @@ class SlatePostTest(SlatePostDataMixin, SlateTestCase):
             data[f"schooling-{i}-name"] = f"Schooling {i}"
             data[f"schooling-{i}-player_line"] = "A line."
             data[f"schooling-{i}-grants"] = ""
-            if i != 0:
-                data[f"schooling-{i}-magic_skill_floor"] = "0"
 
         resp = self.client.post(reverse("admin_tradition_slate", args=[self.beginning.pk]), data)
         assert resp.status_code == 302
@@ -464,72 +460,53 @@ class SlatePostTest(SlatePostDataMixin, SlateTestCase):
             assert line.written_by_id is None
 
 
-class SchoolingFloorTest(SlatePostDataMixin, SlateTestCase):
-    """The Magic skill floor on each schooling stance (#4457)."""
+class SchoolingTrainingTest(SlatePostDataMixin, SlateTestCase):
+    """Each stance's magical training points, read back from its granted distinction.
+
+    Slice 2 of #4659 replaced the Magic skill floor input (#4457) with the granted
+    distinction's ``magic_training_points`` effect, authored on the Distinction Builder.
+    """
 
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        for name in ("theology", "occult", "ritualism"):
-            SkillFactory(trait__name=name, trait__category=TraitCategory.MAGIC)
-        SkillFactory(
-            trait__name="lapsed lore", trait__category=TraitCategory.MAGIC, is_active=False
+        target = ModifierTargetFactory(
+            name=MAGIC_TRAINING_POINTS_TARGET,
+            category=ModifierCategoryFactory(name=CG_MODIFIER_CATEGORY),
         )
-        SkillFactory(trait__name="swordplay")
+        cls.training = DistinctionFactory(name="Tradition Training", max_rank=2)
+        DistinctionEffectFactory(distinction=cls.training, target=target, scaling_values=[20, 50])
         cls.url = reverse("admin_tradition_slate", args=[cls.beginning.pk])
 
-    def _post(self, overrides):
-        state_lines, schooling_lines = _persist_all_standard_lines()
-        return self.client.post(
-            self.url,
-            self._post_data(
-                state_lines=state_lines,
-                schooling_lines=schooling_lines,
-                slate_rows=[],
-                schooling_overrides=overrides,
-            ),
-        )
+    def _lines(self, *, grants=None) -> list[SchoolingLine]:
+        return [
+            SchoolingLineFactory(
+                rank=rank,
+                name=f"Schooling {rank}",
+                player_line="A line.",
+                grants=grants if rank else None,
+            )
+            for rank in range(3)
+        ]
 
-    def test_floor_saves_and_preview_lists_magic_skills(self):
+    def test_preview_reads_the_granted_distinctions_points_at_each_rank(self):
         self.client.force_login(self.author)
-        resp = self._post({1: {"magic_skill_floor": 20}})
-        assert resp.status_code == 302
-        assert SchoolingLine.objects.get(rank=1).magic_skill_floor == 20
-
+        self._lines(grants=self.training)
         body = self.client.get(self.url).content.decode()
-        assert "Derived, read-only: trains occult, ritualism, theology to 20." in body
-        assert "lapsed lore" not in body
-        assert "swordplay" not in body
-        cap = SkillPointBudget.get_active_budget().max_skill_value
-        assert f"At most {cap}, the creation skill cap." in body
+        assert "Derived, read-only: grants 20 magical training points." in body
+        assert "Derived, read-only: grants 50 magical training points." in body
+        assert "Rank 0 trains none." in body
 
-    def test_a_stance_with_no_floor_trains_none(self):
+    def test_a_stance_whose_distinction_gives_no_points_grants_none(self):
         self.client.force_login(self.author)
-        _persist_all_standard_lines()
+        self._lines(grants=DistinctionFactory(name="Plain Schooling", max_rank=2))
         body = self.client.get(self.url).content.decode()
-        assert body.count("Derived, read-only: trains none.") == 2
+        assert body.count("Derived, read-only: grants no magical training points.") == 2
 
-    def test_floor_above_cap_refused(self):
+    def test_the_page_has_no_floor_input(self):
         self.client.force_login(self.author)
-        cap = SkillPointBudget.get_active_budget().max_skill_value
-        resp = self._post({1: {"magic_skill_floor": cap + 10}})
-        assert resp.status_code == 200
-        assert f"A floor cannot exceed the creation skill cap of {cap}." in resp.content.decode()
-        assert SchoolingLine.objects.get(rank=1).magic_skill_floor == 0
-
-    def _floors_in_database(self) -> dict[int, int]:
-        """Rank -> floor as the table holds it, read without the identity map."""
-        return dict(SchoolingLine.objects.values_list("rank", "magic_skill_floor"))
-
-    def _floor_inputs_on_page(self) -> dict[int, str]:
-        """Rank -> the value the rendered floor input shows."""
         body = self.client.get(self.url).content.decode()
-        return {
-            rank: re.search(
-                rf'name="schooling-{rank}-magic_skill_floor"[^>]*value="(\d+)"', body
-            ).group(1)
-            for rank in (1, 2)
-        }
+        assert "magic_skill_floor" not in body
 
     def test_a_correction_after_a_refused_save_is_written_to_the_database(self):
         """A refused POST validates every stance form, and ModelForm validation writes the
@@ -537,18 +514,11 @@ class SchoolingFloorTest(SlatePostDataMixin, SlateTestCase):
         there: the corrected save would compare against the refused values, see no change
         for rank 2 and report success without writing it (#4457 real-testing defect)."""
         self.client.force_login(self.author)
-        cap = SkillPointBudget.get_active_budget().max_skill_value
         state_lines = [
             TraditionStateLineFactory(state=state, entry_line=f"{state} line")
             for state in TraditionState.values
         ]
-        schooling_lines = [
-            SchoolingLineFactory(rank=0, name="Schooling 0", player_line="A line."),
-            SchoolingLineFactory(rank=1, name="Schooling 1", player_line="A line."),
-            SchoolingLineFactory(
-                rank=2, name="Schooling 2", player_line="A line.", magic_skill_floor=30
-            ),
-        ]
+        schooling_lines = self._lines()
 
         def post(overrides):
             return self.client.post(
@@ -561,46 +531,16 @@ class SchoolingFloorTest(SlatePostDataMixin, SlateTestCase):
                 ),
             )
 
-        refused = post({1: {"magic_skill_floor": cap + 1}, 2: {"magic_skill_floor": 25}})
+        def lines_in_database() -> dict[int, str]:
+            return dict(SchoolingLine.objects.values_list("rank", "player_line"))
+
+        refused = post({1: {"name": ""}, 2: {"player_line": "Born to it."}})
         assert refused.status_code == 200
-        assert f"A floor cannot exceed the creation skill cap of {cap}." in (
-            refused.content.decode()
-        )
-        assert self._floors_in_database() == {0: 0, 1: 0, 2: 30}
-        assert self._floor_inputs_on_page() == {1: "0", 2: "30"}
+        assert lines_in_database() == {0: "A line.", 1: "A line.", 2: "A line."}
 
-        saved = post({1: {"magic_skill_floor": 20}, 2: {"magic_skill_floor": 25}})
+        saved = post({2: {"player_line": "Born to it."}})
         assert saved.status_code == 302
-        assert self._floors_in_database() == {0: 0, 1: 20, 2: 25}
-        assert self._floor_inputs_on_page() == {1: "20", 2: "25"}
-
-    def test_floor_at_cap_saves(self):
-        self.client.force_login(self.author)
-        cap = SkillPointBudget.get_active_budget().max_skill_value
-        assert self._post({2: {"magic_skill_floor": cap}}).status_code == 302
-        assert SchoolingLine.objects.get(rank=2).magic_skill_floor == cap
-
-    def test_rank_zero_row_has_no_floor_input(self):
-        self.client.force_login(self.author)
-        _persist_all_standard_lines()
-        body = self.client.get(self.url).content.decode()
-        assert "Rank 0 trains none." in body
-        assert 'name="schooling-0-magic_skill_floor"' not in body
-        assert 'name="schooling-1-magic_skill_floor"' in body
-        assert 'name="schooling-2-magic_skill_floor"' in body
-
-    def test_posting_a_floor_for_rank_zero_changes_nothing(self):
-        self.client.force_login(self.author)
-        resp = self._post({0: {"magic_skill_floor": 20}})
-        assert resp.status_code == 302
-        assert SchoolingLine.objects.get(rank=0).magic_skill_floor == 0
-
-    def test_fresh_page_shows_a_floor_input_for_ranks_one_and_two_only(self):
-        self.client.force_login(self.author)
-        body = self.client.get(self.url).content.decode()
-        assert 'name="schooling-0-magic_skill_floor"' not in body
-        assert 'name="schooling-1-magic_skill_floor"' in body
-        assert 'name="schooling-2-magic_skill_floor"' in body
+        assert lines_in_database() == {0: "A line.", 1: "A line.", 2: "Born to it."}
 
 
 class ChangeFormObjectToolTest(SlateTestCase):

@@ -466,8 +466,8 @@ export interface CharacterDraft {
   stats_budget: number;
   /** Gift-stage technique pick budget (base 1 + distinction bonus, #2426). */
   starting_technique_picks: number;
-  /** The rank every Magic skill starts at from the draft's Tradition stance; 0 for none (#4457). */
-  starting_magic_skill_floor: number;
+  /** The Magic-skill training pool, its fit bonuses and the allocation against it (#4659). */
+  magic_training: MagicTraining;
   /** The age range CG accepts for this draft; the server composes every cap (#3663). */
   age_min: number;
   age_max: number;
@@ -546,9 +546,11 @@ export interface SchoolingLineRow {
   player_line: string;
   price: number;
   techniques: number;
-  /** The rank each Magic skill starts at under this stance; 0 grants none (#4457). */
-  magic_skill_floor: number;
+  /** Magic training points this stance's distinction adds to the pool (#4659). */
+  training_points: number;
   grants_distinction_id: number | null;
+  /** The distinction the stance grants at its rank, e.g. "Tradition Training" (#4659). */
+  grants_distinction_name: string | null;
   offer_id: number | null;
 }
 
@@ -569,6 +571,45 @@ export interface Tradition {
   own_wording: string;
   refund: number;
   schooling: SchoolingLineRow[];
+  /** The Gifts this Tradition teaches well (its gift grant rows, #4659). */
+  favored_gift_names: string[];
+  /** The affinities this Tradition teaches well (#4659). */
+  favored_affinity_names: string[];
+}
+
+/** One distinction, at one rank, and what it adds to the Magic training pool (#4659). */
+export interface MagicTrainingSource {
+  name: string;
+  rank: number;
+  points: number;
+  /** True only for a distinction with more than one rank: "Tradition Training, rank 1" vs "Studious". */
+  show_rank: boolean;
+}
+
+/** A Magic skill the training pool is spent on, with its allocated value (#4659). */
+export interface MagicTrainingSkill {
+  id: number;
+  name: string;
+  value: number;
+  max: number;
+}
+
+/**
+ * The draft's Magic-skill training pool (#4659): the distinctions that feed it, the
+ * Tradition's fit bonuses, the total, what must be spent, and the allocation.
+ */
+export interface MagicTraining {
+  base_sources: MagicTrainingSource[];
+  gift_bonus: number;
+  affinity_bonus: number;
+  favored_gift_name: string | null;
+  favored_affinity_name: string | null;
+  total: number;
+  required_spend: number;
+  /** How far one press moves a Magic skill: the active budget's points per tier. */
+  step: number;
+  allocated: number;
+  skills: MagicTrainingSkill[];
 }
 
 // =============================================================================
@@ -585,6 +626,8 @@ export interface CGGiftOption {
   description: string;
   kind: string;
   codex_entry_id: number | null;
+  /** The draft's Tradition teaches this Gift well (a gift grant row, #4659). */
+  favored: boolean;
 }
 
 /**
@@ -797,28 +840,25 @@ export interface Motif {
 }
 
 // =============================================================================
-// Modifier Type Items (Affinities & Resonances via /api/mechanics/types/)
+// Affinities & Resonances (/api/magic/affinities/, /api/magic/resonances/)
 // =============================================================================
 
-/**
- * ModifierType record from /api/mechanics/types/?category=affinity|resonance.
- * Replaces the legacy Affinity and Resonance interfaces.
- */
-export interface ModifierTypeItem {
+/** An Affinity row from /api/magic/affinities/ (AffinitySerializer). */
+export interface Affinity {
   id: number;
   name: string;
-  category: number;
-  category_name: string;
   description: string;
-  display_order: number;
-  is_active: boolean;
-  opposite: number | null;
-  resonance_affinity: string | null;
-  codex_entry_id: number | null;
 }
 
-export type Affinity = ModifierTypeItem;
-export type Resonance = ModifierTypeItem;
+/** A Resonance row from /api/magic/resonances/ (ResonanceSerializer). */
+export interface Resonance {
+  id: number;
+  name: string;
+  affinity: number;
+  affinity_name: string;
+  description: string;
+  codex_entry_id: number | null;
+}
 
 /**
  * Projected resonance total from draft distinctions.
@@ -976,6 +1016,9 @@ export interface DraftData {
   // Magic fields - Gift/technique picks (GiftStage funnel, #2426 Task 10)
   selected_gift_id?: number | null;
   selected_technique_ids?: number[];
+  // Magic skill allocation of the training pool: skill id -> value (#4659). The
+  // whole map is sent on every save.
+  magic_skills?: Record<string, number>;
   // Magic fields - Anima Check (the stat + skill every cast rolls, #2426)
   anima_check_stat_id?: number | null;
   anima_check_skill_id?: number | null;

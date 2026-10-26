@@ -253,7 +253,7 @@ class FinalizeTests(_Catalog, TestCase):
             for t in sheet.character.threads.all()
             if t.target_kind == TargetKind.TECHNIQUE and t.target_technique_id == self.technique.pk
         )
-        self.assertEqual(thread.level, 1)
+        self.assertEqual(thread.level, 10)  # the flourish's shown 1, stored × 10 (#4585)
         self.assertEqual(thread.resonance, self.frost)
         self.assertEqual(thread.signature_bonus, self.flourish)
         self.assertTrue(sheet.motif.resonances.filter(resonance=self.frost).exists())

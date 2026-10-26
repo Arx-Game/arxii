@@ -631,17 +631,17 @@ class ThreadViewSetTests(APITestCase):
         )
 
     # ------------------------------------------------------------------
-    # Cap fields: path_cap, anchor_cap, effective_cap (Task 16)
+    # Cap fields: level_cap, anchor_cap, effective_cap (Task 16)
     # ------------------------------------------------------------------
 
     def test_retrieve_includes_cap_fields(self) -> None:
-        """GET /api/magic/threads/{id}/ includes path_cap, anchor_cap, effective_cap."""
+        """GET /api/magic/threads/{id}/ includes level_cap, anchor_cap, effective_cap."""
         self.client.force_authenticate(user=self.account)
         response = self.client.get(
             reverse("magic:thread-detail", args=[self.thread.pk]),
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        self.assertIn("path_cap", response.data)
+        self.assertIn("level_cap", response.data)
         self.assertIn("anchor_cap", response.data)
         self.assertIn("effective_cap", response.data)
 
@@ -660,15 +660,15 @@ class ThreadViewSetTests(APITestCase):
             reverse("magic:thread-detail", args=[self.thread.pk]),
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        # anchor_cap = trait.value = 3; path_cap ≥ 10 (stage 0 → min 1 × 10)
-        self.assertIsInstance(response.data["path_cap"], int)
+        # anchor_cap = trait.value = 3; level_cap ≥ 10 (no class level → 1 × 10)
+        self.assertIsInstance(response.data["level_cap"], int)
         self.assertIsInstance(response.data["anchor_cap"], int)
         self.assertEqual(response.data["anchor_cap"], 3)
         self.assertIsInstance(response.data["effective_cap"], int)
-        # effective_cap = min(path_cap, anchor_cap)
+        # effective_cap = min(level_cap, anchor_cap)
         self.assertEqual(
             response.data["effective_cap"],
-            min(response.data["path_cap"], response.data["anchor_cap"]),
+            min(response.data["level_cap"], response.data["anchor_cap"]),
         )
 
     def test_list_includes_cap_fields(self) -> None:
@@ -679,7 +679,7 @@ class ThreadViewSetTests(APITestCase):
         results = response.data["results"]
         self.assertTrue(len(results) >= 1)
         first = results[0]
-        self.assertIn("path_cap", first)
+        self.assertIn("level_cap", first)
         self.assertIn("anchor_cap", first)
         self.assertIn("effective_cap", first)
 
@@ -789,13 +789,14 @@ class ThreadPullPreviewTests(APITestCase):
 
     def test_preview_capped_intensity_flag(self) -> None:
         IntensityTierFactory(name="Minor", threshold=1)
-        # min_thread_level=5 keeps this row distinct from the tier-0 row
-        # seeded in setUpTestData (which uses min_thread_level=0).
+        # min_thread_level=1 keeps this row distinct from the tier-0 row
+        # seeded in setUpTestData (which uses min_thread_level=0); it is a shown
+        # level, met by the stored-20 (shown 2) thread (#4585).
         ThreadPullEffectFactory(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
             tier=0,
-            min_thread_level=5,
+            min_thread_level=1,
             effect_kind=EffectKind.INTENSITY_BUMP,
             intensity_bump_amount=50,
             flat_bonus_amount=None,
@@ -838,14 +839,14 @@ class ThreadPullPreviewTests(APITestCase):
         with scaled_value=0 and a non-empty inactive_reason so the UI can
         explain why the bonus isn't applied.
         """
-        # Wire a tier-1 VITAL_BONUS row at min_thread_level=5 so the
+        # Wire a tier-1 VITAL_BONUS row at min_thread_level=1 (shown) so the
         # (kind, resonance, tier, min_thread_level) unique key differs from
         # the tier-0 FLAT_BONUS row seeded in setUpTestData.
         ThreadPullEffectFactory(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
             tier=1,
-            min_thread_level=5,
+            min_thread_level=1,
             as_vital_bonus=True,
             vital_bonus_amount=4,
             vital_target=VitalBonusTarget.MAX_HEALTH,

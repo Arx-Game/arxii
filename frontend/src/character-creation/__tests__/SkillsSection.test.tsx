@@ -238,17 +238,29 @@ describe('SkillsSection', () => {
       expect(screen.getByRole('button', { name: /raise stealth/i })).toBeInTheDocument();
     });
 
-    it("lists each Magic skill at the Tradition stance's floor, read-only", () => {
-      renderSkillsSection({ ...draft, starting_magic_skill_floor: 20 });
+    it('lists each Magic skill at its training allocation, read-only (#4659)', () => {
+      renderSkillsSection({
+        ...draft,
+        magic_training: {
+          ...mockEmptyDraft.magic_training,
+          total: 40,
+          required_spend: 40,
+          allocated: 40,
+          skills: [
+            { id: 3, name: 'Occult', value: 30, max: 30 },
+            { id: 4, name: 'Ritualism', value: 10, max: 30 },
+          ],
+        },
+      });
 
       expect(screen.getByText('From your Tradition training')).toBeInTheDocument();
-      expect(screen.getByLabelText('Occult')).toHaveTextContent('20');
-      expect(screen.getByLabelText('Ritualism')).toHaveTextContent('20');
+      expect(screen.getByLabelText('Occult')).toHaveTextContent('30');
+      expect(screen.getByLabelText('Ritualism')).toHaveTextContent('10');
       expect(screen.queryByText(/your magic skills start untrained/i)).not.toBeInTheDocument();
     });
 
-    it('says the Magic skills start untrained when the floor is 0', () => {
-      renderSkillsSection({ ...draft, starting_magic_skill_floor: 0 });
+    it('says the Magic skills start untrained when nothing is allocated', () => {
+      renderSkillsSection(draft);
 
       expect(
         screen.getByText(
@@ -264,11 +276,23 @@ describe('SkillsSection', () => {
         skills_magic_granted_heading: 'Schooling',
         skills_magic_granted_none: 'Nothing yet.',
       };
-      const { unmount } = renderSkillsSection({ ...draft, starting_magic_skill_floor: 20 });
+      const { unmount } = renderSkillsSection({
+        ...draft,
+        magic_training: {
+          ...mockEmptyDraft.magic_training,
+          total: 40,
+          required_spend: 40,
+          allocated: 40,
+          skills: [
+            { id: 3, name: 'Occult', value: 30, max: 30 },
+            { id: 4, name: 'Ritualism', value: 10, max: 30 },
+          ],
+        },
+      });
       expect(screen.getByText('Schooling')).toBeInTheDocument();
       unmount();
 
-      renderSkillsSection({ ...draft, starting_magic_skill_floor: 0 });
+      renderSkillsSection(draft);
       expect(screen.getByText('Nothing yet.')).toBeInTheDocument();
     });
 
@@ -293,7 +317,6 @@ describe('SkillsSection', () => {
     it("drops points in a Magic skill's specialization out of the next save", () => {
       const legacy: CharacterDraft = {
         ...draft,
-        starting_magic_skill_floor: 20,
         draft_data: { skills: { '1': 20, '3': 20 }, specializations: { '10': 10, '30': 10 } },
       };
       renderSkillsSection(legacy);
@@ -313,7 +336,6 @@ describe('SkillsSection', () => {
     it('drops Magic points loaded from the draft out of the next save', () => {
       const legacy: CharacterDraft = {
         ...draft,
-        starting_magic_skill_floor: 20,
         draft_data: { skills: { '1': 20, '3': 20 } },
       };
       renderSkillsSection(legacy);

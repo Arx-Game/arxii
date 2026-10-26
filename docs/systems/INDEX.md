@@ -33,11 +33,21 @@
   only (`MAGIC_SKILL_CHOICES` in `world/magic/skill_choices.py`), no seeder names a skill for
   magic, and the `check-types-weight-no-magic-skill` probe lists check types that weight a
   Magic skill directly. Details: [magic.md](magic.md) "Magical skills".
-- **Tradition training and Academy skill courses (#4457, ADR-4457-A):** a Tradition's schooling
-  stance sets the level every Magic skill starts at. `SchoolingLine.magic_skill_floor` (0 on rank 0,
-  check constraint) is read by `offers.schooling_magic_skill_floor(draft)`, exposed as
-  `CharacterDraft.starting_magic_skill_floor` and `schooling[].magic_skill_floor` on the Tradition
-  list, and written to every `magic_category_skills()` skill at finalize. `SCHOOLING_MAX_RANK_BY_STATE`
+- **Tradition training and Academy skill courses (#4457, ADR-4457-A; pool and fit #4659,
+  ADR-4659-B):** a Tradition's schooling stance gives magical training points to spend on Magic
+  skills at creation (the granted distinction's `magic_training_points` effect, read by
+  `CharacterDraft.magic_training_pool`; the old `SchoolingLine.magic_skill_floor` column was dropped
+  by migration 0298 with no carry, since production held no schooling lines, ADR-0237 "empty in
+  production"). A Tradition's teaching fit
+  (`world/magic/services/teaching_fit.py`: `teaching_fit`, `major_gift_for`, `gift_affinity_for`,
+  `student_traits`, `student_fit` (the Academy's entry), `get_teaching_config`) comes from
+  `TraditionGiftGrant` (favored Gifts) and `Tradition.favored_affinities` (compared with an
+  `Affinity` row by foreign key: the picked Gift resonance's in character creation, the resonance on
+  the student's Major Gift thread in the Academy), tuned by the `TraditionTeachingConfig`
+  singleton. Fit adds a flat bonus to the pool only when the draft has some training, and eases
+  Academy course checks; it never gates. The Gift stage validates `draft_data["magic_skills"]`
+  against the pool and finalize writes it. Aura-based fit and starting aura are #4672.
+  `SCHOOLING_MAX_RANK_BY_STATE`
   (`character_creation/constants.py`) sets which states open which stances: LIVING_MASTERS up to
   rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. CG skill points never buy a Magic skill or
   one of its specializations. A character catches up by use, weekly training, or an Academy
@@ -45,7 +55,7 @@
   the handler `run_skill_course_offer` (enroll once for coin and a Golden Hare, then rolled
   sessions at AP each, one per course per game week, development scaled by `TrainingOutcomeAward`,
   every refusal charging nothing). Trainer-menu price line: `OfferPrice`, `format_offer_price`,
-  `InteractionOfferSerializer.price`. `train_skill` and `points_to_next_boundary` in
+  `InteractionOfferSerializer.price` (a course under a Tradition adds `teaching_line` and `fit_line`; `_course_ease` in `npc_services/effects.py` lowers the check difficulty). `train_skill` and `points_to_next_boundary` in
   `world.skills.services`. `AcademyOfferApCostError` replaced `TrainOfferMisconfiguredError`;
   `_academy_for` is shared by TRAIN, the course and settle-obligation. Three Required content
   TUNING rows. Details: [magic.md](magic.md) "Tradition training and Academy skill courses".
@@ -444,11 +454,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - ThreadWeaving acquisition: `compute_thread_weaving_xp_cost(character_sheet, unlock) -> int`,
     `accept_thread_weaving_unlock(character_sheet, unlock, teacher=None)`
   - Cap helpers: `compute_anchor_cap(thread) -> int` (FACET uses
-    `lifetime_earned // DIVISOR` capped at `path_stage × HARD_MAX_PER_STAGE`;
-    COVENANT_ROLE uses `current_level × 10`; SANCTUM uses
-    `sanctum.feature_instance.level × 10`; GIFT: `path_stage × ANCHOR_CAP_GIFT_PER_STAGE`
-    (=10) — built #1580),
-    `compute_path_cap(character_sheet) -> int`, `compute_effective_cap(thread) -> int`
+    `lifetime_earned // DIVISOR`; COVENANT_ROLE uses `current_level × 10`; SANCTUM uses
+    `sanctum.feature_instance.level × 10`; GIFT: the owner's level cap; ORGANIZATION: the
+    org's granted cap), `compute_level_cap(character_sheet) -> int` (character level ×
+    10, #4585), `compute_effective_cap(thread) -> int` (min of the two),
+    `shown_thread_level(level) -> int` (`level // 10`; every thread threshold compares
+    against it, #4585)
   - Specialization engine (ADR-0055 — #1578, `world/magic/specialization/services.py`):
     `resolve_specialized_variant(*, entity, character)` (the one resolver — Technique →
     `_ResolvedTechnique` value object with variant deltas; CovenantRole → cached-handler
@@ -508,7 +519,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     without the price. Picks live on `CharacterTechnique` (the hold), never the catalog, and are written at
     finalize by `apply_creation_personalizations`
     (`world/magic/services/creation_personalization.py`); the flourish pick also weaves a
-    TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (2) via
+    TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (1, a new character's level, #4585) via
     `weave_creation_technique_thread`, so creation never skips a crossing. The old hard
     level-3 floor on signing is gone; `SignatureMotifBonus.min_crossing_level` is the only
     gate, so flourishes keep unlocking in play as the thread is imbued. Endpoint: `GET
@@ -985,7 +996,7 @@ allocations that convert AP to development points.
   casts (`Path.technique_skill`, `Gift.technique_skill`, `Technique.skill`), so a trained
   skill adds points to those rolls and develops from them. The Anima Check pick in character
   creation excludes MAGIC-category skills. See [magic.md](magic.md) "Magical skills". Since #4457 a schooled
-  character starts with them at the stance floor and CG points never buy one; `train_skill` (the one
+  character starts with the Magic skills the player spent their Tradition training points on (#4659) and CG points never buy one; `train_skill` (the one
   writer for development from training, shared with weekly training) and `points_to_next_boundary`
   are in `world.skills.services`.
 - **Integrates with:** traits (skill checks), character_creation (skill selection),
@@ -2703,7 +2714,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
   **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
   **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`),
-  **Maturation Points (#2756, ADR-0172; milestones retuned by #3635 to `MATURATION_MILESTONES` = 24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75, none after; `next_milestone_year` null past 75; since #4124 milestones at or below `CharacterSheet.maturation_floor`, the creation age, never bank, so a new character arrives with none; starting under 21 costs `UNDERAGE_CG_POINT_COST` in the CG breakdown):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 dot they apply
+  **Maturation Points (#2756, ADR-0172; milestones retuned by #3635 to `MATURATION_MILESTONES` = 24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75, none after; `next_milestone_year` null past 75; since #4124 milestones at or below `CharacterSheet.maturation_floor`, the creation age, never bank, so a new character arrives with none; starting under 21 costs `UNDERAGE_CG_POINT_COST` in the CG breakdown):** `MaturationStatCap` (admin "Band caps": authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored; plus the nullable `skill_cap` (#4585, shown units, blank = no cap, unseeded) read by `skill_cap_for` and enforced on every skill raise path, see skills.md "Band skill cap") + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 dot they apply
 
   **Level Stat Points (#3001, ADR-0205):** `LevelStatPointSpend` (sheet FK, trait FK, `level_granted` 2..N, `is_active`; unique per (sheet, level_granted)) — one point per class level past the first, balance derived (`level − 1` minus active spends, no grant hook). Services in `progression/services/stat_points.py`: `stat_points_earned` / `available_stat_points` / `spend_level_stat_point` (same `MaturationStatCap` stage cap) / `sync_level_stat_point_spends` (called from `apply_class_level_advance` so reversals refund). Both writers stamp `traits.CharacterTraitChange` rows (`source=LEVEL_STAT_POINT`, #3055). API: `GET /api/character-sheets/{id}/stat-points/` + `POST .../spend-stat-point/`; frontend `StatPointPanel` beside `MaturationPanel`
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
@@ -3002,7 +3013,7 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   (`TraditionStateLine`, per-tradition `own_wording` override, never its own price) and, for
   LIVING_MASTERS (ranks 0-2) and TEACHERS_GONE (ranks 0-1, #4457), offers the standard schooling
   set (`SchoolingLine`, each granting a distinction at its rank, priced
-  `grants.cost_per_rank * rank`, and carrying a `magic_skill_floor`, #4457). `OriginTemplate
+  `grants.cost_per_rank * rank`, and granting the Tradition training points a draft spends on Magic skills, #4457, #4659). `OriginTemplate
   .closed_distinctions`/`.closed_reason` names distinctions a route never offers, in any
   chapter. `GET /api/character-creation/drafts/{id}/offers/?chapter=<chapter>` returns
   `{"offers": [...], "closed": [...]}` for one chapter; `reconcile_offer_picks` runs after every

@@ -2215,7 +2215,6 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
     unknown id is skipped with a warning, as before.
     """
     from world.character_creation.sheet_writers import set_skill_values  # noqa: PLC0415
-    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
     from world.skills.models import Skill, Specialization  # noqa: PLC0415
     from world.traits.models import TraitChangeSource  # noqa: PLC0415
 
@@ -2227,12 +2226,9 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
         return {found[pk]: value for pk, value in wanted.items() if pk in found}
 
     skills = by_id(Skill.objects.select_related("trait"), draft.draft_data.get("skills", {}))
-    # A schooled character starts with every Magic skill at the stance's floor (#4457).
-    # A draft's own points never reach a Magic skill (validation refuses them), so the
-    # floor is the value written.
-    floor = draft.starting_magic_skill_floor
-    if floor > 0:
-        skills |= dict.fromkeys(magic_category_skills().select_related("trait"), floor)
+    # The Gift stage's Magic skill allocation (validated there) is written as given; a
+    # Magic skill the draft did not allocate to is not written (#4659).
+    skills |= by_id(Skill.objects.select_related("trait"), draft.draft_data.get("magic_skills", {}))
     set_skill_values(
         character.sheet_data,
         skills,
@@ -2690,12 +2686,19 @@ def resubmit_draft(application: DraftApplication, *, comment: str = "") -> None:
         comment: Optional message from the player about changes made.
 
     Raises:
-        ValueError: If the application is not in REVISIONS_REQUESTED status.
+        CharacterCreationError: If the application is not in REVISIONS_REQUESTED
+            status, or the draft can no longer submit.
     """
     from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
 
     if application.status != ApplicationStatus.REVISIONS_REQUESTED:
         msg = "Can only resubmit applications that are in Revisions Requested status."
+        raise CharacterCreationError(msg)
+
+    # Same gate as submit_draft_for_review: a revision can leave a stage failing
+    # (an unspent magical training pool, a dropped required pick).
+    if not application.draft.can_submit():
+        msg = "Draft is not complete enough to submit."
         raise CharacterCreationError(msg)
 
     if comment:

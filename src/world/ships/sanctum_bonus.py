@@ -26,7 +26,7 @@ from world.magic.services.capability_curve import (
     apply_capability_curve,
     get_capability_power_config,
 )
-from world.magic.services.threads import thread_level_multiplier
+from world.magic.services.threads import shown_thread_level, thread_level_multiplier
 from world.ships.models import ShipDetails
 from world.ships.types import ShipCapabilityGrant, ShipStatBonus
 
@@ -127,7 +127,7 @@ def ship_sanctum_bonus(ship: ShipDetails) -> ShipStatBonus:
                     # weaver's business, not the ship's; skip rather than mis-apply.
                     continue
                 level = level_by_resonance[row.resonance_id]
-                if row.min_thread_level > level:
+                if row.min_thread_level > shown_thread_level(level):
                     continue
                 totals[stat] += round(row.vital_bonus_amount * thread_level_multiplier(level))
 
@@ -205,7 +205,7 @@ def ship_sanctum_capability_grants(ship: ShipDetails) -> list[ShipCapabilityGran
         if row.capability_grant_id is None:
             continue
         level = level_by_resonance[row.resonance_id]
-        if row.min_thread_level > level:
+        if row.min_thread_level > shown_thread_level(level):
             continue
         incumbent = best_row.get(row.resonance_id)
         if incumbent is None or row.min_thread_level > incumbent.min_thread_level:

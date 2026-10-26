@@ -5,7 +5,7 @@
  *   Breadcrumb → Threads / {thread.name}
  *   Title with [Edit] button (opens ThreadRenameDialog)
  *   Description block
- *   Stats card: level, developed_points, effective_cap, anchor_cap, path_cap
+ *   Stats card: level, developed_points, effective_cap, anchor_cap, level_cap
  *   ImbuePanel (if not retired and level < effective_cap or cap unavailable)
  *   XPLockBoundaryPanel (prospect from hub summary for this thread)
  *   PullEffectPreview
@@ -176,11 +176,11 @@ export function ThreadDetailPage() {
               {thread.target_kind}
             </dd>
           </div>
-          {thread.path_cap !== undefined && thread.path_cap !== null && (
+          {thread.level_cap !== undefined && thread.level_cap !== null && (
             <div>
-              <dt className="text-muted-foreground">Path Cap</dt>
-              <dd className="font-medium tabular-nums" data-testid="thread-stat-path-cap">
-                {thread.path_cap / 10}
+              <dt className="text-muted-foreground">Level Cap</dt>
+              <dd className="font-medium tabular-nums" data-testid="thread-stat-level-cap">
+                {thread.level_cap / 10}
               </dd>
             </div>
           )}

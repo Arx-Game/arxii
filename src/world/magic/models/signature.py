@@ -76,15 +76,16 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
     min_crossing_level = models.PositiveSmallIntegerField(
         default=3,
         help_text=(
-            "Thread level at which this bonus becomes selectable. Any level from 0 up; "
-            "low levels are the early flourishes (#4099). Default 3."
+            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
+            "The bonus becomes selectable here; low levels are the early flourishes "
+            "(#4099). Default 3."
         ),
     )
     creation_point_cost = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
         help_text="Character-creation points to take this flourish (#4099). Blank = not "
-        "offered in creation. Only resonance-gated rows at level 2 or below can be offered.",
+        "offered in creation. Only resonance-gated rows at level 1 can be offered.",
     )
 
     class Meta:
@@ -96,6 +97,11 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
                 check=models.Q(creation_point_cost__isnull=True)
                 | models.Q(min_crossing_level__lte=CREATION_PERSONALIZATION_MAX_LEVEL),
                 name="signature_bonus_creation_cost_below_crossing",
+                violation_error_message=(
+                    "A flourish offered in creation needs a minimum crossing level of "
+                    f"{CREATION_PERSONALIZATION_MAX_LEVEL}: a new character's threads stop "
+                    "there."
+                ),
             ),
         ]
 

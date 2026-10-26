@@ -204,7 +204,7 @@ class CovenantRoleActionScalingTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=parent,
             resonance=resonance,
-            level=10,
+            level=30,  # stored; shows 3, the sub-role's unlock level (#4585)
         )
 
         set_engaged_membership(membership=membership)
@@ -214,7 +214,8 @@ class CovenantRoleActionScalingTests(TestCase):
         self.assertEqual(engaged, [subrole])
 
         bonus = covenant_role_action_scaling_bonus(character, "combat_interpose")
-        self.assertEqual(bonus, 1.0)  # 10 * 0.10, via the parent's scaling row
+        # 30 * 0.10, via the parent's scaling row; the multiplier reads the stored level.
+        self.assertEqual(bonus, 3.0)
 
 
 class RoleSourceVariantResolutionTests(TestCase):
@@ -247,7 +248,7 @@ class RoleSourceVariantResolutionTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=role,
             resonance=resonance,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
 
         TechniqueVariant.objects.create(

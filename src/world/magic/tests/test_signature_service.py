@@ -48,7 +48,7 @@ def _make_technique_thread(sheet, technique, resonance):
         resonance=resonance,
         target_kind=TargetKind.TECHNIQUE,
         target_technique=technique,
-        level=3,
+        level=30,  # stored; shows 3 (#4585)
     )
 
 
@@ -143,7 +143,7 @@ class AvailableSignatureBonusesTests(TestCase):
             resonance=self.resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=self.technique,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
         try:
             result = available_signature_bonuses(self.sheet, thread=thread)
@@ -170,7 +170,7 @@ class AvailableSignatureBonusesTests(TestCase):
             resonance=self.resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=self.technique,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
         try:
             result = available_signature_bonuses(self.sheet, thread=thread)
@@ -286,7 +286,7 @@ class SetSignatureBonusTests(TestCase):
             resonance=self.resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=other_technique,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
         try:
             with self.assertRaises(TechniqueNotOwned):
@@ -321,14 +321,14 @@ class SetSignatureBonusTests(TestCase):
         """
         self.bonus.min_crossing_level = 1
         self.bonus.save(update_fields=["min_crossing_level"])
-        self.technique_thread.level = 1
+        self.technique_thread.level = 10  # stored; shows 1 (#4585)
         self.technique_thread.save(update_fields=["level"])
         result = set_signature_bonus(self.technique_thread, self.bonus)
         self.assertEqual(result.signature_bonus_id, self.bonus.pk)
 
     def test_set_succeeds_when_thread_at_level_3(self) -> None:
         """set_signature_bonus succeeds when thread.level >= 3."""
-        self.technique_thread.level = 3
+        self.technique_thread.level = 30  # stored; shows 3 (#4585)
         self.technique_thread.save(update_fields=["level"])
         result = set_signature_bonus(self.technique_thread, self.bonus)
         self.assertEqual(result.signature_bonus_id, self.bonus.pk)
@@ -337,7 +337,7 @@ class SetSignatureBonusTests(TestCase):
         """SignatureBonusLocked raised when bonus.min_crossing_level > thread.level."""
         from world.magic.exceptions import SignatureBonusLocked
 
-        self.technique_thread.level = 3
+        self.technique_thread.level = 30  # stored; shows 3 (#4585)
         self.technique_thread.save(update_fields=["level"])
         locked_bonus = SignatureMotifBonus.objects.create(
             name="Locked Bonus",

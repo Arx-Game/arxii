@@ -249,7 +249,7 @@ class InheritedTechniqueCastTests(TestCase):
             resonance=cls.thread_resonance,
             target_kind=TargetKind.GIFT,
             target_gift=cls.kind,
-            level=5,
+            level=50,  # stored; shows 5 (#4585)
         )
         cls.umbrella_tech = TechniqueFactory(gift=cls.umbrella)
 

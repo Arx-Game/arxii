@@ -5545,6 +5545,7 @@
 **Pointed to by:**
   - modifier_target <- mechanics.ModifierTarget
   - resonances <- magic.Resonance
+  - favoring_traditions <- magic.Tradition
   - alteration_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
   - glimpse_tags <- magic.GlimpseTag
@@ -6683,6 +6684,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - favored_affinities -> magic.Affinity [M2M]
 **Pointed to by:**
   - available_beginnings <- character_creation.Beginnings
   - beginning_traditions <- character_creation.BeginningTradition
@@ -6704,6 +6706,8 @@
 **Foreign Keys:**
   - tradition -> magic.Tradition [FK]
   - ritual -> magic.Ritual [FK]
+
+### TraditionTeachingConfig
 
 ### TrainingOutcomeAward
 **Foreign Keys:**
@@ -9481,8 +9485,10 @@
 - `run_weekly_skill_cron() -> 'None' - Run the full weekly skill development cycle.`
 - `set_skill_sheet_value(sheet: 'CharacterSheet', skill: 'Skill', value: 'int') -> 'None' - The skill's ``CharacterSkillValue`` the sheet shows, the mirror of ``set_skill_trait``.`
 - `set_skill_trait(sheet: 'CharacterSheet', skill: 'Skill', value: 'int', source: 'str') -> 'None' - The skill's ``CharacterTraitValue`` the check engine reads (#2894), stamped (#3055).`
+- `skill_cap_message(name: 'str', stored_cap: 'int') -> 'str' - Message shown when development stops at the band's skill cap (#4585).`
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
 - `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
+- `stored_skill_cap(sheet: 'CharacterSheet') -> 'int | None' - The highest stored value the sheet's level band lets a skill reach (#4585).`
 - `total_allocated_training_ap(character_id: 'int', exclude_pk: 'int | None' = None) -> 'int' - Get total AP currently allocated across all training for a character.`
 - `train_skill(sheet: 'CharacterSheet', skill: 'Skill', dev_points: 'int', *, description: 'str', stop_at_boundary: 'bool' = False) -> 'SkillTrainingResult' - Develop a skill from training and record the audit transaction.`
 - `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object>) -> 'TrainingAllocation' - Update an existing training allocation.`

@@ -1448,7 +1448,9 @@ class ThreadFactory(factory.django.DjangoModelFactory):
                                  (anchor_cap reads target_capstone.relationship.pair_depth());
                                  requires as_capstone_thread=True
     - _path_stage=<int>        → add a CharacterPathHistory row for thread.owner with
-                                 a Path of that stage (applies to capstone + effective cap)
+                                 a Path of that stage (display only; no cap reads it)
+    - _class_level=<int>       → give thread.owner a primary class level, which sets
+                                 the level cap (level × 10) on every thread (#4585)
     - as_covenant_role_thread=True → switch to COVENANT_ROLE kind; creates a CovenantRole
 
     NOTE: this factory intentionally does NOT call full_clean(). DB-level
@@ -1597,6 +1599,19 @@ class ThreadFactory(factory.django.DjangoModelFactory):
 
         path = PathFactory(stage=stage)
         CharacterPathHistory.objects.create(character=self.owner, path=path)
+
+    @factory.post_generation  # type: ignore[misc]
+    def _class_level(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
+        """Give thread.owner a primary class level (sets the #4585 level cap)."""
+        if not create or extracted is None:
+            return
+        from world.classes.factories import CharacterClassLevelFactory
+
+        CharacterClassLevelFactory(
+            character=self.owner,
+            level=int(extracted),  # type: ignore[arg-type]
+            is_primary=True,
+        )
 
     @factory.post_generation  # type: ignore[misc]
     def as_covenant_role_thread(

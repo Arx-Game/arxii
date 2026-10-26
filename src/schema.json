@@ -20959,6 +20959,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedPortalDestinationList'
           description: ''
+  /api/magic/affinities/:
+    get:
+      operationId: magic_affinities_list
+      description: Read-only list of the three Affinities, for pickers (character
+        creation).
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Affinity'
+          description: ''
+  /api/magic/affinities/{id}/:
+    get:
+      operationId: magic_affinities_retrieve
+      description: Read-only list of the three Affinities, for pickers (character
+        creation).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this affinity.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Affinity'
+          description: ''
   /api/magic/applicable-pulls/:
     post:
       operationId: magic_applicable_pulls_create
@@ -23310,6 +23351,58 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResonanceGrant'
+          description: ''
+  /api/magic/resonances/:
+    get:
+      operationId: magic_resonances_list
+      description: |-
+        Read-only list of Resonance rows with their Affinity, for pickers.
+
+        The character-creation Gift stage lists every Resonance and stores the chosen
+        pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+      parameters:
+      - in: query
+        name: affinity
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Resonance'
+          description: ''
+  /api/magic/resonances/{id}/:
+    get:
+      operationId: magic_resonances_retrieve
+      description: |-
+        Read-only list of Resonance rows with their Affinity, for pickers.
+
+        The character-creation Gift stage lists every Resonance and stores the chosen
+        pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this resonance.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resonance'
           description: ''
   /api/magic/restrictions/:
     get:
@@ -45054,6 +45147,25 @@ components:
           type: integer
       required:
       - journal_entry_id
+    Affinity:
+      type: object
+      description: Serializer for Affinity records (Celestial, Primal, Abyssal).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Affinity name (e.g., 'Celestial', 'Abyssal', 'Primal').
+        description:
+          type: string
+          readOnly: true
+          description: Description of this affinity.
+      required:
+      - description
+      - id
+      - name
     AftermathBeat:
       type: object
       description: Schema-only shape of the beat line in an aftermath digest (#3551).
@@ -48813,9 +48925,17 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        favored:
+          type: boolean
+          description: |-
+            Whether the draft's Tradition favors this Gift: a ``TraditionGiftGrant`` (#4659).
+
+            The view passes the favored Gift ids in context (one query for the list).
+          readOnly: true
       required:
       - codex_entry_id
       - description
+      - favored
       - id
       - kind
       - name
@@ -50821,8 +50941,9 @@ components:
         starting_technique_picks:
           type: integer
           readOnly: true
-        starting_magic_skill_floor:
-          type: integer
+        magic_training:
+          type: object
+          additionalProperties: {}
           readOnly: true
         age_min:
           type: integer
@@ -50896,6 +51017,7 @@ components:
       - ic_month_names
       - id
       - introductions_offered
+      - magic_training
       - public_worship
       - second_parent_species
       - secret_worship
@@ -50910,7 +51032,6 @@ components:
       - served_house
       - stage_completion
       - stage_errors
-      - starting_magic_skill_floor
       - starting_technique_picks
       - stat_bonuses
       - stats_budget
@@ -69896,6 +70017,12 @@ components:
         training_points:
           type: integer
           nullable: true
+        teaching_line:
+          type: string
+          nullable: true
+        fit_line:
+          type: string
+          nullable: true
         display:
           type: string
       required:
@@ -69904,8 +70031,10 @@ components:
       - development_remaining
       - development_total
       - display
+      - fit_line
       - golden_hares
       - per_session_ap
+      - teaching_line
       - training_points
     OfferSummons:
       type: object
@@ -80733,9 +80862,9 @@ components:
         account (staff may pass any sheet).
 
         Read-only computed fields (SerializerMethodFields):
-        - path_cap: the path-side cap (compute_path_cap)
+        - level_cap: the character-level cap (compute_level_cap)
         - anchor_cap: the anchor-side cap (compute_anchor_cap)
-        - effective_cap: min(path_cap, anchor_cap)
+        - effective_cap: min(level_cap, anchor_cap)
       properties:
         resonance:
           type: integer
@@ -88117,17 +88246,20 @@ components:
           type: integer
         techniques:
           type: integer
-        magic_skill_floor:
+        training_points:
           type: integer
         grants_distinction_id:
           type: integer
+          nullable: true
+        grants_distinction_name:
+          type: string
           nullable: true
         offer_id:
           type: integer
           nullable: true
       required:
       - grants_distinction_id
-      - magic_skill_floor
+      - grants_distinction_name
       - name
       - offer_id
       - player_line
@@ -88135,6 +88267,7 @@ components:
       - rank
       - schooling_line_id
       - techniques
+      - training_points
     Scope77bEnum:
       enum:
       - appear
@@ -89419,7 +89552,8 @@ components:
           readOnly: true
         hollow_max:
           type: integer
-          description: Return the Sinner's Hollow maximum (thread.level * 10).
+          description: Return the Sinner's Hollow maximum (``_compute_hollow_max``,
+            shown level × mult).
           readOnly: true
         sineater_lifetime_helped:
           type: integer
@@ -95067,9 +95201,9 @@ components:
         account (staff may pass any sheet).
 
         Read-only computed fields (SerializerMethodFields):
-        - path_cap: the path-side cap (compute_path_cap)
+        - level_cap: the character-level cap (compute_level_cap)
         - anchor_cap: the anchor-side cap (compute_anchor_cap)
-        - effective_cap: min(path_cap, anchor_cap)
+        - effective_cap: min(level_cap, anchor_cap)
       properties:
         id:
           type: integer
@@ -95114,9 +95248,9 @@ components:
           type: integer
           readOnly: true
           description: Permanent points; advances level via ThreadLevelUnlock entries.
-        path_cap:
+        level_cap:
           type: integer
-          description: Return the path-side cap for this thread's owner.
+          description: Return the character-level cap for this thread's owner (#4585).
           readOnly: true
         anchor_cap:
           type: integer
@@ -95124,7 +95258,7 @@ components:
           readOnly: true
         effective_cap:
           type: integer
-          description: Return min(path_cap, anchor_cap).
+          description: Return min(level_cap, anchor_cap).
           readOnly: true
         retired_at:
           type: string
@@ -95148,8 +95282,8 @@ components:
       - effective_cap
       - id
       - level
+      - level_cap
       - owner
-      - path_cap
       - resonance
       - resonance_name
       - retired_at
@@ -95286,9 +95420,9 @@ components:
         account (staff may pass any sheet).
 
         Read-only computed fields (SerializerMethodFields):
-        - path_cap: the path-side cap (compute_path_cap)
+        - level_cap: the character-level cap (compute_level_cap)
         - anchor_cap: the anchor-side cap (compute_anchor_cap)
-        - effective_cap: min(path_cap, anchor_cap)
+        - effective_cap: min(level_cap, anchor_cap)
       properties:
         resonance:
           type: integer
@@ -95861,9 +95995,25 @@ components:
           items:
             $ref: '#/components/schemas/SchoolingLine'
           readOnly: true
+        favored_gift_names:
+          type: array
+          items:
+            type: string
+          description: 'The Gifts this Tradition teaches well (its ``TraditionGiftGrant``
+            rows, #4659).'
+          readOnly: true
+        favored_affinity_names:
+          type: array
+          items:
+            type: string
+          description: 'The affinities this Tradition teaches well (``favored_affinities``,
+            #4659).'
+          readOnly: true
       required:
       - codex_entry_ids
       - description
+      - favored_affinity_names
+      - favored_gift_names
       - id
       - is_active
       - name

@@ -33,6 +33,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.magic.constants import TargetKind
+from world.magic.services.threads import shown_thread_level
 from world.magic.types.technique_effects import (
     TechniqueFormPayload,
     TechniqueNextSignaturePayload,
@@ -140,7 +141,7 @@ def _variant_form(  # noqa: PLR0913
         is_default=is_default,
         is_locked=is_locked,
         unlock_thread_level=variant.unlock_thread_level,
-        thread_level=thread_level,
+        thread_level=shown_thread_level(thread_level),
         is_early=is_early,
         effect_summary=variant.cached_effect_summary,
     )
@@ -150,13 +151,15 @@ def _next_locked_variant(technique: Technique, *, resonance_id: int, thread_leve
     """The nearest form this thread has not reached yet, or ``None``.
 
     One step ahead per resonance, not the whole ladder: the lowest
-    ``unlock_thread_level`` strictly above the thread's current level. Filters
+    ``unlock_thread_level`` strictly above the thread's current shown level
+    (``thread_level`` is stored; the unlock level is shown, #4585). Filters
     the already-cached ``technique.cached_variants`` list rather than querying.
     """
+    shown_level = shown_thread_level(thread_level)
     ahead = [
         v
         for v in technique.cached_variants
-        if v.resonance_id == resonance_id and v.unlock_thread_level > thread_level
+        if v.resonance_id == resonance_id and v.unlock_thread_level > shown_level
     ]
     if not ahead:
         return None
@@ -236,7 +239,7 @@ def available_technique_forms(
                     is_locked=False,
                     is_early=(
                         resolved.variant.pk == early_form_id
-                        and resolved.variant.unlock_thread_level > thread.level
+                        and resolved.variant.unlock_thread_level > shown_thread_level(thread.level)
                     ),
                 )
             )
@@ -344,6 +347,8 @@ def next_signatures_by_technique(
             pairs, key=lambda pair: (pair[0].min_crossing_level, pair[0].name, pair[0].pk)
         )
         result[technique_id] = TechniqueNextSignaturePayload(
-            name=bonus.name, min_level=bonus.min_crossing_level, thread_level=thread.level
+            name=bonus.name,
+            min_level=bonus.min_crossing_level,
+            thread_level=shown_thread_level(thread.level),
         )
     return result

@@ -62,7 +62,7 @@ class MultiResonanceTests(TestCase):
             target_gift=self.gift,
             resonance=resonance,
         )
-        thread.level = 3
+        thread.level = 30  # stored; shows 3, the variants' unlock level (#4585)
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
         return thread
@@ -173,7 +173,7 @@ class MultiResonanceTests(TestCase):
             target_gift=self.gift,
             resonance=primal,
         )
-        primal_thread.level = 3
+        primal_thread.level = 30
         primal_thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
 

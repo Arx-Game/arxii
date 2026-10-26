@@ -2,8 +2,9 @@
 
 Unmapped config means "no extra skill term" rather than a failure, so these are
 TUNING rows: staff see which magical activities, Paths and Minor Gifts still add
-no skill to their roll, and (#4457) which schooling stances set no Magic skill floor,
-which Magic skills have no Academy course, and which Path suggestions name a Magic skill;
+no skill to their roll, and which schooling stances give no Magic training points
+(slice 2 of #4659, formerly the #4457 floor), which Magic skills have no Academy
+course, and which Path suggestions name a Magic skill;
 and (#4547) which check types weight a Magic skill directly.
 """
 
@@ -15,11 +16,14 @@ from django.test import TestCase
 from django.urls import reverse
 
 from web.admin.tuning import required_content as rc
+from world.character_creation.constants import CG_MODIFIER_CATEGORY, MAGIC_TRAINING_POINTS_TARGET
 from world.character_creation.factories import SchoolingLineFactory
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.classes.factories import PathFactory
+from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.magic.constants import GiftKind, MagicActivity
 from world.magic.factories import GiftFactory, MagicActivitySkillFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.npc_services.constants import OfferKind
 from world.npc_services.factories import (
     NPCRoleFactory,
@@ -145,28 +149,61 @@ def _magic_skill(**kwargs: object) -> Skill:
     return SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC), **kwargs)
 
 
-class SchoolingMagicSkillFloorProbeTests(TestCase):
+class SchoolingTrainingPointsProbeTests(TestCase):
+    """The dependency key stays ``schooling-magic-skill-floors`` so the dashboard row is stable."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.target = ModifierTargetFactory(
+            name=MAGIC_TRAINING_POINTS_TARGET,
+            category=ModifierCategoryFactory(name=CG_MODIFIER_CATEGORY),
+        )
+
     def _resolve(self) -> rc.ProbeResult:
         return _dependency("schooling-magic-skill-floors").probe.resolve(None)
 
-    def test_listed_while_a_stance_sets_no_floor_and_absent_once_authored(self) -> None:
-        first = SchoolingLineFactory(rank=1, magic_skill_floor=0)
-        SchoolingLineFactory(rank=2, magic_skill_floor=30)
+    def test_listed_while_a_stance_gives_no_points_and_absent_once_authored(self) -> None:
+        untrained = DistinctionFactory(name="Untrained")
+        trained = DistinctionFactory(name="Trained")
+        DistinctionEffectFactory(distinction=trained, target=self.target, value_per_rank=20)
+        first = SchoolingLineFactory(rank=1, grants=untrained)
+        SchoolingLineFactory(rank=2, grants=trained)
 
         result = self._resolve()
 
         self.assertFalse(result.present)
         self.assertEqual(result.missing, ("Rank 1",))
 
-        first.magic_skill_floor = 20
-        first.save()
+        DistinctionEffectFactory(distinction=first.grants, target=self.target, value_per_rank=10)
 
         self.assertTrue(self._resolve().present)
 
+    def test_a_stance_that_grants_nothing_is_listed(self) -> None:
+        SchoolingLineFactory(rank=1, grants=None)
+
+        self.assertEqual(self._resolve().missing, ("Rank 1",))
+
+    def test_an_effect_on_another_target_does_not_count(self) -> None:
+        distinction = DistinctionFactory(name="Other Effect")
+        DistinctionEffectFactory(distinction=distinction, target=ModifierTargetFactory())
+        SchoolingLineFactory(rank=1, grants=distinction)
+
+        self.assertEqual(self._resolve().missing, ("Rank 1",))
+
+    def test_an_effect_worth_zero_at_the_stance_rank_is_listed(self) -> None:
+        """An effect on the right target that adds nothing gives no points (#4665)."""
+        zero = DistinctionFactory(name="Zero Effect")
+        DistinctionEffectFactory(distinction=zero, target=self.target, value_per_rank=0)
+        SchoolingLineFactory(rank=1, grants=zero)
+
+        self.assertEqual(self._resolve().missing, ("Rank 1",))
+
     def test_rank_zero_and_a_missing_rank_are_not_listed(self) -> None:
         """Rank 0 grants nothing, and a missing row is REQUIRED elsewhere."""
-        SchoolingLineFactory(rank=0, magic_skill_floor=0)
-        SchoolingLineFactory(rank=1, magic_skill_floor=20)
+        trained = DistinctionFactory(name="Trained")
+        DistinctionEffectFactory(distinction=trained, target=self.target, value_per_rank=20)
+        SchoolingLineFactory(rank=0)
+        SchoolingLineFactory(rank=1, grants=trained)
 
         self.assertTrue(self._resolve().present)
 

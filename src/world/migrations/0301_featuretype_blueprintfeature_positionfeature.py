@@ -8,9 +8,7 @@ import core.natural_keys
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0297_mapterrain_blueprintposition_area_h_and_more"),
-    ]
+    dependencies = [("arxii", "0300_band_skill_cap_and_creation_ceiling")]
 
     operations = [
         migrations.CreateModel(

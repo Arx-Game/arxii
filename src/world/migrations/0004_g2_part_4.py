@@ -766,7 +766,7 @@ class Migration(BatchedCreateModelMigration):
                 (
                     "level",
                     models.PositiveSmallIntegerField(
-                        help_text="Internal thread-level scale crossing (3, 6, 11, 16, 21...). Must be a level where stage_for_level changes."
+                        help_text="Shown thread level (the number players see; a thread stored at 30 shows 3). Must be a crossing level (3, 6, 11, 16, 21)."
                     ),
                 ),
                 (

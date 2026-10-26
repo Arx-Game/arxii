@@ -1,7 +1,10 @@
 """Type declarations for character creation."""
 
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
+
+if TYPE_CHECKING:
+    from world.magic.types.teaching_fit import TeachingFit
 
 # Stage number → list of human-readable error messages.
 # Empty list means the stage is complete.
@@ -126,3 +129,37 @@ class CGPointBreakdownEntry(TypedDict):
     category: str
     item: str
     cost: int
+
+
+@dataclass(frozen=True)
+class DistinctionBonusSource:
+    """One distinction, at one rank, feeding a ModifierTarget: what its effect adds.
+
+    ``max_rank`` is the distinction's own: a breakdown names the rank held only when
+    the distinction has more than one ("Tradition Training, rank 1", but "Studious").
+    """
+
+    name: str
+    rank: int
+    points: int
+    max_rank: int
+
+
+@dataclass(frozen=True)
+class MagicTrainingPool:
+    """The points a draft spends on Magic skills, with the breakdown (slice 2 of #4659).
+
+    ``base`` is the distinctions' sum; ``gift_bonus`` / ``affinity_bonus`` are the
+    Tradition's fit bonuses (0 when ``base`` is 0). ``total`` is rounded down to a whole
+    skill tier; ``required_spend`` is what the draft must spend (capped by what the
+    Magic skills can hold). ``sources`` is one ``DistinctionBonusSource`` per
+    contributing (distinction, rank).
+    """
+
+    base: int
+    gift_bonus: int
+    affinity_bonus: int
+    total: int
+    required_spend: int
+    fit: "TeachingFit"
+    sources: list[DistinctionBonusSource]

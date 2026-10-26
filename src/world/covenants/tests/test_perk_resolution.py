@@ -297,7 +297,7 @@ class SubRolePerkAddsTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
         character.threads.invalidate()
 
@@ -391,7 +391,7 @@ class AllySubRolePerkAddsTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
 
     def _fire(self) -> list[FiredPerk]:
@@ -764,7 +764,7 @@ class AllyMateCountQueryBudgetTests(TestCase):
                 target_kind=TargetKind.COVENANT_ROLE,
                 target_covenant_role=self.parent_role,
                 target_trait=None,
-                level=3,
+                level=30,  # stored; shows 3 (#4585)
             )
 
     def _count_queries(self) -> int:

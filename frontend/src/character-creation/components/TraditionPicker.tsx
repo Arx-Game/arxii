@@ -4,7 +4,8 @@
  *
  * Reading is free (Decision 6): a tradition's full description sits in its
  * entry body, and its holder perspectives appear there too, but only once
- * it's chosen — never on hover. Wrapped by `TraditionStep`, which guards on
+ * it's chosen — never on hover. The body also names the Gifts and affinities
+ * the tradition teaches well (#4659). Wrapped by `TraditionStep`, which guards on
  * the draft having a selected Beginning.
  */
 
@@ -15,7 +16,7 @@ import {
   useTraditionPerspectives,
   useTraditions,
 } from '../queries';
-import type { CharacterDraft, Tradition } from '../types';
+import type { CGExplanations, CharacterDraft, Tradition } from '../types';
 import { SchoolingStances } from './offers/SchoolingStances';
 import { PerspectivesPanel } from './PerspectivesPanel';
 
@@ -36,6 +37,47 @@ function bite(refund: number): string {
 
 function tagFor(tradition: Tradition): string {
   return `${tradition.state_line}${bite(tradition.refund)}`;
+}
+
+/**
+ * The Gifts and affinities a Tradition teaches well (#4659): its gift grant rows and
+ * favored affinities, as tags. Nothing when it favors neither.
+ */
+function TeachesWell({ tradition, copy }: { tradition: Tradition; copy?: CGExplanations }) {
+  const gifts = tradition.favored_gift_names ?? [];
+  const affinities = tradition.favored_affinity_names ?? [];
+  if (gifts.length === 0 && affinities.length === 0) return null;
+  return (
+    <p className="ledger-line">
+      {copy?.gift_teaches_well ?? 'Teaches well'}
+      {gifts.length > 0 && (
+        <>
+          {' · '}
+          {copy?.gift_teaches_well_gifts ?? 'Gifts:'}{' '}
+          <span className="tags">
+            {gifts.map((name) => (
+              <span key={name} className="tag">
+                {name}
+              </span>
+            ))}
+          </span>
+        </>
+      )}
+      {affinities.length > 0 && (
+        <>
+          {' · '}
+          {copy?.gift_teaches_well_affinities ?? 'Affinity:'}{' '}
+          <span className="tags">
+            {affinities.map((name) => (
+              <span key={name} className="tag">
+                {name}
+              </span>
+            ))}
+          </span>
+        </>
+      )}
+    </p>
+  );
 }
 
 export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
@@ -84,6 +126,7 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
             onSetAside={handleClear}
           >
             <Paragraphs text={tradition.description} />
+            <TeachesWell tradition={tradition} copy={copy} />
             {isChosen && perspectives && perspectives.length > 0 && (
               // `.note` is scoped to `.note-group` in cg.css, so a bare panel
               // here would render unstyled; this is Marginalia's own markup.
