@@ -26,9 +26,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.magic.exceptions import AffinityNotConfigured
 from world.magic.models import Resonance
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from django.db.models import QuerySet
 
     from world.magic.models import Affinity
@@ -45,6 +48,19 @@ def authored_resonances(affinity: Affinity | None = None) -> list[Resonance]:
 def first_authored_resonance(affinity: Affinity) -> Resonance | None:
     """The first authored Resonance of an affinity, or ``None`` if it has none."""
     return Resonance.objects.filter(affinity=affinity).order_by("name").first()
+
+
+def first_canonical_resonance(get_affinity: Callable[[], Affinity]) -> Resonance | None:
+    """``first_authored_resonance`` for a canonical affinity getter, ``None`` when unconfigured.
+
+    A database with no Affinity rows yet has no resonance to hang config off either, so the
+    seeder skips exactly as it does for an affinity with no authored resonance.
+    """
+    try:
+        affinity = get_affinity()
+    except AffinityNotConfigured:
+        return None
+    return first_authored_resonance(affinity)
 
 
 def reference_resonance(

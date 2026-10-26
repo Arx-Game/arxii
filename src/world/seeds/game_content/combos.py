@@ -194,9 +194,9 @@ def _ensure_resonances() -> dict[str, Resonance]:
     content repo has authored none — the combo then seeds ungated.
     """
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
-    from world.magic.seeds_resonance import first_authored_resonance  # noqa: PLC0415
+    from world.magic.seeds_resonance import first_canonical_resonance  # noqa: PLC0415
 
-    celestial_resonance = first_authored_resonance(Affinity.objects.get_celestial_affinity())
+    celestial_resonance = first_canonical_resonance(Affinity.objects.get_celestial_affinity)
     if celestial_resonance is None:
         return {}
     return {"light": celestial_resonance}
