@@ -1,5 +1,7 @@
 # Telegraphed wind-ups downgrade, never mid-round-interrupt; a 1-reaction budget plus a 2-answer absorption cap
 
+> **Superseded in part by ADR-4676 (2026-10-25).** The 1-reaction-per-round budget is gone: each reaction makes the next roll harder instead. The 2-answer absorption cap and the wind-up downgrade still stand.
+
 #2637 (telegraphed enemy wind-ups) and #2639 (reaction economy) are specced and built
 together — one PR, two related mechanics that share a fire seam. This is the batch-3
 lore-transcript sizing (rulings F-6c/e, F-9a, F-10b/c) landing in code, extending

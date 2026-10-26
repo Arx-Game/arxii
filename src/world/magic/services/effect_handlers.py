@@ -1050,26 +1050,27 @@ def init_absorb_buffer(*, payload: Any, buffer: int) -> None:
 
 
 def blink_dodge(*, payload: Any) -> None:
-    """Teleport the bearer to an alternate position, fully avoiding incoming damage.
+    """Phase Step outside an NPC attack: avoid the hit, landing where she planned (#4676).
 
-    Highest-priority DAMAGE_PRE_APPLY interceptor (priority 30). Finds the bearer's
-    oldest active ConditionInstance whose template carries a reactive trigger wired to
-    this handler (designated by trigger data, not template name). When the bearer
-    can pay ``reactive_anima_cost`` via ``_try_spend_reactive``:
+    Highest-priority DAMAGE_PRE_APPLY interceptor (priority 30). Against an NPC attack
+    the ward is a dodge source instead (``world.combat.services.reactions``): her
+    defense roll decides the hit and her dodge plan decides the landing, so this
+    handler steps aside while ``DODGE_ROLL_ACTIVE`` is set. Anywhere else (damage
+    with no defense roll) it still avoids the whole hit when the bearer can pay
+    ``reactive_anima_cost`` via ``_try_spend_reactive``, and she lands on her
+    combat dodge plan's place if she set one, else stays where she is. The game
+    never picks a place for her.
 
-    - Repositions the bearer to any other ``Position`` in their current room
-      (flavor; if no alternate position exists the move is skipped).
-    - Sets ``payload.amount = 0`` (full avoidance).
-
-    Fizzles if unaffordable, narrated by ``_try_spend_reactive`` - attack lands
-    unchanged, unless the instance is consented (#3573).
-    Mutation-only: setting ``payload.amount = 0`` is what stops lower-priority
-    interceptors (they guard on ``payload.amount <= 0``) and zeroes the damage; there
-    is no CANCEL_EVENT step (an unconditional cancel would fire on the fizzle path too).
-    A once-only (``UNTIL_USED``) ward is spent through ``spend_condition_use`` after the
-    dodge (#4584).
+    Finds the bearer's oldest active ConditionInstance whose template carries a
+    reactive trigger wired to this handler (designated by trigger data, not template
+    name). Fizzles if unaffordable, narrated by ``_try_spend_reactive``, unless the
+    instance is consented (#3573). Mutation-only: setting ``payload.amount = 0`` stops
+    lower-priority interceptors. A once-only (``UNTIL_USED``) ward is spent through
+    ``spend_condition_use`` after the dodge (#4584).
     """
-    if payload.amount <= 0:
+    from world.combat.services.reactions import DODGE_ROLL_ACTIVE  # noqa: PLC0415
+
+    if payload.amount <= 0 or DODGE_ROLL_ACTIVE.get():
         return
 
     instance = (
@@ -1089,15 +1090,14 @@ def blink_dodge(*, payload: Any) -> None:
     if instance is None or not _try_spend_reactive(instance):
         return
 
-    # Cost paid — attempt relocation (flavor; avoidance is the mechanic).
-    current = position_of(payload.target)
-    if current is not None:
-        dest = Position.objects.filter(room=payload.target.location).exclude(pk=current.pk).first()
-    else:
-        dest = Position.objects.filter(room=payload.target.location).first()
+    from world.combat.services.movement_budget import (  # noqa: PLC0415
+        active_combat_participant,
+    )
 
-    if dest is not None:
-        force_move_to_position(payload.target, dest)
+    participant = active_combat_participant(payload.target)
+    landing = participant.dodge_landing if participant is not None else None
+    if landing is not None and landing.room_id == payload.target.db_location_id:
+        force_move_to_position(payload.target, landing)
 
     payload.amount = 0
     spend_condition_use(instance)

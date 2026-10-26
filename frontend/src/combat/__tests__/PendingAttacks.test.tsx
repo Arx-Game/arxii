@@ -19,6 +19,9 @@ function row(overrides: Partial<PendingAttack> = {}): PendingAttack {
     called_out: true,
     damage_scale: 0.75,
     cancelled: false,
+    attack_name: 'Strike',
+    covered_position_id: null,
+    covered_position_name: null,
     ...overrides,
   };
 }

@@ -1,5 +1,7 @@
 # ADR-4584-A: A standing guard spends the guardian's reaction
 
+> **Superseded in part by ADR-4676 (2026-10-25).** A standing guard still counts as one of her reactions, but there is no per-round cap: each reaction makes the next roll harder.
+
 **Date:** 2026-10-23
 **Status:** Accepted (spec approved on #4573)
 **Issue:** #4584 (relates #2639, #4573). Revisits ADR-0161 for guards only.

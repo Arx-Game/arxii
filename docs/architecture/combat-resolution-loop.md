@@ -1594,7 +1594,6 @@ doing anything else:
 
 ```
 _attempt_guardian_interpose(guardian, protected, pre_payload, *, action)
-  guardian.reactions_used >= REACTIONS_PER_ROUND (1)?                → return (no-op)
   pre_payload.answers_consumed >= ABSORPTION_CAP_PER_MOMENT (2)?     → return (no-op)
   guardian.reactions_used += 1; save()
   pre_payload.answers_consumed += 1
@@ -1669,10 +1668,9 @@ _resolve_npc_action_on_target (PC resolution loop, either the defense-check or
             → participant.sent_flying_damage = damage; save()
             → _broadcast_sent_flying_launch          # "X is sent FLYING by the blow!"
             → catcher = _try_catch_sent_flying(participant)
-                 armed INTERPOSE this round (participant or guard-anyone) found,
-                 AND interposer.reactions_used < REACTIONS_PER_ROUND?
-                   yes → interposer.reactions_used += 1; save()
-                         return interposer's character            # "fires" — budget only, no roll
+                 armed INTERPOSE this round (participant or guard-anyone) found?
+                   yes → interposer.reactions_used += 1; save()   # no cap (#4676)
+                         return interposer's character            # "fires" — no roll
                    no  → return None
             → catcher is not None?
                  yes → _clear_sent_flying_marker (remove_condition + carrier=0)
@@ -1702,8 +1700,8 @@ _resolve_sent_flying_markers (end of resolve_round, see ordering change above)
 `dispatch_interpose` — the mundane/technique challenge chain grades HOW MUCH of a
 landing hit's *amount* a block reduces, which has no meaning for a binary mid-air
 rescue. "Fires" means the same thing `_dispatch_interpose_action`'s docstring already
-establishes for the mundane interpose path: an attempt that clears
-`REACTIONS_PER_ROUND`, independent of any roll. `ABSORPTION_CAP_PER_MOMENT` is not
+establishes for the mundane interpose path: an attempt, independent of any roll (no
+reaction cap since #4676; the catch counts as one more reaction this round). `ABSORPTION_CAP_PER_MOMENT` is not
 consulted — only the first eligible guardian is ever queried (mirrors `_try_interpose`'s
 own v1 scope), so there is never a second attempt on the same moment to cap.
 

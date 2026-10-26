@@ -482,13 +482,6 @@ INTERPOSE_BASE_FATIGUE_COST: int = 3
 # Reaction economy (#2639)
 # ---------------------------------------------------------------------------
 
-# How many reactions (e.g. INTERPOSE fires) a single CombatParticipant may
-# spend per round. Gated + incremented at the reaction fire seam
-# (_dispatch_interpose_action); reset to 0 for every participant in
-# begin_declaration_phase. A second declared reaction this round declines
-# with the same "did not fire" shape as an unaffordable/failed one.
-REACTIONS_PER_ROUND: int = 1
-
 # Per-moment absorption cap: how many interceptors may answer ONE
 # DamagePreApplyPayload (one landing hit) before further interceptors
 # decline, tracked via DamagePreApplyPayload.answers_consumed. Standing

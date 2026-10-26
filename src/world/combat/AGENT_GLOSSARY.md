@@ -73,7 +73,7 @@ The declared protect-with-technique reaction a PC arms via `declare_interpose(pa
 _Avoid_: guardian ward, protect action
 
 **Standing guard** (#4584, ADR-4584-A):
-A condition with `ConditionTemplate.source_guards_bearer`: its source (`source_character`) tries the mundane interpose on every hit on the bearer without declaring anything, from the round after the condition lands. She still takes her own turn. It counts against her one reaction (`REACTIONS_PER_ROUND`) and the hit's answer cap (`ABSORPTION_CAP_PER_MOMENT`) and pays interpose fatigue at very low effort. A guardian who declared any Interpose that round acts only through her declaration; a guard cast on its own bearer never interposes; PC wards in combat only. Read by `_try_interpose` through `guardians_by_target`.
+A condition with `ConditionTemplate.source_guards_bearer`: its source (`source_character`) tries the mundane interpose on every hit on the bearer without declaring anything, from the round after the condition lands. She still takes her own turn. It counts as one of her reactions this round (a harder roll each time, #4676) and against the hit's answer cap (`ABSORPTION_CAP_PER_MOMENT`) and pays interpose fatigue at very low effort. A guardian who declared any Interpose that round acts only through her declaration; a guard cast on its own bearer never interposes; PC wards in combat only. Read by `_try_interpose` through `guardians_by_target`.
 _Avoid_: bodyguard maneuver, auto-interpose
 
 **Strike-back** (#4584):
@@ -109,15 +109,34 @@ NPC side. See `world/covenants/AGENT_GLOSSARY.md`'s Wind-up / Interception (wind
 _Avoid_: charge-up, cast time (a caster's own resolution delay, not an authored multi-round threat).
 
 **Reaction Economy** (#2639, ADR-0161):
-The two budgets gating the shared interpose fire seam (`_attempt_guardian_interpose`):
-`CombatParticipant.reactions_used` vs `REACTIONS_PER_ROUND` (1, per-participant, reset each
-`begin_declaration_phase`) and `DamagePreApplyPayload.answers_consumed` vs
-`ABSORPTION_CAP_PER_MOMENT` (2, per-landing-hit, regardless of who fired). Standing defenses
+`CombatParticipant.reactions_used` counts a participant's reactions this round (dodges,
+guards, catches; reset each `begin_declaration_phase`). It has no cap since #4676: each one
+makes her next reaction's roll harder by `MovementConfig.reaction_difficulty_step`.
+`DamagePreApplyPayload.answers_consumed` vs `ABSORPTION_CAP_PER_MOMENT` (2, per landing
+hit, regardless of who fired) still caps the shared interpose fire seam. Standing defenses
 (absorb/reflect/blink/strike-back, their own `reactive_anima_cost`, ADR-0060) sit outside both
 budgets; a **Standing guard** does not (ADR-4584-A).
 A declined guardian is told privately why (#3574, ADR-0271); the table is not.
 _Avoid_: reaction points, action economy (this is specifically the interpose-family reaction
 budget, not a general action-point system).
+
+**Dodge** (#4676, ADR-4676):
+A character's automatic reaction to an NPC attack, from a capability whose
+`CapabilityType.reaction_reach` is not `none` (or a Phase Step ward). It is her defense roll
+with that capability's value as a bonus, costs anima or physical fatigue
+(`reaction_cost_kind`), and is harder by one `reaction_difficulty_step` per reaction already
+made this round. A dodge that at least partly succeeds may move her (her **Dodge plan**).
+_Avoid_: evade (the defense check itself), blink (one way of dodging), parry.
+
+**Dodge plan** (#4676):
+`CombatParticipant.dodge_enabled` and `dodge_landing`, set while declaring (`combat_dodge`):
+dodge in place, land in a place her reach covers, or do not dodge. Private to her; reset each
+round. _Avoid_: dodge target, escape route.
+
+**Area attack** (#4676):
+An NPC attack whose `ThreatPoolEntry.covers_place` is set: it hits everyone standing in its
+place, and only leaving the place escapes it. A wound-up one fixes its **covered place** when
+telegraphed. _Avoid_: AOE, splash (the room-wide `TargetingMode.ALL` is a different thing).
 
 **Sustained Action** (#2705, ADR-0190):
 The PC-side mirror of Wind-up: a `SustainedAction` row committing a PC to a multi-round

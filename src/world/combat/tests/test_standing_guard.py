@@ -3,8 +3,9 @@
 A ``ConditionTemplate`` with ``source_guards_bearer`` set makes the instance's
 ``source_character`` try to intercept each hit on the bearer, as if she had
 declared an INTERPOSE naming the bearer, without declaring one. She pays the
-same two budgets a declared guardian pays (``REACTIONS_PER_ROUND`` and
-``ABSORPTION_CAP_PER_MOMENT``) and mundane interpose fatigue at very low effort.
+same costs a declared guardian pays (a reaction this round, which makes her next
+one harder since #4676, and ``ABSORPTION_CAP_PER_MOMENT``) and mundane interpose
+fatigue at very low effort.
 
 ``dispatch_interpose`` (the guardian's own roll) is mocked out here, as in
 ``test_reaction_economy.py``: these tests isolate selection, budgets and cost.
@@ -22,7 +23,6 @@ from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from world.combat.constants import (
     ABSORPTION_CAP_PER_MOMENT,
     INTERPOSE_BASE_FATIGUE_COST,
-    REACTIONS_PER_ROUND,
     ActionCategory,
     CombatManeuver,
     ParticipantStatus,
@@ -109,18 +109,18 @@ class StandingGuardTests(TestCase):
         self.assertEqual(pool.get_current(ActionCategory.PHYSICAL), expected)
 
     @patch("world.combat.services.dispatch_interpose")
-    def test_a_guard_past_its_reaction_is_declined_and_told(self, dispatch) -> None:
-        self.guard_a.reactions_used = REACTIONS_PER_ROUND
+    def test_a_guard_who_already_reacted_still_guards_with_a_harder_roll(self, dispatch) -> None:
+        dispatch.return_value = MagicMock()
+        self.guard_a.reactions_used = 1
         self.guard_a.save(update_fields=["reactions_used"])
         self._guard(self.ward, self.guard_a)
 
-        with patch("world.scenes.interaction_services.narrate_privately") as private:
-            _try_interpose(self.ward, _payload(10))
+        _try_interpose(self.ward, _payload(10))
 
-        dispatch.assert_not_called()
-        private.assert_called_once()
-        self.assertEqual(private.call_args.args[0].pk, self.guard_a.character_sheet.character.pk)
-        self.assertIn("You have already spent your reaction this round", private.call_args.args[1])
+        dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.kwargs["extra_modifiers"], -2)
+        self.guard_a.refresh_from_db()
+        self.assertEqual(self.guard_a.reactions_used, 2)
 
     @patch("world.combat.services.dispatch_interpose")
     def test_a_guard_counts_against_the_absorption_cap(self, dispatch) -> None:

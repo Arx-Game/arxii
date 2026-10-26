@@ -281,7 +281,7 @@ function makeParticipant(
     current_position: null,
     aftermath: null,
     reactions_used: null,
-    reactions_remaining: null,
+    dodge_plan: null,
   };
 }
 
@@ -1370,6 +1370,9 @@ describe('YourTurn — pending attacks strip prefills (#3572)', () => {
       called_out: false,
       damage_scale: 1,
       cancelled: false,
+      attack_name: 'Strike',
+      covered_position_id: null,
+      covered_position_name: null,
     };
   }
 

@@ -53,6 +53,7 @@ import {
   routeStyle,
 } from '../battleMapPalette';
 import type { BattleOccupant } from '../battleMapPalette';
+import { AreaTelegraphLayer, type AreaTelegraph } from './AreaTelegraphLayer';
 import { CoverBadges, LabelChip, RouteLabel, Token } from './battleMapPieces';
 
 export type { BattleOccupant, CombatSide } from '../battleMapPalette';
@@ -79,6 +80,8 @@ export interface BattleMapProps {
   onGMPlace?: (positionId: number) => boolean;
   /** Engagement locks drawn between places (#3555). */
   links?: OccupantLink[];
+  /** Wound-up attacks that will cover a place (#4676). */
+  telegraphs?: readonly AreaTelegraph[];
 }
 
 const keyOf = (x: number, y: number) => `${x},${y}`;
@@ -326,6 +329,7 @@ export function BattleMap({
   edges,
   occupantsByPosition,
   heldPositions,
+  telegraphs,
   moveActions,
   ownPositionId,
   onDispatchMove,
@@ -623,6 +627,8 @@ export function BattleMap({
               />
             );
           })}
+
+        <AreaTelegraphLayer areas={areas} telegraphs={telegraphs ?? []} />
 
         {/* The air above a place: an inset over its anchor, with lifted tokens. */}
         {aerialNodes.map((node) => {

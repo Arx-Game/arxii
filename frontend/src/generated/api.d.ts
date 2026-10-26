@@ -32551,6 +32551,18 @@ export interface components {
       /** @description URL-safe identifier for this tag. */
       readonly slug: string;
     };
+    /** @description One place a dodge can land in (#4676). */
+    DodgeLanding: {
+      id: number;
+      name: string;
+    };
+    /** @description Schema-only shape of the viewer's own dodge plan (#4676). Private to its owner. */
+    DodgePlan: {
+      enabled: boolean;
+      landing_id: number | null;
+      options: components['schemas']['DodgeLanding'][];
+      cost_line: string;
+    };
     /**
      * @description * `BEAST` - Beast
      *     * `UNDEAD` - Undead
@@ -44236,8 +44248,7 @@ export interface components {
       readonly aftermath: components['schemas']['AftermathDigest'] | null;
       /** @description Return spent reactions only to the owner, GM, or staff. */
       readonly reactions_used: number | null;
-      /** @description Return the remaining reaction availability without exposing other pools. */
-      readonly reactions_remaining: number | null;
+      readonly dodge_plan: components['schemas']['DodgePlan'] | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -46463,6 +46474,9 @@ export interface components {
       /** Format: double */
       damage_scale: number;
       cancelled: boolean;
+      attack_name: string;
+      covered_position_id: number | null;
+      covered_position_name: string | null;
     };
     /**
      * @description Player-facing view of a pending Audere Majora (Crossing) offer (#543). Read-only.
