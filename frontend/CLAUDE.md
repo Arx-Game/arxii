@@ -61,7 +61,8 @@ development warning (#4677): an update outside `act()`, a dialog with no `Descri
 duplicate key, invalid DOM nesting, a selector that returns a new object on every call. Fix
 the cause: a test waits for what its update shows (`findBy*`, `waitFor`) or dispatches inside
 `act()`; a dialog with no description spreads `NO_DESCRIPTION` from `components/ui/dialog.tsx`
-on its content (one with an optional description spreads it only when absent); a selector's fallback
+on its content (one whose description is optional, or rendered by only some of its child steps,
+spreads it only when absent); a selector's fallback
 is a module-level constant, never an inline `[]` or `{}`. When an agent runs vitest, add
 `--reporter=default`: vitest 5's agent reporter hides console output from passing tests.
 

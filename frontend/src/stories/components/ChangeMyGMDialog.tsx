@@ -365,7 +365,8 @@ export function ChangeMyGMDialog({ story }: ChangeMyGMDialogProps) {
         </Button>
       </DialogTrigger>
 
-      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-lg">
+      {/* The withdraw step renders its own DialogDescription; only the offer step has none. */}
+      <DialogContent {...(step === 'withdraw' ? {} : NO_DESCRIPTION)} className="sm:max-w-lg">
         {step === 'withdraw' ? (
           <WithdrawStep story={story} onSuccess={handleWithdrawSuccess} onCancel={handleCancel} />
         ) : (
