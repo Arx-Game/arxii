@@ -21,12 +21,46 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0303_affinity_rows_backfill"),
+        ("arxii", "0305_affinity_rows_restore_old_columns"),
     ]
 
     operations = [
-        migrations.AlterUniqueTogether(name="resonanceconversion", unique_together=set()),
-        migrations.AlterUniqueTogether(name="auraaffinitythreshold", unique_together=set()),
+        migrations.AlterField(
+            model_name="auraaffinitythreshold",
+            name="affinity",
+            field=models.CharField(
+                default="",
+                max_length=16,
+                choices=[("celestial", "Celestial"), ("primal", "Primal"), ("abyssal", "Abyssal")],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="resonanceconversion",
+            name="target_affinity",
+            field=models.CharField(
+                default="",
+                max_length=16,
+                choices=[("celestial", "Celestial"), ("primal", "Primal"), ("abyssal", "Abyssal")],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="fallredemptionrecord",
+            name="from_affinity",
+            field=models.CharField(
+                default="",
+                max_length=16,
+                choices=[("celestial", "Celestial"), ("primal", "Primal"), ("abyssal", "Abyssal")],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="fallredemptionrecord",
+            name="to_affinity",
+            field=models.CharField(
+                default="",
+                max_length=16,
+                choices=[("celestial", "Celestial"), ("primal", "Primal"), ("abyssal", "Abyssal")],
+            ),
+        ),
         migrations.RemoveField(model_name="characteraura", name="celestial"),
         migrations.RemoveField(model_name="characteraura", name="primal"),
         migrations.RemoveField(model_name="characteraura", name="abyssal"),
