@@ -2,6 +2,8 @@
 
 from rest_framework import serializers
 
+from world.areas.positioning.models import FeatureType
+
 
 class PositionSummarySerializer(serializers.Serializer):
     """Compact public representation of a Position (id + name)."""
@@ -88,3 +90,17 @@ class PositionEdgeSerializer(serializers.Serializer):
     gating_challenge_name = serializers.CharField(read_only=True, allow_null=True)
     integrity = serializers.IntegerField(read_only=True, allow_null=True)
     max_integrity = serializers.IntegerField(read_only=True, allow_null=True)
+
+
+class FeatureTypeSerializer(serializers.ModelSerializer):
+    """One feature type a GM can add to a place (#4675): the GM attach control's list."""
+
+    art_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FeatureType
+        fields = ["id", "name", "reach", "art_url"]
+        read_only_fields = fields
+
+    def get_art_url(self, obj: FeatureType) -> str | None:
+        return obj.art.cloudinary_url if obj.art_id else None

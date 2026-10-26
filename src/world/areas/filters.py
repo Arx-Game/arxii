@@ -3,6 +3,7 @@ import django_filters
 
 from evennia_extensions.models import RoomProfile
 from world.areas.models import Area, AreaClosure
+from world.areas.positioning.models import FeatureType
 
 
 class AreaFilter(django_filters.FilterSet):
@@ -44,3 +45,13 @@ class RoomProfileFilter(django_filters.FilterSet):
         """Return rooms in this area and all descendant areas via subquery."""
         descendant_ids = AreaClosure.objects.filter(ancestor_id=value).values("descendant_id")
         return queryset.filter(area_id__in=descendant_ids)
+
+
+class FeatureTypeFilter(django_filters.FilterSet):
+    """Narrow the feature types by name or reach (#4675)."""
+
+    search = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+
+    class Meta:
+        model = FeatureType
+        fields = ["reach", "search"]

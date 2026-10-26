@@ -17,7 +17,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from actions.player_interface import dispatch_player_action, get_player_actions
-from evennia_extensions.factories import RoomProfileFactory
+from evennia_extensions.factories import MediaFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
 from world.areas.positioning.constants import FeatureReach
 from world.areas.positioning.factories import (
@@ -67,6 +67,7 @@ from world.conditions.factories import (
 )
 from world.conditions.models import CapabilityType
 from world.conditions.services import apply_condition
+from world.gm.factories import GMProfileFactory
 from world.magic.factories import CharacterAnimaFactory
 from world.mechanics.factories import (
     ApplicationFactory,
@@ -566,3 +567,59 @@ class AGMAddsAFeature(_TheHall):
         self.assertEqual(removed.detail.message, NO_GM)
         self.assertFalse(PositionFeature.objects.filter(feature_type=rope).exists())
         self.assertTrue(PositionFeature.objects.filter(pk=self.chandelier.pk).exists())
+
+
+class TheFeatureTypeList(JourneyCase):
+    """GET /api/areas/feature-types/: what the GM attach control offers (#4675)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.room = self.make_room("The Hall")
+        self.art = MediaFactory()
+        self.chandelier = FeatureTypeFactory(
+            name="Chandelier", reach=FeatureReach.ADJACENT, art=self.art
+        )
+        self.rope = FeatureTypeFactory(name="Rope", reach=FeatureReach.ANY_PLACE)
+
+    def test_a_gm_sees_every_feature_type_with_its_reach_and_art(self) -> None:
+        gm = self.make_player("Ash", room=self.room)
+        GMProfileFactory(account=self.account_of(gm))
+
+        response = self.api(self.account_of(gm)).get("/api/areas/feature-types/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            response.json()["results"],
+            [
+                {
+                    "id": self.chandelier.pk,
+                    "name": "Chandelier",
+                    "reach": "adjacent",
+                    "art_url": self.art.cloudinary_url,
+                },
+                {"id": self.rope.pk, "name": "Rope", "reach": "any_place", "art_url": None},
+            ],
+        )
+        narrowed = self.api(self.account_of(gm)).get(
+            "/api/areas/feature-types/", {"reach": "any_place"}
+        )
+        self.assertEqual([row["name"] for row in narrowed.json()["results"]], ["Rope"])
+
+    def test_staff_see_the_list(self) -> None:
+        ash = self.make_player("Ash", room=self.room)
+        account = self.account_of(ash)
+        account.is_staff = True
+        account.save(update_fields=["is_staff"])
+
+        response = self.api(account).get("/api/areas/feature-types/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(len(response.json()["results"]), 2)
+
+    def test_a_player_who_is_not_a_gm_is_refused(self) -> None:
+        pell = self.make_player("Pell", room=self.room)
+
+        response = self.api(self.account_of(pell)).get("/api/areas/feature-types/")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn(self.api().get("/api/areas/feature-types/").status_code, (401, 403))

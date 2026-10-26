@@ -25,6 +25,7 @@ from world.areas.positioning.services import (
     attach_feature,
     connect_positions,
     create_blueprint,
+    detach_feature,
     instantiate_blueprint,
     place_in_position,
     position_of,
@@ -447,3 +448,22 @@ class TheFeaturesOfAPlaceReachTheMap(TheEncounterPayloadCarriesTheDrawing):
         nodes = {node["name"]: node for node in self.body()["position_nodes"]}
 
         self.assertEqual([f["name"] for f in nodes["Hall"]["features"]], ["Balcony rail"])
+
+    def test_a_feature_removed_after_a_read_is_gone_from_the_next_reads(self):
+        rope = self.feature(self.hall, "Rope", square=(4, 3))
+        scene = SceneFactory(room=self.room)
+        client = self.api(self.account_of(self.ann))
+
+        def hall_features(body: dict) -> list[str]:
+            nodes = {node["name"]: node for node in body["position_nodes"]}
+            return [f["name"] for f in nodes["Hall"]["features"]]
+
+        self.assertEqual(hall_features(self.body()), ["Rope"])
+        self.assertEqual(hall_features(client.get(f"/api/scenes/{scene.pk}/").json()), ["Rope"])
+
+        detach_feature(rope)
+
+        self.assertEqual(hall_features(self.body()), [])
+        response = client.get(f"/api/scenes/{scene.pk}/")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(hall_features(response.json()), [])

@@ -9,14 +9,17 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from evennia_extensions.models import RoomProfile
 from world.areas.constants import GridOrigin
-from world.areas.filters import AreaFilter, RoomProfileFilter
+from world.areas.filters import AreaFilter, FeatureTypeFilter, RoomProfileFilter
 from world.areas.models import Area
+from world.areas.positioning.models import FeatureType
+from world.areas.positioning.serializers import FeatureTypeSerializer
 from world.areas.serializers import (
     AreaListSerializer,
     AreaRoomSerializer,
     WhereEntrySerializer,
     WhoEntrySerializer,
 )
+from world.gm.permissions import IsGMOrStaff
 
 
 class AreaPagination(PageNumberPagination):
@@ -35,6 +38,29 @@ class RoomPagination(PageNumberPagination):
     page_size = 50
     page_size_query_param = "page_size"
     max_page_size = 200
+
+
+class FeatureTypePagination(PageNumberPagination):
+    page_size = 100
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+
+class FeatureTypeViewSet(ReadOnlyModelViewSet):
+    """The feature types a GM can add to a place mid-scene (#4675, slice 3 of #4651).
+
+    Read-only: staff author feature types in the admin. GMs and staff only, since
+    the list feeds the GM attach control.
+    """
+
+    serializer_class = FeatureTypeSerializer
+    permission_classes = [IsAuthenticated, IsGMOrStaff]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = FeatureTypeFilter
+    pagination_class = FeatureTypePagination
+
+    def get_queryset(self) -> QuerySet[FeatureType]:
+        return FeatureType.objects.select_related("art").order_by("name")
 
 
 class AreaViewSet(ReadOnlyModelViewSet):
