@@ -1,0 +1,19 @@
+{
+  "unplanInsideAButton": false,
+  "cellBox": {
+    "x": 359.0625,
+    "y": 512,
+    "width": 112,
+    "height": 96
+  },
+  "unplanBox": {
+    "x": 456,
+    "y": 517,
+    "width": 10.0625,
+    "height": 16
+  },
+  "unplanOffsetFromCellTopRight": {
+    "dx": 5,
+    "dy": 5
+  }
+}
