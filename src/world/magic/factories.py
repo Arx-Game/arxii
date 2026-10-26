@@ -3461,20 +3461,20 @@ def wire_fall_redemption_content() -> object:
                     compromise_types.append(act_type)
 
             # Example ResonanceConversion mappings
-            for source_res, target_affinity, target_res in [
-                (cele_res, primal_affinity, primal_res),
-                (cele_res, abyssal_affinity, abyssal_res),
-                (primal_res, abyssal_affinity, abyssal_res),
-                (primal_res, celestial_affinity, cele_res),
-                (abyssal_res, primal_affinity, primal_res),
-                (abyssal_res, celestial_affinity, cele_res),
+            for source_res, target_affinity, target_res, old_key in [
+                (cele_res, primal_affinity, primal_res, "primal"),
+                (cele_res, abyssal_affinity, abyssal_res, "abyssal"),
+                (primal_res, abyssal_affinity, abyssal_res, "abyssal"),
+                (primal_res, celestial_affinity, cele_res, "celestial"),
+                (abyssal_res, primal_affinity, primal_res, "primal"),
+                (abyssal_res, celestial_affinity, cele_res, "celestial"),
             ]:
                 authored_or_sample(
                     ResonanceConversion,
                     {
                         "target_resonance": target_res,
                         # Old column, still part of the unique key until the rename.
-                        "target_affinity": target_affinity.name.lower(),
+                        "target_affinity": old_key,
                     },
                     source_resonance=source_res,
                     target_affinity_ref=target_affinity,

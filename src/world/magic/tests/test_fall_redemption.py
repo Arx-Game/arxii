@@ -16,6 +16,7 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GainSource
+from world.magic.exceptions import ConversionMappingError
 from world.magic.factories import (
     ResonanceFactory,
     ensure_canonical_affinities,
@@ -82,20 +83,20 @@ def _setup_affinities_and_resonances():
 def _setup_conversion_mappings(cele_res, primal_res, abyssal_res):
     """Create ResonanceConversion mappings for all paths."""
     mappings = [
-        (cele_res, primal_res.affinity, primal_res),
-        (cele_res, abyssal_res.affinity, abyssal_res),
-        (primal_res, abyssal_res.affinity, abyssal_res),
-        (primal_res, cele_res.affinity, cele_res),
-        (abyssal_res, primal_res.affinity, primal_res),
-        (abyssal_res, cele_res.affinity, cele_res),
+        (cele_res, primal_res.affinity, primal_res, "primal"),
+        (cele_res, abyssal_res.affinity, abyssal_res, "abyssal"),
+        (primal_res, abyssal_res.affinity, abyssal_res, "abyssal"),
+        (primal_res, cele_res.affinity, cele_res, "celestial"),
+        (abyssal_res, primal_res.affinity, primal_res, "primal"),
+        (abyssal_res, cele_res.affinity, cele_res, "celestial"),
     ]
-    for source, target_aff, target_res in mappings:
+    for source, target_aff, target_res, old_key in mappings:
         ResonanceConversion.objects.get_or_create(
             source_resonance=source,
             target_affinity_ref=target_aff,
             defaults={
                 "target_resonance": target_res,
-                "target_affinity": target_aff.name.lower(),
+                "target_affinity": old_key,
             },
         )
 
@@ -258,6 +259,48 @@ class TestConvertResonancePartial(TestCase):
         self.assertEqual(conv.balance_after, 60)  # 100 - 40
         # 40 * 0.5 = 20
         self.assertEqual(conv.granted_balance, 20)
+
+
+class TestConversionPair(TestCase):
+    """``conversion_pair`` refuses a pair that is not fully authored."""
+
+    def test_pair_with_multiplier_and_type_is_returned(self):
+        cele, primal, _ = ensure_conversion_pairs()
+        pair = conversion_pair(cele, primal)
+        self.assertEqual(pair.conversion_type, ConversionType.FALL)
+
+    def test_blank_type_is_a_mapping_error(self):
+        cele, primal, _ = ensure_conversion_pairs()
+        pair = AffinityInteraction.objects.get(source_affinity=cele, environment_affinity=primal)
+        pair.conversion_type = ""
+        pair.save(update_fields=["conversion_type"])
+        AffinityInteraction.objects.clear_cache()
+        with self.assertRaises(ConversionMappingError):
+            conversion_pair(cele, primal)
+
+    def test_no_row_at_all_is_a_mapping_error(self):
+        cele, primal, _ = ensure_canonical_affinities()
+        AffinityInteraction.objects.clear_cache()
+        with self.assertRaises(ConversionMappingError):
+            conversion_pair(cele, primal)
+
+    def test_blank_type_fall_is_a_clean_refusal(self):
+        from world.magic.exceptions import FallEligibilityError
+
+        sheet = CharacterSheetFactory()
+        _, primal_aff, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
+        pair = AffinityInteraction.objects.get(
+            source_affinity=cele_res.affinity, environment_affinity=primal_aff
+        )
+        pair.conversion_type = ""
+        pair.save(update_fields=["conversion_type"])
+        AffinityInteraction.objects.clear_cache()
+        grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
+        grant_resonance(sheet, primal_res, 100, source=GainSource.STAFF_GRANT)
+        _set_aura(sheet, celestial=50, primal=45, abyssal=5)
+        with self.assertRaises(FallEligibilityError):
+            perform_fall(sheet, target_affinity=primal_aff)
 
 
 class TestPerformFall(TestCase):

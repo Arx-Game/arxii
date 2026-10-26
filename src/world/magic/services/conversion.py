@@ -73,10 +73,11 @@ def conversion_pair(source: Affinity, target: Affinity) -> AffinityInteraction:
     """The AffinityInteraction row authored for converting ``source`` into ``target``.
 
     The pair carries the multiplier and the Fall / Redemption type. Raises
-    ConversionMappingError when the pair has no row or no ``conversion_multiplier``.
+    ConversionMappingError when the pair has no row, or lacks either its
+    ``conversion_multiplier`` or its ``conversion_type``.
     """
     pair = AffinityInteraction.objects.interaction_for(source, target)
-    if pair is None or pair.conversion_multiplier is None:
+    if pair is None or pair.conversion_multiplier is None or not pair.conversion_type:
         msg = f"No conversion is authored from {source.name} to {target.name}."
         raise ConversionMappingError(msg)
     return pair

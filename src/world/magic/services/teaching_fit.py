@@ -92,12 +92,9 @@ def student_traits(sheet: CharacterSheet) -> StudentTraits:
     The affinity follows the student's current aura, so it changes when the aura does;
     ``gift_affinity_for`` stays for character creation, before an aura exists.
     """
-    from world.magic.models.aura import CharacterAura  # noqa: PLC0415
+    from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
 
-    try:
-        aura = sheet.aura
-    except CharacterAura.DoesNotExist:
-        aura = None
+    aura = magical_profile(sheet)
     affinity = aura.dominant_affinity if aura is not None and aura.cached_shares else None
     return StudentTraits(major_gift=major_gift_for(sheet), affinity=affinity)
 

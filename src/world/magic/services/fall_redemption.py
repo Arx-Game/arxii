@@ -76,6 +76,7 @@ def perform_fall(
     *,
     target_affinity: Affinity,
     scene: object | None = None,
+    **_ritual_dispatch_kwargs: object,  # ritual dispatch also forwards ``ritual=``
 ) -> FallResult:
     """Perform the full Fall/Redemption conversion ceremony.
 

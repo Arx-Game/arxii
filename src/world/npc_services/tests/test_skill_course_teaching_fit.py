@@ -124,6 +124,20 @@ class SkillCourseTeachingFitTests(TestCase):
             price.fit_line, "Fits your Gift's Dawn affinity. Sessions are easier for you."
         )
 
+    def test_academy_fit_follows_current_aura(self) -> None:
+        sheet = self._student(gift=self.gift, affinity=self.affinity)
+        fitting = _offer_price_payload(self.course.offer, sheet, {}, None)["fit_line"]
+        self.assertEqual(
+            fitting,
+            "Fits your Lantern Gift and its Dawn affinity. Sessions are easier for you.",
+        )
+        # Her aura drifts: Dusk now dominates, so only the Gift still fits.
+        set_aura_shares(
+            sheet.aura, [AffinityShare(affinity=self.other_affinity, percent=Decimal(100))]
+        )
+        drifted = _offer_price_payload(self.course.offer, sheet, {}, None)["fit_line"]
+        self.assertEqual(drifted, "Fits your Lantern Gift. Sessions are easier for you.")
+
     def test_non_fitting_student_sees_only_the_tradition(self) -> None:
         sheet = self._student()
         price = _offer_price(self.course.offer, sheet, {}, None)

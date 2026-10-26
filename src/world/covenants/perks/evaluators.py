@@ -823,7 +823,7 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
     relations:
 
     1. A ``CombatOpponent`` with a non-empty AUTHORED ``affinity``
-       (``world/combat/models.py`` — #2536 slice 3 field, for non-persona/
+       (``world/combat/models.py`` — #2536 slice 3 ``affinity_ref`` FK, for non-persona/
        generic NPCs that carry no ``CharacterAura`` row to infer from) —
        compared directly against ``params.affinity_ref``. Authored typing wins
        outright when present (``threshold_percent`` is IGNORED on this path —
@@ -837,12 +837,12 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
        ``attacker.aura`` for a bare ``ObjectDB`` attacker. With
        ``params.threshold_percent`` set, holds when ``params.affinity_ref``'s own
        axis percentage is >= the threshold; unset, holds when
-       ``dominant_affinity == params.affinity``.
+       ``dominant_affinity`` is ``params.affinity_ref``.
     3. Otherwise False — no attacker, no authored affinity, and no aura data
        reachable (an ephemeral/generic NPC with neither).
 
     PvP note (v1 scope): a PvP attacker is a ``CombatOpponent`` row with
-    ``objectdb`` set to the attacking PC (never an authored ``affinity`` —
+    ``objectdb`` set to the attacking PC (never an authored ``affinity_ref`` —
     that field is generic-NPC-only), so path (2) is what covers PvP.
     ``world.combat.services.resolve_npc_attack`` is the ONLY defense-check
     site threaded with ``ctx.attacker`` in v1 — the penetration-vs-ward PvP
@@ -859,11 +859,11 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
         return False
 
     try:
-        authored = attacker.affinity_ref
+        authored_id = attacker.affinity_ref_id
     except AttributeError:
-        authored = None
-    if authored is not None:
-        return authored.pk == wanted.pk
+        authored_id = None
+    if authored_id is not None:
+        return authored_id == wanted.pk
 
     aura = _attacker_aura(attacker)
     if aura is None or not aura.cached_shares:

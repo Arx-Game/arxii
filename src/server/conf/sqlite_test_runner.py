@@ -288,6 +288,9 @@ def _analyze_planner_stats() -> None:
     with a partial unique index (``DuelChallenge``) with ``internal query planner
     error``, depending on how many tables the schema holds. The statistics change
     no result; they only make the planner choose a plan instead of erroring.
+
+    Seen on SQLite 3.46.0 (Python 3.13 build). Remove this helper once the bundled
+    SQLite is upgraded and the duel inbox tests pass without it.
     """
     from django.db import connections  # noqa: PLC0415
 
