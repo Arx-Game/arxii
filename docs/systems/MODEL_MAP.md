@@ -2976,6 +2976,7 @@
 - `rename_companion(companion: 'Companion', name: 'str') -> 'None' - Rename a companion: its row and its in-world object's key together (#4338).`
 - `resolve_bonded_companion(opponent: 'CombatOpponent') -> 'Companion | None' - The live, unreleased Companion behind an ALLY CombatOpponent, if any.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' - Resolve a bridged companion's defeat consequence (#1873).`
+- `shown_thread_level(level: 'int') -> 'int' - The thread level a player sees for a stored ``level``: ``level // 10`` (#4585).`
 - `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' - Flat Companion Capacity bonus from every Stables the sheet keeps a household at.`
 - `used_companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' - Companion Capacity currently consumed by character_sheet's active companions via gift.`
 
@@ -6706,8 +6707,8 @@
 - `calculate_soulfray_severity(current_anima: 'int', max_anima: 'int', deficit: 'int', config: 'SoulfrayConfig', *, lethal: 'bool' = True) -> 'int' - Compute Soulfray severity contribution from post-deduction anima state.`
 - `coherence_cache_scope() - Context manager that memoizes ``motif_coherence_bonus`` per (sheet, resonance).`
 - `compute_anchor_cap(thread: 'Thread') -> 'int' - Return the anchor-side cap for this thread (Spec A §2.4).`
-- `compute_effective_cap(thread: 'Thread') -> 'int' - Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4).`
-- `compute_path_cap(character_sheet: 'CharacterSheet') -> 'int' - Return the path-side cap for a character (Spec A §2.4).`
+- `compute_effective_cap(thread: 'Thread') -> 'int' - Return min(level cap, anchor cap), the binding limit on this thread (Spec A §2.4).`
+- `compute_level_cap(character_sheet: 'CharacterSheet') -> 'int' - Return the character-level cap on every thread this character owns (#4585).`
 - `compute_thread_weaving_xp_cost(unlock: 'ThreadWeavingUnlock', learner: 'CharacterSheet') -> 'int' - Compute the XP cost for a learner to acquire a ThreadWeavingUnlock (Spec A §6.2).`
 - `create_pending_alteration(*, character: 'CharacterSheet', tier: 'int', origin_affinity: 'Affinity', origin_resonance: 'ResonanceModel', scene: 'Scene | None', triggering_technique: 'Technique | None' = None, triggering_intensity: 'int | None' = None, triggering_control: 'int | None' = None, triggering_anima_cost: 'int | None' = None, triggering_anima_deficit: 'int | None' = None, triggering_soulfray_stage: 'int | None' = None, audere_active: 'bool' = False, is_cosmetic: 'bool' = False) -> 'PendingAlterationResult' - Create or escalate a PendingAlteration for a character.`
 - `cross_thread_xp_lock(character_sheet: 'CharacterSheet', thread: 'Thread', boundary_level: 'int') -> 'ThreadLevelUnlock' - Pay XP to unlock an XP-locked level boundary on a thread.`
