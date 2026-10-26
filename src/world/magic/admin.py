@@ -2195,8 +2195,8 @@ class CrossingChoiceAdmin(admin.ModelAdmin):
 class CompromiseActTypeAdmin(admin.ModelAdmin):
     """Admin for authored compromise act types."""
 
-    list_display = ("name", "target_resonance", "amount")
-    list_filter = ("target_resonance__affinity",)
+    list_display = ("name", "target_resonance", "amount", "is_cruelty")
+    list_filter = ("is_cruelty",)
     search_fields = ("name", "description")
 
 

@@ -3441,17 +3441,18 @@ def wire_fall_redemption_content() -> object:
 
         if cele_res is not None and primal_res is not None and abyssal_res is not None:
             # Example compromise act types
-            for name, resonance, amount in [
-                ("Combat Kill", primal_res, 10),
-                ("Pragmatic Choice", primal_res, 15),
-                ("Torture", abyssal_res, 25),
-                ("Malicious Harm", abyssal_res, 20),
+            for name, resonance, amount, is_cruelty in [
+                ("Combat Kill", primal_res, 10, False),
+                ("Pragmatic Choice", primal_res, 15, False),
+                ("Torture", abyssal_res, 25, True),
+                ("Malicious Harm", abyssal_res, 20, True),
             ]:
                 act_type = authored_or_sample(
                     CompromiseActType,
                     {
                         "target_resonance": resonance,
                         "amount": amount,
+                        "is_cruelty": is_cruelty,
                         "description": f"Grants {amount} {resonance.name} resonance.",
                     },
                     name=name,

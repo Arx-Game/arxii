@@ -112,6 +112,7 @@ class TestGrantCompromiseResonance(TestCase):
             name="Combat Kill",
             target_resonance=primal_res,
             amount=10,
+            is_cruelty=False,
         )
 
         result = grant_compromise_resonance(sheet, act_type)
@@ -136,6 +137,7 @@ class TestGrantCompromiseResonance(TestCase):
             name="Torture",
             target_resonance=abyssal_res,
             amount=25,
+            is_cruelty=True,
         )
 
         result = grant_compromise_resonance(sheet, act_type)
@@ -284,6 +286,7 @@ class TestConversionPair(TestCase):
     def test_half_authored_pair_is_refused_by_the_database(self):
         cele, primal, _ = ensure_conversion_pairs()
         pair = AffinityInteraction.objects.get(source_affinity=cele, environment_affinity=primal)
+        self.addCleanup(pair.refresh_from_db)
         pair.conversion_type = ""
         with self.assertRaises(IntegrityError), transaction.atomic():
             pair.save(update_fields=["conversion_type"])

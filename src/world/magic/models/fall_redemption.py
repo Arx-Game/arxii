@@ -59,6 +59,14 @@ class CompromiseActType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         help_text="Which feeding-taint rule this act type stands for. Blank = none.",
     )
+    is_cruelty = models.BooleanField(
+        default=False,
+        help_text=(
+            "Convenience flag: True when target_resonance.affinity is Abyssal. "
+            "Derivable from the FK but surfaced for admin filtering and future "
+            "content-authoring tooling."
+        ),
+    )
 
     class Meta:
         verbose_name = "Compromise Act Type"

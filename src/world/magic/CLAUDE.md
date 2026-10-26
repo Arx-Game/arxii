@@ -1945,9 +1945,9 @@ becomes available when the target affinity crosses
 
 **Models (`models/fall_redemption.py`):**
 - `CompromiseActType` — authored act category → (target_resonance, amount,
-  feeding_taint_role). Whether an act is cruel is read from the target
-  resonance's affinity, not stored. Staff author act types;
-  mission/combat/social systems reference them.
+  is_cruelty, feeding_taint_role). `is_cruelty` is staff-authored and
+  separates acts that share an affinity (the affinity cannot). Staff author
+  act types; mission/combat/social systems reference them.
 - `ResonanceConversion` — authored mapping (source_resonance,
   target_affinity FK to `Affinity`) → target_resonance. One row per path.
 - `FallRedemptionConfig` — singleton (pk=1, `ArxSharedMemoryManager`) with

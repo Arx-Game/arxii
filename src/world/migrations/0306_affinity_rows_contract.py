@@ -11,8 +11,6 @@ Schema only. ADR-0237 disposition per removed column:
   ``Affinity.corruption_coefficient``.
 - ``CharacterAura.celestial/primal/abyssal``: copied to ``CharacterAuraShare`` rows by 0303
   (empty in production).
-- ``CompromiseActType.is_cruelty``: DERIVABLE (it only restated whether the target
-  resonance's affinity is Abyssal); no authored information is lost.
 """
 
 from django.db import migrations, models
@@ -85,7 +83,6 @@ class Migration(migrations.Migration):
         migrations.RemoveField(model_name="corruptionconfig", name="celestial_coefficient"),
         migrations.RemoveField(model_name="corruptionconfig", name="primal_coefficient"),
         migrations.RemoveField(model_name="corruptionconfig", name="abyssal_coefficient"),
-        migrations.RemoveField(model_name="compromiseacttype", name="is_cruelty"),
         migrations.RemoveField(model_name="combatopponent", name="affinity"),
         migrations.RemoveField(model_name="auraaffinitythreshold", name="affinity"),
         migrations.RemoveField(model_name="resonanceconversion", name="target_affinity"),
