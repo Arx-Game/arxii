@@ -674,6 +674,34 @@ class PositionFeature(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.feature_type_id} @ pos:{self.position_id}"
 
+    def _invalidate_graph_caches(self) -> None:
+        # Admin edits save the row directly; the map and stunt list read the cached
+        # per-position feature list and the room's positions_cached.
+        position = self.position
+        position.__dict__.pop("features_cached", None)
+        _pop_room_graph(position.room)
+
+    def save(self, *args, **kwargs) -> None:
+        old_position = None
+        if self.pk is not None:
+            old_position = (
+                PositionFeature.objects.filter(pk=self.pk)
+                .values_list("position_id", flat=True)
+                .first()
+            )
+        super().save(*args, **kwargs)
+        self._invalidate_graph_caches()
+        if old_position is not None and old_position != self.position_id:
+            old = Position.objects.get(pk=old_position)
+            old.__dict__.pop("features_cached", None)
+
+    def delete(self, *args, **kwargs):
+        position = self.position
+        result = super().delete(*args, **kwargs)
+        position.__dict__.pop("features_cached", None)
+        _pop_room_graph(position.room)
+        return result
+
 
 class PositionShelter(SharedMemoryModel):
     """Shelter against a hazard granted by a specific Position within a room.

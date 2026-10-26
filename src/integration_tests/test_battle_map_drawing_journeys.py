@@ -19,7 +19,7 @@ from world.areas.positioning.factories import (
     PositionFactory,
     PositionFeatureFactory,
 )
-from world.areas.positioning.models import ObjectPosition
+from world.areas.positioning.models import ObjectPosition, PositionFeature
 from world.areas.positioning.services import (
     add_blueprint_position,
     attach_feature,
@@ -467,3 +467,28 @@ class TheFeaturesOfAPlaceReachTheMap(TheEncounterPayloadCarriesTheDrawing):
         response = client.get(f"/api/scenes/{scene.pk}/")
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(hall_features(response.json()), [])
+
+    def test_an_admin_style_save_move_and_delete_shows_on_the_next_scene_read(self):
+        scene = SceneFactory(room=self.room)
+        client = self.api(self.account_of(self.ann))
+
+        def where(name: str) -> list[str]:
+            response = client.get(f"/api/scenes/{scene.pk}/")
+            self.assertEqual(response.status_code, 200, response.content)
+            return [
+                node["name"]
+                for node in response.json()["position_nodes"]
+                if name in [f["name"] for f in node["features"]]
+            ]
+
+        self.assertEqual(where("Banner"), [])
+        row = PositionFeature(position=self.hall, feature_type=FeatureTypeFactory(name="Banner"))
+        row.save()
+        self.assertEqual(where("Banner"), ["Hall"])
+
+        row.position = self.porch
+        row.save()
+        self.assertEqual(where("Banner"), ["Porch"])
+
+        row.delete()
+        self.assertEqual(where("Banner"), [])

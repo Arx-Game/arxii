@@ -219,7 +219,8 @@ def _dispatch_registry(
         merged_kwargs["blueprint_id"] = ref.blueprint_id
     if ref.feature_id is not None:
         merged_kwargs["feature_id"] = ref.feature_id
-    # A ref's approach_id overrides kwargs["approach_id"]; only stunt and pass refs set it.
+    # A ref's approach_id overrides kwargs["approach_id"]; only stunt refs set it
+    # (pass refs carry the approach in kwargs).
     if ref.approach_id is not None:
         merged_kwargs["approach_id"] = ref.approach_id
     result = action_obj.run(actor=character, **merged_kwargs)

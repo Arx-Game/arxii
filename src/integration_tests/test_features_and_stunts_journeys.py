@@ -425,6 +425,19 @@ class MakingAStunt(_TheHall):
         minted = ChallengeInstance.objects.get(template=self.swing)
         self.assertFalse(minted.is_active)
 
+    def test_the_same_character_can_swing_the_same_feature_twice(self) -> None:
+        kit = self.person("Kit")
+
+        with self.roll(self.clean):
+            first = self.stunt(kit, self.stage)
+            place_in_position(kit, self.floor)  # back under the chandelier
+            second = self.stunt(kit, self.stage)
+
+        self.assertTrue(first.detail.success, first.detail.message)
+        self.assertTrue(second.detail.success, second.detail.message)
+        self.assertEqual(position_of(kit), self.stage)
+        self.assertEqual(ChallengeInstance.objects.filter(template=self.swing).count(), 2)
+
     def test_a_partial_swing_still_lands_her(self) -> None:
         kit = self.person("Kit")
 
