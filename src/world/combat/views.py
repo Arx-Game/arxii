@@ -531,7 +531,11 @@ class CombatEncounterViewSet(ModelViewSet):
         )
 
     def _base_queryset(self) -> QuerySet[CombatEncounter]:
-        from world.areas.positioning.models import Position, PositionEdge  # noqa: PLC0415
+        from world.areas.positioning.models import (  # noqa: PLC0415
+            Position,
+            PositionEdge,
+            PositionFeature,
+        )
         from world.companions.models import CompanionOrder  # noqa: PLC0415
 
         return CombatEncounter.objects.select_related(
@@ -540,8 +544,13 @@ class CombatEncounterViewSet(ModelViewSet):
             Prefetch(
                 "room__positions",
                 queryset=Position.objects.order_by("pk")
-                .select_related("rampart__element_profile")
+                .select_related("rampart__element_profile", "terrain__art")
                 .prefetch_related(
+                    Prefetch(
+                        "features",
+                        queryset=PositionFeature.objects.select_related("feature_type__art"),
+                        to_attr="features_cached",
+                    ),
                     Prefetch(
                         "edges_as_a",
                         queryset=PositionEdge.objects.filter(is_passable=True),

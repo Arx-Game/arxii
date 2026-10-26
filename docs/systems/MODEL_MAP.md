@@ -530,14 +530,21 @@
   - position_b -> areas.BlueprintPosition [FK]
   - gating_challenge_template -> mechanics.ChallengeTemplate [FK] (nullable)
 
+### BlueprintFeature
+**Foreign Keys:**
+  - blueprint_position -> areas.BlueprintPosition [FK]
+  - feature_type -> areas.FeatureType [FK]
+
 ### BlueprintPosition
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - terrain -> areas.MapTerrain [FK] (nullable)
   - blueprint -> areas.PositionBlueprint [FK]
 **Pointed to by:**
   - edges_as_a <- areas.BlueprintEdge
   - edges_as_b <- areas.BlueprintEdge
+  - features <- areas.BlueprintFeature
   - shelters <- areas.BlueprintPositionShelter
 
 ### BlueprintPositionShelter
@@ -557,6 +564,19 @@
   - details -> areas.CleanupProjectDetails [FK]
   - outcome_tier -> traits.CheckOutcome [FK]
 
+### FeatureType
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - art -> evennia_extensions.Media [FK] (nullable)
+  - challenge_template -> mechanics.ChallengeTemplate [FK]
+
+### MapTerrain
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - art -> evennia_extensions.Media [FK] (nullable)
+
 ### ObjectPosition
 **Foreign Keys:**
   - objectdb -> evennia.ObjectDB [OneToOne]
@@ -564,6 +584,7 @@
 
 ### Position
 **Foreign Keys:**
+  - terrain -> areas.MapTerrain [FK] (nullable)
   - room -> evennia.ObjectDB [FK]
   - elevation_anchor -> areas.Position [FK] (nullable)
 **Pointed to by:**
@@ -571,6 +592,7 @@
   - edges_as_a <- areas.PositionEdge
   - edges_as_b <- areas.PositionEdge
   - occupants <- areas.ObjectPosition
+  - features <- areas.PositionFeature
   - shelters <- areas.PositionShelter
   - rampart <- areas.Rampart
   - cast_destination_instances <- conditions.ConditionInstance
@@ -594,6 +616,11 @@
   - gating_challenge -> mechanics.ChallengeInstance [FK] (nullable)
   - created_by_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - source_rampart -> areas.Rampart [FK] (nullable)
+
+### PositionFeature
+**Foreign Keys:**
+  - position -> areas.Position [FK]
+  - feature_type -> areas.FeatureType [FK]
 
 ### PositionShelter
 **Foreign Keys:**
@@ -2484,6 +2511,7 @@
   - aftermath_pool -> actions.ConsequencePool [FK] (nullable)
   - wall_breaker_combo -> combat.ComboDefinition [FK] (nullable)
   - reinforces -> combat.CombatOpponent [FK] (nullable)
+  - affinity -> magic.Affinity [FK] (nullable)
   - suppressed_faction_rules -> standoffs.FactionRule [M2M]
 **Pointed to by:**
   - reinforced_by <- combat.CombatOpponent
@@ -2506,6 +2534,7 @@
 **Foreign Keys:**
   - opponent -> combat.CombatOpponent [FK]
   - threat_entry -> combat.ThreatPoolEntry [FK]
+  - covered_position -> areas.Position [FK] (nullable)
   - targets -> combat.CombatParticipant [M2M]
   - opponent_targets -> combat.CombatOpponent [M2M]
 **Pointed to by:**
@@ -2523,6 +2552,7 @@
   - encounter -> combat.CombatEncounter [FK]
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - covenant_role -> covenants.CovenantRole [FK] (nullable)
+  - dodge_landing -> areas.Position [FK] (nullable)
 **Pointed to by:**
   - mirror_surface <- combat.CombatOpponent
   - vow_effect_firings <- combat.VowAddedEffectFiring
@@ -2699,6 +2729,11 @@
 
 ### FleeTierModifier
 
+### MovementConfig
+**Foreign Keys:**
+  - held_ground_challenge -> mechanics.ChallengeTemplate [FK] (nullable)
+  - updated_by -> evennia.AccountDB [FK] (nullable)
+
 ### NpcTacticsConfig
 
 ### OpponentTierTemplate
@@ -2709,6 +2744,7 @@
   - opponent -> combat.CombatOpponent [FK]
   - threat_entry -> combat.ThreatPoolEntry [FK]
   - target -> combat.CombatParticipant [FK] (nullable)
+  - covered_position -> areas.Position [FK] (nullable)
 
 ### PendingSelection
 **Foreign Keys:**
@@ -2801,7 +2837,7 @@
 - `active_combat_engagement_for(character: 'ObjectDB') -> 'CharacterEngagement | None' - The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None, level: 'int | None' = None) -> 'CombatOpponent' - Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' - Create a CombatParticipant linking a PC to an encounter.`
-- `advance_opponent(opponent: 'CombatOpponent', move_row: 'CombatOpponentMove | None', attack_rows: 'list[CombatOpponentAction] | None' = None, *, on_hop: 'HopHook | None' = None) -> 'Position | None' - Run an opponent's ADVANCE plan in its resolution slot; returns where it moved, or None.`
+- `advance_opponent(opponent: 'CombatOpponent', move_row: 'CombatOpponentMove | None', attack_rows: 'list[CombatOpponentAction] | None' = None, *, on_hop: 'HopHook | None' = None, profile: 'MovementProfile | None' = None) -> 'Position | None' - Run an opponent's ADVANCE plan in its resolution slot; returns where it moved, or None.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0'), skip_condition_interactions: 'bool' = False) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' - Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
@@ -2960,6 +2996,7 @@
 - `rename_companion(companion: 'Companion', name: 'str') -> 'None' - Rename a companion: its row and its in-world object's key together (#4338).`
 - `resolve_bonded_companion(opponent: 'CombatOpponent') -> 'Companion | None' - The live, unreleased Companion behind an ALLY CombatOpponent, if any.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' - Resolve a bridged companion's defeat consequence (#1873).`
+- `shown_thread_level(level: 'int') -> 'int' - The thread level a player sees for a stored ``level``: ``level // 10`` (#4585).`
 - `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' - Flat Companion Capacity bonus from every Stables the sheet keeps a household at.`
 - `used_companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' - Companion Capacity currently consumed by character_sheet's active companions via gift.`
 
@@ -3546,6 +3583,7 @@
 
 ### VowAddedEffect
 **Foreign Keys:**
+  - affinity -> magic.Affinity [FK] (nullable)
   - covenant_role -> covenants.CovenantRole [FK]
   - gift -> magic.Gift [FK] (nullable)
   - technique -> magic.Technique [FK] (nullable)
@@ -3592,10 +3630,12 @@
 
 ### VowSituationalPerkRung
 **Foreign Keys:**
+  - affinity -> magic.Affinity [FK] (nullable)
   - perk -> covenants.VowSituationalPerk [FK]
 
 ### VowSituationalPerkSituation
 **Foreign Keys:**
+  - affinity -> magic.Affinity [FK] (nullable)
   - perk -> covenants.VowSituationalPerk [FK]
 
 ### VowStatScaling
@@ -3904,6 +3944,11 @@
   - target -> mechanics.ModifierTarget [FK]
 **Pointed to by:**
   - modifier_sources <- mechanics.ModifierSource
+  - rank_sizes <- distinctions.DistinctionEffectRankSize
+
+### DistinctionEffectRankSize
+**Foreign Keys:**
+  - effect -> distinctions.DistinctionEffect [FK]
 
 ### DistinctionTag
 **Pointed to by:**
@@ -5508,8 +5553,10 @@
 **Pointed to by:**
   - modifier_target <- mechanics.ModifierTarget
   - resonances <- magic.Resonance
+  - favoring_traditions <- magic.Tradition
   - alteration_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
+  - aura_shares <- magic.CharacterAuraShare
   - glimpse_tags <- magic.GlimpseTag
   - interactions_as_source <- magic.AffinityInteraction
   - interactions_as_environment <- magic.AffinityInteraction
@@ -5588,6 +5635,7 @@
 
 ### AuraAffinityThreshold
 **Foreign Keys:**
+  - affinity -> magic.Affinity [FK]
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
 
 ### AuraPowerConfig
@@ -5611,8 +5659,14 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [OneToOne]
 **Pointed to by:**
+  - shares <- magic.CharacterAuraShare
   - glimpse_tags <- magic.CharacterGlimpseTag
   - glimpse_born_distinctions <- distinctions.CharacterDistinction
+
+### CharacterAuraShare
+**Foreign Keys:**
+  - aura -> magic.CharacterAura [FK]
+  - affinity -> magic.Affinity [FK]
 
 ### CharacterCrossingText
 **Foreign Keys:**
@@ -5793,6 +5847,8 @@
 ### FallRedemptionRecord
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
+  - from_affinity -> magic.Affinity [FK]
+  - to_affinity -> magic.Affinity [FK]
   - scene -> scenes.Scene [FK] (nullable)
 
 ### FeedingRecord
@@ -6104,6 +6160,7 @@
 ### ResonanceConversion
 **Foreign Keys:**
   - source_resonance -> magic.Resonance [FK]
+  - target_affinity -> magic.Affinity [FK]
   - target_resonance -> magic.Resonance [FK]
 
 ### ResonanceEnvironmentConfig
@@ -6646,6 +6703,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - favored_affinities -> magic.Affinity [M2M]
 **Pointed to by:**
   - available_beginnings <- character_creation.Beginnings
   - beginning_traditions <- character_creation.BeginningTradition
@@ -6668,6 +6726,8 @@
   - tradition -> magic.Tradition [FK]
   - ritual -> magic.Ritual [FK]
 
+### TraditionTeachingConfig
+
 ### TrainingOutcomeAward
 **Foreign Keys:**
   - outcome_tier -> traits.CheckOutcome [OneToOne]
@@ -6681,8 +6741,8 @@
 - `calculate_soulfray_severity(current_anima: 'int', max_anima: 'int', deficit: 'int', config: 'SoulfrayConfig', *, lethal: 'bool' = True) -> 'int' - Compute Soulfray severity contribution from post-deduction anima state.`
 - `coherence_cache_scope() - Context manager that memoizes ``motif_coherence_bonus`` per (sheet, resonance).`
 - `compute_anchor_cap(thread: 'Thread') -> 'int' - Return the anchor-side cap for this thread (Spec A §2.4).`
-- `compute_effective_cap(thread: 'Thread') -> 'int' - Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4).`
-- `compute_path_cap(character_sheet: 'CharacterSheet') -> 'int' - Return the path-side cap for a character (Spec A §2.4).`
+- `compute_effective_cap(thread: 'Thread') -> 'int' - Return min(level cap, anchor cap), the binding limit on this thread (Spec A §2.4).`
+- `compute_level_cap(character_sheet: 'CharacterSheet') -> 'int' - Return the character-level cap on every thread this character owns (#4585).`
 - `compute_thread_weaving_xp_cost(unlock: 'ThreadWeavingUnlock', learner: 'CharacterSheet') -> 'int' - Compute the XP cost for a learner to acquire a ThreadWeavingUnlock (Spec A §6.2).`
 - `create_pending_alteration(*, character: 'CharacterSheet', tier: 'int', origin_affinity: 'Affinity', origin_resonance: 'ResonanceModel', scene: 'Scene | None', triggering_technique: 'Technique | None' = None, triggering_intensity: 'int | None' = None, triggering_control: 'int | None' = None, triggering_anima_cost: 'int | None' = None, triggering_anima_deficit: 'int | None' = None, triggering_soulfray_stage: 'int | None' = None, audere_active: 'bool' = False, is_cosmetic: 'bool' = False) -> 'PendingAlterationResult' - Create or escalate a PendingAlteration for a character.`
 - `cross_thread_xp_lock(character_sheet: 'CharacterSheet', thread: 'Thread', boundary_level: 'int') -> 'ThreadLevelUnlock' - Pay XP to unlock an XP-locked level boundary on a thread.`
@@ -9444,8 +9504,10 @@
 - `run_weekly_skill_cron() -> 'None' - Run the full weekly skill development cycle.`
 - `set_skill_sheet_value(sheet: 'CharacterSheet', skill: 'Skill', value: 'int') -> 'None' - The skill's ``CharacterSkillValue`` the sheet shows, the mirror of ``set_skill_trait``.`
 - `set_skill_trait(sheet: 'CharacterSheet', skill: 'Skill', value: 'int', source: 'str') -> 'None' - The skill's ``CharacterTraitValue`` the check engine reads (#2894), stamped (#3055).`
+- `skill_cap_message(name: 'str', stored_cap: 'int') -> 'str' - Message shown when development stops at the band's skill cap (#4585).`
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
 - `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
+- `stored_skill_cap(sheet: 'CharacterSheet') -> 'int | None' - The highest stored value the sheet's level band lets a skill reach (#4585).`
 - `total_allocated_training_ap(character_id: 'int', exclude_pk: 'int | None' = None) -> 'int' - Get total AP currently allocated across all training for a character.`
 - `train_skill(sheet: 'CharacterSheet', skill: 'Skill', dev_points: 'int', *, description: 'str', stop_at_boundary: 'bool' = False) -> 'SkillTrainingResult' - Develop a skill from training and record the audit transaction.`
 - `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object>) -> 'TrainingAllocation' - Update an existing training allocation.`

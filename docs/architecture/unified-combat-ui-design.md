@@ -112,7 +112,8 @@ collapsible.
 
 Since #3557 the scene header above the pose log is minimal during an encounter: the
 scene title, battle links, and prompts that need an answer stay inline; the header map
-unmounts (the rail's Map tab is the one map, with bystanders); everything else folds
+unmounts (the battle map in the page's wide column, `CombatMainMap`, is the one map, with
+bystanders; it left the rail in #4670); everything else folds
 behind a closed "Scene tools" accordion (ADR-0274).
 
 ### Pose log rendering
@@ -221,9 +222,11 @@ this persona's unlinked actions since their last POSE in this scene (see §3).
 
 Top to bottom, all sections collapsible (▾ header control):
 
-The rail is a three-way tab strip: **Your Turn** (the sections below), **Map**
-(`CombatTacticalMap`), and, for a scene GM only, **GM** (`CombatGMTab`: encounter
-controls plus the Condition / Dramatic Beat / Traps tools, #3557).
+The rail is a tab strip: **Your Turn** (the sections below) and, for a scene GM only, **GM**
+(`CombatGMTab`: encounter controls plus the Condition / Dramatic Beat / Traps tools, #3557).
+The map is not a rail tab since #4670: `CombatMainMap` (`CombatTacticalMap`) sits above the
+pose log in the wide column and shares cast-position picking with the rail through
+`CombatPickProvider` / `useCombatPick` (`frontend/src/combat/`).
 
 ### ⚡ Your Turn (Decisions) — highlighted, prominent
 

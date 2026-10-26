@@ -89,6 +89,7 @@ from actions.types import (
     TargetSpec,
     TargetType,
 )
+from world.areas.positioning.constants import CreatureTraversal
 from world.magic.models import CharacterTechnique
 from world.mechanics.services import get_available_actions
 
@@ -97,7 +98,9 @@ if TYPE_CHECKING:
 
     from actions.base import Action
     from actions.models import ActionTemplate
+    from world.areas.positioning.models import Position
     from world.character_sheets.models import CharacterSheet
+    from world.combat.types import PassOption
     from world.consent.models import SocialConsentCategory
     from world.magic.models import CharacterAnima
     from world.mechanics.types import AvailableAction
@@ -214,6 +217,12 @@ def _dispatch_registry(
         merged_kwargs["position_id"] = ref.position_id
     if ref.blueprint_id is not None:
         merged_kwargs["blueprint_id"] = ref.blueprint_id
+    if ref.feature_id is not None:
+        merged_kwargs["feature_id"] = ref.feature_id
+    # A ref's approach_id overrides kwargs["approach_id"]; only stunt refs set it
+    # (pass refs carry the approach in kwargs).
+    if ref.approach_id is not None:
+        merged_kwargs["approach_id"] = ref.approach_id
     result = action_obj.run(actor=character, **merged_kwargs)
     _drive_scene_round_for_turn_cost(action_obj, ctx)
     return DispatchResult(backend=ActionBackend.REGISTRY, deferred=False, detail=result)
@@ -522,6 +531,7 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_set_the_stage_actions(character))
     actions.extend(_gm_place_in_position_actions(character))
     actions.extend(_battle_staging_actions(character))
+    actions.extend(_gm_attach_feature_actions(character))
     # Registry backend: all remaining registry actions excluded (no ActionTemplate /
     # check_type) — see module docstring.  When a registry action gains ActionTemplate
     # backing, or needs web-panel visibility without one, add it to an adapter above
@@ -1108,6 +1118,37 @@ def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
 
 def _hops_left_note(character: ObjectDB) -> str:
     """ "2 hops left this round." for a character in a declaring encounter, else ""."""
+    left = _declaring_hops_left(character)
+    if left is None:
+        return ""
+    return f"{left} hop left this round." if left == 1 else f"{left} hops left this round."
+
+
+_CROSSING_VERB = {CreatureTraversal.CLIMBS: "Climb over", CreatureTraversal.LEAPS: "Leap over"}
+
+
+_HELD_BY_NOTE = "Held by {name}: you'd stop there."
+
+
+def _held_place_holders(character: ObjectDB) -> dict[int, str]:
+    """Who holds each place held against ``character``, by position pk (#4663)."""
+    from world.combat.services.held_ground import held_place_holders  # noqa: PLC0415
+
+    return held_place_holders(character)
+
+
+def _move_description(neighbor: Position, move_note: str, holders: dict[int, str]) -> str:
+    """A move entry's note: who holds the place, else the hops left, else nothing.
+
+    The place's own prose is not repeated on the button; the map already shows it.
+    """
+    if neighbor.pk in holders:
+        return _HELD_BY_NOTE.format(name=holders[neighbor.pk])
+    return move_note
+
+
+def _declaring_hops_left(character: ObjectDB) -> int | None:
+    """Hops left this round in a declaring encounter, or None outside one."""
     from world.combat.services.movement_budget import (  # noqa: PLC0415
         active_combat_participant,
         hops_left,
@@ -1116,9 +1157,134 @@ def _hops_left_note(character: ObjectDB) -> str:
 
     participant = active_combat_participant(character)
     if participant is None or participant.encounter.status != RoundStatus.DECLARING:
-        return ""
-    left = hops_left(participant)
-    return f"{left} hop left this round." if left == 1 else f"{left} hops left this round."
+        return None
+    return hops_left(participant)
+
+
+def _flight_entry(
+    key: str, label: str, move_met: bool, move_reason: str, move_note: str
+) -> PlayerAction:
+    """A take-off or landing entry for the move list (#4663)."""
+    return PlayerAction(
+        backend=ActionBackend.REGISTRY,
+        display_name=label,
+        ref=ActionRef(backend=ActionBackend.REGISTRY, registry_key=key),
+        description=move_note,
+        action_category=ActionCategory.PHYSICAL,
+        prerequisite_met=move_met,
+        prerequisite_reasons=[] if move_met else [move_reason],
+    )
+
+
+def _crossing_entry(  # noqa: PLR0913 - the list's shared refusal state rides along
+    neighbor: Position,
+    cost: int,
+    traversal: str,
+    hops: int | None,
+    move_met: bool,
+    move_reason: str,
+    move_note: str,
+    holders: dict[int, str],
+) -> PlayerAction:
+    """A climber's or leaper's way over a wall with a way past it (#4663).
+
+    Its note is a step's (``_move_description``): who holds the place, else the hops left.
+    """
+    verb = _CROSSING_VERB.get(traversal, "Cross")
+    met, reasons = move_met, [] if move_met else [move_reason]
+    if met and hops is not None and cost > hops:
+        met, reasons = False, [f"That crossing takes {cost} hops; you have {hops} left."]
+    return PlayerAction(
+        backend=ActionBackend.REGISTRY,
+        display_name=f"{verb} to {neighbor.name} ({cost} hops)",
+        ref=ActionRef(
+            backend=ActionBackend.REGISTRY,
+            registry_key="move_to_position",
+            position_id=neighbor.pk,
+        ),
+        description=_move_description(neighbor, move_note, holders),
+        action_category=ActionCategory.PHYSICAL,
+        prerequisite_met=met,
+        prerequisite_reasons=reasons,
+    )
+
+
+def _pass_ways(character: ObjectDB) -> list[PassOption]:
+    """Her ways past held ground (``held_ground_pass.pass_choices``, #4663)."""
+    from world.combat.services.held_ground_pass import pass_choices  # noqa: PLC0415
+
+    return pass_choices(character)
+
+
+def _pass_entry(  # noqa: PLR0913 - the list's shared refusal state rides along
+    neighbor: Position,
+    holders: dict[int, str],
+    options: list[PassOption],
+    cost: int,
+    hops: int | None,
+    move_met: bool,
+    move_reason: str,
+) -> list[PlayerAction]:
+    """Offer "Get past <holder> into <place>" when ``neighbor`` is held and she has a way.
+
+    ``options`` is her ``held_ground_pass.pass_choices``, read once per list (#4663):
+    empty unless a pass challenge is designated and one of its approaches matches a
+    capability she holds. The description names the approach she would roll.
+    """
+    if neighbor.pk not in holders or not options:
+        return []
+    met, reasons = move_met, [] if move_met else [move_reason]
+    if met and hops is not None and cost > hops:
+        met, reasons = False, [f"That crossing takes {cost} hops; you have {hops} left."]
+    entry = PlayerAction(
+        backend=ActionBackend.REGISTRY,
+        display_name=f"Get past {holders[neighbor.pk]} into {neighbor.name}",
+        ref=ActionRef(
+            backend=ActionBackend.REGISTRY,
+            registry_key="pass_held_ground",
+            position_id=neighbor.pk,
+        ),
+        description=options[0].approach.display_name,
+        action_category=ActionCategory.PHYSICAL,
+        prerequisite_met=met,
+        prerequisite_reasons=reasons,
+    )
+    return [entry]
+
+
+def _stunt_entries(character: ObjectDB, move_met: bool, move_reason: str) -> list[PlayerAction]:
+    """One "<Feature> to <Place>" entry per stunt she could make from her place (#4675).
+
+    Read from ``stunts.stunt_options``: nothing when no feature in her place pairs with a
+    capability she holds. The note names the capability she qualifies with and the difficulty.
+    A stunt costs one hop, so it carries the step's refusal (``move_met``/``move_reason``).
+    """
+    from world.areas.positioning.stunts import stunt_options  # noqa: PLC0415
+    from world.mechanics.constants import DifficultyIndicator  # noqa: PLC0415
+
+    entries = []
+    for option in stunt_options(character):
+        approach = option.approach
+        capability_name = approach.application.capability.name
+        difficulty = DifficultyIndicator(option.difficulty).label
+        entries.append(
+            PlayerAction(
+                backend=ActionBackend.REGISTRY,
+                display_name=f"{option.feature.feature_type.name} to {option.destination.name}",
+                ref=ActionRef(
+                    backend=ActionBackend.REGISTRY,
+                    registry_key="perform_stunt",
+                    position_id=option.destination.pk,
+                    feature_id=option.feature.pk,
+                    approach_id=approach.pk,
+                ),
+                description=f"{capability_name} · {difficulty}",
+                action_category=ActionCategory.PHYSICAL,
+                prerequisite_met=move_met,
+                prerequisite_reasons=[] if move_met else [move_reason],
+            )
+        )
+    return entries
 
 
 def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
@@ -1144,6 +1310,10 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
         is_aerial,
         position_of,
         roof_between,
+    )
+    from world.areas.positioning.traversal import (  # noqa: PLC0415
+        cheapest_crossing,
+        traversals_of,
     )
 
     current = position_of(character)
@@ -1171,6 +1341,13 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     # a refusal shows on every move, and a live declaring round shows the hops left.
     move_met, move_reason = CombatMovementPrerequisite().is_met(character)
     move_note = _hops_left_note(character) if move_met else ""
+    # A place a ready enemy holds ends her movement on entry (#4663); only a declaring
+    # round with hops left has a note, and only then does held ground matter.
+    holders = _held_place_holders(character) if move_note else {}
+    # Her ways past held ground, read once for every held neighbour (#4663).
+    pass_ways = _pass_ways(character) if holders else []
+
+    hops = _declaring_hops_left(character)
 
     # Only an airborne mover steps onto an AERIAL position; nobody else is offered one.
     airborne = is_aerial(character)
@@ -1192,16 +1369,28 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
                 backend=ActionBackend.REGISTRY,
                 display_name=f"Move to {neighbor.name}",
                 ref=ref,
-                description=move_note if move_note else neighbor.description,
+                description=_move_description(neighbor, move_note, holders),
                 action_category=ActionCategory.PHYSICAL,
                 prerequisite_met=move_met,
                 prerequisite_reasons=[] if move_met else [move_reason],
             )
         )
+        result.extend(_pass_entry(neighbor, holders, pass_ways, 1, hops, move_met, move_reason))
+
+    # Take off or land (#4663): a character with a flight capability above its baseline
+    # rises into the air above where she stands; an airborne one comes down.
+    # A roof closes the way up or down for everyone (#4608), so neither is offered under one.
+    traversals = traversals_of(character)
+    below = current.elevation_anchor if airborne else None
+    if airborne and not (below is not None and below.is_roofed):
+        result.append(_flight_entry("land", "Land", move_met, move_reason, move_note))
+    elif not airborne and CreatureTraversal.FLIES in traversals and not current.is_roofed:
+        result.append(_flight_entry("take_flight", "Take flight", move_met, move_reason, move_note))
 
     # Surface gated (locked) edges as non-actionable entries so the player
     # can see that a path exists but is currently blocked by a challenge. A
     # sealed wall with a challenge lists too (#4606): its climb is the way over.
+    # A climber or leaper goes over it instead, for its crossing cost (#4663).
     gated_edges = PositionEdge.objects.filter(
         Q(position_a=current) | Q(position_b=current),
         gating_challenge__isnull=False,
@@ -1209,6 +1398,25 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     ).select_related("position_a", "position_b", "gating_challenge__template")
     for edge in gated_edges:
         neighbor = edge.position_b if edge.position_a_id == current.pk else edge.position_a
+        crossing = cheapest_crossing(edge, traversals)
+        if crossing is not None:
+            cost, traversal = crossing
+            result.append(
+                _crossing_entry(
+                    neighbor,
+                    cost,
+                    traversal,
+                    hops,
+                    move_met,
+                    move_reason,
+                    move_note,
+                    holders,
+                )
+            )
+            result.extend(
+                _pass_entry(neighbor, holders, pass_ways, cost, hops, move_met, move_reason)
+            )
+            continue
         challenge_name = edge.gating_challenge.template.name
         # Point the ref at the gating challenge so the UI can offer the approach.
         ref = ActionRef(
@@ -1227,6 +1435,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
             )
         )
 
+    result.extend(_stunt_entries(character, move_met, move_reason))
     return result
 
 
@@ -1328,6 +1537,34 @@ def _gm_place_in_position_actions(character: ObjectDB) -> list[PlayerAction]:
             action_category=ActionCategory.PHYSICAL,
         )
         for position in Position.objects.filter(room=character.location)
+    ]
+
+
+def _gm_attach_feature_actions(character: ObjectDB) -> list[PlayerAction]:
+    """One ``gm_attach_feature`` entry for a GM in a staged room (#4675).
+
+    Gated as ``_gm_place_in_position_actions`` is (``_actor_may_gm_place``, which
+    ``GMAttachFeatureAction.execute()`` re-checks). One entry, not one per place: the
+    available-actions list is paged, and per-place entries would push other GM tools off
+    its first page. The GM control picks the place, the feature type and an optional
+    square, and sends them as kwargs.
+    """
+    from actions.definitions.positioning import _actor_may_gm_place  # noqa: PLC0415
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+
+    room = character.location
+    if room is None or not _actor_may_gm_place(character):
+        return []
+    if not Position.objects.filter(room=room).exists():
+        return []
+    return [
+        PlayerAction(
+            backend=ActionBackend.REGISTRY,
+            display_name="Add feature",
+            ref=ActionRef(backend=ActionBackend.REGISTRY, registry_key="gm_attach_feature"),
+            description="",
+            action_category=ActionCategory.PHYSICAL,
+        )
     ]
 
 

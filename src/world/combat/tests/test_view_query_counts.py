@@ -141,11 +141,16 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         #  10. Turn-order conditions for ``resolution_order`` (#4572) - one flat
         #      query over every combatant's active turn-order conditions.
         #  11. CombatMark lookup for marks (#4603) - one flat query for this round's marks.
+        #  12. Holder names for ``held_positions`` (#4670) - one flat query naming the
+        #      ready enemies who hold a place, per encounter, not per place.
         # The participants/opponents prefetches do not fire on the warm
         # call — they ran during warm-up and the identity-mapped encounter
         # retains the attribute. The specialist-selection, sustained-action,
         # and protection-commitment surfaces add three bounded queries.
-        with self.assertNumQueries(14):
+        # The viewer's own dodge plan (#4676) adds one: her Phase Step ward (the
+        # capabilities that dodge come from the warmed cached_all()). Only her own row
+        # computes it, so it does not scale with the participant count.
+        with self.assertNumQueries(16):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

@@ -19,7 +19,12 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
 from world.conditions.types import AdvancementOutcome
-from world.magic.factories import AffinityFactory, ResonanceFactory, TechniqueFactory
+from world.magic.factories import (
+    AffinityFactory,
+    ResonanceFactory,
+    TechniqueFactory,
+    ensure_canonical_affinities,
+)
 from world.magic.models.corruption_config import CorruptionConfig
 from world.magic.services.corruption import accrue_corruption_for_cast
 from world.magic.types.corruption import (
@@ -90,7 +95,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_celestial_resonance_zero_tick(self) -> None:
         """Celestial resonance skipped entirely — no accrue_corruption call, empty per_resonance."""
-        celestial_affinity = AffinityFactory(name="Celestial")
+        celestial_affinity = ensure_canonical_affinities()[0]
         celestial_resonance = ResonanceFactory(name="Celestial Test", affinity=celestial_affinity)
         technique = TechniqueFactory(level=1)  # tier 1
         result_obj = _make_result(
@@ -117,7 +122,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_abyssal_tier_1_technique_stat_bonus_2_yields_2_ticks(self) -> None:
         """Abyssal, tier 1, stat_bonus=2, no flags → tick = ceil(2 × 1.0 × 1.0 × 1.0) = 2."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal Test", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -147,7 +152,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_audere_multiplier_applied(self) -> None:
         """was_audere=True → 1.5× multiplier; ceil(2 × 1.0 × 1.0 × 1.5) = 3."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal Audere", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -172,7 +177,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_deficit_multiplier_applied(self) -> None:
         """was_deficit=True → 2× multiplier; ceil(2 × 1.0 × 1.0 × 2.0) = 4."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal Deficit", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -197,7 +202,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_mishap_multiplier_applied(self) -> None:
         """was_mishap=True → 1.5× multiplier; ceil(2 × 1.0 × 1.0 × 1.5) = 3."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal Mishap", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -222,7 +227,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_combined_multipliers_compound(self) -> None:
         """All three flags True → multiplier = 2.0 × 1.5 × 1.5 = 4.5; tick = ceil(2 × 4.5) = 9."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal All Flags", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -253,7 +258,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_thread_pull_resonance_spent_adds_to_involvement(self) -> None:
         """stat_bonus=2, thread_pull=3 → involvement=5; tick = ceil(5 × 1.0 × 1.0 × 1.0) = 5."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal Thread", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -286,8 +291,8 @@ class TestAccrueCorruptionForCast(TestCase):
         Primal involvement=10: base = 10 × 0.2 × 1.0 = 2.0 → ceil(2.0) = 2
         Abyssal involvement=10: base = 10 × 1.0 × 1.0 = 10.0 → ceil(10.0) = 10
         """
-        primal_affinity = AffinityFactory(name="Primal")
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        primal_affinity = ensure_canonical_affinities()[1]
+        abyssal_affinity = ensure_canonical_affinities()[2]
         primal_resonance = ResonanceFactory(name="Primal Multi", affinity=primal_affinity)
         abyssal_resonance = ResonanceFactory(name="Abyssal Multi", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
@@ -327,7 +332,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_zero_involvement_skips_call(self) -> None:
         """involvement = 0 → no accrue_corruption call."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal Zero", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -357,7 +362,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
         base = 2 × (10/10) × (40/10) = 2 × 1.0 × 4.0 = 8.0 → tick = ceil(8.0) = 8.
         """
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal Tier3", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=11)  # level 11 → tier 3
 
@@ -385,7 +390,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_returns_corruption_accrual_summary(self) -> None:
         """Return value is a CorruptionAccrualSummary with correct fields populated."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal Summary", affinity=abyssal_affinity)
         sheet = CharacterSheetFactory()
         technique = TechniqueFactory(level=1)
@@ -412,7 +417,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_per_resonance_tuple_contains_accrual_results(self) -> None:
         """Each per_resonance entry is the CorruptionAccrualResult returned by accrue_corruption."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal Result", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -461,7 +466,7 @@ class TestAccrueCorruptionForCast(TestCase):
         """
         from world.magic.models.aura import CharacterResonance
 
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal NoTemplate", affinity=abyssal_affinity)
         sheet = CharacterSheetFactory()
         technique = TechniqueFactory(level=1)
@@ -493,10 +498,10 @@ class TestAccrueCorruptionForCast(TestCase):
     # Explicit config override
     # ------------------------------------------------------------------
 
-    def test_explicit_config_override_zeros_all_ticks(self) -> None:
-        """Config with all affinity coefs=0 produces zero ticks and empty per_resonance tuple."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
-        resonance = ResonanceFactory(name="Abyssal Zeroed", affinity=abyssal_affinity)
+    def test_affinity_with_zero_coefficient_produces_no_ticks(self) -> None:
+        """An affinity authored with corruption_coefficient 0 yields no ticks."""
+        zeroed_affinity = AffinityFactory(corruption_coefficient=0)
+        resonance = ResonanceFactory(name="Zero Coefficient", affinity=zeroed_affinity)
         technique = TechniqueFactory(level=1)
 
         result_obj = _make_result(
@@ -510,11 +515,7 @@ class TestAccrueCorruptionForCast(TestCase):
             ],
         )
 
-        # All affinity coefficients zeroed out — unsaved, used as config override
         zero_config = CorruptionConfig(
-            celestial_coefficient=0,
-            primal_coefficient=0,
-            abyssal_coefficient=0,
             tier_1_coefficient=10,
             tier_2_coefficient=20,
             tier_3_coefficient=40,
@@ -540,7 +541,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_primal_coefficient_applied(self) -> None:
         """Primal coef=2, tier 1, involvement=10 → base = 10 × 0.2 × 1.0 = 2.0 → tick=2."""
-        primal_affinity = AffinityFactory(name="Primal")
+        primal_affinity = ensure_canonical_affinities()[1]
         resonance = ResonanceFactory(name="Primal Coef", affinity=primal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -564,7 +565,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_primal_low_involvement_rounds_up_to_one(self) -> None:
         """Primal coef=2, tier 1, involvement=1 → base = 1 × 0.2 × 1.0 = 0.2 → ceil(0.2) = 1."""
-        primal_affinity = AffinityFactory(name="Primal")
+        primal_affinity = ensure_canonical_affinities()[1]
         resonance = ResonanceFactory(name="Primal Ceil", affinity=primal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -592,7 +593,7 @@ class TestAccrueCorruptionForCast(TestCase):
 
     def test_accrue_corruption_receives_technique_use_kwarg(self) -> None:
         """accrue_corruption is called with technique_use=technique_use_result for audit trail."""
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonance = ResonanceFactory(name="Abyssal AuditArg", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
 

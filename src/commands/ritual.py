@@ -9,7 +9,7 @@ Single-actor path (SERVICE/CEREMONY kind):
     ``ritual anima``                        — perform your personal anima ritual in the
         scene you stand in (also ``ritual <its name>``); once per scene (#4451)
     ``ritual <name> key=value [key=value]``  — with ritual parameters (numeric only,
-        e.g. ``thread=<id>``/``tradition_id=<id>``)
+        e.g. ``thread=<id>``/``tradition_id=<id>``/``target_affinity=<id>``)
     ``ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>``
         — amplify a witnessed deed; free-text grammar special-cased for the Rite
         of Honors (#3466); see ``_resolve_honors_args`` below for why this one
@@ -528,6 +528,18 @@ class CmdRitual(ArxCommand):
                 msg = f"No active tradition with id {tradition_id}."
                 raise CommandError(msg)
             service_kwargs["tradition"] = tradition
+
+        affinity_id = raw_kwargs.pop("target_affinity", None)
+        if affinity_id is not None:
+            from world.magic.exceptions import UnknownAffinity  # noqa: PLC0415
+            from world.magic.services.fall_redemption import (  # noqa: PLC0415
+                resolve_target_affinity,
+            )
+
+            try:
+                service_kwargs["target_affinity"] = resolve_target_affinity(affinity_id)
+            except UnknownAffinity as err:
+                raise CommandError(err.user_message) from err
 
         service_kwargs.update(raw_kwargs)
 

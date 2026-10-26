@@ -61,7 +61,7 @@ The magic system for Arx II. Power flows from identity and connection.
 - `Resonance` - Magical identity tags with FK to Affinity, optional opposite (self OneToOne), optional OneToOne to ModifierTarget
 
 ### Character State
-- `CharacterAura` - Tracks a character's affinity percentages (celestial/primal/abyssal)
+- `CharacterAura` - A character's aura; the affinity percentages are `CharacterAuraShare` rows (one per affinity, read through `cached_shares` / `percent_for(affinity)` / `dominant_affinity`)
 - `CharacterResonance` - Per-character per-resonance row. Identity anchor AND
   spendable currency bucket. Fields: `character_sheet` FK, `resonance` FK,
   `balance` (spendable), `lifetime_earned` (monotonic audit), `claimed_at`,
@@ -582,7 +582,7 @@ possible; higher crossings produce no beat.
 (nullable; blank = not offered in creation) is a separate authored decision from
 `min_crossing_level`: a flourish is only offered as a CG pick when staff set its creation
 cost, and creation weaves the TECHNIQUE thread no higher than
-`CREATION_PERSONALIZATION_MAX_LEVEL` (2) via `weave_creation_technique_thread`
+`CREATION_PERSONALIZATION_MAX_LEVEL` (1, a new character's level, #4585) via `weave_creation_technique_thread`
 (`services/threads.py`), so a creation pick never skips the first crossing. A flourish with
 no `creation_point_cost` is still reachable later in play, once a thread reaches its
 `min_crossing_level` the ordinary way.
@@ -813,7 +813,8 @@ admin all converge on the same service layer.
   `ThreadWeavingUnlock` — the anchor cap (`sanctum.feature_instance.level × 10`)
   is the only gate at imbue time.
 - `ThreadCrossingThreshold` - Authored gate at thread-level PathStage crossing
-  levels (3, 6, 11, 16, 21). Keyed on `(target_kind, level)` so a level-3 GIFT
+  levels (3, 6, 11, 16, 21), on the SHOWN thread scale (stored 30 = shown 3, #4585).
+  Keyed on `(target_kind, level)` so a level-3 GIFT
   crossing can require different things than a level-3 COVENANT_ROLE crossing.
   Requirements attach via the polymorphic `thread_crossing_threshold` FK on
   `AbstractUnlockRequirement` (the generalized base formerly
@@ -823,7 +824,18 @@ admin all converge on the same service layer.
   before advancing to a crossing level; if requirements are unmet, it sets
   `blocked_by="CROSSING_REQUIREMENT"` and stops. `is_crossing_level(level)`
   in `world/classes/services.py` is the single source of truth for crossing
-  detection.
+  detection, applied to `shown_thread_level(next_level)` only when `next_level % 10 == 0`.
+- **Thread caps (#4585).** `compute_level_cap(sheet)` = character level ×
+  `PATH_LEVEL_CAP_MULTIPLIER` (10; never 0, since `get_character_path_level` returns at
+  least 1). `compute_effective_cap` = min(level cap, anchor cap) is the ONLY place the
+  level cap applies; anchor caps hold only what the anchor imposes (ORGANIZATION = the
+  org grant cap, GIFT = the level cap, FACET = `lifetime // ANCHOR_CAP_FACET_DIVISOR`).
+  No cap reads Path stage. Blocked reason `LEVEL_CAP`; serializer field `level_cap`.
+- **Shown thread level (#4585).** Stored levels are ×10; every authored thread threshold
+  (crossings, `unlock_thread_level` on variants/sub-roles/`CovenantRoleGiftGrant`/
+  `VowAddedEffect`, `min_crossing_level`, `ThreadPullEffect.min_thread_level`,
+  `CREATION_PERSONALIZATION_MAX_LEVEL`) is a shown level. Compare through
+  `shown_thread_level(level)` (`services/threads.py`), never the raw `thread.level`.
 - `ImbuingProseTemplate` - Fallback prose for the Imbuing ritual keyed on
   `(resonance, target_kind)`. The row with both NULL is the universal fallback.
 - `Ritual` - Authored magical procedure. Dispatch kinds: `SERVICE` →
@@ -1042,8 +1054,8 @@ also standalone-callable. (`world/covenants/discovery.py` re-exports it as
 - `Gift.resonances` is repurposed to the **supported set** (weave constraint, not the
   cast-time value) per ADR-0052.
 
-**GIFT anchor cap (#1580):** `compute_anchor_cap` now handles `TargetKind.GIFT`:
-`_current_path_stage(thread.owner) × ANCHOR_CAP_GIFT_PER_STAGE` (=10). GIFT threads are
+**GIFT anchor cap (#1580, #4585):** `compute_anchor_cap` handles `TargetKind.GIFT` by
+returning `compute_level_cap(thread.owner)` (character level × 10). GIFT threads are
 always in-action (`_ALWAYS_IN_ACTION_KINDS`; a species gift is intrinsic). The frontend CG
 resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
 `selected_gift_resonance_id`). Proven end-to-end by
@@ -1077,6 +1089,18 @@ resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
   The same authored Gift grants a different set per path (a warrior-line and a spy-line path
   both grant Pyromancy, but different techniques from it). `clean()` rejects a starter
   technique not belonging to the grant's gift; unique per `(path, gift)`.
+- **Tradition teaching fit (slice 2 of #4659, ADR-4659-B).** A `TraditionGiftGrant` row marks a
+  Gift the Tradition favors; it does not gate the Gift pick (ADR-4659-A). `Tradition.favored_affinities`
+  (M2M `Affinity`) marks the affinities it favors. `teaching_fit(tradition, gift, affinity)` in
+  `services/teaching_fit.py` is the one resolver: affinity fit is that `Affinity` row being in
+  `favored_affinities` (by pk, through foreign keys only); the numbers live in the
+  `TraditionTeachingConfig` singleton (`get_teaching_config()`). Character creation
+  (`CharacterDraft.magic_training_pool`) passes the picked Gift resonance's `affinity`; the Academy
+  goes through `student_fit(tradition, student_traits(sheet))` (`npc_services.effects._course_ease`,
+  `services._teaching_lines`), where `student_traits` reads the Major Gift (`major_gift_for`) and the
+  affinity of the resonance on the student's active GIFT thread for it (`gift_affinity_for`, via
+  `specialization.services.gift_threads_for`; None without one). Fit by the character's aura is
+  deferred to #4672. Fit is a bonus or an ease, never a gate.
 - `grant_path_magic(sheet, path)` (`services/path_magic.py`, returns `PathMagicGrantResult`)
   mints, idempotently, `CharacterGift` + the latent GIFT thread (reusing
   `provision_latent_gift_thread`) + `CharacterTechnique` rows for the path's `PathGiftGrant`
@@ -1921,12 +1945,17 @@ becomes available when the target affinity crosses
 
 **Models (`models/fall_redemption.py`):**
 - `CompromiseActType` — authored act category → (target_resonance, amount,
-  is_cruelty). Staff author act types; mission/combat/social systems
-  reference them.
+  is_cruelty, feeding_taint_role). `is_cruelty` is staff-authored and
+  separates acts that share an affinity (the affinity cannot). Staff author
+  act types; mission/combat/social systems reference them.
 - `ResonanceConversion` — authored mapping (source_resonance,
-  target_affinity) → target_resonance. One row per path.
+  target_affinity FK to `Affinity`) → target_resonance. One row per path.
 - `FallRedemptionConfig` — singleton (pk=1, `ArxSharedMemoryManager`) with
-  conversion multipliers per path + penance exchange rate + fall threshold.
+  the penance exchange rate + fall threshold. The per-path multipliers and
+  Fall/Redemption type are `AffinityInteraction.conversion_multiplier` /
+  `conversion_type` on the directed (source, environment) pair; a database
+  check keeps the two both set or both unset. `from_affinity`/`to_affinity`
+  on `FallRedemptionRecord` are `Affinity` FKs.
 - `FallRedemptionRecord` — immutable audit of a full (irreversible) Fall
   or Redemption. `ConversionType` TextChoices: FALL / REDEMPTION.
 

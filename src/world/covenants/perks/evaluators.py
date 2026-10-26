@@ -813,7 +813,7 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
     """True when ``ctx.attacker`` is typed to ``params.affinity``, the required
     authored axis (#2536 slice 3 Task 6; renamed + parameterized #2623 spec §2 —
     required ``affinity``, optional ``threshold_percent``, ``SITUATION_PARAM_SPECS``).
-    ``affinity`` is REQUIRED — ``NO_PARAMS`` (blank ``affinity``) never holds,
+    ``affinity`` is REQUIRED — ``NO_PARAMS`` (no ``affinity``) never holds,
     regardless of what data the attacker carries.
 
     ``ctx.attacker`` is populated ONLY on a defense-side resolution (see
@@ -823,7 +823,7 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
     relations:
 
     1. A ``CombatOpponent`` with a non-empty AUTHORED ``affinity``
-       (``world/combat/models.py`` — #2536 slice 3 field, for non-persona/
+       (``world/combat/models.py`` — #2536 slice 3 ``affinity`` FK, for non-persona/
        generic NPCs that carry no ``CharacterAura`` row to infer from) —
        compared directly against ``params.affinity``. Authored typing wins
        outright when present (``threshold_percent`` is IGNORED on this path —
@@ -837,7 +837,7 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
        ``attacker.aura`` for a bare ``ObjectDB`` attacker. With
        ``params.threshold_percent`` set, holds when ``params.affinity``'s own
        axis percentage is >= the threshold; unset, holds when
-       ``dominant_affinity == params.affinity``.
+       ``dominant_affinity`` is ``params.affinity``.
     3. Otherwise False — no attacker, no authored affinity, and no aura data
        reachable (an ephemeral/generic NPC with neither).
 
@@ -851,35 +851,27 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
     At most one query (the ``CharacterAura`` OneToOne fetch, reached only
     when no authored affinity short-circuits path 1 first).
     """
-    if not params.affinity:
+    wanted = params.affinity
+    if wanted is None:
         return False
     attacker = ctx.attacker
     if attacker is None:
         return False
 
-    from world.magic.types.aura import AffinityType  # noqa: PLC0415
-
     try:
-        affinity = attacker.affinity
+        authored_id = attacker.affinity_id
     except AttributeError:
-        affinity = ""
-    if affinity:
-        return affinity == params.affinity
+        authored_id = None
+    if authored_id is not None:
+        return authored_id == wanted.pk
 
     aura = _attacker_aura(attacker)
-    if aura is None:
+    if aura is None or not aura.cached_shares:
         return False
     if params.threshold_percent is not None:
-        axis_value = {
-            AffinityType.CELESTIAL: aura.celestial,
-            AffinityType.PRIMAL: aura.primal,
-            AffinityType.ABYSSAL: aura.abyssal,
-        }.get(params.affinity)
-        # ``.get()`` (not ``[...]``) — a non-choice affinity string bypassing
-        # full_clean (e.g. a row authored directly in the DB) yields None
-        # here rather than a KeyError; never raise, just miss.
-        return axis_value is not None and axis_value >= params.threshold_percent
-    return aura.dominant_affinity == params.affinity
+        # A missing share reads as 0 and so misses; never raises.
+        return aura.percent_for(wanted) >= params.threshold_percent
+    return aura.dominant_affinity.pk == wanted.pk
 
 
 @register(Situation.ENEMY_WINDUP_UNDERWAY)

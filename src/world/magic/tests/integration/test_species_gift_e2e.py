@@ -30,11 +30,11 @@ SQLite vs Postgres split (project policy: verify SQLite locally, let CI gate PG)
   On the SQLite tier it is *collected but skipped* — it imports cleanly so the file
   loads.
 
-The high-thread-level pull-scaling beat sets ``Thread.level`` directly rather than
-imbuing there: levels above 10 are XP-locked and cost 100+ developed-points each
-(``cost = max((level - 9) * 100, 1)``), so the documented #1578 ceremony-direct
-pattern is the only practical way to exercise a multiplier > 1. The sub-10 raise
-that crosses the variant/resistance thresholds DOES go through the real imbue path.
+Thread levels are stored ×10 and thresholds are shown levels (#4585), so crossing the
+shown-3 variant unlock means imbuing to stored 30. That raise goes through the real
+imbue path: ``_imbue_to`` makes the owner level 3 (the GIFT anchor cap is the level
+cap), pre-unlocks the XP boundaries and funds the dp. The pull-scaling beat still sets
+``Thread.level`` directly (the documented #1578 ceremony-direct pattern).
 """
 
 from __future__ import annotations
@@ -57,6 +57,7 @@ from world.magic.factories import (
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
     TraditionFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import Resonance, Technique, Thread
 from world.magic.models.gifts import CharacterGift
@@ -77,10 +78,11 @@ def _non_cancelling(event_name: str, payload: object, **kwargs: object) -> _Fake
     return _FakeStack()
 
 
-# Levels chosen so the cheap (sub-10) imbue path can reach them:
-#   variant unlocks at 3, passive resistance switches on at 5.
+# Shown levels (#4585): the variant unlocks at 3, passive resistance switches on at 1.
+# _IMBUE_TARGET is the stored level the journey imbues to, past both.
 _VARIANT_UNLOCK_LEVEL = 3
-_RESISTANCE_THRESHOLD = 5
+_RESISTANCE_THRESHOLD = 1
+_IMBUE_TARGET = 30
 
 
 class _SpeciesGiftJourneyBase(TestCase):
@@ -149,6 +151,7 @@ class _SpeciesGiftJourneyBase(TestCase):
                 "selected_gift_resonance_id": self.resonance.id,
             },
         )
+        ensure_canonical_affinities()
         finalize_magic_data(draft, sheet)
         return sheet
 
@@ -171,14 +174,28 @@ class _SpeciesGiftJourneyBase(TestCase):
         return thread
 
     def _imbue_to(self, sheet: CharacterSheet, thread: Thread, target_level: int) -> None:
-        """Raise the species thread to ``target_level`` via the REAL imbue path."""
+        """Raise the species thread to stored ``target_level`` via the REAL imbue path.
+
+        The owner's level cap must allow it (the GIFT anchor cap is the level cap,
+        #4585), and every XP boundary on the way is pre-paid so only dp gates it.
+        """
+        from world.classes.factories import CharacterClassFactory
+        from world.classes.services import set_primary_class_level
+        from world.magic.models import ThreadLevelUnlock
+
+        set_primary_class_level(sheet.character, CharacterClassFactory(), -(-target_level // 10))
+        for boundary in range(10, target_level + 1, 10):
+            ThreadLevelUnlock.objects.get_or_create(
+                thread=thread, unlocked_level=boundary, defaults={"xp_spent": 0}
+            )
+        dp = sum(max((level - 9) * 100, 1) for level in range(thread.level, target_level))
         CharacterResonanceFactory(
             character_sheet=sheet,
             resonance=self.resonance,
-            balance=target_level,
-            lifetime_earned=target_level,
+            balance=dp,
+            lifetime_earned=dp,
         )
-        result = spend_resonance_for_imbuing(sheet, thread, amount=target_level)
+        result = spend_resonance_for_imbuing(sheet, thread, amount=dp)
         self.assertEqual(result.new_level, target_level, "imbue should reach the target level")
         sheet.character.threads.invalidate()
 
@@ -250,7 +267,7 @@ class _SpeciesGiftJourneyBase(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=parent_role,
             target_trait=None,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
         character.threads.invalidate()
         self.assertEqual(
@@ -290,7 +307,7 @@ class SpeciesGiftSpineSQLiteTest(_SpeciesGiftJourneyBase):
 
         # Beats 3/5 (spine): raise the thread past the variant unlock via the REAL
         # imbue path; crossing the threshold fires the discovery beat internally.
-        self._imbue_to(sheet, thread, _RESISTANCE_THRESHOLD)
+        self._imbue_to(sheet, thread, _IMBUE_TARGET)
         self._assert_variant_and_discovery(sheet)
 
         # Beat 6: non-regression.
@@ -441,8 +458,8 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
         )
 
         # Beats 3b/5: raise the thread past the resistance threshold via the REAL
-        # imbue path (this crossing also fires the variant discovery at level 3).
-        self._imbue_to(sheet, thread, _RESISTANCE_THRESHOLD)
+        # imbue path (this crossing also fires the variant discovery at shown 3).
+        self._imbue_to(sheet, thread, _IMBUE_TARGET)
         self._assert_variant_and_discovery(sheet)
 
         # Beat 3c: at/above threshold the +3 gift resistance nets the -3 vuln → 10 → 10.
@@ -471,7 +488,7 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
         high = self._commit_pull_at_level(sheet, thread, 30)
         # active_pull_resistance sums BOTH RESISTANCE snapshots a tier-1 pull writes:
         # resolve_pull_effects iterates effect tiers 0..tier, so the always-on tier-0
-        # passive (amount 3, min_thread_level=5) AND the paid tier-1 row (amount 4) are
+        # passive (amount 3, min_thread_level=1, shown) AND the paid tier-1 row (amount 4) are
         # each snapshotted and scaled by level_multiplier = max(1, level // 10). The
         # returned value is therefore (passive + paid) × multiplier, NOT the paid row
         # alone — that is why it is 7, not 4:

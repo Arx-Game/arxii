@@ -76,8 +76,7 @@ class CorruptionConfigTests(TestCase):
 
         config = get_corruption_config()
         self.assertEqual(config.pk, 1)
-        self.assertEqual(config.abyssal_coefficient, 10)
-        self.assertEqual(config.celestial_coefficient, 0)
+        self.assertEqual(config.tier_1_coefficient, 10)
 
     def test_singleton_returns_same_row(self) -> None:
         from world.magic.services.corruption import get_corruption_config

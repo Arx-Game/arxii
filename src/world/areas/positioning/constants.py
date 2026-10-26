@@ -24,6 +24,28 @@ class CreatureTraversal(models.TextChoices):
     FLIES = "flies", "Flies"
 
 
+class ReactionReach(models.TextChoices):
+    """How far a capability lets its holder move when she dodges an attack (#4676).
+
+    NONE gives no dodge. IN_PLACE dodges without moving. ADJACENT may land in a place
+    next to hers, ANY_PLACE anywhere in the room, AIRBORNE next door or in the air
+    above her place.
+    """
+
+    NONE = "none", "No dodge"
+    IN_PLACE = "in_place", "In place"
+    ADJACENT = "adjacent", "An adjacent place"
+    ANY_PLACE = "any_place", "Any place in the room"
+    AIRBORNE = "airborne", "An adjacent place or the air above"
+
+
+class ReactionCostKind(models.TextChoices):
+    """What a dodge with this capability costs: anima, or fatigue for a physical one (#4676)."""
+
+    ANIMA = "anima", "Anima"
+    FATIGUE = "fatigue", "Fatigue"
+
+
 AERIAL_PROPERTY_NAME = "aerial"
 
 
@@ -78,6 +100,33 @@ class RampartSignature(models.TextChoices):
     MISSILE_WARD = "missile_ward", "Missile Ward"
     MELEE_RETALIATION = "melee_retaliation", "Melee Retaliation"
     GRASPING = "grasping", "Grasping"
+
+
+class FeatureReach(models.TextChoices):
+    """Where a feature's stunt can take someone, measured from the feature's own place."""
+
+    ADJACENT = "adjacent", "A place next to its own"
+    ANY_PLACE = "any_place", "Any place in the room"
+    SAME_TYPE = "same_type", "Another place with the same feature"
+    ELEVATED_ADJACENT = "elevated_adjacent", "A raised place next to its own"
+
+
+class StuntOutcome(models.TextChoices):
+    """How a stunt went (#4675): reached cleanly, reached roughly, or missed."""
+
+    CLEAN = "clean", "Clean"
+    PARTIAL = "partial", "Partial"
+    MISSED = "missed", "Missed"
+
+
+# Stunt copy (#4675, slice 3 of #4651). The player's own lines, then the room's.
+STUNT_CANT_FROM_HERE = "You can't do that from here."
+STUNT_CLEAN = "You use the {feature} to reach {place}."
+STUNT_PARTIAL = "You reach {place}, but not cleanly."
+STUNT_MISSED = "You don't make it."
+STUNT_ROOM_CLEAN = "{name} uses the {feature} to reach {place}."
+STUNT_ROOM_PARTIAL = "{name} uses the {feature} to reach {place}, but not cleanly."
+STUNT_ROOM_MISSED = "{name} tries the {feature} and doesn't make it."
 
 
 class RampartCrackState(models.TextChoices):

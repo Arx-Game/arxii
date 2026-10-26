@@ -18,6 +18,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueVariantFactory,
     TraditionFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import CharacterTechnique
 from world.magic.services.creation_personalization import (
@@ -228,6 +229,7 @@ class FinalizeTests(_Catalog, TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_canonical_affinities()
         cls._make_catalog()
 
     def test_finalize_writes_the_hold_thread_and_motif(self) -> None:
@@ -253,7 +255,7 @@ class FinalizeTests(_Catalog, TestCase):
             for t in sheet.character.threads.all()
             if t.target_kind == TargetKind.TECHNIQUE and t.target_technique_id == self.technique.pk
         )
-        self.assertEqual(thread.level, 1)
+        self.assertEqual(thread.level, 10)  # the flourish's shown 1, stored × 10 (#4585)
         self.assertEqual(thread.resonance, self.frost)
         self.assertEqual(thread.signature_bonus, self.flourish)
         self.assertTrue(sheet.motif.resonances.filter(resonance=self.frost).exists())

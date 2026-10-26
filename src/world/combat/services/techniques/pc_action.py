@@ -96,7 +96,6 @@ def _broadcast_fizzle_no_one_in_reach(
         audience=_resolve_combat_cast_audience(participant, action.focused_action),
         unattributed_narration="",
         target_personas=[target_persona] if target_persona is not None else None,
-        deliver_telnet=True,
     )
 
 

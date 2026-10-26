@@ -62,6 +62,7 @@ from world.magic.filters import (
     ThreadWeavingTeachingOfferFilter,
 )
 from world.magic.models import (
+    Affinity,
     CharacterAnima,
     CharacterAura,
     CharacterCrossingText,
@@ -84,6 +85,7 @@ from world.magic.models import (
     TechniqueStyle,
     Thread,
     ThreadWeavingTeachingOffer,
+    aura_shares_prefetch,
 )
 from world.magic.models.dramatic_moment import (
     DramaticMomentTag,
@@ -100,6 +102,7 @@ from world.magic.serializers import (
     AcceptTeachingOfferResponseSerializer,
     AcceptTeachingOfferSerializer,
     AcceptTechniqueOfferRequestSerializer,
+    AffinitySerializer,
     AlterationResolutionResponseSerializer,
     AlterationResolutionSerializer,
     ApplicablePullsRequestSerializer,
@@ -145,6 +148,7 @@ from world.magic.serializers import (
     ReadiedUltimateSerializer,
     RescueOutcomeSerializer,
     ResonanceGrantSerializer,
+    ResonanceSerializer,
     RestrictionSerializer,
     RitualPatchSerializer,
     RitualPerformRequestSerializer,
@@ -195,6 +199,7 @@ _ERR_THREAD_NOT_FOUND = "Thread not found or not owned by the actor."
 _ERR_RESONANCE_NOT_FOUND = "Resonance not found."
 _ERR_IMBUING_REQUIRES_THREAD = "Imbuing ritual requires thread_id in kwargs (int)."
 _ERR_IMBUING_REQUIRES_AMOUNT = "Imbuing ritual requires amount in kwargs (positive int)."
+_KWARG_TARGET_AFFINITY = "target_affinity"
 
 # =============================================================================
 # Lookup Table ViewSets (Read-Only)
@@ -215,6 +220,30 @@ class TechniqueStyleViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TechniqueStyleSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup table
+
+
+class AffinityViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only list of the three Affinities, for pickers (character creation)."""
+
+    queryset = Affinity.objects.order_by("name")
+    serializer_class = AffinitySerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Three rows; a picker needs all of them.
+
+
+class ResonanceViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only list of Resonance rows with their Affinity, for pickers.
+
+    The character-creation Gift stage lists every Resonance and stores the chosen
+    pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+    """
+
+    queryset = Resonance.objects.select_related("affinity").order_by("affinity__name", "name")
+    serializer_class = ResonanceSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["affinity"]
+    pagination_class = None  # A bounded catalog the CG picker shows in full.
 
 
 class EffectTypeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -641,9 +670,11 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         """Filter to characters the current user plays (or all if staff)."""
         user = self.request.user
         if user.is_staff:
-            return CharacterAura.objects.all()
+            return CharacterAura.objects.prefetch_related(aura_shares_prefetch())
         character_ids = RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
-        return CharacterAura.objects.filter(character_id__in=character_ids)
+        return CharacterAura.objects.filter(character_id__in=character_ids).prefetch_related(
+            aura_shares_prefetch()
+        )
 
     @extend_schema(request=GlimpseSetTagsSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-tags")
@@ -1218,6 +1249,20 @@ def _validate_imbuing_amount(kwargs: dict) -> Response | None:
     return None
 
 
+def _model_ref_dict(pairs: list[tuple[str, object]]) -> dict:
+    """``asdict`` dict factory that sends a model instance as its ``{id, name}`` reference.
+
+    A service result may carry the rows it acted on (the Ritual of Falling returns its
+    from/to ``Affinity``); the JSON encoder cannot serialize a model.
+    """
+    from django.db.models import Model  # noqa: PLC0415
+
+    return {
+        key: ({"id": value.pk, "name": str(value)} if isinstance(value, Model) else value)
+        for key, value in pairs
+    }
+
+
 class RitualPerformView(APIView):
     """Dispatch a Ritual via ``PerformRitualAction.run()`` (Spec A §4.5, #1331).
 
@@ -1286,6 +1331,27 @@ class RitualPerformView(APIView):
         kwargs["tradition"] = tradition
         return None
 
+    @staticmethod
+    def _resolve_target_affinity_kwargs(kwargs: dict) -> Response | None:
+        """Resolve the Ritual of Falling's ``target_affinity`` id in place.
+
+        Returns a 400 ``Response`` for an unknown id, else ``None`` (with
+        ``kwargs["target_affinity"]`` an ``Affinity``). Shares its resolver with the
+        telnet ``ritual`` command.
+        """
+        from world.magic.exceptions import UnknownAffinity  # noqa: PLC0415
+        from world.magic.services.fall_redemption import (  # noqa: PLC0415
+            resolve_target_affinity,
+        )
+
+        if _KWARG_TARGET_AFFINITY not in kwargs:
+            return None
+        try:
+            kwargs[_KWARG_TARGET_AFFINITY] = resolve_target_affinity(kwargs[_KWARG_TARGET_AFFINITY])
+        except UnknownAffinity as err:
+            return Response({"detail": err.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return None
+
     def _resolve_primitive_kwargs(
         self, sheet: CharacterSheet, ritual: Ritual, kwargs: dict, *, imbuing: bool
     ) -> Response | None:
@@ -1303,7 +1369,7 @@ class RitualPerformView(APIView):
             name=ritual.name, service_function_path=ritual.service_function_path
         ):
             return self._resolve_ghost_tutor_kwargs(sheet, kwargs)
-        return None
+        return self._resolve_target_affinity_kwargs(kwargs)
 
     def _run_imbue_finisher(self, sheet: CharacterSheet, ritual: Ritual, kwargs: dict) -> Response:
         """Fuse the telnet ``imbue`` finisher onto a web-hosted Rite of Imbuing.
@@ -1391,7 +1457,11 @@ class RitualPerformView(APIView):
             "execution_kind": ritual.execution_kind,
         }
         if ritual.execution_kind == RitualExecutionKind.SERVICE and result is not None:
-            payload["result"] = asdict(result) if dataclasses.is_dataclass(result) else result
+            payload["result"] = (
+                asdict(result, dict_factory=_model_ref_dict)
+                if dataclasses.is_dataclass(result)
+                else result
+            )
         if ritual.execution_kind == RitualExecutionKind.SCENE_ACTION:
             # The personal anima ritual (#4451): tell the performer what the roll did.
             payload["message"] = action_result.message

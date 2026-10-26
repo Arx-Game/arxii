@@ -10,11 +10,55 @@ from django.utils.functional import cached_property
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from core.testing import register_test_cache_flusher
 from world.contributors.models import CreditedContent
+from world.magic.constants import AFFINITY_ABYSSAL, AFFINITY_CELESTIAL, AFFINITY_PRIMAL
+from world.magic.exceptions import AffinityNotConfigured
 
 
 class AffinityManager(NaturalKeyManager):
-    """Manager for Affinity with natural key support."""
+    """Manager for Affinity with natural key support and the three canonical getters.
+
+    The getters share one class-level cache loaded with a single query. Call
+    ``clear_cache()`` in test ``setUp``, as for ``AffinityInteractionManager``.
+    """
+
+    _canonical_cache: dict[str, "Affinity"] | None = None
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Discard the cached canonical rows. Must be called in test setUp."""
+        cls._canonical_cache = None
+
+    def _canonical(self, name: str) -> "Affinity":
+        if AffinityManager._canonical_cache is None:
+            AffinityManager._canonical_cache = {
+                row.name: row
+                for row in self.filter(
+                    name__in=[AFFINITY_CELESTIAL, AFFINITY_PRIMAL, AFFINITY_ABYSSAL]
+                )
+            }
+        row = AffinityManager._canonical_cache.get(name)
+        if row is None:
+            # Do not cache the miss: the row may be authored later.
+            AffinityManager._canonical_cache = None
+            msg = f"No Affinity row named {name!r} is configured."
+            raise AffinityNotConfigured(msg)
+        return row
+
+    def get_celestial_affinity(self) -> "Affinity":
+        return self._canonical(AFFINITY_CELESTIAL)
+
+    def get_primal_affinity(self) -> "Affinity":
+        return self._canonical(AFFINITY_PRIMAL)
+
+    def get_abyssal_affinity(self) -> "Affinity":
+        return self._canonical(AFFINITY_ABYSSAL)
+
+
+# A rolled-back test leaves the canonical rows cached with primary keys the database no
+# longer holds; the test runner drops them after every test, as a restart would.
+register_test_cache_flusher(AffinityManager.clear_cache)
 
 
 class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -33,6 +77,10 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     description = models.TextField(
         blank=True,
         help_text="Description of this affinity.",
+    )
+    corruption_coefficient = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Integer tenths of corruption per cast tick for this affinity's resonances.",
     )
     objects = AffinityManager()
 

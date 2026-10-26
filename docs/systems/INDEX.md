@@ -33,11 +33,21 @@
   only (`MAGIC_SKILL_CHOICES` in `world/magic/skill_choices.py`), no seeder names a skill for
   magic, and the `check-types-weight-no-magic-skill` probe lists check types that weight a
   Magic skill directly. Details: [magic.md](magic.md) "Magical skills".
-- **Tradition training and Academy skill courses (#4457, ADR-4457-A):** a Tradition's schooling
-  stance sets the level every Magic skill starts at. `SchoolingLine.magic_skill_floor` (0 on rank 0,
-  check constraint) is read by `offers.schooling_magic_skill_floor(draft)`, exposed as
-  `CharacterDraft.starting_magic_skill_floor` and `schooling[].magic_skill_floor` on the Tradition
-  list, and written to every `magic_category_skills()` skill at finalize. `SCHOOLING_MAX_RANK_BY_STATE`
+- **Tradition training and Academy skill courses (#4457, ADR-4457-A; pool and fit #4659,
+  ADR-4659-B):** a Tradition's schooling stance gives magical training points to spend on Magic
+  skills at creation (the granted distinction's `magic_training_points` effect, read by
+  `CharacterDraft.magic_training_pool`; the old `SchoolingLine.magic_skill_floor` column was dropped
+  by migration 0298 with no carry, since production held no schooling lines, ADR-0237 "empty in
+  production"). A Tradition's teaching fit
+  (`world/magic/services/teaching_fit.py`: `teaching_fit`, `major_gift_for`, `gift_affinity_for`,
+  `student_traits`, `student_fit` (the Academy's entry), `get_teaching_config`) comes from
+  `TraditionGiftGrant` (favored Gifts) and `Tradition.favored_affinities` (compared with an
+  `Affinity` row by foreign key: the picked Gift resonance's in character creation, the resonance on
+  the student's Major Gift thread in the Academy), tuned by the `TraditionTeachingConfig`
+  singleton. Fit adds a flat bonus to the pool only when the draft has some training, and eases
+  Academy course checks; it never gates. The Gift stage validates `draft_data["magic_skills"]`
+  against the pool and finalize writes it. Aura-based fit and starting aura are #4672.
+  `SCHOOLING_MAX_RANK_BY_STATE`
   (`character_creation/constants.py`) sets which states open which stances: LIVING_MASTERS up to
   rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. CG skill points never buy a Magic skill or
   one of its specializations. A character catches up by use, weekly training, or an Academy
@@ -45,7 +55,7 @@
   the handler `run_skill_course_offer` (enroll once for coin and a Golden Hare, then rolled
   sessions at AP each, one per course per game week, development scaled by `TrainingOutcomeAward`,
   every refusal charging nothing). Trainer-menu price line: `OfferPrice`, `format_offer_price`,
-  `InteractionOfferSerializer.price`. `train_skill` and `points_to_next_boundary` in
+  `InteractionOfferSerializer.price` (a course under a Tradition adds `teaching_line` and `fit_line`; `_course_ease` in `npc_services/effects.py` lowers the check difficulty). `train_skill` and `points_to_next_boundary` in
   `world.skills.services`. `AcademyOfferApCostError` replaced `TrainOfferMisconfiguredError`;
   `_academy_for` is shared by TRAIN, the course and settle-obligation. Three Required content
   TUNING rows. Details: [magic.md](magic.md) "Tradition training and Academy skill courses".
@@ -444,11 +454,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - ThreadWeaving acquisition: `compute_thread_weaving_xp_cost(character_sheet, unlock) -> int`,
     `accept_thread_weaving_unlock(character_sheet, unlock, teacher=None)`
   - Cap helpers: `compute_anchor_cap(thread) -> int` (FACET uses
-    `lifetime_earned // DIVISOR` capped at `path_stage × HARD_MAX_PER_STAGE`;
-    COVENANT_ROLE uses `current_level × 10`; SANCTUM uses
-    `sanctum.feature_instance.level × 10`; GIFT: `path_stage × ANCHOR_CAP_GIFT_PER_STAGE`
-    (=10) — built #1580),
-    `compute_path_cap(character_sheet) -> int`, `compute_effective_cap(thread) -> int`
+    `lifetime_earned // DIVISOR`; COVENANT_ROLE uses `current_level × 10`; SANCTUM uses
+    `sanctum.feature_instance.level × 10`; GIFT: the owner's level cap; ORGANIZATION: the
+    org's granted cap), `compute_level_cap(character_sheet) -> int` (character level ×
+    10, #4585), `compute_effective_cap(thread) -> int` (min of the two),
+    `shown_thread_level(level) -> int` (`level // 10`; every thread threshold compares
+    against it, #4585)
   - Specialization engine (ADR-0055 — #1578, `world/magic/specialization/services.py`):
     `resolve_specialized_variant(*, entity, character)` (the one resolver — Technique →
     `_ResolvedTechnique` value object with variant deltas; CovenantRole → cached-handler
@@ -471,8 +482,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     Proven by `test_path_crossing_grant_e2e.py` + `test_advancement.py::DuranceSemiCrossingTests`.
   - **CG catalog magic — Path → Tradition → Gift → Technique (#2426, ADR-0136):**
     `TraditionGiftGrant` (`world/magic/models/grants.py`, per `(tradition, gift)`
-    grant with a `signature_techniques` M2M — a tradition's CG gift list; the
-    self-taught `Unbound` tradition carries the common starter set, no extras).
+    grant with a `special_techniques` M2M — a Gift the tradition favors; since #4659 it no
+    longer gates the CG Gift pick, any tradition may teach any Major Gift).
     `PathGiftGrant.starter_techniques` is now read as CG pick *availability*
     (the techniques for that Path and Gift; a `TraditionGiftGrant` listing restricts a
     technique to the listing traditions, #4555, ADR-4555-A), not an automatic grant — `grant_path_magic`
@@ -508,7 +519,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     without the price. Picks live on `CharacterTechnique` (the hold), never the catalog, and are written at
     finalize by `apply_creation_personalizations`
     (`world/magic/services/creation_personalization.py`); the flourish pick also weaves a
-    TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (2) via
+    TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (1, a new character's level, #4585) via
     `weave_creation_technique_thread`, so creation never skips a crossing. The old hard
     level-3 floor on signing is gone; `SignatureMotifBonus.min_crossing_level` is the only
     gate, so flourishes keep unlocking in play as the thread is imbued. Endpoint: `GET
@@ -667,10 +678,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     — validates resonance claim + per-scene cap; atomically creates tag, calls
     `grant_resonance(source=DRAMATIC_MOMENT)`, and calls `fire_renown_award` for the
     primary persona (skipped if none)
-- **Key Methods:** `CharacterAura.dominant_affinity`,
+- **Key Methods:** `CharacterAura.dominant_affinity` / `percent_for(affinity)` (shares are `CharacterAuraShare` rows), `Affinity.objects.get_celestial_affinity()` and siblings,
   `Thread.target` (populated FK), `Thread.display_name`,
   `ThreadWeavingUnlock.display_name`
-- **Enums:** `AffinityType`, `TargetKind` (Thread discriminator — values: TRAIT,
+- **Enums:** `TargetKind` (Thread discriminator — values: TRAIT,
   TECHNIQUE, FACET, RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE, COVENANT_ROLE,
   MANTLE, SANCTUM; bare ROOM removed), `EffectKind` (ThreadPullEffect — includes
   `RESISTANCE`: species-gift drawback mitigation, #1580; `resistance_amount` +
@@ -985,7 +996,7 @@ allocations that convert AP to development points.
   casts (`Path.technique_skill`, `Gift.technique_skill`, `Technique.skill`), so a trained
   skill adds points to those rolls and develops from them. The Anima Check pick in character
   creation excludes MAGIC-category skills. See [magic.md](magic.md) "Magical skills". Since #4457 a schooled
-  character starts with them at the stance floor and CG points never buy one; `train_skill` (the one
+  character starts with the Magic skills the player spent their Tradition training points on (#4659) and CG points never buy one; `train_skill` (the one
   writer for development from training, shared with weekly training) and `points_to_next_boundary`
   are in `world.skills.services`.
 - **Integrates with:** traits (skill checks), character_creation (skill selection),
@@ -1000,14 +1011,17 @@ rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
 `reconcile_offer_picks`); see the Character Creation section below and
 [distinctions.md](distinctions.md)'s "CG Integration".
 
-- **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
+- **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`,
+  `DistinctionEffectRankSize` (#4660: an effect's size from one rank up), `CharacterDistinction`
   (`from_glimpse` nullable FK → `magic.CharacterAura`, SET_NULL, #2427 — FK presence is
   the Glimpse-provenance state, mirroring `.secret`; set via
   `world.magic.services.glimpse.link_distinction_to_glimpse`/`unlink_distinction_from_glimpse`)
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
 - **Check lane (#4638):** `DistinctionEffect.modifier_size` (Paramount refused): on a check-scoped
-  target the effect reads the check value table at its holder's level and this size, scaled by
-  rank like the authored value; blank keeps the flat value. The list serializer's generated
+  target the effect reads the check value table at its holder's level and the size its held rank
+  names (`DistinctionEffect.size_at_rank`: the highest `DistinctionEffectRankSize` at or below
+  the rank, else `modifier_size`; rank never multiplies it, #4660, ADR-4660-A); blank keeps the
+  flat per-rank value. Rank sizes are an inline on the standalone effect admin page. The list serializer's generated
   effect line names the size ("+Large <target>") for such an effect. See [checks.md](checks.md).
 - **Enums:** `DistinctionOrigin` (`CHARACTER_CREATION`, `GAMEPLAY` vestigial, `GM_AWARD`,
   `ACHIEVEMENT_AUTO_GRANT`, `CONSEQUENCE_POOL`, `ENDORSEMENT_THRESHOLD`), `OtherStatus`
@@ -1086,8 +1100,8 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `ValueTable.signed_value`; crafted modifiers are one EQUIPMENT contribution per worn piece; the
   equipment walk's vow terms (`equipment_walk_parts(...).vow_part`) ride untapered.
   Third and fourth, distinctions and scene surroundings (#4638, ADR-4638-A):
-  `DistinctionEffect.modifier_size` at the holder's `CharacterSheet.current_level`, scaled by
-  rank, through `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)` (kept in the
+  `DistinctionEffect.modifier_size` at the holder's `CharacterSheet.current_level`, stepped up
+  the size ladder by rank through `DistinctionEffectRankSize` (#4660, ADR-4660-A), through `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)` (kept in the
   CHARACTER kind); `SceneCheckModifier.modifier_level`/`modifier_size` authored together,
   valued in `_scene_check_contributions`.
 - **Source:** `src/world/checks/`
@@ -1732,6 +1746,15 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   **conjured walls** `create_conjured_obstacle` / `restore_edge` / `damage_barrier` /
   `expire_obstacle_rounds` / `teardown_conjured_obstacles` (#2019, #4606; seed
   `barrier_content.ensure_conjured_barrier_content`, the "Conjured Barrier" challenge)
+- **Features and stunts (#4675, slice 3 of #4651, ADR-4675) [BUILT & WIRED]:** `FeatureType` (staff catalog: `name`,
+  `art`, `reach` = `FeatureReach` ADJACENT / ANY_PLACE / SAME_TYPE / ELEVATED_ADJACENT,
+  `challenge_template`), `PositionFeature` and `BlueprintFeature` (place + optional square, inside the
+  place's area; `instantiate_blueprint` copies them); `attach_feature` / `detach_feature`;
+  `stunts.stunt_options` / `stunts.perform_stunt` (`StuntOutcome` CLEAN / PARTIAL / MISSED; a miss
+  stays and still spends the hop); actions `perform_stunt`, `gm_attach_feature`, `gm_detach_feature`;
+  `features[]` on every position node; `GET /api/areas/feature-types/` (GM/staff). NPCs do not use
+  features. Details: `docs/systems/areas.md`, "Features and stunts". Not the same as
+  `world/room_features` (lab stations).
 - **Enums:** `PositionKind` (PRIMARY / FEATURE / ELEVATED / AERIAL / BARRIER_SIDE / CHASM);
   `PositionDestination` in `world/checks/constants.py`
   (ACTOR_POSITION / GATING_FAR_SIDE / NAMED / AWAY_FROM_ACTOR) — governs `MOVE_TO_POSITION`
@@ -1766,8 +1789,9 @@ consequence effects for graph mutation and flight), and Rampart living barriers
 - **Frontend (#2006):** `TacticalMap` (shared read-only `@xyflow/react` canvas,
   `frontend/src/areas/components/`) + `SceneTacticalMap` (scene wrapper, replaces the old
   `RoomPositionsPanel`, `frontend/src/scenes/components/`) + `CombatTacticalMap` (combat
-  wrapper — occupants from `current_position` not `persona_positions` — mounted as a "Map"
-  tab in `CombatRail`'s right rail alongside "Your Turn"/`CombatTurnPanel` (#2197: `CombatRail`
+  wrapper: occupants from `current_position` not `persona_positions`; since #4670 drawn as
+  the SVG `BattleMap` and mounted as the main view of a fight by `CombatMainMap`, with the rail
+  holding "Your Turn"/`CombatTurnPanel` and, for a GM, "GM" (#2197: `CombatRail`
   renders in-scene on `SceneDetailPage`'s `/scenes/:id`, not a dedicated route,
   `frontend/src/combat/components/`) + `MovementActions` (shared adjacent-position button
   list, `frontend/src/combat/components/`). `PositionMapNode` renders a covering Rampart as
@@ -1777,7 +1801,7 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   "Place" toggle + target picker over the room's co-located participants/opponents/personas
   when a `gm_place_in_position` `PlayerAction` is available.
   **#3557:** while an encounter is active `SceneDetailPage` unmounts `SceneTacticalMap`
-  and `CombatTacticalMap` is the page's only map; it takes `sceneId`, reads the page's
+  and `CombatTacticalMap` is the page's only map (#4670: in the wide column, not the rail); it takes `sceneId`, reads the page's
   cached scene detail, and draws non-combatant personas as dimmed bystanders
   (`OccupantSummary.bystander`). `CombatRail` gained a GM tab (`CombatGMTab`: encounter
   controls + the combat `GMAdjudicationPanel` tabs), and the idle header panels fold
@@ -2690,7 +2714,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
   **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
   **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`),
-  **Maturation Points (#2756, ADR-0172; milestones retuned by #3635 to `MATURATION_MILESTONES` = 24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75, none after; `next_milestone_year` null past 75; since #4124 milestones at or below `CharacterSheet.maturation_floor`, the creation age, never bank, so a new character arrives with none; starting under 21 costs `UNDERAGE_CG_POINT_COST` in the CG breakdown):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 dot they apply
+  **Maturation Points (#2756, ADR-0172; milestones retuned by #3635 to `MATURATION_MILESTONES` = 24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75, none after; `next_milestone_year` null past 75; since #4124 milestones at or below `CharacterSheet.maturation_floor`, the creation age, never bank, so a new character arrives with none; starting under 21 costs `UNDERAGE_CG_POINT_COST` in the CG breakdown):** `MaturationStatCap` (admin "Band caps": authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored; plus the nullable `skill_cap` (#4585, shown units, blank = no cap, unseeded) read by `skill_cap_for` and enforced on every skill raise path, see skills.md "Band skill cap") + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 dot they apply
 
   **Level Stat Points (#3001, ADR-0205):** `LevelStatPointSpend` (sheet FK, trait FK, `level_granted` 2..N, `is_active`; unique per (sheet, level_granted)) — one point per class level past the first, balance derived (`level − 1` minus active spends, no grant hook). Services in `progression/services/stat_points.py`: `stat_points_earned` / `available_stat_points` / `spend_level_stat_point` (same `MaturationStatCap` stage cap) / `sync_level_stat_point_spends` (called from `apply_class_level_advance` so reversals refund). Both writers stamp `traits.CharacterTraitChange` rows (`source=LEVEL_STAT_POINT`, #3055). API: `GET /api/character-sheets/{id}/stat-points/` + `POST .../spend-stat-point/`; frontend `StatPointPanel` beside `MaturationPanel`
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
@@ -2989,7 +3013,7 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   (`TraditionStateLine`, per-tradition `own_wording` override, never its own price) and, for
   LIVING_MASTERS (ranks 0-2) and TEACHERS_GONE (ranks 0-1, #4457), offers the standard schooling
   set (`SchoolingLine`, each granting a distinction at its rank, priced
-  `grants.cost_per_rank * rank`, and carrying a `magic_skill_floor`, #4457). `OriginTemplate
+  `grants.cost_per_rank * rank`, and granting the Tradition training points a draft spends on Magic skills, #4457, #4659). `OriginTemplate
   .closed_distinctions`/`.closed_reason` names distinctions a route never offers, in any
   chapter. `GET /api/character-creation/drafts/{id}/offers/?chapter=<chapter>` returns
   `{"offers": [...], "closed": [...]}` for one chapter; `reconcile_offer_picks` runs after every
@@ -7604,7 +7628,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     (cumulative escalation tiers — rung N requires rungs 1..N-1 too, highest qualifying rung's
     magnitude replaces the base). Both inherit `SituationRequirementMixin` (#2623, ADR-0154) —
     four typed, nullable/blank parameter columns (Situation Parameters): `threshold_percent`
-    (0-100), `count_threshold`, `affinity` (`AffinityType` axis), `origin_side`
+    (0-100), `count_threshold`, `affinity` (FK to `Affinity`), `origin_side`
     (`SituationOriginSide.OURS`/`THEIRS`, blank = side-blind). No JSON (ADR-0007). Which
     situation reads/requires which params is `SITUATION_PARAM_SPECS`
     (`world.covenants.perks.constants`); the mixin's `clean()` enforces both directions. All
@@ -7612,7 +7636,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     code-defined library (15 values as of #2646: slice 1's 9 plus `CHAMPION_DUEL`,
     `COMBAT_OPENED_FROM_PARLEY`, `AMBUSH_UNDERWAY`, `ALLY_INTERCEPTED_FOR_ME`, and
     `ATTACKER_AFFINITY` — the Abyssal-only attacker-typing situation renamed and parameterized to
-    all three `AffinityType` axes by #2623 — plus `ON_CHOSEN_GROUND` (#2646)) with a registered
+    all three affinity rows by #2623 — plus `ON_CHOSEN_GROUND` (#2646)) with a registered
     evaluator per value
     (`world.covenants.perks.evaluators.SITUATION_EVALUATORS`) — attaching a situation to a perk
     (and tuning its params) is content; adding a new situation to the library is code.
@@ -8180,7 +8204,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `PreparedGround` (Room Features section below) for how a ground gets prepared. Read by
     `Situation.ON_CHOSEN_GROUND`, which mirrors `Situation.CHAMPION_DUEL`'s shape exactly (one
     cached FK read off the resolution's participant, False outside combat).
-  - `CombatOpponent.affinity` (`AffinityType` CharField, blank default) — authored magical
+  - `CombatOpponent.affinity` (nullable FK to `Affinity`) — authored magical
     affinity typing for non-persona/generic NPCs that carry no `CharacterAura` row to infer
     from. Read by `Situation.ATTACKER_AFFINITY`'s evaluator FIRST against the row's required
     `affinity` Situation Parameter (authored typing wins outright when present, matching that
@@ -8733,8 +8757,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - **Reaction economy (#2639), shared fire seam per F-10c:** `CombatParticipant.
     reactions_used` (reset to 0 for every participant in `begin_declaration_phase` via
     identity-map-safe `bulk_update`, never a raw queryset `.update()` — that would leave any
-    already-cached instance reading a stale value) vs `REACTIONS_PER_ROUND` (1) — gated +
-    incremented in `_attempt_guardian_interpose`, the shared tail both `_try_interpose`
+    already-cached instance reading a stale value). No cap since #4676: it is counted in
+    `_attempt_guardian_interpose` and each one makes the next reaction's roll harder
+    (`world.combat.services.reactions.reaction_penalty`). Counted in the shared tail the shared tail both `_try_interpose`
     (declarations and standing guards, #4584) and `_try_interpose_for_opponent` call.
     `DamagePreApplyPayload.answers_consumed` (int, default 0) vs `ABSORPTION_CAP_PER_MOMENT`
     (2): per-LANDING-HIT cap on how many interceptors may answer, incremented at the same
@@ -8782,6 +8807,59 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     only `opponents_in_reach` (`techniques/technique_targets.py`).
   - Path service and reach rule live in positioning (`find_path`, `step_costs`,
     `edge_crossing_cost`, `strike_reaches`); see `docs/systems/areas.md`.
+- **Reactions and area attacks (#4676, slice 4 of #4651, ADR-4676) [BUILT & WIRED]:** see
+  `docs/systems/COMBAT_DEFENSES.md` "Dodging and area attacks".
+  - Models: `CapabilityType.reaction_reach`/`reaction_cost_kind` (`ReactionReach`,
+    `ReactionCostKind` in `world/areas/positioning/constants.py`); `CombatParticipant.dodge_enabled`/
+    `dodge_landing`; `MovementConfig.dodge_anima_cost`/`dodge_fatigue_cost`/`reaction_difficulty_step`;
+    `ThreatPoolEntry.covers_place`; `PendingOpponentAttack.covered_position` and
+    `CombatOpponentAction.covered_position`.
+  - Services (`world/combat/services/reactions.py`): `reaction_tuning`, `reaction_penalty`,
+    `record_reaction`, `dodge_sources`, `reachable_landings`, `dodge_landing_options`,
+    `choose_dodge`, `pay_for_dodge`, `land_dodge`, `covered_place`, `dodge_cost_line`,
+    `dodge_roll_active`/`DODGE_ROLL_ACTIVE`. `world/combat/services/npc/area_attacks.py`:
+    `cover_place`, `place_of_participant`. `world.mechanics.reactions._fresh_reaction_instance`.
+  - Action `combat_dodge` (`DodgePlanAction`, kwargs `dodge`, `position_id` or `place`); telnet
+    `combat dodge [<place>|here|off]`. Payload: participant `dodge_plan` (owner only),
+    `pending_attacks[].attack_name/covered_position_id/covered_position_name`;
+    `reactions_remaining` removed. Frontend: `DodgePlanPanel`, `AreaAttackWarning`,
+    `AreaTelegraphLayer`, `combat/dodging.ts`.
+- **Movement by capability and held ground (#4663, slice 2 of #4651, ADR-4663) [BUILT & WIRED]:**
+  - A player's way of moving is a capability: `CapabilityType.traversal` (`CreatureTraversal`,
+    blank for none; migration 0294); `player_traversals(sheet)`, `traversals_of(objectdb)`,
+    `cheapest_crossing`, `best_crossing_cost` (`world/areas/positioning/traversal.py`) read it
+    from `get_effective_capability_value` above `innate_baseline`. `move_to_position(...,
+    traversals=)` and `check_move_to_position(...)` (positioning services) take it; a crossing
+    costs its hops via `spend_combat_hop(participant, hops=)` (`movement_budget.py`).
+  - Actions `take_flight`, `land` (roof rule: "A roof is in the way."), `pass_held_ground`
+    (`actions/definitions/positioning.py`); telnet `position/fly`, `position/land`,
+    `position/pass <name>`. `enter_aerial` draws a missing aerial twin.
+  - Held ground (`world/combat/services/held_ground.py`): `held_position_ids_against`,
+    `encounter_holds` / `EncounterHolds`, `npc_stop_at`, `routing_profile`, `holder_names`, `held_place_holders`;
+    `find_path` / `path_costs_from` take `stop_at`, `MovementProfile.stop_at`.
+  - The pass (`world/combat/services/held_ground_pass.py`): `pass_choices`, `pass_options`,
+    `attempt_pass` -> `PassResult` (`HeldGroundPassOutcome` CLEAN / PARTIAL / STOPPED);
+    `MovementConfig.held_ground_challenge` (singleton) names the challenge. Authoring note: the
+    partial outcome's damage must target `self` to hit the roller.
+  - Capability sources: `CapabilitySourceType.MODIFIER` / `_get_modifier_sources`;
+    `CharacterModifierQuerySet.active()`; `get_available_actions` keeps the strongest source per
+    approach. Detail in `docs/systems/areas.md`, "Movement by capability and held ground".
+- **The battle map drawing (#4670, slice 1 of #4651, ADR-4670) [BUILT & WIRED]:**
+  - Models (migration 0297): `MapTerrain` (`name`, `art` FK Media; drawing only, no rule reads
+    it), `PositionNodeBase.area_x/area_y/area_w/area_h` (all four or none) and `terrain`,
+    `ObjectPosition.square_x/square_y` (both or neither). `instantiate_blueprint` copies area and
+    terrain to the live place.
+  - Services (`positioning/services.py`): `validate_square`, `step_to_square` (free, needs
+    movement), `square_of`; `place_in_position` / `take_position` / `move_to_position` take
+    `square=`, and a move without one clears it. Action `step_to_square` (`StepToSquareAction`,
+    dispatched by registry key, not in the available-actions list); `move_to_position` and
+    `take_position` accept `square_x`/`square_y`.
+  - Payload: node `area_*`, `terrain_name`, `terrain_art_url`; `current_square` on encounter
+    participants and opponents; encounter `held_positions` (`enemy_held_places`, the same for
+    every viewer); scene `persona_positions[].square_x/square_y`.
+  - Frontend: `BattleMap` (SVG) via `CombatTacticalMap`, mounted by `CombatMainMap` as the main
+    view of a fight; pick state in `CombatPickProvider` / `useCombatPick`. Detail in
+    `docs/systems/areas.md`, "The battle map drawing".
 - **The waiting strike (#4608, slice 3 of #4576) [BUILT & WIRED]:**
   - Declaration: `declare_await_opening(participant, technique, *, confirm_soulfray_risk)`
     (`world/combat/services/declarations/await_opening.py`) writes the round action with
@@ -8844,8 +8922,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - Standing guard: `_ensure_interpose_challenges` and `_try_interpose`
     (`world/combat/services/damage/`) via `guardians_by_target`; the shared tail is now
     `_attempt_guardian_interpose(guardian, protected, pre_payload, *, action)` (`_dispatch_interpose_action`
-    is a wrapper for declarations). A guard counts against `REACTIONS_PER_ROUND` and
-    `ABSORPTION_CAP_PER_MOMENT` and pays interpose fatigue (this revisits ADR-0161 for guards only).
+    is a wrapper for declarations). A guard counts as one of her reactions (no cap, a harder
+    roll each time, #4676) and against `ABSORPTION_CAP_PER_MOMENT`, and pays interpose
+    fatigue (this revisits ADR-0161 for guards only).
   - Strike-back: `_answer_with_strike_backs` in `_emit_post_damage_events` -> `strike_back`; PC
     bearers, NPC attackers only; counts as duel interference and probing; success not narrated.
   - Grace: `_process_knockout_tier` skips the roll via `knockout_preventing_instance`.
@@ -9048,7 +9127,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - **The catch seam:** `_try_catch_sent_flying` reuses `_try_interpose`'s query shape (an
     armed INTERPOSE this round, named or guard-anyone) but never calls `dispatch_interpose`
     — a mid-air catch is a binary rescue, not gradeable damage mitigation, so it never rolls;
-    "fires" means clearing `REACTIONS_PER_ROUND` (mirrors `_attempt_guardian_interpose`'s own
+    "fires" means an attempt, counted as one more reaction (mirrors `_attempt_guardian_interpose`'s own
     "fire = attempt, not success" vocabulary). `ABSORPTION_CAP_PER_MOMENT` is not consulted
     — only the first eligible guardian is ever queried (documented v1 scope).
   - **Explicit resolution:** `_resolve_sent_flying_markers`, called at the end of

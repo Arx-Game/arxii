@@ -14,7 +14,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.combat.factories import CombatEncounterFactory
 from world.combat.interaction_services import (
     broadcast_action_outcome,
@@ -240,6 +242,47 @@ class BroadcastActionOutcomeAudienceTests(TestCase):
 
         for outcome in outcomes:
             self.assertEqual(outcome.visibility, InteractionVisibility.PERCEIVED_ONLY)
+
+    def test_a_telnet_observer_reads_only_their_own_tier_once(self) -> None:
+        """The plain-text line follows the same tiers as the web push (#4640)."""
+        attributed = "Ilyra's Whisper of Binding strikes Corvin for 24 damage."
+        unattributed = "Corvin is struck for 24 damage."
+        told = {}
+        patches = []
+        for persona in (self.detector, self.marginal, self.oblivious):
+            # The identity-map instance the delivery reads, not setUpTestData's
+            # per-test deep copy hanging off the persona.
+            character = ObjectDB.objects.get(pk=persona.character_sheet_id)
+            telnet = MagicMock(protocol_key="telnet")
+            patches.append(patch.object(character.sessions, "all", return_value=[telnet]))
+            told[persona.pk] = MagicMock()
+            patches.append(patch.object(character, "msg", told[persona.pk]))
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+        room = ObjectDBFactory(db_key="The Pit", db_typeclass_path="typeclasses.rooms.Room")
+        broadcast_action_outcome(
+            encounter=CombatEncounterFactory(scene=self.scene, room=room),
+            narration=attributed,
+            audience=CastAudience(
+                concealed=True,
+                full=[self.detector],
+                vague=[self.marginal],
+                effect_only=[self.oblivious],
+            ),
+            unattributed_narration=unattributed,
+        )
+
+        def texts(persona) -> list[str]:
+            return [c.args[0] for c in told[persona.pk].call_args_list if c.args]
+
+        self.assertEqual(texts(self.detector), [attributed])
+        self.assertEqual(texts(self.oblivious), [unattributed])
+        vague = texts(self.marginal)
+        self.assertEqual(len(vague), 1, vague)
+        self.assertIn("working", vague[0])
+        self.assertNotIn("Ilyra", vague[0])
 
     def test_imperceptible_working_hides_outright_from_the_bottom_tier(self) -> None:
         """No unattributed narration means there was nothing to see; pre-#2734 behaviour.

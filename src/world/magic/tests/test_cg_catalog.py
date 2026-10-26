@@ -3,6 +3,7 @@
 from django.test import TestCase
 
 from world.classes.factories import PathFactory
+from world.magic.constants import GiftKind
 from world.magic.factories import (
     GiftFactory,
     PathGiftGrantFactory,
@@ -94,7 +95,7 @@ class TechniqueOptionsTest(TestCase):
 
 
 class GiftOptionsTest(TestCase):
-    """get_gift_options excludes gifts with zero combined pool U signature availability."""
+    """get_gift_options offers every Major Gift with a takeable technique for the Tradition."""
 
     @classmethod
     def setUpTestData(cls):
@@ -129,6 +130,23 @@ class GiftOptionsTest(TestCase):
 
         self.assertIn(self.available_gift, gifts)
         self.assertNotIn(self.empty_gift, gifts)
+
+    def test_a_major_gift_the_tradition_does_not_favor_is_offered(self):
+        """#4659: a grant row marks a favored Gift; it no longer gates the pick."""
+        unfavored = GiftFactory()
+        PathGiftGrantFactory(path=self.path, gift=unfavored).starter_techniques.set(
+            [TechniqueFactory(gift=unfavored, action_template=get_standalone_cast_template())]
+        )
+
+        self.assertIn(unfavored, get_gift_options(self.tradition, self.path))
+
+    def test_a_minor_gift_on_the_path_list_is_not_offered(self):
+        minor = GiftFactory(kind=GiftKind.MINOR)
+        PathGiftGrantFactory(path=self.path, gift=minor).starter_techniques.set(
+            [TechniqueFactory(gift=minor, action_template=get_standalone_cast_template())]
+        )
+
+        self.assertNotIn(minor, get_gift_options(self.tradition, self.path))
 
     def test_a_gift_whose_techniques_another_tradition_keeps_is_not_offered(self):
         self.assertNotIn(self.kept_gift, get_gift_options(self.tradition, self.path))

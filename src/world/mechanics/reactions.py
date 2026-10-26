@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.mechanics.models import ChallengeInstance
     from world.mechanics.types import AvailableAction, ChallengeResolutionResult
 
 
@@ -35,16 +36,17 @@ def _select_reaction_action(
 ) -> AvailableAction:
     """Pick the :class:`~world.mechanics.types.AvailableAction` matching *approach*.
 
-    Iterates *actions* looking for one whose ``capability_source.capability_name``
-    equals *approach*.  Falls back to ``actions[0]`` when:
+    Iterates *actions* looking for one whose approach rests on the capability named
+    *approach* (``resolved_challenge_approach.application.capability.name``, always
+    set), not on ``capability_source.capability_name``, which a condition source
+    leaves empty (#4663). Falls back to ``actions[0]`` when:
 
     - *approach* is ``None`` and *select_best_check_rating* is ``False``;
-    - no action's capability name matches (e.g. the approach is condition-sourced
-      and carries an empty ``capability_name``).
+    - no action's capability name matches.
 
     When *select_best_check_rating* is ``True`` and *approach* is ``None``,
     delegates to :func:`_select_best_rated_action` instead of the naive
-    first-match fallback (#2207) — string-matching on ``capability_name`` is
+    first-match fallback (#2207) — string-matching on the source's ``capability_name`` is
     dead on the condition-sourced path (``capability_name=""``, see
     ``world.mechanics.services._get_condition_sources``), so a caller comparing
     two mechanically-equivalent approaches (e.g. interpose's Reflexes vs.
@@ -60,8 +62,8 @@ def _select_reaction_action(
 
     if approach is not None:
         for action in actions:
-            source = action.capability_source
-            if source is not None and source.capability_name == approach:
+            approach_row = action.resolved_challenge_approach
+            if approach_row is not None and approach_row.application.capability.name == approach:
                 return action
     # No match — fall back to the first available reaction action.
     return actions[0]
@@ -169,12 +171,51 @@ def dispatch_capability_reaction(  # noqa: PLR0913
         select_best_check_rating=select_best_check_rating,
     )
 
-    result = resolve_challenge(
+    # A repeat answer this round gets a fresh instance (#4676).
+    instance = _fresh_reaction_instance(
         actor,
         chosen.resolved_challenge_instance,  # type: ignore[arg-type] — filtered non-None above
+    )
+    result = resolve_challenge(
+        actor,
+        instance,
         chosen.resolved_challenge_approach,  # type: ignore[arg-type] — set whenever instance is
         chosen.capability_source,
         extra_modifiers=extra_modifiers,
     )
     outcome_fn(result)
     return result
+
+
+def _fresh_reaction_instance(
+    actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the reacting character, any typeclass
+    instance: ChallengeInstance,
+) -> ChallengeInstance:
+    """The instance to resolve this reaction against: a new one if she already answered it.
+
+    A reaction has no per-round cap (#4676), but a character resolves a challenge
+    instance once (``character_challenge_record_unique``). When she already has a
+    record on this round's bound instance, it is retired and a replacement bound to
+    the same target is minted, so her next reaction is a fresh roll.
+    """
+    from world.mechanics.models import (  # noqa: PLC0415
+        ChallengeInstance as Instance,
+        CharacterChallengeRecord,
+    )
+
+    if not CharacterChallengeRecord.objects.filter(
+        character_id=actor.pk, challenge_instance=instance
+    ).exists():
+        return instance
+    instance.is_active = False
+    instance.save(update_fields=["is_active"])
+    return Instance.objects.create(
+        template=instance.template,
+        location=instance.location,
+        target_object=instance.target_object,
+        situation_instance=instance.situation_instance,
+        severity_adjustment=instance.severity_adjustment,
+        adjustment_reason=instance.adjustment_reason,
+        is_active=True,
+        is_revealed=True,
+    )

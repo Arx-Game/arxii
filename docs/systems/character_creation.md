@@ -65,7 +65,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 |-------|---------|------------|
 | `BeginningTradition` | Maps traditions to beginnings, with which slate line each reads (#3675); `CreditedContent` because `own_wording` is player-facing prose | `beginning`, `tradition`, `state`, `own_wording`, `sort_order`, `written_by`, `written_on`, `reviewed_by`, `reviewed_on` |
 | `TraditionStateLine` | The standard line for one `TraditionState` and the drawback it carries (#3675) | `state`, `entry_line`, `carries` |
-| `SchoolingLine` | One stance under a tradition whose state opens stances (LIVING_MASTERS ranks 0-2, TEACHERS_GONE ranks 0-1, #4457) and what it grants (#3675); `magic_skill_floor` is the level it lifts every Magic skill to at finalize (#4457; check constraint: rank 0 carries 0) | `rank`, `name`, `player_line`, `grants`, `magic_skill_floor` |
+| `SchoolingLine` | One stance under a tradition whose state opens stances (LIVING_MASTERS ranks 0-2, TEACHERS_GONE ranks 0-1, #4457) and what it grants (#3675); the Magic-skill training points it gives are its `grants` distinction's `magic_training_points` effect at its rank (#4659; the `magic_skill_floor` column was dropped) | `rank`, `name`, `player_line`, `grants` |
 | `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`/`feature_rows` (#3739 — Appearance's second opener: offered on every trait row and marking rather than under a section); `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `chapter_opener_fields`, `set_openers` |
 | `EnemyReason` | Why an enemy wants the character to fail, as staff wrote it once for every enemy (#3709); the enemy chapter's opener | `name`, `player_line`, `fits` (`EnemyReasonFits`: person/group/either), `sort_order`, `is_active`, credit |
 | `AppearanceSection` | A heading Appearance groups its offers under (#3709); one of the Appearance chapter's two openers | `name`, `player_line`, `sort_order`, credit |
@@ -155,11 +155,9 @@ draft.calculate_cg_points_breakdown()   # itemized [{category, item, cost}, ...]
 draft.calculate_final_stats()           # Dict[str, int] with bonuses applied
 draft.enforce_stat_caps()               # Clamp stats after distinction changes
 draft.get_expected_gift_count()         # Base 1 + bonus from distinctions
-draft.starting_magic_skill_floor        # int (property, #4457): the level every Magic skill
-                                         # starts at, from the schooling stance picked under
-                                         # Tradition Training (offers.schooling_magic_skill_floor);
-                                         # live on every call, never memoised; 0 when self-taught
-                                         # or at rank 0
+draft.magic_training_pool               # MagicTrainingPool (property, #4659): base, gift_bonus,
+                                         # affinity_bonus, total, required_spend, fit, sources.
+                                         # Live on every call, never memoised
 ```
 
 ### DraftApplication
@@ -285,11 +283,9 @@ from world.character_creation.offers import (
                                #   "is this the tradition-agnostic default", never a
                                #   name match
     slate_state,               # (beginning, tradition) -> TraditionState | None
-    schooling_magic_skill_floor,  # (draft) -> int: the highest magic_skill_floor among
-                               #   the Tradition Step offers the draft picked, counting a
-                               #   pick only when its schooling line grants the very
-                               #   distinction the pick holds; 0 when the slate state
-                               #   opens no stances (#4457)
+    schooling_training_points, # (lines) -> {rank: int}: the magic_training_points each
+                               #   stance's granted distinction gives at its rank; 0 for
+                               #   rank 0 or a line that grants nothing (#4659)
     self_taught_drawback,      # () -> Distinction | None: the drawback the SELF_TAUGHT
                                #   TraditionStateLine carries, if any
     entry_price,                # (entry, distinction) -> int: 0 if any source arrived
@@ -314,19 +310,47 @@ on each row. `reconcile_offer_picks` drops a per-feature pick whose feature is g
 both. Anything that is not per-feature keys as `(id, "", 0)` and is unaffected. See
 [distinctions.md](distinctions.md) "Distinctive features".
 
-**Which stances a state opens, and the Magic skill floor (#4457, ADR-4457-A).** The Tradition Step
+**Which stances a state opens (#4457, ADR-4457-A).** The Tradition Step
 offers are the schooling stances. `_opener_satisfied` opens an offer when its `schooling_line.rank`
 is at most `schooling_max_rank(slate_state)`: a LIVING_MASTERS Tradition opens ranks 0 to 2, a
 TEACHERS_GONE one ranks 0 and 1 (its teachers were lost before anyone could finish), a SELF_TAUGHT
 one none; an offer saved without its schooling line is never open. `TraditionSerializer.get_schooling`
 cuts the stance rows to the same ranks, and `reconcile_offer_picks` drops a pick the state no longer
-opens. Each stance row carries `magic_skill_floor`; the draft's `starting_magic_skill_floor` is the
-floor of the stance it picked, `GET /api/character-creation/drafts/{id}/` returns it read-only, and
-`_create_skill_values` writes it as the value of every `magic_category_skills()` skill at finalize.
-The skills stage refuses points in a Magic skill or one of its specializations
-(`CharacterDraft._check_no_magic_points`, from `validate_path_skills`), so Tradition Training is the
-only creation source of Magic skills. Full account: [magic.md](magic.md), "Tradition training and
-Academy skill courses".
+opens. Each stance row carries `training_points` and `grants_distinction_name`.
+
+**Magical training pool (slice 2 of #4659, ADR-4659-B).** The old per-stance Magic skill floor is
+gone: `0299_remove_schoolingline_magic_skill_floor` dropped the column and its check constraint
+with no carry, because production held no schooling lines (dump arxii-20261025T033001Z, 0 rows):
+disposition "empty in production" (ADR-0237). A stance's points come from its granted
+distinction's `magic_training_points` effect.
+`CharacterDraft.magic_training_pool` sums the draft's distinction effects on that target (`base`),
+then adds the Tradition's flat fit bonuses from `TraditionTeachingConfig` (`gift_fit_training_bonus`
+when the Tradition favors the picked Gift, `affinity_fit_training_bonus` when it favors the picked
+Gift resonance's affinity), only when `base > 0`, and rounds the total down to a multiple of
+`SkillPointBudget.points_per_tier`. Fit comes from `world.magic.services.teaching_fit.teaching_fit`,
+given the picked resonance's `affinity` (the `Resonance.affinity` foreign key; the fit compares
+`Affinity` rows, never names). A Magic skill value costs its own value in points,
+the ordinary 10 per step. `required_spend` is `min(total, active Magic skill count x
+max_skill_value)`.
+
+The player spends the pool on the Gift stage's own training step, after the Gift pick (its Gift
+bonus depends on the pick). The allocation lives in `draft_data["magic_skills"]` (skill id to value).
+`compute_magic_errors` ends with `_magic_skill_allocation_errors`: only active Magic skills, values
+in steps of `points_per_tier` up to `max_skill_value`, never more than `total`, never less than
+`required_spend`. A changed Gift, Tradition, stance or resonance changes the pool, so a stale
+allocation fails the stage and the draft cannot submit; the funnel step reopens while
+`allocated != required_spend`. The draft serializer returns the breakdown as `magic_training`
+(`base_sources` with rank, `gift_bonus`, `affinity_bonus`, `favored_gift_name`,
+`favored_affinity_name`, `total`, `required_spend`, `allocated`, `skills`). Tradition rows carry
+`favored_gift_names` and `favored_affinity_names`; Gift options carry `favored` (any Tradition may
+teach any Major Gift, ADR-4659-A).
+
+Finalize: `_create_skill_values` writes exactly the allocated Magic skills (CHARACTER_CREATION
+provenance), replacing the floor write. `magic_writer._glimpse` starts a new `CharacterAura` at the model
+defaults (Primal 80); a starting aura that follows the picked resonance waits on #4672. The skills stage
+refuses points in a Magic skill or one of its specializations (`CharacterDraft._check_no_magic_points`,
+from `validate_path_skills`), so the training pool is the only creation source of Magic skills. Full
+account: [magic.md](magic.md), "Tradition training and Academy skill courses".
 
 **Reconcile-on-patch:** `CharacterDraftViewSet.perform_update` calls
 `reconcile_offer_picks(draft)` after every draft save, and `select-tradition` calls it
@@ -563,7 +587,7 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 - `GET /api/character-creation/pronouns/` - Pronoun sets
 - `GET /api/character-creation/cg-budgets/` - Active CG point budget
 - `GET /api/character-creation/paths/` - Active Prospect-stage paths
-- `GET /api/character-creation/traditions/?beginning_id=X` - Traditions for a beginning; each carries `schooling` rows cut to the stances its state opens, each with `magic_skill_floor` (#4457)
+- `GET /api/character-creation/traditions/?beginning_id=X` - Traditions for a beginning; each carries `schooling` rows cut to the stances its state opens, each with `training_points` and `grants_distinction_name` (#4659), plus `favored_gift_names` and `favored_affinity_names` on the Tradition
 - `GET /api/character-creation/tarot-cards/` - Tarot cards for naming ritual
 - `GET /api/character-creation/form-options/{species_id}/` - Form traits for a species
 - `GET /api/character-creation/can-create/` - Eligibility check
@@ -654,7 +678,8 @@ files, URLs, gate, and credit rule.
 (`EnemyReason`, `AppearanceSection`), and the Builder's "Add from a table"
 (`web/admin/distinction_builder/paste.py`) lands scores of new distinctions at once, additions
 only (a row whose slug exists is skipped, never updated; nothing deleted; every referenced row must
-already exist; preview, then one transaction behind a digest-guarded confirm; superuser only):
+already exist; preview, then one transaction behind a digest-guarded confirm; superuser only;
+a `beat:<stage>/<beat name>` token places the card as an answer on an existing Life beat, #4655):
 one click from the Authoring Workbench's Builders panel and from the row each edits: the
 Distinction Builder (a distinction's own fields, effects, exclusions, and every offer naming
 it), the tradition slate page (the shared `TraditionStateLine`/`SchoolingLine` standard lines
@@ -908,6 +933,6 @@ seed_character_creation_dev()  # idempotent: get_or_create, never overwrites edi
 
 `Realm`/`StartingArea`/`Beginnings`/`TarotCard`/`Path` are *not* `CONTENT_MODELS`, but are still open-ended world content rather than config — `_seed_sample_cg_world()` and the tail of `seed_character_creation_dev()` gate them behind `SEED_SAMPLE_CONTENT` too (an earlier #2698 slice), for the same reason: seeding a "Commoner"/"Noble"/"Arx City" here is indistinguishable from authored content once `export_to_content_repo` runs. What always seeds unconditionally regardless of the flag: the 12 stat `Trait` rows (content-repo-owned too, `authored_or_sample`'d), and the two `Roster` rows ("Available"/"Active Characters") — genuine config with no content-repo equivalent.
 
-`seed_beginning_traditions()` (#2426 whole-branch-review fix) links every seeded `Beginnings` row to the "Unbound" `Tradition` (real lore-repo content, loaded via `core_management.content_fixtures.load_world_content()` before any `CLUSTER_SEEDERS` entry runs, #2474 Decision 5), via a `BeginningTradition` row whose `state=TraditionState.SELF_TAUGHT` (#3675; was a `required_distinction` FK onto the "Unbound" drawback `Distinction` pre-#3675, now the SELF_TAUGHT slate line's own `TraditionStateLine.carries` carries that drawback into the draft, seeded by `ensure_unbound_drawback_distinction()`, itself gated behind `SEED_SAMPLE_CONTENT` since #2698); without it, `TraditionViewSet` and `select_tradition` have nothing to offer and CG's Tradition step is uncompletable on a fresh DB, even the tradition-agnostic Unbound path. `ensure_shroudwatch_academy()` (#2428 Task 3) then seeds the "Shroudwatch Academy" `Organization` (`tradition=None`, deliberate NULL, #2426 ruling; `org_type` "guild"; description/rank titles PLACEHOLDER and content-overridable) that `finalize_magic_data`'s Golden Hare hook resolves by name. `ensure_orphaned_tradition_distinction()` and `seed_metallic_order_tradition()` (#2428 Task 5) then seed the "Orphaned Tradition" drawback `Distinction` (slug `orphaned-tradition`, cost −2, no `DistinctionEffect`; its teeth are trainerlessness, #2440) and the "Metallic Order" example orphaned tradition (starter-gift `TraditionGiftGrant` rows mirroring Unbound's; `BeginningTradition` rows for Arx-realm Beginnings only, each with `state=TraditionState.TEACHERS_GONE` (#3675; was `required_distinction=orphaned-tradition` pre-#3675), the story-mutable shape staff edit when a recovery quest restores its teachers). Registered last in `CLUSTER_SEEDERS`, after `magic` (which seeds the non-content magic tuning/ritual/thread substrate `finalize_character` depends on) and after the content-repo load itself provides the catalog `Gift`/`Technique`/`Resonance` rows and the Unbound `Tradition` row (#2474; see `docs/systems/magic.md`'s "CG Starter Gift/Technique Catalog" section). Verified by `test_playable_slice.py::TestSeededCharacterCreation` (finalize + the real Tradition-step gates run on a seeded-only DB), `test_character_creation_magic_seed.py` (`seed_beginning_traditions` idempotency + defensive skip, `EnsureOrphanedTraditionDistinctionTests`, `SeedMetallicOrderTraditionTests`), `test_traditions.py::OrphanedTraditionSelectionTests` (the drawback gate through the real select-tradition endpoint), `test_idempotency.py::test_edited_cg_row_survives_reseed`, and `test_clusters.py::test_cg_explanations_seeded_and_nonempty`.
+`seed_beginning_traditions()` (#2426 whole-branch-review fix) links every seeded `Beginnings` row to the "Unbound" `Tradition` (real lore-repo content, loaded via `core_management.content_fixtures.load_world_content()` before any `CLUSTER_SEEDERS` entry runs, #2474 Decision 5), via a `BeginningTradition` row whose `state=TraditionState.SELF_TAUGHT` (#3675; was a `required_distinction` FK onto the "Unbound" drawback `Distinction` pre-#3675, now the SELF_TAUGHT slate line's own `TraditionStateLine.carries` carries that drawback into the draft, seeded by `ensure_unbound_drawback_distinction()`, itself gated behind `SEED_SAMPLE_CONTENT` since #2698); without it, `TraditionViewSet` and `select_tradition` have nothing to offer and CG's Tradition step is uncompletable on a fresh DB, even the tradition-agnostic Unbound path. `ensure_shroudwatch_academy()` (#2428 Task 3) then seeds the "Shroudwatch Academy" `Organization` (`tradition=None`, deliberate NULL, #2426 ruling; `org_type` "guild"; description/rank titles PLACEHOLDER and content-overridable) that `finalize_magic_data`'s Golden Hare hook resolves by name. `ensure_orphaned_tradition_distinction()` and `seed_metallic_order_tradition()` (#2428 Task 5) then seed the "Orphaned Tradition" drawback `Distinction` (slug `orphaned-tradition`, cost −2, no `DistinctionEffect`; its teeth are trainerlessness, #2440) and the "Metallic Order" example orphaned tradition (no `TraditionGiftGrant` rows, since any tradition may teach any Major Gift, #4659; `BeginningTradition` rows for Arx-realm Beginnings only, each with `state=TraditionState.TEACHERS_GONE` (#3675; was `required_distinction=orphaned-tradition` pre-#3675), the story-mutable shape staff edit when a recovery quest restores its teachers). Registered last in `CLUSTER_SEEDERS`, after `magic` (which seeds the non-content magic tuning/ritual/thread substrate `finalize_character` depends on) and after the content-repo load itself provides the catalog `Gift`/`Technique`/`Resonance` rows and the Unbound `Tradition` row (#2474; see `docs/systems/magic.md`'s "CG Starter Gift/Technique Catalog" section). Verified by `test_playable_slice.py::TestSeededCharacterCreation` (finalize + the real Tradition-step gates run on a seeded-only DB), `test_character_creation_magic_seed.py` (`seed_beginning_traditions` idempotency + defensive skip, `EnsureOrphanedTraditionDistinctionTests`, `SeedMetallicOrderTraditionTests`), `test_traditions.py::OrphanedTraditionSelectionTests` (the drawback gate through the real select-tradition endpoint), `test_idempotency.py::test_edited_cg_row_survives_reseed`, and `test_clusters.py::test_cg_explanations_seeded_and_nonempty`.
 
 The admin **Game Setup** hub (`admin_game_setup` view, `_game_setup/` URL) is a superuser-only landing page for clone hosts: the clone→seed→tweak→export flow, a per-cluster content inventory (via `seeded_models_by_cluster()`) with live row counts, and links to the Big Button, Export/Import, and the World authoring apps. See `src/web/admin/CLAUDE.md`.

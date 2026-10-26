@@ -24,6 +24,7 @@ from django.db import transaction
 
 from world.locations.services import effective_value, upsert_room_resonance_modifier
 from world.magic.constants import ResonanceDirection
+from world.magic.models.affinity import Affinity
 from world.magic.services.corruption import accrue_corruption
 from world.magic.services.resonance_environment import (
     _get_room_resonances,
@@ -45,9 +46,6 @@ if TYPE_CHECKING:
 
 #: ``LocationValueModifier.source`` tag for cascade rows mutated by defilement.
 DEFILE_SOURCE = "defilement"
-
-#: Affinity whose resonances corrupt the world (case-insensitive name match).
-_ABYSSAL = "abyssal"
 
 
 @transaction.atomic
@@ -131,10 +129,11 @@ def _spread_abyssal_taint(
     cfg: ResonanceEnvironmentConfig,
 ) -> None:
     """Steps 2-3: spread the technique's Abyssal resonances + accrue caster->world corruption."""
+    abyssal = Affinity.objects.get_abyssal_affinity()
     abyssal_resonances = [
         inv.resonance
         for inv in technique_result.resonance_involvements
-        if inv.resonance.affinity.name.lower() == _ABYSSAL
+        if inv.resonance.affinity_id == abyssal.pk
     ]
     for resonance in abyssal_resonances:
         # 2. Spread Abyssal taint onto the room.

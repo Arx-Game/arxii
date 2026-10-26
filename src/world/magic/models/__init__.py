@@ -82,7 +82,9 @@ from world.magic.models.appetites import (
 from world.magic.models.aura import (
     AuraAffinityThreshold,
     CharacterAura,
+    CharacterAuraShare,
     CharacterResonance,
+    aura_shares_prefetch,
 )
 from world.magic.models.commitments import CommittingDeclaration  # noqa: F401
 from world.magic.models.corruption_config import CorruptionConfig
@@ -206,6 +208,7 @@ from world.magic.models.soul_tether import (
 )
 from world.magic.models.soul_tether_config import SoulTetherConfig
 from world.magic.models.soulfray import AnimaRitualBudgetAward, MishapPoolTier, SoulfrayConfig
+from world.magic.models.teaching import TraditionTeachingConfig
 from world.magic.models.technique_builder import (
     TechniqueBudgetConfig,
     TechniqueTierBudget,
@@ -304,6 +307,7 @@ __all__ = [
     "CastPowerLevel",
     "CharacterAnima",
     "CharacterAura",
+    "CharacterAuraShare",
     # prepared per-character Audere text (#4101)
     "CharacterCrossingText",
     # gifts
@@ -509,6 +513,8 @@ __all__ = [
     "TraditionGiftGrant",
     "TraditionManager",
     "TraditionRitualGrant",
+    "TraditionTeachingConfig",
     # training outcome awards (#2727)
     "TrainingOutcomeAward",
+    "aura_shares_prefetch",
 ]

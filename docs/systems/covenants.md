@@ -148,7 +148,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `VowSituationalPerkSituation`/`VowSituationalPerkRung`; carries four typed, nullable/blank
   parameter columns (Situation Parameters): `threshold_percent` (0-100, percent-shaped floors —
   aura-axis floor, ally-health fraction), `count_threshold` (count-shaped floors — surrounded
-  lock count, minimum affection), `affinity` (`AffinityType` axis for attacker typing),
+  lock count, minimum affection), `affinity` (nullable FK to `Affinity` for attacker typing),
   `origin_side` (`SituationOriginSide.OURS`/`THEIRS`, blank = side-blind). No JSON (ADR-0007) —
   every knob is a real column. Which situation reads which params — and requires which — is
   `SITUATION_PARAM_SPECS` (`perks/constants.py`); the mixin's `clean()` enforces both directions
@@ -187,7 +187,7 @@ modules import combat/checks contexts at function level, never the reverse):
   `CHAMPION_DUEL` (Battle wiring, Task 3), `COMBAT_OPENED_FROM_PARLEY`/`AMBUSH_UNDERWAY`
   (origin-marker addition, Task 4), `ALLY_INTERCEPTED_FOR_ME` (declared-guard, Task 5), and
   `ATTACKER_AFFINITY` (defense-side seam, Task 6; originally Abyssal-only, renamed and
-  parameterized to all three `AffinityType` axes by #2623, ADR-0154) from #2536 slice 3, plus
+  parameterized to all three affinity rows by #2623, ADR-0154) from #2536 slice 3, plus
   `ON_CHOSEN_GROUND` (#2646 — see "Chosen Ground" below) — see each value's own docstring entry
   for its evaluator's data source, its Situation Parameters, and any v1 approximation.
   `SITUATION_PARAM_SPECS` (#2623) names, per situation, which of the four `SituationRequirementMixin`
@@ -297,8 +297,9 @@ clients. `announce_fired_perks` dual-dispatches per firing — a persisted, Narr
 `combat.interaction_services.broadcast_action_outcome` uses, including its `scene=` link —
 resolved via `get_active_scene(location)` — so a perk announce appears in scene-log replay like
 the precedent it's modeled on) PLUS a direct `location.msg_contents(text)` text companion so bare
-telnet renders the identical line. `broadcast_action_outcome` alone is WS-only and was verified
-insufficient for this path — see ADR-0151 for why it isn't reused as-is. The telnet companion
+telnet renders the identical line. `broadcast_action_outcome` was WS-only when this was built
+(see ADR-0151 for why it wasn't reused); it reaches telnet itself since #4640, but takes an
+encounter, which a perk firing outside a fight does not have. The telnet companion
 calls `location.msg_contents` directly rather than `flows.service_functions.communication
 .message_location` — `message_location` resolves its broadcast room from its caller's own
 location, not from an explicit `location` argument, and this function has no single acting
@@ -1331,7 +1332,7 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   typed columns (`threshold_percent`/`count_threshold`/`affinity`/`origin_side`) on both
   `VowSituationalPerkSituation` and `VowSituationalPerkRung`, the `SITUATION_PARAM_SPECS`
   per-situation allowed/required contract, the Abyssal-only attacker-typing situation's rename
-  to `ATTACKER_AFFINITY` (now authorable against all three `AffinityType` axes), and
+  to `ATTACKER_AFFINITY` (now authorable against all three affinity rows), and
   `CombatEncounter.initiated_by_pc_side` — the new initiator-side capture `origin_side`-
   parameterized situations read (stamped `True` at CREATE by every PC-cast encounter path;
   `False` is admin/GM-stampable in v1, honestly `NULL`-heavy until an NPC-initiated-encounter

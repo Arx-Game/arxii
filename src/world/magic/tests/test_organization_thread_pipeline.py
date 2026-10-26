@@ -12,28 +12,30 @@ from world.societies.models import OrganizationGiftGrant
 
 
 class OrganizationAnchorCapTests(TestCase):
-    def test_anchor_cap_is_min_of_grant_and_path_stage(self):
-        """compute_anchor_cap returns min(grant_cap, path_stage × 10).
+    def test_effective_cap_is_lower_of_grant_and_level(self):
+        """The anchor cap is the org grant alone; the level cap binds in the effective cap.
 
-        A fresh sheet has path_stage 0, so the cap is 0 regardless of the
-        grant's anchor_cap — the member can't invest until they progress.
+        #4585: compute_anchor_cap no longer folds in a Path-stage cap. A level-1 owner
+        (no class level) is held to 10 by the level cap; a level-5 owner is held to the
+        grant's 30.
         """
-        sheet = CharacterSheetFactory()
+        from world.magic.services import compute_effective_cap
+
         org = OrganizationFactory()
         resonance = ResonanceFactory()
         gift = GiftFactory()
         gift.resonances.add(resonance)
         OrganizationGiftGrant.objects.create(organization=org, gift=gift, anchor_cap=30)
-        thread = Thread.objects.create(
-            owner=sheet,
-            resonance=resonance,
-            target_kind=TargetKind.ORGANIZATION,
-            target_organization=org,
-        )
-        cap = compute_anchor_cap(thread)
-        # path_stage defaults to 1 for a fresh sheet (no path history),
-        # so cap is min(30, 1 × 10) = 10.
-        self.assertEqual(cap, 10)
+        for class_level, effective in ((None, 10), (5, 30)):
+            sheet = CharacterSheetFactory(_class_level=class_level)
+            thread = Thread.objects.create(
+                owner=sheet,
+                resonance=resonance,
+                target_kind=TargetKind.ORGANIZATION,
+                target_organization=org,
+            )
+            self.assertEqual(compute_anchor_cap(thread), 30)
+            self.assertEqual(compute_effective_cap(thread), effective)
 
     def test_anchor_cap_zero_when_no_matching_grant(self):
         """No matching grant for the thread's resonance → cap is 0."""

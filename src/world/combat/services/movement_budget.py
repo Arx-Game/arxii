@@ -70,7 +70,7 @@ def hops_left(participant: CombatParticipant) -> int:
     return max(0, hops_for(participant.character_sheet) - participant.hops_used)
 
 
-def spend_combat_hop(participant: CombatParticipant) -> None:
-    """Record one hop spent this round."""
-    participant.hops_used += 1
+def spend_combat_hop(participant: CombatParticipant, hops: int = 1) -> None:
+    """Record ``hops`` spent this round (a climb over a wall costs more than one, #4663)."""
+    participant.hops_used += hops
     participant.save(update_fields=["hops_used"])

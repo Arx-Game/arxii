@@ -5,7 +5,7 @@
  * Only pictures that can be looks are offered: not NSFW, not hidden, not already looks.
  */
 import { useRef, useState } from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, NO_DESCRIPTION } from '@/components/ui/dialog';
 import {
   type GalleryPicture,
   useChangePicture,
@@ -46,7 +46,7 @@ export function AddLookFlow({ open, entryId, sheetId, ink, onClose }: AddLookFlo
   return (
     <>
       <Dialog open={open && cropping === null} onOpenChange={(next) => !next && onClose()}>
-        <DialogContent className="max-w-lg">
+        <DialogContent {...NO_DESCRIPTION} className="max-w-lg">
           <div className="refsheet gallery-dialog">
             <DialogTitle className="gallery-dialog-title">Add a look</DialogTitle>
             <div className="gallery-pick">

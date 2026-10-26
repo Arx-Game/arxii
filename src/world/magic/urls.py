@@ -1,10 +1,7 @@
-"""
-URL configuration for magic system API.
+"""URL configuration for magic system API.
 
-Note: Affinity and Resonance routes have been removed.
-These are now served from the mechanics app as ModifierTarget entries
-filtered by category. Use /api/mechanics/modifier-types/?category=affinity
-or /api/mechanics/modifier-types/?category=resonance instead.
+Affinity and Resonance are their own models (``world.magic.models.affinity``) and are
+listed at ``/api/magic/affinities/`` and ``/api/magic/resonances/``.
 """
 
 from django.urls import path
@@ -12,6 +9,7 @@ from rest_framework.routers import DefaultRouter
 
 from world.magic.views import (
     AcceptTechniqueOfferView,
+    AffinityViewSet,
     ApplicablePullsView,
     AudereMajoraRespondView,
     AudereRespondView,
@@ -41,6 +39,7 @@ from world.magic.views import (
     PreparedSurgeTextViewSet,
     PurchaseGiftUnlockView,
     ResonanceGrantViewSet,
+    ResonanceViewSet,
     RestrictionViewSet,
     RitualPerformView,
     RitualSessionViewSet,
@@ -68,7 +67,8 @@ app_name = "magic"
 router = DefaultRouter()
 
 # Lookup tables (read-only)
-# Note: affinities and resonances are now in mechanics app as ModifierTarget.
+router.register("affinities", AffinityViewSet, basename="affinity")
+router.register("resonances", ResonanceViewSet, basename="resonance")
 router.register("styles", TechniqueStyleViewSet, basename="technique-style")
 router.register("effect-types", EffectTypeViewSet, basename="effect-type")
 router.register(

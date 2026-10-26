@@ -362,7 +362,7 @@ section for the full #2428/#2440/#2441/#2442 build record.
 - Picks are written at finalize onto the hold (`CharacterTechnique.custom_name`
   /`custom_description`/`price`/`early_form`), never onto the shared catalog
   `Technique`; a flourish pick also weaves a TECHNIQUE thread (up to
-  `CREATION_PERSONALIZATION_MAX_LEVEL`, 2) so an early flourish never skips a
+  `CREATION_PERSONALIZATION_MAX_LEVEL`, 1, a new character's level per #4585) so an early flourish never skips a
   crossing. A Motif is seeded for every new character at finalize so a flourish pick
   (resonance-gated; a price or name/description pick carries no resonance of its own)
   can qualify once the gift resonance resolves.

@@ -31,6 +31,12 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   renders — and, per Finding I1, `lingeringEncounterId`/`dismissedEncounterId`,
   which keep `CombatRail` mounted after `useEncounterForScene`'s poll drops a
   completed encounter, until the player dismisses the outcome banner.
+- **Battle map in the game page (#4670)**: `GamePage` wraps its layout in `CombatPickProvider`
+  (`frontend/src/combat/CombatPickContext.tsx`; read it with `useCombatPick` from
+  `combat/combatPick.ts`) and `GameCenter` renders `CombatMainMap` above `GameWindow` while
+  `showCombatRail` is true (`mapEncounterId`). The map is the main view of a fight; `CombatRail`
+  keeps "Your Turn" and, for a GM, "GM", and shares cast-position picks with the map through the
+  provider. `SceneTacticalMap` shows only outside a fight (on `SceneDetailPage`).
 - **`GameWindow.tsx`**: Central communication hub with session tabs and
   command input. When the composition root passes a `sceneFeed` prop (an
   active scene), the center renders the structured prose-line feed
@@ -189,7 +195,11 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   counts (`railCollapsed` in the play preferences; a count press reopens it on
   that row); the find box at the foot (`feed-find`, Esc clears) is the needle
   `GameWindow` narrows by. Width (`railWidth`, 200 to 320) is dragged on the
-  pane's right edge in `GameLayout`.
+  pane's right edge in `GameLayout`. The rail's and the sidebar's resize handles
+  are both 12px strips on the pane's edge (`play-sidebar-resize`, `data-edge`
+  names the side); a touch screen adds a 44px grip at mid-height
+  (`index.css`, `pointer: coarse`). The sidebar's was a 44px strip down the
+  whole edge and sat over the battle map's zoom buttons (#4641).
 - **`PlaySidebar.tsx`**: The single contextual sidebar — Here / History mode tabs
   sharing one scroll container (Conversations mode left for the rail, #4129).
   Both mode bodies stay mounted (`hidden` attribute, not conditional unmount) so

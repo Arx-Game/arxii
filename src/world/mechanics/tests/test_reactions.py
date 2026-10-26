@@ -63,14 +63,20 @@ def _make_available_action(
     target_object_id: int = 99,
     capability_name: str = "telekinesis",
     instance_id: int = 1,
+    source_name: str | None = None,
 ) -> AvailableAction:
-    """Build a minimal AvailableAction with a mock ChallengeInstance."""
-    cap_source = _make_capability_source(capability_name)
+    """Build a minimal AvailableAction with a mock ChallengeInstance.
+
+    ``capability_name`` is the capability behind the approach; ``source_name`` is what
+    the source carries (defaults to the same; a condition source carries "").
+    """
+    cap_source = _make_capability_source(capability_name if source_name is None else source_name)
     instance = MagicMock()
     instance.target_object_id = target_object_id
     instance.pk = instance_id
 
     approach = MagicMock()
+    approach.application.capability.name = capability_name
 
     return AvailableAction(
         application_id=1,
@@ -175,6 +181,16 @@ class DispatchCapabilityReactionNoActionsTest(TestCase):
 class DispatchCapabilityReactionSelectionTest(TestCase):
     """Selects action by capability name and invokes outcome_fn with the result."""
 
+    def setUp(self) -> None:
+        # resolve_challenge is mocked here, so the repeat-answer check (#4676) has no
+        # real instance to query; it passes the mocked instance through.
+        patcher = patch(
+            "world.mechanics.reactions._fresh_reaction_instance",
+            side_effect=lambda _actor, instance: instance,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_selects_matching_capability_and_calls_outcome_fn(self) -> None:
         actor = MagicMock()
         actor.location = MagicMock()
@@ -224,6 +240,38 @@ class DispatchCapabilityReactionSelectionTest(TestCase):
             tele_action.capability_source,
             extra_modifiers=0,
         )
+
+    def test_matches_approach_when_the_surviving_source_is_a_condition(self) -> None:
+        """A condition source carries an empty name; the approach's capability decides (#4663)."""
+        actor = MagicMock()
+        actor.location = MagicMock()
+        target = MagicMock()
+        target.id = 99
+
+        resolution = _make_resolution_result()
+        shield_action = _make_available_action(capability_name="shield", source_name="")
+        tele_action = _make_available_action(capability_name="telekinesis", source_name="")
+
+        with (
+            patch(
+                "world.mechanics.services.get_available_actions",
+                return_value=[shield_action, tele_action],
+            ),
+            patch(
+                "world.mechanics.challenge_resolution.resolve_challenge",
+                return_value=resolution,
+            ) as mock_resolve,
+        ):
+            dispatch_capability_reaction(
+                actor,
+                target,
+                challenge_name="Interpose",
+                approach="telekinesis",
+                error_msg="no match",
+                outcome_fn=MagicMock(),
+            )
+
+        self.assertIs(mock_resolve.call_args.args[2], tele_action.resolved_challenge_approach)
 
     def test_falls_back_to_first_action_when_approach_not_found(self) -> None:
         """When the named approach has no matching capability_source, fall back to first action."""

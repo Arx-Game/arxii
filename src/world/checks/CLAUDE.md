@@ -88,7 +88,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
    (#2536 slice 3, ADR-0153) is threaded through too — populated only on a defense-side check
    (currently only `world.combat.services.resolve_npc_attack`), `None` on every offense-side
    call — so an `ATTACKER_AFFINITY`-gated guarantee can fire on a defender's roll (#2623,
-   ADR-0154 — parameterized to any `AffinityType` axis, renamed from its original Abyssal-only
+   ADR-0154 — parameterized to any affinity row, renamed from its original Abyssal-only
    form).
    Both `_situational_perk_check_bonus` (step 5's CHECK_BONUS) and this step also make a
    DORMANT pass right after their live `applicable_perks` call (#2536 slice 3, Task 7, ruling
@@ -230,7 +230,8 @@ valuation helper; never re-derive the sign/None rule). The equipment walk's vow 
 `vow_part`, and crafted modifiers are one contribution per worn piece.
 Distinctions and scene surroundings are the third and fourth (#4638, ADR-4638-A): the CHARACTER
 block calls `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)`, which prices a sized
-`DistinctionEffect` at the holder's `CharacterSheet.current_level`, scaled by rank, before
+`DistinctionEffect` at the holder's `CharacterSheet.current_level` and the size its held rank
+names (`DistinctionEffectRankSize`, #4660, ADR-4660-A; rank never multiplies it), before
 amplification and immunity; the rows stay in the CHARACTER kind (achievement rewards and form
 profiles on the same path stay flat). `_scene_check_contributions` prices a sized
 `SceneCheckModifier` at its authored `modifier_level`. Only this seam passes a lane: every other

@@ -88,7 +88,7 @@ class Migration(migrations.Migration):
             name="creation_point_cost",
             field=models.PositiveSmallIntegerField(
                 blank=True,
-                help_text="Character-creation points to take this flourish (#4099). Blank = not offered in creation. Only resonance-gated rows at level 2 or below can be offered.",
+                help_text="Character-creation points to take this flourish (#4099). Blank = not offered in creation. Only resonance-gated rows at level 1 can be offered.",
                 null=True,
             ),
         ),
@@ -156,7 +156,7 @@ class Migration(migrations.Migration):
             name="min_crossing_level",
             field=models.PositiveSmallIntegerField(
                 default=3,
-                help_text="Thread level at which this bonus becomes selectable. Any level from 0 up; low levels are the early flourishes (#4099). Default 3.",
+                help_text="Shown thread level (the number players see; a thread stored at 30 shows 3). The bonus becomes selectable here; low levels are the early flourishes (#4099). Default 3.",
             ),
         ),
         migrations.AlterField(

@@ -8,6 +8,15 @@ falling back to a unique prefix match, mirroring ``CmdPlaces``) and
 dispatches ``TakePositionAction`` when the caller is not yet placed anywhere,
 or ``MoveToPositionAction`` when already placed.
 
+``position/fly`` dispatches ``TakeFlightAction`` and ``position/land``
+``LandAction`` (#4663): a character with a flight capability takes off into the
+air above where she stands, and comes back down. ``position/pass <name>``
+dispatches ``PassHeldGroundAction`` (#4663): roll to get past the enemy holding
+that adjacent place, with her best matching approach. ``position/stunt <feature> to
+<place>`` dispatches ``PerformStuntAction`` (#4675) for the first stunt she could make
+from a feature of that name in her place to that place; the listing names each place's
+features.
+
 ``position/place <target>=<position name>`` (#3385) dispatches
 ``GMPlaceInPositionAction`` -- staff/GM-fiat unchecked placement of any
 co-located object. No business logic here: the command resolves ``<target>``
@@ -21,14 +30,25 @@ from __future__ import annotations
 
 from actions.definitions.positioning import (
     GMPlaceInPositionAction,
+    LandAction,
     MoveToPositionAction,
+    PassHeldGroundAction,
+    PerformStuntAction,
+    TakeFlightAction,
     TakePositionAction,
 )
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.utils.gm_resolution import resolve_position_by_name
+from world.areas.positioning.constants import STUNT_CANT_FROM_HERE
 
 _SWITCH_PLACE = "place"
+_SWITCH_FLY = "fly"
+_SWITCH_LAND = "land"
+_SWITCH_GET_PAST = "pass"
+_USAGE_GET_PAST = "Usage: position/pass <position name>"
+_SWITCH_STUNT = "stunt"
+_USAGE_STUNT = "Usage: position/stunt <feature> to <position name>"
 _USAGE_PLACE = "Usage: position/place <target>=<position name>"
 _NOT_ANYWHERE = "You aren't anywhere."
 
@@ -40,6 +60,20 @@ class CmdPosition(ArxCommand):
         position
         position <name>
         position/place <target>=<position name>
+        position/fly
+        position/land
+        position/pass <name>
+        position/stunt <feature> to <name>
+
+    Bare ``position`` lists the places here, who stands in each, and which an enemy
+    holds against you in a fight ("held by <name>": stepping in stops you there).
+
+    Switches:
+        /fly    take flight into the air above where you stand.
+        /land   come down onto the ground below you.
+        /pass   roll to get past the enemy holding <name>, a place next to you.
+        /stunt  use a feature where you stand (a chandelier, a rope) to reach <name>.
+        /place  (GM) set <target> in <position name>.
     """
 
     key = "position"
@@ -53,8 +87,22 @@ class CmdPosition(ArxCommand):
             except CommandError as err:
                 self.msg(str(err))
             return
+        if _SWITCH_FLY in self.switches or _SWITCH_LAND in self.switches:
+            action = TakeFlightAction() if _SWITCH_FLY in self.switches else LandAction()
+            result = action.run(self.caller)
+            if result.message:
+                self.msg(result.message)
+            return
 
         raw = (self.args or "").strip()
+        rolled = {_SWITCH_GET_PAST: self._do_pass, _SWITCH_STUNT: self._do_stunt}
+        for switch, handler in rolled.items():
+            if switch in self.switches:
+                try:
+                    handler(raw)
+                except CommandError as err:
+                    self.msg(str(err))
+                return
         if not raw:
             self._list_positions()
             return
@@ -65,8 +113,13 @@ class CmdPosition(ArxCommand):
             self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
 
     def _list_positions(self) -> None:
-        from world.areas.positioning.models import ObjectPosition, Position  # noqa: PLC0415
+        from world.areas.positioning.models import (  # noqa: PLC0415
+            ObjectPosition,
+            Position,
+            PositionFeature,
+        )
         from world.areas.positioning.services import room_position_adjacency  # noqa: PLC0415
+        from world.combat.services.held_ground import held_place_holders  # noqa: PLC0415
 
         room = self.caller.location
         if room is None:
@@ -85,6 +138,19 @@ class CmdPosition(ArxCommand):
         ):
             occupants_by_position.setdefault(obj_pos.position_id, []).append(obj_pos.objectdb.key)
 
+        # Places an enemy holds against her in a live fight, read once (#4663).
+        holders = held_place_holders(self.caller)
+        # Each place's features, read once (#4675).
+        features_by_position: dict[int, list[str]] = {}
+        for feature in (
+            PositionFeature.objects.filter(position__room=room)
+            .select_related("feature_type")
+            .order_by("pk")
+        ):
+            features_by_position.setdefault(feature.position_id, []).append(
+                feature.feature_type.name
+            )
+
         lines = ["Positions here:"]
         for p in positions:
             occupants = occupants_by_position.get(p.pk, [])
@@ -93,9 +159,13 @@ class CmdPosition(ArxCommand):
                 name_by_id[pid] for pid in adjacency.get(p.pk, []) if pid in name_by_id
             ]
             adjacent_text = ", ".join(adjacent_names) if adjacent_names else "none"
+            held_text = f"; held by {holders[p.pk]}" if p.pk in holders else ""
+            features = features_by_position.get(p.pk)
+            features_text = f"; features: {', '.join(features)}" if features else ""
             lines.append(
                 f"  {p.name} ({p.get_kind_display()}) — "
-                f"occupants: {occupants_text}; adjacent: {adjacent_text}"
+                f"occupants: {occupants_text}; adjacent: {adjacent_text}{held_text}"
+                f"{features_text}"
             )
         self.msg("\n".join(lines))
 
@@ -112,6 +182,49 @@ class CmdPosition(ArxCommand):
             result = TakePositionAction().run(self.caller, position_id=position.pk)
         else:
             result = MoveToPositionAction().run(self.caller, position_id=position.pk)
+        if result.message:
+            self.msg(result.message)
+
+    def _do_pass(self, name: str) -> None:
+        if not name:
+            raise CommandError(_USAGE_GET_PAST)
+        room = self.caller.location
+        if room is None:
+            raise CommandError(_NOT_ANYWHERE)
+        position = resolve_position_by_name(room, name)
+        result = PassHeldGroundAction().run(self.caller, position_id=position.pk)
+        if result.message:
+            self.msg(result.message)
+
+    def _do_stunt(self, raw: str) -> None:
+        from world.areas.positioning.stunts import stunt_options  # noqa: PLC0415
+
+        feature_name, sep, place_name = raw.partition(" to ")
+        feature_name, place_name = feature_name.strip(), place_name.strip()
+        if not sep or not feature_name or not place_name:
+            raise CommandError(_USAGE_STUNT)
+        room = self.caller.location
+        if room is None:
+            raise CommandError(_NOT_ANYWHERE)
+        destination = resolve_position_by_name(room, place_name)
+        wanted = feature_name.lower()
+        option = next(
+            (
+                option
+                for option in stunt_options(self.caller)
+                if option.destination.pk == destination.pk
+                and option.feature.feature_type.name.lower() == wanted
+            ),
+            None,
+        )
+        if option is None:
+            raise CommandError(STUNT_CANT_FROM_HERE)
+        result = PerformStuntAction().run(
+            self.caller,
+            feature_id=option.feature.pk,
+            position_id=destination.pk,
+            approach_id=option.approach.pk,
+        )
         if result.message:
             self.msg(result.message)
 

@@ -1,7 +1,7 @@
 """CG gift/technique availability service (#2426).
 
-Character creation's magic stage lets a player pick a Gift (from their chosen
-Tradition) and then techniques for that Gift. Two curated authoring tables decide
+Character creation's magic stage lets a player pick a Major Gift (any Tradition may
+teach any of them, #4659) and then techniques for that Gift. Two curated authoring tables decide
 which (#4555): the (path, gift) list (``PathGiftGrant.starter_techniques``, #1579)
 holds the techniques for that Path and Gift, and the (tradition, gift) list
 (``TraditionGiftGrant.special_techniques``, #2426) restricts. A technique no
@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch, Q, QuerySet
 
+from world.magic.constants import GiftKind
 from world.magic.models.grants import PathGiftGrant, TraditionGiftGrant
 from world.magic.models.techniques import Technique
 from world.magic.types.cg_catalog import TechniqueOptions
@@ -207,36 +208,34 @@ def get_species_technique_options(
 
 
 def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:
-    """Gifts pickable under ``tradition`` that have >=1 technique available for ``path``.
+    """Major Gifts pickable under ``tradition`` with >=1 technique available for ``path``.
 
-    A gift needs an authored ``TraditionGiftGrant`` row for ``tradition`` and, on
-    ``path``'s list for that gift, a technique offered to ``tradition`` (listed by no
-    Tradition grant, or by this one's, #4555). "Available" is
+    Every Tradition may teach every Major Gift (#4659): a ``TraditionGiftGrant`` row
+    marks a Gift the Tradition favors, it no longer gates the pick. A Gift is offered
+    when ``path``'s list for it holds a technique offered to ``tradition`` (listed by
+    no Tradition grant, or by this one's, #4555). "Available" is
     ``cg_takeable_techniques``, the same rule the technique picker applies, so a gift
     whose pool holds only unready, ultimate or gated techniques is not offered with an
     empty picker behind it (#4545). A fixed query count, no per-gift query loop.
     """
-    tradition_grants = list(
-        TraditionGiftGrant.objects.filter(tradition=tradition).select_related("gift")
-    )
-    if not tradition_grants:
-        return []
-
-    gift_ids = [grant.gift_id for grant in tradition_grants]
-    listings = tradition_listings(gift_ids)
-    path_grants = PathGiftGrant.objects.filter(path=path, gift_id__in=gift_ids).prefetch_related(
-        Prefetch(
-            "starter_techniques",
-            queryset=cg_takeable_techniques(),
-            to_attr="cached_starter_techniques",
+    path_grants = list(
+        PathGiftGrant.objects.filter(path=path, gift__kind=GiftKind.MAJOR)
+        .select_related("gift")
+        .prefetch_related(
+            Prefetch(
+                "starter_techniques",
+                queryset=cg_takeable_techniques(),
+                to_attr="cached_starter_techniques",
+            )
         )
     )
-    offered = {
-        grant.gift_id
+    listings = tradition_listings([grant.gift_id for grant in path_grants])
+    offered = [
+        grant.gift
         for grant in path_grants
         if any(
             offered_to_tradition(technique.pk, tradition.pk, listings)
             for technique in grant.cached_starter_techniques
         )
-    }
-    return [grant.gift for grant in tradition_grants if grant.gift_id in offered]
+    ]
+    return sorted(offered, key=lambda gift: (gift.name, gift.pk))

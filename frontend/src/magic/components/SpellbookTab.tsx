@@ -12,7 +12,7 @@
  *
  * Aura is rendered qualitatively per the magic app's key rule ("player-facing data is
  * narrative, not numerical") — the glimpse_story plus a dominant-affinity label, never the
- * raw celestial/primal/abyssal percentages.
+ * raw affinity percentages.
  *
  * Drawn in the Reference Sheet's vocabulary (#3898): gifts and techniques are entries on
  * hairlines, resonances are a glance list, and the aura is prose under its own
@@ -173,31 +173,32 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
   );
 }
 
+/** A CSS-safe class suffix for an affinity name ("Celestial" -> "celestial"). */
+function affinitySlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
 /**
- * The aura as a proportional strip: three segments sized by their share, with the split
- * said in words underneath rather than printed on them. An aura with nothing in it
- * renders no strip — there is nothing to be proportional to.
+ * The aura as a proportional strip: one segment per affinity held, sized by its share,
+ * with the split said in words underneath rather than printed on them. An aura with
+ * nothing in it renders no strip — there is nothing to be proportional to.
  */
 function AuraStrip({ aura }: { aura: CharacterSheetAura }) {
-  const total = aura.celestial + aura.primal + aura.abyssal;
-  if (total <= 0) return null;
-  const segments: Array<[string, number]> = [
-    ['celestial', aura.celestial],
-    ['primal', aura.primal],
-    ['abyssal', aura.abyssal],
-  ];
+  const held = aura.shares.filter((share) => share.percent > 0);
+  if (held.length === 0) return null;
   return (
     <div className="refsheet-aura" data-testid="spellbook-aura-strip">
-      {segments
-        .filter(([, share]) => share > 0)
-        .map(([name, share]) => (
+      {held.map((share) => {
+        const slug = affinitySlug(share.affinity_name);
+        return (
           <span
-            key={name}
-            className={`refsheet-aura-${name}`}
-            style={{ flexGrow: share }}
-            data-testid={`aura-segment-${name}`}
+            key={share.affinity_id}
+            className={`refsheet-aura-seg refsheet-aura-${slug}`}
+            style={{ flexGrow: share.percent }}
+            data-testid={`aura-segment-${slug}`}
           />
-        ))}
+        );
+      })}
     </div>
   );
 }
@@ -212,7 +213,7 @@ function glimpseStateLine(state: CharacterSheetAura['glimpse_state']): string {
 /**
  * A share of the aura, in words. The magic app's standing rule is that player-facing
  * data is narrative rather than numerical, and the sheet's spec asks for the split to
- * be said in words beside the strip — so this is the one place the three figures turn
+ * be said in words beside the strip — so this is the one place the figures turn
  * into language, and the figures themselves never reach the page.
  */
 function shareInWords(share: number, total: number): string {
@@ -233,13 +234,10 @@ function shareInWords(share: number, total: number): string {
  * abyssal."). Silent when the aura is unformed and every share is zero.
  */
 function auraSplitSentence(aura: CharacterSheetAura): string {
-  const total = aura.celestial + aura.primal + aura.abyssal;
-  const held = [
-    { name: 'celestial', share: aura.celestial },
-    { name: 'primal', share: aura.primal },
-    { name: 'abyssal', share: aura.abyssal },
-  ]
-    .filter((row) => row.share > 0)
+  const total = aura.shares.reduce((sum, share) => sum + share.percent, 0);
+  const held = aura.shares
+    .filter((row) => row.percent > 0)
+    .map((row) => ({ name: row.affinity_name.toLowerCase(), share: row.percent }))
     .sort((a, b) => a.share - b.share);
 
   if (held.length === 0) return '';
@@ -252,19 +250,6 @@ function auraSplitSentence(aura: CharacterSheetAura): string {
     .join(', ');
   const sentence = `${named}, the rest ${rest.name}.`;
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
-}
-
-/** The affinity with the highest share, as a qualitative label — never the raw percentage. */
-function dominantAffinityLabel(aura: CharacterSheetAura): string {
-  const shares: Array<[string, number]> = [
-    ['Celestial', aura.celestial],
-    ['Primal', aura.primal],
-    ['Abyssal', aura.abyssal],
-  ];
-  return shares.reduce(
-    (dominant, share) => (share[1] > dominant[1] ? share : dominant),
-    shares[0]
-  )[0];
 }
 
 export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props) {
@@ -432,10 +417,12 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
               words. The demo draws it this way, and the magic app's narrative-not-
               numerical rule is why the numbers stay off the page. */}
           <AuraStrip aura={magic.aura} />
-          <Ledger>
-            {auraSplitSentence(magic.aura) ||
-              `It reads as ${dominantAffinityLabel(magic.aura).toLowerCase()}.`}
-          </Ledger>
+          {(auraSplitSentence(magic.aura) || magic.aura.dominant_affinity) && (
+            <Ledger>
+              {auraSplitSentence(magic.aura) ||
+                `It reads as ${magic.aura.dominant_affinity.toLowerCase()}.`}
+            </Ledger>
+          )}
           {isMyCharacter && <Ledger>{glimpseStateLine(magic.aura.glimpse_state)}</Ledger>}
           {magic.aura.glimpse_tags.length > 0 && (
             <div className="refsheet-tags" data-testid="spellbook-glimpse-tags">

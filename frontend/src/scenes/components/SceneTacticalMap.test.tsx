@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
@@ -127,8 +127,8 @@ const MOCK_SCENE = {
     { position_id: 102, adjacent_position_ids: [101] },
   ],
   persona_positions: [
-    { persona_id: 1, position: { id: 101, name: 'North Wall' } },
-    { persona_id: 2, position: null },
+    { persona_id: 1, square_x: null, square_y: null, position: { id: 101, name: 'North Wall' } },
+    { persona_id: 2, square_x: null, square_y: null, position: null },
   ],
   personas: [
     { id: 1, name: 'Alice Persona' },
@@ -372,12 +372,14 @@ describe('SceneTacticalMap', () => {
     const centerNode = screen.getByTestId('tactical-map-node-102');
     fireEvent.click(centerNode);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalledWith({
         ref: gmPlaceAction.ref,
         kwargs: { target_object_id: 42 },
       });
     });
+    // The picker resets once the dispatched placement resolves.
+    expect(await screen.findByText('Select a target…')).toBeInTheDocument();
   });
 
   it('does not show the Place toggle when no gm_place_in_position action is available', async () => {

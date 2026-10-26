@@ -13,14 +13,14 @@ term is chosen and the rest are listed under `_Avoid_`.
   Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate, Gift
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
-  Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501); and Magic skill floor (#4457,
-  ADR-4457-A; Tradition Training gains it)
+  Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501); and Magical training points and Teaching fit (#4659,
+  ADR-4659-B; replaced the #4457 Magic skill floor); and Shown thread level / level cap (#4585)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md) - also holds the #4581 vow added effect terms
   (ADR-4581-A): Vow added effect, Upgrade (of a vow added effect), Added-effect firing
   (_Avoid_: vow rider, vow switch)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
   Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
-- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms, and hop budget, tactics level and move plan (#4607), the waiting strike (#4608), unanswerable attacker, progress guarantee and bash (#4609), and the encounter state ping (#4644)
+- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms, and hop budget, tactics level and move plan (#4607), the waiting strike (#4608), unanswerable attacker, progress guarantee and bash (#4609), the encounter state ping (#4644), and dodge, dodge plan and area attack (#4676)
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
   Settled round; (ADR-4147) Spectacle, Spectacle kind; and (#4581, ADR-4581-A) Added-effect firing
   (the once-per-round / once-per-fight vow effect ledger)
@@ -96,13 +96,13 @@ term is chosen and the rest are listed under `_Avoid_`.
   feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to,
   plus Ward (#3983 Plan B, `AreaLevel.WARD` vs. the unrelated household Ward position) and a
   Capital stub pointing to societies' canonical entry
-- [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md) - also holds wall integrity and the walker rule (#4606), and traversal, hop and strike reach (#4607), and roofed position, screened position and grounding (#4608)
+- [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md) - also holds wall integrity and the walker rule (#4606), and traversal, hop and strike reach (#4607), and roofed position, screened position and grounding (#4608), and held ground, pass and player traversal (#4663), and place area, square and map terrain (#4670), and feature type, feature, reach and stunt (#4675)
 - [buildings](src/world/buildings/AGENT_GLOSSARY.md)
 - [locations](src/world/locations/AGENT_GLOSSARY.md)
 - [forms](src/world/forms/AGENT_GLOSSARY.md)
 - [ships](src/world/ships/AGENT_GLOSSARY.md)
 - [assets](src/world/assets/AGENT_GLOSSARY.md)
-- [distinctions](src/world/distinctions/AGENT_GLOSSARY.md)
+- [distinctions](src/world/distinctions/AGENT_GLOSSARY.md) - also holds rank size, the size a sized effect steps to at a rank (#4660)
 - [narrative](src/world/narrative/AGENT_GLOSSARY.md)
 - [boards](src/world/boards/AGENT_GLOSSARY.md)
 

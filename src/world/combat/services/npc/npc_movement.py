@@ -37,6 +37,7 @@ from world.combat.models import (
     CombatParticipant,
     ThreatPoolEntry,
 )
+from world.combat.services.held_ground import routing_profile
 from world.combat.services.npc.npc_targeting import (
     _npc_action_target_pool,
     _select_opponent_targets,
@@ -110,7 +111,7 @@ def _cheapest_route(
     profile: MovementProfile,
 ) -> list[Position] | None:
     """The cheapest route to a goal node, or None; the route may exceed the hop budget."""
-    return find_path(origin, goal_test, traversal=profile.traversal)
+    return find_path(origin, goal_test, traversal=profile.traversal, stop_at=profile.stop_at)
 
 
 def can_strike_this_round(
@@ -391,6 +392,9 @@ def _advance_route(
     """The full (uncut) route the advance takes, or None to stay put.
 
     None when there is no goal, the origin already strikes one, or nothing is reachable.
+    When held ground (``profile.stop_at``, #4663) closes every way to a goal this round,
+    it takes the way it would walk with no one in it, cut at the first held place: it
+    stops there this round and walks on from there the next.
     """
     if not pairs:
         return None
@@ -406,7 +410,22 @@ def _advance_route(
         return path
     hostiles, _ = _live_target_pool(opponent)
     hostile_pks = {p.pk for p in (target_position(t) for t in hostiles) if p is not None}
-    return _cheapest_route(origin, lambda node: node.pk in hostile_pks, profile)
+    path = _cheapest_route(origin, lambda node: node.pk in hostile_pks, profile)
+    if path is not None or not profile.stop_at:
+        return path
+    return _cut_at_held(
+        find_path(origin, strikes_a_goal, traversal=profile.traversal), profile.stop_at
+    )
+
+
+def _cut_at_held(path: list[Position] | None, stop_at: frozenset[int]) -> list[Position] | None:
+    """``path`` up to and including its first held place after the origin."""
+    if path is None:
+        return None
+    for index, position in enumerate(path[1:], start=1):
+        if position.pk in stop_at:
+            return path[: index + 1]
+    return path
 
 
 def advance_opponent(
@@ -415,6 +434,7 @@ def advance_opponent(
     attack_rows: list[CombatOpponentAction] | None = None,
     *,
     on_hop: HopHook | None = None,
+    profile: MovementProfile | None = None,
 ) -> Position | None:
     """Run an opponent's ADVANCE plan in its resolution slot; returns where it moved, or None.
 
@@ -427,6 +447,9 @@ def advance_opponent(
     ``on_hop`` (#4608) runs after each hop: the resolve loop fires waiting strikes on
     arrival there, saying first where the mover stepped. A hook that stops the mover
     ends the walk where it stands.
+
+    ``profile`` is the slot's routing profile when the caller already read it (#4663);
+    otherwise it is read here, held ground included.
     """
     if move_row is None or move_row.kind != OpponentMoveKind.ADVANCE:
         return None
@@ -438,7 +461,8 @@ def advance_opponent(
                 opponent=opponent, round_number=move_row.round_number
             ).select_related("threat_entry")
         )
-    profile = opponent.movement_profile
+    if profile is None:
+        profile = routing_profile(opponent)
     with mover_origin(opponent, profile) as origin:
         if origin is None:
             return None
@@ -483,7 +507,6 @@ def _broadcast_moves_to(opponent: CombatOpponent, position: Position) -> None:
         encounter=opponent.encounter,
         narration=MOVES_TO_LINE.format(name=opponent.name, position=position.name),
         target_personas=[],
-        deliver_telnet=True,
     )
 
 
@@ -561,5 +584,4 @@ def broadcast_cannot_reach(opponent: CombatOpponent) -> None:
         encounter=opponent.encounter,
         narration=CANNOT_REACH_LINE.format(name=opponent.name),
         target_personas=[],
-        deliver_telnet=True,
     )

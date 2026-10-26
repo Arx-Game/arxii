@@ -136,7 +136,7 @@ class BlinkDodgeReactiveE2ETests(TestCase):
         return inst
 
     def test_blink_dodges_attack_when_anima_sufficient(self) -> None:
-        """Bearer has ≥ cost anima and ≥ 2 positions → damage_dealt == 0 + position moved."""
+        """Bearer has ≥ cost anima → damage_dealt == 0, and she lands where she planned."""
         from world.areas.positioning.services import position_of
 
         # Install blink condition + trigger
@@ -146,6 +146,9 @@ class BlinkDodgeReactiveE2ETests(TestCase):
         from world.areas.positioning.services import force_move_to_position
 
         force_move_to_position(self.character, self.pos_a)
+        # Her dodge plan names where she lands; the game never picks it (#4676).
+        self.participant.dodge_landing = self.pos_b
+        self.participant.save(update_fields=["dodge_landing"])
 
         result = apply_damage_to_participant(
             self.participant, 30, damage_type=None, source=self.enemy
@@ -158,14 +161,8 @@ class BlinkDodgeReactiveE2ETests(TestCase):
             "blink_dodge should zero damage_dealt (payload.amount=0)",
         )
 
-        # Bearer should have relocated (flavor: any position != pos_a)
-        after_pos = position_of(self.character)
-        self.assertIsNotNone(after_pos, "bearer should be at some position after blink")
-        self.assertNotEqual(
-            after_pos.pk,
-            self.pos_a.pk,
-            "bearer should have moved to a different position after blink",
-        )
+        # Bearer lands on her planned place.
+        self.assertEqual(position_of(self.character), self.pos_b)
 
     def test_blink_fizzles_when_anima_insufficient(self) -> None:
         """Anima < cost → blink_dodge no-ops → attack lands (damage_dealt > 0)."""

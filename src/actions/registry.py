@@ -91,6 +91,7 @@ from actions.definitions.combat_maneuvers import (
     CoverAction,
     DemoralizeAction,
     DisengageAction,
+    DodgePlanAction,
     EngageAction,
     FleeAction,
     InterposeAction,
@@ -434,9 +435,16 @@ from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.places import JoinPlaceAction, LeavePlaceAction
 from actions.definitions.portals import DissolvePortalAnchorAction, InstallPortalAnchorAction
 from actions.definitions.positioning import (
+    GMAttachFeatureAction,
+    GMDetachFeatureAction,
     GMPlaceInPositionAction,
+    LandAction,
     MoveToPositionAction,
+    PassHeldGroundAction,
+    PerformStuntAction,
     SetTheStageAction,
+    StepToSquareAction,
+    TakeFlightAction,
     TakePositionAction,
 )
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
@@ -814,7 +822,14 @@ _ALL_ACTIONS: list[Action] = [
     StopTravelAction(),
     HomeAction(),
     MoveToPositionAction(),
+    PassHeldGroundAction(),
+    PerformStuntAction(),
+    GMAttachFeatureAction(),
+    GMDetachFeatureAction(),
     TakePositionAction(),
+    StepToSquareAction(),
+    TakeFlightAction(),
+    LandAction(),
     GMPlaceInPositionAction(),
     SetTheStageAction(),
     SetSituationAction(),
@@ -862,6 +877,7 @@ _ALL_ACTIONS: list[Action] = [
     TauntAction(),
     ParleyAction(),
     MarkAction(),
+    DodgePlanAction(),
     StandoffReadAction(),
     StandoffPressAction(),
     StandoffTermsAction(),

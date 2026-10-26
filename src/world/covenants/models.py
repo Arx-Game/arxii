@@ -59,7 +59,6 @@ from world.magic.models.techniques import (
     validate_inert_removal_knobs,
 )
 from world.magic.specialization.models import AbstractSpecializedVariant
-from world.magic.types.aura import AffinityType
 from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
 if TYPE_CHECKING:
@@ -1290,6 +1289,7 @@ class CovenantRoleGiftGrant(NaturalKeyMixin, SharedMemoryModel):
     unlock_thread_level = models.PositiveIntegerField(
         default=0,
         help_text=(
+            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
             "The COVENANT_ROLE thread level at which this gift's techniques "
             "become available while engaged. 0 = always available."
         ),
@@ -2101,11 +2101,12 @@ class SituationRequirementMixin(models.Model):
         validators=[MinValueValidator(1)],
         help_text="Count-shaped floor: surrounded lock count, minimum affection.",
     )
-    affinity = models.CharField(
-        max_length=20,
-        choices=AffinityType.choices,
+    affinity = models.ForeignKey(
+        "arxii.Affinity",
+        on_delete=models.PROTECT,
+        null=True,
         blank=True,
-        default="",
+        related_name="+",
         help_text="Affinity axis for attacker typing (ATTACKER_AFFINITY).",
     )
     origin_side = models.CharField(
@@ -2137,7 +2138,7 @@ class SituationRequirementMixin(models.Model):
         values: dict[str, object | None] = {
             "threshold_percent": self.threshold_percent,
             "count_threshold": self.count_threshold,
-            "affinity": self.affinity or None,
+            "affinity": self.affinity,
             "origin_side": self.origin_side or None,
         }
         for field, value in values.items():
@@ -2339,7 +2340,10 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
     )
     unlock_thread_level = models.PositiveIntegerField(
         default=0,
-        help_text="The holder's vow thread level this effect needs.",
+        help_text=(
+            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
+            "The holder's vow thread level this effect needs."
+        ),
     )
     severity_per_thread_level = models.PositiveIntegerField(
         default=0,

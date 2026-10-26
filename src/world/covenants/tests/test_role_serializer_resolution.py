@@ -47,7 +47,7 @@ class RoleSerializerResolutionTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=level,
+            level=level * 10,  # ``level`` is shown; stored × 10 (#4585)
         )
         character.threads.invalidate()
 

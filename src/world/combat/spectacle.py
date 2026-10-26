@@ -386,6 +386,6 @@ def deliver_spectacle(encounter: CombatEncounter, result: SpectacleResult) -> No
 
     def _post() -> None:
         for line in result.lines:
-            broadcast_action_outcome(encounter=encounter, narration=line, deliver_telnet=True)
+            broadcast_action_outcome(encounter=encounter, narration=line)
 
     transaction.on_commit(_post, robust=True)

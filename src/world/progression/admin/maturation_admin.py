@@ -7,7 +7,7 @@ from world.progression.models import LevelStatPointSpend, MaturationSpend, Matur
 
 @admin.register(MaturationStatCap)
 class MaturationStatCapAdmin(admin.ModelAdmin):
-    list_display = ["path_stage", "stat_cap"]
+    list_display = ["path_stage", "stat_cap", "skill_cap"]
     ordering = ["path_stage"]
 
 

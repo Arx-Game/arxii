@@ -130,7 +130,6 @@ def _leave(encounter: CombatEncounter, opponent: CombatOpponent) -> None:
             broadcast_action_outcome,
             encounter=encounter,
             narration=LINE_RELEASED_LEAVES.format(name=opponent.name),
-            deliver_telnet=True,
         )
     )
 

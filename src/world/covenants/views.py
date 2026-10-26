@@ -306,6 +306,8 @@ def _build_role_power_row(
     A member with no woven role-thread (or a thread below the effect's
     ``min_thread_level``) has null capability fields.
     """
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+
     thread = threads_by_key.get((membership.character_sheet_id, membership.covenant_role_id))
     resonance_name = None
     capability_name = None
@@ -313,7 +315,7 @@ def _build_role_power_row(
     if thread is not None and thread.resonance_id is not None:
         resonance_name = thread.resonance.name
         effect = effects_by_resonance.get(thread.resonance_id)
-        if effect is not None and thread.level >= effect.min_thread_level:
+        if effect is not None and shown_thread_level(thread.level) >= effect.min_thread_level:
             if effect.capability_grant is not None:
                 capability_name = effect.capability_grant.name
             narrative_snippet = effect.narrative_snippet or None

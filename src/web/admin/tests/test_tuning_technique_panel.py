@@ -411,6 +411,7 @@ class TestTechniquePanelStartingKits(TestCase):
             BeginningTraditionFactory,
         )
         from world.classes.factories import PathFactory
+        from world.magic.constants import GiftKind
         from world.magic.factories import GiftFactory, TraditionFactory, TraditionGiftGrantFactory
         from world.species.factories import SpeciesFactory
 
@@ -423,6 +424,7 @@ class TestTechniquePanelStartingKits(TestCase):
         cls.gift = GiftFactory()
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
         cls.other_gift = GiftFactory()
+        cls.minor_gift = GiftFactory(kind=GiftKind.MINOR)
         cls.other_species = SpeciesFactory()
 
     def setUp(self) -> None:
@@ -583,10 +585,22 @@ class TestTechniquePanelStartingKits(TestCase):
         mock_kit.assert_not_called()
 
     @patch(_KIT_TARGET)
-    def test_gift_not_granted_by_the_tradition_is_a_form_error(self, mock_kit: Any) -> None:
+    def test_a_major_gift_the_tradition_does_not_favor_builds_a_kit(self, mock_kit: Any) -> None:
+        """#4659: any tradition may teach any Major Gift, favored or not."""
+        mock_kit.return_value = self._empty_kit()
         resp = self.client.post(
             reverse("admin_tuning_techniques"),
             self._kit_data(gift=self.other_gift.pk),
+        )
+        self.assertEqual(resp.status_code, 200)
+        mock_kit.assert_called_once()
+        self.assertEqual(mock_kit.call_args.args[0].gift, self.other_gift)
+
+    @patch(_KIT_TARGET)
+    def test_a_minor_gift_is_a_form_error(self, mock_kit: Any) -> None:
+        resp = self.client.post(
+            reverse("admin_tuning_techniques"),
+            self._kit_data(gift=self.minor_gift.pk),
         )
         self.assertEqual(resp.status_code, 200)
         self.assertIn("errorlist", resp.content.decode())

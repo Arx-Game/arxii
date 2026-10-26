@@ -33,6 +33,7 @@ from world.combat.models import (
     EscalationCurve,
     FleeConfig,
     FleeTierModifier,
+    MovementConfig,
     NpcTacticsConfig,
     OpponentTierTemplate,
     PendingSelection,
@@ -159,8 +160,15 @@ class ThreatPoolEntryAdmin(admin.ModelAdmin):
         "defense_check_type",
         "weight",
         "targeting_mode",
+        "covers_place",
     ]
-    list_filter = ["attack_category", "targeting_mode", "target_selection", "defense_check_type"]
+    list_filter = [
+        "attack_category",
+        "targeting_mode",
+        "target_selection",
+        "defense_check_type",
+        "covers_place",
+    ]
 
 
 @admin.register(BossPhase)
@@ -556,6 +564,33 @@ class FleeConfigAdmin(admin.ModelAdmin):
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""
         return not FleeConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(MovementConfig)
+class MovementConfigAdmin(admin.ModelAdmin):
+    """#4663 - the singleton authored movement wiring (the held-ground pass)."""
+
+    list_display = [
+        "pk",
+        "held_ground_challenge",
+        "dodge_anima_cost",
+        "dodge_fatigue_cost",
+        "reaction_difficulty_step",
+        "updated_at",
+    ]
+    autocomplete_fields = ["held_ground_challenge", "updated_by"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not MovementConfig.objects.exists()
 
     def has_delete_permission(
         self,

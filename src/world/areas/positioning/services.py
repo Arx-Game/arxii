@@ -31,11 +31,14 @@ from world.areas.positioning.constants import (
 from world.areas.positioning.exceptions import PositionError, PositionTransitionError
 from world.areas.positioning.models import (
     BlueprintEdge,
+    BlueprintFeature,
     BlueprintPosition,
+    FeatureType,
     ObjectPosition,
     Position,
     PositionBlueprint,
     PositionEdge,
+    PositionFeature,
     PositionShelter,
     Rampart,
     RampartElementProfile,
@@ -586,6 +589,11 @@ def instantiate_blueprint(
                 layout_x=bp_pos.layout_x,
                 layout_y=bp_pos.layout_y,
                 is_roofed=bp_pos.is_roofed,
+                area_x=bp_pos.area_x,
+                area_y=bp_pos.area_y,
+                area_w=bp_pos.area_w,
+                area_h=bp_pos.area_h,
+                terrain=bp_pos.terrain,
                 screens_ranged=bp_pos.screens_ranged,
             )
             for bp_pos in blueprint_positions
@@ -636,7 +644,48 @@ def instantiate_blueprint(
             if shelter_rows:
                 PositionShelter.objects.bulk_create(shelter_rows)
 
+        # Clone feature templates in one bulk write (the blueprint's features load
+        # with one query; replace=True already cascaded the old layout's features).
+        feature_rows = [
+            PositionFeature(
+                position=live_map[bp_feature.blueprint_position.name],
+                feature_type=bp_feature.feature_type,
+                square_x=bp_feature.square_x,
+                square_y=bp_feature.square_y,
+            )
+            for bp_feature in BlueprintFeature.objects.filter(
+                blueprint_position__blueprint=blueprint
+            ).select_related("blueprint_position", "feature_type")
+        ]
+        if feature_rows:
+            PositionFeature.objects.bulk_create(feature_rows)
+            invalidate_position_graph_caches(room)
+
         return list(live_map.values())
+
+
+def attach_feature(
+    position: Position,
+    feature_type: FeatureType,
+    *,
+    square: tuple[int, int] | None = None,
+) -> PositionFeature:
+    """Put a feature in a live place, optionally on one of its squares."""
+    square_x, square_y = square if square is not None else (None, None)
+    feature = PositionFeature(
+        position=position, feature_type=feature_type, square_x=square_x, square_y=square_y
+    )
+    feature.full_clean()
+    feature.save()
+    invalidate_position_graph_caches(position.room)
+    return feature
+
+
+def detach_feature(feature: PositionFeature) -> None:
+    """Remove a feature from its place."""
+    room = feature.position.room
+    feature.delete()
+    invalidate_position_graph_caches(room)
 
 
 # ---------------------------------------------------------------------------
@@ -765,6 +814,21 @@ def position_of(objectdb: ObjectDB) -> Position | None:
         return None
 
 
+def square_of(objectdb: ObjectDB) -> tuple[int, int] | None:
+    """Return the battle-map square objectdb stands on, or None when it has none (#4651).
+
+    Reads the ``object_position`` row the caller already loaded; no query of its own
+    when it was select_related.
+    """
+    try:
+        row = objectdb.object_position
+    except ObjectPosition.DoesNotExist:
+        return None
+    if row.square_x is None or row.square_y is None:
+        return None
+    return row.square_x, row.square_y
+
+
 def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
     """Return the ADJACENT-reach adjacency map for every position in *room*.
 
@@ -807,6 +871,17 @@ def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
 
 
 @dataclass(frozen=True)
+class PositionFeatureInfo:
+    """One feature standing in a place, as the battle map draws it (#4675)."""
+
+    id: int
+    name: str
+    art_url: str | None
+    square_x: int | None
+    square_y: int | None
+
+
+@dataclass(frozen=True)
 class PositionNode:
     """One node in the tactical-map graph (#2006) — kind, elevation, and layout.
 
@@ -827,6 +902,13 @@ class PositionNode:
     rampart_crack_state: str | None
     is_roofed: bool = False
     screens_ranged: bool = False
+    area_x: int | None = None
+    area_y: int | None = None
+    area_w: int | None = None
+    area_h: int | None = None
+    terrain_name: str | None = None
+    terrain_art_url: str | None = None
+    features: tuple[PositionFeatureInfo, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -856,6 +938,19 @@ class PositionGraph:
 
 
 def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
+    terrain = position.terrain if position.terrain_id else None
+    art = terrain.art if terrain is not None and terrain.art_id else None
+    # ``features_cached`` is prefetched on every positions_cached path.
+    features = tuple(
+        PositionFeatureInfo(
+            id=f.pk,
+            name=f.feature_type.name,
+            art_url=f.feature_type.art.cloudinary_url if f.feature_type.art_id else None,
+            square_x=f.square_x,
+            square_y=f.square_y,
+        )
+        for f in sorted(position.features_cached, key=lambda f: f.pk)
+    )
     return PositionNode(
         id=position.pk,
         name=position.name,
@@ -869,6 +964,13 @@ def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
         rampart_crack_state=rampart.crack_state if rampart else None,
         is_roofed=position.is_roofed,
         screens_ranged=position.screens_ranged,
+        area_x=position.area_x,
+        area_y=position.area_y,
+        area_w=position.area_w,
+        area_h=position.area_h,
+        terrain_name=terrain.name if terrain is not None else None,
+        terrain_art_url=art.cloudinary_url if art is not None else None,
+        features=features,
     )
 
 
@@ -1089,6 +1191,7 @@ def find_path(
     *,
     traversal: str,
     through_barriers: bool = False,
+    stop_at: frozenset[int] = frozenset(),
 ) -> list[Position] | None:
     """The cheapest route from ``origin`` to the first position ``goal_test`` accepts.
 
@@ -1103,6 +1206,9 @@ def find_path(
     ``through_barriers`` (#4609) is the barrier-ignoring route an NPC weighs before it
     bashes: a ground wall that damage can bring down (``is_breakable_barrier``) counts
     as open at 1 hop. An indestructible seal stays closed.
+
+    ``stop_at`` (#4663) is held ground: a position there (other than the origin) may be
+    the goal, but the route never walks on past it, so it only ever ends a route.
     """
     graph = _room_graph(origin)
     best: dict[int, tuple[int, int]] = {origin.pk: (0, 0)}
@@ -1116,6 +1222,8 @@ def find_path(
         done.add(pk)
         if goal_test(graph.nodes[pk]):
             return _walk_back(graph, parent, pk)
+        if pk in stop_at and pk != origin.pk:
+            continue  # held ground: a walker who enters stops there
         for other, edge in graph.neighbours[pk]:
             hop = _hop_cost(graph, edge, traversal, through_barriers=through_barriers)
             if hop is None or other in done:
@@ -1128,12 +1236,18 @@ def find_path(
     return None
 
 
-def path_costs_from(origin: Position, *, traversal: str) -> dict[int, int]:
+def path_costs_from(
+    origin: Position, *, traversal: str, stop_at: frozenset[int] = frozenset()
+) -> dict[int, int]:
     """Hops from ``origin`` to every position a mover of ``traversal`` can reach, by pk.
 
     The same costs ``find_path`` routes over (``edge_crossing_cost``); the origin costs
     0, and a position the mover cannot reach is absent. Used to measure path distance
     (an NPC retreating from its enemies, #4609).
+
+    ``stop_at`` is held ground, as in ``find_path`` (#4663): such a position (other than
+    the origin) is reached but never expanded past, so this maps exactly the positions
+    ``find_path`` with the same ``stop_at`` can route to.
     """
     graph = _room_graph(origin)
     best: dict[int, int] = {origin.pk: 0}
@@ -1144,6 +1258,8 @@ def path_costs_from(origin: Position, *, traversal: str) -> dict[int, int]:
         if pk in done:
             continue
         done.add(pk)
+        if pk in stop_at and pk != origin.pk:
+            continue  # held ground: reached, never walked past
         for other, edge in graph.neighbours[pk]:
             hop = graph.cost(edge, traversal)
             if hop is None or other in done:
@@ -1287,33 +1403,75 @@ _ERR_MOVE_CANNOT_FLY = "You cannot fly."
 _ERR_MOVE_ROOFED = "A roof is in the way."
 _ERR_TAKE_ALREADY_PLACED = "You are already placed somewhere — move instead."
 _ERR_TAKE_NOT_ENTRY = "You cannot enter the position graph there."
+_ERR_SQUARE_OUTSIDE = "That square is outside {place}."
+_ERR_SQUARE_TAKEN = "Someone is standing there."
+_ERR_SQUARE_NO_AREA = "{place} has no squares to pick."
+_ERR_STEP_UNPLACED = "You aren't standing anywhere."
+
+Square = tuple[int, int]
 
 
-def place_in_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
+def validate_square(position: Position, square: Square, *, mover: ObjectDB) -> None:
+    """Refuse a square the mover cannot stand on in ``position`` (#4670).
+
+    The place needs an area, the square must lie inside it, and no one else may hold it.
+    Drawing only: nothing else about the place is read.
+    """
+    if position.area_x is None:
+        raise PositionError(_ERR_SQUARE_NO_AREA.format(place=position.name))
+    x, y = square
+    inside = (
+        position.area_x <= x < position.area_x + position.area_w
+        and position.area_y <= y < position.area_y + position.area_h
+    )
+    if not inside:
+        raise PositionError(_ERR_SQUARE_OUTSIDE.format(place=position.name))
+    taken = (
+        ObjectPosition.objects.filter(position=position, square_x=x, square_y=y)
+        .exclude(objectdb=mover)
+        .exists()
+    )
+    if taken:
+        raise PositionError(_ERR_SQUARE_TAKEN)
+
+
+def place_in_position(
+    objectdb: ObjectDB, position: Position, *, square: Square | None = None
+) -> ObjectPosition:
     """Place objectdb in position (setup / staff teleport).
 
-    Raises PositionError if position.room != objectdb.location.
+    Raises PositionError if position.room != objectdb.location, or the square is refused.
     Uses update_or_create so calling twice is idempotent (updates occupancy).
     """
     if position.room_id != objectdb.db_location_id:
         raise PositionError(_ERR_PLACE_CROSS_ROOM)
-    return _commit_position(objectdb, position)
+    if square is not None:
+        validate_square(position, square, mover=objectdb)
+    return _commit_position(objectdb, position, square=square)
 
 
-def _commit_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
+def _commit_position(
+    objectdb: ObjectDB, position: Position, *, square: Square | None = None
+) -> ObjectPosition:
     """The one writer of an object's position (#4607).
 
     Writes the ``ObjectPosition`` row, drops the cached ``current_position`` of every
     combat opponent and participant this object is (the rows are identity-mapped, so
     a stale cache would outlive the move), tells the open battle maps in the room to
-    refetch once the move commits (#4644), then re-reconciles sunlight.
+    refetch once the move commits (#4644), then re-reconciles sunlight. ``square`` is where
+    the token stands inside the place; no square clears it and the map arranges the token
+    (#4670). The caller validates it first (``validate_square``).
     """
     from world.combat.models import CombatOpponent, CombatParticipant
     from world.combat.services.encounter.state_ping import notify_room_encounters_on_commit
 
     obj_pos, _ = ObjectPosition.objects.update_or_create(
         objectdb=objectdb,
-        defaults={"position": position},
+        defaults={
+            "position": position,
+            "square_x": square[0] if square else None,
+            "square_y": square[1] if square else None,
+        },
     )
     # Only identity-mapped rows can hold the cached property, so walk the map (no query).
     # CharacterSheet shares ObjectDB's pk, so a participant's sheet id is the object's pk.
@@ -1340,7 +1498,9 @@ def _reconcile_sun_after_position_change(objectdb: ObjectDB) -> None:
 _ENTRY_KINDS = (PositionKind.PRIMARY, PositionKind.FEATURE)
 
 
-def take_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
+def take_position(
+    objectdb: ObjectDB, position: Position, *, square: Square | None = None
+) -> ObjectPosition:
     """Voluntary entry onto the position graph for an UNPLACED actor (#2005).
 
     Restricted to ground entry-point kinds so voluntary entry can't bypass
@@ -1356,21 +1516,62 @@ def take_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
         raise PositionError(_ERR_TAKE_NOT_ENTRY)
     if not _can_move(objectdb):
         raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
-    return place_in_position(objectdb, position)
+    return place_in_position(objectdb, position, square=square)
 
 
-def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
+def move_to_position(
+    objectdb: ObjectDB,
+    target: Position,
+    *,
+    traversals: frozenset[str] = frozenset({CreatureTraversal.WALKS}),
+    square: Square | None = None,
+) -> ObjectPosition:
     """Voluntary move from current position to target position.
+
+    ``traversals`` are the mover's ways of crossing (``traversal.player_traversals``
+    for a player character, #4663); the default is a walker.
 
     Validation order (each failure raises PositionTransitionError):
     1. target is in the same room as objectdb
     2. objectdb is currently placed in a position
     3. an edge exists between current and target
-    4. the edge does not block a walker (``edge_blocks_crossing``): an active
-       gating challenge names itself; a hard seal is "The way is blocked."
+    4. the edge does not block the mover: a wall a walker cannot cross
+       (``edge_blocks_crossing``) passes only when one of ``traversals`` can cross it
+       (``best_crossing_cost``, a climber or leaper at a wall with a way past it).
+       Otherwise an active gating challenge names itself; a hard seal is
+       "The way is blocked."
     5. an AERIAL target needs the mover to hold the ``aerial`` property: "You cannot fly."
     6. no roof stands between the two (``roof_between``): "A roof is in the way." (#4608)
     7. the actor's MOVEMENT capability > 0 (characters only)
+    """
+    check_move_to_position(objectdb, target, traversals=traversals)
+    if square is not None:
+        validate_square(target, square, mover=objectdb)
+    return _commit_position(objectdb, target, square=square)
+
+
+def step_to_square(objectdb: ObjectDB, square: Square) -> ObjectPosition:
+    """Stand on another square of the place already held: free, no hop (#4670)."""
+    here = position_of(objectdb)
+    if here is None:
+        raise PositionError(_ERR_STEP_UNPLACED)
+    if not _can_move(objectdb):
+        raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
+    validate_square(here, square, mover=objectdb)
+    return _commit_position(objectdb, here, square=square)
+
+
+def check_move_to_position(
+    objectdb: ObjectDB,
+    target: Position,
+    *,
+    traversals: frozenset[str] = frozenset({CreatureTraversal.WALKS}),
+) -> None:
+    """Raise PositionTransitionError if ``move_to_position`` would refuse this step.
+
+    ``move_to_position``'s whole validation, without the move: a caller that must roll
+    before it commits the step (the pass past held ground, #4663) validates here first,
+    then commits through ``force_move_to_position``.
     """
     if target.room_id != objectdb.db_location_id:
         raise PositionTransitionError(_ERR_MOVE_CROSS_ROOM)
@@ -1383,7 +1584,7 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     if edge is None:
         raise PositionTransitionError(_ERR_MOVE_NO_PATH)
 
-    if edge_blocks_crossing(edge):
+    if edge_blocks_crossing(edge) and not _traversals_cross(edge, traversals):
         if edge.gating_challenge_id is not None:
             challenge_name = edge.gating_challenge.template.name
             msg = f"Crossing that requires getting past {challenge_name}."
@@ -1399,7 +1600,12 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
     if not _can_move(objectdb):
         raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
 
-    return _commit_position(objectdb, target)
+
+def _traversals_cross(edge: PositionEdge, traversals: frozenset[str]) -> bool:
+    """Whether any of ``traversals`` crosses ``edge`` (lazy: traversal imports this module)."""
+    from world.areas.positioning.traversal import best_crossing_cost
+
+    return best_crossing_cost(edge, traversals) is not None
 
 
 def is_aerial(objectdb: ObjectDB) -> bool:
@@ -1505,6 +1711,40 @@ def teardown_aerial_layer(room: ObjectDB) -> None:
     invalidate_position_graph_caches(room)
 
 
+def _aerial_twin(room: ObjectDB, ground: Position) -> Position:
+    """The AERIAL twin above ``ground``, drawn now if ``ground`` was added after the layer.
+
+    ``materialize_aerial_layer`` builds the whole layer once, so a ground position staged
+    later has no twin until the layer is torn down. This adds that one twin the way the
+    layer builder would: the vertical edge, and an aerial edge to each existing twin over
+    a ground neighbour whose edge does not block flight (#4663).
+    """
+    above = Position.objects.filter(
+        room=room, kind=PositionKind.AERIAL, elevation_anchor=ground
+    ).first()
+    if above is not None:
+        return above
+    above = create_position(room, f"Above {ground.name}", kind=PositionKind.AERIAL)
+    above.elevation_anchor = ground
+    above.save(update_fields=["elevation_anchor"])
+    connect_positions(ground, above)  # vertical
+    twins = {
+        twin.elevation_anchor_id: twin
+        for twin in Position.objects.filter(room=room, kind=PositionKind.AERIAL).exclude(
+            pk=above.pk
+        )
+    }
+    for edge in PositionEdge.objects.filter(Q(position_a=ground) | Q(position_b=ground)):
+        if edge.blocks_flight:
+            continue
+        neighbour_id = edge.position_b_id if edge.position_a_id == ground.pk else edge.position_a_id
+        neighbour_twin = twins.get(neighbour_id)
+        if neighbour_twin is not None:
+            connect_positions(above, neighbour_twin)
+    invalidate_position_graph_caches(room)
+    return above
+
+
 def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:
     """Move objectdb to the AERIAL twin above its current position.
 
@@ -1524,7 +1764,7 @@ def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:
         return objectdb.object_position
     room = objectdb.location
     materialize_aerial_layer(room)
-    above = Position.objects.get(room=room, kind=PositionKind.AERIAL, elevation_anchor=ground)
+    above = _aerial_twin(room, ground)
     ObjectProperty.objects.update_or_create(
         object=objectdb,
         property=_aerial_property(),

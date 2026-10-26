@@ -180,6 +180,7 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     position_adjacency: [],
     position_nodes: [],
     position_edges: [],
+    held_positions: [],
     volatile_objects: [],
     is_lethal: false,
     duel_winner: null,
@@ -215,10 +216,11 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    current_square: null,
     current_position: null,
     aftermath: null,
     reactions_used: null,
-    reactions_remaining: null,
+    dodge_plan: null,
     ...overrides,
   };
 }
@@ -334,6 +336,9 @@ describe('CombatTurnPanel — render smoke', () => {
           called_out: false,
           damage_scale: 1,
           cancelled: false,
+          attack_name: 'Strike',
+          covered_position_id: null,
+          covered_position_name: null,
         },
       ],
     });
@@ -751,7 +756,7 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
           character_name: 'Aerande',
           aftermath: null,
           reactions_used: null,
-          reactions_remaining: null,
+          dodge_plan: null,
         }),
       ],
     });

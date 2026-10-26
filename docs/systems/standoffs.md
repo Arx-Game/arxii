@@ -121,7 +121,7 @@ admins in `world/standoffs/admin.py`.
   it firing, wounded party members make it likelier.
 - **NPC-initiated fight is delivered live**: `end_standoff_into_fight(initiated_by_pc_side=
   False)` sends, after commit, a Narrator OUTCOME "The <group> attack!" through
-  `broadcast_action_outcome(deliver_telnet=True)`, and the actor's result message ends "They
+  `broadcast_action_outcome` (web and telnet), and the actor's result message ends "They
   attack!". Terms-wheel theater is emitted after commit too. A press with `damages_morale` that moves a
   member's morale state to a worse one (steady to falter, or to break) sends one more line after
   one more line, "<persona> shakes the <group>: they falter." (or "they break."), crediting the
@@ -206,7 +206,7 @@ admins in `world/standoffs/admin.py`.
   `creature_template` beats a generic one. `<actor>` is the presented persona name, `<group>` the
   creature kind. The line REPLACES the plain "presses ... : success." room line (one line per
   action; no line authored keeps the plain one), and is sent by the action layer through
-  `broadcast_action_outcome(deliver_telnet=True)`. Refusals announce nothing. Admin inlines sit
+  `broadcast_action_outcome` (web and telnet). Refusals announce nothing. Admin inlines sit
   on the approach and terms pages. Distinct from `NPCReactionLine` (NPC role, banded on a
   character metric).
 - **Angles**: acting on an angle (press or terms by the matched character while that rule

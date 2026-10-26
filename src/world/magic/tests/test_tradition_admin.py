@@ -142,8 +142,8 @@ class TraditionAddThenEditFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         expected = (
-            "Gift 'Tidecalling' is already on another row. A tradition grants each gift "
-            "on one row; pick every special technique it grants from that gift there."
+            "Gift 'Tidecalling' is already on another row. A tradition favors each gift "
+            "on one row; pick every special technique it keeps from that gift there."
         )
         grants = next(
             fs.formset

@@ -97,9 +97,12 @@ def _payload(bearer, amount: int) -> DamagePreApplyPayload:
 class BlinkDodgeHandlerTests(TestCase):
     """blink_dodge: highest-priority DAMAGE_PRE_APPLY interceptor (#1584)."""
 
-    def test_a_dodge_succeeds_zeros_payload_debits_anima_moves_bearer(self) -> None:
-        """(a) anima >= cost: payload zeroed, anima debited, bearer at the other position."""
-        bearer, pos_a, pos_b, anima, _instance = _make_blink_setup(
+    def test_a_dodge_succeeds_zeros_payload_debits_anima_stays_without_a_plan(self) -> None:
+        """(a) anima >= cost: payload zeroed, anima debited; with no dodge plan she stays put.
+
+        The game never picks a landing for her (#4676).
+        """
+        bearer, pos_a, _pos_b, anima, _instance = _make_blink_setup(
             anima_current=10,
             reactive_anima_cost=2,
         )
@@ -107,16 +110,28 @@ class BlinkDodgeHandlerTests(TestCase):
 
         blink_dodge(payload=payload)
 
-        # Damage fully avoided.
         self.assertEqual(payload.amount, 0)
-        # Anima debited by reactive_anima_cost.
         anima.refresh_from_db()
         self.assertEqual(anima.current, 8)
-        # Bearer relocated to the other position in the room.
-        current_pos = position_of(bearer)
-        self.assertIsNotNone(current_pos)
-        self.assertNotEqual(current_pos, pos_a)
-        self.assertEqual(current_pos, pos_b)
+        self.assertEqual(position_of(bearer), pos_a)
+
+    def test_a_dodge_roll_in_progress_leaves_the_hit_to_the_roll(self) -> None:
+        """During an NPC attack the ward is a dodge source; this handler steps aside."""
+        from world.combat.services.reactions import dodge_roll_active
+
+        bearer, pos_a, _pos_b, anima, _instance = _make_blink_setup(
+            anima_current=10,
+            reactive_anima_cost=2,
+        )
+        payload = _payload(bearer, amount=15)
+
+        with dodge_roll_active():
+            blink_dodge(payload=payload)
+
+        self.assertEqual(payload.amount, 15)
+        anima.refresh_from_db()
+        self.assertEqual(anima.current, 10)
+        self.assertEqual(position_of(bearer), pos_a)
 
     def test_b_fizzle_when_anima_insufficient(self) -> None:
         """(b) anima < cost: payload unchanged, no move, anima unchanged."""

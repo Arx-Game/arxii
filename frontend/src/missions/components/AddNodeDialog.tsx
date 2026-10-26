@@ -14,6 +14,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -63,7 +64,7 @@ export function AddNodeDialog({ open, onOpenChange, templateId, isFirstNode }: A
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent {...(isFirstNode ? {} : { 'aria-describedby': undefined })}>
+      <DialogContent {...(isFirstNode ? {} : NO_DESCRIPTION)}>
         <form onSubmit={onSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Add node</DialogTitle>

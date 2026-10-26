@@ -4,9 +4,10 @@ Hobb and Ada fight on the causeway (Lane - Gate - Yard - Hall - Tower). Ada watc
 battle map reads positions from the REST encounter and refetches it when her client is
 sent a ``combat_encounter_state`` ping for that encounter.
 
-- A wolf at the Tower runs to the Yard during the round. Once the round commits, Ada is
-  sent one ping for this encounter (not one per move), and the encounter she then reads
-  over REST has the wolf at the Yard.
+- A wolf at the Tower runs to the Yard during the round (Hobb at the Gate holds it there,
+  and Ada waits at the Lane behind him, so the run passes through no one's place). Once
+  the round commits, Ada is sent one ping for this encounter (not one per move), and the
+  encounter she then reads over REST has the wolf at the Yard.
 - Hobb steps from the Gate to the Lane in the web client while the round is declared.
   Once that commits, Ada is sent one ping, and the encounter she reads has Hobb at the Lane.
 - Nothing is sent before the commit: a refetch then would read the old positions. The
@@ -62,6 +63,9 @@ class _TwoOnTheCauseway(_TheCauseway):
 
 class AWatcherSeesTheEnemyArrive(_TwoOnTheCauseway):
     def test_one_ping_after_the_round_commits_and_the_wolf_is_where_it_ran(self) -> None:
+        # Ada waits at the Lane behind Hobb: a ready player holds the place she stands in, so
+        # the wolf's run from the Tower must not pass through her.
+        force_move_to_position(self.ada, self.lane)
         self.creature("Grey Wolf", at=self.tower, hops=2)
         self.mailbox(self.ada).calls.clear()
 

@@ -6,7 +6,7 @@
  * act rows, CAPTURED/DEAD/RETIRED/UNKNOWN show world-voice refusal prose
  * instead.
  */
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { OffscreenActsPlate } from '../OffscreenActsPlate';
@@ -69,7 +69,10 @@ const bianca: MyRosterEntry = {
 
 describe('OffscreenActsPlate', () => {
   afterEach(() => {
-    store.dispatch(resetGame());
+    // Components are still mounted here; reset inside act so they re-render cleanly.
+    act(() => {
+      store.dispatch(resetGame());
+    });
   });
 
   it('renders nothing when no character is docked', () => {

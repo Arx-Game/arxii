@@ -49,10 +49,11 @@ function makeParticipant(id: number, name: string): Participant {
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    current_square: null,
     current_position: null,
     aftermath: null,
     reactions_used: null,
-    reactions_remaining: null,
+    dodge_plan: null,
   };
 }
 
@@ -92,6 +93,7 @@ function makeEncounter(
     position_adjacency: [],
     position_nodes: [],
     position_edges: [],
+    held_positions: [],
     volatile_objects: [],
     is_lethal: false,
     duel_winner: null,

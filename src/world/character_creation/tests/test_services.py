@@ -32,6 +32,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
 )
 from world.roster.seeds import ensure_rosters
 from world.skills.factories import SkillFactory
@@ -591,6 +592,51 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         assert skill_value.development_points == 0
         assert skill_value.rust_points == 0
 
+    def test_finalize_writes_the_magic_skill_allocation_and_no_other_magic_skill(self):
+        """draft_data["magic_skills"] is written as given; unallocated Magic skills get no row."""
+        from world.character_creation.constants import (
+            CG_MODIFIER_CATEGORY,
+            MAGIC_TRAINING_POINTS_TARGET,
+        )
+        from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+        from world.skills.factories import SkillPointBudgetFactory
+        from world.skills.models import CharacterSkillValue
+        from world.traits.constants import TraitCategory
+
+        occult = SkillFactory(trait__name="Occult Test", trait__category=TraitCategory.MAGIC)
+        ritualism = SkillFactory(trait__name="Ritualism Test", trait__category=TraitCategory.MAGIC)
+        SkillFactory(trait__name="Unallocated Test", trait__category=TraitCategory.MAGIC)
+        category = ModifierCategoryFactory(name=CG_MODIFIER_CATEGORY)
+        target = ModifierTargetFactory(name=MAGIC_TRAINING_POINTS_TARGET, category=category)
+        SkillPointBudgetFactory(pk=1)
+        training = DistinctionFactory(name="Magic Training Test")
+        DistinctionEffectFactory(distinction=training, target=target, value_per_rank=40)
+        # The base 40 plus the Gift-fit bonus (10) is the 50 spent below.
+        draft = self._create_complete_draft()
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": training.id,
+                "distinction_name": training.name,
+                "distinction_slug": training.slug,
+                "category_slug": training.category.slug,
+                "rank": 1,
+                "cost": 0,
+                "notes": "",
+            }
+        ]
+        draft.draft_data["magic_skills"] = {str(occult.pk): 30, str(ritualism.pk): 20}
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        held = dict(
+            CharacterSkillValue.objects.filter(
+                character_id=character.pk, skill__trait__category=TraitCategory.MAGIC
+            ).values_list("skill_id", "value")
+        )
+        assert held == {occult.pk: 30, ritualism.pk: 20}
+
     def test_finalize_stamps_character_trait_change_for_skill_bridge(self):
         """The CG skill->trait bridge row also stamps a CharacterTraitChange (#3055)."""
         draft = self._create_complete_draft()
@@ -1141,7 +1187,7 @@ class FinalizeCharacterDistinctionResonanceTests(FinalizationTestMixin, TestCase
 
         # The stored CharacterAura reflects the seeded resonance.
         aura = CharacterAura.objects.get(character=character.sheet_data)
-        assert aura.abyssal > 0
+        assert aura.percent_for(self.abyssal_resonance.affinity) > 0
 
         # The resonance-category-targeted DistinctionEffect on "Serene" produces NO
         # resonance-category CharacterModifier at CG (dead write path removed).
@@ -1163,6 +1209,7 @@ class FinalizeGiftAndTechniquesTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_canonical_affinities()
         from world.magic.factories import (
             TechniqueFactory,
             TraditionFactory,
@@ -1350,9 +1397,11 @@ class FinalizeGiftAndTechniquesTests(TestCase):
         finalize_magic_data(draft, sheet)
 
         aura = CharacterAura.objects.get(character=sheet)
-        assert aura.celestial == Decimal("0.00")
-        assert aura.primal == Decimal("80.00")
-        assert aura.abyssal == Decimal("20.00")
+        # The draft picked self.resonance: its affinity holds 80, Abyssal 20.
+        _, _, abyssal = ensure_canonical_affinities()
+        assert aura.percent_for(self.resonance.affinity) == Decimal("80.00")
+        assert aura.percent_for(abyssal) == Decimal("20.00")
+        assert sum(share.percent for share in aura.cached_shares) == Decimal("100.00")
         assert aura.glimpse_story == ""
 
     def test_aura_saves_glimpse_story(self) -> None:
@@ -1674,9 +1723,11 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
 
         aura = CharacterAura.objects.get(character=character.sheet_data)
-        assert aura.celestial == Decimal("0.00")
-        assert aura.primal == Decimal("80.00")
-        assert aura.abyssal == Decimal("20.00")
+        # The draft picked self.resonance: its affinity holds 80, Abyssal 20.
+        _, _, abyssal = ensure_canonical_affinities()
+        assert aura.percent_for(self.resonance.affinity) == Decimal("80.00")
+        assert aura.percent_for(abyssal) == Decimal("20.00")
+        assert sum(share.percent for share in aura.cached_shares) == Decimal("100.00")
 
     def test_finalize_saves_glimpse_story(self):
         """glimpse_story from draft_data should be saved on the CharacterAura."""
@@ -1810,6 +1861,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
 class FinalizeGMCharacterTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_canonical_affinities()
         from world.gm.factories import GMProfileFactory, GMTableFactory
 
         # finalize_gm_character() looks up a seeded roster by roster_type (#2728).
@@ -1948,6 +2000,7 @@ class FinalizeGMCharacterClaimAsNpcTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_canonical_affinities()
         from world.gm.constants import GMLevel
         from world.gm.factories import GMProfileFactory, GMTableFactory, seed_default_gm_level_caps
 

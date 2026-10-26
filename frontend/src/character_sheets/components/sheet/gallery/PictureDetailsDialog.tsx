@@ -3,7 +3,7 @@
  * whether it is NSFW. The game never suggests any of the words.
  */
 import { useEffect, useState } from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, NO_DESCRIPTION } from '@/components/ui/dialog';
 import type { GalleryPicture, MoodOption, PictureChange } from '@/roster/gallery';
 
 interface PictureDetailsDialogProps {
@@ -46,7 +46,7 @@ export function PictureDetailsDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-lg">
         <form
           className="refsheet gallery-dialog"
           onSubmit={(event) => {

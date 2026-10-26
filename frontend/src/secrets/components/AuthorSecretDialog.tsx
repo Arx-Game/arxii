@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
@@ -118,7 +119,7 @@ export function AuthorSecretDialog({ subjectId, secret, trigger }: AuthorSecretD
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-h-[80vh] overflow-y-auto">
+      <DialogContent {...NO_DESCRIPTION} className="max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit secret' : 'Author secret'}</DialogTitle>
         </DialogHeader>

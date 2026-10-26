@@ -83,7 +83,6 @@ class OpeningFireBroadcastTests(SpawnedPredationBase):
         self.assertEqual(
             broadcast.call_args.kwargs["narration"], f"The {self.creature.name} attack!"
         )
-        self.assertTrue(broadcast.call_args.kwargs["deliver_telnet"])
 
 
 class FewMooksTests(SpawnedPredationBase):

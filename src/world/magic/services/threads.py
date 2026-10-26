@@ -23,8 +23,7 @@ from world.magic.constants import (
     ANCHOR_CAP_COVENANT_LEGEND_DIVISOR,
     ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER,
     ANCHOR_CAP_FACET_DIVISOR,
-    ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE,
-    ANCHOR_CAP_GIFT_PER_STAGE,
+    PATH_LEVEL_CAP_MULTIPLIER,
     TargetKind,
     VitalBonusTarget,
 )
@@ -110,6 +109,19 @@ def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:
     return False
 
 
+def shown_thread_level(level: int) -> int:
+    """The thread level a player sees for a stored ``level``: ``level // 10`` (#4585).
+
+    Threads are stored ×10 (stored 30 shows 3), like stats. Every authored thread
+    threshold (crossings 3/6/11/16/21, variant ``unlock_thread_level``, signature
+    ``min_crossing_level``, ``ThreadPullEffect.min_thread_level``,
+    ``CREATION_PERSONALIZATION_MAX_LEVEL``) is on the shown scale, so every
+    threshold comparison goes through this helper rather than reading the stored
+    value directly.
+    """
+    return level // 10
+
+
 # =============================================================================
 # Resonance Pivot Spec A — Phase 10: Cap helpers (§2.4)
 # =============================================================================
@@ -117,6 +129,9 @@ def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:
 
 def _current_path_stage(character_sheet: CharacterSheet) -> int:
     """Return the stage of the most-recently-selected Path; 1 if none.
+
+    Display only (the progression dashboard). No thread cap reads Path stage since
+    #4585; threads are capped by character level (``compute_level_cap``).
 
     Reads the sheet's ``path_history`` reverse FK (CharacterPathHistory),
     ordered by -selected_at then -pk for deterministic
@@ -179,8 +194,7 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
       target_capstone.relationship (#3957) — a capstone thread inherits its anchor
       from the RELATIONSHIP_TRACK it was formed on; RelationshipCapstone carries no
       cap value of its own (it's a receipt: tier_claimed, xp_spent, ritual).
-    - FACET: min(lifetime_earned // ANCHOR_CAP_FACET_DIVISOR,
-      path_stage × ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE).
+    - FACET: lifetime_earned // ANCHOR_CAP_FACET_DIVISOR.
     - COVENANT_ROLE: max_covenant_level × ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER (covenant
       component) + legend_earned_in_role // ANCHOR_CAP_COVENANT_LEGEND_DIVISOR (personal
       deeds) + days_held_in_role // ANCHOR_CAP_COVENANT_DAYS_DIVISOR (personal tenure).
@@ -189,8 +203,12 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
       character clears higher mantle ranks via codex research.
     - SANCTUM: target_sanctum_details.feature_instance.level × 10 (Plan 4 §F).
       Cap scales with the Sanctum's upgrade level (1–5 → 10–50).
-    - GIFT: current_path_stage × ANCHOR_CAP_GIFT_PER_STAGE (#1580). Species gift
-      threads grow in lockstep with the character's path stage (stage 2 → cap 20).
+    - GIFT: compute_level_cap(owner) (#1580, #4585). A gift has no value of its
+      own, so a gift thread is held only by the character's level.
+    - ORGANIZATION: the org's granted cap for the thread's resonance alone.
+
+    The character-level cap is NOT applied here; ``compute_effective_cap`` takes the
+    lower of this and ``compute_level_cap`` (#4585: every cap is "lower of").
     """
     match thread.target_kind:
         case TargetKind.TRAIT:
@@ -208,8 +226,7 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
             return int(thread.target_capstone.relationship.pair_depth())
         case TargetKind.FACET:
             lifetime = thread.owner.character.resonances.lifetime(thread.resonance)
-            hard_max = _current_path_stage(thread.owner) * ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE
-            return min(lifetime // ANCHOR_CAP_FACET_DIVISOR, hard_max)
+            return lifetime // ANCHOR_CAP_FACET_DIVISOR
         case TargetKind.COVENANT_ROLE:
             from world.societies.services import get_character_role_legend  # noqa: PLC0415
 
@@ -242,29 +259,49 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
         case TargetKind.SANCTUM:
             return thread.target_sanctum_details.feature_instance.level * 10
         case TargetKind.GIFT:
-            return _current_path_stage(thread.owner) * ANCHOR_CAP_GIFT_PER_STAGE
+            return compute_level_cap(thread.owner)
         case TargetKind.ORGANIZATION:
             org = thread.target_organization
-            handler = org.gift_grants_handler
-            grant_cap = handler.anchor_cap_for(thread.resonance)
-            path_cap = _current_path_stage(thread.owner) * ANCHOR_CAP_GIFT_PER_STAGE
-            return min(grant_cap, path_cap)
+            return int(org.gift_grants_handler.anchor_cap_for(thread.resonance))
     return 0
 
 
-def compute_path_cap(character_sheet: CharacterSheet) -> int:
-    """Return the path-side cap for a character (Spec A §2.4).
+def compute_level_cap(character_sheet: CharacterSheet) -> int:
+    """Return the character-level cap on every thread this character owns (#4585).
 
-    = max(current_path_stage, 1) × 10.  Minimum is 10 so stage-0 characters
-    still have a non-zero cap.
+    = ``get_character_path_level(character) × PATH_LEVEL_CAP_MULTIPLIER``: 10 stored
+    points (one shown level) per character level, so a thread is never shown higher
+    than its owner's level. ``get_character_path_level`` returns at least 1, so a
+    sheet with no class level still has a cap of 10.
     """
-    stage = _current_path_stage(character_sheet)
-    return max(stage, 1) * 10
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        get_character_path_level,
+    )
+
+    return get_character_path_level(character_sheet.character) * PATH_LEVEL_CAP_MULTIPLIER
+
+
+def cap_exceeded_error(thread: Thread) -> type[AnchorCapExceeded]:
+    """The refusal naming whichever cap binds ``thread`` (#4585).
+
+    ``LevelCapExceeded`` when the character-level cap is at or below the anchor cap
+    (a tie binds on level: a GIFT thread's anchor cap *is* the level cap, and only a
+    higher level would let it grow), else ``AnchorCapExceeded``. The same test the
+    imbue loop uses for its ``LEVEL_CAP`` / ``ANCHOR_CAP`` blocked reason.
+    """
+    from world.magic.exceptions import LevelCapExceeded  # noqa: PLC0415
+
+    if compute_level_cap(thread.owner) <= compute_anchor_cap(thread):
+        return LevelCapExceeded
+    return AnchorCapExceeded
 
 
 def compute_effective_cap(thread: Thread) -> int:
-    """Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4)."""
-    return min(compute_path_cap(thread.owner), compute_anchor_cap(thread))
+    """Return min(level cap, anchor cap), the binding limit on this thread (Spec A §2.4).
+
+    The only place the character-level cap applies (#4585).
+    """
+    return min(compute_level_cap(thread.owner), compute_anchor_cap(thread))
 
 
 # =============================================================================
@@ -359,7 +396,7 @@ def cross_thread_xp_lock(
         raise InvalidImbueAmount(msg)
     if boundary_level > compute_effective_cap(thread):
         msg = "Boundary level exceeds effective cap."
-        raise AnchorCapExceeded(msg)
+        raise cap_exceeded_error(thread)(msg)
 
     locked = ThreadXPLockedLevel.objects.filter(level=boundary_level).first()
     if locked is None:
@@ -756,16 +793,17 @@ def weave_creation_technique_thread(
     """Character creation weaves a TECHNIQUE thread at a starting level (#4099).
 
     Creation pays for this in CG points (the flourish's own cost), so it bypasses the
-    ThreadWeavingUnlock gate ``weave_thread`` enforces in play. It never starts a thread
-    at or past the first crossing (``CREATION_PERSONALIZATION_MAX_LEVEL``), so no
-    crossing ceremony or threshold is skipped, and never past the anchor cap.
+    ThreadWeavingUnlock gate ``weave_thread`` enforces in play. ``level`` is the stored
+    level (shown × 10). It never starts a thread shown past
+    ``CREATION_PERSONALIZATION_MAX_LEVEL`` (a shown level, below the first crossing),
+    so no crossing ceremony or threshold is skipped, and never past the effective cap.
 
     Call only from character-creation finalize.
     """
     from world.magic.constants import CREATION_PERSONALIZATION_MAX_LEVEL  # noqa: PLC0415
     from world.magic.exceptions import CreationThreadLevelTooHigh  # noqa: PLC0415
 
-    if level > CREATION_PERSONALIZATION_MAX_LEVEL:
+    if shown_thread_level(level) > CREATION_PERSONALIZATION_MAX_LEVEL:
         raise CreationThreadLevelTooHigh
     _validate_technique_ownership(character_sheet, technique)
     thread = Thread(
@@ -844,13 +882,13 @@ def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
         cr.resonance_id: cr
         for cr in CharacterResonance.objects.filter(character_sheet=character_sheet)
     }
-    path_cap = compute_path_cap(character_sheet)
+    level_cap = compute_level_cap(character_sheet)
     out: list[Thread] = []
     for t in threads:
         cr = crs.get(t.resonance_id)
         if cr is None or cr.balance <= 0:
             continue
-        effective_cap = min(path_cap, compute_anchor_cap(t))
+        effective_cap = min(level_cap, compute_anchor_cap(t))
         if t.level < effective_cap:
             out.append(t)
     return out
@@ -905,8 +943,8 @@ def threads_blocked_by_cap(character_sheet: CharacterSheet) -> list[Thread]:
     Spec A §3.6.
     """
     threads = list(Thread.objects.filter(owner=character_sheet, retired_at__isnull=True))
-    path_cap = compute_path_cap(character_sheet)
-    return [t for t in threads if t.level >= min(path_cap, compute_anchor_cap(t))]
+    level_cap = compute_level_cap(character_sheet)
+    return [t for t in threads if t.level >= min(level_cap, compute_anchor_cap(t))]
 
 
 def weaving_eligibility_for(character_sheet: CharacterSheet) -> dict[str, bool]:

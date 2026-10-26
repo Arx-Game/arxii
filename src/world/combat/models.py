@@ -83,7 +83,6 @@ from world.fatigue.constants import EffortLevel
 from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
-from world.magic.types.aura import AffinityType
 from world.scenes.round_models import AbstractRound
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -456,6 +455,13 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "declaration instead of a same-round CombatOpponentAction; the attack "
             "matures resolves_round rounds later, and can be interrupted/downgraded "
             "by PC hits on the opponent in the meantime."
+        ),
+    )
+    covers_place = models.BooleanField(
+        default=False,
+        help_text=(
+            "The attack covers the target's whole place: everyone there is hit, and only "
+            "leaving the place escapes it (#4676). Off: a single target, as before."
         ),
     )
     windup_telegraph = models.CharField(
@@ -892,17 +898,18 @@ class CombatOpponent(SharedMemoryModel):
     )
 
     # === Affinity field (#2536 slice 3 Task 6) ===
-    affinity = models.CharField(
-        max_length=20,
-        choices=AffinityType.choices,
+    affinity = models.ForeignKey(
+        "arxii.Affinity",
+        on_delete=models.PROTECT,
+        null=True,
         blank=True,
-        default="",
+        related_name="+",
         help_text=(
             "Authored magical affinity for non-persona NPCs (generic/ephemeral "
-            "opponents carry no CharacterAura row to infer from). Blank = "
-            "untyped/unauthored — the ATTACKER_AFFINITY situational-perk evaluator "
+            "opponents carry no CharacterAura row to infer from). Null = "
+            "untyped/unauthored: the ATTACKER_AFFINITY situational-perk evaluator "
             "(world.covenants.perks.evaluators) falls back to a reachable "
-            "ObjectDB's CharacterAura.dominant_affinity when this is blank."
+            "ObjectDB's aura when this is null."
         ),
     )
 
@@ -1384,10 +1391,27 @@ class CombatParticipant(SharedMemoryModel):
     reactions_used = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
-            "Reactions (e.g. INTERPOSE fires) this participant has spent this round "
-            "(#2639). Reset to 0 in begin_declaration_phase. Gated against "
-            "combat.constants.REACTIONS_PER_ROUND at the reaction fire seam "
-            "(_dispatch_interpose_action)."
+            "Reactions (dodges, interposes, catches) this participant has made this round "
+            "(#2639, #4676). Reset to 0 in begin_declaration_phase. No cap: each one makes "
+            "the next reaction's roll harder by MovementConfig.reaction_difficulty_step."
+        ),
+    )
+    dodge_enabled = models.BooleanField(
+        default=True,
+        help_text=(
+            "Dodge attacks this round when she has a capability that dodges (#4676). "
+            "Reset to True each round."
+        ),
+    )
+    dodge_landing = models.ForeignKey(
+        "arxii.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Where she lands if she dodges this round, when her capability reaches it (#4676). "
+            "Null dodges in place. Private to her; reset each round."
         ),
     )
     hops_used = models.PositiveSmallIntegerField(
@@ -1827,6 +1851,18 @@ class CombatOpponentAction(SharedMemoryModel):
             "same-round action."
         ),
     )
+    covered_position = models.ForeignKey(
+        "arxii.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The place a place-covering attack lands on, copied from its wind-up at "
+            "maturation (#4676). Null for any other attack: a place-covering attack "
+            "with no wind-up covers its target's place when it resolves."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.opponent.name} Round {self.round_number}: {self.threat_entry.name}"
@@ -1874,6 +1910,17 @@ class PendingOpponentAttack(SharedMemoryModel):
         blank=True,
         related_name="+",
         help_text="v1 single-target. Null when the entry is room-targeting.",
+    )
+    covered_position = models.ForeignKey(
+        "arxii.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "For a place-covering attack, the place it lands on, fixed when it was "
+            "telegraphed (#4676)."
+        ),
     )
     declared_round = models.PositiveIntegerField(
         help_text="The round this wind-up was declared/telegraphed.",
@@ -2715,6 +2762,54 @@ class FleeConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"FleeConfig(pk={self.pk})"
+
+
+class MovementConfig(SharedMemoryModel):
+    """Singleton (pk=1): authored movement wiring and reaction tuning (#4663, #4676).
+
+    The pass is optional content: read with cached_singleton() and treat DoesNotExist
+    as "no pass offered", not an error. The dodge costs and the reaction step fall back
+    to their field defaults when no row exists (``world.combat.services.reactions``).
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    held_ground_challenge = models.ForeignKey(
+        "arxii.ChallengeTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Challenge rolled to get past ground a ready enemy holds. Unset: no pass is offered."
+        ),
+    )
+    dodge_anima_cost = models.PositiveSmallIntegerField(
+        default=2,
+        help_text="Anima each dodge costs with a capability that dodges for anima (#4676).",
+    )
+    dodge_fatigue_cost = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Base fatigue each dodge costs with a physical capability (#4676).",
+    )
+    reaction_difficulty_step = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "Roll penalty per reaction already made this round, for dodges, guarding and "
+            "catches (#4676). No cap: many reactions in one round become very hard."
+        ),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="movement_config_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"MovementConfig(pk={self.pk})"
 
 
 class FleeTierModifier(SharedMemoryModel):

@@ -48,7 +48,7 @@ class GiftVariantDiscoveryTests(TestCase):
         )
 
     def test_crossing_unlock_fires_discovery(self) -> None:
-        fire_variant_discoveries(thread=self.thread, starting_level=0, new_level=3)
+        fire_variant_discoveries(thread=self.thread, starting_level=0, new_level=30)
 
         self.assertTrue(
             CharacterAchievement.objects.filter(
@@ -70,7 +70,7 @@ class GiftVariantDiscoveryTests(TestCase):
             )
 
     def test_below_unlock_does_not_fire(self) -> None:
-        fire_variant_discoveries(thread=self.thread, starting_level=0, new_level=2)
+        fire_variant_discoveries(thread=self.thread, starting_level=0, new_level=20)
 
         self.assertFalse(
             CharacterAchievement.objects.filter(

@@ -84,7 +84,7 @@ from world.magic.factories import (
     ThreadFactory,
     ThreadPullCostFactory,
 )
-from world.magic.models import CharacterAnima, CharacterResonance, Thread
+from world.magic.models import CharacterAnima, CharacterResonance, Thread, ThreadLevelUnlock
 from world.magic.models.sessions import (
     RitualSession,
     RitualSessionParticipant,
@@ -257,9 +257,11 @@ class CourtJourneyEndToEndTests(TestCase):
         # STEP 3 — Capped pull changes the offense read-path.
         # ==============================================================
         # The founding servant joined as a founder (no fealty induction), so swear
-        # a pact directly with a small grant that BINDS below the covenant floor
-        # (level 1 → covenant_component = 10; grant = 2 is the binding cap).
-        granted = 2
+        # a pact directly with a grant that BINDS at stored 10 (shown 1, #4585): the
+        # Court FLAT_BONUS is authored at shown level 1, so the servant needs a
+        # thread shown at 1 to pull it. The level-1 servant's level cap is also 10,
+        # so the cap is equal, not lower, and the refusal stays the anchor's.
+        granted = 10
         swear_court_pact(
             covenant=self.covenant,
             servant_sheet=self.servant,
@@ -300,8 +302,10 @@ class CourtJourneyEndToEndTests(TestCase):
             granted,
             "The Court-role thread's cap must be bounded by CourtPact.granted_pull_cap.",
         )
-        # Imbuing greedily raises the thread up TO the cap (level 2), no further.
-        spend_resonance_for_imbuing(self.servant, thread, 5)
+        # Imbuing greedily raises the thread up TO the cap (stored 10), no further.
+        # Levels 0-9 cost 1 dp each; the stored-10 XP boundary is already paid.
+        ThreadLevelUnlock.objects.create(thread=thread, unlocked_level=10, xp_spent=0)
+        spend_resonance_for_imbuing(self.servant, thread, 12)
         thread.refresh_from_db()
         self.assertEqual(
             thread.level,

@@ -168,13 +168,11 @@ block XP spend identically to Mage Scars without code changes.
 Singleton-by-convention (pk=1, lazy-create), matching `SoulfrayConfig` and
 `ResonanceGainConfig`. All accrual-formula coefficients staff-tunable via Django
 admin. Coefficients stored as integer-tenths (× 0.1 in formula) to avoid float
-precision — project pattern.
+precision — project pattern. The per-affinity coefficient is not on this config: it is
+`Affinity.corruption_coefficient` (Celestial 0, Primal 2, Abyssal 10 as of #4681, in
+tenths), edited on the Affinity admin.
 
 ```
-celestial_coefficient    PositiveSmallIntegerField  default=0    (× 0.1 → 0.0)
-primal_coefficient       PositiveSmallIntegerField  default=2    (× 0.1 → 0.2)
-abyssal_coefficient      PositiveSmallIntegerField  default=10   (× 0.1 → 1.0)
-
 tier_1_coefficient       PositiveSmallIntegerField  default=10   (× 0.1 → 1.0)
 tier_2_coefficient       PositiveSmallIntegerField  default=20
 tier_3_coefficient       PositiveSmallIntegerField  default=40
@@ -909,9 +907,9 @@ playtest):
 
 | Knob | Default | Reasoning |
 |---|---|---|
-| `celestial_coefficient` | 0 | Celestial never corrupts |
-| `primal_coefficient` | 2 (× 0.1 → 0.2) | Primal accrues 1/5 the rate of Abyssal |
-| `abyssal_coefficient` | 10 (× 0.1 → 1.0) | Abyssal at full rate |
+| `Affinity.corruption_coefficient` (Celestial) | 0 | Celestial never corrupts |
+| `Affinity.corruption_coefficient` (Primal) | 2 (× 0.1 → 0.2) | Primal accrues 1/5 the rate of Abyssal |
+| `Affinity.corruption_coefficient` (Abyssal) | 10 (× 0.1 → 1.0) | Abyssal at full rate |
 | `tier_1_coefficient` | 10 | Cantrip baseline |
 | `tier_2_coefficient` | 20 | Doubles per tier |
 | `tier_3_coefficient` | 40 | |

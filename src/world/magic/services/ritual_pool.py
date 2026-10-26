@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import AnimaContributionKind
+from world.magic.constants import AnimaContributionKind, FeedingTaintRole
 from world.magic.exceptions import RitualPoolError
 from world.magic.models.anima import AnimaConfig, CharacterAnima
 from world.magic.models.ritual_pool import RitualAnimaContribution
@@ -137,7 +137,6 @@ def contribute_sacrifice(  # noqa: PLR0913 — commit seam mirrors feed_anima's 
     the murder taint at the sacrificer and mints the crime-tagged deed.
     """
     from world.magic.services.feeding import (  # noqa: PLC0415
-        MURDER_TAINT_ACT,
         _maybe_kill_npc_victim,
         grant_blood_taint,
     )
@@ -157,7 +156,7 @@ def contribute_sacrifice(  # noqa: PLR0913 — commit seam mirrors feed_anima's 
         if was_lethal:
             config = AnimaConfig.get_singleton()
             amount = config.death_harvest_multiplier * victim_anima.maximum
-            grant_blood_taint(sacrificer_sheet, MURDER_TAINT_ACT)
+            grant_blood_taint(sacrificer_sheet, FeedingTaintRole.MURDER)
 
         if amount <= 0:
             msg = "The victim has nothing left to give."

@@ -73,10 +73,9 @@ def _set_primary_affinity_abyssal(sheet: object) -> None:
     char = sheet.character  # type: ignore[union-attr]
     try:
         aura = char.aura
-        aura.celestial = Decimal("10.00")
-        aura.primal = Decimal("10.00")
-        aura.abyssal = Decimal("80.00")
-        aura.save()
+        from world.magic.factories import set_aura_split
+
+        set_aura_split(aura, celestial="10.00", primal="10.00", abyssal="80.00")
     except AttributeError:
         CharacterAuraFactory(
             character=char.sheet_data,
@@ -91,10 +90,9 @@ def _set_primary_affinity_celestial(sheet: object) -> None:
     char = sheet.character  # type: ignore[union-attr]
     try:
         aura = char.aura
-        aura.celestial = Decimal("80.00")
-        aura.primal = Decimal("10.00")
-        aura.abyssal = Decimal("10.00")
-        aura.save()
+        from world.magic.factories import set_aura_split
+
+        set_aura_split(aura, celestial="80.00", primal="10.00", abyssal="10.00")
     except AttributeError:
         CharacterAuraFactory(
             character=char.sheet_data,
@@ -109,10 +107,9 @@ def _set_primary_affinity_primal(sheet: object) -> None:
     char = sheet.character  # type: ignore[union-attr]
     try:
         aura = char.aura
-        aura.celestial = Decimal("10.00")
-        aura.primal = Decimal("80.00")
-        aura.abyssal = Decimal("10.00")
-        aura.save()
+        from world.magic.factories import set_aura_split
+
+        set_aura_split(aura, celestial="10.00", primal="80.00", abyssal="10.00")
     except AttributeError:
         CharacterAuraFactory(
             character=char.sheet_data,
@@ -1019,7 +1016,7 @@ class PerSceneCapTests(TestCase):
         )
 
         # Manually advance thread level to test cap formula.
-        thread.level = 5
+        thread.level = 50  # stored; the formula reads the shown level 5 (#4585)
         thread.save(update_fields=["level"])
 
         cap = _compute_per_scene_sineating_cap(sinner_thread=thread, relationship=rel)

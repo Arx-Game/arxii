@@ -37,6 +37,7 @@ from world.character_sheets.types import (
     AnimaRitualSection,
     AppearanceSection,
     AuraData,
+    AuraShareEntry,
     AuraThemingData,
     BeatEntry,
     CovenantRoleEntry,
@@ -122,6 +123,7 @@ from world.magic.models import (
     MotifResonanceStyle,
     Ritual,
     TechniqueVariant,
+    aura_shares_prefetch,
 )
 from world.magic.services.technique_effects import technique_payload_prefetches
 from world.magic.services.technique_forms import (
@@ -970,6 +972,7 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         queryset=CharacterGlimpseTag.objects.select_related("tag"),
         to_attr="cached_glimpse_tags",
     ),
+    aura_shares_prefetch("aura__"),
 )
 
 
@@ -1103,6 +1106,24 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | Non
     )
 
 
+def _aura_share_entries(aura: CharacterAura) -> list[AuraShareEntry]:
+    """The aura's shares as display entries, highest percent first (ties by affinity pk)."""
+    ordered = sorted(aura.cached_shares, key=lambda share: (-share.percent, share.affinity_id))
+    return [
+        AuraShareEntry(
+            affinity_id=share.affinity_id,
+            affinity_name=share.affinity.name,
+            percent=share.percent,
+        )
+        for share in ordered
+    ]
+
+
+def _aura_dominant_name(aura: CharacterAura) -> str:
+    """Name of the dominant affinity, blank for an aura that holds no shares yet."""
+    return aura.dominant_affinity.name if aura.cached_shares else ""
+
+
 def _build_magic_aura(character: ObjectDB, *, privileged: bool) -> AuraData | None:
     """Build the aura sub-section (OneToOne on the sheet, read via the puppet).
 
@@ -1126,9 +1147,8 @@ def _build_magic_aura(character: ObjectDB, *, privileged: bool) -> AuraData | No
         tag_rows = aura.glimpse_tags.select_related("tag")
     return AuraData(
         id=aura.pk,
-        celestial=aura.celestial,
-        primal=aura.primal,
-        abyssal=aura.abyssal,
+        shares=_aura_share_entries(aura),
+        dominant_affinity=_aura_dominant_name(aura),
         glimpse_story=aura.glimpse_story,
         glimpse_state=aura.glimpse_state,
         glimpse_tags=[
@@ -1527,7 +1547,7 @@ def _build_personas(
 
 
 _THEMING_SELECT_RELATED: tuple[str, ...] = ("aura",)
-_THEMING_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
+_THEMING_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (aura_shares_prefetch("aura__"),)
 
 
 def _build_theming(sheet: CharacterSheet) -> ThemingSection:
@@ -1540,9 +1560,8 @@ def _build_theming(sheet: CharacterSheet) -> ThemingSection:
     try:
         aura = sheet.aura
         aura_data = AuraThemingData(
-            celestial=aura.celestial,
-            primal=aura.primal,
-            abyssal=aura.abyssal,
+            shares=_aura_share_entries(aura),
+            dominant_affinity=_aura_dominant_name(aura),
         )
     except CharacterAura.DoesNotExist:
         pass

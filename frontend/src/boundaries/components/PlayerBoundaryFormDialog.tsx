@@ -15,6 +15,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -158,7 +159,7 @@ export function PlayerBoundaryFormDialog({ open, onOpenChange, boundary, onSucce
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit boundary' : 'Add a content boundary'}</DialogTitle>
         </DialogHeader>

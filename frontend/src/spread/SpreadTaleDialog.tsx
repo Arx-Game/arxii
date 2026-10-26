@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -56,7 +57,7 @@ export function SpreadTaleDialog({ personaId }: { personaId: number }) {
           Spread a Tale
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Spread a Tale</DialogTitle>
         </DialogHeader>

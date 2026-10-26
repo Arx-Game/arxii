@@ -39,6 +39,8 @@ export interface ActionRef {
   position_id?: number | null;
   /** Blueprint PK — present on set_the_stage registry actions (#1017). */
   blueprint_id?: number | null; // #1017
+  /** Feature PK — present on perform_stunt registry actions (#4675). */
+  feature_id?: number | null;
   /** WORLD_INTERACTION target identity (#2503). */
   application_id?: number | null;
   target_object_id?: number | null;

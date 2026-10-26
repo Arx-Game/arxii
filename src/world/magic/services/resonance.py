@@ -13,7 +13,6 @@ from django.db import transaction
 from world.classes.services import is_crossing_level
 from world.magic.constants import ACCELERATED_GAIN_SOURCES, EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
-    AnchorCapExceeded,
     CovenantRoleNotEngagedError,
     InvalidImbueAmount,
     MagicError,
@@ -31,13 +30,15 @@ from world.magic.models import (
 )
 from world.magic.services.pull_effects import get_pull_effects_for_thread
 from world.magic.services.threads import (
+    cap_exceeded_error,
     compute_anchor_cap,
     compute_effective_cap,
-    compute_path_cap,
+    compute_level_cap,
     get_imbue_cost_multiplier,
     get_pull_cost,
     recompute_max_health_with_threads,
     relationship_side_from_row,
+    shown_thread_level,
     thread_level_multiplier,
 )
 from world.magic.types import (
@@ -378,14 +379,16 @@ def _check_imbue_level_advance(  # noqa: PLR0913
         ).exists()
         if not unlocked:
             return False, "XP_LOCK", []
-    if is_crossing_level(next_level):
+    # Crossings are on the shown scale (#4585): stored 30 is shown 3, the first
+    # crossing. Only a whole shown level (next_level % 10 == 0) can be one.
+    if next_level % 10 == 0 and is_crossing_level(shown_thread_level(next_level)):
         from world.progression.services.spends import (  # noqa: PLC0415
             check_requirements_for_thread_crossing,
         )
 
         threshold = ThreadCrossingThreshold.objects.filter(
             target_kind=thread.target_kind,
-            level=next_level,
+            level=shown_thread_level(next_level),
         ).first()
         if threshold is not None:
             met, failed = check_requirements_for_thread_crossing(
@@ -395,8 +398,8 @@ def _check_imbue_level_advance(  # noqa: PLR0913
                 return False, "CROSSING_REQUIREMENT", failed
     if next_level > cap:
         blocked_by = (
-            "PATH_CAP"
-            if compute_path_cap(character_sheet) < compute_anchor_cap(thread)
+            "LEVEL_CAP"
+            if compute_level_cap(character_sheet) <= compute_anchor_cap(thread)
             else "ANCHOR_CAP"
         )
         return False, blocked_by, []
@@ -463,7 +466,8 @@ def spend_resonance_for_imbuing(
 
     Raises:
         InvalidImbueAmount: If amount < 0 or thread.owner != character_sheet.
-        AnchorCapExceeded: If thread is already at effective cap.
+        AnchorCapExceeded: If thread is already at effective cap (``LevelCapExceeded``,
+            a subclass, when the character-level cap is the one binding it).
         ResonanceInsufficient: If balance < amount.
     """
     from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
@@ -480,7 +484,7 @@ def spend_resonance_for_imbuing(
     cap = compute_effective_cap(thread)
     if thread.level >= cap:
         msg = "Thread already at effective cap."
-        raise AnchorCapExceeded(msg)
+        raise cap_exceeded_error(thread)(msg)
 
     cr = CharacterResonance.objects.get(
         character_sheet=character_sheet,
@@ -986,7 +990,9 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
             effective_level = t.level + beseech_bonus
         multiplier = thread_level_multiplier(effective_level)
         for effect_tier in range(tier + 1):
-            rows = get_pull_effects_for_thread(t, tier=effect_tier, min_thread_level__lte=t.level)
+            rows = get_pull_effects_for_thread(
+                t, tier=effect_tier, min_thread_level__lte=shown_thread_level(t.level)
+            )
             for row in rows:
                 effect = _resolve_one_pull_effect(
                     t,

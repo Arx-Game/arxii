@@ -32,6 +32,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -112,7 +113,7 @@ export function TriggerInstallDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Install a trigger</DialogTitle>
         </DialogHeader>

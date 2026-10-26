@@ -507,6 +507,7 @@ class Migration(BatchedCreateModelMigration):
                 (
                     "gift",
                     models.ForeignKey(
+                        help_text="A Gift listed here is one this Tradition favors. Any Gift can still be picked under any Tradition.",
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="tradition_grants",
                         to="arxii.gift",

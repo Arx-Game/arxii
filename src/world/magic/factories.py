@@ -44,6 +44,7 @@ from world.magic.constants import (
     TechniqueFunction,
     VitalBonusTarget,
 )
+from world.magic.exceptions import AffinityNotConfigured
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
@@ -117,6 +118,7 @@ from world.magic.models import (
     TraditionGiftGrant,
 )
 from world.magic.models.anima import AnimaConfig
+from world.magic.models.fall_redemption import ConversionType
 from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.models.manifestation import CharacterManifestation, TechniqueManifestOption
 from world.magic.types.ritual import SoulfrayContent
@@ -238,6 +240,67 @@ class AffinityFactory(factory.django.DjangoModelFactory):
     description = factory.LazyAttribute(lambda o: f"The {o.name} affinity.")
 
 
+def ensure_canonical_affinities() -> tuple[Affinity, Affinity, Affinity]:
+    """Create the Celestial, Primal and Abyssal rows if absent and drop the getter cache.
+
+    For tests that reach code using ``Affinity.objects.get_*_affinity()`` (a CG finalize's
+    starting aura, the fall/atonement rites). Returns (celestial, primal, abyssal).
+    """
+    from world.magic.constants import (
+        AFFINITY_ABYSSAL,
+        AFFINITY_CELESTIAL,
+        AFFINITY_PRIMAL,
+    )
+
+    rows = (
+        AffinityFactory(name=AFFINITY_CELESTIAL),
+        AffinityFactory(name=AFFINITY_PRIMAL),
+        AffinityFactory(name=AFFINITY_ABYSSAL),
+    )
+    for row, coefficient in zip(rows, _CANONICAL_CORRUPTION_COEFFICIENTS, strict=True):
+        if row.corruption_coefficient != coefficient:
+            row.corruption_coefficient = coefficient
+            row.save(update_fields=["corruption_coefficient"])
+    Affinity.objects.clear_cache()
+    return rows
+
+
+#: Corruption tenths per cast tick for (Celestial, Primal, Abyssal), as production authors them.
+_CANONICAL_CORRUPTION_COEFFICIENTS = (0, 2, 10)
+
+
+def ensure_conversion_pairs() -> tuple[Affinity, Affinity, Affinity]:
+    """Author the six Fall / Redemption conversion pairs between the canonical affinities.
+
+    Creates the canonical rows if absent, then upserts each cross pair's
+    ``AffinityInteraction`` with the production ``conversion_multiplier`` and
+    ``conversion_type``. Returns (celestial, primal, abyssal).
+    """
+    celestial, primal, abyssal = ensure_canonical_affinities()
+    for source, target, conversion_type, multiplier in (
+        (celestial, primal, ConversionType.FALL, "1.20"),
+        (celestial, abyssal, ConversionType.FALL, "1.50"),
+        (primal, abyssal, ConversionType.FALL, "1.20"),
+        (abyssal, primal, ConversionType.REDEMPTION, "0.70"),
+        (primal, celestial, ConversionType.REDEMPTION, "0.70"),
+        (abyssal, celestial, ConversionType.REDEMPTION, "0.50"),
+    ):
+        pair, _ = AffinityInteraction.objects.get_or_create(
+            source_affinity=source,
+            environment_affinity=target,
+            defaults={
+                "valence": ResonanceValence.OPPOSED,
+                "kind": AffinityInteractionKind.REJECT,
+                "aggressor": AffinityInteractionAggressor.ENVIRONMENT,
+            },
+        )
+        pair.conversion_multiplier = Decimal(multiplier)
+        pair.conversion_type = conversion_type
+        pair.save(update_fields=["conversion_multiplier", "conversion_type"])
+    AffinityInteraction.objects.clear_cache()
+    return celestial, primal, abyssal
+
+
 class AffinityInteractionFactory(factory.django.DjangoModelFactory):
     """Factory for AffinityInteraction directed-pair rows."""
 
@@ -311,7 +374,31 @@ class DistinctionResonanceRankThresholdFactory(factory.django.DjangoModelFactory
     lifetime_earned_threshold = 10
 
 
+def set_aura_split(aura: CharacterAura, *, celestial: str, primal: str, abyssal: str) -> None:
+    """Set an aura's shares to a Celestial / Primal / Abyssal split (zero writes no row)."""
+    from world.magic.services.aura import set_aura_shares
+    from world.magic.types import AffinityShare
+
+    rows = ensure_canonical_affinities()
+    set_aura_shares(
+        aura,
+        [
+            AffinityShare(affinity=row, percent=Decimal(percent))
+            for row, percent in zip(rows, (celestial, primal, abyssal), strict=True)
+            if Decimal(percent) > 0
+        ],
+    )
+
+
 class CharacterAuraFactory(factory.django.DjangoModelFactory):
+    """An aura with share rows.
+
+    ``celestial`` / ``primal`` / ``abyssal`` are convenience percentages for the three
+    canonical affinities (rows named Celestial / Primal / Abyssal, created if absent);
+    a zero percent writes no row. The three old columns of the same names still exist on
+    the model until Task 7 drops them; the factory never writes them.
+    """
+
     class Meta:
         model = CharacterAura
 
@@ -319,6 +406,32 @@ class CharacterAuraFactory(factory.django.DjangoModelFactory):
     celestial = Decimal("10.00")
     primal = Decimal("70.00")
     abyssal = Decimal("20.00")
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        from world.magic.constants import (
+            AFFINITY_ABYSSAL,
+            AFFINITY_CELESTIAL,
+            AFFINITY_PRIMAL,
+        )
+        from world.magic.services.aura import set_aura_shares
+        from world.magic.types import AffinityShare
+
+        percents = {
+            AFFINITY_CELESTIAL: Decimal(kwargs.pop("celestial")),
+            AFFINITY_PRIMAL: Decimal(kwargs.pop("primal")),
+            AFFINITY_ABYSSAL: Decimal(kwargs.pop("abyssal")),
+        }
+        aura = super()._create(model_class, *args, **kwargs)
+        shares = [
+            AffinityShare(affinity=AffinityFactory(name=name), percent=percent)
+            for name, percent in percents.items()
+            if percent > 0
+        ]
+        Affinity.objects.clear_cache()
+        if shares:
+            set_aura_shares(aura, shares)
+        return aura
 
 
 class CharacterResonanceFactory(factory.django.DjangoModelFactory):
@@ -879,7 +992,7 @@ class TraditionFactory(factory.django.DjangoModelFactory):
 
 
 class TraditionGiftGrantFactory(factory.django.DjangoModelFactory):
-    """Factory for TraditionGiftGrant — the (tradition x gift) CG-availability pool row."""
+    """Factory for TraditionGiftGrant - a Gift a Tradition favors (#4659)."""
 
     class Meta:
         model = TraditionGiftGrant
@@ -1448,7 +1561,9 @@ class ThreadFactory(factory.django.DjangoModelFactory):
                                  (anchor_cap reads target_capstone.relationship.pair_depth());
                                  requires as_capstone_thread=True
     - _path_stage=<int>        → add a CharacterPathHistory row for thread.owner with
-                                 a Path of that stage (applies to capstone + effective cap)
+                                 a Path of that stage (display only; no cap reads it)
+    - _class_level=<int>       → give thread.owner a primary class level, which sets
+                                 the level cap (level × 10) on every thread (#4585)
     - as_covenant_role_thread=True → switch to COVENANT_ROLE kind; creates a CovenantRole
 
     NOTE: this factory intentionally does NOT call full_clean(). DB-level
@@ -1597,6 +1712,19 @@ class ThreadFactory(factory.django.DjangoModelFactory):
 
         path = PathFactory(stage=stage)
         CharacterPathHistory.objects.create(character=self.owner, path=path)
+
+    @factory.post_generation  # type: ignore[misc]
+    def _class_level(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
+        """Give thread.owner a primary class level (sets the #4585 level cap)."""
+        if not create or extracted is None:
+            return
+        from world.classes.factories import CharacterClassLevelFactory
+
+        CharacterClassLevelFactory(
+            character=self.owner,
+            level=int(extracted),  # type: ignore[arg-type]
+            is_primary=True,
+        )
 
     @factory.post_generation  # type: ignore[misc]
     def as_covenant_role_thread(
@@ -2154,8 +2282,6 @@ def wire_soulfray_aftermath(content: SoulfrayContent) -> None:
 # Scope #7 Phase 9 — Reference Corruption content factories
 # =============================================================================
 
-_ABYSSAL_AFFINITY_NAME: str = "abyssal"
-
 
 def _make_magical_endurance_check_type() -> Any:
     """Return a 'Magical Endurance' CheckType — factory-owned, not the gated #709 seed (#2698).
@@ -2215,7 +2341,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
 
     These values are PLACEHOLDERS for Phase 14 tuning via SoulTetherConfig.
 
-    The affinity is inferred from corruption_resonance.affinity.name.lower().
+    The affinity is read from the canonical Abyssal row against corruption_resonance.affinity.
     """
 
     class Meta:
@@ -2252,7 +2378,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
         from world.conditions.types import AdvancementResistFailureKind
 
         thresholds = [50, 200, 500, 1000, 1500]
-        is_abyssal = self.corruption_resonance.affinity.name.lower() == _ABYSSAL_AFFINITY_NAME
+        is_abyssal = self.corruption_resonance.affinity_id == ensure_canonical_affinities()[2].pk
         difficulties = [12, 18, 25, 30, 35] if is_abyssal else [8, 12, 18, 22, 28]
         check_type = _make_resist_corruption_check_type()
 
@@ -3223,7 +3349,8 @@ def wire_fall_redemption_content() -> object:
     the Ritual row that ``ritual draft`` resolves by name does not exist.
 
     Creates (get_or_create on name):
-    - ``FallRedemptionConfig`` singleton (pk=1) with default multipliers.
+    - ``FallRedemptionConfig`` singleton (pk=1) (non-conversion tuning; the six
+      per-pair conversion multipliers are seeded by ``_seed_affinity_interactions``).
     - "Ritual of Falling" Ritual — SERVICE dispatch to
       ``world.magic.services.fall_redemption.perform_fall``.
 
@@ -3283,16 +3410,14 @@ def wire_fall_redemption_content() -> object:
     # the canonical Affinities exist, and only their own Resonances/
     # CompromiseActType/ResonanceConversion rows are content-repo-owned #2698)
     compromise_types = []
-    celestial_affinity = Affinity.objects.filter(name__iexact="Celestial").first()
-    primal_affinity = Affinity.objects.filter(name__iexact="Primal").first()
-    abyssal_affinity = Affinity.objects.filter(name__iexact="Abyssal").first()
+    try:
+        celestial_affinity = Affinity.objects.get_celestial_affinity()
+        primal_affinity = Affinity.objects.get_primal_affinity()
+        abyssal_affinity = Affinity.objects.get_abyssal_affinity()
+    except AffinityNotConfigured:
+        celestial_affinity = primal_affinity = abyssal_affinity = None
 
-    have_affinities = (
-        celestial_affinity is not None
-        and primal_affinity is not None
-        and abyssal_affinity is not None
-    )
-    if have_affinities:
+    if celestial_affinity is not None:
         # One authored resonance per affinity to hang the examples off. This used
         # to name "Bene"/"Praedari"/"Dissolution" and authored_or_sample them into
         # existence -- two canonical names minted with whatever affinity this
@@ -3302,17 +3427,17 @@ def wire_fall_redemption_content() -> object:
         cele_res = reference_resonance(
             CompromiseActType.objects.filter(target_resonance__affinity=celestial_affinity),
             resonance_field="target_resonance",
-            affinity_name=celestial_affinity.name,
+            affinity=celestial_affinity,
         )
         primal_res = reference_resonance(
             CompromiseActType.objects.filter(target_resonance__affinity=primal_affinity),
             resonance_field="target_resonance",
-            affinity_name=primal_affinity.name,
+            affinity=primal_affinity,
         )
         abyssal_res = reference_resonance(
             CompromiseActType.objects.filter(target_resonance__affinity=abyssal_affinity),
             resonance_field="target_resonance",
-            affinity_name=abyssal_affinity.name,
+            affinity=abyssal_affinity,
         )
 
         if cele_res is not None and primal_res is not None and abyssal_res is not None:
@@ -3338,12 +3463,12 @@ def wire_fall_redemption_content() -> object:
 
             # Example ResonanceConversion mappings
             for source_res, target_affinity, target_res in [
-                (cele_res, "primal", primal_res),
-                (cele_res, "abyssal", abyssal_res),
-                (primal_res, "abyssal", abyssal_res),
-                (primal_res, "celestial", cele_res),
-                (abyssal_res, "primal", primal_res),
-                (abyssal_res, "celestial", cele_res),
+                (cele_res, primal_affinity, primal_res),
+                (cele_res, abyssal_affinity, abyssal_res),
+                (primal_res, abyssal_affinity, abyssal_res),
+                (primal_res, celestial_affinity, cele_res),
+                (abyssal_res, primal_affinity, primal_res),
+                (abyssal_res, celestial_affinity, cele_res),
             ]:
                 authored_or_sample(
                     ResonanceConversion,
@@ -3514,7 +3639,7 @@ def author_reference_corruption_content() -> None:
                     corruption_resonance=None
                 ),
                 resonance_field="corruption_resonance",
-                affinity_name=affinity.name,
+                affinity=affinity,
             )
             for affinity in (primal_affinity, abyssal_affinity)
         )

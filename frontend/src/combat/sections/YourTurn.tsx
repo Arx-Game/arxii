@@ -27,9 +27,11 @@ import type {
   TargetOption,
 } from '@/actions/types';
 import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
+import { AreaAttackWarning } from '@/combat/components/AreaAttackWarning';
+import { DodgePlanPanel } from '@/combat/components/DodgePlanPanel';
 import { MovementActions } from '../components/MovementActions';
 import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
-import { waitingStrikeTechniques } from '../roundActionHelpers';
+import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
 import { FuryDeclaration } from '../components/FuryDeclaration';
@@ -1935,12 +1937,10 @@ export function YourTurn({
   );
 
   // ---------------------------------------------------------------------------
-  // Move-to-position actions from availableActions (registry backend, #532)
+  // Movement actions from availableActions (registry backend, #532; flight and pass, #4663)
   // ---------------------------------------------------------------------------
 
-  const moveActions = availableActions.filter(
-    (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'move_to_position'
-  );
+  const moveActions = availableActions.filter(isMoveAction);
 
   // ---------------------------------------------------------------------------
   // Combos
@@ -2151,6 +2151,9 @@ export function YourTurn({
 
   const { mutateAsync: dispatchAction, isPending: dispatchPending } =
     useDispatchPlayerAction(characterId);
+  const refreshEncounter = () => {
+    queryClient.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+  };
 
   // #3381 — shared registry-dispatch mutation for the new maneuvers below
   // (rally/succor/use-item/revert/charge/joust). One mutation instance is
@@ -2636,6 +2639,25 @@ export function YourTurn({
             .catch(() => {});
         }}
       />
+
+      {/* A wound-up attack covering her place, and her dodge plan (#4676) */}
+      <AreaAttackWarning
+        attacks={encounter?.pending_attacks ?? []}
+        currentPositionId={actorPositionId}
+        plan={myParticipantSelf?.dodge_plan ?? null}
+        isLocked={isLocked}
+        dispatchAction={dispatchAction}
+        onDispatched={refreshEncounter}
+      />
+      {myParticipantSelf?.dodge_plan && (
+        <DodgePlanPanel
+          plan={myParticipantSelf.dodge_plan}
+          currentPositionId={actorPositionId}
+          isLocked={isLocked}
+          dispatchAction={dispatchAction}
+          onDispatched={refreshEncounter}
+        />
+      )}
 
       {/* Passive slots — only non-focused-category slots */}
       {visiblePassiveSlots.length > 0 && (

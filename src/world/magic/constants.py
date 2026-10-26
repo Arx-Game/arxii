@@ -395,19 +395,12 @@ ANCHOR_CAP_FACET_DIVISOR: int = 50
 500 lifetime resonance → cap level 10. Tunable via playtest.
 """
 
-ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE: int = 20
-"""Hard ceiling on FACET anchor cap, scaled by character path stage.
+PATH_LEVEL_CAP_MULTIPLIER: int = 10
+"""Stored points per character level, for caps keyed on character level.
 
-path_stage × 20 = ceiling. At stage 1, hard max = 20 (well above path cap of 10).
-At stage 6, hard max = 120 (well above path cap of 60). Prevents runaway at the
-extreme tail of lifetime accumulation.
-"""
-
-ANCHOR_CAP_GIFT_PER_STAGE: int = 10
-"""GIFT thread anchor cap per path stage (#1580).
-
-path_stage × 10 = GIFT anchor cap. At stage 2, cap = 20 (matches path cap of 20).
-A species gift thread can grow in lockstep with the character's path progression.
+Thread level cap: ``get_character_path_level(character) * PATH_LEVEL_CAP_MULTIPLIER``
+(#4585), so a level-4 character's threads stop at stored 40 (shown 4). The sanctum
+Homecoming cap (``services/sanctum_lvm.py``) reads the same constant.
 """
 
 
@@ -459,10 +452,11 @@ class RestrictionKind(models.TextChoices):
     PRICE = "price", "Price a caster pays"
 
 
-#: Highest thread level a creation pick may start a thread at, or unlock early: one
-#: below the first crossing (level 3, ``world.classes.services.is_crossing_level``), so a
-#: creation pick never skips a crossing ceremony or its requirements (#4099).
-CREATION_PERSONALIZATION_MAX_LEVEL = 2
+#: Highest shown thread level a creation pick may start a thread at, or unlock early.
+#: A new character is level 1 and a thread never exceeds its character's level
+#: (``compute_level_cap``, #4585), so a creation pick stops at 1. That also keeps it below
+#: the first crossing (level 3, ``world.classes.services.is_crossing_level``, #4099).
+CREATION_PERSONALIZATION_MAX_LEVEL = 1
 CUSTOM_TECHNIQUE_NAME_MAX_LENGTH = 80
 CUSTOM_TECHNIQUE_DESCRIPTION_MAX_LENGTH = 2000
 
@@ -803,3 +797,18 @@ class MagicActivity(models.TextChoices):
     CEREMONY = "ceremony", "Ceremony"
     COMPANION_BINDING = "companion_binding", "Companion binding"
     DREAM_PERIL = "dream_peril", "Dream peril"
+
+
+# Names of the three canonical Affinity rows. Looked up by the
+# ``Affinity.objects.get_*_affinity()`` getters; never matched anywhere else.
+AFFINITY_CELESTIAL = "Celestial"
+AFFINITY_PRIMAL = "Primal"
+AFFINITY_ABYSSAL = "Abyssal"
+
+
+class FeedingTaintRole(models.TextChoices):
+    """Which feeding-taint rule a CompromiseActType row stands for."""
+
+    MURDER = "murder", "Murder"
+    SEDUCTION_DECEPTION = "seduction_deception", "Seduction by deception"
+    SEDUCTION_PREDATION = "seduction_predation", "Seduction by predation"

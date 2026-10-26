@@ -18,6 +18,10 @@ SRC_DIR = PROJECT_ROOT / "src"
 # transition backfills (deriving/re-keying existing rows during a field
 # rename/split), not authored seed content.
 ALLOWED_MIGRATIONS: set[str] = {
+    # #4681: row-keyed affinity backfill. Re-keys existing CharacterAura percent
+    # columns into CharacterAuraShare rows (empty in production) and copies enum
+    # values into _ref FKs; no authored content is invented.
+    "world/migrations/0304_affinity_rows_backfill.py",
     "world/battles/migrations/0031_populate_military_units.py",
     # #2529: derives CovenantRole.sword/shield/crown_weight from the removed
     # archetype field and re-keys ArchetypeActionScaling rows onto the new

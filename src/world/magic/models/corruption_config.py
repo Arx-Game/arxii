@@ -15,10 +15,6 @@ class CorruptionConfig(SharedMemoryModel):
 
     objects = ArxSharedMemoryManager()
 
-    celestial_coefficient = models.PositiveSmallIntegerField(default=0)
-    primal_coefficient = models.PositiveSmallIntegerField(default=2)
-    abyssal_coefficient = models.PositiveSmallIntegerField(default=10)
-
     tier_1_coefficient = models.PositiveSmallIntegerField(default=10)
     tier_2_coefficient = models.PositiveSmallIntegerField(default=20)
     tier_3_coefficient = models.PositiveSmallIntegerField(default=40)

@@ -28,6 +28,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ReadiedUltimate, UltimateReveal, UltimateRevealCard } from '@/magic/types';
+import { NO_DESCRIPTION } from '@/components/ui/dialog';
 
 interface UltimateRevealDialogProps {
   reveal: UltimateReveal;
@@ -117,6 +118,7 @@ export function UltimateRevealDialog({
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent
+        {...(reveal.framing_text ? {} : NO_DESCRIPTION)}
         data-testid="ultimate-reveal-dialog"
         className={cn(
           'max-h-[90vh] overflow-y-auto shadow-[0_0_60px_-12px]',

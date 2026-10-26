@@ -280,6 +280,24 @@ def _noop() -> None:
     """No-op stub used as a ``__code__`` donor for PG-only refresh helpers."""
 
 
+def _analyze_planner_stats() -> None:
+    """Run ``ANALYZE`` so SQLite plans from statistics instead of guessing.
+
+    A fresh in-memory test database has no ``sqlite_stat1``. Without it SQLite
+    can fail a count over ``status = ? AND (a IN (...) OR b IN (...))`` on a table
+    with a partial unique index (``DuelChallenge``) with ``internal query planner
+    error``, depending on how many tables the schema holds. The statistics change
+    no result; they only make the planner choose a plan instead of erroring.
+
+    Seen on SQLite 3.46.0 (Python 3.13 build). Remove this helper once the bundled
+    SQLite is upgraded and the duel inbox tests pass without it.
+    """
+    from django.db import connections  # noqa: PLC0415
+
+    with connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+        cursor.execute("ANALYZE")
+
+
 def _create_matview_stand_in_tables() -> None:
     """Create empty stand-in tables for the PG materialized views.
 
@@ -343,6 +361,7 @@ class SqliteTestRunner(TimedEvenniaTestRunner):
         if os.environ.get("ARX_SCHEMA_CACHE") == "0":
             config = super().setup_databases(**kwargs)
             _create_matview_stand_in_tables()
+            _analyze_planner_stats()
             return config
         template = SCHEMA_CACHE_DIR / f"schema-{_schema_fingerprint()}.sqlite3"
         if template.exists():
@@ -351,12 +370,14 @@ class SqliteTestRunner(TimedEvenniaTestRunner):
             with _migrate_replaced_by_restore(template):
                 config = super().setup_databases(**kwargs)
             _create_matview_stand_in_tables()
+            _analyze_planner_stats()
             return config
         old_config = super().setup_databases(**kwargs)
         # Create the stand-ins before dumping so the cached template carries
         # them; the restore path still re-runs the (idempotent) helper to
         # upgrade templates dumped before the stand-ins existed.
         _create_matview_stand_in_tables()
+        _analyze_planner_stats()
         _dump_sqlite_to_template(DEFAULT_DB_ALIAS, template)
         _prune_schema_cache()
         if self.verbosity >= 1:

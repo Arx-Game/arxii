@@ -13,7 +13,6 @@ from world.combat import services as _svc
 from world.combat.constants import (
     ABSORPTION_CAP_PER_MOMENT,
     INTERPOSE_BASE_FATIGUE_COST,
-    REACTIONS_PER_ROUND,
     ActionCategory,
     ClashFlavor,
     CombatAllegiance,
@@ -353,7 +352,7 @@ def _try_interpose(
     (:func:`~world.conditions.services.guardians_by_target`, oldest instance
     first). A guard cast on oneself never interposes for its own
     bearer. A standing guard counts against both budgets exactly as a declaration
-    does (``REACTIONS_PER_ROUND`` and ``ABSORPTION_CAP_PER_MOMENT``); ADR-4584-A
+    does (its reaction count and ``ABSORPTION_CAP_PER_MOMENT``); ADR-4584-A
     revisits ADR-0161 for this. It covers player-character wards in combat only:
     not an ALLY summon ward (:func:`_try_interpose_for_opponent`) and not
     out-of-combat Sudden Harm.
@@ -550,17 +549,17 @@ def _attempt_guardian_interpose(
     guardian is retried.
     """
     interposer = guardian.character_sheet.character
-    if guardian.reactions_used >= REACTIONS_PER_ROUND:
-        _narrate_reaction_declined(interposer, protected, cap=False)
-        return False
     if pre_payload.answers_consumed >= ABSORPTION_CAP_PER_MOMENT:
-        _narrate_reaction_declined(interposer, protected, cap=True)
+        _narrate_reaction_declined(interposer, protected)
         return False
 
-    # Bond combat bonus (#2021): relationship-scaled protection.
+    from world.combat.services.reactions import reaction_penalty  # noqa: PLC0415
     from world.relationships.services import bond_bonus  # noqa: PLC0415
 
-    modifiers = bond_bonus(interposer, protected)
+    # Bond combat bonus (#2021): relationship-scaled protection. No cap on guarding
+    # (#4676): each reaction already made this round makes this roll harder by
+    # MovementConfig.reaction_difficulty_step.
+    modifiers = bond_bonus(interposer, protected) - reaction_penalty(guardian)
 
     technique_action = (
         action if action is not None and action.focused_action_id is not None else None

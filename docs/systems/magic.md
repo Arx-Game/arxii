@@ -23,7 +23,7 @@ Techniques are the primary magical abilities, powered by intensity and control s
 
 ```python
 from world.magic.types import (
-    AffinityType,        # CELESTIAL, PRIMAL, ABYSSAL
+    AffinityShare,       # one affinity row + its percent
     AnimaRitualCategory, # SOLITARY, COLLABORATIVE, ENVIRONMENTAL, CEREMONIAL
 )
 
@@ -80,8 +80,8 @@ and the 5-axis Thread model no longer exist.
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
-| `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target` |
-| `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne |
+| `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick), optional OneToOne `modifier_target`. Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
+| `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne. Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
 
 **Note:** `Affinity` and `Resonance` are proper first-class domain models in
 this app (each with an optional OneToOne link back to `mechanics.ModifierTarget`
@@ -94,7 +94,7 @@ part of the Resonance Pivot — relationship flavor is now carried by
 
 | Model | Purpose | Key Fields | Relationship |
 |-------|---------|------------|--------------|
-| `CharacterAura` | Affinity percentages (must sum to 100) | `celestial`, `primal`, `abyssal` | OneToOne via `character.aura` |
+| `CharacterAura` | A character's aura. The percentages live in `CharacterAuraShare` rows (one per aura and affinity, `percent` 0-100, summing to 100; see `cached_shares`, `percent_for(affinity)`, `dominant_affinity`) | `character`, `glimpse_story`, `glimpse_state` | OneToOne via `character.aura` |
 | `CharacterResonance` | Per-character per-resonance identity + currency (Spec A §2.2) | `character_sheet` FK, `resonance` FK, `balance`, `lifetime_earned`, `claimed_at`, `flavor_text` | FK via `character_sheet.resonances` (unique_together: (character_sheet, resonance)) |
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
 | `CharacterTechnique` | Known techniques; the character's hold carries their own personalization of it (#4099, ADR-4099) | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques), `custom_name` (display only, never a lookup key; blank = the catalog name), `custom_description` (blank = the catalog description), `price` (FK `Restriction`, PRICE kind only, nullable), `early_form` (FK `TechniqueVariant`, nullable; bought in creation before the gift thread reaches its level) | FK via `character.character_techniques` |
@@ -225,8 +225,9 @@ Gift. `TraditionGiftGrant.special_techniques` no longer adds to a pool: a techni
 Tradition grant lists is open to every Tradition, and one listed by one or more is open only
 to those Traditions. The pool for Tradition T on Path P picking Gift G is the techniques on
 P's list for G that no Tradition grant lists, or T's does (`get_technique_options` returns
-the two halves as `pool` and `tradition`). `get_gift_options` offers G when T has a grant
-for it and that pool holds a takeable technique. The restriction half is
+the two halves as `pool` and `tradition`). `get_gift_options` offers every Major Gift G whose
+pool holds a takeable technique; a grant row for (T, G) is not needed, since a row now marks a
+Gift T favors rather than one it allows (#4659). The restriction half is
 `cg_catalog.tradition_listings` / `offered_to_tradition`, shared with Academy training
 (`_technique_available_to_learner`, through `get_technique_options`) and `grant_path_magic`,
 which skips a technique the character's active Tradition may not take. The
@@ -241,8 +242,9 @@ required-content sentinel (`web/admin/tuning/required_content.py`, #3712) report
 such `(path, gift)` pair and names the traditions it leaks through — 8 pairs across 17
 combinations at the time it was added. A `TraditionGiftGrant` carrying no specials is
 deliberately never reported: that is a legitimate authored state meaning "this tradition
-teaches this gift and adds no extras of its own", it creates no availability of its own,
-and 39 of 69 authored rows are in it.
+favors this gift and adds no extras of its own" (#4659), and it creates no availability of
+its own. The `cg-gift-pools-takeable` row lists each path and Major Gift no active tradition
+can take there, and counts tradition and path pairings left with no Gift at all.
 
 **"Non-empty" means a technique a player can take (#4545).** `cg_technique_queryset`
 (`cg_catalog.py`) is the one CG readiness rule: never an ultimate, an `action_template`
@@ -754,24 +756,66 @@ options. (Tradition skill grants came in #4457, next section.) See `docs/roadmap
 
 ### Tradition training and Academy skill courses (#4457, ADR-4457-A) [BUILT & WIRED]
 
-A Tradition's schooling stance sets what level every Magic skill starts at; CG points never buy a
-Magic skill; a character who starts behind catches up in play, fastest through an Academy course.
-Slice 1 above made rolls add skills; this slice gives a schooled character those skills.
+A Tradition's schooling stance gives a character magical training points to spend on Magic skills at
+character creation; CG skill points never buy a Magic skill; a character who starts behind catches up
+in play, fastest through an Academy course. Slice 1 above made rolls add skills; this slice gives a
+schooled character those skills. Slice 2 of #4659 (ADR-4659-B) replaced the original fixed "floor"
+(every Magic skill raised to one level) with a pool the player spends and a Tradition teaching fit
+that grows the pool and eases Academy courses.
 
-**The floor.** `SchoolingLine.magic_skill_floor` (`PositiveSmallIntegerField`, default 0) is the
-level each stance lifts every active Magic skill to (migration `0273_skill_courses_and_schooling_floor`).
-Rank 0 carries none: check constraint `schooling_rank_zero_grants_no_floor`. The set is every skill
-in `magic_category_skills()`, the same for every Tradition; a per-Tradition list is deferred.
+**Training points.** The stance's granted distinction carries a `DistinctionEffect` on the
+`magic_training_points` `ModifierTarget` (category `character_creation`, seeded by
+`wire_magic_training_points_target`). `CharacterDraft.magic_training_pool` sums those effects with the
+fit bonuses below. `SchoolingLine.magic_skill_floor` and its check constraint were removed by
+`0299_remove_schoolingline_magic_skill_floor` with no carry: production held no schooling lines
+(dump arxii-20261025T033001Z, 0 rows), so the data disposition is "empty in production" (ADR-0237). The set of skills is
+still every skill in `magic_category_skills()`, the same for every Tradition.
+
+**Teaching fit.** Three authored inputs say how well a Tradition teaches a given student:
 
 | Surface | Location | Purpose |
 |---------|----------|---------|
-| `SCHOOLING_MAX_RANK_BY_STATE` / `schooling_max_rank(state)` | `world/character_creation/constants.py` | Which Tradition states open which stances: LIVING_MASTERS up to rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. A game rule, not tuning; #4536 replaces it when the training level becomes its own fact. Read by the offers module, `TraditionSerializer.get_schooling` and `schooling_magic_skill_floor` |
-| `schooling_magic_skill_floor(draft)` | `world/character_creation/offers.py` | The highest `magic_skill_floor` among the Tradition Step offers the draft picked, counting a pick only when its schooling line grants the very distinction the pick holds; 0 when the slate state opens no stances. Computed on every call, never memoised |
-| `CharacterDraft.starting_magic_skill_floor` | `world/character_creation/models.py` | Property over the function above; exposed read-only on `CharacterDraftSerializer` |
-| `_create_skill_values` | `world/character_creation/services.py` | At finalize, writes every `magic_category_skills()` skill at the floor through `set_skill_values` (source `CHARACTER_CREATION`, caps off), so each gets a `CharacterTraitValue` and one `CharacterTraitChange`. A self-taught draft writes no Magic rows |
-| `CharacterDraft._check_no_magic_points` | `world/character_creation/models.py` | Refuses points in a Magic skill or in a specialization whose parent is one, naming them (`MAGIC_SKILL_POINTS_REFUSAL`), from `validate_path_skills` |
-| `SchoolingLineSerializer.magic_skill_floor` | `world/character_creation/serializers.py` | Each stance row in `GET /api/character-creation/traditions/?beginning_id=...` carries its floor; `schooling` is cut to the ranks the Tradition's state opens |
-| `starting_magic_skill_floor` | `CharacterDraftSerializer` | Read-only integer on `GET /api/character-creation/drafts/<id>/` |
+| `TraditionGiftGrant` | `world/magic/models/grants.py` | A row now means a Gift the Tradition's teachers favor (ADR-4659-A); it no longer gates the Gift pick |
+| `Tradition.favored_affinities` | `world/magic/models/gifts.py` | M2M to `Affinity`, blank; reverse name `favoring_traditions`. A student whose Gift resonance's affinity is one of these gets the affinity fit. Admin field on `TraditionAdmin` |
+| `TraditionTeachingConfig` | `world/magic/models/teaching.py` | Singleton (pk=1, lazy-created): `gift_fit_training_bonus` (10), `affinity_fit_training_bonus` (10), `course_ease_gift_fit` (2), `course_ease_affinity_fit` (2). `clean()` requires the two training bonuses to be multiples of `SkillPointBudget.points_per_tier`. Kept apart from `GiftAcquisitionConfig`, which tunes technique acquisition |
+| `teaching_fit(tradition, gift, affinity)` | `world/magic/services/teaching_fit.py` | The one resolver, returning a `TeachingFit` (`world/magic/types/teaching_fit.py`: `gift_fit`, `affinity_fit`, `favored_gift_name`, `favored_affinity_name`, `training_bonus(config)`, `course_ease(config)`). Gift fit is a `TraditionGiftGrant` for the pair; affinity fit is the given `Affinity` row being in `favored_affinities` (by pk, through foreign keys only, never names). No affinity or no Tradition never fits |
+| `gift_affinity_for(sheet, gift)` / `student_traits(sheet)` | same file | The Academy's student: the Major Gift and the affinity of the resonance on the sheet's active GIFT thread for it (`specialization.services.gift_threads_for`), None without one. Character creation passes the picked Gift resonance's `affinity` directly. Fit by the character's aura is deferred to #4672 |
+| `major_gift_for(sheet)` | same file | The sheet's Major Gift (first `CharacterGift` of kind MAJOR), None when it has none |
+| `get_teaching_config()` | same file | Lazily creates and returns the `TraditionTeachingConfig` singleton |
+
+Character creation and the Academy both go through `teaching_fit`, so the two places cannot
+disagree. The fit gives bonuses and ease, never a gate.
+
+| Surface | Location | Purpose |
+|---------|----------|---------|
+| `SCHOOLING_MAX_RANK_BY_STATE` / `schooling_max_rank(state)` | `world/character_creation/constants.py` | Which Tradition states open which stances: LIVING_MASTERS up to rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. A game rule, not tuning; #4536 replaces it when the training level becomes its own fact. Read by the offers module and `TraditionSerializer.get_schooling` |
+| `schooling_training_points(lines)` | `world/character_creation/offers.py` | The training points each stance gives keyed by rank: the granted distinction's `magic_training_points` effect at the stance's rank, 0 for rank 0 or a line that grants nothing. One query. Read by the Tradition serializer and the tradition slate page |
+| `CharacterDraft.magic_training_pool` | `world/character_creation/models.py` | Property returning a `MagicTrainingPool` (`base`, `gift_bonus`, `affinity_bonus`, `total`, `required_spend`, `fit`, `sources`). Computed on every call, never memoised. See "The pool" below |
+| `compute_magic_errors` / `_magic_skill_allocation_errors` | `world/character_creation/validators.py` | Gift-stage validation of `draft_data["magic_skills"]` |
+| `_create_skill_values` | `world/character_creation/services.py` | At finalize, writes exactly the allocated `magic_skills` through `set_skill_values` (source `CHARACTER_CREATION`, caps off), one `CharacterTraitChange` each; a Magic skill with no allocation is not written |
+| `_glimpse` | `world/character_creation/magic_writer.py` | A new `CharacterAura` starts with its 80 on the picked resonance's affinity (below) |
+| `CharacterDraft._check_no_magic_points` | `world/character_creation/models.py` | Refuses points in a Magic skill or in a specialization whose parent is one, naming them (`MAGIC_SKILL_POINTS_REFUSAL`), from `validate_path_skills`. Magic skills are bought only from the training pool |
+| `TraditionSerializer` | `world/character_creation/serializers.py` | Each Tradition row carries `favored_gift_names` and `favored_affinity_names` (one query each for the list, built in `TraditionViewSet.get_serializer_context`); each stance row carries `training_points` and `grants_distinction_name`. Gift options carry `favored` |
+| `CharacterDraftSerializer.magic_training` | `world/character_creation/serializers.py` | Read-only breakdown on `GET /api/character-creation/drafts/<id>/`: `base_sources` (name, rank, points, `show_rank`: true only for a distinction whose `max_rank` is above 1), `gift_bonus`, `affinity_bonus`, `favored_gift_name`, `favored_affinity_name`, `total`, `required_spend`, `step` (the active `SkillPointBudget.points_per_tier`), `allocated`, and `skills` (id, name, value, max) |
+
+**The pool.** `base` is the sum of the draft's `magic_training_points` distinction effects.
+`total = base + gift bonus + affinity bonus`, where each bonus is the config value when that fit
+holds and `base > 0` (a draft with no training gets nothing, even when it fits both), rounded down to
+a multiple of `SkillPointBudget.points_per_tier`. A Magic skill value costs its own value in points
+(10 per step, the ordinary skill price). `required_spend = min(total, active Magic skill count x
+max_skill_value)`, so a pool larger than the skills can hold never blocks submission. Example with
+Tradition Training rank 1 = 20, a Studious +10 distinction and both bonuses at 10: a draft that fits
+both has 50 to spend, a Gift-only or affinity-only fit 40, no fit 30, no training distinction 0.
+
+**Validation.** The Gift stage reads `draft_data["magic_skills"]` (skill id to value). It fails the
+stage when the value is malformed, names a skill that is not an active Magic skill, holds a value
+that is not a multiple of `points_per_tier` or exceeds `max_skill_value`, spends more than `total`,
+or spends less than `required_spend`. Changing the Gift, Tradition, stance or resonance changes the
+pool, so an allocation that no longer matches fails the stage and the draft cannot submit until it
+is fixed. `_check_no_magic_points` stays.
+
+**Starting aura.** A new character's `CharacterAura` starts at the model defaults; the Glimpse nudge
+then applies as before. A starting aura that follows the picked resonance is deferred to #4672.
 
 An orphaned Tradition's rank 1 carries Tradition Training's starting technique pick as a living
 one does. A pick the state no longer opens (switching a rank 2 draft to a TEACHERS_GONE Tradition)
@@ -779,28 +823,29 @@ is dropped by the existing `reconcile_offer_picks`. A `DistinctionOffer` saved w
 schooling stance is never offered (the database does not require one). Joining a Tradition in play
 grants nothing retroactively (#2441).
 
-**Staff.** The tradition slate page gives each schooling stance of rank 1 and 2 a "Magic skill floor"
-input (`SchoolingLineForm`; refused above `SkillPointBudget.max_skill_value`, the creation skill
-cap) and a read-only line naming the Magic skills it trains ("Derived, read-only: trains occult,
-ritualism, theology to 20."; the text after the colon is `live.schooling_floor_preview`, "trains
-none." while the floor is 0). Rank 0 has no input and reads "Rank 0 trains none." Three TUNING rows were added to
-the Required content dashboard (`required_content.py`):
+**Staff.** The tradition slate page has no training input on a stance: the points are the granted
+distinction's `magic_training_points` effect, authored on the Distinction Builder. Under each rank 1
+and 2 row it shows a read-only "grants <n> magical training points." (rank 0 reads "Rank 0 trains
+none."). Favored Gifts are `TraditionGiftGrant` rows and favored affinities are the `favored_affinities`
+field on the Tradition admin; the tuning numbers are on the `TraditionTeachingConfig` admin page.
+The Required content dashboard has these rows (`required_content.py`; all TUNING):
 
 | Key | Lists | Consumer |
 |-----|-------|----------|
-| `schooling-magic-skill-floors` | Schooling ranks 1 and 2 whose `magic_skill_floor` is still 0 | `schooling_magic_skill_floor()` |
+| `schooling-magic-skill-floors` | Schooling ranks 1 and above that give no training points: no granted distinction, no `magic_training_points` effect, or one worth 0 or less at the rank, read through `schooling_training_points()` (key kept so the dashboard row is stable) | `schooling_training_points()` |
 | `magic-skill-courses` | Active Magic skills with no `SKILL_COURSE` offer on an active role that has a `faction_affiliation` (an inactive role's offers are never shown) | `run_skill_course_offer()` |
 | `path-suggestions-name-magic-skills` | `PathSkillSuggestion` rows naming a Magic skill (CG cannot take them) | `PathSkillSuggestionViewSet` |
 
-**Frontend.** `SkillsSection` hides Magic skills from the point groups and shows a read-only group
-(`StatRow readOnly`) at the floor under "From your Tradition training", or a muted line when the
-floor is 0; Path suggestions naming a Magic skill and Magic ids loaded from an older draft are
-dropped. `SchoolingStances` shows each stance's floor; rank 0 reads "No magic skills", and a rank 1
-or 2 stance whose floor is still 0 shows no Magic line until staff set one. The CG copy keys
-(`CGExplanation`, each with the literal fallback shown) are `skills_magic_granted_heading` ("From
-your Tradition training"), `skills_magic_granted_none` (the line shown when the floor is 0),
-`offers_magic_skill_floor` ("Magic skills {floor}") and `offers_magic_skill_floor_none` ("No magic
-skills").
+**Frontend.** The Gift stage has its own training step after the Resonance step, shown once both
+the Gift and the resonance are picked (its Gift bonus depends on the Gift, its affinity bonus on the
+resonance): `MagicTrainingBlock` lists the pool lines (each source, with its rank when `show_rank`;
+the Gift and affinity bonuses; the total), the remaining count, and a row per Magic skill stepping
+by the payload's `step`; an overspend or an
+underspend is flagged and the step stays open until `allocated` equals `required_spend`. Tradition
+and Gift cards carry "Teaches well" tags from `favored_gift_names`, `favored_affinity_names` and
+`favored`. `SchoolingStances` shows each stance's training points. `SkillsSection` hides Magic skills
+from the point groups and shows the allocation as a read-only Magic group; Path suggestions naming
+a Magic skill and Magic ids loaded from an older draft are dropped.
 
 #### Academy skill courses
 
@@ -828,6 +873,18 @@ the course, because the course was paid for up front, and the session after a br
 continues it. A skill the character has no row for starts at 10 (`DP_BASE_LEVEL`). The enrollment is
 stamped complete when `development_remaining` reaches 0. The AP is spent on any rolled outcome,
 including a botch that teaches nothing.
+
+*Teaching fit (slice 2 of #4659).* When the offer's role has `teaches_tradition`, `_course_ease`
+(`effects.py`) resolves `student_fit(tradition, student_traits(sheet))` (the sheet's Major Gift and
+the affinity of the resonance on its active GIFT thread for that Gift, then `teaching_fit`) and subtracts `course_ease(config)` from `check_difficulty` before the roll, with no floor. The fit
+changes the check only: the roll's outcome still decides the development gained. A role with no
+Tradition is neutral. The menu price (`OfferPrice`) carries two lines for such a course:
+`teaching_line` ("Taught in the manner of <Tradition>") and, when the learner fits,
+`fit_line` ("Fits your <Gift> and its <Affinity> affinity. Sessions are easier for you.", or just the part
+that fits; omitted when the fit's `course_ease` is 0, so staff zeroing both eases removes the claim).
+The menu (`serialize_npc_session_state`) reads the student's traits once and resolves one fit per
+teaching Tradition (`_menu_teaching_fits`, a local dict passed down), not one per offer. Both
+ride `OfferPriceSerializer`, `NPCInteractionDialog` shows them and telnet `hire` prints them.
 
 *Refusals charge nothing.* Every refusal is checked before anything is charged, in this order:
 debt or no Academy (`_academy_for`), then (under the AP pool lock) already trained in this course
@@ -1561,8 +1618,8 @@ draft-time half):
 - `weave_creation_technique_thread(character_sheet, technique, resonance, *, level) ->
   Thread` weaves a TECHNIQUE thread at a starting level during creation, paid for in CG
   points. Raises `CreationThreadLevelTooHigh` above `CREATION_PERSONALIZATION_MAX_LEVEL`
-  (2), so creation never starts a thread at or past the first crossing (level 3) and no
-  crossing ceremony is skipped.
+  (1), because a new character is level 1 and a thread never exceeds its character's
+  level (#4585); that also keeps creation below the first crossing (level 3).
 - `next_signature_bonus(thread, catalog) -> SignatureMotifBonus | None` returns the
   nearest flourish the thread has not yet reached, for a "keep imbuing" display. See
   "Gradual unlock" above: `min_crossing_level` is the only gate on when a flourish
@@ -1717,9 +1774,11 @@ real).
   `AnimaConfig.death_harvest_multiplier` (20) × the victim's full maximum (feeder overflow
   lands in `glut`; ritual harvests pour into the pool). Fires the murder taint.
 - **Blood taints:** extraction is affinity-neutral; the METHOD taints, via authored
-  `CompromiseActType` rows resolved by name at fire time (`grant_blood_taint` in
-  `services/feeding.py`, log-skip when unauthored): "Murder by Anima Drain" (+5 Praedari),
-  and both "Seduction Feeding" rows (+1 Insidia, +1 Praedari) on every essence-kind feed.
+  `CompromiseActType` rows chosen by their `feeding_taint_role` field (`FeedingTaintRole`:
+  murder, seduction by deception, seduction by predation), never by name (`grant_blood_taint`
+  in `services/feeding.py`, log-skip when unauthored). Staff must set `feeding_taint_role` on
+  each authored act, or the taint never fires: the murder act (+5 Praedari) and both
+  seduction acts (+1 Insidia, +1 Praedari) on every essence-kind feed.
 - **Pool gate** (`resolve_pool_gate`): met → as authored; ≥2× → spectacular tier
   (stashed into `session_kwargs["anima_pool"]` for requirement-bearing session rituals;
   `ActionResult.data["spectacular"]` for solo performs); underfilled → the ritual's own
@@ -2242,9 +2301,9 @@ ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
 - **`Gift.resonances`** is repurposed to the **supported set** (a weave constraint, not the
   cast-time value) per ADR-0052.
 
-**GIFT anchor cap (#1580):** `compute_anchor_cap` now handles `TargetKind.GIFT`:
-`_current_path_stage(thread.owner) × ANCHOR_CAP_GIFT_PER_STAGE` (=10,
-`world/magic/services/threads.py`). GIFT threads are always in-action (intrinsic species
+**GIFT anchor cap (#1580, #4585):** `compute_anchor_cap` handles `TargetKind.GIFT` by
+returning `compute_level_cap(thread.owner)` (character level × 10,
+`world/magic/services/threads.py`): a gift has no cap value of its own. GIFT threads are always in-action (intrinsic species
 gift — added to `_ALWAYS_IN_ACTION_KINDS`). The frontend CG resonance picker is built (#1620).
 
 Proven end-to-end by `world/magic/tests/integration/test_gift_specialization_e2e.py` (#1578):
@@ -3630,7 +3689,7 @@ point calls all nine sub-builders:
 | Summon Spirit | Summoning | `summon_ally_on_condition` adapter → `summon_ally` | CONDITION_APPLIED; creates an ALLY `CombatOpponent` (ADR-0059) |
 | Aegis Field | Aegis Field | `absorb_pool` (priority 10) | DAMAGE_PRE_APPLY; mutation-only; overflow lands |
 | Mirror Ward | Mirror Ward | `reflect_damage` (priority 20) | DAMAGE_PRE_APPLY; mutation-only; bounces via `bypass_pre_apply` |
-| Phase Step | Phase Step | `blink_dodge` (priority 30) | DAMAGE_PRE_APPLY; mutation-only; moves bearer on success |
+| Phase Step | Phase Step | `blink_dodge` (priority 30) | DAMAGE_PRE_APPLY; mutation-only; outside an NPC attack, avoids the hit and lands her on her dodge plan (else she stays); against an NPC attack it is a dodge source instead (#4676) |
 | Phase Jump | Phase Jump | `move_position_on_condition` adapter | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
 | Barricade | Barricade | `create_obstacle_on_condition` adapter | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
 | Ghostform | Ghostform | intangibility category only (`grants_intangibility=True`) | `ConditionCategory`; intangibility gate via `is_untargetable` |
@@ -3670,7 +3729,7 @@ grammar is what #2206 made actually reach validation/persistence in combat.
 | `create_obstacle(*, payload)` | direct handler | Create a blocking `Obstacle` at a target `Position` |
 | `absorb_pool(*, payload)` | reactive handler (prio 10) | Drain `absorb_remaining` buffer; sets `payload.amount=0` when fully absorbed; overflow lands |
 | `reflect_damage(*, payload)` | reactive handler (prio 20) | Pay `reactive_anima_cost`; resolve attacker from `payload.source.ref`; bounce via `bypass_pre_apply`; set `payload.amount=0` |
-| `blink_dodge(*, payload)` | reactive handler (prio 30) | Pay `reactive_anima_cost`; move bearer; set `payload.amount=0` |
+| `blink_dodge(*, payload)` | reactive handler (prio 30) | Steps aside while `DODGE_ROLL_ACTIVE`; else pay `reactive_anima_cost`, land on the dodge plan if any, set `payload.amount=0` |
 | `strike_back(*, payload, instance)` | direct read at the damage seam (#4584) | Not a flow handler: `_answer_with_strike_backs` in `_emit_post_damage_events` calls it for each instance `retaliating_instances` finds on a PC bearer, right after `DAMAGE_APPLIED`. Pay `reactive_anima_cost`; deal `retaliation_damage` to the `CombatOpponent` that struck (typed, counted as the payer's threat); lay `retaliation_condition` with the ward's source as its source. Never strikes a PC |
 | `summon_ally(*, payload)` | direct handler | Create a `CombatOpponent` with `allegiance=ALLY`, `summoned_by=caster` |
 | `move_position_on_condition(*, payload, destination_position_id)` | CONDITION_APPLIED adapter | Thin wrapper → `move_position` |
@@ -3823,7 +3882,7 @@ failure-isolated (`logger.exception`) so the resonance grant itself always stand
 
 ### Aura Drift (#1737)
 
-`CharacterAura`'s stored celestial/primal/abyssal percentages are a write-through cache,
+`CharacterAura`'s stored `CharacterAuraShare` percentages are a write-through cache,
 recomputed by `recompute_aura(character_sheet)` (`world/magic/services/aura.py`) on
 **every** `grant_resonance()` call system-wide. The formula sums
 `CharacterResonance.lifetime_earned` grouped by `Resonance.affinity` and normalizes to
@@ -4102,13 +4161,14 @@ content lives in the lore repo, never as arxii seed data:**
 aura = character.aura  # May raise DoesNotExist if not created
 
 # Get dominant affinity
-aura.dominant_affinity  # Returns AffinityType enum (CELESTIAL, PRIMAL, or ABYSSAL)
+aura.dominant_affinity  # Returns the dominant Affinity row
 
-# Validation: percentages must sum to 100
-aura.celestial = Decimal("50.00")
-aura.primal = Decimal("30.00")
-aura.abyssal = Decimal("20.00")
-aura.save()  # Calls full_clean() automatically
+# One affinity's share, by row
+aura.percent_for(Affinity.objects.get_primal_affinity())  # Decimal
+
+# Write all shares at once (must sum to 100)
+from world.magic.services.aura import set_aura_shares
+set_aura_shares(aura, [AffinityShare(affinity=celestial, percent=Decimal("50.00")), ...])
 ```
 
 ### Thread (new Spec A model)
@@ -4120,11 +4180,36 @@ thread.target   # Returns the Trait / Technique / ObjectDB / CharacterRelationsh
 # Resolved level cap (per Spec A §2.4)
 from world.magic.services import (
     compute_anchor_cap,
-    compute_path_cap,
+    compute_level_cap,
     compute_effective_cap,
 )
-cap = compute_effective_cap(thread)   # min(path_cap, anchor_cap)
+cap = compute_effective_cap(thread)   # min(level_cap, anchor_cap)
 ```
+
+**Thread caps and the shown scale (#4585).** A thread level is stored ×10, like a stat:
+stored 30 shows 3. `compute_level_cap(sheet)` = `get_character_path_level(character) ×
+PATH_LEVEL_CAP_MULTIPLIER` (10, `world/magic/constants.py`; the sanctum Homecoming cap
+reads the same constant), so a thread is never shown above its owner's level. A sheet
+with no class level still gets 10. `compute_effective_cap` = min(level cap, anchor cap)
+and is the only place the level cap applies; each anchor cap holds only what its anchor
+imposes (ORGANIZATION: the org's granted cap; GIFT: the level cap; FACET:
+`lifetime // ANCHOR_CAP_FACET_DIVISOR`). No cap reads Path stage; `_current_path_stage`
+remains for the progression dashboard's display. An imbue that stops at the level cap
+reports `blocked_by="LEVEL_CAP"`; the thread serializer's field is `level_cap`.
+
+Every authored thread threshold is a **shown** level: crossings (3, 6, 11, 16, 21),
+`ThreadCrossingThreshold.level`, `CrossingOption.crossing_level`,
+`TechniqueVariant`/`CovenantRole.unlock_thread_level`,
+`SignatureMotifBonus.min_crossing_level`, `ThreadPullEffect.min_thread_level`,
+`CovenantRoleGiftGrant.unlock_thread_level`, `VowAddedEffect.unlock_thread_level`
+(including its per-level scaling) and `CREATION_PERSONALIZATION_MAX_LEVEL`. Every
+comparison goes through `shown_thread_level(level)` (= `level // 10`,
+`services/threads.py`). The imbue loop checks a crossing only at a whole shown level
+(`next_level % 10 == 0 and is_crossing_level(shown_thread_level(next_level))`); the
+crossing handlers list shown crossings between the start and end levels with the same
+`is_crossing_level` Paths use. Soul Tether's per-scene cap and Hollow max and the outfit
+trickle's level factor also read the shown level. The predicate DSL's `min_thread_level`
+stays on the stored scale, like its `min_trait`.
 
 ### Per-Character Handlers
 
@@ -4303,14 +4388,9 @@ character_gifts = CharacterGift.objects.filter(character=character).select_relat
 ```python
 from world.magic.models import CharacterAura
 
-aura, created = CharacterAura.objects.get_or_create(
-    character=character,
-    defaults={
-        "celestial": Decimal("0.00"),
-        "primal": Decimal("80.00"),
-        "abyssal": Decimal("20.00"),
-    }
-)
+aura, created = CharacterAura.objects.get_or_create(character=character)
+if created:
+    set_aura_shares(aura, starting_aura_shares(None))  # 80 Primal / 20 Abyssal
 ```
 
 ### Get character's techniques from a specific gift
@@ -4591,8 +4671,6 @@ tag, arity violation) surface as HTTP 400 detail.
 ### Types
 `frontend/src/character-creation/types.ts`
 - `Affinity`, `Resonance`, `Gift`, `GiftListItem`, `AnimaRitualType`
-- `AFFINITY_TYPES` constant: `['celestial', 'primal', 'abyssal']`
-- `AffinityType` type alias
 
 ### API Hooks
 `frontend/src/character-creation/queries.ts`

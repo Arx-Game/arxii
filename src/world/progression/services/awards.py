@@ -169,6 +169,14 @@ def award_development_points(  # noqa: PLR0913 - Service signature exposes optio
         )
 
         dev_tracker.award_points(modified_amount)
+        cap = dev_tracker.at_skill_cap()
+        if cap is not None:
+            # Development stopped at the band's skill cap (#4585); say so on the record.
+            from world.skills.services import skill_cap_message
+
+            cap_note = skill_cap_message(trait.name, cap)
+            limit = DevelopmentTransaction._meta.get_field("description").max_length  # noqa: SLF001
+            description = (f"{description} {cap_note}" if description else cap_note)[:limit]
 
         return DevelopmentTransaction.objects.create(
             character_sheet=character_sheet,

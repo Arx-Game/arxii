@@ -631,14 +631,13 @@ def _victory_outcome_clauses(
     return clauses
 
 
-def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outcome-broadcast facet
+def broadcast_action_outcome(
     *,
     encounter: CombatEncounter,
     narration: str,
     audience: CastAudience | None = None,
     unattributed_narration: str = "",
     target_personas: list[Persona] | None = None,
-    deliver_telnet: bool = False,
 ) -> Interaction | None:
     """Persist a Narrator-authored OUTCOME interaction and broadcast it.
 
@@ -649,18 +648,14 @@ def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outco
     interaction WebSocket payload. When the encounter has no room, the
     interaction is still persisted (durable) but not broadcast.
 
+    Every row also goes to the non-web (telnet/ssh) sessions it reaches as plain
+    text (``send_outcome_text_to_non_web``, #3807), synchronously, right after its
+    web push. Telnet is the secondary interface, but a telnet player in a fight
+    still reads each outcome line the web log shows (#4640), so callers never add
+    a ``room.msg_contents`` companion of their own: that would reach telnet twice
+    and web sessions a second time as raw text.
+
     Args:
-        deliver_telnet: After the non-concealed room broadcast, also send the
-            line as plain text to every non-web session in the room
-            (``send_outcome_text_to_non_web``, #3807), synchronously so the
-            web push keeps its place ahead of any follow-up push (fix round
-            4), so a bare telnet session gets the line too. The top-level
-            encounter-outcome call opts into this (#4091 fix round 2), and so
-            do the waiting strike's own lines (#4608, ``waiting_strikes._say``).
-            Every per-action narration caller of this function (flee,
-            technique cast, NPC actions, windup, sustained rituals, cleanup)
-            keeps the WebSocket-only behavior; telnet parity for those is
-            #4640.
         audience: Who perceived this outcome, from ``resolve_cast_audience``
             (#2734). ``None`` -- the default, and what every non-cast caller
             passes -- keeps the room-wide broadcast byte-identical to its
@@ -743,14 +738,13 @@ def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outco
 
     if not concealed:
         _broadcast_to_location(room, _payload(interaction))
-        if deliver_telnet:
-            # Synchronous, right after the synchronous web push (#4091 fix round 4):
-            # deliver_outcome_interaction would defer BOTH channels to on_commit,
-            # landing the OUTCOME line after the aftermath digest that
-            # complete_encounter pushes immediately. _broadcast_to_location only
-            # reaches webclient sessions with the structured payload, so this adds
-            # the plain-text line for non-web sessions only -- nothing twice.
-            send_outcome_text_to_non_web(interaction, location=room)
+        # Synchronous, right after the synchronous web push (#4091 fix round 4):
+        # deliver_outcome_interaction would defer BOTH channels to on_commit,
+        # landing the OUTCOME line after the aftermath digest that
+        # complete_encounter pushes immediately. _broadcast_to_location only
+        # reaches webclient sessions with the structured payload, so this adds
+        # the plain-text line for non-web sessions only -- nothing twice.
+        send_outcome_text_to_non_web(interaction, location=room)
         return interaction
 
     # Concealed: deliberately NOT _broadcast_to_location. Live delivery has to match
@@ -761,6 +755,8 @@ def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outco
     from world.scenes.interaction_services import _send_to_objects  # noqa: PLC0415
 
     _send_to_objects(_characters_for(audience.full), _payload(interaction))
+    # Receiver-scoped rows: the telnet line reaches the same receivers, not the room.
+    send_outcome_text_to_non_web(interaction, location=room)
 
     # No target_personas on either lower-tier pose: the FK drives "this pose is about
     # you" surfacing, and naming the target alongside an unattributed line re-opens the
@@ -777,6 +773,7 @@ def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outco
             visibility=InteractionVisibility.PERCEIVED_ONLY,
         )
         _send_to_objects(_characters_for(recipients), _payload(tier_interaction))
+        send_outcome_text_to_non_web(tier_interaction, location=room)
 
     _emit_tier(audience.vague, render_vague_cast_narration(unattributed_narration))
     _emit_tier(audience.effect_only, unattributed_narration)

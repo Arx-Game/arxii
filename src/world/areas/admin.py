@@ -1,16 +1,23 @@
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html, format_html_join
 
 from world.admin_utils import OneRowPerFormSet
 from world.areas.models import Area, AreaElevationRequirement
 from world.areas.positioning.models import (
     BlueprintEdge,
+    BlueprintFeature,
     BlueprintPosition,
     BlueprintPositionShelter,
+    FeatureType,
+    MapTerrain,
     PositionBlueprint,
+    PositionFeature,
     RampartElementProfile,
     RampartElementResistance,
 )
 from world.areas.worldmap.models import RegionMap, RegionMapUpload
+from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 
 
 @admin.register(Area)
@@ -32,12 +39,20 @@ class AreaElevationRequirementAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 
+@admin.register(MapTerrain)
+class MapTerrainAdmin(admin.ModelAdmin):
+    list_display = ["name", "art"]
+    search_fields = ["name"]
+    autocomplete_fields = ["art"]
+
+
 class BlueprintPositionInline(admin.TabularInline):
     """#3831 - the position nodes belonging to a blueprint."""
 
     model = BlueprintPosition
     formset = OneRowPerFormSet
     extra = 1
+    autocomplete_fields = ["terrain"]
 
 
 class BlueprintEdgeInline(admin.TabularInline):
@@ -56,6 +71,87 @@ class PositionBlueprintAdmin(admin.ModelAdmin):
     list_display = ["name"]
     search_fields = ["name", "description"]
     inlines = [BlueprintPositionInline, BlueprintEdgeInline]
+    readonly_fields = ["features_table"]
+
+    @admin.display(description="Features")
+    def features_table(self, obj: PositionBlueprint) -> str:
+        """Every feature the blueprint's places carry, read-only (edited on each place)."""
+        if obj.pk is None:
+            return "-"
+        rows = BlueprintFeature.objects.filter(blueprint_position__blueprint=obj).select_related(
+            "feature_type", "blueprint_position"
+        )
+        if not rows:
+            return "No features yet."
+        body = format_html_join(
+            "",
+            "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+            (
+                (
+                    row.feature_type.name,
+                    row.blueprint_position.name,
+                    "-" if row.square_x is None else f"{row.square_x}, {row.square_y}",
+                )
+                for row in rows
+            ),
+        )
+        return format_html(
+            "<table><thead><tr><th>Feature type</th><th>Where</th><th>Square</th></tr></thead>"
+            "<tbody>{}</tbody></table>",
+            body,
+        )
+
+
+@admin.register(FeatureType)
+class FeatureTypeAdmin(admin.ModelAdmin):
+    """#4675 - a feature staff attach to any place; its template is what a stunt rolls."""
+
+    list_display = [
+        "name",
+        "reach",
+        "challenge",
+        "difficulty",
+        "art",
+    ]
+    list_filter = ["reach"]
+    search_fields = ["name"]
+    list_select_related = ["challenge_template", "art"]
+    autocomplete_fields = ["art", "challenge_template"]
+
+    @admin.display(description="Challenge")
+    def challenge(self, obj: FeatureType) -> str:
+        """Link to the challenge template, where properties, approaches and misses show live."""
+        template = obj.challenge_template
+        url = reverse("admin:arxii_challengetemplate_change", args=[template.pk])
+        return format_html('<a href="{}">{}</a>', url, template.name)
+
+    @admin.display(description="Difficulty")
+    def difficulty(self, obj: FeatureType) -> str:
+        """The band whose value sits nearest the template's severity."""
+        severity = obj.challenge_template.severity
+        band = min(DIFFICULTY_VALUES, key=lambda b: abs(DIFFICULTY_VALUES[b] - severity))
+        return DifficultyChoice(band).label
+
+
+class BlueprintFeatureInline(admin.TabularInline):
+    """#4675 - the features a blueprint place carries."""
+
+    model = BlueprintFeature
+    extra = 1
+    autocomplete_fields = ["feature_type"]
+    fields = ["feature_type", "square_x", "square_y"]
+
+
+@admin.register(PositionFeature)
+class PositionFeatureAdmin(admin.ModelAdmin):
+    """#4675 - features standing in live places, for staff fixes."""
+
+    list_display = ["feature_type", "position", "square_x", "square_y"]
+    list_filter = ["feature_type"]
+    search_fields = ["feature_type__name", "position__name"]
+    list_select_related = ["feature_type", "position"]
+    autocomplete_fields = ["feature_type"]
+    raw_id_fields = ["position"]
 
 
 @admin.register(BlueprintPosition)
@@ -67,6 +163,7 @@ class BlueprintPositionAdmin(admin.ModelAdmin):
     search_fields = ["name", "blueprint__name"]
     list_select_related = ["blueprint"]
     autocomplete_fields = ["blueprint"]
+    inlines = [BlueprintFeatureInline]
 
 
 @admin.register(BlueprintEdge)

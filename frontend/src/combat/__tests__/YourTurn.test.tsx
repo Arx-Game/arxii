@@ -277,10 +277,11 @@ function makeParticipant(
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    current_square: null,
     current_position: null,
     aftermath: null,
     reactions_used: null,
-    reactions_remaining: null,
+    dodge_plan: null,
   };
 }
 
@@ -1369,6 +1370,9 @@ describe('YourTurn — pending attacks strip prefills (#3572)', () => {
       called_out: false,
       damage_scale: 1,
       cancelled: false,
+      attack_name: 'Strike',
+      covered_position_id: null,
+      covered_position_name: null,
     };
   }
 
@@ -1499,7 +1503,7 @@ describe('YourTurn — Task 8 move-to-position actions', () => {
       wrapper: createWrapper(),
     });
 
-    await userEvent.click(screen.getByTestId('move-btn-7'));
+    await userEvent.click(screen.getByTestId('move-btn-move_to_position-7'));
 
     expect(mockMutateAsync).toHaveBeenCalledWith({
       ref: {
@@ -2405,6 +2409,7 @@ function makeOpponentFixture(overrides: Partial<Opponent> = {}): Opponent {
     active_conditions: [],
     thumbnail_url: '',
     thumbnail_media_url: null,
+    current_square: null,
     current_position: null,
     mirrors_participant_id: null,
     status: 'active',

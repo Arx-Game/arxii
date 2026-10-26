@@ -188,7 +188,7 @@ resolved block).
 `Situation.ATTACKER_AFFINITY` (renamed from its original Abyssal-only situation, parameterized
 #2623) — holds
 when the DEFENSE-side `SituationContext.attacker` is typed to the row's authored `affinity` axis
-(required Situation Parameter, one of `AffinityType.CELESTIAL/PRIMAL/ABYSSAL` — no longer
+(required Situation Parameter, an `Affinity` row (Celestial, Primal or Abyssal) — no longer
 hardcoded to Abyssal). A `CombatOpponent` with a non-empty authored `affinity` matching the row's
 axis is definitional (checked first, `threshold_percent` ignored); otherwise falls back to a
 reachable `ObjectDB`'s `CharacterAura` — with `threshold_percent` set, that axis's Decimal
@@ -271,8 +271,8 @@ The plummet pattern's first "in-flight" clone, and the template for future conse
 events (#2638, ADR-0162): a `sends_flying` `ThreatPoolEntry`'s attack that lands damage
 > 0 applies the seeded "Sent Flying" marker `ConditionTemplate` — a produced, reactable
 moment, dual-dispatched loud ("X is sent FLYING by the blow!"). The moment is
-IMMEDIATELY answerable by an armed guardian INTERPOSE (budget-gated via
-`REACTIONS_PER_ROUND`, no skill roll — a mid-air catch is a binary rescue, not gradeable
+IMMEDIATELY answerable by an armed guardian INTERPOSE (one more reaction this round, no
+cap since #4676, no skill roll — a mid-air catch is a binary rescue, not gradeable
 damage mitigation, unlike mundane Interpose); a caught victim's marker clears with a
 celebration naming the catcher (+ the wind-up's caller, if the source attack was called
 out). Left unanswered, the marker resolves EXPLICITLY at the end of `resolve_round` —
@@ -307,7 +307,7 @@ The typed knobs authored on ONE situation-requirement row (`VowSituationalPerkSi
 `VowSituationalPerkRung`), carried via `SituationRequirementMixin` (`world.covenants.models`,
 #2623): `threshold_percent` (0-100, percent-shaped floors — aura-axis floor, ally-health
 fraction), `count_threshold` (count-shaped floors — surrounded lock count, minimum affection),
-`affinity` (`AffinityType` axis selector for attacker typing), `origin_side`
+`affinity` (FK to `Affinity`, the axis selector for attacker typing), `origin_side`
 (`SituationOriginSide` — see below). Which situation reads which params — and which it
 REQUIRES — is `SITUATION_PARAM_SPECS` (`world.covenants.perks.constants`); the mixin's `clean()`
 enforces both directions, mirroring the per-effect-kind gating already on

@@ -1606,6 +1606,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/AreaList'
           description: ''
+  /api/areas/feature-types/:
+    get:
+      operationId: areas_feature_types_list
+      description: |-
+        The feature types a GM can add to a place mid-scene (#4675, slice 3 of #4651).
+
+        Read-only: staff author feature types in the admin. GMs and staff only, since
+        the list feeds the GM attach control.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: reach
+        schema:
+          type: string
+          enum:
+          - adjacent
+          - any_place
+          - elevated_adjacent
+          - same_type
+        description: |-
+          Where the feature can take her.
+
+          * `adjacent` - A place next to its own
+          * `any_place` - Any place in the room
+          * `same_type` - Another place with the same feature
+          * `elevated_adjacent` - A raised place next to its own
+      - in: query
+        name: search
+        schema:
+          type: string
+      tags:
+      - areas
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFeatureTypeList'
+          description: ''
+  /api/areas/feature-types/{id}/:
+    get:
+      operationId: areas_feature_types_retrieve
+      description: |-
+        The feature types a GM can add to a place mid-scene (#4675, slice 3 of #4651).
+
+        Read-only: staff author feature types in the admin. GMs and staff only, since
+        the list feeds the GM attach control.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this feature type.
+        required: true
+      tags:
+      - areas
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureType'
+          description: ''
   /api/areas/presence/:
     get:
       operationId: areas_presence_retrieve
@@ -20883,6 +20961,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedPortalDestinationList'
           description: ''
+  /api/magic/affinities/:
+    get:
+      operationId: magic_affinities_list
+      description: Read-only list of the three Affinities, for pickers (character
+        creation).
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Affinity'
+          description: ''
+  /api/magic/affinities/{id}/:
+    get:
+      operationId: magic_affinities_retrieve
+      description: Read-only list of the three Affinities, for pickers (character
+        creation).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this affinity.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Affinity'
+          description: ''
   /api/magic/applicable-pulls/:
     post:
       operationId: magic_applicable_pulls_create
@@ -23234,6 +23353,58 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResonanceGrant'
+          description: ''
+  /api/magic/resonances/:
+    get:
+      operationId: magic_resonances_list
+      description: |-
+        Read-only list of Resonance rows with their Affinity, for pickers.
+
+        The character-creation Gift stage lists every Resonance and stores the chosen
+        pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+      parameters:
+      - in: query
+        name: affinity
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Resonance'
+          description: ''
+  /api/magic/resonances/{id}/:
+    get:
+      operationId: magic_resonances_retrieve
+      description: |-
+        Read-only list of Resonance rows with their Affinity, for pickers.
+
+        The character-creation Gift stage lists every Resonance and stores the chosen
+        pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this resonance.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resonance'
           description: ''
   /api/magic/restrictions/:
     get:
@@ -44868,6 +45039,9 @@ components:
         blueprint_id:
           type: integer
           nullable: true
+        feature_id:
+          type: integer
+          nullable: true
         application_id:
           type: integer
           nullable: true
@@ -44975,6 +45149,25 @@ components:
           type: integer
       required:
       - journal_entry_id
+    Affinity:
+      type: object
+      description: Serializer for Affinity records (Celestial, Primal, Abyssal).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Affinity name (e.g., 'Celestial', 'Abyssal', 'Primal').
+        description:
+          type: string
+          readOnly: true
+          description: Description of this affinity.
+      required:
+      - description
+      - id
+      - name
     AftermathBeat:
       type: object
       description: Schema-only shape of the beat line in an aftermath digest (#3551).
@@ -48734,9 +48927,17 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        favored:
+          type: boolean
+          description: |-
+            Whether the draft's Tradition favors this Gift: a ``TraditionGiftGrant`` (#4659).
+
+            The view passes the favored Gift ids in context (one query for the list).
+          readOnly: true
       required:
       - codex_entry_id
       - description
+      - favored
       - id
       - kind
       - name
@@ -50305,27 +50506,19 @@ components:
         character:
           type: integer
           description: The character this aura belongs to.
-        celestial:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Celestial affinity (0-100).
-        primal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Primal affinity (0-100).
-        abyssal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Abyssal affinity (0-100).
+        shares:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterAuraShare'
+          readOnly: true
         dominant_affinity:
           type: string
+          description: The dominant affinity's name, blank before the aura holds any
+            share.
           readOnly: true
         dominant_affinity_display:
           type: string
-          description: Return the display label for the dominant affinity.
+          description: The dominant affinity's name for display.
           readOnly: true
         glimpse_state:
           allOf:
@@ -50347,6 +50540,7 @@ components:
       - dominant_affinity_display
       - glimpse_state
       - id
+      - shares
       - updated_at
     CharacterAuraRequest:
       type: object
@@ -50355,23 +50549,28 @@ components:
         character:
           type: integer
           description: The character this aura belongs to.
-        celestial:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Celestial affinity (0-100).
-        primal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Primal affinity (0-100).
-        abyssal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Abyssal affinity (0-100).
       required:
       - character
+    CharacterAuraShare:
+      type: object
+      description: One affinity's share of an aura.
+      properties:
+        affinity_id:
+          type: integer
+          readOnly: true
+        affinity_name:
+          type: string
+          readOnly: true
+        percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          readOnly: true
+          description: This affinity's share of the aura, 0-100.
+      required:
+      - affinity_id
+      - affinity_name
+      - percent
     CharacterClass:
       type: object
       description: Full serializer for character class detail with core traits.
@@ -50742,8 +50941,9 @@ components:
         starting_technique_picks:
           type: integer
           readOnly: true
-        starting_magic_skill_floor:
-          type: integer
+        magic_training:
+          type: object
+          additionalProperties: {}
           readOnly: true
         age_min:
           type: integer
@@ -50817,6 +51017,7 @@ components:
       - ic_month_names
       - id
       - introductions_offered
+      - magic_training
       - public_worship
       - second_parent_species
       - secret_worship
@@ -50831,7 +51032,6 @@ components:
       - served_house
       - stage_completion
       - stage_errors
-      - starting_magic_skill_floor
       - starting_technique_picks
       - stat_bonuses
       - stats_budget
@@ -55308,6 +55508,38 @@ components:
       - id
       - name
       - slug
+    DodgeLanding:
+      type: object
+      description: One place a dodge can land in (#4676).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    DodgePlan:
+      type: object
+      description: Schema-only shape of the viewer's own dodge plan (#4676). Private
+        to its owner.
+      properties:
+        enabled:
+          type: boolean
+        landing_id:
+          type: integer
+          nullable: true
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/DodgeLanding'
+        cost_line:
+          type: string
+      required:
+      - cost_line
+      - enabled
+      - landing_id
+      - options
     DomainEnum:
       enum:
       - BEAST
@@ -56459,6 +56691,11 @@ components:
           items:
             $ref: '#/components/schemas/PositionEdge'
           readOnly: true
+        held_positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeldPosition'
+          readOnly: true
         volatile_objects:
           type: array
           items:
@@ -56520,6 +56757,7 @@ components:
       - escalation_tick_narration
       - forced_escape
       - gm_standoff
+      - held_positions
       - id
       - is_gm
       - is_lethal
@@ -58439,6 +58677,49 @@ components:
       - ic_day
       - ic_month
       - name
+    FeatureType:
+      type: object
+      description: 'One feature type a GM can add to a place (#4675): the GM attach
+        control''s list.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        reach:
+          allOf:
+          - $ref: '#/components/schemas/FeatureTypeReachEnum'
+          readOnly: true
+          description: |-
+            Where the feature can take her.
+
+            * `adjacent` - A place next to its own
+            * `any_place` - Any place in the room
+            * `same_type` - Another place with the same feature
+            * `elevated_adjacent` - A raised place next to its own
+        art_url:
+          type: string
+          nullable: true
+          readOnly: true
+      required:
+      - art_url
+      - id
+      - name
+      - reach
+    FeatureTypeReachEnum:
+      enum:
+      - adjacent
+      - any_place
+      - same_type
+      - elevated_adjacent
+      type: string
+      description: |-
+        * `adjacent` - A place next to its own
+        * `any_place` - Any place in the room
+        * `same_type` - Another place with the same feature
+        * `elevated_adjacent` - A raised place next to its own
     FieldEnum:
       enum:
       - background
@@ -61591,6 +61872,21 @@ components:
       - id
       - name
       - target_kind
+    HeldPosition:
+      type: object
+      description: A place an enemy able to act holds, and who holds it (#4670).
+      properties:
+        position_id:
+          type: integer
+          readOnly: true
+        holder_names:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - holder_names
+      - position_id
     Heritage:
       type: object
       description: A heritage, for staff edit mode's picker (#3988).
@@ -69760,6 +70056,12 @@ components:
         training_points:
           type: integer
           nullable: true
+        teaching_line:
+          type: string
+          nullable: true
+        fit_line:
+          type: string
+          nullable: true
         display:
           type: string
       required:
@@ -69768,8 +70070,10 @@ components:
       - development_remaining
       - development_total
       - display
+      - fit_line
       - golden_hares
       - per_session_ap
+      - teaching_line
       - training_points
     OfferSummons:
       type: object
@@ -70083,6 +70387,11 @@ components:
           - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
           nullable: true
+        current_square:
+          allOf:
+          - $ref: '#/components/schemas/Square'
+          nullable: true
+          readOnly: true
         mirrors_participant_id:
           type: integer
           readOnly: true
@@ -70092,6 +70401,7 @@ components:
       - break_bar_current
       - break_bar_threshold
       - current_position
+      - current_square
       - damage_multiplier
       - health
       - id
@@ -73293,6 +73603,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FashionPresentation'
+    PaginatedFeatureTypeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeatureType'
     PaginatedFlowDefinitionListList:
       type: object
       required:
@@ -77482,6 +77815,11 @@ components:
           - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
           nullable: true
+        current_square:
+          allOf:
+          - $ref: '#/components/schemas/Square'
+          nullable: true
+          readOnly: true
         aftermath:
           allOf:
           - $ref: '#/components/schemas/AftermathDigest'
@@ -77492,11 +77830,10 @@ components:
           nullable: true
           description: Return spent reactions only to the owner, GM, or staff.
           readOnly: true
-        reactions_remaining:
-          type: integer
+        dodge_plan:
+          allOf:
+          - $ref: '#/components/schemas/DodgePlan'
           nullable: true
-          description: Return the remaining reaction availability without exposing
-            other pools.
           readOnly: true
       required:
       - active_conditions
@@ -77507,13 +77844,14 @@ components:
       - character_status
       - control_modifier
       - current_position
+      - current_square
+      - dodge_plan
       - escalation_level
       - fatigue
       - health
       - id
       - intensity_modifier
       - max_health
-      - reactions_remaining
       - reactions_used
       - thumbnail_media_url
       - thumbnail_url
@@ -77913,21 +78251,6 @@ components:
         character:
           type: integer
           description: The character this aura belongs to.
-        celestial:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Celestial affinity (0-100).
-        primal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Primal affinity (0-100).
-        abyssal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Abyssal affinity (0-100).
     PatchedCharacterDraftRequest:
       type: object
       description: Serializer for character drafts.
@@ -80562,9 +80885,9 @@ components:
         account (staff may pass any sheet).
 
         Read-only computed fields (SerializerMethodFields):
-        - path_cap: the path-side cap (compute_path_cap)
+        - level_cap: the character-level cap (compute_level_cap)
         - anchor_cap: the anchor-side cap (compute_anchor_cap)
-        - effective_cap: min(path_cap, anchor_cap)
+        - effective_cap: min(level_cap, anchor_cap)
       properties:
         resonance:
           type: integer
@@ -81258,9 +81581,20 @@ components:
           format: double
         cancelled:
           type: boolean
+        attack_name:
+          type: string
+        covered_position_id:
+          type: integer
+          nullable: true
+        covered_position_name:
+          type: string
+          nullable: true
       required:
+      - attack_name
       - called_out
       - cancelled
+      - covered_position_id
+      - covered_position_name
       - damage_scale
       - declared_round
       - downgrades
@@ -82060,9 +82394,19 @@ components:
           - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
           nullable: true
+        square_x:
+          type: integer
+          readOnly: true
+          nullable: true
+        square_y:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - persona_id
       - position
+      - square_x
+      - square_y
     PersonaTitle:
       type: object
       description: |-
@@ -83361,6 +83705,34 @@ components:
       - max_integrity
       - position_a_id
       - position_b_id
+    PositionFeature:
+      type: object
+      description: Read-only serializer for one feature standing in a place (#4675).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        art_url:
+          type: string
+          readOnly: true
+          nullable: true
+        square_x:
+          type: integer
+          readOnly: true
+          nullable: true
+        square_y:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - art_url
+      - id
+      - name
+      - square_x
+      - square_y
     PositionNode:
       type: object
       description: Read-only serializer for one PositionNode — tactical-map node shape
@@ -83409,8 +83781,42 @@ components:
         screens_ranged:
           type: boolean
           readOnly: true
+        area_x:
+          type: integer
+          readOnly: true
+          nullable: true
+        area_y:
+          type: integer
+          readOnly: true
+          nullable: true
+        area_w:
+          type: integer
+          readOnly: true
+          nullable: true
+        area_h:
+          type: integer
+          readOnly: true
+          nullable: true
+        terrain_name:
+          type: string
+          readOnly: true
+          nullable: true
+        terrain_art_url:
+          type: string
+          readOnly: true
+          nullable: true
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionFeature'
+          readOnly: true
       required:
+      - area_h
+      - area_w
+      - area_x
+      - area_y
       - elevation_anchor_id
+      - features
       - id
       - is_roofed
       - kind
@@ -83422,6 +83828,8 @@ components:
       - rampart_integrity
       - rampart_max_integrity
       - screens_ranged
+      - terrain_art_url
+      - terrain_name
     PositionSummary:
       type: object
       description: Compact public representation of a Position (id + name).
@@ -87872,17 +88280,20 @@ components:
           type: integer
         techniques:
           type: integer
-        magic_skill_floor:
+        training_points:
           type: integer
         grants_distinction_id:
           type: integer
+          nullable: true
+        grants_distinction_name:
+          type: string
           nullable: true
         offer_id:
           type: integer
           nullable: true
       required:
       - grants_distinction_id
-      - magic_skill_floor
+      - grants_distinction_name
       - name
       - offer_id
       - player_line
@@ -87890,6 +88301,7 @@ components:
       - rank
       - schooling_line_id
       - techniques
+      - training_points
     Scope77bEnum:
       enum:
       - appear
@@ -89174,7 +89586,8 @@ components:
           readOnly: true
         hollow_max:
           type: integer
-          description: Return the Sinner's Hollow maximum (thread.level * 10).
+          description: Return the Sinner's Hollow maximum (``_compute_hollow_max``,
+            shown level × mult).
           readOnly: true
         sineater_lifetime_helped:
           type: integer
@@ -89480,6 +89893,19 @@ components:
       - created_at
       - id
       - title
+    Square:
+      type: object
+      description: 'A battle-map square inside a place (#4651): drawing only.'
+      properties:
+        x:
+          type: integer
+          readOnly: true
+        y:
+          type: integer
+          readOnly: true
+      required:
+      - x
+      - y
     StaffBeginningsRequest:
       type: object
       properties:
@@ -94809,9 +95235,9 @@ components:
         account (staff may pass any sheet).
 
         Read-only computed fields (SerializerMethodFields):
-        - path_cap: the path-side cap (compute_path_cap)
+        - level_cap: the character-level cap (compute_level_cap)
         - anchor_cap: the anchor-side cap (compute_anchor_cap)
-        - effective_cap: min(path_cap, anchor_cap)
+        - effective_cap: min(level_cap, anchor_cap)
       properties:
         id:
           type: integer
@@ -94856,9 +95282,9 @@ components:
           type: integer
           readOnly: true
           description: Permanent points; advances level via ThreadLevelUnlock entries.
-        path_cap:
+        level_cap:
           type: integer
-          description: Return the path-side cap for this thread's owner.
+          description: Return the character-level cap for this thread's owner (#4585).
           readOnly: true
         anchor_cap:
           type: integer
@@ -94866,7 +95292,7 @@ components:
           readOnly: true
         effective_cap:
           type: integer
-          description: Return min(path_cap, anchor_cap).
+          description: Return min(level_cap, anchor_cap).
           readOnly: true
         retired_at:
           type: string
@@ -94890,8 +95316,8 @@ components:
       - effective_cap
       - id
       - level
+      - level_cap
       - owner
-      - path_cap
       - resonance
       - resonance_name
       - retired_at
@@ -95028,9 +95454,9 @@ components:
         account (staff may pass any sheet).
 
         Read-only computed fields (SerializerMethodFields):
-        - path_cap: the path-side cap (compute_path_cap)
+        - level_cap: the character-level cap (compute_level_cap)
         - anchor_cap: the anchor-side cap (compute_anchor_cap)
-        - effective_cap: min(path_cap, anchor_cap)
+        - effective_cap: min(level_cap, anchor_cap)
       properties:
         resonance:
           type: integer
@@ -95603,9 +96029,25 @@ components:
           items:
             $ref: '#/components/schemas/SchoolingLine'
           readOnly: true
+        favored_gift_names:
+          type: array
+          items:
+            type: string
+          description: 'The Gifts this Tradition teaches well (its ``TraditionGiftGrant``
+            rows, #4659).'
+          readOnly: true
+        favored_affinity_names:
+          type: array
+          items:
+            type: string
+          description: 'The affinities this Tradition teaches well (``favored_affinities``,
+            #4659).'
+          readOnly: true
       required:
       - codex_entry_ids
       - description
+      - favored_affinity_names
+      - favored_gift_names
       - id
       - is_active
       - name

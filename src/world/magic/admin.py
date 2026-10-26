@@ -4,6 +4,7 @@ from django.contrib.admin import helpers
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Prefetch
 from django.forms.models import BaseInlineFormSet
+from django.http import HttpRequest
 from django.template.response import TemplateResponse
 from django.utils.html import format_html
 
@@ -35,6 +36,7 @@ from world.magic.models import (
     CastPowerLevel,
     CharacterAnima,
     CharacterAura,
+    CharacterAuraShare,
     CharacterCrossingText,
     CharacterGift,
     CharacterGiftUnlock,
@@ -130,6 +132,8 @@ from world.magic.models import (
     Tradition,
     TraditionGiftGrant,
     TraditionRitualGrant,
+    TraditionTeachingConfig,
+    aura_shares_prefetch,
 )
 from world.magic.models.appetites import (
     AppetiteUpkeep,
@@ -162,7 +166,7 @@ from world.magic.specialization.models import (
 
 @admin.register(Affinity)
 class AffinityAdmin(admin.ModelAdmin):
-    list_display = ["name", "description"]
+    list_display = ["name", "corruption_coefficient", "description"]
     search_fields = ["name"]
 
 
@@ -206,8 +210,10 @@ class AffinityInteractionAdmin(admin.ModelAdmin):
         "kind",
         "aggressor",
         "severity_multiplier",
+        "conversion_type",
+        "conversion_multiplier",
     ]
-    list_filter = ["valence", "kind"]
+    list_filter = ["valence", "kind", "conversion_type"]
     raw_id_fields = ["source_affinity", "environment_affinity"]
 
 
@@ -655,17 +661,32 @@ class TechniqueAdmin(admin.ModelAdmin):
             self.message_user(request, warning, messages.WARNING)
 
 
+class CharacterAuraShareInline(admin.TabularInline):
+    """Read-only: shares are written only by set_aura_shares, which keeps the sum at 100."""
+
+    model = CharacterAuraShare
+    formset = OneRowPerFormSet
+    extra = 0
+    max_num = 0
+    can_delete = False
+    readonly_fields = ["affinity", "percent"]
+
+
 @admin.register(CharacterAura)
 class CharacterAuraAdmin(admin.ModelAdmin):
     autocomplete_fields = ["character"]
-    list_display = ["character", "celestial", "primal", "abyssal", "get_dominant"]
+    list_display = ["character", "get_dominant"]
+    inlines = [CharacterAuraShareInline]
     list_filter = ["updated_at"]
     search_fields = ["character__db_key"]
     readonly_fields = ["updated_at", "glimpse_state"]
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related(aura_shares_prefetch())
+
     @admin.display(description="Dominant")
     def get_dominant(self, obj):
-        return obj.dominant_affinity.label
+        return obj.dominant_affinity.name if obj.cached_shares else ""
 
     def save_model(self, request, obj, form, change):
         """Keep the glimpse_state cache truthful after an admin prose/tag edit (#2427).
@@ -997,13 +1018,16 @@ class TraditionGiftGrantFormSet(OneRowPerFormSet):
     """Names the doubled gift and says where its techniques go (#4380)."""
 
     duplicate_hint = (
-        "A tradition grants each gift on one row; pick every special technique it "
-        "grants from that gift there."
+        "A tradition favors each gift on one row; pick every special technique it "
+        "keeps from that gift there."
     )
 
 
 class TraditionGiftGrantInline(admin.StackedInline):
-    """Gifts this tradition grants (sibling of TraditionCodexGrantInline above).
+    """Gifts this tradition favors (sibling of TraditionCodexGrantInline above).
+
+    Any tradition may teach any major gift (#4659); a row here marks one its teachers
+    are better at, and carries the techniques it keeps for its own members.
 
     One block per gift, with the gift's special techniques picked on that block.
     Stacked rather than tabular because the technique picker is the two-column
@@ -1015,6 +1039,8 @@ class TraditionGiftGrantInline(admin.StackedInline):
 
     model = TraditionGiftGrant
     formset = TraditionGiftGrantFormSet
+    verbose_name = "favored gift"
+    verbose_name_plural = "favored gifts"
     extra = 1
     autocomplete_fields = ["gift"]
     filter_horizontal = ["special_techniques"]
@@ -1026,6 +1052,7 @@ class TraditionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     list_filter = ["is_active"]
     search_fields = ["name", "description"]
     list_editable = ["sort_order", "is_active"]
+    filter_horizontal = ["favored_affinities"]
     inlines = [TraditionCodexGrantInline, TraditionGiftGrantInline]
 
     @admin.display(description="Current members")
@@ -2040,6 +2067,22 @@ class GiftAcquisitionConfigAdmin(admin.ModelAdmin):
     ]
 
 
+@admin.register(TraditionTeachingConfig)
+class TraditionTeachingConfigAdmin(admin.ModelAdmin):
+    list_display = [
+        "gift_fit_training_bonus",
+        "affinity_fit_training_bonus",
+        "course_ease_gift_fit",
+        "course_ease_affinity_fit",
+    ]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
+        return not TraditionTeachingConfig.objects.filter(pk=1).exists()
+
+    def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
 @admin.register(TechniqueGrant)
 class TechniqueGrantAdmin(admin.ModelAdmin):
     list_display = ["technique", "item_template", "ritual", "verb", "acquisition_ap_cost"]
@@ -2182,7 +2225,7 @@ class ResonanceConversionAdmin(admin.ModelAdmin):
 class FallRedemptionConfigAdmin(admin.ModelAdmin):
     """Admin for the Fall/Redemption tuning singleton."""
 
-    list_display = ("id", "celestial_to_primal_multiplier", "celestial_to_abyssal_multiplier")
+    list_display = ("id", "penance_exchange_rate", "fall_threshold_percent")
 
 
 @admin.register(FallRedemptionRecord)
@@ -2551,9 +2594,6 @@ class CorruptionConfigAdmin(admin.ModelAdmin):
     """#3831 - the singleton Corruption-foundation coefficient tuning surface."""
 
     list_display = [
-        "celestial_coefficient",
-        "primal_coefficient",
-        "abyssal_coefficient",
         "tier_1_coefficient",
         "tier_2_coefficient",
         "tier_3_coefficient",

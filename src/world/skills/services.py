@@ -46,6 +46,10 @@ _XP_BOUNDARY_DIGIT = 9
 _XP_BOUNDARY_MIN = 19
 _XP_BOUNDARY_MAX = 49
 
+# A skill's shown value is its stored value / 10 (the "3.0" a plateau message names).
+# Band caps (#4585) are authored on that shown scale and converted at the comparison.
+_SKILL_SHOWN_DIVISOR = 10
+
 
 def _get_path_level(character: ObjectDB) -> int:
     """Get the character's highest class level.
@@ -473,6 +477,26 @@ def is_skill_at_xp_boundary(value: int) -> bool:
     return _is_at_xp_boundary(value)
 
 
+def stored_skill_cap(sheet: CharacterSheet) -> int | None:
+    """The highest stored value the sheet's level band lets a skill reach (#4585).
+
+    ``MaturationStatCap.skill_cap`` (shown units) times ten, or ``None`` when the band
+    has no row or its skill cap is blank. Applies to skills and their specializations.
+    """
+    from world.progression.services.maturation import skill_cap_for  # noqa: PLC0415
+
+    cap = skill_cap_for(sheet)
+    return None if cap is None else cap * _SKILL_SHOWN_DIVISOR
+
+
+def skill_cap_message(name: str, stored_cap: int) -> str:
+    """Message shown when development stops at the band's skill cap (#4585)."""
+    return (
+        f"{name} is at {stored_cap / _SKILL_SHOWN_DIVISOR:.1f}, the cap for your current "
+        "level band. Development maintains it but cannot raise it further."
+    )
+
+
 def _boundary_message(skill: Skill, next_rating: int) -> str:
     """Plateau message shown when dev points dissipate at an XP boundary (#2115)."""
     return (
@@ -502,20 +526,28 @@ def points_to_next_boundary(skill_value: CharacterSkillValue) -> int | None:
     Counts unpaid rust first (rust is paid before any level), then the cost of each
     level from the current value up to the next boundary (19, 29, 39, 49), less the
     ``development_points`` already banked toward the current level. A skill already
-    sitting at a boundary can take only its rust, since anything more dissipates. Returns
-    ``None`` above 49, where no boundary lies ahead. A caller that must not lose any
-    development to dissipation clamps what it applies to this number.
+    sitting at a boundary can take only its rust, since anything more dissipates. The
+    band's skill cap (#4585) is a stop like a boundary: the count ends there, and a skill
+    at its cap takes only its rust. Returns ``None`` above 49 with no cap set, where no
+    stop lies ahead. A caller that must not lose any development to dissipation clamps
+    what it applies to this number.
     """
     value = skill_value.value
-    if _is_at_xp_boundary(value):
+    cap = stored_skill_cap(skill_value.character)
+    if _is_at_xp_boundary(value) or (cap is not None and value >= cap):
         return skill_value.rust_points
-    if value > _XP_BOUNDARY_MAX:
-        return None
     boundary = next(
-        v
-        for v in range(max(value, _XP_BOUNDARY_MIN), _XP_BOUNDARY_MAX + 1)
-        if _is_at_xp_boundary(v)
+        (
+            v
+            for v in range(max(value, _XP_BOUNDARY_MIN), _XP_BOUNDARY_MAX + 1)
+            if _is_at_xp_boundary(v)
+        ),
+        None,
     )
+    if cap is not None:
+        boundary = cap if boundary is None else min(boundary, cap)
+    if boundary is None:
+        return None
     level_cost = sum(_development_cost(v) for v in range(value, boundary))
     return skill_value.rust_points + max(level_cost - skill_value.development_points, 0)
 
@@ -590,17 +622,19 @@ def _develop_skill_value(skill_value: CharacterSkillValue, dev_points: int) -> s
     boundary: development points are deliberately ephemeral (the 2026-07-09
     ephemerality ruling) — never banked, never silently discarded. The same
     dissipation (with the same visible message) applies to overflow from a
-    level-up that lands exactly on a boundary. Mutates ``skill_value`` in place
-    and saves it.
+    level-up that lands exactly on a boundary. The band's skill cap (#4585) is a
+    wall of the same kind: development stops at it, surplus dissipates, and the
+    message names the cap. Mutates ``skill_value`` in place and saves it.
 
     Args:
         skill_value: The CharacterSkillValue to develop.
         dev_points: Development points to apply.
 
     Returns:
-        A plateau message when points dissipated at a boundary this call,
-        else ``None``.
+        A plateau message when points dissipated at a boundary or the band's cap
+        this call, else ``None``.
     """
+    cap = stored_skill_cap(skill_value.character)
     # Pay off rust first — always, even when parked at a boundary.
     remaining = dev_points
     if skill_value.rust_points > 0:
@@ -610,6 +644,12 @@ def _develop_skill_value(skill_value: CharacterSkillValue, dev_points: int) -> s
         else:
             skill_value.rust_points -= remaining
             remaining = 0
+
+    if cap is not None and skill_value.value >= cap:
+        message = skill_cap_message(skill_value.skill.name, cap) if remaining else None
+        skill_value.development_points = 0
+        skill_value.save()
+        return message
 
     if _is_at_xp_boundary(skill_value.value):
         message = _boundary_message(skill_value.skill, skill_value.value + 1) if remaining else None
@@ -625,6 +665,11 @@ def _develop_skill_value(skill_value: CharacterSkillValue, dev_points: int) -> s
     while remaining >= cost:
         remaining -= cost
         skill_value.value += 1
+        if cap is not None and skill_value.value >= cap:
+            if remaining > 0:
+                message = skill_cap_message(skill_value.skill.name, cap)
+            remaining = 0
+            break
         if _is_at_xp_boundary(skill_value.value):
             if remaining > 0:
                 message = _boundary_message(skill_value.skill, skill_value.value + 1)
@@ -672,6 +717,9 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
         return False, f"{skill.name} is not at a breakthrough boundary."
 
     target_rating = skill_value.value + 1
+    cap = stored_skill_cap(character.sheet_data)
+    if cap is not None and target_rating > cap:
+        return False, skill_cap_message(skill.name, cap)
     try:
         unlock = TraitRatingUnlock.objects.get(trait=skill.trait, target_rating=target_rating)
     except TraitRatingUnlock.DoesNotExist:
@@ -778,25 +826,43 @@ def skills_at_boundary(character: ObjectDB) -> list[SkillBreakthroughProspect]:
 
 def _apply_development_to_specialization(
     spec_value: CharacterSpecializationValue, dev_points: int
-) -> None:
+) -> str | None:
     """Apply development points to a specialization, handling level-ups.
 
-    Specializations have no XP boundaries and can level freely. Mutates the
-    ``spec_value`` instance in place and saves it.
+    Specializations have no XP boundaries, but the band's skill cap (#4585) binds
+    them as it binds their parent skill: development stops at it and the surplus
+    dissipates. Mutates the ``spec_value`` instance in place and saves it.
 
     Args:
         spec_value: The CharacterSpecializationValue to develop.
         dev_points: Development points to apply.
+
+    Returns:
+        A message naming the cap when points dissipated there, else ``None``.
     """
+    cap = stored_skill_cap(spec_value.character)
+    name = spec_value.specialization.name
+    if cap is not None and spec_value.value >= cap:
+        spec_value.development_points = 0
+        spec_value.save()
+        return skill_cap_message(name, cap) if dev_points > 0 else None
+
     spec_value.development_points += dev_points
 
+    message = None
     cost = _development_cost(spec_value.value)
     while spec_value.development_points >= cost:
         spec_value.development_points -= cost
         spec_value.value += 1
+        if cap is not None and spec_value.value >= cap:
+            if spec_value.development_points > 0:
+                message = skill_cap_message(name, cap)
+            spec_value.development_points = 0
+            break
         cost = _development_cost(spec_value.value)
 
     spec_value.save()
+    return message
 
 
 @transaction.atomic
@@ -856,14 +922,14 @@ def process_weekly_training() -> dict[int, set[int]]:
                 specialization=allocation.specialization,
                 defaults={"value": 10, "development_points": 0},
             )
-            _apply_development_to_specialization(spec_value, dev_points)
+            cap_message = _apply_development_to_specialization(spec_value, dev_points)
             trained_skills[character.pk].add(allocation.specialization.parent_skill_id)
             _record_training_transaction(
                 character,
                 allocation.specialization.parent_skill.trait,
                 dev_points,
                 description,
-                None,
+                cap_message,
             )
         else:
             continue  # pragma: no cover — XOR constraint prevents this

@@ -351,26 +351,25 @@ class SpendResonanceForPullEphemeralTests(TestCase):
             lifetime_earned=10,
         )
         ThreadPullCostFactory(tier=1, resonance_cost=2, anima_per_thread=1)
-        # Bump thread to level 1 so both authored effect rows (min_level 0/1) apply.
+        # Bump thread to stored 10 (shown 1, #4585) so both authored effect rows
+        # (min_level 0/1, shown) apply.
         self.thread = ThreadFactory(
             owner=self.sheet,
             resonance=self.resonance,
-            level=1,
+            level=10,
         )
         ThreadPullEffectFactory(
             target_kind=self.thread.target_kind,
             resonance=self.resonance,
             tier=1,
             min_thread_level=0,
-            # amount=10, not 3: thread_level_multiplier(1) == 0.1 (#1718's corrected
-            # ramp), and scaled_value = round(authored * multiplier); an authored
-            # amount below 6 rounds to 0 at level 1, which would defeat this test's
-            # "still active" assertion below. 10 clears that floor with margin.
+            # amount=10: scaled_value = round(authored * thread_level_multiplier),
+            # and the "still active" assertion below needs a positive value.
             flat_bonus_amount=10,
         )
         # Wire a tier-1 VITAL_BONUS row at min_level=1 so the (kind,res,tier,level)
         # unique key differs from the FLAT_BONUS row above. Both apply to the
-        # level-1 thread per the min_thread_level__lte filter.
+        # shown-1 thread per the min_thread_level__lte filter.
         ThreadPullEffectFactory(
             target_kind=self.thread.target_kind,
             resonance=self.resonance,

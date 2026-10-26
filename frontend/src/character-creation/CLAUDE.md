@@ -8,8 +8,9 @@ This module provides the staged character creation UI flow.
 character-creation/
 ├── index.ts                 # Public exports
 ├── types.ts                 # TypeScript type definitions
-├── constants.ts             # MAGIC_SKILL_CATEGORY: Magic skills are trained by the Tradition
-│                              #   stance (read-only group in SkillsSection, #4457), never bought
+├── constants.ts             # MAGIC_SKILL_CATEGORY: Magic skills are spent from the Gift
+│                              #   stage's magical training (read-only group in SkillsSection,
+│                              #   #4457, #4659), never bought with skill points
 ├── api.ts                   # API fetch functions using apiFetch
 ├── queries.ts               # React Query hooks
 ├── cg.css                   # Scoped under `.interview`; realm is an ink, paper
@@ -22,7 +23,8 @@ character-creation/
 │   ├── NightPlate.tsx       # Full-bleed night moment (arrival, submission)
 │   ├── ChapterLeaf.tsx      # Wraps a stage's old internals in the leaf frame
 │   ├── RecordRail.tsx       # Marginalia: record-so-far rows + a Note aside
-│   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries. Since
+│   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries (an
+│   │                        #   optional `tags` list prints extra `.tag`s beside `tag`). Since
 │   │                        #   #4022 the name row carries a square Select mark (Selected
 │   │                        #   once chosen, a second press clears; never toggles the
 │   │                        #   disclosure) and a chosen row is tinted in the realm accent;
@@ -51,7 +53,8 @@ character-creation/
     ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
     ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection)
     ├── GiftStage.tsx        # Stage 6 (Gift): vertical funnel — Tradition → Gift →
-    │                        #   Techniques → Gift Resonance → Anima Check, plus an
+    │                        #   [magical training, #4659] → Techniques → Gift Resonance
+    │                        #   → Anima Check, plus an
     │                        #   always-visible Motif textarea and the guided Glimpse
     │                        #   flow (#2426 Task 10; Glimpse redesign #2427)
     ├── AppearanceStage.tsx  # Stage 8: Appearance. After the height block, mounts this
@@ -77,7 +80,18 @@ character-creation/
     │                        #   entry in TraditionPicker (#3281, #3630)
     ├── gift/                # GiftStage funnel steps (#2426 Task 10)
     │   ├── TraditionStep.tsx    # Wraps TraditionPicker
-    │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=)
+    │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=); a Gift the
+    │   │                        #   Tradition favors is tagged "Teaches well" (#4659)
+    │   ├── MagicTrainingBlock.tsx # Body of GiftStage's own "What <Tradition> taught you"
+    │   │                        #   funnel step (#4659), after the Resonance step, gated on
+    │   │                        #   a Gift and a resonance (its bonuses read both), open
+    │   │                        #   until the pool is spent exactly: the breakdown
+    │   │                        #   ("<distinction>, rank N" sources, the rank only when
+    │   │                        #   `show_rank`; "Fits:" bonuses,
+    │   │                        #   total), a "Spend all of it" ledger flagged when under or
+    │   │                        #   over, and a StatRow per Magic skill writing
+    │   │                        #   draft_data.magic_skills. The step is absent with no
+    │   │                        #   training and nothing allocated (`magicTraining.ts`)
     │   ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
     │   ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
     │   ├── GlimpseSection.tsx   # CG state binder for the Glimpse (#2427): draft reads,
@@ -193,6 +207,8 @@ character-creation/
 - `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Draft detail operations
 - `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's tradition + path
 - `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options (pool ∪ signature) for the chosen gift
+- `GET /api/magic/resonances/` - Every Resonance with its `affinity_name`, unpaginated (the Gift
+  stage's Resonance step; `GET /api/magic/affinities/` lists the Affinities, #4665)
 - `GET /api/character-creation/glimpse-tags/` - List the active glimpse tag catalog (guided Glimpse flow, #2427)
 - `GET /api/character-creation/form-options/{species_id}/?draft=X` - Trait palettes (`{traits, inherited}`; traits carry `is_required`, `?draft=` appends cross-line option groups from the draft's parents, #2815)
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review

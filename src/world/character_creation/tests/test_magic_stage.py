@@ -37,6 +37,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import CharacterAnima
 from world.magic.seeds_cast import get_standalone_cast_template
@@ -79,7 +80,8 @@ class MagicStageValidationTest(TestCase):
             [*cls.pool_techniques, cls.unready_technique, cls.special_technique]
         )
 
-        # A gift with no TraditionGiftGrant for this tradition — never a valid pick.
+        # A gift with no technique on this Path's list - never a valid pick (#4659: a
+        # grant row no longer gates; any Tradition may teach any Major Gift).
         cls.other_gift = GiftFactory(name="Not Granted")
         cls.species = SpeciesFactory(name="Species Technique Test")
         cls.species_gift = GiftFactory(name="Species Minor Gift", kind=GiftKind.MINOR)
@@ -291,6 +293,9 @@ class MagicStageValidationTest(TestCase):
 class MagicFinalizationCGSeedingTest(TestCase):
     """finalize_magic_data seeds CharacterAnima and FatiguePool at CG completion (Phase 12)."""
 
+    def setUp(self):
+        ensure_canonical_affinities()
+
     def _make_draft_and_sheet(self):
         sheet = CharacterSheetFactory()
         # CharacterTradition creation is unconditional (#2426) — a tradition is
@@ -357,6 +362,9 @@ class AcademyEntranceObligationTest(TestCase):
     state, #3675), never its name; a defensive, logged skip covers an unseeded
     Academy.
     """
+
+    def setUp(self):
+        ensure_canonical_affinities()
 
     def _make_draft_and_sheet(self, *, tradition_name: str, self_taught: bool = False):
         sheet = CharacterSheetFactory()
@@ -432,6 +440,9 @@ class GiftGrantNotificationTest(TestCase):
     """Gift/technique grant during magic-stage finalization queues an ABILITY
     NarrativeMessage (#1606, updated to the catalog gift/technique contract #2426).
     """
+
+    def setUp(self):
+        ensure_canonical_affinities()
 
     def _make_draft_and_sheet(self):
         gift = GiftFactory(name="Umbral Sight")
@@ -545,6 +556,17 @@ class CGGiftOptionEndpointTest(TestCase):
         cls.empty_gift = GiftFactory(name="Nothing Yet")
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.empty_gift)
 
+        # Offered on the path, but no grant row from this tradition: not favored (#4659).
+        cls.unfavored_gift = GiftFactory(name="Unfavored Gift")
+        unfavored_grant = PathGiftGrantFactory(path=cls.path, gift=cls.unfavored_gift)
+        unfavored_grant.starter_techniques.set(
+            TechniqueFactory.create_batch(
+                1,
+                gift=cls.unfavored_gift,
+                action_template=get_standalone_cast_template(),
+            )
+        )
+
     def setUp(self):
         self.client = APIClient()
         self.client.force_authenticate(user=self.account)
@@ -571,6 +593,20 @@ class CGGiftOptionEndpointTest(TestCase):
         gift_ids = [row["id"] for row in response.data]
         assert self.available_gift.id in gift_ids
         assert self.empty_gift.id not in gift_ids
+
+    def test_rows_say_whether_the_drafts_tradition_favors_the_gift(self):
+        """``favored`` is a TraditionGiftGrant from the draft's Tradition (#4659)."""
+        draft = CharacterDraftFactory(
+            account=self.account,
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+        )
+
+        response = self.client.get("/api/character-creation/gifts/", {"draft_id": draft.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        favored = {row["id"]: row["favored"] for row in response.data}
+        assert favored == {self.available_gift.id: True, self.unfavored_gift.id: False}
 
     def test_missing_draft_id_returns_empty_list(self):
         response = self.client.get("/api/character-creation/gifts/")

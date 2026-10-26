@@ -4,7 +4,7 @@
  * `hall/__tests__/`; this file verifies the zero-character remedy swap and
  * that every band mounts with the right data.
  */
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HallPage } from '../HallPage';
@@ -100,7 +100,10 @@ function gmAccount(overrides: Partial<AccountData> = {}): AccountData {
 
 describe('HallPage', () => {
   afterEach(() => {
-    store.dispatch(setAccount(null));
+    // The page is still mounted here; the store update re-renders it.
+    act(() => {
+      store.dispatch(setAccount(null));
+    });
   });
 
   it('renders a loading skeleton (not the zero-character remedy) while the roster query is loading (review fix)', () => {

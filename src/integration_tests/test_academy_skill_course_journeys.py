@@ -36,7 +36,18 @@ from world.currency.services import (
     transfer,
 )
 from world.game_clock.week_services import advance_game_week
+from world.magic.constants import GainSource
+from world.magic.factories import (
+    AffinityFactory,
+    CharacterAuraFactory,
+    CharacterGiftFactory,
+    GiftFactory,
+    ResonanceFactory,
+    TraditionFactory,
+    TraditionGiftGrantFactory,
+)
 from world.magic.models import TrainingOutcomeAward
+from world.magic.services.resonance import grant_resonance
 from world.npc_services.constants import OfferKind
 from world.npc_services.factories import (
     FunctionaryFactory,
@@ -565,6 +576,72 @@ class TheTrainersMenu(_AcademyCourseCase):
         self.assertRegex(menu, rf"Course: Occult.*{self.NEXT}")
         self.assertNotIn("next week", menu)
 
+    def test_telnet_prints_the_tradition_line_then_the_fit_line(self) -> None:
+        """A tutor who teaches a Tradition says so, then what of her it fits (#4659)."""
+        gift = GiftFactory(name="Lantern Gift")
+        CharacterGiftFactory(character=self.sheet, gift=gift)
+        tradition = TraditionFactory(name="House of Dawn")
+        TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+        self.role.teaches_tradition = tradition
+        self.role.save()
+
+        menu = self.menu()
+
+        self.assertRegex(
+            menu,
+            rf"Course: Occult.*{self.ENROLL}\s+Taught in the manner of House of Dawn\s+"
+            r"Fits your Lantern Gift\. Sessions are easier for you\.",
+        )
+
+    def test_the_web_menu_reads_the_affinity_from_her_aura(self) -> None:
+        """Affinity fit is her aura's dominant affinity, which resonance she earns moves (#4681)."""
+        gift = GiftFactory(name="Lantern Gift")
+        CharacterGiftFactory(character=self.sheet, gift=gift)
+        dawn = AffinityFactory(name="Dawn")
+        tradition = TraditionFactory(name="House of Dawn")
+        TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+        tradition.favored_affinities.add(dawn)
+        self.role.teaches_tradition = tradition
+        self.role.save()
+        aura = CharacterAuraFactory(character=self.sheet, celestial="0", primal="80", abyssal="20")
+
+        before = self.web_offers()["Course: Occult"]["price"]["fit_line"]
+        grant_resonance(
+            self.sheet, ResonanceFactory(affinity=dawn), 100, source=GainSource.STAFF_GRANT
+        )
+        after = self.web_offers()["Course: Occult"]["price"]["fit_line"]
+
+        self.assertEqual(aura.dominant_affinity.name, "Dawn")
+        self.assertEqual(before, "Fits your Lantern Gift. Sessions are easier for you.")
+        self.assertEqual(
+            after, "Fits your Lantern Gift and its Dawn affinity. Sessions are easier for you."
+        )
+
+    def test_telnet_fit_line_follows_the_aura(self) -> None:
+        """The same fit line on telnet names the affinity her aura leads with (#4681)."""
+        gift = GiftFactory(name="Lantern Gift")
+        CharacterGiftFactory(character=self.sheet, gift=gift)
+        dawn = AffinityFactory(name="Dawn")
+        tradition = TraditionFactory(name="House of Dawn")
+        TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+        tradition.favored_affinities.add(dawn)
+        self.role.teaches_tradition = tradition
+        self.role.save()
+        CharacterAuraFactory(character=self.sheet, celestial="0", primal="80", abyssal="20")
+
+        before = self.menu()
+        self.telnet(self.ysmay, "hire end")
+        grant_resonance(
+            self.sheet, ResonanceFactory(affinity=dawn), 100, source=GainSource.STAFF_GRANT
+        )
+        after = self.menu()
+
+        self.assertIn("Fits your Lantern Gift. Sessions are easier for you.", before)
+        self.assertNotIn("Dawn affinity", before)
+        self.assertIn(
+            "Fits your Lantern Gift and its Dawn affinity. Sessions are easier for you.", after
+        )
+
     def test_a_free_course_names_only_the_hare(self) -> None:
         self.course.coin_cost = 0
         self.course.save()
@@ -585,6 +662,8 @@ class TheTrainersMenu(_AcademyCourseCase):
                 "development_remaining": None,
                 "development_total": None,
                 "training_points": None,
+                "teaching_line": None,
+                "fit_line": None,
                 "display": self.ENROLL,
             },
         )

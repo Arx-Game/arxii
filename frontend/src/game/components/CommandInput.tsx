@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
-import type { ActionResultPayload } from '@/hooks/types';
+import type { ActionResultPayload, RoomStateObject } from '@/hooks/types';
 import { useDraftStore, readStoredDraft } from '@/game/useDraftStore';
 import type { Draft, DraftKey, DraftMode, DraftScopeSettling } from '@/game/useDraftStore';
 import { readComposerLine, uniqueNames } from '@/game/composerLine';
@@ -79,6 +79,8 @@ const EXECUTE_ACTION_SPEECH_MODES = new Set(['say', 'whisper', 'tt']);
 
 /** No command names yet (before the first `commands` frame): one stable empty list. */
 const NO_COMMAND_NAMES: readonly string[] = [];
+/** No room yet, or nobody in it: one stable empty list, so the selector does not re-render. */
+const NO_ROOM_CHARACTERS: RoomStateObject[] = [];
 /** Modes where a leading `@Nyx` addresses someone here (#4346); elsewhere it is just text. */
 const ADDRESSING_MODES: ReadonlySet<string> = new Set(['pose', 'emit']);
 /**
@@ -262,9 +264,9 @@ export function CommandInput({
 
   const activeCharacter = useAppSelector((state) => state.game.active);
   const roomCharacters = useAppSelector((state) => {
-    if (!activeCharacter) return [];
+    if (!activeCharacter) return NO_ROOM_CHARACTERS;
     const room = state.game.sessions[activeCharacter]?.room;
-    return room?.characters ?? [];
+    return room?.characters ?? NO_ROOM_CHARACTERS;
   });
   // #4346 — every name this character can type a command by, so `@desc` reads as
   // a command and `@Nyx` as someone to address.

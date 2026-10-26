@@ -109,7 +109,7 @@ class ThreadHubSummaryPopulatedTests(APITestCase):
             resonance=cls.resonance,
             as_trait_thread=True,
             _trait_value=100,
-            _path_stage=3,  # path cap=30; anchor cap=100 → effective=30
+            _class_level=3,  # level cap=30; anchor cap=100 → effective=30
             level=0,
             developed_points=0,
         )
@@ -124,20 +124,20 @@ class ThreadHubSummaryPopulatedTests(APITestCase):
             resonance=cls.resonance,
             as_trait_thread=True,
             _trait_value=100,
-            _path_stage=3,
+            _class_level=3,
             level=0,
             developed_points=5,
         )
 
         # --- blocked thread (level == effective cap) ---
-        # _trait_value=5 → anchor cap=5; _path_stage=3 → path cap=30 → effective=5.
+        # _trait_value=5 → anchor cap=5; _class_level=3 → level cap=30 → effective=5.
         # level=5 == effective cap → blocked.
         cls.blocked_thread = ThreadFactory(
             owner=cls.sheet,
             resonance=cls.resonance,
             as_trait_thread=True,
             _trait_value=5,
-            _path_stage=3,
+            _class_level=3,
             level=5,
             developed_points=0,
         )

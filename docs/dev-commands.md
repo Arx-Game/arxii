@@ -265,6 +265,11 @@ Automatic-Analysis-specific behaviors that differ from a configured scanner:
 - `pnpm lint:fix` — Run ESLint with auto-fix
 - `pnpm format` — Format code with Prettier
 - `pnpm typecheck` — Run TypeScript type checking
+- `pnpm test` — Run the Vitest suite once (`vitest run`). CI splits it into four
+  parallel shards (`frontend-shard`, `--shard=i/4`) beside separate `frontend-typecheck`
+  and `frontend-build` jobs; the required `frontend` check aggregates all three (#4677).
+  Add `--reporter=default` when an agent runs it: vitest 5's agent reporter hides the
+  console output of passing tests.
 - `just gen-api-types` — Regenerate OpenAPI schema (`src/schema.json`) and frontend
   TypeScript API types (`frontend/src/generated/api.d.ts`)
 

@@ -854,6 +854,9 @@
   display: block;
   min-width: 2px;
 }
+.refsheet-aura-seg {
+  background: hsl(var(--muted-foreground));
+}
 .refsheet-aura-celestial {
   background: #d8c27a;
 }

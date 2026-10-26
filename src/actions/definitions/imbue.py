@@ -44,6 +44,8 @@ class ImbueAction(Action):
         from django.db import transaction  # noqa: PLC0415
 
         from world.magic.exceptions import (  # noqa: PLC0415
+            AnchorCapExceeded,
+            LevelCapExceeded,
             MagicError,
             ProtagonismLockedError,
         )
@@ -81,8 +83,11 @@ class ImbueAction(Action):
                 data={"result": result},
             )
 
-        return ActionResult(
-            success=True,
-            message=f"You complete the rite, imbuing {thread.name}.",
-            data={"result": result},
+        message = f"You complete the rite, imbuing {thread.name}."
+        cap_refusal = {"LEVEL_CAP": LevelCapExceeded, "ANCHOR_CAP": AnchorCapExceeded}.get(
+            result.blocked_by
         )
+        if cap_refusal is not None:
+            # The cap stopped the climb partway (#4585); the rest stays in the thread.
+            message += f" {cap_refusal.user_message} The rest stays banked in the thread."
+        return ActionResult(success=True, message=message, data={"result": result})

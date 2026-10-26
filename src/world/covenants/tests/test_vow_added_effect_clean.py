@@ -26,6 +26,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueFunctionTagFactory,
     TechniqueRemovedConditionFactory,
+    ensure_canonical_affinities,
 )
 
 
@@ -163,7 +164,9 @@ class VowAddedEffectCleanTests(TestCase):
 
     def test_situation_params_follow_the_situation(self) -> None:
         row = VowAddedEffectFactory.build(
-            covenant_role=self.role, situation=Situation.SURROUNDED, affinity="abyssal"
+            covenant_role=self.role,
+            situation=Situation.SURROUNDED,
+            affinity=ensure_canonical_affinities()[2],
         )
         self.assertIn("affinity", self._keys(row))
 

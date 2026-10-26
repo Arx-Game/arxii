@@ -61,6 +61,9 @@ import { useEquippedItems, useInventory, inventoryKeys } from '../hooks/useInven
 import { useOutfits } from '../hooks/useOutfits';
 import type { ContainerAccessPolicy, ItemInstance } from '../types';
 
+/** No room yet: one stable empty list, so the selector does not re-render the page. */
+const NO_ROOM_CHARACTERS: RoomStateObject[] = [];
+
 export function WardrobePage() {
   // This tab's browsing identity (#3479) drives WHAT'S DISPLAYED (whose
   // outfits/inventory), but NOT which character WS actions dispatch to.
@@ -118,7 +121,8 @@ export function WardrobePage() {
   // outside an active room/session.
   const roomCharacters = useAppSelector<RoomStateObject[]>(
     (state) =>
-      (activeCharacter ? state.game.sessions[activeCharacter]?.room?.characters : undefined) ?? []
+      (activeCharacter ? state.game.sessions[activeCharacter]?.room?.characters : undefined) ??
+      NO_ROOM_CHARACTERS
   );
 
   // -------------------------------------------------------------------------

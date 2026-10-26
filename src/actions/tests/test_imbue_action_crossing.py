@@ -19,7 +19,7 @@ from world.magic.factories import (
     ResonanceFactory,
     ThreadFactory,
 )
-from world.magic.models import PendingRitualEffect, ThreadCrossingThreshold
+from world.magic.models import PendingRitualEffect, ThreadCrossingThreshold, ThreadLevelUnlock
 from world.progression.models import ItemRequirement
 
 
@@ -28,7 +28,7 @@ class ImbueActionCrossingRequirementTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.sheet = CharacterSheetFactory()
+        cls.sheet = CharacterSheetFactory(_class_level=5)  # level cap 50 (#4585)
         cls.resonance = ResonanceFactory()
         CharacterResonanceFactory(character_sheet=cls.sheet, resonance=cls.resonance, balance=9999)
         cls.template = ItemTemplateFactory()
@@ -39,13 +39,20 @@ class ImbueActionCrossingRequirementTests(TestCase):
         PendingRitualEffect.objects.get_or_create(character=self.sheet, ritual=self.ritual)
 
     def _make_thread_at_level(self, level: int):
-        return ThreadFactory(
+        """A TRAIT thread at stored ``level`` with the stored-30 XP boundary paid.
+
+        The shown-3 crossing is stored 30 (#4585), so these tests imbue stored
+        29 -> 30, which costs (29 - 9) × 100 = 2000 dp.
+        """
+        thread = ThreadFactory(
             owner=self.sheet,
             resonance=self.resonance,
             level=level,
             developed_points=0,
             _trait_value=999,
         )
+        ThreadLevelUnlock.objects.create(thread=thread, unlocked_level=30, xp_spent=0)
+        return thread
 
     def test_crossing_block_returns_success_with_messages(self) -> None:
         """When blocked_by=CROSSING_REQUIREMENT, action returns success=True
@@ -56,13 +63,13 @@ class ImbueActionCrossingRequirementTests(TestCase):
             item_template=self.template,
             quantity=1,
         )
-        thread = self._make_thread_at_level(2)
+        thread = self._make_thread_at_level(29)
 
         action = ImbueAction()
         result = action.run(
             actor=self.sheet.character,
             thread=thread,
-            amount=1,
+            amount=2000,
         )
         self.assertTrue(result.success, f"Expected success=True, got: {result.message}")
         assert "crossing requirements" in result.message.lower()
@@ -77,10 +84,10 @@ class ImbueActionCrossingRequirementTests(TestCase):
             item_template=self.template,
             quantity=1,
         )
-        thread = self._make_thread_at_level(2)
+        thread = self._make_thread_at_level(29)
 
         action = ImbueAction()
-        action.run(actor=self.sheet.character, thread=thread, amount=1)
+        action.run(actor=self.sheet.character, thread=thread, amount=2000)
 
         assert not PendingRitualEffect.objects.filter(
             character=self.sheet, ritual=self.ritual
@@ -88,13 +95,13 @@ class ImbueActionCrossingRequirementTests(TestCase):
 
     def test_no_crossing_block_returns_normal_message(self) -> None:
         """When not blocked by a crossing, the normal imbue message is returned."""
-        thread = self._make_thread_at_level(2)
+        thread = self._make_thread_at_level(29)
 
         action = ImbueAction()
         result = action.run(
             actor=self.sheet.character,
             thread=thread,
-            amount=1,
+            amount=2000,
         )
         self.assertTrue(result.success)
         assert "crossing requirements" not in result.message.lower()

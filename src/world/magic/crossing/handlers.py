@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 from world.classes.services import is_crossing_level
 from world.magic.constants import TargetKind
 from world.magic.crossing.ceremony import CeremonyNarrative, execute_ceremony_beat
+from world.magic.services.threads import shown_thread_level
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -36,6 +37,26 @@ if TYPE_CHECKING:
     from world.relationships.models import RelationshipLabel
 
 logger = logging.getLogger(__name__)
+
+#: The first PathStage crossing, on the shown thread scale (stored 30).
+_FIRST_CROSSING_LEVEL = 3
+
+
+def _crossed_levels(starting_level: int, new_level: int) -> list[int]:
+    """Shown crossing levels a thread passed going from stored ``starting_level`` to
+    stored ``new_level`` (#4585).
+
+    Thread levels are stored ×10, crossings (3, 6, 11, 16, 21) are shown levels, so
+    stored 29 → 30 crosses 3 and stored 0 → 3 crosses nothing. Crossing detection is
+    ``is_crossing_level`` on the shown level, the same list Paths use.
+    """
+    return [
+        level
+        for level in range(
+            shown_thread_level(starting_level) + 1, shown_thread_level(new_level) + 1
+        )
+        if is_crossing_level(level)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -219,9 +240,9 @@ class TechniqueCrossingHandler:
         if new_level <= starting_level:
             return
 
-        # Only fire at the first crossing (level 3) — the depth-milestone beat.
+        # Only fire at the first crossing (shown level 3) — the depth-milestone beat.
         # Higher crossings don't need a beat; the discovery fires on selection.
-        if not is_crossing_level(new_level) or new_level != 3:  # noqa: PLR2004 — first crossing
+        if _FIRST_CROSSING_LEVEL not in _crossed_levels(starting_level, new_level):
             return
 
         sheet: CharacterSheet = thread.owner
@@ -276,10 +297,8 @@ class _CrossingChoiceHandler:
         if new_level <= starting_level:
             return
 
-        # Find crossing levels in (starting_level, new_level]
-        crossing_levels = [
-            level for level in (3, 6, 11, 16, 21) if starting_level < level <= new_level
-        ]
+        # Shown crossing levels in (starting_level, new_level] (#4585).
+        crossing_levels = _crossed_levels(starting_level, new_level)
         if not crossing_levels:
             return
 

@@ -1043,6 +1043,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/areas/feature-types/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The feature types a GM can add to a place mid-scene (#4675, slice 3 of #4651).
+     *
+     *     Read-only: staff author feature types in the admin. GMs and staff only, since
+     *     the list feeds the GM attach control.
+     */
+    get: operations['areas_feature_types_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/areas/feature-types/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The feature types a GM can add to a place mid-scene (#4675, slice 3 of #4651).
+     *
+     *     Read-only: staff author feature types in the admin. GMs and staff only, since
+     *     the list feeds the GM attach control.
+     */
+    get: operations['areas_feature_types_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/areas/presence/': {
     parameters: {
       query?: never;
@@ -13594,6 +13638,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/affinities/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only list of the three Affinities, for pickers (character creation). */
+    get: operations['magic_affinities_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/affinities/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only list of the three Affinities, for pickers (character creation). */
+    get: operations['magic_affinities_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/applicable-pulls/': {
     parameters: {
       query?: never;
@@ -15059,6 +15137,50 @@ export interface paths {
      *     Filter params: source, resonance (PK), granted_after, granted_before.
      */
     get: operations['magic_resonance_grants_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/resonances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only list of Resonance rows with their Affinity, for pickers.
+     *
+     *     The character-creation Gift stage lists every Resonance and stores the chosen
+     *     pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+     */
+    get: operations['magic_resonances_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/resonances/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only list of Resonance rows with their Affinity, for pickers.
+     *
+     *     The character-creation Gift stage lists every Resonance and stores the chosen
+     *     pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+     */
+    get: operations['magic_resonances_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -27603,6 +27725,7 @@ export interface components {
       action_slot?: string | null;
       position_id?: number | null;
       blueprint_id?: number | null;
+      feature_id?: number | null;
       application_id?: number | null;
       target_object_id?: number | null;
     };
@@ -27653,6 +27776,14 @@ export interface components {
       target_persona_id?: number;
       target_companion_id?: number;
       journal_entry_id: number;
+    };
+    /** @description Serializer for Affinity records (Celestial, Primal, Abyssal). */
+    Affinity: {
+      readonly id: number;
+      /** @description Affinity name (e.g., 'Celestial', 'Abyssal', 'Primal'). */
+      readonly name: string;
+      /** @description Description of this affinity. */
+      readonly description: string;
     };
     /** @description Schema-only shape of the beat line in an aftermath digest (#3551). */
     AftermathBeat: {
@@ -29467,6 +29598,12 @@ export interface components {
        */
       readonly kind: components['schemas']['CGGiftOptionKindEnum'];
       readonly codex_entry_id: number | null;
+      /**
+       * @description Whether the draft's Tradition favors this Gift: a ``TraditionGiftGrant`` (#4659).
+       *
+       *     The view passes the favored Gift ids in context (one query for the list).
+       */
+      readonly favored: boolean;
     };
     /**
      * @description * `MAJOR` - Major (CG-chosen)
@@ -30158,23 +30295,10 @@ export interface components {
       readonly id: number;
       /** @description The character this aura belongs to. */
       character: number;
-      /**
-       * Format: decimal
-       * @description Percentage of Celestial affinity (0-100).
-       */
-      celestial?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Primal affinity (0-100).
-       */
-      primal?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Abyssal affinity (0-100).
-       */
-      abyssal?: string;
+      readonly shares: components['schemas']['CharacterAuraShare'][];
+      /** @description The dominant affinity's name, blank before the aura holds any share. */
       readonly dominant_affinity: string;
-      /** @description Return the display label for the dominant affinity. */
+      /** @description The dominant affinity's name for display. */
       readonly dominant_affinity_display: string;
       /**
        * @description Deferral/progress state of the Glimpse (#2427). Cache of prose+tag truth — maintained by world.magic.services.glimpse, never written directly.
@@ -30191,21 +30315,16 @@ export interface components {
     CharacterAuraRequest: {
       /** @description The character this aura belongs to. */
       character: number;
+    };
+    /** @description One affinity's share of an aura. */
+    CharacterAuraShare: {
+      readonly affinity_id: number;
+      readonly affinity_name: string;
       /**
        * Format: decimal
-       * @description Percentage of Celestial affinity (0-100).
+       * @description This affinity's share of the aura, 0-100.
        */
-      celestial?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Primal affinity (0-100).
-       */
-      primal?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Abyssal affinity (0-100).
-       */
-      abyssal?: string;
+      readonly percent: string;
     };
     /** @description Full serializer for character class detail with core traits. */
     CharacterClass: {
@@ -30379,7 +30498,9 @@ export interface components {
       /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
       readonly starting_technique_picks: number;
-      readonly starting_magic_skill_floor: number;
+      readonly magic_training: {
+        [key: string]: unknown;
+      };
       readonly age_min: number;
       readonly age_max: number;
       readonly ic_month_names: string[];
@@ -32457,6 +32578,18 @@ export interface components {
       /** @description URL-safe identifier for this tag. */
       readonly slug: string;
     };
+    /** @description One place a dodge can land in (#4676). */
+    DodgeLanding: {
+      id: number;
+      name: string;
+    };
+    /** @description Schema-only shape of the viewer's own dodge plan (#4676). Private to its owner. */
+    DodgePlan: {
+      enabled: boolean;
+      landing_id: number | null;
+      options: components['schemas']['DodgeLanding'][];
+      cost_line: string;
+    };
     /**
      * @description * `BEAST` - Beast
      *     * `UNDEAD` - Undead
@@ -32995,6 +33128,7 @@ export interface components {
       readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
       readonly position_nodes: components['schemas']['PositionNode'][];
       readonly position_edges: components['schemas']['PositionEdge'][];
+      readonly held_positions: components['schemas']['HeldPosition'][];
       readonly volatile_objects: components['schemas']['VolatileObject'][];
       readonly objective: components['schemas']['ObjectiveSnapshot'] | null;
       readonly pending_selections: components['schemas']['PendingSelection'][];
@@ -33952,6 +34086,29 @@ export interface components {
       /** @default  */
       lore: string;
     };
+    /** @description One feature type a GM can add to a place (#4675): the GM attach control's list. */
+    FeatureType: {
+      readonly id: number;
+      readonly name: string;
+      /**
+       * @description Where the feature can take her.
+       *
+       *     * `adjacent` - A place next to its own
+       *     * `any_place` - Any place in the room
+       *     * `same_type` - Another place with the same feature
+       *     * `elevated_adjacent` - A raised place next to its own
+       */
+      readonly reach: components['schemas']['FeatureTypeReachEnum'];
+      readonly art_url: string | null;
+    };
+    /**
+     * @description * `adjacent` - A place next to its own
+     *     * `any_place` - Any place in the room
+     *     * `same_type` - Another place with the same feature
+     *     * `elevated_adjacent` - A raised place next to its own
+     * @enum {string}
+     */
+    FeatureTypeReachEnum: 'adjacent' | 'any_place' | 'same_type' | 'elevated_adjacent';
     /**
      * @description * `background` - Background
      *     * `never_do` - What would you never do?
@@ -35397,6 +35554,11 @@ export interface components {
       readonly target_kind: string;
       /** Format: date-time */
       readonly found_at: string;
+    };
+    /** @description A place an enemy able to act holds, and who holds it (#4670). */
+    HeldPosition: {
+      readonly position_id: number;
+      readonly holder_names: string[];
     };
     /** @description A heritage, for staff edit mode's picker (#3988). */
     Heritage: {
@@ -39495,6 +39657,8 @@ export interface components {
       development_remaining: number | null;
       development_total: number | null;
       training_points: number | null;
+      teaching_line: string | null;
+      fit_line: string | null;
       display: string;
     };
     /** @description Serializer for a directed-offer summons (#2050). */
@@ -39667,6 +39831,7 @@ export interface components {
        */
       readonly thumbnail_media_url: string | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
+      readonly current_square: components['schemas']['Square'] | null;
       readonly mirrors_participant_id: number | null;
     };
     /**
@@ -41435,6 +41600,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['FashionPresentation'][];
+    };
+    PaginatedFeatureTypeList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['FeatureType'][];
     };
     PaginatedFlowDefinitionListList: {
       /** @example 123 */
@@ -44129,11 +44309,11 @@ export interface components {
       /** @description Process-derived control bonus from the COMBAT engagement. */
       readonly control_modifier: number | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
+      readonly current_square: components['schemas']['Square'] | null;
       readonly aftermath: components['schemas']['AftermathDigest'] | null;
       /** @description Return spent reactions only to the owner, GM, or staff. */
       readonly reactions_used: number | null;
-      /** @description Return the remaining reaction availability without exposing other pools. */
-      readonly reactions_remaining: number | null;
+      readonly dodge_plan: components['schemas']['DodgePlan'] | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -44359,21 +44539,6 @@ export interface components {
     PatchedCharacterAuraRequest: {
       /** @description The character this aura belongs to. */
       character?: number;
-      /**
-       * Format: decimal
-       * @description Percentage of Celestial affinity (0-100).
-       */
-      celestial?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Primal affinity (0-100).
-       */
-      primal?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Abyssal affinity (0-100).
-       */
-      abyssal?: string;
     };
     /** @description Serializer for character drafts. */
     PatchedCharacterDraftRequest: {
@@ -45918,9 +46083,9 @@ export interface components {
      *     account (staff may pass any sheet).
      *
      *     Read-only computed fields (SerializerMethodFields):
-     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - level_cap: the character-level cap (compute_level_cap)
      *     - anchor_cap: the anchor-side cap (compute_anchor_cap)
-     *     - effective_cap: min(path_cap, anchor_cap)
+     *     - effective_cap: min(level_cap, anchor_cap)
      */
     PatchedThreadRequest: {
       /** @description Resonance this thread channels. */
@@ -46359,6 +46524,9 @@ export interface components {
       /** Format: double */
       damage_scale: number;
       cancelled: boolean;
+      attack_name: string;
+      covered_position_id: number | null;
+      covered_position_name: string | null;
     };
     /**
      * @description Player-facing view of a pending Audere Majora (Crossing) offer (#543). Read-only.
@@ -46719,6 +46887,8 @@ export interface components {
     PersonaPosition: {
       readonly persona_id: number;
       readonly position: components['schemas']['PositionSummary'] | null;
+      readonly square_x: number | null;
+      readonly square_y: number | null;
     };
     /**
      * @description Serializer for an earned, displayable character title (#1522, #3466).
@@ -47330,6 +47500,14 @@ export interface components {
       readonly integrity: number | null;
       readonly max_integrity: number | null;
     };
+    /** @description Read-only serializer for one feature standing in a place (#4675). */
+    PositionFeature: {
+      readonly id: number;
+      readonly name: string;
+      readonly art_url: string | null;
+      readonly square_x: number | null;
+      readonly square_y: number | null;
+    };
     /** @description Read-only serializer for one PositionNode — tactical-map node shape (#2006). */
     PositionNode: {
       readonly id: number;
@@ -47344,6 +47522,13 @@ export interface components {
       readonly rampart_crack_state: string | null;
       readonly is_roofed: boolean;
       readonly screens_ranged: boolean;
+      readonly area_x: number | null;
+      readonly area_y: number | null;
+      readonly area_w: number | null;
+      readonly area_h: number | null;
+      readonly terrain_name: string | null;
+      readonly terrain_art_url: string | null;
+      readonly features: components['schemas']['PositionFeature'][];
     };
     /** @description Compact public representation of a Position (id + name). */
     PositionSummary: {
@@ -49438,8 +49623,9 @@ export interface components {
       player_line: string;
       price: number;
       techniques: number;
-      magic_skill_floor: number;
+      training_points: number;
       grants_distinction_id: number | null;
+      grants_distinction_name: string | null;
       offer_id: number | null;
     };
     /**
@@ -50049,7 +50235,7 @@ export interface components {
       readonly sineater_sheet_id: number | null;
       /** @description Return the Sinner's current Hollow capacity (from the capstone Thread). */
       readonly hollow_current: number;
-      /** @description Return the Sinner's Hollow maximum (thread.level * 10). */
+      /** @description Return the Sinner's Hollow maximum (``_compute_hollow_max``, shown level × mult). */
       readonly hollow_max: number;
       /** @description Return the Sineater's total lifetime_helped across all resonances for this bond. */
       readonly sineater_lifetime_helped: number;
@@ -50175,6 +50361,11 @@ export interface components {
       readonly base_value: number;
       /** Format: date-time */
       readonly created_at: string;
+    };
+    /** @description A battle-map square inside a place (#4651): drawing only. */
+    Square: {
+      readonly x: number;
+      readonly y: number;
     };
     StaffBeginningsRequest: {
       beginnings: number;
@@ -52647,9 +52838,9 @@ export interface components {
      *     account (staff may pass any sheet).
      *
      *     Read-only computed fields (SerializerMethodFields):
-     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - level_cap: the character-level cap (compute_level_cap)
      *     - anchor_cap: the anchor-side cap (compute_anchor_cap)
-     *     - effective_cap: min(path_cap, anchor_cap)
+     *     - effective_cap: min(level_cap, anchor_cap)
      */
     Thread: {
       readonly id: number;
@@ -52681,11 +52872,11 @@ export interface components {
       readonly level: number;
       /** @description Permanent points; advances level via ThreadLevelUnlock entries. */
       readonly developed_points: number;
-      /** @description Return the path-side cap for this thread's owner. */
-      readonly path_cap: number;
+      /** @description Return the character-level cap for this thread's owner (#4585). */
+      readonly level_cap: number;
       /** @description Return the anchor-side cap for this thread. */
       readonly anchor_cap: number;
-      /** @description Return min(path_cap, anchor_cap). */
+      /** @description Return min(level_cap, anchor_cap). */
       readonly effective_cap: number;
       /**
        * Format: date-time
@@ -52756,9 +52947,9 @@ export interface components {
      *     account (staff may pass any sheet).
      *
      *     Read-only computed fields (SerializerMethodFields):
-     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - level_cap: the character-level cap (compute_level_cap)
      *     - anchor_cap: the anchor-side cap (compute_anchor_cap)
-     *     - effective_cap: min(path_cap, anchor_cap)
+     *     - effective_cap: min(level_cap, anchor_cap)
      */
     ThreadRequest: {
       /** @description Resonance this thread channels. */
@@ -53043,6 +53234,10 @@ export interface components {
       readonly own_wording: string;
       readonly refund: number;
       readonly schooling: components['schemas']['SchoolingLine'][];
+      /** @description The Gifts this Tradition teaches well (its ``TraditionGiftGrant`` rows, #4659). */
+      readonly favored_gift_names: string[];
+      /** @description The affinities this Tradition teaches well (``favored_affinities``, #4659). */
+      readonly favored_affinity_names: string[];
     };
     /** @description Read-only serializer for a character's training allocation. */
     TrainingAllocation: {
@@ -56089,6 +56284,62 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['AreaList'];
+        };
+      };
+    };
+  };
+  areas_feature_types_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description Where the feature can take her.
+         *
+         *     * `adjacent` - A place next to its own
+         *     * `any_place` - Any place in the room
+         *     * `same_type` - Another place with the same feature
+         *     * `elevated_adjacent` - A raised place next to its own
+         */
+        reach?: 'adjacent' | 'any_place' | 'elevated_adjacent' | 'same_type';
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedFeatureTypeList'];
+        };
+      };
+    };
+  };
+  areas_feature_types_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this feature type. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FeatureType'];
         };
       };
     };
@@ -72458,6 +72709,47 @@ export interface operations {
       };
     };
   };
+  magic_affinities_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Affinity'][];
+        };
+      };
+    };
+  };
+  magic_affinities_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this affinity. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Affinity'];
+        };
+      };
+    };
+  };
   magic_applicable_pulls_create: {
     parameters: {
       query?: never;
@@ -74375,6 +74667,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ResonanceGrant'];
+        };
+      };
+    };
+  };
+  magic_resonances_list: {
+    parameters: {
+      query?: {
+        affinity?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Resonance'][];
+        };
+      };
+    };
+  };
+  magic_resonances_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this resonance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Resonance'];
         };
       };
     };

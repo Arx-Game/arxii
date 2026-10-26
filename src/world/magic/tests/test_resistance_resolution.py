@@ -53,7 +53,7 @@ class PassiveGiftResistanceHandlerTests(TestCase):
             target_gift=self.gift,
             resonance=self.resonance,
             tier=0,
-            min_thread_level=10,
+            min_thread_level=1,  # shown; met at stored 10 (#4585)
             effect_kind=EffectKind.RESISTANCE,
             flat_bonus_amount=None,
             resistance_amount=3,
@@ -104,7 +104,7 @@ class PassiveGiftResistanceHandlerTests(TestCase):
         self._set_level(0)
         handler = self.sheet.character.threads
         # min_thread_level=0 null-type row contributes 2 to any type; the fire
-        # row (min_thread_level=10) is still inert at level 0.
+        # row (min_thread_level=1, shown) is still inert at level 0.
         self.assertEqual(handler.passive_damage_type_resistance(cold), 2)
         self.assertEqual(handler.passive_damage_type_resistance(self.fire), 2)
 
@@ -175,13 +175,13 @@ class GiftResistanceNettingTests(TestCase):
         cls.resonance = ResonanceFactory()
         cls.gift = GiftFactory()
         cls.thread = provision_latent_gift_thread(cls.sheet, cls.gift, resonance=cls.resonance)
-        # +3 fire gift resistance, switching on at thread level 10.
+        # +3 fire gift resistance, switching on at stored thread level 10 (shown 1).
         ThreadPullEffectFactory(
             target_kind=TargetKind.GIFT,
             target_gift=cls.gift,
             resonance=cls.resonance,
             tier=0,
-            min_thread_level=10,
+            min_thread_level=1,  # shown; met at stored 10 (#4585)
             effect_kind=EffectKind.RESISTANCE,
             flat_bonus_amount=None,
             resistance_amount=3,

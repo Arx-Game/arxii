@@ -12,16 +12,20 @@ Covers:
 
 from decimal import Decimal
 
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GainSource
+from world.magic.exceptions import ConversionMappingError
 from world.magic.factories import (
-    AffinityFactory,
     ResonanceFactory,
+    ensure_canonical_affinities,
+    ensure_conversion_pairs,
     with_corruption_at_stage,
 )
 from world.magic.models import (
+    AffinityInteraction,
     CharacterAura,
     CharacterResonance,
     FallRedemptionRecord,
@@ -36,7 +40,9 @@ from world.magic.services.atonement import (
     AtonementNothingToAtone,
     perform_atonement_rite,
 )
+from world.magic.services.aura import set_aura_shares
 from world.magic.services.conversion import (
+    conversion_pair,
     convert_resonance,
     get_fall_redemption_config,
 )
@@ -45,22 +51,30 @@ from world.magic.services.fall_redemption import (
     perform_fall,
 )
 from world.magic.services.resonance import grant_resonance
+from world.magic.types import AffinityShare
 
 
 def _set_aura(sheet, celestial=80, primal=10, abyssal=10):
     """Create or update a CharacterAura with given percentages."""
     aura, _ = CharacterAura.objects.get_or_create(character=sheet)
-    aura.celestial = Decimal(str(celestial))
-    aura.primal = Decimal(str(primal))
-    aura.abyssal = Decimal(str(abyssal))
-    aura.save()
+    celestial_row, primal_row, abyssal_row = ensure_canonical_affinities()
+    set_aura_shares(
+        aura,
+        [
+            AffinityShare(affinity=row, percent=Decimal(str(percent)))
+            for row, percent in (
+                (celestial_row, celestial),
+                (primal_row, primal),
+                (abyssal_row, abyssal),
+            )
+            if percent
+        ],
+    )
 
 
 def _setup_affinities_and_resonances():
-    """Create the three affinities and one resonance per affinity."""
-    cele_aff = AffinityFactory(name="Celestial")
-    primal_aff = AffinityFactory(name="Primal")
-    abyssal_aff = AffinityFactory(name="Abyssal")
+    """Create the three affinities (with authored conversion pairs) and one resonance each."""
+    cele_aff, primal_aff, abyssal_aff = ensure_conversion_pairs()
     cele_res = ResonanceFactory(name="Bene", affinity=cele_aff)
     primal_res = ResonanceFactory(name="Praedari", affinity=primal_aff)
     abyssal_res = ResonanceFactory(name="Dissolution", affinity=abyssal_aff)
@@ -70,12 +84,12 @@ def _setup_affinities_and_resonances():
 def _setup_conversion_mappings(cele_res, primal_res, abyssal_res):
     """Create ResonanceConversion mappings for all paths."""
     mappings = [
-        (cele_res, "primal", primal_res),
-        (cele_res, "abyssal", abyssal_res),
-        (primal_res, "abyssal", abyssal_res),
-        (primal_res, "celestial", cele_res),
-        (abyssal_res, "primal", primal_res),
-        (abyssal_res, "celestial", cele_res),
+        (cele_res, primal_res.affinity, primal_res),
+        (cele_res, abyssal_res.affinity, abyssal_res),
+        (primal_res, abyssal_res.affinity, abyssal_res),
+        (primal_res, cele_res.affinity, cele_res),
+        (abyssal_res, primal_res.affinity, primal_res),
+        (abyssal_res, cele_res.affinity, cele_res),
     ]
     for source, target_aff, target_res in mappings:
         ResonanceConversion.objects.get_or_create(
@@ -109,8 +123,9 @@ class TestGrantCompromiseResonance(TestCase):
 
         # Aura should have drifted toward Primal
         aura = CharacterAura.objects.get(character=sheet)
-        self.assertLess(aura.celestial, Decimal(80))
-        self.assertGreater(aura.primal, Decimal(10))
+        celestial_row, primal_row, _ = ensure_canonical_affinities()
+        self.assertLess(aura.percent_for(celestial_row), Decimal(80))
+        self.assertGreater(aura.percent_for(primal_row), Decimal(10))
 
     def test_grants_abyssal_resonance_from_cruelty(self):
         """A cruelty act grants Abyssal resonance."""
@@ -143,20 +158,21 @@ class TestConvertResonanceFull(TestCase):
     def test_celestial_to_primal_conversion(self):
         """Celestial→Primal full conversion with 1.2× multiplier."""
         sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        cele_aff, primal_aff, _, cele_res, primal_res, abyssal_res = (
+            _setup_affinities_and_resonances()
+        )
         _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
 
         # Grant some Celestial resonance
         grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
         _set_aura(sheet, celestial=80, primal=10, abyssal=10)
 
-        config = get_fall_redemption_config()
-        multiplier = config.celestial_to_primal_multiplier
+        multiplier = conversion_pair(cele_aff, primal_aff).conversion_multiplier
 
         result = convert_resonance(
             sheet,
-            source_affinity="celestial",
-            target_affinity="primal",
+            source_affinity=cele_aff,
+            target_affinity=primal_aff,
             multiplier=multiplier,
             partial=False,
         )
@@ -184,19 +200,20 @@ class TestConvertResonanceFull(TestCase):
     def test_redemption_is_lossy(self):
         """Abyssal→Primal redemption with 0.7× multiplier reduces balance."""
         sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        _, primal_aff, abyssal_aff, cele_res, primal_res, abyssal_res = (
+            _setup_affinities_and_resonances()
+        )
         _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
 
         grant_resonance(sheet, abyssal_res, 100, source=GainSource.STAFF_GRANT)
         _set_aura(sheet, celestial=10, primal=10, abyssal=80)
 
-        config = get_fall_redemption_config()
-        multiplier = config.abyssal_to_primal_multiplier  # 0.7
+        multiplier = conversion_pair(abyssal_aff, primal_aff).conversion_multiplier  # 0.7
 
         result = convert_resonance(
             sheet,
-            source_affinity="abyssal",
-            target_affinity="primal",
+            source_affinity=abyssal_aff,
+            target_affinity=primal_aff,
             multiplier=multiplier,
             partial=False,
         )
@@ -213,7 +230,9 @@ class TestConvertResonancePartial(TestCase):
     def test_partial_conversion_reduces_balance(self):
         """Atonement converts some Primal balance back to Celestial at 0.5×."""
         sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        cele_aff, primal_aff, _, cele_res, primal_res, abyssal_res = (
+            _setup_affinities_and_resonances()
+        )
         _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
 
         # Grant Celestial + Primal resonance
@@ -225,8 +244,8 @@ class TestConvertResonancePartial(TestCase):
 
         result = convert_resonance(
             sheet,
-            source_affinity="primal",
-            target_affinity="celestial",
+            source_affinity=primal_aff,
+            target_affinity=cele_aff,
             multiplier=config.penance_exchange_rate,  # 0.5
             partial=True,
             penance_amount=40,
@@ -240,13 +259,65 @@ class TestConvertResonancePartial(TestCase):
         self.assertEqual(conv.granted_balance, 20)
 
 
+class TestConversionPair(TestCase):
+    """``conversion_pair`` refuses a pair that is not fully authored."""
+
+    def test_pair_with_multiplier_and_type_is_returned(self):
+        cele, primal, _ = ensure_conversion_pairs()
+        pair = conversion_pair(cele, primal)
+        self.assertEqual(pair.conversion_type, ConversionType.FALL)
+
+    def test_unconverted_pair_is_a_mapping_error(self):
+        cele, primal, _ = ensure_conversion_pairs()
+        pair = AffinityInteraction.objects.get(source_affinity=cele, environment_affinity=primal)
+        pair.conversion_type = ""
+        pair.conversion_multiplier = None
+        pair.save(update_fields=["conversion_type", "conversion_multiplier"])
+        AffinityInteraction.objects.clear_cache()
+        with self.assertRaises(ConversionMappingError):
+            conversion_pair(cele, primal)
+
+    def test_no_row_at_all_is_a_mapping_error(self):
+        cele, primal, _ = ensure_canonical_affinities()
+        AffinityInteraction.objects.clear_cache()
+        with self.assertRaises(ConversionMappingError):
+            conversion_pair(cele, primal)
+
+    def test_half_authored_pair_is_refused_by_the_database(self):
+        cele, primal, _ = ensure_conversion_pairs()
+        pair = AffinityInteraction.objects.get(source_affinity=cele, environment_affinity=primal)
+        self.addCleanup(pair.refresh_from_db)
+        pair.conversion_type = ""
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            pair.save(update_fields=["conversion_type"])
+
+    def test_unconverted_pair_fall_is_a_clean_refusal(self):
+        from world.magic.exceptions import FallEligibilityError
+
+        sheet = CharacterSheetFactory()
+        _, primal_aff, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
+        pair = AffinityInteraction.objects.get(
+            source_affinity=cele_res.affinity, environment_affinity=primal_aff
+        )
+        pair.conversion_type = ""
+        pair.conversion_multiplier = None
+        pair.save(update_fields=["conversion_type", "conversion_multiplier"])
+        AffinityInteraction.objects.clear_cache()
+        grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
+        grant_resonance(sheet, primal_res, 100, source=GainSource.STAFF_GRANT)
+        _set_aura(sheet, celestial=50, primal=45, abyssal=5)
+        with self.assertRaises(FallEligibilityError):
+            perform_fall(sheet, target_affinity=primal_aff)
+
+
 class TestPerformFall(TestCase):
     """The full Fall/Redemption ceremony."""
 
     def test_fall_celestial_to_primal(self):
         """Celestial Falls to Primal when Primal aura crosses threshold."""
         sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        _, primal_aff, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
         _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
 
         # Make the character dominant Celestial but with high Primal drift
@@ -254,10 +325,10 @@ class TestPerformFall(TestCase):
         grant_resonance(sheet, primal_res, 100, source=GainSource.STAFF_GRANT)
         _set_aura(sheet, celestial=50, primal=45, abyssal=5)
 
-        result = perform_fall(sheet, target_affinity="primal")
+        result = perform_fall(sheet, target_affinity=primal_aff)
 
-        self.assertEqual(result.from_affinity, "celestial")
-        self.assertEqual(result.to_affinity, "primal")
+        self.assertEqual(result.from_affinity.name, "Celestial")
+        self.assertEqual(result.to_affinity, primal_aff)
         self.assertEqual(result.conversion_type, ConversionType.FALL)
 
         # Record exists
@@ -276,7 +347,7 @@ class TestPerformFall(TestCase):
         from world.magic.exceptions import FallEligibilityError
 
         sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        _, primal_aff, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
         _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
 
         grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
@@ -284,14 +355,14 @@ class TestPerformFall(TestCase):
         _set_aura(sheet, celestial=90, primal=5, abyssal=5)
 
         with self.assertRaises(FallEligibilityError):
-            perform_fall(sheet, target_affinity="primal")
+            perform_fall(sheet, target_affinity=primal_aff)
 
     def test_fall_irreversible(self):
         """Cannot Fall from the same affinity to the same target twice."""
         from world.magic.exceptions import FallEligibilityError
 
         sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        _, primal_aff, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
         _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
 
         grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
@@ -299,27 +370,27 @@ class TestPerformFall(TestCase):
         _set_aura(sheet, celestial=50, primal=45, abyssal=5)
 
         # First Fall succeeds
-        perform_fall(sheet, target_affinity="primal")
+        perform_fall(sheet, target_affinity=primal_aff)
 
         # Aura should now be Primal-dominant (after conversion)
         aura = CharacterAura.objects.get(character=sheet)
-        self.assertEqual(aura.dominant_affinity.value, "primal")
+        self.assertEqual(aura.dominant_affinity.name, "Primal")
 
         # Second Fall from primal to primal is refused (same affinity)
         with self.assertRaises(FallEligibilityError):
-            perform_fall(sheet, target_affinity="primal")
+            perform_fall(sheet, target_affinity=primal_aff)
 
     def test_redemption_abyssal_to_primal(self):
         """Abyssal character Redeems to Primal (lossy)."""
         sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        _, primal_aff, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
         _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
 
         grant_resonance(sheet, abyssal_res, 100, source=GainSource.STAFF_GRANT)
         grant_resonance(sheet, primal_res, 50, source=GainSource.STAFF_GRANT)
         _set_aura(sheet, celestial=5, primal=45, abyssal=50)
 
-        result = perform_fall(sheet, target_affinity="primal")
+        result = perform_fall(sheet, target_affinity=primal_aff)
 
         self.assertEqual(result.conversion_type, ConversionType.REDEMPTION)
 
@@ -330,6 +401,30 @@ class TestPerformFall(TestCase):
         primal_cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=primal_res)
         # 50 (original) + 70 (converted 100 * 0.7) = 120
         self.assertEqual(primal_cr.balance, 120)
+
+    def test_fall_missing_pair_is_clean_refusal(self):
+        """A path with no authored conversion pair refuses with a message, not a crash."""
+        from world.magic.exceptions import FallEligibilityError
+
+        sheet = CharacterSheetFactory()
+        _, primal_aff, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
+        pair = AffinityInteraction.objects.get(
+            source_affinity=cele_res.affinity, environment_affinity=primal_aff
+        )
+        pair.conversion_multiplier = None
+        pair.conversion_type = ""
+        pair.save(update_fields=["conversion_multiplier", "conversion_type"])
+        AffinityInteraction.objects.clear_cache()
+
+        grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
+        grant_resonance(sheet, primal_res, 100, source=GainSource.STAFF_GRANT)
+        _set_aura(sheet, celestial=50, primal=45, abyssal=5)
+
+        with self.assertRaises(FallEligibilityError) as ctx:
+            perform_fall(sheet, target_affinity=primal_aff)
+        self.assertIn("No conversion is authored", ctx.exception.user_message)
+        self.assertFalse(FallRedemptionRecord.objects.filter(character_sheet=sheet).exists())
 
 
 class TestExtendedAtonement(TestCase):

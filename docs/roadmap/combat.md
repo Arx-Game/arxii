@@ -114,10 +114,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   WHICH-to-call is a follow-up). Since #3572 every telegraph names its target and
   pending wind-ups are visible on the rail (threat strip with Guard/Strike prefills)
   and in the telnet `combat` hub. `Situation.ENEMY_WINDUP_UNDERWAY`/
-  `ENEMY_WINDUP_CALLED_OUT` are live evaluators. Separately, `REACTIONS_PER_ROUND` (1)
-  and `ABSORPTION_CAP_PER_MOMENT` (2) now gate the shared interpose fire seam
-  (`world/combat/tests/test_reaction_economy.py`: second reaction declines, resets
-  next round, a third answer on one payload declines). In-PR investigation found
+  `ENEMY_WINDUP_CALLED_OUT` are live evaluators. Separately, `ABSORPTION_CAP_PER_MOMENT`
+  (2) gates the shared interpose fire seam (a third answer on one payload declines); the
+  per-participant reaction cap that sat beside it is gone since #4676 (a later reaction
+  is a harder roll instead, `world/combat/tests/test_reaction_economy.py`). In-PR investigation found
   `select_npc_actions` had zero production callers — `resolve_round` now auto-selects
   as a conservative fallback when a round has no NPC selection yet (see ADR-0161).
 - **PC sustained actions — the wind-up mirror, for a PC's own commitments (#2705,
@@ -291,8 +291,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   read-only `@xyflow/react` canvas with occupant avatars per node, edges styled by
   passability/gating, and click-to-move via the existing `move_to_position`/
   `take_position` actions. `SceneTacticalMap` replaced the old `RoomPositionsPanel`
-  text-list UI on the scene page; `CombatTacticalMap` mounts as a "Map" tab in
-  `CombatRail`'s right rail (default tab stays "Your Turn") — `CombatRail` renders
+  text-list UI on the scene page; `CombatTacticalMap` mounted as a "Map" tab in
+  `CombatRail`'s right rail until #4670 made it the main view of a fight; `CombatRail` renders
   in-scene on `/scenes/:id` (#2197; the dedicated `CombatScenePage` route is gone).
   Both `SceneDetail`
   and `EncounterDetail` now serve the full node+edge graph (`position_nodes`/
@@ -387,6 +387,61 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   struck enemy morale. The three numbers live in the `NpcTacticsConfig` staff row. Journeys:
   `src/integration_tests/test_npc_tactics_journeys.py`; the progress guarantee is fuzzed in
   `src/integration_tests/fuzz/test_npc_progress_fuzz.py`. This completes #4576.
+- **Movement by capability and held ground (#4663, slice 2 of #4651, ADR-4663).** A player
+  character moves by her capabilities: a capability row can name a way of moving
+  (`CapabilityType.traversal`), and holding it above baseline, from a technique, condition,
+  species, distinction or gear, lets her climb or leap a walled edge for its hops, take flight
+  and land (`take_flight`, `land`, telnet `position/fly`, `position/land`), with the roof rule
+  on both. Ground a ready enemy holds stops a player character who enters it, however she moves
+  on the ground (walking, climbing or leaping; landing in it too); NPCs do not roll, so an NPC
+  walker or climber stops there and an NPC flier or leaper passes (`held_ground.py`; routing
+  treats it as the end of a route). A character with a matching
+  capability can roll to get past instead (`pass_held_ground`, telnet `position/pass <name>`):
+  clean, past at the template's price, or stopped in the place. Staff set the challenge on the
+  `MovementConfig` row; none authored means no pass. Capabilities raised by sheet modifiers now
+  count as challenge capability sources, one action per approach from the strongest source.
+  She is not stopped by ground held below her while in the air. Journeys: `test_moving_by_capability_journeys.py`,
+  `test_holding_ground_journeys.py`, `test_crossing_a_wall_journeys.py`.
+- **The battle map is the main view of a fight (#4670, slice 1 of #4651, ADR-4670) [BUILT &
+  WIRED].** The combat map is now an SVG drawing, not a React Flow graph. Staff give a place a
+  rectangle (`area_x/y/w/h`, in map squares) and a `MapTerrain` ground look (admin; both on
+  `Position` and `BlueprintPosition`, copied when a blueprint is staged). A fighter stands on a
+  square inside the place (`ObjectPosition.square_x/y`): a move can name a square, and
+  `step_to_square` re-tiles inside the place she holds for free. A place with no area is drawn
+  as a derived 3x2 box and takes no square. Squares are drawing only: hops, held ground, walls
+  and reach still read places. The encounter payload carries `current_square` and
+  `held_positions` (who holds each enemy-held place), and the scene payload carries persona
+  squares. The map (`BattleMap`, `CombatMainMap`) sits in the wide column of the scene page and
+  the game page for the whole fight; the rail keeps Your Turn, and GM for a GM. Outside a
+  fight the scene map is still `SceneTacticalMap`. Journeys:
+  `test_battle_map_drawing_journeys.py`. Not built: staff tools to draw areas on a canvas
+  (areas are authored as numbers in admin).
+- **Features and stunts (#4675, slice 3 of #4651, ADR-4675) [BUILT & WIRED].** Staff author a
+  catalog of feature types in admin (art, a reach rule, and a challenge template) and attach them to
+  blueprint places; staging copies them to the live places, and a GM can add or remove one mid-fight
+  from the GM tab (`gm_attach_feature`, `gm_detach_feature`, `GET /api/areas/feature-types/`). A
+  character standing in a place with a feature, and a capability that matches one of the
+  template's approaches, sees "<Feature> to <Place>" in her move list and rolls it
+  (`perform_stunt`, telnet `position/stunt`): clean or partial moves her, a miss leaves her where she
+  is with the template's consequences applied, and every try spends one hop in a declaring round.
+  Landing in held ground stops her. The map draws features in a layer under the tokens. NPCs do not
+  use features and no prone condition is coded. Journeys: `test_features_and_stunts_journeys.py`.
+  Not built: NPCs using features.
+- **Reactions and area attacks (#4676, slice 4 of #4651, ADR-4676) [BUILT & WIRED].** A
+  capability with a `reaction_reach` (or a Phase Step ward) makes a character dodge NPC attacks
+  automatically: the defense roll gets the capability's value as a bonus, the dodge costs anima
+  or physical fatigue (`MovementConfig.dodge_anima_cost`/`dodge_fatigue_cost`), and each
+  reaction already made this round takes `reaction_difficulty_step` off the roll. The
+  one-reaction-per-round cap is gone; guarding and catching count as reactions under the same
+  step, and a guardian's repeat answer resolves a fresh Interpose challenge instance. While
+  declaring she sets a dodge plan (`combat_dodge`; telnet `combat dodge`; Your Turn "If
+  you're attacked this round"): dodge in place, land somewhere her reach covers, or not at
+  all. Phase Step now lands on that plan, never on a place the game picks, and against an NPC
+  attack its all-or-nothing cancel is the defense roll. `ThreatPoolEntry.covers_place` hits
+  everyone in a place; a wound-up one is drawn on the map a round ahead and warns whoever stands
+  there, and only leaving the place (on her turn or by a dodge landing outside it) escapes it.
+  Journeys: `test_dodging_journeys.py`. Not built: NPCs dodging, and covering attacks that
+  spread past one place.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips
@@ -822,7 +877,7 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   `SituationRequirementMixin`'s four typed columns (`threshold_percent`/`count_threshold`/
   `affinity`/`origin_side`) on both `VowSituationalPerkSituation` and `VowSituationalPerkRung`,
   a per-situation `SITUATION_PARAM_SPECS` allowed/required contract, `ATTACKER_AFFINITY`
-  authorable against any `AffinityType` axis (was Abyssal-only), and
+  authorable against any affinity row (was Abyssal-only), and
   `CombatEncounter.initiated_by_pc_side` recording who sprang a fight for `origin_side`-gated
   ambush/parley perks. #2646 follow-up adds a 15th situation, `ON_CHOSEN_GROUND` — "the fight
   was won yesterday": `CombatEncounter.on_chosen_ground` is stamped at CREATE time in the three

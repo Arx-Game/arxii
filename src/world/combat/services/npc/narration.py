@@ -8,20 +8,14 @@ from world.combat.models import CombatEncounter
 def _dual_dispatch_combat_narration(encounter: CombatEncounter, narration: str) -> None:
     """Broadcast a combat narration line to BOTH clients (HARD telnet parity).
 
-    Mirrors ``world.covenants.perks.services.announce_fired_perks``'s
-    dual-dispatch shape: a persisted, Narrator-authored OUTCOME Interaction
-    over the WS interaction payload
-    (``world.combat.interaction_services.broadcast_action_outcome``) PLUS a
-    direct ``room.msg_contents(narration)`` text companion so bare telnet
-    clients render the identical line — ``broadcast_action_outcome`` alone is
-    WS-only.
+    A persisted, Narrator-authored OUTCOME Interaction
+    (``world.combat.interaction_services.broadcast_action_outcome``), which pushes
+    the WS payload to web sessions and the same line as plain text to telnet
+    sessions (#4640).
     """
     from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 
     broadcast_action_outcome(encounter=encounter, narration=narration)
-    room = encounter.room
-    if room is not None:
-        room.msg_contents(narration)
 
 
 def _broadcast_commitment_line(encounter: CombatEncounter, narration: str) -> None:

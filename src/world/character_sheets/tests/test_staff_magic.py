@@ -22,6 +22,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import (
     CharacterAura,
@@ -62,6 +63,7 @@ class GrantMagicTests(TestCase):
         cls.skill = SkillFactory()
 
     def setUp(self) -> None:
+        ensure_canonical_affinities()
         self.entry = RosterEntryFactory()
         RosterTenureFactory(player_data=self.player, roster_entry=self.entry, player_number=1)
         self.sheet = self.entry.character_sheet

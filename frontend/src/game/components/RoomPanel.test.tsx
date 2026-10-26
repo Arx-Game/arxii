@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, act } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -28,7 +28,10 @@ const renderEmptyRoom = (character: string | null) =>
 
 describe('RoomPanel location recovery', () => {
   afterEach(() => {
-    store.dispatch(resetGame());
+    // Components are still mounted here; reset inside act so they re-render cleanly.
+    act(() => {
+      store.dispatch(resetGame());
+    });
     vi.clearAllMocks();
   });
 

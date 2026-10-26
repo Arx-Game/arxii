@@ -54,7 +54,11 @@ They do not use the command system, dispatchers, or handlers.
   (engagement locks, #2020; telnet `combat engage`/`combat disengage` since #3396;
   the web affordance #3396 deferred to #3381 never landed there — tracked in #3447)/
   `MarkAction` (#4603: a free act that writes only a `CombatMark`, never a
-  `CombatRoundAction`; telnet `combat mark <opp>`, web opponent menu "Mark") (keys
+  `CombatRoundAction`; telnet `combat mark <opp>`, web opponent menu "Mark")/
+  `DodgePlanAction` (key `combat_dodge`, #4676: sets this round's dodge plan while declaring;
+  kwargs `dodge` (false turns it off), `position_id` or `place`; telnet
+  `combat dodge [<place>|here|off]`, web Your Turn "If you're attacked this round"; not in the
+  available-actions list, dispatched by key) (keys
   prefixed `combat_`). `SuccorAction` (key `combat_succor`) wraps `declare_succor` — always
   names a specific ally (no "any ally" path, unlike Interpose). `UseItemManeuverAction`
   (key `combat_use`, #2120) wraps `declare_use_item` — a primary maneuver (consumes the
@@ -160,7 +164,22 @@ They do not use the command system, dispatchers, or handlers.
   DECLARING and `movement_budget.hops_left` is above 0, and `execute()` then spends one hop
   (`spend_combat_hop`); RESOLVING and BETWEEN_ROUNDS refuse with a reason. `_positioning_actions`
   builds move entries by hand, so it asks the prerequisite itself and puts the refusal or the
-  "N hops left this round." line on each entry. `positioning.py`'s `SetTheStageAction` names what it staged ("You set the stage with Lone
+  "N hops left this round." line on each entry. `positioning.py` (#4663) also holds `take_flight` (`TakeFlightAction`, `CanFlyPrerequisite`), `land`
+  (`LandAction`, `AirbornePrerequisite`) and `pass_held_ground` (`PassHeldGroundAction`, kwargs
+  `position_id`, optional `approach_id`); each carries `CombatMovementPrerequisite` and spends hops in a
+  DECLARING round. From #4675 it also holds `perform_stunt`
+  (`PerformStuntAction`; kwargs `feature_id`, `position_id` for the destination, optional `approach_id`; the
+  roll and move are `world.areas.positioning.stunts.perform_stunt`; one hop in a declaring round, a miss
+  included), `gm_attach_feature` (`position_id`, `feature_type_id`, optional `square_x`/`square_y`) and
+  `gm_detach_feature` (`feature_id`); the two GM actions check `_actor_may_gm_place` inside `execute`.
+  `ActionRef.feature_id` exists for them, and `_dispatch_registry` forwards `ref.position_id`,
+  `ref.feature_id` and `ref.approach_id` into the action's kwargs (a ref's `approach_id` overrides the same
+  key in `kwargs`; only stunt and pass refs set it). `MoveToPositionAction` derives the mover's traversals (`player_traversals`) and spends a
+  wall crossing's cost; entering held ground stops a player character however she moves on the
+  ground, landing included ("You are stopped by <name>."; NPC walkers and climbers stop, NPC fliers
+  and leapers pass). The pass roll is narrated to the room ("<name> gets past <holder> into
+  <place>."). Telnet
+  `position/fly`, `/land`, `/pass <name>`. `positioning.py`'s `SetTheStageAction` names what it staged ("You set the stage with Lone
   Dais: Center."; it had answered with no message), and `distinctions.py`'s
   `GMAwardDistinctionAction` searches quietly and answers an absent name itself ("Could not
   find 'Nobody'.", as `GrantItemAction` does) and refuses a distinction already at its

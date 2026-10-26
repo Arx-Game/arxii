@@ -1,1 +1,1 @@
-0293_npc_tactics_config
+0307_affinity_rows_contract

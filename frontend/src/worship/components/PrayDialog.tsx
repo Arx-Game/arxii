@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
@@ -77,7 +78,7 @@ export function PrayDialog({ characterId, defaultBeingId }: PrayDialogProps) {
           Pray
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent {...NO_DESCRIPTION}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Pray</DialogTitle>

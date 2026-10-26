@@ -169,6 +169,28 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
         path = PathFactory(stage=stage)
         CharacterPathHistory.objects.create(character=self, path=path)
 
+    @factory.post_generation
+    def _class_level(
+        self: CharacterSheet,
+        create: bool,
+        extracted: object,
+        **kwargs: object,
+    ) -> None:
+        """Give the character a primary class level of the given integer.
+
+        Pass ``_class_level=<int>``. ``get_character_path_level`` reads it, so it sets
+        the thread level cap (``compute_level_cap`` = level × 10, #4585).
+        """
+        if not create or extracted is None:
+            return
+        from world.classes.factories import CharacterClassLevelFactory
+
+        CharacterClassLevelFactory(
+            character=self,
+            level=int(extracted),  # type: ignore[arg-type]
+            is_primary=True,
+        )
+
 
 class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):
     """Factory for creating ObjectDisplayData instances."""

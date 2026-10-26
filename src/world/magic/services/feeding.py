@@ -23,6 +23,7 @@ import logging
 
 from django.db import transaction
 
+from world.magic.constants import FeedingTaintRole
 from world.magic.models.anima import CharacterAnima
 from world.magic.models.appetites import FeedingRecord
 
@@ -45,10 +46,10 @@ FEEDING_KILL_CRIME_SLUG = "murder"
 FEEDING_KILL_DEED_BASE_VALUE = 0
 
 # #3001 blood-magic taints: extraction is affinity-neutral; the METHOD carries
-# the taint. Authored CompromiseActType rows (content repo) resolved by name at
-# fire time — absent rows log and skip, never invent (#2698).
-MURDER_TAINT_ACT = "Murder by Anima Drain"
-SEDUCTION_TAINT_ACTS = ("Seduction Feeding - Deception", "Seduction Feeding - Predation")
+# the taint. Authored CompromiseActType rows (content repo) designated by their
+# ``feeding_taint_role`` field at fire time — absent rows log and skip, never
+# invent (#2698).
+SEDUCTION_TAINT_ROLES = (FeedingTaintRole.SEDUCTION_DECEPTION, FeedingTaintRole.SEDUCTION_PREDATION)
 
 
 class FeedMode:
@@ -137,12 +138,12 @@ def feed_anima(
         feeder_anima.save(update_fields=["current", "glut"])
 
         if was_lethal:
-            grant_blood_taint(feeder_sheet, MURDER_TAINT_ACT)
+            grant_blood_taint(feeder_sheet, FeedingTaintRole.MURDER)
         if take > 0 and _feeder_is_essence_kind(feeder_sheet):
             # The succubi lane: an essence feed IS the seduction (#3001 ruling —
             # +1 Insidia, +1 Praedari per feed).
-            for act_name in SEDUCTION_TAINT_ACTS:
-                grant_blood_taint(feeder_sheet, act_name)
+            for role in SEDUCTION_TAINT_ROLES:
+                grant_blood_taint(feeder_sheet, role)
 
         record = FeedingRecord.objects.create(
             feeder_sheet=feeder_sheet,
@@ -176,7 +177,7 @@ def _anima_or_none(sheet) -> CharacterAnima | None:
     return sheet.anima_or_none
 
 
-def grant_blood_taint(sheet, act_name: str) -> None:
+def grant_blood_taint(sheet, role: FeedingTaintRole) -> None:
     """Fire an authored blood-magic CompromiseActType at *sheet*, if authored.
 
     #3001: the extraction is neutral; the method (murder, seduction) grants the
@@ -187,9 +188,9 @@ def grant_blood_taint(sheet, act_name: str) -> None:
     from world.magic.models.fall_redemption import CompromiseActType  # noqa: PLC0415
     from world.magic.services.fall_redemption import grant_compromise_resonance  # noqa: PLC0415
 
-    act = CompromiseActType.objects.filter(name=act_name).first()
+    act = CompromiseActType.objects.filter(feeding_taint_role=role).first()
     if act is None:
-        logger.info("Compromise act %r not authored; blood taint skipped.", act_name)
+        logger.info("Compromise act for taint role %r not authored; blood taint skipped.", role)
         return
     grant_compromise_resonance(sheet, act)
 

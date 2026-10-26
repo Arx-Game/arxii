@@ -34,8 +34,16 @@ class AnchorCapExceeded(MagicError):
     user_message = "This thread cannot grow beyond its anchor's strength."
 
 
-class PathCapExceeded(MagicError):
-    user_message = "Your Path stage limits this thread's growth."
+class LevelCapExceeded(AnchorCapExceeded):
+    """The character-level cap, not the anchor, is what stops this thread (#4585).
+
+    Subclasses ``AnchorCapExceeded`` so every caller that already catches the cap
+    refusal keeps catching it; only the message changes, naming the binding cap.
+    Replaces the never-raised ``PathCapExceeded`` (threads are no longer capped by
+    Path stage).
+    """
+
+    user_message = "Your character level limits this thread's growth."
 
 
 class CreationThreadLevelTooHigh(MagicError):
@@ -849,3 +857,15 @@ class UnmergedFacetRelation(MagicError):
     """
 
     user_message = "These facets cannot be merged yet."
+
+
+class UnknownAffinity(MagicError):
+    """No Affinity row has the id a ritual was given (telnet and web share this refusal)."""
+
+    def __init__(self, affinity_id: object) -> None:
+        super().__init__(affinity_id)
+        self.user_message = f"No affinity with id {affinity_id}."
+
+
+class AffinityNotConfigured(MagicError):
+    user_message = "This affinity has not been set up yet."

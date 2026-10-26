@@ -3,12 +3,14 @@
 import factory
 from factory.django import DjangoModelFactory
 
+from world.checks.constants import ModifierSize
 from world.distinctions.models import (
     CharacterDistinction,
     CharacterDistinctionOther,
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
+    DistinctionEffectRankSize,
     DistinctionTag,
     SheetUpdateRequest,
 )
@@ -71,6 +73,17 @@ class DistinctionEffectFactory(DjangoModelFactory):
     target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
     value_per_rank = 5
     description = factory.Faker("sentence")
+
+
+class DistinctionEffectRankSizeFactory(DjangoModelFactory):
+    """Factory for the size a sized effect has from one rank up (#4660)."""
+
+    class Meta:
+        model = DistinctionEffectRankSize
+
+    effect = factory.SubFactory(DistinctionEffectFactory, modifier_size=ModifierSize.MINOR)
+    rank = 2
+    size = ModifierSize.MODERATE
 
 
 class CharacterDistinctionFactory(DjangoModelFactory):

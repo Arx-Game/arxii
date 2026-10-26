@@ -47,6 +47,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -549,7 +550,7 @@ function AddOpponentDialog({
           Add Opponent
         </Button>
       </DialogTrigger>
-      <DialogContent data-testid="add-opponent-dialog">
+      <DialogContent {...NO_DESCRIPTION} data-testid="add-opponent-dialog">
         <DialogHeader>
           <DialogTitle>Add Opponent</DialogTitle>
         </DialogHeader>
@@ -921,7 +922,7 @@ function AddParticipantDialog({ encounterId }: { encounterId: number }) {
           Add PC
         </Button>
       </DialogTrigger>
-      <DialogContent data-testid="add-participant-dialog">
+      <DialogContent {...NO_DESCRIPTION} data-testid="add-participant-dialog">
         <DialogHeader>
           <DialogTitle>Add PC</DialogTitle>
         </DialogHeader>
@@ -1055,7 +1056,7 @@ function StartLethalDuelDialog({ sceneId }: { sceneId: number }) {
           Start Lethal Duel
         </Button>
       </DialogTrigger>
-      <DialogContent data-testid="start-lethal-duel-dialog">
+      <DialogContent {...NO_DESCRIPTION} data-testid="start-lethal-duel-dialog">
         <DialogHeader>
           <DialogTitle>Start Lethal Duel</DialogTitle>
         </DialogHeader>

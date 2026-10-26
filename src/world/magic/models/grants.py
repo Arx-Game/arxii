@@ -170,15 +170,16 @@ class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
 
 
 class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
-    """Gift + the techniques a Tradition keeps for its members (#2426, #4555).
+    """A Gift a Tradition favors + the techniques it keeps for its members (#2426, #4555).
 
-    The (Tradition x Gift) sibling of ``PathGiftGrant`` above. The row itself makes
-    the Gift pickable for the Tradition at character creation. ``special_techniques``
+    The (Tradition x Gift) sibling of ``PathGiftGrant`` above. The row marks a Gift
+    this Tradition's teachers are better at (#4659); it does not gate the pick, since
+    any Tradition may teach any Major Gift at character creation. ``special_techniques``
     restricts: a technique listed by no Tradition grant is open to every Tradition, one
     listed here is open only to the listing Traditions, and it is still offered only on
     the Paths whose ``PathGiftGrant`` list holds it. Distinct from
     ``OrganizationGiftGrant`` (``world.societies`` — a project-acquired org capability
-    granted through play, not an authored CG availability pool).
+    granted through play, not an authored Tradition favor).
     """
 
     tradition = models.ForeignKey(
@@ -190,6 +191,10 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         _GIFT_MODEL,
         on_delete=models.PROTECT,
         related_name="tradition_grants",
+        help_text=(
+            "A Gift listed here is one this Tradition favors. "
+            "Any Gift can still be picked under any Tradition."
+        ),
     )
     special_techniques = models.ManyToManyField(
         "arxii.Technique",

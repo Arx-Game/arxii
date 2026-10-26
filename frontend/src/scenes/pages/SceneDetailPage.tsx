@@ -37,6 +37,8 @@ import { useBattleForSceneQuery } from '@/battles/queries';
 import { RitualProposedChip } from '@/rituals/components/RitualProposedChip';
 import { useEncounterForScene } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
+import { CombatMainMap } from '@/combat/components/CombatMainMap';
+import { CombatPickProvider } from '@/combat/CombatPickContext';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { GMStoryRail } from '../components/GMStoryRail';
 import { CastListPanel } from '@/gm/npcs/CastListPanel';
@@ -335,7 +337,7 @@ export function SceneDetailPage() {
       {/* One map during a fight: the rail's CombatTacticalMap draws the room
           with bystanders, so the header map unmounts (Set the Stage rides on
           it and is unavailable mid-fight by design; it returns with the map). */}
-      {!hasActiveEncounter && <SceneTacticalMap sceneId={id} />}
+      {!hasActiveEncounter && !showCombatRail && <SceneTacticalMap sceneId={id} />}
       <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
       {/* GM "Start Encounter" affordance (#3067), only while no encounter is
           active; the active-encounter controls live in the rail's GM tab. */}
@@ -372,35 +374,36 @@ export function SceneDetailPage() {
 
   return (
     <PersonaCardContext.Provider value={cardContextValue}>
-      <div className="flex h-full flex-col">
-        <div className="shrink-0 px-4 pt-4">
-          <SceneHeader scene={scene} onRefresh={() => refetch()} />
-          {battle && battle.outcome === 'unresolved' && (
-            <Link
-              to={`/scenes/${id}/battle`}
-              className="mt-1 inline-block text-sm text-blue-600 hover:underline"
-              data-testid="scene-battle-map-link"
-            >
-              Battle Map
-            </Link>
-          )}
-          {battle && battle.outcome !== 'unresolved' && (
-            <Link
-              to={`/battles/${battle.id}`}
-              className="mt-1 inline-block text-sm text-blue-600 hover:underline"
-              data-testid="scene-battle-writeup-link"
-            >
-              Battle Writeup
-            </Link>
-          )}
-          {scene && <RitualProposedChip sceneId={scene.id} />}
-          {scene?.is_owner && <PrecapturePanel sceneId={id} />}
-          {isActive && <ConsentPrompt sceneId={id} />}
-          {isActive && <SineatingInbox />}
-          {isActive && <SoulTetherRescuePrompt />}
-          {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
-          {isActive && <WitnessReactionOfferGate personaId={personaId} />}
-          {/* #3557 combat layout. Everything above this line either needs an
+      <CombatPickProvider encounterId={showCombatRail ? railEncounterId : null}>
+        <div className="flex h-full flex-col">
+          <div className="shrink-0 px-4 pt-4">
+            <SceneHeader scene={scene} onRefresh={() => refetch()} />
+            {battle && battle.outcome === 'unresolved' && (
+              <Link
+                to={`/scenes/${id}/battle`}
+                className="mt-1 inline-block text-sm text-blue-600 hover:underline"
+                data-testid="scene-battle-map-link"
+              >
+                Battle Map
+              </Link>
+            )}
+            {battle && battle.outcome !== 'unresolved' && (
+              <Link
+                to={`/battles/${battle.id}`}
+                className="mt-1 inline-block text-sm text-blue-600 hover:underline"
+                data-testid="scene-battle-writeup-link"
+              >
+                Battle Writeup
+              </Link>
+            )}
+            {scene && <RitualProposedChip sceneId={scene.id} />}
+            {scene?.is_owner && <PrecapturePanel sceneId={id} />}
+            {isActive && <ConsentPrompt sceneId={id} />}
+            {isActive && <SineatingInbox />}
+            {isActive && <SoulTetherRescuePrompt />}
+            {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
+            {isActive && <WitnessReactionOfferGate personaId={personaId} />}
+            {/* #3557 combat layout. Everything above this line either needs an
             answer (consent, sineating, soul-tether, flourish, witness) or is the scene's
             identity; it stays inline in both shapes. Below: while an encounter
             is active the header map yields to the rail's map (one map, with
@@ -408,142 +411,149 @@ export function SceneDetailPage() {
             rest of the stack folds behind one closed "Scene tools" accordion so
             the feed and composer sit under the title. Idle renders today's
             stack unchanged. */}
-          {hasActiveEncounter ? (
-            <>
-              {isActive && (
-                <div className="mt-2">
-                  <CheckCallPromptCard />
-                </div>
-              )}
-              <Accordion
-                type="single"
-                collapsible
-                className="mt-2"
-                data-testid="scene-tools-accordion"
-              >
-                <AccordionItem value="scene-tools" className="border-b-0">
-                  <AccordionTrigger className="py-2 text-sm" data-testid="scene-tools-trigger">
-                    Scene tools
-                  </AccordionTrigger>
-                  <AccordionContent>{sceneTools}</AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </>
-          ) : (
-            sceneTools
-          )}
-        </div>
-
-        {/* Combat rail fold-in (#2197): a two-column C-frame grid while an active
-          encounter exists (or the GM story rail is shown); single column
-          otherwise. The rail's GM tab (#3557) hosts the encounter controls. */}
-        <div
-          className={cn(
-            'min-h-0 flex-1',
-            showCombatRail || showStoryRail
-              ? 'grid grid-cols-[1fr_360px] gap-4 px-4 pb-4'
-              : 'flex flex-col'
-          )}
-        >
-          <div className="flex min-h-0 flex-1 flex-col" data-testid="scene-detail-left">
-            {/* #3565 - the mission scenario a scene's beats run on; self-hides
-              for non-participants, so it's mounted for every viewer. */}
-            {scene && <ScenarioCard scene={scene} />}
-
-            {/* Main interaction area with threading */}
-            <SceneInteractionPanel
-              sceneId={id}
-              roomName={roomName}
-              onComposerModeChange={handleComposerModeChange}
-              onAddTarget={setPendingTarget}
-              onAttachAction={handleActionAttach}
-              canGm={scene?.viewer_can_gm}
-              onAvatarClick={setCardPersona}
-            />
-
-            {/* GM prompt queue: mechanical events awaiting narration (#4101) */}
-            {scene?.viewer_can_gm && <GMPromptQueue sceneId={id} personas={scene.personas ?? []} />}
-
-            {/* Composer + Action Panel */}
-            {isActive && (
-              <div className="shrink-0">
-                {activeCharacter && (
-                  <>
-                    <PendingActionAttachments
-                      sceneId={id}
-                      personaId={personaId}
-                      detachedIds={detachedActionIds}
-                      onDetach={handleDetach}
-                      onUndoDetach={handleUndoDetach}
-                    />
-                    <CommandInput
-                      character={activeCharacter}
-                      composerMode={composerMode}
-                      onModeChange={handleComposerModeChange}
-                      targetToAppend={targetToAppend}
-                      onTargetConsumed={handleTargetConsumed}
-                      sceneId={id}
-                      actionAttachment={actionAttachment}
-                      onActionAttach={handleActionAttach}
-                      onActionDetach={handleActionDetach}
-                      onSubmitAction={handleSubmitAction}
-                      personaId={personaId}
-                      pendingActionIds={pendingActionIds}
-                      detachedActionIds={detachedActionIds}
-                      onPoseSubmitted={handlePoseSubmitted}
-                      isAtPlace={isAtPlace}
-                      currentPlaceId={currentPlace?.id ?? null}
-                      speakingAs={
-                        activeEntry
-                          ? {
-                              name: activeEntry.name,
-                              thumbnailUrl: activeEntry.profile_picture_url,
-                            }
-                          : undefined
-                      }
-                      ready={isConnected}
-                    />
-                  </>
+            {hasActiveEncounter ? (
+              <>
+                {isActive && (
+                  <div className="mt-2">
+                    <CheckCallPromptCard />
+                  </div>
                 )}
-                <ActionPanel sceneId={id} />
-              </div>
+                <Accordion
+                  type="single"
+                  collapsible
+                  className="mt-2"
+                  data-testid="scene-tools-accordion"
+                >
+                  <AccordionItem value="scene-tools" className="border-b-0">
+                    <AccordionTrigger className="py-2 text-sm" data-testid="scene-tools-trigger">
+                      Scene tools
+                    </AccordionTrigger>
+                    <AccordionContent>{sceneTools}</AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </>
+            ) : (
+              sceneTools
             )}
           </div>
 
-          {(showCombatRail || showStoryRail) && (
-            <div
-              ref={railRef}
-              className="min-h-0 space-y-3 overflow-y-auto"
-              data-testid="scene-detail-combat-rail"
-            >
-              {showStoryRail && scene && <GMStoryRail scene={scene} />}
-              {showCastPanel && scene && (
-                <CastListPanel sceneId={scene.id} sceneName={scene.name} />
-              )}
+          {/* Combat rail fold-in (#2197): a two-column C-frame grid while an active
+          encounter exists (or the GM story rail is shown); single column
+          otherwise, and stacked below 860px so the map keeps the phone's width
+          (#4670). The rail's GM tab (#3557) hosts the encounter controls. */}
+          <div
+            className={cn(
+              'min-h-0 flex-1',
+              showCombatRail || showStoryRail
+                ? 'grid grid-cols-1 gap-4 px-4 pb-4 min-[860px]:grid-cols-[1fr_360px]'
+                : 'flex flex-col'
+            )}
+          >
+            <div className="flex min-h-0 flex-1 flex-col" data-testid="scene-detail-left">
               {showCombatRail && (
-                <>
-                  {/* The rail lingers past the encounter's end so the aftermath digest
-                    and outcome banner stay readable (#3551). */}
-                  {encounterChooser}
-                  <CombatRail
-                    sceneId={sceneIdNum}
-                    encounterId={railEncounterId}
-                    viewerCanGm={hasActiveEncounter && (scene?.viewer_can_gm ?? false)}
-                    scene={scene}
-                    onDismissOutcome={handleDismissOutcome}
-                  />
-                </>
+                <CombatMainMap sceneId={sceneIdNum} encounterId={railEncounterId} />
+              )}
+              {/* #3565 - the mission scenario a scene's beats run on; self-hides
+              for non-participants, so it's mounted for every viewer. */}
+              {scene && <ScenarioCard scene={scene} />}
+
+              {/* Main interaction area with threading */}
+              <SceneInteractionPanel
+                sceneId={id}
+                roomName={roomName}
+                onComposerModeChange={handleComposerModeChange}
+                onAddTarget={setPendingTarget}
+                onAttachAction={handleActionAttach}
+                canGm={scene?.viewer_can_gm}
+                onAvatarClick={setCardPersona}
+              />
+
+              {/* GM prompt queue: mechanical events awaiting narration (#4101) */}
+              {scene?.viewer_can_gm && (
+                <GMPromptQueue sceneId={id} personas={scene.personas ?? []} />
+              )}
+
+              {/* Composer + Action Panel */}
+              {isActive && (
+                <div className="shrink-0">
+                  {activeCharacter && (
+                    <>
+                      <PendingActionAttachments
+                        sceneId={id}
+                        personaId={personaId}
+                        detachedIds={detachedActionIds}
+                        onDetach={handleDetach}
+                        onUndoDetach={handleUndoDetach}
+                      />
+                      <CommandInput
+                        character={activeCharacter}
+                        composerMode={composerMode}
+                        onModeChange={handleComposerModeChange}
+                        targetToAppend={targetToAppend}
+                        onTargetConsumed={handleTargetConsumed}
+                        sceneId={id}
+                        actionAttachment={actionAttachment}
+                        onActionAttach={handleActionAttach}
+                        onActionDetach={handleActionDetach}
+                        onSubmitAction={handleSubmitAction}
+                        personaId={personaId}
+                        pendingActionIds={pendingActionIds}
+                        detachedActionIds={detachedActionIds}
+                        onPoseSubmitted={handlePoseSubmitted}
+                        isAtPlace={isAtPlace}
+                        currentPlaceId={currentPlace?.id ?? null}
+                        speakingAs={
+                          activeEntry
+                            ? {
+                                name: activeEntry.name,
+                                thumbnailUrl: activeEntry.profile_picture_url,
+                              }
+                            : undefined
+                        }
+                        ready={isConnected}
+                      />
+                    </>
+                  )}
+                  <ActionPanel sceneId={id} />
+                </div>
               )}
             </div>
-          )}
+
+            {(showCombatRail || showStoryRail) && (
+              <div
+                ref={railRef}
+                className="min-h-0 space-y-3 overflow-y-auto"
+                data-testid="scene-detail-combat-rail"
+              >
+                {showStoryRail && scene && <GMStoryRail scene={scene} />}
+                {showCastPanel && scene && (
+                  <CastListPanel sceneId={scene.id} sceneName={scene.name} />
+                )}
+                {showCombatRail && (
+                  <>
+                    {/* The rail lingers past the encounter's end so the aftermath digest
+                    and outcome banner stay readable (#3551). */}
+                    {encounterChooser}
+                    <CombatRail
+                      sceneId={sceneIdNum}
+                      encounterId={railEncounterId}
+                      viewerCanGm={hasActiveEncounter && (scene?.viewer_can_gm ?? false)}
+                      scene={scene}
+                      onDismissOutcome={handleDismissOutcome}
+                    />
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          <CharacterCardDrawer
+            persona={cardPersona}
+            onClose={() => setCardPersona(null)}
+            viewerEntryId={viewerEntryId}
+            onWhisper={handleWhisper}
+          />
         </div>
-        <CharacterCardDrawer
-          persona={cardPersona}
-          onClose={() => setCardPersona(null)}
-          viewerEntryId={viewerEntryId}
-          onWhisper={handleWhisper}
-        />
-      </div>
+      </CombatPickProvider>
     </PersonaCardContext.Provider>
   );
 }
