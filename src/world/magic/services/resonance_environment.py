@@ -502,8 +502,7 @@ def evaluate_resonance_environment(
     except CharacterAura.DoesNotExist:
         return _inert()
 
-    aura_field = working_affinity.name.lower()
-    caster_aura_value: Decimal = getattr(aura, aura_field, Decimal("0.00"))
+    caster_aura_value: Decimal = aura.percent_for(working_affinity)
     caster_alignment = caster_aura_value / Decimal(100)
 
     # Step 6 (enriched): see _enriched_raw for formula details.

@@ -8,6 +8,8 @@ from actions.factories import ConsequencePoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GiftKind, TechniqueCategory
 from world.magic.factories import (
+    AffinityFactory,
+    CharacterAuraFactory,
     CharacterTechniqueFactory,
     EffectTypeFactory,
     GiftFactory,
@@ -21,6 +23,7 @@ from world.magic.factories import (
 from world.magic.models import (
     CharacterAnima,
     CharacterAura,
+    CharacterAuraShare,
     CharacterGift,
     CharacterResonance,
     Facet,
@@ -29,9 +32,6 @@ from world.magic.models import (
     Reincarnation,
     Technique,
     TraditionGiftGrant,
-)
-from world.magic.types import (
-    AffinityType,
 )
 
 # Note: Power, CharacterPower, IntensityTier, and AnimaRitualType have been
@@ -45,12 +45,14 @@ class CharacterAuraModelTests(TestCase):
     def setUpTestData(cls):
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
-        cls.aura = CharacterAura.objects.create(
+        cls.aura = CharacterAuraFactory(
             character=cls.character.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("75.00"),
             abyssal=Decimal("15.00"),
         )
+        cls.celestial = AffinityFactory(name="Celestial")
+        cls.primal = AffinityFactory(name="Primal")
 
     def test_aura_str(self):
         """Test string representation."""
@@ -58,33 +60,33 @@ class CharacterAuraModelTests(TestCase):
 
     def test_aura_total_equals_100(self):
         """Test that aura percentages sum to 100."""
-        total = self.aura.celestial + self.aura.primal + self.aura.abyssal
+        total = sum(share.percent for share in self.aura.cached_shares)
         self.assertEqual(total, Decimal("100.00"))
 
     def test_aura_one_per_character(self):
         """Test that a character can only have one aura."""
         with self.assertRaises(ValidationError):
-            CharacterAura.objects.create(
-                character=self.character.sheet_data,
-                celestial=Decimal("33.33"),
-                primal=Decimal("33.34"),
-                abyssal=Decimal("33.33"),
-            )
+            CharacterAura.objects.create(character=self.character.sheet_data)
 
     def test_aura_dominant_affinity(self):
         """Test dominant_affinity property."""
-        self.assertEqual(self.aura.dominant_affinity, AffinityType.PRIMAL)
+        self.assertEqual(self.aura.dominant_affinity, self.primal)
+        self.assertEqual(self.aura.percent_for(self.celestial), Decimal("10.00"))
 
     def test_aura_validation_requires_100_percent(self):
         """Test that aura validation requires percentages to sum to 100."""
-        character2 = CharacterSheetFactory()
+        aura = CharacterAuraFactory(
+            character=CharacterSheetFactory(),
+            celestial=Decimal(0),
+            primal=Decimal(0),
+            abyssal=Decimal(0),
+        )
+        for affinity in (self.celestial, self.primal, AffinityFactory(name="Abyssal")):
+            CharacterAuraShare.objects.create(
+                aura=aura, affinity=affinity, percent=Decimal("50.00")
+            )  # Total is 150, should fail
         with self.assertRaises(ValidationError):
-            CharacterAura.objects.create(
-                character=character2,
-                celestial=Decimal("50.00"),
-                primal=Decimal("50.00"),
-                abyssal=Decimal("50.00"),  # Total is 150, should fail
-            )
+            aura.full_clean()
 
 
 class CharacterResonanceModelTests(TestCase):

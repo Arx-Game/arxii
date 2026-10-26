@@ -21,6 +21,7 @@ from world.magic.factories import (
     TechniqueStyleFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models.ritual_check_config import RitualCheckConfig
 from world.magic.models.rituals import Ritual
@@ -206,6 +207,7 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
         cls.technique = technique
 
     def setUp(self):
+        ensure_canonical_affinities()
         CharacterSheet.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
         Trait.flush_instance_cache()
@@ -350,6 +352,7 @@ class GetCharacterCastCheckTests(TestCase):
         cls.technique = technique
 
     def setUp(self):
+        ensure_canonical_affinities()
         CharacterSheet.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
         Trait.flush_instance_cache()

@@ -238,6 +238,27 @@ class AffinityFactory(factory.django.DjangoModelFactory):
     description = factory.LazyAttribute(lambda o: f"The {o.name} affinity.")
 
 
+def ensure_canonical_affinities() -> tuple[Affinity, Affinity, Affinity]:
+    """Create the Celestial, Primal and Abyssal rows if absent and drop the getter cache.
+
+    For tests that reach code using ``Affinity.objects.get_*_affinity()`` (a CG finalize's
+    starting aura, the fall/atonement rites). Returns (celestial, primal, abyssal).
+    """
+    from world.magic.constants import (
+        AFFINITY_ABYSSAL,
+        AFFINITY_CELESTIAL,
+        AFFINITY_PRIMAL,
+    )
+
+    rows = (
+        AffinityFactory(name=AFFINITY_CELESTIAL),
+        AffinityFactory(name=AFFINITY_PRIMAL),
+        AffinityFactory(name=AFFINITY_ABYSSAL),
+    )
+    Affinity.objects.clear_cache()
+    return rows
+
+
 class AffinityInteractionFactory(factory.django.DjangoModelFactory):
     """Factory for AffinityInteraction directed-pair rows."""
 

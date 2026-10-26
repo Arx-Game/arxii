@@ -19,6 +19,7 @@ from world.magic.constants import GainSource
 from world.magic.factories import (
     AffinityFactory,
     ResonanceFactory,
+    ensure_canonical_affinities,
     with_corruption_at_stage,
 )
 from world.magic.models import (
@@ -36,6 +37,7 @@ from world.magic.services.atonement import (
     AtonementNothingToAtone,
     perform_atonement_rite,
 )
+from world.magic.services.aura import set_aura_shares
 from world.magic.services.conversion import (
     convert_resonance,
     get_fall_redemption_config,
@@ -45,15 +47,25 @@ from world.magic.services.fall_redemption import (
     perform_fall,
 )
 from world.magic.services.resonance import grant_resonance
+from world.magic.types import AffinityShare
 
 
 def _set_aura(sheet, celestial=80, primal=10, abyssal=10):
     """Create or update a CharacterAura with given percentages."""
     aura, _ = CharacterAura.objects.get_or_create(character=sheet)
-    aura.celestial = Decimal(str(celestial))
-    aura.primal = Decimal(str(primal))
-    aura.abyssal = Decimal(str(abyssal))
-    aura.save()
+    celestial_row, primal_row, abyssal_row = ensure_canonical_affinities()
+    set_aura_shares(
+        aura,
+        [
+            AffinityShare(affinity=row, percent=Decimal(str(percent)))
+            for row, percent in (
+                (celestial_row, celestial),
+                (primal_row, primal),
+                (abyssal_row, abyssal),
+            )
+            if percent
+        ],
+    )
 
 
 def _setup_affinities_and_resonances():
@@ -109,8 +121,9 @@ class TestGrantCompromiseResonance(TestCase):
 
         # Aura should have drifted toward Primal
         aura = CharacterAura.objects.get(character=sheet)
-        self.assertLess(aura.celestial, Decimal(80))
-        self.assertGreater(aura.primal, Decimal(10))
+        celestial_row, primal_row, _ = ensure_canonical_affinities()
+        self.assertLess(aura.percent_for(celestial_row), Decimal(80))
+        self.assertGreater(aura.percent_for(primal_row), Decimal(10))
 
     def test_grants_abyssal_resonance_from_cruelty(self):
         """A cruelty act grants Abyssal resonance."""
@@ -303,7 +316,7 @@ class TestPerformFall(TestCase):
 
         # Aura should now be Primal-dominant (after conversion)
         aura = CharacterAura.objects.get(character=sheet)
-        self.assertEqual(aura.dominant_affinity.value, "primal")
+        self.assertEqual(aura.dominant_affinity.name, "Primal")
 
         # Second Fall from primal to primal is refused (same affinity)
         with self.assertRaises(FallEligibilityError):
