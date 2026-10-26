@@ -61,7 +61,7 @@ The magic system for Arx II. Power flows from identity and connection.
 - `Resonance` - Magical identity tags with FK to Affinity, optional opposite (self OneToOne), optional OneToOne to ModifierTarget
 
 ### Character State
-- `CharacterAura` - Tracks a character's affinity percentages (celestial/primal/abyssal)
+- `CharacterAura` - A character's aura; the affinity percentages are `CharacterAuraShare` rows (one per affinity, read through `cached_shares` / `percent_for(affinity)` / `dominant_affinity`)
 - `CharacterResonance` - Per-character per-resonance row. Identity anchor AND
   spendable currency bucket. Fields: `character_sheet` FK, `resonance` FK,
   `balance` (spendable), `lifetime_earned` (monotonic audit), `claimed_at`,
@@ -1945,12 +1945,17 @@ becomes available when the target affinity crosses
 
 **Models (`models/fall_redemption.py`):**
 - `CompromiseActType` — authored act category → (target_resonance, amount,
-  is_cruelty). Staff author act types; mission/combat/social systems
-  reference them.
+  feeding_taint_role). Whether an act is cruel is read from the target
+  resonance's affinity, not stored. Staff author act types;
+  mission/combat/social systems reference them.
 - `ResonanceConversion` — authored mapping (source_resonance,
-  target_affinity) → target_resonance. One row per path.
+  target_affinity FK to `Affinity`) → target_resonance. One row per path.
 - `FallRedemptionConfig` — singleton (pk=1, `ArxSharedMemoryManager`) with
-  conversion multipliers per path + penance exchange rate + fall threshold.
+  the penance exchange rate + fall threshold. The per-path multipliers and
+  Fall/Redemption type are `AffinityInteraction.conversion_multiplier` /
+  `conversion_type` on the directed (source, environment) pair; a database
+  check keeps the two both set or both unset. `from_affinity`/`to_affinity`
+  on `FallRedemptionRecord` are `Affinity` FKs.
 - `FallRedemptionRecord` — immutable audit of a full (irreversible) Fall
   or Redemption. `ConversionType` TextChoices: FALL / REDEMPTION.
 

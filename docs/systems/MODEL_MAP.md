@@ -2492,6 +2492,7 @@
   - aftermath_pool -> actions.ConsequencePool [FK] (nullable)
   - wall_breaker_combo -> combat.ComboDefinition [FK] (nullable)
   - reinforces -> combat.CombatOpponent [FK] (nullable)
+  - affinity -> magic.Affinity [FK] (nullable)
   - suppressed_faction_rules -> standoffs.FactionRule [M2M]
 **Pointed to by:**
   - reinforced_by <- combat.CombatOpponent
@@ -3563,6 +3564,7 @@
 
 ### VowAddedEffect
 **Foreign Keys:**
+  - affinity -> magic.Affinity [FK] (nullable)
   - covenant_role -> covenants.CovenantRole [FK]
   - gift -> magic.Gift [FK] (nullable)
   - technique -> magic.Technique [FK] (nullable)
@@ -3609,10 +3611,12 @@
 
 ### VowSituationalPerkRung
 **Foreign Keys:**
+  - affinity -> magic.Affinity [FK] (nullable)
   - perk -> covenants.VowSituationalPerk [FK]
 
 ### VowSituationalPerkSituation
 **Foreign Keys:**
+  - affinity -> magic.Affinity [FK] (nullable)
   - perk -> covenants.VowSituationalPerk [FK]
 
 ### VowStatScaling
@@ -5533,6 +5537,7 @@
   - favoring_traditions <- magic.Tradition
   - alteration_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
+  - aura_shares <- magic.CharacterAuraShare
   - glimpse_tags <- magic.GlimpseTag
   - interactions_as_source <- magic.AffinityInteraction
   - interactions_as_environment <- magic.AffinityInteraction
@@ -5611,6 +5616,7 @@
 
 ### AuraAffinityThreshold
 **Foreign Keys:**
+  - affinity -> magic.Affinity [FK]
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
 
 ### AuraPowerConfig
@@ -5634,8 +5640,14 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [OneToOne]
 **Pointed to by:**
+  - shares <- magic.CharacterAuraShare
   - glimpse_tags <- magic.CharacterGlimpseTag
   - glimpse_born_distinctions <- distinctions.CharacterDistinction
+
+### CharacterAuraShare
+**Foreign Keys:**
+  - aura -> magic.CharacterAura [FK]
+  - affinity -> magic.Affinity [FK]
 
 ### CharacterCrossingText
 **Foreign Keys:**
@@ -5816,6 +5828,8 @@
 ### FallRedemptionRecord
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
+  - from_affinity -> magic.Affinity [FK]
+  - to_affinity -> magic.Affinity [FK]
   - scene -> scenes.Scene [FK] (nullable)
 
 ### FeedingRecord
@@ -6127,6 +6141,7 @@
 ### ResonanceConversion
 **Foreign Keys:**
   - source_resonance -> magic.Resonance [FK]
+  - target_affinity -> magic.Affinity [FK]
   - target_resonance -> magic.Resonance [FK]
 
 ### ResonanceEnvironmentConfig
