@@ -3349,7 +3349,8 @@ def wire_fall_redemption_content() -> object:
     the Ritual row that ``ritual draft`` resolves by name does not exist.
 
     Creates (get_or_create on name):
-    - ``FallRedemptionConfig`` singleton (pk=1) with default multipliers.
+    - ``FallRedemptionConfig`` singleton (pk=1) (non-conversion tuning; the six
+      per-pair conversion multipliers are seeded by ``_seed_affinity_interactions``).
     - "Ritual of Falling" Ritual — SERVICE dispatch to
       ``world.magic.services.fall_redemption.perform_fall``.
 

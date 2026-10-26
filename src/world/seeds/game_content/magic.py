@@ -941,7 +941,8 @@ def _seed_resonance_environment_consequence_pools() -> None:
 
     Depends on:
     - seed_canonical_affinities()      (Celestial/Primal/Abyssal must exist)
-    - _seed_affinity_interactions()    (9 AffinityInteraction rows)
+    - _seed_affinity_interactions()    (9 AffinityInteraction rows; six carry
+      Fall/Redemption multipliers)
     - _seed_endure_hallowed_ground_check() (ensures the resolution-spine
       CheckOutcome rows via seed_check_resolution_tables)
 
@@ -963,6 +964,7 @@ def _seed_resonance_environment_consequence_pools() -> None:
     (config) but skips the APPLY_CONDITION effect that would need the missing
     condition — the pool still seeds, just without teeth for that tier.
     """
+    from world.magic.exceptions import AffinityNotConfigured  # noqa: PLC0415
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.magic.models.resonance_environment import AffinityInteraction  # noqa: PLC0415
     from world.traits.models import CheckOutcome  # noqa: PLC0415
@@ -1003,10 +1005,11 @@ def _seed_resonance_environment_consequence_pools() -> None:
     # skips a pairing whose Affinity is absent) — so both are resolved via
     # filter().first() and this wiring step is skipped rather than raising
     # when either canonical Affinity or its pairing isn't there.
-    abyssal = Affinity.objects.filter(name="Abyssal").first()
-    primal = Affinity.objects.filter(name="Primal").first()
-    celestial = Affinity.objects.filter(name="Celestial").first()
-    if abyssal is None or primal is None or celestial is None:
+    try:
+        abyssal = Affinity.objects.get_abyssal_affinity()
+        primal = Affinity.objects.get_primal_affinity()
+        celestial = Affinity.objects.get_celestial_affinity()
+    except AffinityNotConfigured:
         return
 
     pair4 = AffinityInteraction.objects.filter(
@@ -1113,6 +1116,7 @@ def _seed_resonance_alignment_boons() -> None:
     """
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+    from world.magic.exceptions import AffinityNotConfigured  # noqa: PLC0415
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.magic.models.resonance_environment import (  # noqa: PLC0415
         AffinityInteraction,
@@ -1164,8 +1168,9 @@ def _seed_resonance_alignment_boons() -> None:
     # --- Fetch pair #5: Abyssal → Abyssal (ALIGNED) ---
     # Affinity is content-repo-owned (#2698); skip the boon tiers rather than
     # raising when the canonical Affinity or its self-pairing isn't there.
-    abyssal = Affinity.objects.filter(name="Abyssal").first()
-    if abyssal is None:
+    try:
+        abyssal = Affinity.objects.get_abyssal_affinity()
+    except AffinityNotConfigured:
         return
     pair5 = AffinityInteraction.objects.filter(
         source_affinity=abyssal,
@@ -1668,25 +1673,39 @@ def seed_canonical_affinities() -> None:
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    for name in ("Celestial", "Primal", "Abyssal"):
-        authored_or_sample(Affinity, {}, name=name)
+    for name, coefficient in _CORRUPTION_COEFFICIENTS.items():
+        affinity = authored_or_sample(Affinity, {"corruption_coefficient": coefficient}, name=name)
+        # An authored row arrives with the column default of 0; fill it in, but never
+        # overwrite a value staff already tuned.
+        if affinity is not None and affinity.corruption_coefficient == 0 and coefficient:
+            affinity.corruption_coefficient = coefficient
+            affinity.save(update_fields=["corruption_coefficient"])
 
 
 # Task RC1 — directed RPS affinity interaction matrix
-# (source_name, env_name, valence, kind, aggressor, severity_multiplier, caster_dominance_defiles)
+# (source_name, env_name, valence, kind, aggressor, severity_multiplier, caster_dominance_defiles,
+#  conversion_type, conversion_multiplier)
 # caster_dominance_defiles=True ONLY for the Abyssal-caster OPPOSED pairs (#4 Abyssal->Celestial,
 # #6 Abyssal->Primal): a strong-enough Abyssal caster overpowers and defiles those places.
-_AFFINITY_INTERACTION_ROWS: list[tuple[str, str, str, str, str, str, bool]] = [
-    ("Celestial", "Celestial", "aligned", "amplify", "environment", "1.00", False),
-    ("Celestial", "Abyssal", "opposed", "reject", "environment", "1.00", False),
-    ("Celestial", "Primal", "opposed", "repel", "environment", "0.30", False),
-    ("Abyssal", "Celestial", "opposed", "reject", "environment", "1.00", True),
-    ("Abyssal", "Abyssal", "aligned", "amplify", "environment", "1.00", False),
-    ("Abyssal", "Primal", "opposed", "corrupt", "caster", "1.00", True),
-    ("Primal", "Celestial", "opposed", "reject", "environment", "1.00", False),
-    ("Primal", "Abyssal", "opposed", "corrupt", "environment", "1.00", False),
-    ("Primal", "Primal", "aligned", "amplify", "environment", "1.00", False),
+# conversion_type / conversion_multiplier: the six cross pairs carry the Fall (toward Abyssal)
+# or Redemption (away from it) multiplier (ConversionType values); source = FROM affinity,
+# environment = TO affinity.
+# The self-pairs carry none (blank type, no multiplier).
+_AffinityRow = tuple[str, str, str, str, str, str, bool, str, str | None]
+_AFFINITY_INTERACTION_ROWS: list[_AffinityRow] = [
+    ("Celestial", "Celestial", "aligned", "amplify", "environment", "1.00", False, "", None),
+    ("Celestial", "Abyssal", "opposed", "reject", "environment", "1.00", False, "FALL", "1.50"),
+    ("Celestial", "Primal", "opposed", "repel", "environment", "0.30", False, "FALL", "1.20"),
+    ("Abyssal", "Celestial", "opposed", "reject", "environment", "1.00", True, "REDEMPTION", "0.5"),
+    ("Abyssal", "Abyssal", "aligned", "amplify", "environment", "1.00", False, "", None),
+    ("Abyssal", "Primal", "opposed", "corrupt", "caster", "1.00", True, "REDEMPTION", "0.7"),
+    ("Primal", "Celestial", "opposed", "reject", "environment", "1.00", False, "REDEMPTION", "0.7"),
+    ("Primal", "Abyssal", "opposed", "corrupt", "environment", "1.00", False, "FALL", "1.20"),
+    ("Primal", "Primal", "aligned", "amplify", "environment", "1.00", False, "", None),
 ]
+
+#: Integer tenths of corruption per cast tick, by canonical affinity name.
+_CORRUPTION_COEFFICIENTS: dict[str, int] = {"Celestial": 0, "Primal": 2, "Abyssal": 10}
 
 
 def _seed_affinity_interactions() -> None:
@@ -1715,7 +1734,7 @@ def _seed_affinity_interactions() -> None:
         obj.name: obj for obj in Affinity.objects.filter(name__in=canonical_names)
     }
     for row in _AFFINITY_INTERACTION_ROWS:
-        src_name, env_name, valence, kind, aggressor, mult_str, defiles = row
+        src_name, env_name, valence, kind, aggressor, mult_str, defiles, conv_type, conv_mult = row
         if src_name not in affinity_cache or env_name not in affinity_cache:
             continue
         obj, created = AffinityInteraction.objects.get_or_create(
@@ -1727,11 +1746,24 @@ def _seed_affinity_interactions() -> None:
                 "aggressor": aggressor,
                 "severity_multiplier": Decimal(mult_str),
                 "caster_dominance_defiles": defiles,
+                "conversion_type": conv_type,
+                "conversion_multiplier": Decimal(conv_mult) if conv_mult else None,
             },
         )
-        if not created and obj.caster_dominance_defiles != defiles:
+        if created:
+            continue
+        changed = []
+        if obj.caster_dominance_defiles != defiles:
             obj.caster_dominance_defiles = defiles
-            obj.save(update_fields=["caster_dominance_defiles"])
+            changed.append("caster_dominance_defiles")
+        # A row authored before conversions existed has none; fill it in, never
+        # overwrite a conversion staff already set.
+        if conv_mult and not obj.conversion_type and obj.conversion_multiplier is None:
+            obj.conversion_type = conv_type
+            obj.conversion_multiplier = Decimal(conv_mult)
+            changed += ["conversion_type", "conversion_multiplier"]
+        if changed:
+            obj.save(update_fields=changed)
 
 
 def _seed_resonance_environment_config() -> None:
