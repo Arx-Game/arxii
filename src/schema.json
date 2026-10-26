@@ -44868,6 +44868,9 @@ components:
         blueprint_id:
           type: integer
           nullable: true
+        feature_id:
+          type: integer
+          nullable: true
         application_id:
           type: integer
           nullable: true
