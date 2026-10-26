@@ -48,7 +48,11 @@ export function CommandDrawer({
           {title}
         </Button>
       </SheetTrigger>
-      <SheetContent hideOverlay className="sm:max-w-md">
+      <SheetContent
+        hideOverlay
+        className="sm:max-w-md"
+        {...(description ? {} : { 'aria-describedby': undefined })}
+      >
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
           {description && <SheetDescription>{description}</SheetDescription>}

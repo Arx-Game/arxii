@@ -56,6 +56,11 @@ function LevelTag({ level }: { level?: string }) {
   );
 }
 
+/** Areas and rooms number separately, so a room's id can equal an area's in the same crumb. */
+function crumbKey(entry: FolioCrumbEntry): string {
+  return `${entry.kind ?? 'area'}-${entry.id}`;
+}
+
 export function FolioCrumb({ entries, onSelect, onInsertBetween, children }: FolioCrumbProps) {
   const lastIndex = entries.length - 1;
   const insertPoint = (index: number) => {
@@ -84,14 +89,14 @@ export function FolioCrumb({ entries, onSelect, onInsertBetween, children }: Fol
       <span className="flex flex-wrap items-baseline gap-1">
         {entries.map((entry, index) =>
           index === lastIndex ? (
-            <span key={entry.id} className="flex items-baseline">
+            <span key={crumbKey(entry)} className="flex items-baseline">
               <b className="font-medium text-foreground" data-testid="folio-crumb-current">
                 {entry.name}
               </b>
               <LevelTag level={entry.level_display} />
             </span>
           ) : (
-            <Fragment key={entry.id}>
+            <Fragment key={crumbKey(entry)}>
               <span className="flex items-baseline">
                 <button
                   type="button"

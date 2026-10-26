@@ -364,7 +364,7 @@ export function ChangeMyGMDialog({ story }: ChangeMyGMDialogProps) {
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
         {step === 'withdraw' ? (
           <WithdrawStep story={story} onSuccess={handleWithdrawSuccess} onCancel={handleCancel} />
         ) : (

@@ -850,7 +850,7 @@ export function PersonaMenu({
         </DialogContent>
       </Dialog>
       <Dialog open={treatDialogOpen} onOpenChange={setTreatDialogOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Offer treatment to {personaName}</DialogTitle>
           </DialogHeader>

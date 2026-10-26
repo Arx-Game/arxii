@@ -75,7 +75,7 @@ export function GMApplicationDialog({ children, onSuccess }: GMApplicationDialog
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Apply to be a GM</DialogTitle>
         </DialogHeader>

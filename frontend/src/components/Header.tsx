@@ -277,7 +277,7 @@ export function Header() {
                 <span className="sr-only">Open menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-4">
+            <SheetContent aria-describedby={undefined} side="left" className="p-4">
               <nav className="flex flex-col gap-4">
                 <Link to="/game" className="text-lg">
                   Play

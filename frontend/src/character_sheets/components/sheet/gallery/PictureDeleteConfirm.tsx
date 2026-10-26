@@ -51,7 +51,7 @@ export function PictureDeleteConfirm({
 
   return (
     <AlertDialog open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent className="max-w-md">
+      <AlertDialogContent aria-describedby={undefined} className="max-w-md">
         <div className="refsheet gallery-dialog">
           <AlertDialogTitle className="gallery-dialog-title">{copy.title}</AlertDialogTitle>
           <p>{copy.body}</p>

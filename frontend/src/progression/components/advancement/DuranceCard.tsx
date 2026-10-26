@@ -143,9 +143,10 @@ export function DuranceCard({ characterId }: DuranceCardProps) {
                     ))}
                   </>
                 )}
-                <p className="text-sm text-muted-foreground">
+                {/* A div, not a p: the status can be a Badge, which is a div. */}
+                <div className="text-sm text-muted-foreground">
                   XP unlock: {renderUnlockStatus(status.unlock_gate)}
-                </p>
+                </div>
               </div>
             )}
 

@@ -118,7 +118,11 @@ export function CharacterCardDrawer({
         if (!open) onClose();
       }}
     >
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+      <SheetContent
+        aria-describedby={undefined}
+        side="right"
+        className="w-full overflow-y-auto sm:max-w-md"
+      >
         {persona && (
           <>
             <SheetHeader>
