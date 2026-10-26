@@ -8747,8 +8747,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - **Reaction economy (#2639), shared fire seam per F-10c:** `CombatParticipant.
     reactions_used` (reset to 0 for every participant in `begin_declaration_phase` via
     identity-map-safe `bulk_update`, never a raw queryset `.update()` — that would leave any
-    already-cached instance reading a stale value) vs `REACTIONS_PER_ROUND` (1) — gated +
-    incremented in `_attempt_guardian_interpose`, the shared tail both `_try_interpose`
+    already-cached instance reading a stale value). No cap since #4676: it is counted in
+    `_attempt_guardian_interpose` and each one makes the next reaction's roll harder
+    (`world.combat.services.reactions.reaction_penalty`). Counted in the shared tail the shared tail both `_try_interpose`
     (declarations and standing guards, #4584) and `_try_interpose_for_opponent` call.
     `DamagePreApplyPayload.answers_consumed` (int, default 0) vs `ABSORPTION_CAP_PER_MOMENT`
     (2): per-LANDING-HIT cap on how many interceptors may answer, incremented at the same
@@ -8796,6 +8797,23 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     only `opponents_in_reach` (`techniques/technique_targets.py`).
   - Path service and reach rule live in positioning (`find_path`, `step_costs`,
     `edge_crossing_cost`, `strike_reaches`); see `docs/systems/areas.md`.
+- **Reactions and area attacks (#4676, slice 4 of #4651, ADR-4676) [BUILT & WIRED]:** see
+  `docs/systems/COMBAT_DEFENSES.md` "Dodging and area attacks".
+  - Models: `CapabilityType.reaction_reach`/`reaction_cost_kind` (`ReactionReach`,
+    `ReactionCostKind` in `world/areas/positioning/constants.py`); `CombatParticipant.dodge_enabled`/
+    `dodge_landing`; `MovementConfig.dodge_anima_cost`/`dodge_fatigue_cost`/`reaction_difficulty_step`;
+    `ThreatPoolEntry.covers_place`; `PendingOpponentAttack.covered_position` and
+    `CombatOpponentAction.covered_position`.
+  - Services (`world/combat/services/reactions.py`): `reaction_tuning`, `reaction_penalty`,
+    `record_reaction`, `dodge_sources`, `reachable_landings`, `dodge_landing_options`,
+    `choose_dodge`, `pay_for_dodge`, `land_dodge`, `covered_place`, `dodge_cost_line`,
+    `dodge_roll_active`/`DODGE_ROLL_ACTIVE`. `world/combat/services/npc/area_attacks.py`:
+    `cover_place`, `place_of_participant`. `world.mechanics.reactions._fresh_reaction_instance`.
+  - Action `combat_dodge` (`DodgePlanAction`, kwargs `dodge`, `position_id` or `place`); telnet
+    `combat dodge [<place>|here|off]`. Payload: participant `dodge_plan` (owner only),
+    `pending_attacks[].attack_name/covered_position_id/covered_position_name`;
+    `reactions_remaining` removed. Frontend: `DodgePlanPanel`, `AreaAttackWarning`,
+    `AreaTelegraphLayer`, `combat/dodging.ts`.
 - **Movement by capability and held ground (#4663, slice 2 of #4651, ADR-4663) [BUILT & WIRED]:**
   - A player's way of moving is a capability: `CapabilityType.traversal` (`CreatureTraversal`,
     blank for none; migration 0294); `player_traversals(sheet)`, `traversals_of(objectdb)`,
@@ -8894,8 +8912,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - Standing guard: `_ensure_interpose_challenges` and `_try_interpose`
     (`world/combat/services/damage/`) via `guardians_by_target`; the shared tail is now
     `_attempt_guardian_interpose(guardian, protected, pre_payload, *, action)` (`_dispatch_interpose_action`
-    is a wrapper for declarations). A guard counts against `REACTIONS_PER_ROUND` and
-    `ABSORPTION_CAP_PER_MOMENT` and pays interpose fatigue (this revisits ADR-0161 for guards only).
+    is a wrapper for declarations). A guard counts as one of her reactions (no cap, a harder
+    roll each time, #4676) and against `ABSORPTION_CAP_PER_MOMENT`, and pays interpose
+    fatigue (this revisits ADR-0161 for guards only).
   - Strike-back: `_answer_with_strike_backs` in `_emit_post_damage_events` -> `strike_back`; PC
     bearers, NPC attackers only; counts as duel interference and probing; success not narrated.
   - Grace: `_process_knockout_tier` skips the roll via `knockout_preventing_instance`.
@@ -9098,7 +9117,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - **The catch seam:** `_try_catch_sent_flying` reuses `_try_interpose`'s query shape (an
     armed INTERPOSE this round, named or guard-anyone) but never calls `dispatch_interpose`
     — a mid-air catch is a binary rescue, not gradeable damage mitigation, so it never rolls;
-    "fires" means clearing `REACTIONS_PER_ROUND` (mirrors `_attempt_guardian_interpose`'s own
+    "fires" means an attempt, counted as one more reaction (mirrors `_attempt_guardian_interpose`'s own
     "fire = attempt, not success" vocabulary). `ABSORPTION_CAP_PER_MOMENT` is not consulted
     — only the first eligible guardian is ever queried (documented v1 scope).
   - **Explicit resolution:** `_resolve_sent_flying_markers`, called at the end of

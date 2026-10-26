@@ -291,7 +291,7 @@ resolve_round
   ├─ _ensure_interpose_challenges ← guardians_by_target             source_guards_bearer
   └─ hit on a PC ward:
        _try_interpose: named declaration → standing guards → guard-anyone declaration
-         └─ _attempt_guardian_interpose (REACTIONS_PER_ROUND, ABSORPTION_CAP_PER_MOMENT,
+         └─ _attempt_guardian_interpose (reaction penalty, ABSORPTION_CAP_PER_MOMENT,
             interpose fatigue); a guardian with any declared Interpose acts only through it
        apply_damage_to_participant
          └─ _emit_post_damage_events: DAMAGE_APPLIED, then _answer_with_strike_backs

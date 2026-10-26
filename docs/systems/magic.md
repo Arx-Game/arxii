@@ -3687,7 +3687,7 @@ point calls all nine sub-builders:
 | Summon Spirit | Summoning | `summon_ally_on_condition` adapter → `summon_ally` | CONDITION_APPLIED; creates an ALLY `CombatOpponent` (ADR-0059) |
 | Aegis Field | Aegis Field | `absorb_pool` (priority 10) | DAMAGE_PRE_APPLY; mutation-only; overflow lands |
 | Mirror Ward | Mirror Ward | `reflect_damage` (priority 20) | DAMAGE_PRE_APPLY; mutation-only; bounces via `bypass_pre_apply` |
-| Phase Step | Phase Step | `blink_dodge` (priority 30) | DAMAGE_PRE_APPLY; mutation-only; moves bearer on success |
+| Phase Step | Phase Step | `blink_dodge` (priority 30) | DAMAGE_PRE_APPLY; mutation-only; outside an NPC attack, avoids the hit and lands her on her dodge plan (else she stays); against an NPC attack it is a dodge source instead (#4676) |
 | Phase Jump | Phase Jump | `move_position_on_condition` adapter | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
 | Barricade | Barricade | `create_obstacle_on_condition` adapter | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
 | Ghostform | Ghostform | intangibility category only (`grants_intangibility=True`) | `ConditionCategory`; intangibility gate via `is_untargetable` |
@@ -3727,7 +3727,7 @@ grammar is what #2206 made actually reach validation/persistence in combat.
 | `create_obstacle(*, payload)` | direct handler | Create a blocking `Obstacle` at a target `Position` |
 | `absorb_pool(*, payload)` | reactive handler (prio 10) | Drain `absorb_remaining` buffer; sets `payload.amount=0` when fully absorbed; overflow lands |
 | `reflect_damage(*, payload)` | reactive handler (prio 20) | Pay `reactive_anima_cost`; resolve attacker from `payload.source.ref`; bounce via `bypass_pre_apply`; set `payload.amount=0` |
-| `blink_dodge(*, payload)` | reactive handler (prio 30) | Pay `reactive_anima_cost`; move bearer; set `payload.amount=0` |
+| `blink_dodge(*, payload)` | reactive handler (prio 30) | Steps aside while `DODGE_ROLL_ACTIVE`; else pay `reactive_anima_cost`, land on the dodge plan if any, set `payload.amount=0` |
 | `strike_back(*, payload, instance)` | direct read at the damage seam (#4584) | Not a flow handler: `_answer_with_strike_backs` in `_emit_post_damage_events` calls it for each instance `retaliating_instances` finds on a PC bearer, right after `DAMAGE_APPLIED`. Pay `reactive_anima_cost`; deal `retaliation_damage` to the `CombatOpponent` that struck (typed, counted as the payer's threat); lay `retaliation_condition` with the ward's source as its source. Never strikes a PC |
 | `summon_ally(*, payload)` | direct handler | Create a `CombatOpponent` with `allegiance=ALLY`, `summoned_by=caster` |
 | `move_position_on_condition(*, payload, destination_position_id)` | CONDITION_APPLIED adapter | Thin wrapper → `move_position` |
