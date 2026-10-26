@@ -530,6 +530,11 @@
   - position_b -> areas.BlueprintPosition [FK]
   - gating_challenge_template -> mechanics.ChallengeTemplate [FK] (nullable)
 
+### BlueprintFeature
+**Foreign Keys:**
+  - blueprint_position -> areas.BlueprintPosition [FK]
+  - feature_type -> areas.FeatureType [FK]
+
 ### BlueprintPosition
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -539,6 +544,7 @@
 **Pointed to by:**
   - edges_as_a <- areas.BlueprintEdge
   - edges_as_b <- areas.BlueprintEdge
+  - features <- areas.BlueprintFeature
   - shelters <- areas.BlueprintPositionShelter
 
 ### BlueprintPositionShelter
@@ -557,6 +563,13 @@
 **Foreign Keys:**
   - details -> areas.CleanupProjectDetails [FK]
   - outcome_tier -> traits.CheckOutcome [FK]
+
+### FeatureType
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - art -> evennia_extensions.Media [FK] (nullable)
+  - challenge_template -> mechanics.ChallengeTemplate [FK]
 
 ### MapTerrain
 **Foreign Keys:**
@@ -579,6 +592,7 @@
   - edges_as_a <- areas.PositionEdge
   - edges_as_b <- areas.PositionEdge
   - occupants <- areas.ObjectPosition
+  - features <- areas.PositionFeature
   - shelters <- areas.PositionShelter
   - rampart <- areas.Rampart
   - cast_destination_instances <- conditions.ConditionInstance
@@ -602,6 +616,11 @@
   - gating_challenge -> mechanics.ChallengeInstance [FK] (nullable)
   - created_by_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - source_rampart -> areas.Rampart [FK] (nullable)
+
+### PositionFeature
+**Foreign Keys:**
+  - position -> areas.Position [FK]
+  - feature_type -> areas.FeatureType [FK]
 
 ### PositionShelter
 **Foreign Keys:**

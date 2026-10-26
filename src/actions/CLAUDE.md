@@ -163,7 +163,14 @@ They do not use the command system, dispatchers, or handlers.
   "N hops left this round." line on each entry. `positioning.py` (#4663) also holds `take_flight` (`TakeFlightAction`, `CanFlyPrerequisite`), `land`
   (`LandAction`, `AirbornePrerequisite`) and `pass_held_ground` (`PassHeldGroundAction`, kwargs
   `position_id`, optional `approach_id`); each carries `CombatMovementPrerequisite` and spends hops in a
-  DECLARING round. `MoveToPositionAction` derives the mover's traversals (`player_traversals`) and spends a
+  DECLARING round. From #4675 it also holds `perform_stunt`
+  (`PerformStuntAction`; kwargs `feature_id`, `position_id` for the destination, optional `approach_id`; the
+  roll and move are `world.areas.positioning.stunts.perform_stunt`; one hop in a declaring round, a miss
+  included), `gm_attach_feature` (`position_id`, `feature_type_id`, optional `square_x`/`square_y`) and
+  `gm_detach_feature` (`feature_id`); the two GM actions check `_actor_may_gm_place` inside `execute`.
+  `ActionRef.feature_id` exists for them, and `_dispatch_registry` forwards `ref.position_id`,
+  `ref.feature_id` and `ref.approach_id` into the action's kwargs (a ref's `approach_id` overrides the same
+  key in `kwargs`; only stunt and pass refs set it). `MoveToPositionAction` derives the mover's traversals (`player_traversals`) and spends a
   wall crossing's cost; entering held ground stops a player character however she moves on the
   ground, landing included ("You are stopped by <name>."; NPC walkers and climbers stop, NPC fliers
   and leapers pass). The pass roll is narrated to the room ("<name> gets past <holder> into

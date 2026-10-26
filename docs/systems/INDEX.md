@@ -1735,6 +1735,15 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   **conjured walls** `create_conjured_obstacle` / `restore_edge` / `damage_barrier` /
   `expire_obstacle_rounds` / `teardown_conjured_obstacles` (#2019, #4606; seed
   `barrier_content.ensure_conjured_barrier_content`, the "Conjured Barrier" challenge)
+- **Features and stunts (#4675, slice 3 of #4651, ADR-4675) [BUILT & WIRED]:** `FeatureType` (staff catalog: `name`,
+  `art`, `reach` = `FeatureReach` ADJACENT / ANY_PLACE / SAME_TYPE / ELEVATED_ADJACENT,
+  `challenge_template`), `PositionFeature` and `BlueprintFeature` (place + optional square, inside the
+  place's area; `instantiate_blueprint` copies them); `attach_feature` / `detach_feature`;
+  `stunts.stunt_options` / `stunts.perform_stunt` (`StuntOutcome` CLEAN / PARTIAL / MISSED; a miss
+  stays and still spends the hop); actions `perform_stunt`, `gm_attach_feature`, `gm_detach_feature`;
+  `features[]` on every position node; `GET /api/areas/feature-types/` (GM/staff). NPCs do not use
+  features. Details: `docs/systems/areas.md`, "Features and stunts". Not the same as
+  `world/room_features` (lab stations).
 - **Enums:** `PositionKind` (PRIMARY / FEATURE / ELEVATED / AERIAL / BARRIER_SIDE / CHASM);
   `PositionDestination` in `world/checks/constants.py`
   (ACTOR_POSITION / GATING_FAR_SIDE / NAMED / AWAY_FROM_ACTOR) — governs `MOVE_TO_POSITION`
