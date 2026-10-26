@@ -91,13 +91,21 @@ export interface CharacterSheetGlimpseTag {
   description: string;
 }
 
+/** Mirrors `world.character_sheets.types.AuraShareEntry`. */
+export interface CharacterSheetAuraShare {
+  affinity_id: number;
+  affinity_name: string;
+  percent: number;
+}
+
 /** Mirrors `world.character_sheets.types.AuraData`. */
 export interface CharacterSheetAura {
   /** CharacterAura pk — the id the aura action endpoints (`/api/magic/character-auras/{id}/...`) key on. */
   id: number;
-  celestial: number;
-  primal: number;
-  abyssal: number;
+  /** One row per affinity the character holds, highest percent first. */
+  shares: CharacterSheetAuraShare[];
+  /** The dominant affinity's name; blank before the aura holds any share. */
+  dominant_affinity: string;
   glimpse_story: string;
   glimpse_state: 'NOT_STARTED' | 'TAGS_ONLY' | 'COMPLETE';
   glimpse_tags: CharacterSheetGlimpseTag[];

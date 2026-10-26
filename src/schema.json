@@ -50425,27 +50425,19 @@ components:
         character:
           type: integer
           description: The character this aura belongs to.
-        celestial:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Celestial affinity (0-100).
-        primal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Primal affinity (0-100).
-        abyssal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Abyssal affinity (0-100).
+        shares:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterAuraShare'
+          readOnly: true
         dominant_affinity:
           type: string
+          description: The dominant affinity's name, blank before the aura holds any
+            share.
           readOnly: true
         dominant_affinity_display:
           type: string
-          description: Return the display label for the dominant affinity.
+          description: The dominant affinity's name for display.
           readOnly: true
         glimpse_state:
           allOf:
@@ -50467,6 +50459,7 @@ components:
       - dominant_affinity_display
       - glimpse_state
       - id
+      - shares
       - updated_at
     CharacterAuraRequest:
       type: object
@@ -50475,23 +50468,28 @@ components:
         character:
           type: integer
           description: The character this aura belongs to.
-        celestial:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Celestial affinity (0-100).
-        primal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Primal affinity (0-100).
-        abyssal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Abyssal affinity (0-100).
       required:
       - character
+    CharacterAuraShare:
+      type: object
+      description: One affinity's share of an aura.
+      properties:
+        affinity_id:
+          type: integer
+          readOnly: true
+        affinity_name:
+          type: string
+          readOnly: true
+        percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          readOnly: true
+          description: This affinity's share of the aura, 0-100.
+      required:
+      - affinity_id
+      - affinity_name
+      - percent
     CharacterClass:
       type: object
       description: Full serializer for character class detail with core traits.
@@ -78106,21 +78104,6 @@ components:
         character:
           type: integer
           description: The character this aura belongs to.
-        celestial:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Celestial affinity (0-100).
-        primal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Primal affinity (0-100).
-        abyssal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
-          description: Percentage of Abyssal affinity (0-100).
     PatchedCharacterDraftRequest:
       type: object
       description: Serializer for character drafts.
