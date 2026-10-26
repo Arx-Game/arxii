@@ -16,9 +16,15 @@ from world.magic.factories import (
     ensure_conversion_pairs,
     set_aura_split,
 )
-from world.magic.models import CharacterResonance, FallRedemptionRecord, ResonanceConversion
+from world.magic.models import (
+    CharacterResonance,
+    FallRedemptionRecord,
+    ResonanceConversion,
+    Ritual,
+)
 from world.magic.services.resonance import grant_resonance
 
+PERFORM_URL = "/api/magic/rituals/perform/"
 _FALL_PATH = "world.magic.services.fall_redemption.perform_fall"
 
 
@@ -69,4 +75,34 @@ class FallingByAffinityId(_AFalling):
             self.ysmay, f"ritual Ritual of Falling target_affinity={self.celestial.pk}"
         )
         self.assertIn("already dominant", told)
+        self.assertFalse(FallRedemptionRecord.objects.filter(character_sheet=self.sheet).exists())
+
+
+class FallingThroughTheWebClient(_AFalling):
+    def setUp(self) -> None:
+        super().setUp()
+        self.ritual = Ritual.objects.get(name="Ritual of Falling")
+
+    def _post(self, affinity_id: int):
+        return self.api(self.account_of(self.ysmay)).post(
+            PERFORM_URL,
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.ritual.pk,
+                "kwargs": {"target_affinity": affinity_id},
+            },
+            format="json",
+        )
+
+    def test_the_web_client_falls_to_primal_by_its_id(self) -> None:
+        response = self._post(self.primal.pk)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data["result"]["to_affinity"]["id"], self.primal.pk)
+        record = FallRedemptionRecord.objects.get(character_sheet=self.sheet)
+        self.assertEqual(record.to_affinity, self.primal)
+
+    def test_the_web_client_is_refused_an_unknown_affinity_id(self) -> None:
+        response = self._post(999999)
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.data["detail"], "No affinity with id 999999.")
         self.assertFalse(FallRedemptionRecord.objects.filter(character_sheet=self.sheet).exists())

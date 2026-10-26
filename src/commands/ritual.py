@@ -531,13 +531,15 @@ class CmdRitual(ArxCommand):
 
         affinity_id = raw_kwargs.pop("target_affinity", None)
         if affinity_id is not None:
-            from world.magic.models import Affinity  # noqa: PLC0415
+            from world.magic.exceptions import UnknownAffinity  # noqa: PLC0415
+            from world.magic.services.fall_redemption import (  # noqa: PLC0415
+                resolve_target_affinity,
+            )
 
-            target_affinity = Affinity.objects.filter(pk=affinity_id).first()
-            if target_affinity is None:
-                msg = f"No affinity with id {affinity_id}."
-                raise CommandError(msg)
-            service_kwargs["target_affinity"] = target_affinity
+            try:
+                service_kwargs["target_affinity"] = resolve_target_affinity(affinity_id)
+            except UnknownAffinity as err:
+                raise CommandError(err.user_message) from err
 
         service_kwargs.update(raw_kwargs)
 

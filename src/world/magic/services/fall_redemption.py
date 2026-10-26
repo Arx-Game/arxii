@@ -15,7 +15,11 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.magic.constants import GainSource
-from world.magic.exceptions import ConversionMappingError, FallEligibilityError
+from world.magic.exceptions import (
+    ConversionMappingError,
+    FallEligibilityError,
+    UnknownAffinity,
+)
 from world.magic.models.aura import CharacterAura
 from world.magic.models.fall_redemption import (
     ConversionType,
@@ -33,6 +37,28 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.affinity import Affinity
     from world.magic.models.fall_redemption import CompromiseActType
+
+
+def resolve_target_affinity(affinity_id: object) -> Affinity:
+    """Resolve the ``target_affinity`` id a ritual caller sends to its ``Affinity``.
+
+    The one resolver the telnet ``ritual`` command and the web ritual-perform view
+    share, so ``perform_fall`` always receives an ``Affinity``, never a bare id.
+    Raises ``UnknownAffinity`` (player-safe ``user_message``) for a non-integer or
+    unknown id.
+    """
+    from world.magic.models.affinity import Affinity  # noqa: PLC0415
+
+    if isinstance(affinity_id, bool) or not isinstance(affinity_id, int | str):
+        raise UnknownAffinity(affinity_id)
+    try:
+        pk = int(affinity_id)
+    except ValueError:
+        raise UnknownAffinity(affinity_id) from None
+    affinity = Affinity.objects.filter(pk=pk).first()
+    if affinity is None:
+        raise UnknownAffinity(affinity_id)
+    return affinity
 
 
 def grant_compromise_resonance(
