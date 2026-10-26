@@ -24,10 +24,13 @@ from actions.definitions.almanach import (
     AlmanachPlanEstateAction,
     AlmanachPlantRungAction,
     AlmanachPublishAction,
+    AlmanachRemoveHoldingAction,
+    AlmanachRenameHoldingAction,
+    AlmanachSiteHoldingAction,
     AlmanachSwearAction,
     AlmanachVacateHolderAction,
 )
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, RoomProfileFactory
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import GenderFactory
@@ -35,7 +38,7 @@ from world.roster.constants import MembershipBasis
 from world.roster.factories import FamilyFactory, KinspersonFactory, UnionKindFactory
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import plant_rung
-from world.societies.houses.constants import HouseState, TitleTier
+from world.societies.houses.constants import HoldingSiteKind, HouseState, TitleTier
 from world.societies.houses.factories import HoldingKindFactory
 from world.societies.houses.models import Domain, FealtyEdge, Title
 
@@ -241,6 +244,97 @@ class AlmanachActionTests(TestCase):
             self.player, title_id=self.kingdom.pk, org_id=house.pk
         )
         assert not result.success
+
+    def _add_holding(self, **kind_kwargs):
+        kind = HoldingKindFactory(**kind_kwargs)
+        result = AlmanachAddHoldingAction().run(
+            self.staff,
+            domain_id=self.kingdom.seat_domain_id,
+            holding_kind_id=kind.pk,
+            name="Quarry",
+            unsited=True,
+        )
+        assert result.success, result.message
+        return result
+
+    def test_rename_holding(self) -> None:
+        from world.societies.houses.models import DomainHolding
+
+        self._add_holding()
+        holding = DomainHolding.objects.get(name="Quarry")
+
+        blank = AlmanachRenameHoldingAction().run(self.staff, holding_id=holding.pk, name="  ")
+        assert not blank.success
+        result = AlmanachRenameHoldingAction().run(
+            self.staff, holding_id=holding.pk, name="North Quarry"
+        )
+
+        assert result.success, result.message
+        holding.refresh_from_db()
+        assert holding.name == "North Quarry"
+        assert not AlmanachRenameHoldingAction().run(self.staff, holding_id=0, name="x").success
+
+    def test_remove_holding_deletes_it_and_its_income_stream(self) -> None:
+        from world.currency.models import OrgIncomeStream
+        from world.societies.houses.models import DomainHolding
+
+        self._add_holding()
+        holding = DomainHolding.objects.get(name="Quarry")
+        stream_pk = holding.income_stream_id
+        assert stream_pk is not None
+
+        result = AlmanachRemoveHoldingAction().run(self.staff, holding_id=holding.pk)
+
+        assert result.success, result.message
+        assert not DomainHolding.objects.filter(pk=holding.pk).exists()
+        assert not OrgIncomeStream.objects.filter(pk=stream_pk).exists()
+
+    def test_remove_holding_refuses_while_income_is_uncollected(self) -> None:
+        from world.societies.houses.models import DomainHolding
+
+        self._add_holding()
+        holding = DomainHolding.objects.get(name="Quarry")
+        stream = holding.income_stream
+        stream.uncollected_pool = 500
+        stream.save(update_fields=["uncollected_pool"])
+
+        result = AlmanachRemoveHoldingAction().run(self.staff, holding_id=holding.pk)
+
+        assert not result.success
+        assert DomainHolding.objects.filter(pk=holding.pk).exists()
+
+    def test_site_holding_refuses_a_land_holding_with_no_ground_named(self) -> None:
+        from world.societies.houses.models import DomainHolding
+
+        self._add_holding(site_kind=HoldingSiteKind.LAND)
+        holding = DomainHolding.objects.get(name="Quarry")
+
+        result = AlmanachSiteHoldingAction().run(self.staff, holding_id=holding.pk)
+
+        assert not result.success
+        missing = AlmanachSiteHoldingAction().run(self.staff, holding_id=holding.pk, room_id=0)
+        assert not missing.success
+
+    def test_site_holding_places_a_land_holding_on_an_outdoor_room_under_the_domain(self) -> None:
+        from world.societies.houses.models import DomainHolding
+
+        self._add_holding(site_kind=HoldingSiteKind.LAND, units_required=1)
+        holding = DomainHolding.objects.get(name="Quarry")
+        room = RoomProfileFactory(area=self.kingdom.seat_domain.area, is_outdoor=True)
+
+        result = AlmanachSiteHoldingAction().run(self.staff, holding_id=holding.pk, room_id=room.pk)
+
+        assert result.success, result.message
+        holding.refresh_from_db()
+        assert holding.room_profile_id == room.pk
+
+    def test_player_is_refused_the_holding_actions(self) -> None:
+        for action in (
+            AlmanachSiteHoldingAction(),
+            AlmanachRenameHoldingAction(),
+            AlmanachRemoveHoldingAction(),
+        ):
+            assert not action.run(self.player, holding_id=1).success
 
     def _duchy_held_by(self, name: str):
         house = OrganizationFactory(name=name, family=FamilyFactory(name=name))

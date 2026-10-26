@@ -812,13 +812,18 @@ itself.
 
 ### Actions (`actions/definitions/almanach.py`)
 
-Fourteen REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
+Seventeen REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
 `StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`),
 `AlmanachBatchUnclaimedAction` (`almanach_batch_unclaimed`), `AlmanachNameRungAction`
 (`almanach_name_rung`), `AlmanachAssignHolderAction` (`almanach_assign_holder`, kwargs `title_id`,
 `org_id`: `almanach.assign_holder`, seating an existing house on a rung's whole chain, vacant or
 held, #4614), `AlmanachVacateHolderAction` (`almanach_vacate_holder`, kwarg `title_id`:
-`almanach.vacate_holder`, the inverse, #4615), `AlmanachDeleteRungAction` (`almanach_delete_rung`: `almanach.delete_rung` removes a
+`almanach.vacate_holder`, the inverse, #4615), `AlmanachSiteHoldingAction` (`almanach_site_holding`: `holding_id` plus
+`room_id`/`field_id`/`building_id`, over `resolve_holding_site` and `site_holding`),
+`AlmanachRenameHoldingAction` (`almanach_rename_holding`) and `AlmanachRemoveHoldingAction`
+(`almanach_remove_holding`: `almanach.remove_holding` drops the holding and its income stream,
+refused while the stream has uncollected income or is still referenced) (#4616),
+`AlmanachDeleteRungAction` (`almanach_delete_rung`: `almanach.delete_rung` removes a
 chain's Titles, Domains and Areas, refused while held, with rungs, holdings or rooms beneath, or
 when something else still points at the land) and `AlmanachMoveRungAction` (`almanach_move_rung`,
 `title_id` + `parent_title_id`: `almanach.move_rung` reparents the rung's Area, refused for another
@@ -843,7 +848,10 @@ chain's top title (`assign_holder` refuses an inner chain member), over `almanac
 (#4614). Create Family stays the way to seat a brand-new family. A held chain-top rung also offers
 Vacate (a second press confirms): the chain returns to unheld and claimable, its Domains lose
 their owner, and a house sworn to the old holder by the land it holds beneath is re-sworn to the
-nearest remaining liege, or released when none is left (#4615). A chain-top rung's page also offers Move
+nearest remaining liege, or released when none is left (#4615). Each holding row on the page (`title/
+HoldingRow.tsx`) renames, removes (second press) and, for land holdings, places itself on a room
+found by name. A farm's field and a building holding's building have no finder yet, so those two
+site kinds are placed through the action only (#4616). A chain-top rung's page also offers Move
 under (a select of the realm's rungs) and, while unheld, Delete rung (second press; lands on the
 realm ladder after) (#4617).
 

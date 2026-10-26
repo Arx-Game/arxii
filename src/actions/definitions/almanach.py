@@ -1,6 +1,6 @@
 """Staff Almanach de Catenys actions (#3983): the feudal ladder + house record.
 
-Fourteen REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
+Seventeen REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
 by ``StaffOnlyPrerequisite`` — the shared ``action.run()`` seam a future web
 staff console and telnet alike will dispatch through, mirroring the shape of
 the world-builder canvas (``world_builder.py``). Each is a thin wrapper over
@@ -247,6 +247,114 @@ class AlmanachAssignHolderAction(_AlmanachAction):
             message=f"{org.name} holds {title.name or 'the rung'}.",
             data={"title_id": title.pk, "org_id": org.pk},
         )
+
+
+def _holding(kwargs: dict[str, Any]):
+    from world.societies.houses.models import DomainHolding  # noqa: PLC0415
+
+    return DomainHolding.objects.filter(pk=kwargs.get("holding_id")).first()
+
+
+_NO_SUCH_HOLDING = "No such holding."
+
+
+@dataclass
+class AlmanachSiteHoldingAction(_AlmanachAction):
+    """Place a holding on the ground its kind calls for. Kwargs: ``holding_id`` and
+    the site the kind needs: ``room_id`` (land), ``field_id`` (a farm), ``building_id``."""
+
+    key: str = "almanach_site_holding"
+    name: str = "Site Holding"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.services import (  # noqa: PLC0415
+            HousesServiceError,
+            resolve_holding_site,
+            site_holding,
+        )
+
+        holding = _holding(kwargs)
+        if holding is None:
+            return ActionResult(success=False, message=_NO_SUCH_HOLDING)
+        try:
+            site = resolve_holding_site(
+                room_id=_int_or_none(kwargs.get("room_id")),
+                building_id=_int_or_none(kwargs.get("building_id")),
+                field_id=_int_or_none(kwargs.get("field_id")),
+            )
+            site_holding(holding, **site)
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        return ActionResult(
+            success=True,
+            message=f"{holding.name or holding.kind.name} placed.",
+            data={"holding_id": holding.pk},
+        )
+
+
+@dataclass
+class AlmanachRenameHoldingAction(_AlmanachAction):
+    """Rename a holding. Kwargs: ``holding_id``, ``name``."""
+
+    key: str = "almanach_rename_holding"
+    name: str = "Rename Holding"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import rename_holding  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        holding = _holding(kwargs)
+        if holding is None:
+            return ActionResult(success=False, message=_NO_SUCH_HOLDING)
+        try:
+            holding = rename_holding(holding, kwargs.get("name") or "")
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        return ActionResult(
+            success=True,
+            message=f"{holding.name} renamed.",
+            data={"holding_id": holding.pk},
+        )
+
+
+@dataclass
+class AlmanachRemoveHoldingAction(_AlmanachAction):
+    """Remove a holding and its income stream. Kwargs: ``holding_id``."""
+
+    key: str = "almanach_remove_holding"
+    name: str = "Remove Holding"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import remove_holding  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        holding = _holding(kwargs)
+        if holding is None:
+            return ActionResult(success=False, message=_NO_SUCH_HOLDING)
+        label = holding.name or holding.kind.name
+        try:
+            remove_holding(holding)
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        return ActionResult(success=True, message=f"{label} removed.", data={})
 
 
 @dataclass
