@@ -36,7 +36,7 @@ from world.covenants.factories import (
 from world.covenants.services import swear_court_pact
 from world.magic.constants import TargetKind
 from world.magic.factories import CharacterResonanceFactory, ThreadPullCostFactory
-from world.magic.models import Thread
+from world.magic.models import Thread, ThreadLevelUnlock
 from world.magic.services.resonance import spend_resonance_for_imbuing
 from world.magic.types.pull import CastPullDeclaration
 from world.npc_services.models import NPCStanding
@@ -64,7 +64,7 @@ class EmergencyDrawNonCombatE2ETests(CastScenarioMixin):
         cls.resonance = cls.flat_bonus_rows[0].resonance
 
         swear_court_pact(
-            covenant=cls.covenant, servant_sheet=cls.caster.character_sheet, granted_pull_cap=2
+            covenant=cls.covenant, servant_sheet=cls.caster.character_sheet, granted_pull_cap=10
         )
         # Seat + engage the caster on the Court's role — required by
         # _anchor_in_action's COVENANT_ROLE branch before any pull is attempted
@@ -93,11 +93,13 @@ class EmergencyDrawNonCombatE2ETests(CastScenarioMixin):
         # The FLAT_BONUS row (wire_court_role_powers_catalog) is authored at
         # min_thread_level=1 — the pull-effect eligibility check reads the thread's
         # REAL level (never the beseech-boosted effective level), so the thread
-        # must actually be imbued to level 1 for there to be an applicable effect.
-        spend_resonance_for_imbuing(cls.caster.character_sheet, cls.thread, 1)
+        # must actually be imbued to stored 10 (shown 1, #4585) for there to be an
+        # applicable effect.
+        ThreadLevelUnlock.objects.create(thread=cls.thread, unlocked_level=10, xp_spent=0)
+        spend_resonance_for_imbuing(cls.caster.character_sheet, cls.thread, 10)
         cls.thread.refresh_from_db()
         cls.starting_thread_level = cls.thread.level
-        assert cls.starting_thread_level == 1
+        assert cls.starting_thread_level == 10
 
         # Wires CourtGrantConfig.petition_check_type — required or
         # _resolve_emergency_draw degrades to (None, 0).
@@ -167,8 +169,8 @@ class EmergencyDrawNonCombatE2ETests(CastScenarioMixin):
         self.assertEqual(standing.consecutive_failed_petitions, 1)
 
         # The base pull itself still commits (resonance debited) even though
-        # the emergency bonus was denied. Starting balance 20, minus 1 already
-        # spent imbuing the thread to level 1 in setUpTestData, minus this
+        # the emergency bonus was denied. Starting balance 20, minus 10 already
+        # spent imbuing the thread to stored 10 in setUpTestData, minus this
         # pull's tier-1 cost of 1.
         self.character_resonance.refresh_from_db()
-        self.assertEqual(self.character_resonance.balance, 20 - 1 - 1)
+        self.assertEqual(self.character_resonance.balance, 20 - 10 - 1)

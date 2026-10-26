@@ -1,12 +1,13 @@
-"""Tests for the GIFT branch of compute_anchor_cap (#1580).
+"""Tests for the GIFT branch of compute_anchor_cap (#1580, #4585).
 
-GIFT thread anchor cap = current_path_stage(owner) × ANCHOR_CAP_GIFT_PER_STAGE (10).
+A gift has no cap value of its own, so a GIFT thread's anchor cap is the owner's
+level cap: ``compute_level_cap(owner)`` = character level × 10. Path stage no longer
+enters any thread cap (#4585).
 """
 
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import ANCHOR_CAP_GIFT_PER_STAGE
 from world.magic.factories import GiftFactory, ResonanceFactory
 from world.magic.models import Thread
 from world.magic.services import compute_anchor_cap
@@ -14,7 +15,7 @@ from world.magic.specialization.services import provision_latent_gift_thread
 
 
 class GiftAnchorCapTests(TestCase):
-    """compute_anchor_cap for GIFT-kind threads: path_stage × ANCHOR_CAP_GIFT_PER_STAGE."""
+    """compute_anchor_cap for GIFT-kind threads: the owner's level cap."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -22,9 +23,9 @@ class GiftAnchorCapTests(TestCase):
         cls.resonance = ResonanceFactory()
         cls.gift.resonances.add(cls.resonance)
 
-    def _gift_thread(self, path_stage: int) -> Thread:
-        """Return a level-0 GIFT thread whose owner has the given path stage."""
-        sheet = CharacterSheetFactory(_path_stage=path_stage)
+    def _gift_thread(self, **sheet_kwargs: object) -> Thread:
+        """Return a level-0 GIFT thread on a sheet built with ``sheet_kwargs``."""
+        sheet = CharacterSheetFactory(**sheet_kwargs)
         provision_latent_gift_thread(sheet, self.gift, resonance=self.resonance)
         return Thread.objects.get(
             owner=sheet,
@@ -32,16 +33,17 @@ class GiftAnchorCapTests(TestCase):
             target_gift=self.gift,
         )
 
-    def test_gift_anchor_cap_stage_two(self) -> None:
-        """Owner at path stage 2 → anchor cap = 2 × 10 = 20."""
-        thread = self._gift_thread(path_stage=2)
+    def test_gift_anchor_cap_follows_character_level(self) -> None:
+        """A level-4 owner → anchor cap = 4 × 10 = 40."""
+        thread = self._gift_thread(_class_level=4)
+        self.assertEqual(compute_anchor_cap(thread), 40)
+
+    def test_gift_anchor_cap_without_class_level_is_ten(self) -> None:
+        """No class level → get_character_path_level returns 1 → cap 10, never 0."""
+        thread = self._gift_thread()
+        self.assertEqual(compute_anchor_cap(thread), 10)
+
+    def test_gift_anchor_cap_ignores_path_stage(self) -> None:
+        """A high Path stage no longer raises the cap; only character level does."""
+        thread = self._gift_thread(_path_stage=5, _class_level=2)
         self.assertEqual(compute_anchor_cap(thread), 20)
-
-    def test_gift_anchor_cap_stage_zero(self) -> None:
-        """Owner at path stage 0 → anchor cap = 0 × 10 = 0."""
-        thread = self._gift_thread(path_stage=0)
-        self.assertEqual(compute_anchor_cap(thread), 0)
-
-    def test_gift_per_stage_constant_is_ten(self) -> None:
-        """Tuning constant is 10; changing it here would invalidate the formula tests."""
-        self.assertEqual(ANCHOR_CAP_GIFT_PER_STAGE, 10)

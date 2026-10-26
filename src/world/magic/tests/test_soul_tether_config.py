@@ -20,8 +20,8 @@ class SoulTetherConfigSineatingKnobsTest(TestCase):
         cfg = get_soul_tether_config()
         cfg.hollow_max_level_mult = 7
         cfg.save()
-        thread = self._make_thread(level=2)
-        self.assertEqual(_compute_hollow_max(thread), 14)  # 2 * 7
+        thread = self._make_thread(level=20)  # stored; shows 2 (#4585)
+        self.assertEqual(_compute_hollow_max(thread), 14)  # shown 2 * 7
 
     def test_per_scene_cap_reads_knobs_from_config(self):
         from world.magic.services.soul_tether import (
@@ -34,7 +34,7 @@ class SoulTetherConfigSineatingKnobsTest(TestCase):
         cfg.per_scene_cap_base = 10
         cfg.per_scene_cap_hard_max = 100
         cfg.save()
-        thread = self._make_thread(level=4)
+        thread = self._make_thread(level=40)  # stored; shows 4 (#4585)
         # min(100, 4*3 + 10) = min(100, 22) = 22
         self.assertEqual(_compute_per_scene_sineating_cap(thread, MagicMock()), 22)
 

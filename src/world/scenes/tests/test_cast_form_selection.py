@@ -65,11 +65,12 @@ class CastableTechniqueFormsTest(TestCase):
         )
 
     def _thread_at(self, level: int) -> Thread:
+        """The GIFT thread SHOWN at ``level`` (stored × 10, #4585)."""
         provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
         thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )
-        thread.level = level
+        thread.level = level * 10
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
         return thread

@@ -23,11 +23,14 @@ from world.covenants.factories import (
 )
 from world.magic.constants import TargetKind
 from world.magic.factories import CharacterResonanceFactory
-from world.magic.models import Thread
+from world.magic.models import Thread, ThreadLevelUnlock
 from world.magic.services import spend_resonance_for_imbuing
 from world.mechanics.services import covenant_role_base_total
 from world.narrative.models import NarrativeMessageDelivery
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+#: dp to carry the role thread from stored 29 to 30: (29 - 9) × 100.
+IMBUE_TO_THIRTY = 2000
 
 
 def _make_active_sheet():
@@ -58,7 +61,8 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
         # Covenant + engaged membership on the parent role.
         # make_engaged_member creates and engages the membership.
-        self.covenant = CovenantFactory(covenant_type=self.parent_role.covenant_type)
+        # Covenant level 3 → the role thread's anchor cap is 30 (#4585: shown 3).
+        self.covenant = CovenantFactory(covenant_type=self.parent_role.covenant_type, level=3)
         self.membership = make_engaged_member(
             character_sheet=self.sheet,
             covenant=self.covenant,
@@ -69,23 +73,27 @@ class ResonanceSubroleEndToEndTest(TestCase):
         self.other_sheet = _make_active_sheet()
 
         # CharacterResonance row so spend_resonance_for_imbuing can find a balance.
-        # Create at level 2 (one below unlock_thread_level=3); cost to advance is 1 dp.
+        # The thread sits at stored 29 (shown 2, one below unlock_thread_level=3,
+        # #4585); the next level costs (29 - 9) × 100 = 2000 dp, and the stored-30
+        # XP boundary is paid below.
         self.cr = CharacterResonanceFactory(
             character_sheet=self.sheet,
             resonance=self.resonance,
-            balance=10,
+            balance=IMBUE_TO_THIRTY,
         )
 
-        # COVENANT_ROLE thread at level 2, anchored on parent_role with the sub-role's resonance.
+        # COVENANT_ROLE thread at stored 29 (shown 2), anchored on parent_role with the
+        # sub-role's resonance.
         self.thread = Thread.objects.create(
             owner=self.sheet,
             resonance=self.resonance,
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
-            level=2,
+            level=29,
             developed_points=0,
             name=f"Thread for {self.parent_role.name}",
         )
+        ThreadLevelUnlock.objects.create(thread=self.thread, unlocked_level=30, xp_spent=0)
 
     # ------------------------------------------------------------------
     # (a) Sub-role resolution
@@ -93,7 +101,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_currently_engaged_roles_returns_subrole_after_threshold(self) -> None:
         """After crossing unlock_thread_level, currently_engaged_roles() returns the sub-role."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, 1)
+        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
 
         char = self.sheet.character
         # Invalidate both the thread cache (so resolve_effective_role sees the updated level)
@@ -115,7 +123,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_covenant_role_base_total_positive_after_resolution(self) -> None:
         """covenant_role_base_total returns > 0 once the sub-role resolves."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, 1)
+        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
 
         char = self.sheet.character
         char.threads.invalidate()
@@ -134,7 +142,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_discovery_created(self) -> None:
         """Discovery row is created for the sub-role's achievement on first crossing."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, 1)
+        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
 
         ach = self.subrole.discovery_achievement
         self.assertIsNotNone(ach)
@@ -145,7 +153,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_character_achievement_granted(self) -> None:
         """CharacterAchievement row is created for the discovering character."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, 1)
+        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
 
         ach = self.subrole.discovery_achievement
         self.assertTrue(
@@ -157,7 +165,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_codex_knowledge_created_with_known_status(self) -> None:
         """CharacterCodexKnowledge(status=KNOWN) is created for the sub-role's codex_entry."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, 1)
+        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
 
         entry = self.subrole.codex_entry
         self.assertIsNotNone(entry)
@@ -171,7 +179,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_gamewide_narrative_message_reaches_other_active_sheet(self) -> None:
         """First-ever discovery sends a gamewide message; the other active sheet receives it."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, 1)
+        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
 
         self.assertTrue(
             NarrativeMessageDelivery.objects.filter(
@@ -182,7 +190,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_gamewide_narrative_message_reaches_discovering_sheet(self) -> None:
         """The discovering character also receives the gamewide message."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, 1)
+        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
 
         self.assertTrue(
             NarrativeMessageDelivery.objects.filter(recipient_character_sheet=self.sheet).exists(),
@@ -195,7 +203,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_anchor_role_in_returns_parent_after_subrole_resolution(self) -> None:
         """anchor_role_in() must return the stored parent role regardless of sub-role resolution."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, 1)
+        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
 
         char = self.sheet.character
         char.threads.invalidate()

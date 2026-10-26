@@ -46022,9 +46022,9 @@ export interface components {
      *     account (staff may pass any sheet).
      *
      *     Read-only computed fields (SerializerMethodFields):
-     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - level_cap: the character-level cap (compute_level_cap)
      *     - anchor_cap: the anchor-side cap (compute_anchor_cap)
-     *     - effective_cap: min(path_cap, anchor_cap)
+     *     - effective_cap: min(level_cap, anchor_cap)
      */
     PatchedThreadRequest: {
       /** @description Resonance this thread channels. */
@@ -50162,7 +50162,7 @@ export interface components {
       readonly sineater_sheet_id: number | null;
       /** @description Return the Sinner's current Hollow capacity (from the capstone Thread). */
       readonly hollow_current: number;
-      /** @description Return the Sinner's Hollow maximum (thread.level * 10). */
+      /** @description Return the Sinner's Hollow maximum (``_compute_hollow_max``, shown level × mult). */
       readonly hollow_max: number;
       /** @description Return the Sineater's total lifetime_helped across all resonances for this bond. */
       readonly sineater_lifetime_helped: number;
@@ -52765,9 +52765,9 @@ export interface components {
      *     account (staff may pass any sheet).
      *
      *     Read-only computed fields (SerializerMethodFields):
-     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - level_cap: the character-level cap (compute_level_cap)
      *     - anchor_cap: the anchor-side cap (compute_anchor_cap)
-     *     - effective_cap: min(path_cap, anchor_cap)
+     *     - effective_cap: min(level_cap, anchor_cap)
      */
     Thread: {
       readonly id: number;
@@ -52799,11 +52799,11 @@ export interface components {
       readonly level: number;
       /** @description Permanent points; advances level via ThreadLevelUnlock entries. */
       readonly developed_points: number;
-      /** @description Return the path-side cap for this thread's owner. */
-      readonly path_cap: number;
+      /** @description Return the character-level cap for this thread's owner (#4585). */
+      readonly level_cap: number;
       /** @description Return the anchor-side cap for this thread. */
       readonly anchor_cap: number;
-      /** @description Return min(path_cap, anchor_cap). */
+      /** @description Return min(level_cap, anchor_cap). */
       readonly effective_cap: number;
       /**
        * Format: date-time
@@ -52874,9 +52874,9 @@ export interface components {
      *     account (staff may pass any sheet).
      *
      *     Read-only computed fields (SerializerMethodFields):
-     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - level_cap: the character-level cap (compute_level_cap)
      *     - anchor_cap: the anchor-side cap (compute_anchor_cap)
-     *     - effective_cap: min(path_cap, anchor_cap)
+     *     - effective_cap: min(level_cap, anchor_cap)
      */
     ThreadRequest: {
       /** @description Resonance this thread channels. */

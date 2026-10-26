@@ -228,7 +228,7 @@ class OutfitDailyTrickleTests(TestCase):
         *,
         item_quality_multiplier: str = "2.00",
         attachment_quality_multiplier: str = "3.00",
-        thread_level: int = 2,
+        thread_level: int = 20,  # stored; shows 2 (#4585)
     ):
         """Build a CharacterSheet with an equipped item bearing a facet and a matching Thread.
 
@@ -276,7 +276,7 @@ class OutfitDailyTrickleTests(TestCase):
     def test_grants_resonance_when_thread_matches(self) -> None:
         """Equipped item bearing a facet + Thread on that facet → grant issued.
 
-        Config default base=1, item_quality=2.0, attach_quality=3.0, thread_level=2
+        Config default base=1, item_quality=2.0, attach_quality=3.0, thread_level=20 (shown 2)
         → amount = 1 × 2 × 3 × 2 = 12.
         """
         from world.magic.constants import GainSource

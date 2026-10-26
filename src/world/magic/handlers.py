@@ -20,7 +20,7 @@ from world.magic.models import CharacterResonance, Thread, ThreadPullEffect
 from world.magic.models.techniques import Technique
 from world.magic.services.pull_effects import get_pull_effects_for_thread
 from world.magic.services.resonance import _anchor_ambiently_active, resolve_gift_ids_by_technique
-from world.magic.services.threads import thread_level_multiplier
+from world.magic.services.threads import shown_thread_level, thread_level_multiplier
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -183,7 +183,7 @@ class CharacterThreadHandler:
         # --- Non-GIFT: sum contributions ---
         for row in non_gift_effects:
             level = thread_level.get((row.target_kind, row.resonance_id), 0)
-            if row.min_thread_level > level:
+            if row.min_thread_level > shown_thread_level(level):
                 continue
             multiplier = thread_level_multiplier(level)
             total += row.vital_bonus_amount * multiplier
@@ -214,7 +214,10 @@ class CharacterThreadHandler:
             )
             multiplier = thread_level_multiplier(t.level)
             for row in rows:
-                if row.min_thread_level > t.level or row.vital_bonus_amount is None:
+                if (
+                    row.min_thread_level > shown_thread_level(t.level)
+                    or row.vital_bonus_amount is None
+                ):
                     continue
                 total += row.vital_bonus_amount * multiplier
         return total
@@ -254,7 +257,10 @@ class CharacterThreadHandler:
         for t in gift_threads:
             rows = get_pull_effects_for_thread(t, tier=0, effect_kind=EffectKind.RESISTANCE)
             for row in rows:
-                if row.min_thread_level > t.level or row.resistance_amount is None:
+                if (
+                    row.min_thread_level > shown_thread_level(t.level)
+                    or row.resistance_amount is None
+                ):
                     continue
                 if self._resistance_matches(row, damage_type):
                     total += row.resistance_amount
@@ -287,7 +293,9 @@ class CharacterThreadHandler:
         total = 0
         for row in rows:
             level = thread_level.get((row.target_kind, row.resonance_id), 0)
-            if row.min_thread_level > level or not self._resistance_matches(row, damage_type):
+            if row.min_thread_level > shown_thread_level(level) or not self._resistance_matches(
+                row, damage_type
+            ):
                 continue
             total += row.resistance_amount
         return total
@@ -441,7 +449,7 @@ class CharacterThreadHandler:
         for row in non_gift_effects:
             candidates = threads_by_key.get((row.target_kind, row.resonance_id), [])
             for t in candidates:
-                if row.min_thread_level > t.level:
+                if row.min_thread_level > shown_thread_level(t.level):
                     continue
                 if (
                     row.target_kind == TargetKind.COVENANT_ROLE
@@ -532,7 +540,7 @@ class CharacterThreadHandler:
         INTENSITY_BUMP row that could possibly apply to any of the character's threads,
         level-scaled the same way ``resolve_pull_effects`` scales an active pull
         (``round(intensity_bump_amount * thread_level_multiplier(thread.level))``, gated
-        by ``min_thread_level <= thread.level``) — see
+        by ``min_thread_level <= shown_thread_level(thread.level)``) — see
         ``world/magic/services/resonance.py`` around lines 716-734. Memoizing here is what
         keeps ``contextual_thread_power`` query-free per context, so the agency oracle's
         technique sweep stays constant-query. Cleared by ``invalidate()``.
@@ -605,7 +613,7 @@ class CharacterThreadHandler:
                 )
                 continue
             for t in by_key.get((row.target_kind, row.resonance_id), []):
-                if row.min_thread_level > t.level:
+                if row.min_thread_level > shown_thread_level(t.level):
                     continue
                 scaled = round(row.intensity_bump_amount * thread_level_multiplier(t.level))
                 bumps[t.pk] = bumps.get(t.pk, 0) + scaled
@@ -651,7 +659,7 @@ class CharacterThreadHandler:
                 candidates = by_resonance_null.get(t.resonance_id, [])
             total = 0
             for row in candidates:
-                if row.min_thread_level > t.level:
+                if row.min_thread_level > shown_thread_level(t.level):
                     continue
                 total += round(row.intensity_bump_amount * thread_level_multiplier(t.level))
             if total:
@@ -778,7 +786,7 @@ class CharacterThreadHandler:
                 effect_kind=EffectKind.CAPABILITY_GRANT,
             )
             for row in rows:
-                if row.min_thread_level > t.level:
+                if row.min_thread_level > shown_thread_level(t.level):
                     continue
                 if row.capability_grant_id is not None:
                     value = apply_capability_curve(

@@ -80724,9 +80724,9 @@ components:
         account (staff may pass any sheet).
 
         Read-only computed fields (SerializerMethodFields):
-        - path_cap: the path-side cap (compute_path_cap)
+        - level_cap: the character-level cap (compute_level_cap)
         - anchor_cap: the anchor-side cap (compute_anchor_cap)
-        - effective_cap: min(path_cap, anchor_cap)
+        - effective_cap: min(level_cap, anchor_cap)
       properties:
         resonance:
           type: integer
@@ -89380,7 +89380,8 @@ components:
           readOnly: true
         hollow_max:
           type: integer
-          description: Return the Sinner's Hollow maximum (thread.level * 10).
+          description: Return the Sinner's Hollow maximum (``_compute_hollow_max``,
+            shown level × mult).
           readOnly: true
         sineater_lifetime_helped:
           type: integer
@@ -95028,9 +95029,9 @@ components:
         account (staff may pass any sheet).
 
         Read-only computed fields (SerializerMethodFields):
-        - path_cap: the path-side cap (compute_path_cap)
+        - level_cap: the character-level cap (compute_level_cap)
         - anchor_cap: the anchor-side cap (compute_anchor_cap)
-        - effective_cap: min(path_cap, anchor_cap)
+        - effective_cap: min(level_cap, anchor_cap)
       properties:
         id:
           type: integer
@@ -95075,9 +95076,9 @@ components:
           type: integer
           readOnly: true
           description: Permanent points; advances level via ThreadLevelUnlock entries.
-        path_cap:
+        level_cap:
           type: integer
-          description: Return the path-side cap for this thread's owner.
+          description: Return the character-level cap for this thread's owner (#4585).
           readOnly: true
         anchor_cap:
           type: integer
@@ -95085,7 +95086,7 @@ components:
           readOnly: true
         effective_cap:
           type: integer
-          description: Return min(path_cap, anchor_cap).
+          description: Return min(level_cap, anchor_cap).
           readOnly: true
         retired_at:
           type: string
@@ -95109,8 +95110,8 @@ components:
       - effective_cap
       - id
       - level
+      - level_cap
       - owner
-      - path_cap
       - resonance
       - resonance_name
       - retired_at
@@ -95247,9 +95248,9 @@ components:
         account (staff may pass any sheet).
 
         Read-only computed fields (SerializerMethodFields):
-        - path_cap: the path-side cap (compute_path_cap)
+        - level_cap: the character-level cap (compute_level_cap)
         - anchor_cap: the anchor-side cap (compute_anchor_cap)
-        - effective_cap: min(path_cap, anchor_cap)
+        - effective_cap: min(level_cap, anchor_cap)
       properties:
         resonance:
           type: integer

@@ -1618,8 +1618,8 @@ draft-time half):
 - `weave_creation_technique_thread(character_sheet, technique, resonance, *, level) ->
   Thread` weaves a TECHNIQUE thread at a starting level during creation, paid for in CG
   points. Raises `CreationThreadLevelTooHigh` above `CREATION_PERSONALIZATION_MAX_LEVEL`
-  (2), so creation never starts a thread at or past the first crossing (level 3) and no
-  crossing ceremony is skipped.
+  (1), because a new character is level 1 and a thread never exceeds its character's
+  level (#4585); that also keeps creation below the first crossing (level 3).
 - `next_signature_bonus(thread, catalog) -> SignatureMotifBonus | None` returns the
   nearest flourish the thread has not yet reached, for a "keep imbuing" display. See
   "Gradual unlock" above: `min_crossing_level` is the only gate on when a flourish
@@ -2299,9 +2299,9 @@ ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
 - **`Gift.resonances`** is repurposed to the **supported set** (a weave constraint, not the
   cast-time value) per ADR-0052.
 
-**GIFT anchor cap (#1580):** `compute_anchor_cap` now handles `TargetKind.GIFT`:
-`_current_path_stage(thread.owner) × ANCHOR_CAP_GIFT_PER_STAGE` (=10,
-`world/magic/services/threads.py`). GIFT threads are always in-action (intrinsic species
+**GIFT anchor cap (#1580, #4585):** `compute_anchor_cap` handles `TargetKind.GIFT` by
+returning `compute_level_cap(thread.owner)` (character level × 10,
+`world/magic/services/threads.py`): a gift has no cap value of its own. GIFT threads are always in-action (intrinsic species
 gift — added to `_ALWAYS_IN_ACTION_KINDS`). The frontend CG resonance picker is built (#1620).
 
 Proven end-to-end by `world/magic/tests/integration/test_gift_specialization_e2e.py` (#1578):
@@ -4177,11 +4177,36 @@ thread.target   # Returns the Trait / Technique / ObjectDB / CharacterRelationsh
 # Resolved level cap (per Spec A §2.4)
 from world.magic.services import (
     compute_anchor_cap,
-    compute_path_cap,
+    compute_level_cap,
     compute_effective_cap,
 )
-cap = compute_effective_cap(thread)   # min(path_cap, anchor_cap)
+cap = compute_effective_cap(thread)   # min(level_cap, anchor_cap)
 ```
+
+**Thread caps and the shown scale (#4585).** A thread level is stored ×10, like a stat:
+stored 30 shows 3. `compute_level_cap(sheet)` = `get_character_path_level(character) ×
+PATH_LEVEL_CAP_MULTIPLIER` (10, `world/magic/constants.py`; the sanctum Homecoming cap
+reads the same constant), so a thread is never shown above its owner's level. A sheet
+with no class level still gets 10. `compute_effective_cap` = min(level cap, anchor cap)
+and is the only place the level cap applies; each anchor cap holds only what its anchor
+imposes (ORGANIZATION: the org's granted cap; GIFT: the level cap; FACET:
+`lifetime // ANCHOR_CAP_FACET_DIVISOR`). No cap reads Path stage; `_current_path_stage`
+remains for the progression dashboard's display. An imbue that stops at the level cap
+reports `blocked_by="LEVEL_CAP"`; the thread serializer's field is `level_cap`.
+
+Every authored thread threshold is a **shown** level: crossings (3, 6, 11, 16, 21),
+`ThreadCrossingThreshold.level`, `CrossingOption.crossing_level`,
+`TechniqueVariant`/`CovenantRole.unlock_thread_level`,
+`SignatureMotifBonus.min_crossing_level`, `ThreadPullEffect.min_thread_level`,
+`CovenantRoleGiftGrant.unlock_thread_level`, `VowAddedEffect.unlock_thread_level`
+(including its per-level scaling) and `CREATION_PERSONALIZATION_MAX_LEVEL`. Every
+comparison goes through `shown_thread_level(level)` (= `level // 10`,
+`services/threads.py`). The imbue loop checks a crossing only at a whole shown level
+(`next_level % 10 == 0 and is_crossing_level(shown_thread_level(next_level))`); the
+crossing handlers list shown crossings between the start and end levels with the same
+`is_crossing_level` Paths use. Soul Tether's per-scene cap and Hollow max and the outfit
+trickle's level factor also read the shown level. The predicate DSL's `min_thread_level`
+stays on the stored scale, like its `min_trait`.
 
 ### Per-Character Handlers
 

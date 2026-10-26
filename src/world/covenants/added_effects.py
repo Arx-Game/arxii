@@ -28,8 +28,9 @@ the caster's own vow, COVENANT_ALLIES and WHOLE_GROUP on an ally's.
 
 ## Scaling
 
-The holder's COVENANT_ROLE thread level on the vow's anchor role gates the row
-(``unlock_thread_level``) and scales it: each level above the unlock adds the
+The holder's COVENANT_ROLE thread level on the vow's anchor role, shown scale
+(stored // 10, #4585), gates the row (``unlock_thread_level``) and scales it:
+each shown level above the unlock adds the
 row's ``severity_per_thread_level``, ``duration_per_thread_level`` and
 ``damage_per_thread_level``. A row from a secondary vow has each bonus
 multiplied by ``SecondaryVowConfig.potency_tenths`` and floor-divided by 10.
@@ -121,7 +122,7 @@ class _LiveRow:
 
     candidate: VowHolderCandidate
     effect: VowAddedEffect
-    thread_level: int
+    thread_level: int  # shown level (stored // 10, #4585)
 
 
 def vow_added_effects_for_cast(
@@ -414,9 +415,12 @@ def _live_rows(  # noqa: PLR0913 - the cast's gates, computed once by the caller
     check: SituationCheck,
 ) -> list[_LiveRow]:
     """Rows that pass every per-holder gate; the situation is checked last (it may query)."""
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+
     live: list[_LiveRow] = []
     for candidate in candidates:
-        level = levels.get((candidate.holder.pk, candidate.anchor_role_id), 0)
+        # unlock_thread_level and the per-level bonuses are on the shown scale (#4585).
+        level = shown_thread_level(levels.get((candidate.holder.pk, candidate.anchor_role_id), 0))
         live.extend(
             _LiveRow(candidate=candidate, effect=effect, thread_level=level)
             for effect in effects_by_role.get(candidate.role_id, ())

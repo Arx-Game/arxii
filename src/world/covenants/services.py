@@ -907,7 +907,10 @@ def _grant_role_gifts_and_techniques(membership: CharacterCovenantRole) -> None:
     sheet = membership.character_sheet
     role = membership.covenant_role
     # Resolve the COVENANT_ROLE thread level for this character.
-    thread_level = _covenant_role_thread_level(sheet, role)
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+
+    # unlock_thread_level is a shown level (#4585): a grant at 3 unlocks at stored 30.
+    thread_level = shown_thread_level(_covenant_role_thread_level(sheet, role))
     for grant in role.gift_grants.select_related("gift"):
         if thread_level < grant.unlock_thread_level:
             continue

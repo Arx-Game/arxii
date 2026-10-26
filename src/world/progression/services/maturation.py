@@ -70,13 +70,27 @@ def _milestone_years(matured_years: int, floor: int = 0) -> list[int]:
     return [year for year in MATURATION_MILESTONES if floor < year <= matured_years]
 
 
+def _band_cap_row(sheet: "CharacterSheet") -> MaturationStatCap | None:
+    """The authored band cap row for the sheet's current level band, if any."""
+    level = get_character_path_level(sheet.character)
+    return MaturationStatCap.objects.filter(path_stage=stage_for_level(level)).first()
+
+
 def stat_cap_for(sheet: "CharacterSheet") -> int | None:
     """The per-stat cap for the sheet's current stage, or None when unauthored."""
-    character = sheet.character
-    level = get_character_path_level(character)
-    stage = stage_for_level(level)
-    row = MaturationStatCap.objects.filter(path_stage=stage).first()
+    row = _band_cap_row(sheet)
     return row.stat_cap if row else None
+
+
+def skill_cap_for(sheet: "CharacterSheet") -> int | None:
+    """The per-skill cap for the sheet's current band in shown units (#4585).
+
+    None when the band has no row or its ``skill_cap`` is blank: no cap. Callers
+    compare against stored values at ``cap * 10`` (ADR-0193: authored numbers
+    convert at the comparison, never at rest).
+    """
+    row = _band_cap_row(sheet)
+    return row.skill_cap if row else None
 
 
 @transaction.atomic

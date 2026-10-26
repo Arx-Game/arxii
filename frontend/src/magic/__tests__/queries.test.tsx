@@ -157,7 +157,7 @@ const mockThread = {
   description: '',
   level: 10,
   developed_points: 100,
-  path_cap: 10,
+  level_cap: 10,
   anchor_cap: 10,
   effective_cap: 10,
   retired_at: null,

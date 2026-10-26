@@ -1237,11 +1237,11 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
 
     # ------------------------------------------------------------------
     # Per resonance: a tier-1 FLAT_BONUS pull, authored at min_thread_level=1
-    # so the PACT is the real gate (#1589 final review). A servant with no
-    # active pact gets granted cap 0 → their Court-role thread cannot imbue
-    # above level 0 → this min-level-1 effect does NOT apply → the pull yields
-    # no Court bonus. Keyed (target_kind, resonance, tier, min_thread_level) —
-    # the unique lookup.
+    # (shown; stored 10, #4585) so the PACT is the real gate (#1589 final
+    # review). A servant with no active pact gets granted cap 0 → their
+    # Court-role thread cannot imbue above level 0 → this min-level-1 effect
+    # does NOT apply → the pull yields no Court bonus. Keyed (target_kind,
+    # resonance, tier, min_thread_level) — the unique lookup.
     #
     # FLAT_BONUS effects carry NO narrative_snippet: the combat-commit snapshot
     # (CombatPullResolvedEffect's flat_bonus_payload CheckConstraint) requires
@@ -1357,6 +1357,9 @@ def engage_vow_with_thread(  # noqa: PLR0913 - mirrors the vow's own shape
 ) -> CharacterCovenantRole:
     """An engaged vow on ``role`` plus its COVENANT_ROLE thread at ``thread_level`` (#4581).
 
+    ``thread_level`` is the SHOWN level, the scale every vow and sub-role unlock is
+    authored on; the thread is stored at ``thread_level × 10`` (#4585).
+
     The thread sits on the role's anchor (its ``parent_role`` for a sub-role,
     else the role itself), where COVENANT_ROLE threads always key, with
     ``resonance`` or a fresh one. The character's covenant-role handler is
@@ -1378,7 +1381,7 @@ def engage_vow_with_thread(  # noqa: PLR0913 - mirrors the vow's own shape
         target_kind=TargetKind.COVENANT_ROLE,
         target_trait=None,
         target_covenant_role=anchor,
-        level=thread_level,
+        level=thread_level * 10,
     )
     sheet.character.covenant_roles.invalidate()
     return membership

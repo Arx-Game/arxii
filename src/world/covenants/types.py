@@ -38,7 +38,7 @@ class FiredVowEffect:
     is True when the row came from the holder's SECONDARY vow (#2641); its
     bonuses are then already scaled by ``SecondaryVowConfig.potency_tenths``.
 
-    Each bonus is ``max(0, thread level - unlock_thread_level)`` times the
+    Each bonus is ``max(0, shown thread level - unlock_thread_level)`` times the
     row's matching ``*_per_thread_level`` column, read off the holder's
     COVENANT_ROLE thread on the vow's anchor role. ``severity_bonus`` and
     ``duration_bonus`` add to every applied condition; ``damage_bonus`` adds to

@@ -62,9 +62,9 @@ This is the first full management surface for a major Spec A model family. It se
 
 - `weave_thread(character_sheet, target_kind, target, resonance, *, name, description) -> Thread` — eligibility + create
 - `update_thread_narrative(thread, *, name, description) -> Thread` — rename/redescribe
-- `spend_resonance_for_imbuing(character_sheet, thread, amount) -> ThreadImbueResult` — per-tier imbue with `blocked_by` enum (NONE, INSUFFICIENT_BUCKET, XP_LOCK, PATH_CAP, ANCHOR_CAP)
+- `spend_resonance_for_imbuing(character_sheet, thread, amount) -> ThreadImbueResult` — per-tier imbue with `blocked_by` enum (NONE, INSUFFICIENT_BUCKET, XP_LOCK, LEVEL_CAP, ANCHOR_CAP)
 - `cross_thread_xp_lock(character_sheet, thread, boundary_level) -> ThreadLevelUnlock` — pay XP at a boundary
-- `compute_path_cap(character_sheet)`, `compute_anchor_cap(thread)`, `compute_effective_cap(thread)`
+- `compute_level_cap(character_sheet)`, `compute_anchor_cap(thread)`, `compute_effective_cap(thread)`
 - `imbue_ready_threads(character_sheet) -> list[Thread]`
 - `near_xp_lock_threads(character_sheet, within=100) -> list[ThreadXPLockProspect]`
 - `threads_blocked_by_cap(character_sheet) -> list[Thread]`
@@ -236,7 +236,7 @@ We expose these via a single new aggregate endpoint (§10), not three round-trip
 │                                                             │
 │  Or: blocked-by callouts                                    │
 │  - blocked_by=XP_LOCK → render XPLockBoundaryPanel inline   │
-│  - blocked_by=PATH_CAP → "Advance your Path to raise this"  │
+│  - blocked_by=LEVEL_CAP → "Raise your character level"      │
 │  - blocked_by=ANCHOR_CAP → kind-specific guidance           │
 ├─────────────────────────────────────────────────────────────┤
 │ XP Lock Boundary panel (only if level%10==0 boundary blocks)│
