@@ -94,6 +94,19 @@ class RecordingRoll:
         return [call["extra_modifiers"] for call in self.calls]
 
 
+class RollByCharacter(RecordingRoll):
+    """A defence roll whose success level depends on who rolls, not on the order."""
+
+    def __init__(self, levels: dict[str, int], default: int = 0) -> None:
+        super().__init__()
+        self.by_name = levels
+        self.default = default
+
+    def __call__(self, character: Any, *_args: object, **kwargs: Any) -> MagicMock:
+        self.calls.append(kwargs)
+        return MagicMock(success_level=self.by_name.get(character.db_key, self.default))
+
+
 def _clean_hit(*args: object, **kwargs: object) -> MagicMock:
     return MagicMock(success_level=2)
 
@@ -346,7 +359,7 @@ class GettingClearOfAnAreaAttack(_TheCellar):
 
         begin_declaration_phase(self.encounter)
         self.web(self.malvaine, "combat_dodge", position_id=self.stage.pk)
-        self.resolve(RecordingRoll(1, 0))  # round 2: it lands
+        self.resolve(RollByCharacter({"Malvaine": 1}))  # round 2: it lands
 
         self.assertEqual(position_of(self.malvaine), self.stage)
         self.assertEqual(self.health(self.malvaine), 100)
