@@ -872,7 +872,8 @@ export function Lattice({
                 }
                 const state = cellState(key, sketch);
                 // The unplan control sits beside the square's button, not inside it:
-                // a button inside a button is invalid HTML.
+                // a button inside a button is invalid HTML. It sets the square's text-xs
+                // itself, and its 5px inset is the old 4px plus the square's 1px border.
                 return (
                   <div key={key} className="relative">
                     <button
@@ -898,7 +899,7 @@ export function Lattice({
                         type="button"
                         aria-label="unplan this square"
                         title="remove from the plan"
-                        className="absolute right-1 top-1 text-muted-foreground hover:text-primary"
+                        className="absolute right-[5px] top-[5px] text-xs text-muted-foreground hover:text-primary"
                         onClick={(event) => {
                           event.stopPropagation();
                           updateSketch((prev) => unplanCell(prev, key));
