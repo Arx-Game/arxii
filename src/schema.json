@@ -1637,6 +1637,8 @@ paths:
           - elevated_adjacent
           - same_type
         description: |-
+          Where the feature can take her.
+
           * `adjacent` - A place next to its own
           * `any_place` - Any place in the room
           * `same_type` - Another place with the same feature
@@ -58660,6 +58662,13 @@ components:
           allOf:
           - $ref: '#/components/schemas/FeatureTypeReachEnum'
           readOnly: true
+          description: |-
+            Where the feature can take her.
+
+            * `adjacent` - A place next to its own
+            * `any_place` - Any place in the room
+            * `same_type` - Another place with the same feature
+            * `elevated_adjacent` - A raised place next to its own
         art_url:
           type: string
           nullable: true

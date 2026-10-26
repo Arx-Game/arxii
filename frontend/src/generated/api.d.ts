@@ -34096,6 +34096,14 @@ export interface components {
     FeatureType: {
       readonly id: number;
       readonly name: string;
+      /**
+       * @description Where the feature can take her.
+       *
+       *     * `adjacent` - A place next to its own
+       *     * `any_place` - Any place in the room
+       *     * `same_type` - Another place with the same feature
+       *     * `elevated_adjacent` - A raised place next to its own
+       */
       readonly reach: components['schemas']['FeatureTypeReachEnum'];
       readonly art_url: string | null;
     };
@@ -56307,7 +56315,9 @@ export interface operations {
         /** @description Number of results to return per page. */
         page_size?: number;
         /**
-         * @description * `adjacent` - A place next to its own
+         * @description Where the feature can take her.
+         *
+         *     * `adjacent` - A place next to its own
          *     * `any_place` - Any place in the room
          *     * `same_type` - Another place with the same feature
          *     * `elevated_adjacent` - A raised place next to its own
