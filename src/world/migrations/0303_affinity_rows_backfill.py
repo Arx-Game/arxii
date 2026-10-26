@@ -120,11 +120,12 @@ def _copy_refs(apps, rows):
 def _copy_auras(apps, rows):
     aura_model = apps.get_model("arxii", "CharacterAura")
     share_model = apps.get_model("arxii", "CharacterAuraShare")
+    existing = set(share_model.objects.values_list("aura_id", "affinity_id"))
     shares = [
         share_model(aura=aura, affinity=rows[name], percent=getattr(aura, value))
         for aura in aura_model.objects.all()
         for value, name in _VALUE_TO_NAME.items()
-        if not share_model.objects.filter(aura=aura, affinity=rows[name]).exists()
+        if (aura.pk, rows[name].pk) not in existing
     ]
     share_model.objects.bulk_create(shares)
 
@@ -136,6 +137,9 @@ def _set_feeding_roles(apps):
 
 
 def forwards(apps, schema_editor):
+    if not apps.get_model("arxii", "Affinity").objects.exists():
+        # Fresh database (empty migrate, clone, regeneration gate): nothing to convert.
+        return
     rows = _affinity_rows(apps)
     _write_conversions(apps, rows)
     _write_coefficients(apps, rows)
@@ -145,7 +149,11 @@ def forwards(apps, schema_editor):
 
 
 def backwards(apps, schema_editor):
-    """Clear what forwards set; the old CharFields still hold the source values."""
+    """Clear the shares, conversions, coefficients, roles and _ref FKs.
+
+    Broader than what forwards wrote, which is acceptable: rolling back 0302 drops
+    these columns and the share table anyway, and the old CharFields keep the source.
+    """
     apps.get_model("arxii", "CharacterAuraShare").objects.all().delete()
     apps.get_model("arxii", "AffinityInteraction").objects.update(
         conversion_multiplier=None, conversion_type=""
