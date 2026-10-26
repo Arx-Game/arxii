@@ -46,6 +46,7 @@ from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
     ResonanceFactory,
     ThreadWeavingUnlockFactory,
+    ensure_canonical_affinities,
     wire_soul_tether_content,
     with_corruption_at_stage,
 )
@@ -65,38 +66,37 @@ _EMIT_EVENT_PATH = "world.magic.services.soul_tether.emit_event"
 # ---------------------------------------------------------------------------
 
 
-def _set_abyssal_primary(sheet: object) -> None:
+def _set_aura_split(sheet: object, *, celestial: str, primal: str, abyssal: str) -> None:
+    from world.magic.models import CharacterAura
+    from world.magic.services.aura import set_aura_shares
+    from world.magic.types import AffinityShare
+
     char = sheet.character  # type: ignore[union-attr]
-    try:
-        aura = char.aura
-        aura.celestial = Decimal("10.00")
-        aura.primal = Decimal("10.00")
-        aura.abyssal = Decimal("80.00")
-        aura.save()
-    except AttributeError:
+    aura = CharacterAura.objects.filter(character=char.sheet_data).first()
+    if aura is None:
         CharacterAuraFactory(
             character=char.sheet_data,
-            celestial=Decimal("10.00"),
-            primal=Decimal("10.00"),
-            abyssal=Decimal("80.00"),
+            celestial=Decimal(celestial),
+            primal=Decimal(primal),
+            abyssal=Decimal(abyssal),
         )
+        return
+    rows = ensure_canonical_affinities()
+    set_aura_shares(
+        aura,
+        [
+            AffinityShare(affinity=row, percent=Decimal(percent))
+            for row, percent in zip(rows, (celestial, primal, abyssal), strict=True)
+        ],
+    )
+
+
+def _set_abyssal_primary(sheet: object) -> None:
+    _set_aura_split(sheet, celestial="10.00", primal="10.00", abyssal="80.00")
 
 
 def _set_primal_primary(sheet: object) -> None:
-    char = sheet.character  # type: ignore[union-attr]
-    try:
-        aura = char.aura
-        aura.celestial = Decimal("10.00")
-        aura.primal = Decimal("80.00")
-        aura.abyssal = Decimal("10.00")
-        aura.save()
-    except AttributeError:
-        CharacterAuraFactory(
-            character=char.sheet_data,
-            celestial=Decimal("10.00"),
-            primal=Decimal("80.00"),
-            abyssal=Decimal("10.00"),
-        )
+    _set_aura_split(sheet, celestial="10.00", primal="80.00", abyssal="10.00")
 
 
 def _grant_track_unlock(sheet: object, track: object) -> object:
