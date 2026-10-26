@@ -1,6 +1,5 @@
 from django.contrib import admin
-from django.db.models import Prefetch, QuerySet
-from django.http import HttpRequest
+from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 
 from world.admin_utils import OneRowPerFormSet
@@ -18,7 +17,6 @@ from world.areas.positioning.models import (
     RampartElementResistance,
 )
 from world.areas.worldmap.models import RegionMap, RegionMapUpload
-from world.mechanics.models import ChallengeTemplateConsequence, ChallengeTemplateProperty
 from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 
 
@@ -111,10 +109,8 @@ class FeatureTypeAdmin(admin.ModelAdmin):
     list_display = [
         "name",
         "reach",
-        "challenge_template",
-        "properties",
+        "challenge",
         "difficulty",
-        "on_a_miss",
         "art",
     ]
     list_filter = ["reach"]
@@ -122,29 +118,12 @@ class FeatureTypeAdmin(admin.ModelAdmin):
     list_select_related = ["challenge_template", "art"]
     autocomplete_fields = ["art", "challenge_template"]
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet[FeatureType]:
-        return (
-            super()
-            .get_queryset(request)
-            .prefetch_related(
-                # Read through .all() on the cached rows; no per-instance attribute is wanted.
-                Prefetch(  # noqa: PREFETCH_STRING
-                    "challenge_template__challenge_template_properties",
-                    queryset=ChallengeTemplateProperty.objects.select_related("property"),
-                ),
-                Prefetch(  # noqa: PREFETCH_STRING
-                    "challenge_template__challenge_consequences",
-                    queryset=ChallengeTemplateConsequence.objects.select_related(
-                        "consequence__outcome_tier"
-                    ),
-                ),
-            )
-        )
-
-    @admin.display(description="Properties")
-    def properties(self, obj: FeatureType) -> str:
-        links = obj.challenge_template.challenge_template_properties.all()
-        return ", ".join(link.property.name for link in links)
+    @admin.display(description="Challenge")
+    def challenge(self, obj: FeatureType) -> str:
+        """Link to the challenge template, where properties, approaches and misses show live."""
+        template = obj.challenge_template
+        url = reverse("admin:arxii_challengetemplate_change", args=[template.pk])
+        return format_html('<a href="{}">{}</a>', url, template.name)
 
     @admin.display(description="Difficulty")
     def difficulty(self, obj: FeatureType) -> str:
@@ -152,15 +131,6 @@ class FeatureTypeAdmin(admin.ModelAdmin):
         severity = obj.challenge_template.severity
         band = min(DIFFICULTY_VALUES, key=lambda b: abs(DIFFICULTY_VALUES[b] - severity))
         return DifficultyChoice(band).label
-
-    @admin.display(description="On a miss")
-    def on_a_miss(self, obj: FeatureType) -> str:
-        links = obj.challenge_template.challenge_consequences.all()
-        return ", ".join(
-            link.consequence.label
-            for link in links
-            if link.consequence.outcome_tier.success_level < 1
-        )
 
 
 class BlueprintFeatureInline(admin.TabularInline):

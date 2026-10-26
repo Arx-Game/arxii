@@ -669,16 +669,17 @@ class StaffReadWhatAFeatureTypeDoes(TestCase):
     def changelist(self):
         return self.client.get(reverse("admin:arxii_featuretype_changelist"))
 
-    def test_the_list_shows_properties_difficulty_and_the_miss_result(self) -> None:
-        self.make_type("Chandelier")
+    def test_the_list_shows_difficulty_and_links_to_the_challenge(self) -> None:
+        feature_type = self.make_type("Chandelier")
 
         response = self.changelist()
 
         self.assertEqual(response.status_code, 200)
-        html = response.content.decode()
-        for expected in ("Chandelier-aerial", "Hard", "Fall", "Properties", "On a miss"):
-            self.assertIn(expected, html)
-        self.assertNotIn("Chandelier lands", html)
+        link = reverse(
+            "admin:arxii_challengetemplate_change", args=[feature_type.challenge_template.pk]
+        )
+        self.assertContains(response, f'<a href="{link}">Chandelier challenge</a>')
+        self.assertContains(response, "Hard")
 
     def test_more_rows_cost_no_more_queries(self) -> None:
         self.make_type("Chandelier")
