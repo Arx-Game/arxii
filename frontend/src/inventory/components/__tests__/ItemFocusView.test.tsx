@@ -7,7 +7,7 @@
  * quality tier border accent, stats, no action buttons).
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -250,7 +250,9 @@ describe('ItemFocusView', () => {
       );
 
       await user.click(screen.getByRole('button', { name: /steal/i }));
-      emitActionResult({ success: true, message: 'You take the brooch.', data: null });
+      act(() => {
+        emitActionResult({ success: true, message: 'You take the brooch.', data: null });
+      });
 
       await waitFor(() => {
         expect(onStolen).toHaveBeenCalledTimes(1);
@@ -267,7 +269,9 @@ describe('ItemFocusView', () => {
       );
 
       await user.click(screen.getByRole('button', { name: /steal/i }));
-      emitActionResult({ success: false, message: 'They catch your hand.', data: null });
+      act(() => {
+        emitActionResult({ success: false, message: 'They catch your hand.', data: null });
+      });
 
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalledWith('They catch your hand.');
