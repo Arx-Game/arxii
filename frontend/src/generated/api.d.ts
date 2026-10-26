@@ -47341,6 +47341,14 @@ export interface components {
       readonly integrity: number | null;
       readonly max_integrity: number | null;
     };
+    /** @description Read-only serializer for one feature standing in a place (#4675). */
+    PositionFeature: {
+      readonly id: number;
+      readonly name: string;
+      readonly art_url: string | null;
+      readonly square_x: number | null;
+      readonly square_y: number | null;
+    };
     /** @description Read-only serializer for one PositionNode — tactical-map node shape (#2006). */
     PositionNode: {
       readonly id: number;
@@ -47361,6 +47369,7 @@ export interface components {
       readonly area_h: number | null;
       readonly terrain_name: string | null;
       readonly terrain_art_url: string | null;
+      readonly features: components['schemas']['PositionFeature'][];
     };
     /** @description Compact public representation of a Position (id + name). */
     PositionSummary: {

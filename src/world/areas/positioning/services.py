@@ -871,6 +871,17 @@ def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
 
 
 @dataclass(frozen=True)
+class PositionFeatureInfo:
+    """One feature standing in a place, as the battle map draws it (#4675)."""
+
+    id: int
+    name: str
+    art_url: str | None
+    square_x: int | None
+    square_y: int | None
+
+
+@dataclass(frozen=True)
 class PositionNode:
     """One node in the tactical-map graph (#2006) — kind, elevation, and layout.
 
@@ -897,6 +908,7 @@ class PositionNode:
     area_h: int | None = None
     terrain_name: str | None = None
     terrain_art_url: str | None = None
+    features: tuple[PositionFeatureInfo, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -928,6 +940,17 @@ class PositionGraph:
 def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
     terrain = position.terrain if position.terrain_id else None
     art = terrain.art if terrain is not None and terrain.art_id else None
+    # ``features_cached`` is prefetched on every positions_cached path.
+    features = tuple(
+        PositionFeatureInfo(
+            id=f.pk,
+            name=f.feature_type.name,
+            art_url=f.feature_type.art.cloudinary_url if f.feature_type.art_id else None,
+            square_x=f.square_x,
+            square_y=f.square_y,
+        )
+        for f in sorted(position.features_cached, key=lambda f: f.pk)
+    )
     return PositionNode(
         id=position.pk,
         name=position.name,
@@ -947,6 +970,7 @@ def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
         area_h=position.area_h,
         terrain_name=terrain.name if terrain is not None else None,
         terrain_art_url=art.cloudinary_url if art is not None else None,
+        features=features,
     )
 
 

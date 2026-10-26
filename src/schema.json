@@ -83407,6 +83407,34 @@ components:
       - max_integrity
       - position_a_id
       - position_b_id
+    PositionFeature:
+      type: object
+      description: Read-only serializer for one feature standing in a place (#4675).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        art_url:
+          type: string
+          readOnly: true
+          nullable: true
+        square_x:
+          type: integer
+          readOnly: true
+          nullable: true
+        square_y:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - art_url
+      - id
+      - name
+      - square_x
+      - square_y
     PositionNode:
       type: object
       description: Read-only serializer for one PositionNode — tactical-map node shape
@@ -83479,12 +83507,18 @@ components:
           type: string
           readOnly: true
           nullable: true
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionFeature'
+          readOnly: true
       required:
       - area_h
       - area_w
       - area_x
       - area_y
       - elevation_anchor_id
+      - features
       - id
       - is_roofed
       - kind

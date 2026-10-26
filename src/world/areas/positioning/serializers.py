@@ -44,6 +44,16 @@ class PositionAdjacencyItemSerializer(serializers.Serializer):
     adjacent_position_ids = serializers.ListField(child=serializers.IntegerField(), read_only=True)
 
 
+class PositionFeatureSerializer(serializers.Serializer):
+    """Read-only serializer for one feature standing in a place (#4675)."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    art_url = serializers.CharField(read_only=True, allow_null=True)
+    square_x = serializers.IntegerField(read_only=True, allow_null=True)
+    square_y = serializers.IntegerField(read_only=True, allow_null=True)
+
+
 class PositionNodeSerializer(serializers.Serializer):
     """Read-only serializer for one PositionNode — tactical-map node shape (#2006)."""
 
@@ -65,6 +75,7 @@ class PositionNodeSerializer(serializers.Serializer):
     area_h = serializers.IntegerField(read_only=True, allow_null=True)
     terrain_name = serializers.CharField(read_only=True, allow_null=True)
     terrain_art_url = serializers.CharField(read_only=True, allow_null=True)
+    features = PositionFeatureSerializer(many=True, read_only=True)
 
 
 class PositionEdgeSerializer(serializers.Serializer):

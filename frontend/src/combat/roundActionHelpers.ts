@@ -6,13 +6,15 @@ import type { PlayerAction } from '@/scenes/actionTypes';
 
 /**
  * The registry actions that move the viewer during a round (#4663): a step, a take-off,
- * a landing, and a pass roll into held ground.
+ * a landing, a pass roll into held ground, and a stunt
+ * (#4675, panel-only: the battle map ignores it for map clicks).
  */
 export const MOVE_REGISTRY_KEYS: ReadonlySet<string> = new Set([
   'move_to_position',
   'take_flight',
   'land',
   'pass_held_ground',
+  'perform_stunt',
 ]);
 
 /** A registry action that moves the viewer (see MOVE_REGISTRY_KEYS). */

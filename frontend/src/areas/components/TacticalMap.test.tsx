@@ -55,6 +55,7 @@ const node = (
   area_h: null,
   terrain_name: null,
   terrain_art_url: null,
+  features: [],
   ...overrides,
 });
 

@@ -24,7 +24,12 @@ from world.contributors.models import CreditedContent
 _DAMAGE_TYPE_MODEL = "arxii.DamageType"
 
 # Instance-dict names of the Prefetch/query shared-interface caches on Position.
-_POSITION_EDGE_CACHES = ("passable_edges_as_a", "passable_edges_as_b", "all_edges_as_a")
+_POSITION_EDGE_CACHES = (
+    "passable_edges_as_a",
+    "passable_edges_as_b",
+    "all_edges_as_a",
+    "features_cached",
+)
 
 
 def _pop_room_graph(room: Any) -> None:
@@ -310,6 +315,10 @@ class Position(PositionNodeBase):
     @cached_property
     def all_edges_as_a(self) -> list[PositionEdge]:
         return list(self.edges_as_a.select_related("gating_challenge__template", "source_rampart"))
+
+    @cached_property
+    def features_cached(self) -> list[PositionFeature]:
+        return list(self.features.select_related("feature_type__art"))
 
     rampart_or_none = ReverseOneToOneOrNone("rampart")
 
