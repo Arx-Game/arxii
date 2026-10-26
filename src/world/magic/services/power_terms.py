@@ -147,8 +147,9 @@ def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: 
 
     if not config.affinity_alignment_bonus:
         return 0
-    aura = CharacterAura.objects.filter(character=ctx.sheet).first()
-    if aura is None:
+    try:
+        aura = ctx.sheet.aura
+    except CharacterAura.DoesNotExist:
         return 0
     alignment = 0
     affinities = {r.affinity for r in resonances}

@@ -2133,7 +2133,7 @@ class SituationRequirementMixin(models.Model):
         return SituationParams(
             threshold_percent=self.threshold_percent,
             count_threshold=self.count_threshold,
-            affinity=self.affinity,
+            affinity_ref=self.affinity_ref,
             origin_side=self.origin_side,
         )
 
@@ -2146,7 +2146,7 @@ class SituationRequirementMixin(models.Model):
         values: dict[str, object | None] = {
             "threshold_percent": self.threshold_percent,
             "count_threshold": self.count_threshold,
-            "affinity": self.affinity or None,
+            "affinity": self.affinity_ref,
             "origin_side": self.origin_side or None,
         }
         for field, value in values.items():

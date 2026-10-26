@@ -1,5 +1,6 @@
 """An Academy course taught under a Tradition is easier for a student who fits it (#4659)."""
 
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.db import connection
@@ -8,18 +9,18 @@ from django.test.utils import CaptureQueriesContext
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.game_clock.week_services import get_current_game_week
-from world.magic.constants import TargetKind
 from world.magic.factories import (
     AffinityFactory,
+    CharacterAuraFactory,
     CharacterGiftFactory,
     GiftFactory,
-    ResonanceFactory,
-    ThreadFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
 from world.magic.models import Affinity, TraditionGiftGrant
+from world.magic.services.aura import set_aura_shares
 from world.magic.services.teaching_fit import get_teaching_config, student_traits
+from world.magic.types import AffinityShare
 from world.npc_services.effects import _run_course_session
 from world.npc_services.factories import (
     NPCRoleFactory,
@@ -53,20 +54,15 @@ class SkillCourseTeachingFitTests(TestCase):
 
     def _student(self, *, gift=None, affinity=None):
         """A student holding ``gift`` (a fresh one when only ``affinity`` is given),
-        with a GIFT thread on it at a resonance of ``affinity``."""
+        with an aura wholly of ``affinity``."""
         sheet = CharacterSheetFactory()
         if gift is None and affinity is not None:
             gift = GiftFactory()
         if gift is not None:
             CharacterGiftFactory(character=sheet, gift=gift)
         if affinity is not None:
-            ThreadFactory(
-                owner=sheet,
-                resonance=ResonanceFactory(affinity=affinity),
-                target_kind=TargetKind.GIFT,
-                target_trait=None,
-                target_gift=gift,
-            )
+            aura = CharacterAuraFactory(character=sheet)
+            set_aura_shares(aura, [AffinityShare(affinity=affinity, percent=Decimal(100))])
         return sheet
 
     def _difficulty_rolled(self, sheet, course=None) -> int:
