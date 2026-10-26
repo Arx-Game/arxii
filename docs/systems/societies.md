@@ -672,7 +672,11 @@ Every held rung carries one `OrgIncomeStream` of kind `TERRITORY` (`Turf.income_
 `Domain.territory_stream`; `OrgIncomeStream.room_profile` anchors a crew's), created or
 retargeted by `ensure_turf_stream` / `ensure_domain_stream`; the weekly economy's new
 `territory` phase runs `ensure_territory_streams()` before income accrues, so rungs that
-predate #4060 need no backfill. At accrual (`currency.services.accrue_income_stream`) the
+predate #4060 need no backfill. New stream names reserve a `domain:<pk>` or `turf:<pk>`
+suffix within the 100-character limit: display labels may repeat or truncate, but
+separate rungs must keep separate pools. On an ownership change, an existing stream
+gets that suffix as it moves, preserving its row and accumulated pool; other existing
+names are left alone. At accrual (`currency.services.accrue_income_stream`) the
 stream's gross is recomputed: `units × TERRITORY_BASE_PER_UNIT × multiplier`, the
 multiplier a Domain's `income_multiplier` (prosperity / 50, crisis-scaled) or a Turf's
 `grip / 100`; the stored `gross_amount` is last cycle's figure for display. It pools and
