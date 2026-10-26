@@ -234,4 +234,16 @@ class Migration(migrations.Migration):
                 name="affinity_interaction_conversion_pair_complete",
             ),
         ),
+        migrations.AlterField(
+            model_name="compromiseacttype",
+            name="is_cruelty",
+            field=models.BooleanField(
+                default=False,
+                help_text=(
+                    "Staff-authored: True for an act that is cruel. It separates acts the "
+                    "resonance's affinity cannot (two Abyssal acts need not both be cruel), "
+                    "so it is not derived from target_resonance.affinity."
+                ),
+            ),
+        ),
     ]

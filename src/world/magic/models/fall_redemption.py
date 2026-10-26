@@ -62,9 +62,9 @@ class CompromiseActType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     is_cruelty = models.BooleanField(
         default=False,
         help_text=(
-            "Convenience flag: True when target_resonance.affinity is Abyssal. "
-            "Derivable from the FK but surfaced for admin filtering and future "
-            "content-authoring tooling."
+            "Staff-authored: True for an act that is cruel. It separates acts the "
+            "resonance's affinity cannot (two Abyssal acts need not both be cruel), "
+            "so it is not derived from target_resonance.affinity."
         ),
     )
 
