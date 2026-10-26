@@ -55,6 +55,17 @@ export async function fetchThreatPools(search?: string): Promise<ThreatPool[]> {
   return data.results ?? [];
 }
 
+/** One feature type a GM can add to a place (GET /api/areas/feature-types/, #4675). */
+export type FeatureType = components['schemas']['FeatureType'];
+
+/** The feature types for the GM Add feature control (#4675). GM or staff only. */
+export async function fetchFeatureTypes(): Promise<FeatureType[]> {
+  const res = await apiFetch('/api/areas/feature-types/?page_size=200');
+  if (!res.ok) throw new Error('Failed to load feature types');
+  const data = (await res.json()) as { results?: FeatureType[] };
+  return data.results ?? [];
+}
+
 // ---------------------------------------------------------------------------
 // Encounter
 // ---------------------------------------------------------------------------

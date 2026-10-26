@@ -169,7 +169,7 @@ async function openRail(
   await page.route('**/api/magic/applicable-pulls/', (route) => route.fulfill({ json: [] }));
   for (const quiet of [
     'checks/consequence-outcomes/**',
-    `actions/characters/${CHARACTER.character_id}/available/`,
+    `actions/characters/${CHARACTER.character_id}/available/**`,
     'items/inventory/**',
     'magic/character-anima/**',
     'magic/threads/**',

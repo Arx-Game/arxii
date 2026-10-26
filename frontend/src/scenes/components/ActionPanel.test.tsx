@@ -455,6 +455,81 @@ describe('ActionPanel', () => {
     expect(screen.getByText('Intimidate')).toBeInTheDocument();
   });
 
+  it('leaves out moves, stunts and the GM Add feature entry (#4675)', async () => {
+    const ref = (registry_key: string, extra: Record<string, number> = {}) => ({
+      backend: 'registry' as const,
+      challenge_instance_id: null,
+      approach_id: null,
+      technique_id: null,
+      registry_key,
+      ...extra,
+    });
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      ...MOCK_ACTIONS,
+      results: [
+        ...MOCK_ACTIONS.results,
+        makeAction({
+          display_name: 'Move to Stage',
+          ref: ref('move_to_position', { position_id: 2 }),
+        }),
+        makeAction({
+          display_name: 'Chandelier to Stage',
+          ref: ref('perform_stunt', { position_id: 2, feature_id: 11, approach_id: 5 }),
+        }),
+        makeAction({
+          display_name: 'Place Ash in Stage',
+          ref: ref('gm_place_in_position', { position_id: 2 }),
+        }),
+        makeAction({ display_name: 'Add feature', ref: ref('gm_attach_feature') }),
+      ],
+    });
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Perform')).toBeInTheDocument();
+    });
+    for (const name of [
+      'Move to Stage',
+      'Chandelier to Stage',
+      'Place Ash in Stage',
+      'Add feature',
+    ]) {
+      expect(screen.queryByText(name)).not.toBeInTheDocument();
+    }
+  });
+
+  it('shows "No actions available" when only map entries are offered (#4675)', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        makeAction({
+          display_name: 'Move to Stage',
+          ref: {
+            backend: 'registry',
+            challenge_instance_id: null,
+            approach_id: null,
+            technique_id: null,
+            registry_key: 'move_to_position',
+            position_id: 2,
+          },
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('No actions available.')).toBeInTheDocument();
+    });
+  });
+
   it('shows loading state while fetching actions', async () => {
     // Never resolve so we stay in loading state
     vi.mocked(fetchAvailableActions).mockReturnValue(new Promise(() => {}));

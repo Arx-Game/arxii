@@ -26,6 +26,21 @@ export function isMoveAction(a: PlayerAction): boolean {
   );
 }
 
+/**
+ * A registry entry the generic action lists (the scene ActionPanel, the composer's
+ * ActionAttachment) must not show (#4675): a move, stunt, pass or GM placement names
+ * its place or feature in its ref, which a generic button drops; the GM's Add feature
+ * needs a place and a feature type picked. They live on the map and the combat panels.
+ */
+export function isMapOnlyAction(a: PlayerAction): boolean {
+  return (
+    a.ref.backend === 'registry' &&
+    (a.ref.position_id != null ||
+      a.ref.feature_id != null ||
+      a.ref.registry_key === 'gm_attach_feature')
+  );
+}
+
 const HOPS_LINE = /^\d+ hops? left this round\.$/;
 
 /**

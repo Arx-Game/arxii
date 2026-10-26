@@ -26,6 +26,7 @@ import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import { useCastPullSelection } from '../hooks/useCastPullSelection';
+import { isMapOnlyAction } from '@/combat/roundActionHelpers';
 import { extractErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -215,6 +216,8 @@ export function ActionPanel({ sceneId }: Props) {
   const initiatorPersonaId = actingPersonaId(activeEntry);
 
   const { data, isLoading } = useAvailableActionsQuery(characterId, { enabled: open });
+  // Moves, stunts and GM placements live on the map and combat panels (#4675).
+  const panelActions = (data?.results ?? []).filter((a) => !isMapOnlyAction(a));
   // A challenge approach (a wall's climb, a door's lock) resolves through the dispatch
   // seam, never a scene action request: it has no target to ask (#4606).
   const { mutateAsync: dispatchChallenge } = useDispatchPlayerAction(characterId ?? 0);
@@ -341,6 +344,8 @@ export function ActionPanel({ sceneId }: Props) {
       action.ref.challenge_instance_id ?? '',
       action.ref.approach_id ?? '',
       action.ref.registry_key ?? '',
+      action.ref.position_id ?? '',
+      action.ref.feature_id ?? '',
     ].join('-');
   }
 
@@ -609,9 +614,9 @@ export function ActionPanel({ sceneId }: Props) {
 
             {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
 
-            {data && data.results.length > 0 && (
+            {data && panelActions.length > 0 && (
               <div className="space-y-1.5">
-                {data.results.map((action) => {
+                {panelActions.map((action) => {
                   const actionKey = actionKeyFor(action);
                   const hasEnhancements = action.enhancements.length > 0;
                   const isExpanded = expandedAction === actionKey;
@@ -694,7 +699,7 @@ export function ActionPanel({ sceneId }: Props) {
               </div>
             )}
 
-            {data && data.results.length === 0 && (
+            {data && panelActions.length === 0 && (
               <p className="text-sm text-muted-foreground">No actions available.</p>
             )}
 

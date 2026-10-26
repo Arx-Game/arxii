@@ -54,6 +54,7 @@ import {
 } from '../battleMapPalette';
 import type { BattleOccupant } from '../battleMapPalette';
 import { CoverBadges, LabelChip, RouteLabel, Token } from './battleMapPieces';
+import { BattleMapFeatures } from './battleMapFeatures';
 
 export type { BattleOccupant, CombatSide } from '../battleMapPalette';
 
@@ -541,6 +542,7 @@ export function BattleMap({
         <g stroke="#000" strokeOpacity={0.2} strokeWidth={1} pointerEvents="none">
           {gridLines}
         </g>
+        <BattleMapFeatures nodes={nodes} areas={areas} uid={uid} />
 
         {/* Routes between places. */}
         <g pointerEvents="none">

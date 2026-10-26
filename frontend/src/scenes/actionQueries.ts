@@ -32,7 +32,8 @@ import type {
  * `fetchSceneActions` helper have been removed in favor of this unified shape.
  */
 export async function fetchAvailableActions(characterId: number): Promise<PlayerActionsResponse> {
-  const res = await apiFetch(`/api/actions/characters/${characterId}/available/`);
+  // One page of 100: a GM in a staged room is offered many entries (#4675).
+  const res = await apiFetch(`/api/actions/characters/${characterId}/available/?page_size=100`);
   if (!res.ok) throw new Error('Failed to load available actions');
   return res.json() as Promise<PlayerActionsResponse>;
 }
