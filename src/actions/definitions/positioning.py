@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
@@ -330,19 +331,22 @@ class PerformStuntAction(Action):
         participant = _declaring_participant(actor)
         # Read before the move: her own place never counts as held against her.
         held = held_position_ids_against(actor) if participant is not None else frozenset()
+        feature_name = feature.feature_type.name
         try:
-            outcome = perform_stunt(actor, feature, destination, approach)
+            # The roll, the move, the hop and the held-ground stop land together or not at all.
+            with transaction.atomic():
+                outcome = perform_stunt(actor, feature, destination, approach)
+                message = _STUNT_MESSAGES[outcome].format(
+                    feature=feature_name, place=destination.name
+                )
+                if participant is not None:
+                    spend_combat_hop(participant)  # a miss still spends the hop
+                    if outcome != StuntOutcome.MISSED:
+                        stopped = _stop_in_held_ground(actor, participant, destination, held)
+                        if stopped:
+                            message = f"{message} {stopped}"
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
-
-        feature_name = feature.feature_type.name
-        message = _STUNT_MESSAGES[outcome].format(feature=feature_name, place=destination.name)
-        if participant is not None:
-            spend_combat_hop(participant)  # a miss still spends the hop
-            if outcome != StuntOutcome.MISSED:
-                stopped = _stop_in_held_ground(actor, participant, destination, held)
-                if stopped:
-                    message = f"{message} {stopped}"
 
         _narrate_stunt(actor, feature_name, destination, outcome)
         sdm = context.scene_data if context else SceneDataManager()

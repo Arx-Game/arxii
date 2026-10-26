@@ -219,6 +219,7 @@ def _dispatch_registry(
         merged_kwargs["blueprint_id"] = ref.blueprint_id
     if ref.feature_id is not None:
         merged_kwargs["feature_id"] = ref.feature_id
+    # A ref's approach_id overrides kwargs["approach_id"]; only stunt and pass refs set it.
     if ref.approach_id is not None:
         merged_kwargs["approach_id"] = ref.approach_id
     result = action_obj.run(actor=character, **merged_kwargs)
@@ -528,8 +529,8 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_positioning_actions(character))
     actions.extend(_set_the_stage_actions(character))
     actions.extend(_gm_place_in_position_actions(character))
-    actions.extend(_gm_attach_feature_actions(character))
     actions.extend(_battle_staging_actions(character))
+    actions.extend(_gm_attach_feature_actions(character))
     # Registry backend: all remaining registry actions excluded (no ActionTemplate /
     # check_type) — see module docstring.  When a registry action gains ActionTemplate
     # backing, or needs web-panel visibility without one, add it to an adapter above
@@ -1539,30 +1540,30 @@ def _gm_place_in_position_actions(character: ObjectDB) -> list[PlayerAction]:
 
 
 def _gm_attach_feature_actions(character: ObjectDB) -> list[PlayerAction]:
-    """One ``gm_attach_feature`` entry per place in the room for a GM (#4675).
+    """One ``gm_attach_feature`` entry for a GM in a staged room (#4675).
 
     Gated as ``_gm_place_in_position_actions`` is (``_actor_may_gm_place``, which
-    ``GMAttachFeatureAction.execute()`` re-checks). The feature type (and an optional
-    square) is chosen at dispatch time and sent as kwargs; no entry per type.
+    ``GMAttachFeatureAction.execute()`` re-checks). One entry, not one per place: the
+    available-actions list is paged, and per-place entries would push other GM tools off
+    its first page. The GM control picks the place, the feature type and an optional
+    square, and sends them as kwargs.
     """
     from actions.definitions.positioning import _actor_may_gm_place  # noqa: PLC0415
     from world.areas.positioning.models import Position  # noqa: PLC0415
 
-    if character.location is None or not _actor_may_gm_place(character):
+    room = character.location
+    if room is None or not _actor_may_gm_place(character):
+        return []
+    if not Position.objects.filter(room=room).exists():
         return []
     return [
         PlayerAction(
             backend=ActionBackend.REGISTRY,
-            display_name=f"Add feature: {position.name}",
-            ref=ActionRef(
-                backend=ActionBackend.REGISTRY,
-                registry_key="gm_attach_feature",
-                position_id=position.pk,
-            ),
+            display_name="Add feature",
+            ref=ActionRef(backend=ActionBackend.REGISTRY, registry_key="gm_attach_feature"),
             description="",
             action_category=ActionCategory.PHYSICAL,
         )
-        for position in Position.objects.filter(room=character.location).order_by("pk")
     ]
 
 

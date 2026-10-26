@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
+from django.urls import reverse
 
 from actions.player_interface import dispatch_player_action, get_player_actions
 from evennia_extensions.factories import RoomProfileFactory
@@ -509,15 +510,6 @@ class AGMAddsAFeature(_TheHall):
         account.is_staff = True
         account.save(update_fields=["is_staff"])
 
-        listed = [
-            action.display_name
-            for action in get_player_actions(gm)
-            if action.ref.registry_key == "gm_attach_feature"
-        ]
-        self.assertEqual(
-            listed, ["Add feature: Floor", "Add feature: Stage", "Add feature: Gallery"]
-        )
-
         result = self.web(
             gm, "gm_attach_feature", position_id=self.stage.pk, feature_type_id=rope.pk
         )
@@ -530,6 +522,32 @@ class AGMAddsAFeature(_TheHall):
 
         self.assertEqual(removed.detail.message, "You remove the Rope from Stage.")
         self.assertFalse(PositionFeature.objects.filter(pk=added.pk).exists())
+
+    def test_a_gm_in_a_large_room_keeps_every_gm_tool_on_the_first_page(self) -> None:
+        """Ten places: one "Add feature" entry, not ten, so staging stays on page one."""
+        for number in range(7):
+            PositionFactory(room=self.room, name=f"Alcove {number + 1}")
+        gm = self.person("Ash", fighting=False, acrobat=False)
+        account = self.account_of(gm)
+        account.is_staff = True
+        account.save(update_fields=["is_staff"])
+
+        response = self.api(account).get(
+            reverse("actions:available-actions", kwargs={"character_id": gm.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        keys = [row["ref"]["registry_key"] for row in response.data["results"]]
+        self.assertEqual(keys.count("gm_attach_feature"), 1)
+        self.assertEqual(keys.count("gm_place_in_position"), 10)
+        for staging in (
+            "create_battle",
+            "stage_battle_map",
+            "spawn_battle_units",
+            "enlist_battle_participant",
+        ):
+            self.assertIn(staging, keys)
+        self.assertGreater(keys.index("gm_attach_feature"), keys.index("create_battle"))
 
     def test_a_player_who_is_not_a_gm_is_refused(self) -> None:
         rope = FeatureTypeFactory(name="Rope")

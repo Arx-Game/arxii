@@ -241,29 +241,28 @@ def perform_stunt(
 ) -> StuntOutcome:
     """Roll the feature's challenge to reach ``destination``; move her unless she missed.
 
-    Refuses with ``PositionError("You can't do that from here.")`` before anything changes
-    when the stunt is not hers to make now (``_choose_way``). Then, in one transaction:
-    mints a one-shot instance of the feature's challenge in the room, resolves it with the
-    approach (applying the template's consequences for the outcome), deactivates it
-    whatever happens, and on a clean or partial outcome moves her into ``destination``
-    with no square (the map arranges her token).
+    Everything runs in one transaction. Refuses with ``PositionError("You can't do that
+    from here.")`` before anything changes when the stunt is not hers to make now
+    (``_choose_way``). Then mints a one-shot instance of the feature's challenge in the
+    room, resolves it with the approach (applying the template's consequences for the
+    outcome), deactivates it, and on a clean or partial outcome moves her into
+    ``destination`` with no square (the map arranges her token). If resolution raises, the
+    rollback removes the minted instance; nothing is saved on that path, so the original
+    error is the one that surfaces.
     """
-    approach, source = _choose_way(character, feature, destination, approach)
-    room = character.location
     with transaction.atomic():
+        approach, source = _choose_way(character, feature, destination, approach)
+        room = character.location
         instance = instantiate_challenge(
             feature.feature_type.challenge_template, location=room, target_object=room
         )
-        try:
-            # Every stunt is rolled in the open: a hidden instance would refuse the roll.
-            if not instance.is_revealed:
-                instance.is_revealed = True
-                instance.save(update_fields=["is_revealed"])
-            resolution = resolve_challenge(character, instance, approach, source)
-        finally:
-            if instance.is_active:
-                instance.is_active = False
-                instance.save(update_fields=["is_active"])
+        # Every stunt is rolled in the open: a hidden instance would refuse the roll.
+        if not instance.is_revealed:
+            instance.is_revealed = True
+            instance.save(update_fields=["is_revealed"])
+        resolution = resolve_challenge(character, instance, approach, source)
+        instance.is_active = False
+        instance.save(update_fields=["is_active"])
         outcome = _outcome_of(resolution)
         if outcome != StuntOutcome.MISSED:
             force_move_to_position(character, destination)

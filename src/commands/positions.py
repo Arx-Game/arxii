@@ -40,6 +40,7 @@ from actions.definitions.positioning import (
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.utils.gm_resolution import resolve_position_by_name
+from world.areas.positioning.constants import STUNT_CANT_FROM_HERE
 
 _SWITCH_PLACE = "place"
 _SWITCH_FLY = "fly"
@@ -48,7 +49,6 @@ _SWITCH_GET_PAST = "pass"
 _USAGE_GET_PAST = "Usage: position/pass <position name>"
 _SWITCH_STUNT = "stunt"
 _USAGE_STUNT = "Usage: position/stunt <feature> to <position name>"
-_NO_SUCH_STUNT = "You can't do that from here."
 _USAGE_PLACE = "Usage: position/place <target>=<position name>"
 _NOT_ANYWHERE = "You aren't anywhere."
 
@@ -218,7 +218,7 @@ class CmdPosition(ArxCommand):
             None,
         )
         if option is None:
-            raise CommandError(_NO_SUCH_STUNT)
+            raise CommandError(STUNT_CANT_FROM_HERE)
         result = PerformStuntAction().run(
             self.caller,
             feature_id=option.feature.pk,
