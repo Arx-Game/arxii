@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import { WelcomePanel } from './WelcomePanel';
@@ -15,7 +15,10 @@ vi.mock('@/character-creation/queries', () => ({
 
 describe('WelcomePanel', () => {
   afterEach(() => {
-    store.dispatch(setAccount(null));
+    // The panel is still mounted here; the store update re-renders it.
+    act(() => {
+      store.dispatch(setAccount(null));
+    });
     mockUseDraft.mockReset();
     mockUseDraft.mockReturnValue({ data: null });
   });
