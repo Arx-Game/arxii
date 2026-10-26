@@ -665,6 +665,7 @@ class CharacterAuraShareInline(admin.TabularInline):
     """Read-only: shares are written only by set_aura_shares, which keeps the sum at 100."""
 
     model = CharacterAuraShare
+    formset = OneRowPerFormSet
     extra = 0
     max_num = 0
     can_delete = False
