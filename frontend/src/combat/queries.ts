@@ -45,6 +45,8 @@ export const combatKeys = {
 
   threatPools: (search?: string) => [...combatKeys.all, 'threat-pools', search ?? ''] as const,
 
+  featureTypes: () => [...combatKeys.all, 'feature-types'] as const,
+
   opponentDefaults: (encounterId: number, tier: api.OpponentTier) =>
     [...combatKeys.all, 'opponent-defaults', encounterId, tier] as const,
 
@@ -552,6 +554,16 @@ export function useThreatPools(search?: string) {
   return useQuery({
     queryKey: combatKeys.threatPools(search),
     queryFn: () => api.fetchThreatPools(search),
+    staleTime: 60_000,
+  });
+}
+
+/** Feature types for the GM Add feature control (#4675); fetched only while it shows. */
+export function useFeatureTypes(enabled: boolean) {
+  return useQuery({
+    queryKey: combatKeys.featureTypes(),
+    queryFn: api.fetchFeatureTypes,
+    enabled,
     staleTime: 60_000,
   });
 }

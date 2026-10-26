@@ -31,11 +31,14 @@ from world.areas.positioning.constants import (
 from world.areas.positioning.exceptions import PositionError, PositionTransitionError
 from world.areas.positioning.models import (
     BlueprintEdge,
+    BlueprintFeature,
     BlueprintPosition,
+    FeatureType,
     ObjectPosition,
     Position,
     PositionBlueprint,
     PositionEdge,
+    PositionFeature,
     PositionShelter,
     Rampart,
     RampartElementProfile,
@@ -641,7 +644,48 @@ def instantiate_blueprint(
             if shelter_rows:
                 PositionShelter.objects.bulk_create(shelter_rows)
 
+        # Clone feature templates in one bulk write (the blueprint's features load
+        # with one query; replace=True already cascaded the old layout's features).
+        feature_rows = [
+            PositionFeature(
+                position=live_map[bp_feature.blueprint_position.name],
+                feature_type=bp_feature.feature_type,
+                square_x=bp_feature.square_x,
+                square_y=bp_feature.square_y,
+            )
+            for bp_feature in BlueprintFeature.objects.filter(
+                blueprint_position__blueprint=blueprint
+            ).select_related("blueprint_position", "feature_type")
+        ]
+        if feature_rows:
+            PositionFeature.objects.bulk_create(feature_rows)
+            invalidate_position_graph_caches(room)
+
         return list(live_map.values())
+
+
+def attach_feature(
+    position: Position,
+    feature_type: FeatureType,
+    *,
+    square: tuple[int, int] | None = None,
+) -> PositionFeature:
+    """Put a feature in a live place, optionally on one of its squares."""
+    square_x, square_y = square if square is not None else (None, None)
+    feature = PositionFeature(
+        position=position, feature_type=feature_type, square_x=square_x, square_y=square_y
+    )
+    feature.full_clean()
+    feature.save()
+    invalidate_position_graph_caches(position.room)
+    return feature
+
+
+def detach_feature(feature: PositionFeature) -> None:
+    """Remove a feature from its place."""
+    room = feature.position.room
+    feature.delete()
+    invalidate_position_graph_caches(room)
 
 
 # ---------------------------------------------------------------------------
@@ -827,6 +871,17 @@ def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
 
 
 @dataclass(frozen=True)
+class PositionFeatureInfo:
+    """One feature standing in a place, as the battle map draws it (#4675)."""
+
+    id: int
+    name: str
+    art_url: str | None
+    square_x: int | None
+    square_y: int | None
+
+
+@dataclass(frozen=True)
 class PositionNode:
     """One node in the tactical-map graph (#2006) — kind, elevation, and layout.
 
@@ -853,6 +908,7 @@ class PositionNode:
     area_h: int | None = None
     terrain_name: str | None = None
     terrain_art_url: str | None = None
+    features: tuple[PositionFeatureInfo, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -884,6 +940,17 @@ class PositionGraph:
 def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
     terrain = position.terrain if position.terrain_id else None
     art = terrain.art if terrain is not None and terrain.art_id else None
+    # ``features_cached`` is prefetched on every positions_cached path.
+    features = tuple(
+        PositionFeatureInfo(
+            id=f.pk,
+            name=f.feature_type.name,
+            art_url=f.feature_type.art.cloudinary_url if f.feature_type.art_id else None,
+            square_x=f.square_x,
+            square_y=f.square_y,
+        )
+        for f in sorted(position.features_cached, key=lambda f: f.pk)
+    )
     return PositionNode(
         id=position.pk,
         name=position.name,
@@ -903,6 +970,7 @@ def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
         area_h=position.area_h,
         terrain_name=terrain.name if terrain is not None else None,
         terrain_art_url=art.cloudinary_url if art is not None else None,
+        features=features,
     )
 
 

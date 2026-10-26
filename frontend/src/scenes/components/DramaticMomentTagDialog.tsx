@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -79,7 +80,7 @@ export function DramaticMomentTagDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Tag Dramatic Moment</DialogTitle>
         </DialogHeader>

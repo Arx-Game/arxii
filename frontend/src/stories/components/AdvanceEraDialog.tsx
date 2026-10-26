@@ -12,6 +12,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { useAdvanceEra } from '../queries';
 import type { Era } from '../types';
@@ -40,7 +41,7 @@ export function AdvanceEraDialog({ open, onClose, era }: AdvanceEraDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Advance to Season {era.season_number}?</DialogTitle>
         </DialogHeader>

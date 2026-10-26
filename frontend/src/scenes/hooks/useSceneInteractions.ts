@@ -58,6 +58,10 @@ export function wsPayloadToInteraction(
   };
 }
 
+// One shared object, so a session with no retention yet selects the same
+// reference every time instead of a fresh one that re-renders the reader.
+const NO_RETENTION = { retained: 0, evicted: 0, warning: false, gap: false };
+
 /**
  * Backfills a scene's interactions via REST (paginated, cursor-based) and
  * merges in any newer ones that have arrived over the WebSocket while the
@@ -130,13 +134,7 @@ export function useSceneInteractions(sceneId: string | undefined, viewerKey?: st
   }, [interactionsQuery.data?.pages, wsInteractions]);
 
   const retention = useAppSelector(
-    (state) =>
-      state.game.sessions[activeCharacter ?? '']?.sceneRetention ?? {
-        retained: 0,
-        evicted: 0,
-        warning: false,
-        gap: false,
-      }
+    (state) => state.game.sessions[activeCharacter ?? '']?.sceneRetention ?? NO_RETENTION
   );
 
   return {

@@ -448,6 +448,7 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 | `Position` | Named tactical region in a room | `room` FK → `objects.ObjectDB`; unique per room+name; `elevation_anchor` (self-referential FK → `Position`, null=floor/top-level) — the ground `Position` this AERIAL or CHASM node is anchored to (**omitted from `MODEL_MAP.md`** — the auto-generation tool skips self-referential FKs); `layout_x`/`layout_y` (nullable small integers) — cosmetic tactical-map coordinates (#2006); `null` on both means "let the frontend auto-layout" (`computeTacticalLayout`'s BFS-ring placement) rather than "place at the origin" |
 | `PositionEdge` | Traversable adjacency between two `Position` nodes | `position_a` / `position_b` FK (canonical pk order); `is_passable`; `blocks_flight` — obstructs AERIAL-layer traversal; `gating_challenge` FK → `mechanics.ChallengeInstance` (nullable, `SET_NULL`); `duration_rounds` / `created_by_sheet` (a conjured wall's lifetime and caster); `integrity` / `max_integrity` (nullable `PositiveSmallIntegerField`, #4606 — a conjured wall's strength; both null = indestructible; `CheckConstraint` both-or-neither and `integrity <= max_integrity`); `source_rampart` FK → `Rampart` (nullable, `SET_NULL`, `related_name="sealed_edges"`, #4606 — the Rampart whose seal this is; a `CheckConstraint` forbids it together with `integrity`, since the Rampart holds that pool); `barrier_integrity` property → `(integrity, max_integrity)` from the Rampart or the edge, else `None` |
 | `ObjectPosition` | One-to-one occupancy record | `objectdb` OneToOne PK; `position` FK — mirrors `db_location` |
+| `PositionFeature` | A feature standing in a place (#4675) | `position` FK (`CASCADE`); `feature_type` FK → `FeatureType` (`PROTECT`); `square_x`/`square_y` both or neither, inside the place's area; see "Features and stunts" |
 
 **Rampart — living barriers** (#2209, room-anchored; see the dedicated section below):
 
@@ -463,6 +464,8 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 |-------|---------|--------------------------|
 | `PositionBlueprint` | GM-authored reusable terrain layout | `name` (unique), `description` |
 | `BlueprintPosition` | Position node template inside a blueprint | `blueprint` FK; name unique per blueprint; `layout_x`/`layout_y` (nullable small integers, #2006) |
+| `FeatureType` | Catalog row for a feature (#4675) | `name` unique; `art` FK → `Media`; `reach` (`FeatureReach`); `challenge_template` FK → `ChallengeTemplate` (`PROTECT`) |
+| `BlueprintFeature` | A feature a blueprint place carries (#4675) | `blueprint_position` FK (`CASCADE`); `feature_type` FK; `square_x`/`square_y`; copied to `PositionFeature` on staging |
 | `BlueprintEdge` | Edge template inside a blueprint | `blueprint` FK; `position_a` / `position_b` FK → `BlueprintPosition` (canonical pk order); `is_passable`; `gating_challenge_template` FK → `mechanics.ChallengeTemplate` (nullable, `on_delete=PROTECT`) |
 
 **Room profile link** (in `evennia_extensions.RoomProfile`):
@@ -575,6 +578,8 @@ challenge's approaches beside it.
 | `TakeFlightAction` | `take_flight` | `CombatMovementPrerequisite` + `CanFlyPrerequisite` ("You cannot fly." without FLIES among her traversals, "You are already in the air.", "A roof is in the way." under a roofed position) | #4663. Calls `enter_aerial`; spends one hop in a DECLARING round; no kwargs. The move list offers "Take flight" to a ground flier |
 | `LandAction` | `land` | `CombatMovementPrerequisite` + `AirbornePrerequisite` ("You are not in the air.", "A roof is in the way." over a roofed anchor) | #4663. Calls `leave_aerial`; one hop in a DECLARING round; no kwargs |
 | `PassHeldGroundAction` | `pass_held_ground` | `CombatMovementPrerequisite` | #4663. Kwargs `position_id`, optional `approach_id`. Rolls to get past the enemy holding an adjacent place (see "Held ground" below); costs what a walk to that place costs (1 hop, or the crossing cost over a wall) and is refused with fewer hops left |
+| `PerformStuntAction` | `perform_stunt` | `CombatMovementPrerequisite` | #4675. Kwargs `feature_id`, `position_id` (destination), optional `approach_id`. Rolls the feature's challenge from the feature's own place; one hop in a declaring round, a miss included; see "Features and stunts" |
+| `GMAttachFeatureAction` / `GMDetachFeatureAction` | `gm_attach_feature` / `gm_detach_feature` | none (gate `_actor_may_gm_place` in `execute`) | #4675. Attach takes `position_id`, `feature_type_id`, optional `square_x`/`square_y`; detach takes `feature_id` |
 | `TakePositionAction` | `take_position` | none | Voluntary entry for an UNPLACED actor; dispatched with `ActionRef(registry_key="take_position", position_id=<pk>)`; surfaced via `get_player_actions` for PRIMARY/FEATURE positions only (#2005) |
 | `GMPlaceInPositionAction` | `gm_place_in_position` | none (gate is in-body, not a `Prerequisite`) | Staff OR active-scene GM (mirrors `_actor_may_gm_battle`; no active scene means staff-only) — wraps the unchecked `place_in_position`. `ActionRef(registry_key="gm_place_in_position", position_id=<pk>, target_object_id=<ObjectDB pk co-located with actor>)` (#2005) |
 | `SetTheStageAction` | `set_the_stage` | `MinimumGMLevelPrerequisite(GMLevel.STARTING)` (staff bypass preserved, #2117) | Dispatched with `ActionRef(registry_key="set_the_stage", blueprint_id=<pk>, replace=False)`; surfaced via `get_player_actions` when the room's `RoomProfile.default_blueprint` is set. `ActionRef` carries a `blueprint_id` field for this. |
@@ -664,6 +669,97 @@ closing telnet's gap with the web `AddOpponentDialog`, which has taken a positio
 - `SceneTacticalMap` (`frontend/src/scenes/components/SceneTacticalMap.tsx`) — non-combat wrapper; builds `occupantsByPosition` from the scene's `persona_positions`, renders nothing when the room has no positions. Replaced the old `RoomPositionsPanel` text-list UI (#2006). GM-place picker (#3385): when `gm_place_in_position` `PlayerAction`s are present in the scene's available actions (the same "am I GM" signal `setTheStageAction` already uses — no separate prop), a "Place" toggle + target `<select>` appear above the map; targets are built from `persona_positions`' co-located personas via `character_sheet` (the persona's character ObjectDB pk); selecting a target and clicking a node dispatches `gm_place_in_position` with `target_object_id` in the kwargs.
 - `CombatTacticalMap` (`frontend/src/combat/components/CombatTacticalMap.tsx`): combat wrapper; builds `occupantsByPosition` from `Participant.current_position`/`Opponent.current_position` instead of `persona_positions`. Since #4670 it renders `BattleMap` (an SVG, not `TacticalMap`) and is the main view of a fight: `CombatMainMap` mounts it in the wide column of `SceneDetailPage` and `GamePage` while an encounter is on, and `CombatRail` keeps only "Your Turn" (and "GM" for a scene GM). `CombatRail` renders in-scene on `/scenes/:id`, not a dedicated route (#2197). Same GM-place picker as `SceneTacticalMap` (#3385); targets are built from `encounter.participants` (`character_sheet_id`) and `encounter.opponents` (`objectdb_id`), both already on `EncounterDetail`.
 - `MovementActions` — shared component (extracted from combat; lives in `frontend/src/combat/components/`); renders adjacent-position move buttons (a non-map fallback list still used elsewhere). Since #4663 it lists every move entry `roundActionHelpers.isMoveAction` admits (`move_to_position`, `take_flight`, `land`, `pass_held_ground`), keyed by `registry_key` and position (a step and a pass roll can name the same place), shows each entry's note (e.g. "Held by Bandit: you'd stop there.", a pass's approach) and toasts the result's message on success. `hopsLeftLine` finds the "N hops left this round." line on any move entry. On the map a click on a held place takes the plain step; the pass roll stays a panel choice.
+
+### Features and stunts [BUILT & WIRED] (#4675, slice 3 of #4651, ADR-4675)
+
+A place can hold a feature (a chandelier, a rope, a balcony rail). A character in that place
+can use it to reach another place with a roll. A stunt moves a character; it is not a wall
+crossing and it changes no hop cost or held-ground rule.
+
+**Models** (`world/areas/positioning/models.py`, migration 0298).
+- `FeatureType`: the catalog staff author in admin (`FeatureTypeAdmin`). `name` (unique), `art`
+  (FK to `Media`, null allowed, `SET_NULL`), `reach` (`FeatureReach`) and `challenge_template`
+  (FK to `ChallengeTemplate`, `PROTECT`). The template decides who can use the feature (its
+  approaches, matched to capabilities) and what a miss costs (its consequences).
+- `FeatureReach` (`constants.py`) has four values. `ADJACENT`: any place joined to the
+  feature's place by an edge, passable or not, so a swing goes over a wall; aerial places are
+  left out. `ANY_PLACE`: every non-aerial place in the room except her own. `SAME_TYPE`: other
+  places that hold a feature of the same type. `ELEVATED_ADJACENT`: neighbours of kind
+  `ELEVATED`.
+- `PositionFeature` (live): `position` FK (`CASCADE`), `feature_type` FK (`PROTECT`),
+  `square_x`/`square_y`. `BlueprintFeature` is the same on a `BlueprintPosition`. The square is
+  both numbers or neither (`position_feature_square_both_or_none`,
+  `blueprint_feature_square_both_or_none`). `clean()` refuses a square on a place with no drawn
+  area ("... has no drawn area, so a feature there cannot sit on a square.") and a square outside
+  the place's area ("That square is outside <place>."). A blueprint feature whose area shrank
+  later is tolerated and drawn at the area corner.
+- `Position.features_cached` is a `PrunedCachedProperty` (the `to_attr` of the prefetch the
+  position nodes use, ADR-0263), dropped by `invalidate_position_graph_caches`.
+
+**Services.**
+- `instantiate_blueprint` copies each `BlueprintFeature` to a `PositionFeature` in one bulk
+  insert; `replace=True` removes the old places and their features.
+- `attach_feature(position, feature_type, *, square=None)` runs `full_clean`, saves and
+  invalidates the room's graph caches. `detach_feature(feature)` deletes and invalidates.
+- `stunt_options(character) -> list[StuntOption]` (`positioning/stunts.py`,
+  `StuntOption` in `positioning/types.py`): one option per feature in her own place and per
+  destination its reach allows. The approach is the strongest one on the feature's challenge
+  template that she holds a capability for (value above 0, ties by approach pk). She sees no
+  stunt when she has no capability for any approach. The difficulty is previewed against the
+  template's severity.
+- `perform_stunt(character, feature, destination, approach=None) -> StuntOutcome`: re-checks
+  the stunt (the feature is in her place, the destination is within reach, the approach is one
+  she qualifies for; otherwise `PositionError("You can't do that from here.")`), mints a
+  one-shot challenge instance in the room, rolls it, deactivates it, and moves her unless she
+  missed. All in one transaction. `StuntOutcome` is `CLEAN` (success level above 0), `PARTIAL`
+  (0) or `MISSED` (below 0, or no roll). A clean or partial stunt moves her with
+  `force_move_to_position`, which clears the square (the map arranges the token). A miss leaves
+  her where she was and the template's consequences for the outcome have already applied.
+
+**Actions** (`actions/definitions/positioning.py`).
+- `perform_stunt` (`PerformStuntAction`, `CombatMovementPrerequisite`): kwargs `feature_id`,
+  `position_id` (the destination), optional `approach_id`. In a declaring round it spends one
+  hop, a miss included. Landing in ground an enemy holds stops her there, as any ground move
+  does (`_stop_in_held_ground`: "You are stopped by Bandit."). The room is told by persona name.
+  Outside a fight it moves her with no hop.
+- `gm_attach_feature` (kwargs `position_id` in the actor's room, `feature_type_id`, optional
+  `square_x`/`square_y`) and `gm_detach_feature` (kwargs `feature_id`). Both are gated inside
+  `execute` by `_actor_may_gm_place` (staff or the active scene's GM).
+- The available-actions list carries one `perform_stunt` entry per option ("<Feature> to
+  <Place>", note "<approach> - <difficulty label>") and, for a GM, one "Add feature" entry
+  (`gm_attach_feature`, no place on the ref). There is no detach entry in the list.
+- Telnet: bare `position` appends "; features: <names>" to each place; `position/stunt
+  <feature> to <place>` runs the first matching option.
+
+**Payload and endpoint.**
+- Each `position_nodes` entry (scene and encounter) carries `features[]`:
+  `{id, name, art_url, square_x, square_y}` (`PositionFeatureInfo`,
+  `PositionFeatureSerializer`). The query count does not grow with the number of features.
+- `GET /api/areas/feature-types/` (`FeatureTypeViewSet`, `world/areas/views.py`): read-only,
+  `IsAuthenticated` and `IsGMOrStaff`, filter by `reach` and `search`, 100 per page (up to
+  200). Rows are `{id, name, reach, art_url}`. It feeds the GM control.
+
+**Frontend.** `battleMapFeatures.tsx` draws the feature layer on `BattleMap`: after the routes,
+before places and tokens, pointer events off so squares stay clickable. Art is clipped to one
+square (or to the place's ring with the initial when there is no art). A feature with no square,
+or one outside the area, sits on the area's top row from the right. Aerial places group by their
+anchor's area. Names show through `<title>` only. `MovementActions` keys each entry
+`<registry_key>-<position>[-feature_id][-approach_id]`, so two stunts to one place do not
+collide, and lists stunts beside moves. `isMapOnlyAction` (`combat/roundActionHelpers.ts`)
+hides registry entries that carry `position_id` or `feature_id`, and `gm_attach_feature`, from
+the generic buttons of `ActionPanel` and `ActionAttachment`. `fetchAvailableActions` asks for
+`page_size=100` so a big room's GM tools stay on the first page. `GMFeatureControls.tsx` (in the
+GM tab) picks a place, a feature type and an optional square and dispatches the attach entry;
+each feature has a Remove button that dispatches `gm_detach_feature`. It shows "Feature types
+could not be loaded." when the list call fails.
+
+**Rulings.** NPCs do not use features: NPC movement is `CreatureTraversal` based, not
+capability based. There is no prone condition in code: a miss is whatever consequences the
+template authors. A feature is used from the place it stands in. A miss still spends the hop,
+since it was an attempt.
+
+Journeys: `src/integration_tests/test_features_and_stunts_journeys.py` and the feature cases in
+`test_battle_map_drawing_journeys.py`.
 
 ### Movement by capability and held ground [BUILT & WIRED] (#4663, slice 2 of #4651)
 

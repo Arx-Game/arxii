@@ -41,6 +41,12 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
 'challenge'`, a wall's climb, a door's lock) resolves through the dispatch endpoint
   (`useDispatchPlayerAction`), never a scene action request: it has no one to ask (#4606; before
   it, the request was keyed by the button text and could never resolve).
+  Since #4675 `ActionPanel` and `ActionAttachment` drop registry entries that `isMapOnlyAction`
+  (`combat/roundActionHelpers.ts`) names: those carrying `position_id` or `feature_id` (moves, stunts, GM
+  place) and `gm_attach_feature`. They belong to the battle map and the combat panels, and their stable ids
+  include the position and feature so two stunts never share a key. `fetchAvailableActions` asks for
+  `page_size=100`. The battle map's feature layer and `GMFeatureControls` are described in
+  `docs/systems/areas.md`, "Features and stunts".
 - **`ActionResult.tsx`**: Action result display
 - **`ConsentPrompt.tsx`**: Consent prompt for scene actions
 - **`PersonaMenu.tsx`** (#4030): The one action menu for a persona — right-click

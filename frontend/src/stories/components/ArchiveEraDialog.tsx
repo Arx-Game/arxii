@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { useArchiveEra } from '../queries';
 import type { Era } from '../types';
@@ -41,7 +42,7 @@ export function ArchiveEraDialog({ open, onClose, era }: ArchiveEraDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Archive Era?</DialogTitle>
         </DialogHeader>

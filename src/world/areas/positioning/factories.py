@@ -8,15 +8,23 @@ from __future__ import annotations
 import factory
 import factory.django
 
-from world.areas.positioning.constants import FALL_TRIGGER_NAME, PositionKind, RampartSignature
+from world.areas.positioning.constants import (
+    FALL_TRIGGER_NAME,
+    FeatureReach,
+    PositionKind,
+    RampartSignature,
+)
 from world.areas.positioning.models import (
     BlueprintEdge,
+    BlueprintFeature,
     BlueprintPosition,
+    FeatureType,
     MapTerrain,
     ObjectPosition,
     Position,
     PositionBlueprint,
     PositionEdge,
+    PositionFeature,
     Rampart,
     RampartElementProfile,
     RampartElementResistance,
@@ -405,3 +413,30 @@ class MapTerrainFactory(factory.django.DjangoModelFactory):
         model = MapTerrain
 
     name = factory.Sequence(lambda n: f"terrain_{n}")
+
+
+class FeatureTypeFactory(factory.django.DjangoModelFactory):
+    """Factory for FeatureType; the challenge template is a fresh one unless supplied."""
+
+    class Meta:
+        model = FeatureType
+
+    name = factory.Sequence(lambda n: f"feature_{n}")
+    reach = FeatureReach.ADJACENT
+    challenge_template = factory.SubFactory("world.mechanics.factories.ChallengeTemplateFactory")
+
+
+class BlueprintFeatureFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = BlueprintFeature
+
+    blueprint_position = factory.SubFactory(BlueprintPositionFactory)
+    feature_type = factory.SubFactory(FeatureTypeFactory)
+
+
+class PositionFeatureFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = PositionFeature
+
+    position = factory.SubFactory(PositionFactory)
+    feature_type = factory.SubFactory(FeatureTypeFactory)

@@ -77,3 +77,19 @@ _Avoid_: tile, cell, hex, grid position
 **Map terrain** (#4670):
 A named ground look (`MapTerrain`: a name and tile art) that staff set on a place so the map draws wood planks or flagstones under its area. Drawing only: no rule, roll or cost reads it.
 _Avoid_: tile, ground type, biome, floor
+
+**Feature type** (#4675, slice 3 of #4651):
+A staff-authored catalog row (`FeatureType`) for a thing a place can hold that a stunt uses: a chandelier, a rope, a balcony rail. It names its art, its **reach** and the challenge template that is rolled against. Defined once, attached to any place. Not the `world/room_features` app, which means lab stations and other room fittings.
+_Avoid_: prop, fixture, room feature, obstacle (a conjured obstacle blocks an edge; a feature opens a way)
+
+**Feature** (#4675):
+A feature type standing in one place (`PositionFeature`), optionally on one of the place's squares; `BlueprintFeature` is the same on a blueprint place and is copied when the blueprint is staged. A GM adds and removes live ones with `gm_attach_feature` and `gm_detach_feature`. Drawing only apart from the stunts it offers.
+_Avoid_: prop, fixture, object
+
+**Reach** (#4675):
+The rule on a feature type for where a stunt from it can end, measured from the feature's own place: ADJACENT (any edge, passable or not), ANY_PLACE, SAME_TYPE (another place with the same feature) or ELEVATED_ADJACENT. Distinct from hop and strike reach (see **Traversal**).
+_Avoid_: range, destinations rule
+
+**Stunt** (#4675):
+Using a feature in your own place to reach another place by rolling the feature type's challenge (`perform_stunt`). The approach is the strongest her capabilities match. A clean or partial result moves her; a miss leaves her where she was and applies the template's consequences. Either way a declaring round spends one hop, and landing in held ground stops her. NPCs do not make stunts.
+_Avoid_: trick, jump, special move

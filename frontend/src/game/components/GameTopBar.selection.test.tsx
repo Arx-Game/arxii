@@ -11,7 +11,7 @@
  * so this stays a fast unit test (real `connect()` opens a WebSocket and
  * hits the network) and so a stray mutation call is caught.
  */
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const connectMock = vi.fn();
@@ -106,7 +106,10 @@ describe('GameTopBar selection wiring (#3479 decision 4)', () => {
   });
 
   afterEach(() => {
-    store.dispatch(resetGame());
+    // Components are still mounted here; reset inside act so they re-render cleanly.
+    act(() => {
+      store.dispatch(resetGame());
+    });
     sessionStorage.clear();
   });
 

@@ -1043,6 +1043,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/areas/feature-types/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The feature types a GM can add to a place mid-scene (#4675, slice 3 of #4651).
+     *
+     *     Read-only: staff author feature types in the admin. GMs and staff only, since
+     *     the list feeds the GM attach control.
+     */
+    get: operations['areas_feature_types_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/areas/feature-types/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The feature types a GM can add to a place mid-scene (#4675, slice 3 of #4651).
+     *
+     *     Read-only: staff author feature types in the admin. GMs and staff only, since
+     *     the list feeds the GM attach control.
+     */
+    get: operations['areas_feature_types_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/areas/presence/': {
     parameters: {
       query?: never;
@@ -27681,6 +27725,7 @@ export interface components {
       action_slot?: string | null;
       position_id?: number | null;
       blueprint_id?: number | null;
+      feature_id?: number | null;
       application_id?: number | null;
       target_object_id?: number | null;
     };
@@ -34041,6 +34086,29 @@ export interface components {
       /** @default  */
       lore: string;
     };
+    /** @description One feature type a GM can add to a place (#4675): the GM attach control's list. */
+    FeatureType: {
+      readonly id: number;
+      readonly name: string;
+      /**
+       * @description Where the feature can take her.
+       *
+       *     * `adjacent` - A place next to its own
+       *     * `any_place` - Any place in the room
+       *     * `same_type` - Another place with the same feature
+       *     * `elevated_adjacent` - A raised place next to its own
+       */
+      readonly reach: components['schemas']['FeatureTypeReachEnum'];
+      readonly art_url: string | null;
+    };
+    /**
+     * @description * `adjacent` - A place next to its own
+     *     * `any_place` - Any place in the room
+     *     * `same_type` - Another place with the same feature
+     *     * `elevated_adjacent` - A raised place next to its own
+     * @enum {string}
+     */
+    FeatureTypeReachEnum: 'adjacent' | 'any_place' | 'same_type' | 'elevated_adjacent';
     /**
      * @description * `background` - Background
      *     * `never_do` - What would you never do?
@@ -41533,6 +41601,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['FashionPresentation'][];
     };
+    PaginatedFeatureTypeList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['FeatureType'][];
+    };
     PaginatedFlowDefinitionListList: {
       /** @example 123 */
       count: number;
@@ -47417,6 +47500,14 @@ export interface components {
       readonly integrity: number | null;
       readonly max_integrity: number | null;
     };
+    /** @description Read-only serializer for one feature standing in a place (#4675). */
+    PositionFeature: {
+      readonly id: number;
+      readonly name: string;
+      readonly art_url: string | null;
+      readonly square_x: number | null;
+      readonly square_y: number | null;
+    };
     /** @description Read-only serializer for one PositionNode — tactical-map node shape (#2006). */
     PositionNode: {
       readonly id: number;
@@ -47437,6 +47528,7 @@ export interface components {
       readonly area_h: number | null;
       readonly terrain_name: string | null;
       readonly terrain_art_url: string | null;
+      readonly features: components['schemas']['PositionFeature'][];
     };
     /** @description Compact public representation of a Position (id + name). */
     PositionSummary: {
@@ -56192,6 +56284,62 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['AreaList'];
+        };
+      };
+    };
+  };
+  areas_feature_types_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description Where the feature can take her.
+         *
+         *     * `adjacent` - A place next to its own
+         *     * `any_place` - Any place in the room
+         *     * `same_type` - Another place with the same feature
+         *     * `elevated_adjacent` - A raised place next to its own
+         */
+        reach?: 'adjacent' | 'any_place' | 'elevated_adjacent' | 'same_type';
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedFeatureTypeList'];
+        };
+      };
+    };
+  };
+  areas_feature_types_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this feature type. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FeatureType'];
         };
       };
     };

@@ -11,6 +11,7 @@
  * - `GMAdjudicationPanel` narrowed to COMBAT_GM_TOOL_TABS (Condition,
  *   Dramatic Beat, Traps). The header panel renders the other tabs while an
  *   encounter is active, so no lever has two homes.
+ * - `GMFeatureControls` (#4675): add a feature to a place, or remove one.
  *
  * The tab itself is shown only when `scene.viewer_can_gm` (CombatRail).
  */
@@ -19,6 +20,7 @@ import { useCombatEncounter, useOpenStandoff } from '@/combat/queries';
 import { GMStandoffPanel } from '@/combat/standoff/GMStandoffPanel';
 import { Button } from '@/components/ui/button';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
+import { GMFeatureControls } from '@/combat/components/GMFeatureControls';
 import { COMBAT_GM_TOOL_TABS, GMAdjudicationPanel } from '@/scenes/components/GMAdjudicationPanel';
 import type { SceneDetail } from '@/scenes/types';
 
@@ -27,6 +29,8 @@ export interface CombatGMTabProps {
   encounterId: number;
   scene: SceneDetail | undefined;
   viewerCanGm: boolean;
+  /** The GM's active character: its available actions gate the Add feature control. */
+  characterId: number;
 }
 
 function OpenStandoffButton({ encounterId }: { encounterId: number }) {
@@ -51,7 +55,13 @@ function OpenStandoffButton({ encounterId }: { encounterId: number }) {
   );
 }
 
-export function CombatGMTab({ sceneId, encounterId, scene, viewerCanGm }: CombatGMTabProps) {
+export function CombatGMTab({
+  sceneId,
+  encounterId,
+  scene,
+  viewerCanGm,
+  characterId,
+}: CombatGMTabProps) {
   const { data: encounter } = useCombatEncounter(encounterId);
   return (
     <div className="space-y-3" data-testid="combat-gm-tab">
@@ -64,6 +74,7 @@ export function CombatGMTab({ sceneId, encounterId, scene, viewerCanGm }: Combat
       {encounter && (
         <GMEncounterControls sceneId={sceneId} encounter={encounter} viewerCanGm={viewerCanGm} />
       )}
+      <GMFeatureControls sceneId={sceneId} encounterId={encounterId} characterId={characterId} />
       <GMAdjudicationPanel scene={scene} tabs={COMBAT_GM_TOOL_TABS} title="Fight Tools" />
     </div>
   );

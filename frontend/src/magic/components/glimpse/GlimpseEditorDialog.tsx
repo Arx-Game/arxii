@@ -39,6 +39,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useGlimpseTags } from '@/character-creation/queries';
@@ -102,6 +103,7 @@ export function GlimpseEditorDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        {...NO_DESCRIPTION}
         className="max-h-[90vh] max-w-2xl overflow-y-auto"
         data-testid="glimpse-editor-dialog"
       >

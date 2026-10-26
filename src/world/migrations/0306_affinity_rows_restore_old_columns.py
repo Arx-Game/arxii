@@ -43,7 +43,7 @@ def restore_old_columns(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0304_affinity_rows_unique_released"),
+        ("arxii", "0305_affinity_rows_unique_released"),
     ]
 
     operations = [

@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -110,7 +111,7 @@ export function LinkRoomsDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Link {fromRoom.name} to another room</DialogTitle>
         </DialogHeader>

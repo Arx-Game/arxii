@@ -13,7 +13,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0303_affinity_rows_backfill"),
+        ("arxii", "0304_affinity_rows_backfill"),
     ]
 
     operations = [

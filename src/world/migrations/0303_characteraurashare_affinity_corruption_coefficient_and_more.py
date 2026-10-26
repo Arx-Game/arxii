@@ -9,7 +9,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0301_capabilitytype_reaction_cost_kind_and_more"),
+        ("arxii", "0302_featuretype_blueprintfeature_positionfeature"),
     ]
 
     operations = [

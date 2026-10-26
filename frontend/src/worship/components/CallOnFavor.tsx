@@ -15,7 +15,13 @@
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
@@ -344,7 +350,7 @@ export function CallOnFavor({
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent
             className="max-w-lg"
-            aria-describedby={undefined}
+            {...NO_DESCRIPTION}
             data-testid="call-on-favor-dialog"
           >
             <DialogHeader>

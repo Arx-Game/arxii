@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
@@ -46,7 +46,10 @@ function mockChildDialogHooks() {
 describe('TwoFactorCard', () => {
   afterEach(() => {
     vi.clearAllMocks();
-    store.dispatch(setAccount(null));
+    // The card is still mounted here; the store update re-renders it.
+    act(() => {
+      store.dispatch(setAccount(null));
+    });
   });
 
   it('shows Set up when 2FA is off', () => {

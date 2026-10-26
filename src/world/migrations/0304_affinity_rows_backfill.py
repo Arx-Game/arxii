@@ -166,7 +166,7 @@ def backwards(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0302_characteraurashare_affinity_corruption_coefficient_and_more"),
+        ("arxii", "0303_characteraurashare_affinity_corruption_coefficient_and_more"),
     ]
 
     operations = [

@@ -8,7 +8,13 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setSessionScene, type RoomStateResyncStatus } from '@/store/gameSlice';
 import type { HubTidings, NpcGiver, RoomStateObject, SceneSummary } from '@/hooks/types';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { dispatchRoomBuilder } from '@/buildings/api';
 import { buildingKeys, useBuildingForRoomQuery } from '@/buildings/queries';
 import { BuildingBuilderDialog } from '@/buildings/components/BuildingBuilderDialog';
@@ -326,7 +332,7 @@ export function RoomPanel({
 
       {room.is_owner && characterId != null && (
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
-          <DialogContent>
+          <DialogContent {...NO_DESCRIPTION}>
             <DialogHeader>
               <DialogTitle>Edit room</DialogTitle>
             </DialogHeader>

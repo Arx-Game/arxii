@@ -260,7 +260,8 @@ describe('RewardLinesEditor', () => {
     );
   });
 
-  it('renders the readonly name field for an existing ITEM reward line', () => {
+  it('renders the readonly name field for an existing ITEM reward line', async () => {
+    vi.mocked(api.resolveItemTemplateById).mockResolvedValueOnce({ id: 12, name: 'Rusty Blade' });
     mockLines([
       makeRewardLine({
         id: 10,
@@ -275,6 +276,8 @@ describe('RewardLinesEditor', () => {
     renderWithProviders(<RewardLinesEditor resolutionId={30} beatId={200} />);
 
     expect(screen.getByText('Current: Rusty Blade')).toBeInTheDocument();
+    // The picker resolves the saved template id to its name.
+    expect(await screen.findByDisplayValue('Rusty Blade')).toBeInTheDocument();
   });
 
   it('surfaces the mutation error message on a rejected add', async () => {

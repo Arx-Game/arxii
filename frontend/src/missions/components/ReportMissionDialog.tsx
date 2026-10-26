@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
@@ -63,7 +64,7 @@ export function ReportMissionDialog({ instanceId, templateName }: ReportMissionD
           Report in
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Report {templateName}</DialogTitle>
         </DialogHeader>

@@ -25,6 +25,7 @@ const PRESENCE_REFETCH_MS = 30_000;
 import { UnreadNarrativeBadge } from '@/narrative/components/UnreadNarrativeBadge';
 import { UnreadMailBadge } from '@/mail/components/UnreadMailBadge';
 import { useRitualSessionInbox } from '@/rituals/queries';
+import { NO_DESCRIPTION } from '@/components/ui/dialog';
 
 /**
  * Who sees a row (#4188): nothing for everyone, `auth` for any account, `gm`
@@ -277,7 +278,7 @@ export function Header() {
                 <span className="sr-only">Open menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-4">
+            <SheetContent {...NO_DESCRIPTION} side="left" className="p-4">
               <nav className="flex flex-col gap-4">
                 <Link to="/game" className="text-lg">
                   Play

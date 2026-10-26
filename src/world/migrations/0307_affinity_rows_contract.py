@@ -19,7 +19,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0305_affinity_rows_restore_old_columns"),
+        ("arxii", "0306_affinity_rows_restore_old_columns"),
     ]
 
     operations = [

@@ -5,7 +5,7 @@
  * connected. Sessions and sockets live in Redux/module scope, so navigating
  * away keeps every character tab open.
  */
-import { screen } from '@testing-library/react';
+import { screen, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 
@@ -76,7 +76,10 @@ vi.mock('@/home/hall/queries', () => ({
 
 describe('GameTopBar world menu (#3818)', () => {
   afterEach(() => {
-    store.dispatch(resetGame());
+    // Components are still mounted here; reset inside act so they re-render cleanly.
+    act(() => {
+      store.dispatch(resetGame());
+    });
     vi.clearAllMocks();
   });
 
@@ -116,8 +119,10 @@ describe('GameTopBar world menu (#3818)', () => {
     expect(screen.queryByRole('menuitem', { name: /leave the world/i })).toBeNull();
     await user.keyboard('{Escape}');
 
-    store.dispatch(startSession('Aria'));
-    store.dispatch(setActiveSession('Aria'));
+    act(() => {
+      store.dispatch(startSession('Aria'));
+      store.dispatch(setActiveSession('Aria'));
+    });
     await user.click(screen.getByRole('button', { name: 'Open world menu' }));
     await user.click(screen.getByRole('menuitem', { name: 'Disconnect Character' }));
 
@@ -139,12 +144,14 @@ describe('GameTopBar world menu (#3818)', () => {
     // The sub-menu by keyboard: ArrowRight opens it on its first item, ArrowDown
     // moves to the second, Enter selects (a pointer leaving the trigger would
     // close it again under jsdom's pointer geometry).
-    screen.getByRole('menuitem', { name: 'Disconnect Character' }).focus();
+    act(() => {
+      screen.getByRole('menuitem', { name: 'Disconnect Character' }).focus();
+    });
     await user.keyboard('{ArrowRight}');
     expect(await screen.findByRole('menuitem', { name: 'This connection' })).toBeInTheDocument();
     await user.keyboard('{ArrowDown}{Enter}');
 
-    expect(everywhereMock).toHaveBeenCalledWith(1);
+    await waitFor(() => expect(everywhereMock).toHaveBeenCalledWith(1));
     expect(disconnectMock).not.toHaveBeenCalled();
   });
 

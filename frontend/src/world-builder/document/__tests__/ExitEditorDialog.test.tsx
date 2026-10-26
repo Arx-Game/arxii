@@ -38,9 +38,11 @@ vi.mock('@/components/ui/select', () => ({
     title?: string;
     'data-testid'?: string;
   }) => (
-    <span id={id} title={title} data-testid={testId}>
+    // An option, not a span: the trigger renders inside the mocked <select>, and a
+    // select may only hold options. It carries the id, title and test id the tests read.
+    <option value="" disabled hidden id={id} title={title} data-testid={testId}>
       {children}
-    </span>
+    </option>
   ),
   SelectValue: () => null,
   SelectContent: ({ children }: { children?: React.ReactNode }) => <>{children}</>,

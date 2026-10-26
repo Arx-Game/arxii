@@ -43,8 +43,11 @@ describe('EmailVerifyPage', () => {
       screen.getByText('Please wait while we verify your email address...')
     ).toBeInTheDocument();
 
-    // Clean up
-    resolveVerify();
+    // Let the verification finish inside act and show its result
+    await act(async () => {
+      resolveVerify();
+    });
+    expect(screen.getByText('Email Verified!')).toBeInTheDocument();
   });
 
   it('keeps verification success visible until the player chooses login', async () => {

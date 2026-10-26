@@ -102,13 +102,18 @@ class ObjectParent:
         """
         from django.db.models import Prefetch
 
-        from world.areas.positioning.models import PositionEdge
+        from world.areas.positioning.models import PositionEdge, PositionFeature
 
         passable = PositionEdge.objects.filter(is_passable=True)
         return list(
             self.positions.select_related(
                 "rampart__element_profile", "terrain__art"
             ).prefetch_related(
+                Prefetch(
+                    "features",
+                    queryset=PositionFeature.objects.select_related("feature_type__art"),
+                    to_attr="features_cached",
+                ),
                 Prefetch("edges_as_a", queryset=passable, to_attr="passable_edges_as_a"),
                 Prefetch("edges_as_b", queryset=passable, to_attr="passable_edges_as_b"),
                 Prefetch(

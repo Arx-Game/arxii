@@ -3,8 +3,8 @@
  *
  * Extracted from YourTurn.tsx (lines 655–685) to share with the
  * non-combat SceneTacticalMap.  Renders one button per move action (a step,
- * a take-off or landing, a pass roll into held ground, #4663) with the
- * server's note under it; clicking dispatches `{ ref, kwargs: {} }` via the
+ * a take-off or landing, a pass roll into held ground, #4663, a stunt off a feature,
+ * #4675) with the server's note under it; clicking dispatches `{ ref, kwargs: {} }` via the
  * caller-supplied dispatchAction function and toasts the result's message.
  */
 
@@ -45,8 +45,13 @@ export function MovementActions({
       {actions.map((action) => {
         const positionId = action.ref.position_id;
         const refused = !action.prerequisite_met;
-        // A move and a pass roll can name the same place, so the key carries both (#4663).
-        const key = `${action.ref.registry_key ?? 'move'}-${positionId ?? 'here'}`;
+        // A move and a pass roll can name the same place (#4663), and two stunts can reach
+        // one place by different features or approaches (#4675): the key carries them all.
+        const via = [action.ref.feature_id, action.ref.approach_id]
+          .filter((id) => id != null)
+          .map((id) => `-${id}`)
+          .join('');
+        const key = `${action.ref.registry_key ?? 'move'}-${positionId ?? 'here'}${via}`;
         // The hops line already shows above; any other note is this entry's own.
         const note =
           action.description && action.description !== hopsLine ? action.description : '';

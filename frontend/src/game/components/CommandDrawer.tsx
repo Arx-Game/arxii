@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { CommandForm } from './CommandForm';
+import { NO_DESCRIPTION } from '@/components/ui/dialog';
 
 interface CommandDrawerProps extends CommandSpec {
   character: MyRosterEntry['name'];
@@ -48,7 +49,7 @@ export function CommandDrawer({
           {title}
         </Button>
       </SheetTrigger>
-      <SheetContent hideOverlay className="sm:max-w-md">
+      <SheetContent hideOverlay className="sm:max-w-md" {...(description ? {} : NO_DESCRIPTION)}>
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
           {description && <SheetDescription>{description}</SheetDescription>}

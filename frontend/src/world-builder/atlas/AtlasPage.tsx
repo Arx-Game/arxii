@@ -32,7 +32,13 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 
 import { AreaDocument } from '../document/AreaDocument';
@@ -301,7 +307,7 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
       />
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent {...NO_DESCRIPTION} className="max-w-md">
           <DialogHeader>
             <DialogTitle>Find a room</DialogTitle>
           </DialogHeader>
