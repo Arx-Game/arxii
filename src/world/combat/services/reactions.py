@@ -142,7 +142,12 @@ def dodge_sources(participant: CombatParticipant) -> list[DodgeSource]:
 
     sheet = participant.character_sheet
     sources: list[DodgeSource] = []
-    for capability in CapabilityType.objects.exclude(reaction_reach=ReactionReach.NONE):
+    dodging = [
+        capability
+        for capability in CapabilityType.objects.cached_all()
+        if capability.reaction_reach != ReactionReach.NONE
+    ]
+    for capability in dodging:
         above = get_effective_capability_value(sheet, capability) - capability.innate_baseline
         if above > 0:
             sources.append(

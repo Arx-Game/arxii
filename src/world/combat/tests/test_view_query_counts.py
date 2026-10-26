@@ -147,10 +147,10 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         # call — they ran during warm-up and the identity-mapped encounter
         # retains the attribute. The specialist-selection, sustained-action,
         # and protection-commitment surfaces add three bounded queries.
-        # The viewer's own dodge plan (#4676) adds two: the capabilities that dodge
-        # and her Phase Step ward. Only her own row computes it, so they do not
-        # scale with the participant count.
-        with self.assertNumQueries(17):
+        # The viewer's own dodge plan (#4676) adds one: her Phase Step ward (the
+        # capabilities that dodge come from the warmed cached_all()). Only her own row
+        # computes it, so it does not scale with the participant count.
+        with self.assertNumQueries(16):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
