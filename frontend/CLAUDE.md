@@ -54,6 +54,17 @@ pnpm test         # Run Vitest unit tests
 pnpm test:e2e     # Run Playwright smoke tests against the production build
 ```
 
+### Unit tests fail on React warnings
+
+`src/test/setup.ts` fails any test during which React, Radix or react-redux logs a
+development warning (#4677): an update outside `act()`, a dialog with no `Description`, a
+duplicate key, invalid DOM nesting, a selector that returns a new object on every call. Fix
+the cause: a test waits for what its update shows (`findBy*`, `waitFor`) or dispatches inside
+`act()`; a dialog with no description passes `aria-describedby={undefined}` (only when it
+has none: one with an optional description passes it conditionally); a selector's fallback
+is a module-level constant, never an inline `[]` or `{}`. When an agent runs vitest, add
+`--reporter=default`: vitest 5's agent reporter hides console output from passing tests.
+
 ### E2E Smoke Tests
 
 Playwright tests in `e2e/` verify the production build actually loads and works. They run against Vite's preview server (serves the same built bundle as Django). Run `pnpm build` first, then `pnpm test:e2e`. These catch issues that only appear in production builds — circular chunk dependencies, broken module loading, asset serving failures. Run these after any Vite config change or dependency update.

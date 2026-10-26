@@ -35,11 +35,21 @@ Django deepcopies class-level test data per test, and Evennia objects (ObjectDB 
 
 `evennia.utils.test_resources.EvenniaTest`'s session-login path hits the custom `accounts.py::at_post_login` and breaks. Use plain `django.test.TestCase` + `evennia_extensions.factories.CharacterFactory` instead (see `world/items/tests/test_handlers.py`) for any test needing a real character.
 
-## Frontend: never run bare `pnpm test`
+## Frontend: an agent run hides React warnings
 
-**Symptom:** a subagent told to "run pnpm test" hangs / gets killed without committing.
+**Symptom:** a test file is clean when an agent runs it, and the same file prints thousands
+of `not wrapped in act(...)` warnings in CI.
 
-`pnpm test` is `vitest` in watch mode and never exits. Use `pnpm exec vitest run <path>` (or bare `pnpm exec vitest run` for everything). For the full frontend gate: `pnpm exec vitest run`, `pnpm typecheck`, `pnpm lint`, `pnpm build` (the build's `tsc -b` project-reference mode type-checks test files that `typecheck`/vitest miss).
+vitest 5 detects that an AI agent is driving it and switches to its `agent` reporter, which
+drops console output from passing tests (#4677). Pass `--reporter=default` to see what CI
+sees: `pnpm exec vitest run <path> --reporter=default`. `pnpm test` is `vitest run` (it
+exits), and CI runs it in four shards (`--shard=i/4`). Since #4677, `src/test/setup.ts`
+fails any test during which React, Radix or react-redux logs a development warning (act,
+missing dialog Description, duplicate key, invalid DOM nesting, a selector that returns a
+new object each call), so a warning is a red test under either reporter; the default
+reporter just shows the message in full. For the full frontend gate: `pnpm exec vitest run`,
+`pnpm typecheck`, `pnpm lint`, `pnpm build` (the build's `tsc -b` project-reference mode
+type-checks test files that `typecheck`/vitest miss).
 
 ## Stray `src/.venv` breaks `shard-coverage`
 
