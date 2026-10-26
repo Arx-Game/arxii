@@ -132,8 +132,8 @@ def perform_fall(
     # Gate 2: irreversibility — check for existing record
     if FallRedemptionRecord.objects.filter(
         character_sheet=character_sheet,
-        from_affinity_ref=from_affinity,
-        to_affinity_ref=target_affinity,
+        from_affinity=from_affinity,
+        to_affinity=target_affinity,
     ).exists():
         msg = "You have already undergone this conversion."
         raise FallEligibilityError(msg)
@@ -163,8 +163,8 @@ def perform_fall(
     record = FallRedemptionRecord.objects.create(
         character_sheet=character_sheet,
         conversion_type=conversion_type,
-        from_affinity_ref=from_affinity,
-        to_affinity_ref=target_affinity,
+        from_affinity=from_affinity,
+        to_affinity=target_affinity,
         multiplier=multiplier,
         scene=scene,
     )

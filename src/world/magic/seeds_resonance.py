@@ -31,25 +31,27 @@ from world.magic.models import Resonance
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
+    from world.magic.models import Affinity
 
-def authored_resonances(affinity_name: str | None = None) -> list[Resonance]:
+
+def authored_resonances(affinity: Affinity | None = None) -> list[Resonance]:
     """Every authored Resonance, optionally narrowed to one affinity."""
     queryset = Resonance.objects.all()
-    if affinity_name is not None:
-        queryset = queryset.filter(affinity__name=affinity_name)
+    if affinity is not None:
+        queryset = queryset.filter(affinity=affinity)
     return list(queryset.order_by("name"))
 
 
-def first_authored_resonance(affinity_name: str) -> Resonance | None:
+def first_authored_resonance(affinity: Affinity) -> Resonance | None:
     """The first authored Resonance of an affinity, or ``None`` if it has none."""
-    return Resonance.objects.filter(affinity__name=affinity_name).order_by("name").first()
+    return Resonance.objects.filter(affinity=affinity).order_by("name").first()
 
 
 def reference_resonance(
     existing: QuerySet,
     *,
     resonance_field: str = "resonance",
-    affinity_name: str | None = None,
+    affinity: Affinity | None = None,
 ) -> Resonance | None:
     """Resolve the resonance a re-runnable reference seed should hang off.
 
@@ -57,12 +59,12 @@ def reference_resonance(
     to the ones it owns. When it holds a row, that row's resonance is the answer
     — re-pressing the Big Button after the catalog has grown must not seed a
     second reference set beside the first. Otherwise the first authored
-    resonance (optionally of *affinity_name*) is taken, or ``None`` when the
+    resonance (optionally of *affinity*) is taken, or ``None`` when the
     content repo has authored none.
     """
     placed = existing.values_list(resonance_field, flat=True).first()
     if placed is not None:
         return Resonance.objects.filter(pk=placed).first()
-    if affinity_name is not None:
-        return first_authored_resonance(affinity_name)
+    if affinity is not None:
+        return first_authored_resonance(affinity)
     return next(iter(authored_resonances()), None)

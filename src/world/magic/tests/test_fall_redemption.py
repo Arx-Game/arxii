@@ -12,6 +12,7 @@ Covers:
 
 from decimal import Decimal
 
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -83,21 +84,18 @@ def _setup_affinities_and_resonances():
 def _setup_conversion_mappings(cele_res, primal_res, abyssal_res):
     """Create ResonanceConversion mappings for all paths."""
     mappings = [
-        (cele_res, primal_res.affinity, primal_res, "primal"),
-        (cele_res, abyssal_res.affinity, abyssal_res, "abyssal"),
-        (primal_res, abyssal_res.affinity, abyssal_res, "abyssal"),
-        (primal_res, cele_res.affinity, cele_res, "celestial"),
-        (abyssal_res, primal_res.affinity, primal_res, "primal"),
-        (abyssal_res, cele_res.affinity, cele_res, "celestial"),
+        (cele_res, primal_res.affinity, primal_res),
+        (cele_res, abyssal_res.affinity, abyssal_res),
+        (primal_res, abyssal_res.affinity, abyssal_res),
+        (primal_res, cele_res.affinity, cele_res),
+        (abyssal_res, primal_res.affinity, primal_res),
+        (abyssal_res, cele_res.affinity, cele_res),
     ]
-    for source, target_aff, target_res, old_key in mappings:
+    for source, target_aff, target_res in mappings:
         ResonanceConversion.objects.get_or_create(
             source_resonance=source,
-            target_affinity_ref=target_aff,
-            defaults={
-                "target_resonance": target_res,
-                "target_affinity": old_key,
-            },
+            target_affinity=target_aff,
+            defaults={"target_resonance": target_res},
         )
 
 
@@ -114,7 +112,6 @@ class TestGrantCompromiseResonance(TestCase):
             name="Combat Kill",
             target_resonance=primal_res,
             amount=10,
-            is_cruelty=False,
         )
 
         result = grant_compromise_resonance(sheet, act_type)
@@ -139,7 +136,6 @@ class TestGrantCompromiseResonance(TestCase):
             name="Torture",
             target_resonance=abyssal_res,
             amount=25,
-            is_cruelty=True,
         )
 
         result = grant_compromise_resonance(sheet, act_type)
@@ -269,11 +265,12 @@ class TestConversionPair(TestCase):
         pair = conversion_pair(cele, primal)
         self.assertEqual(pair.conversion_type, ConversionType.FALL)
 
-    def test_blank_type_is_a_mapping_error(self):
+    def test_unconverted_pair_is_a_mapping_error(self):
         cele, primal, _ = ensure_conversion_pairs()
         pair = AffinityInteraction.objects.get(source_affinity=cele, environment_affinity=primal)
         pair.conversion_type = ""
-        pair.save(update_fields=["conversion_type"])
+        pair.conversion_multiplier = None
+        pair.save(update_fields=["conversion_type", "conversion_multiplier"])
         AffinityInteraction.objects.clear_cache()
         with self.assertRaises(ConversionMappingError):
             conversion_pair(cele, primal)
@@ -284,7 +281,14 @@ class TestConversionPair(TestCase):
         with self.assertRaises(ConversionMappingError):
             conversion_pair(cele, primal)
 
-    def test_blank_type_fall_is_a_clean_refusal(self):
+    def test_half_authored_pair_is_refused_by_the_database(self):
+        cele, primal, _ = ensure_conversion_pairs()
+        pair = AffinityInteraction.objects.get(source_affinity=cele, environment_affinity=primal)
+        pair.conversion_type = ""
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            pair.save(update_fields=["conversion_type"])
+
+    def test_unconverted_pair_fall_is_a_clean_refusal(self):
         from world.magic.exceptions import FallEligibilityError
 
         sheet = CharacterSheetFactory()
@@ -294,7 +298,8 @@ class TestConversionPair(TestCase):
             source_affinity=cele_res.affinity, environment_affinity=primal_aff
         )
         pair.conversion_type = ""
-        pair.save(update_fields=["conversion_type"])
+        pair.conversion_multiplier = None
+        pair.save(update_fields=["conversion_type", "conversion_multiplier"])
         AffinityInteraction.objects.clear_cache()
         grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
         grant_resonance(sheet, primal_res, 100, source=GainSource.STAFF_GRANT)

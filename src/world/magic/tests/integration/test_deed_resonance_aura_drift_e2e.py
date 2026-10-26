@@ -45,7 +45,7 @@ class DeedResonanceAuraDriftE2ETest(TestCase):
         cruelty = ResonanceFactory(name="Cruelty", affinity=abyssal)
         achievement = AchievementFactory(is_active=True)
         AuraAffinityThreshold.objects.create(
-            affinity_ref=abyssal,
+            affinity=abyssal,
             threshold_percent=Decimal("50.00"),
             discovery_achievement=achievement,
         )

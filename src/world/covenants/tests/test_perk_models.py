@@ -367,7 +367,7 @@ class SituationParamValidationTests(TestCase):
         row = VowSituationalPerkSituationFactory.build(
             perk=self.perk,
             situation=Situation.ATTACKER_AFFINITY,
-            affinity_ref=ensure_canonical_affinities()[1],
+            affinity=ensure_canonical_affinities()[1],
             threshold_percent=30,
         )
         row.full_clean()  # no raise
@@ -392,7 +392,7 @@ class SituationParamValidationTests(TestCase):
             perk=self.perk,
             rung_number=1,
             extra_situation=Situation.SURROUNDED,
-            affinity_ref=ensure_canonical_affinities()[2],
+            affinity=ensure_canonical_affinities()[2],
         )
         with self.assertRaises(ValidationError):
             rung.full_clean()
@@ -401,12 +401,12 @@ class SituationParamValidationTests(TestCase):
         row = VowSituationalPerkSituationFactory.build(
             perk=self.perk,
             situation=Situation.ATTACKER_AFFINITY,
-            affinity_ref=ensure_canonical_affinities()[0],
+            affinity=ensure_canonical_affinities()[0],
             threshold_percent=40,
         )
         self.assertEqual(
             row.params,
-            SituationParams(threshold_percent=40, affinity_ref=ensure_canonical_affinities()[0]),
+            SituationParams(threshold_percent=40, affinity=ensure_canonical_affinities()[0]),
         )
 
     def test_threshold_percent_zero_rejected(self):

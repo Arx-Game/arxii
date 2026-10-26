@@ -166,7 +166,7 @@ from world.magic.specialization.models import (
 
 @admin.register(Affinity)
 class AffinityAdmin(admin.ModelAdmin):
-    list_display = ["name", "description"]
+    list_display = ["name", "corruption_coefficient", "description"]
     search_fields = ["name"]
 
 
@@ -210,8 +210,10 @@ class AffinityInteractionAdmin(admin.ModelAdmin):
         "kind",
         "aggressor",
         "severity_multiplier",
+        "conversion_type",
+        "conversion_multiplier",
     ]
-    list_filter = ["valence", "kind"]
+    list_filter = ["valence", "kind", "conversion_type"]
     raw_id_fields = ["source_affinity", "environment_affinity"]
 
 
@@ -2193,8 +2195,8 @@ class CrossingChoiceAdmin(admin.ModelAdmin):
 class CompromiseActTypeAdmin(admin.ModelAdmin):
     """Admin for authored compromise act types."""
 
-    list_display = ("name", "target_resonance", "amount", "is_cruelty")
-    list_filter = ("is_cruelty",)
+    list_display = ("name", "target_resonance", "amount")
+    list_filter = ("target_resonance__affinity",)
     search_fields = ("name", "description")
 
 
@@ -2222,7 +2224,7 @@ class ResonanceConversionAdmin(admin.ModelAdmin):
 class FallRedemptionConfigAdmin(admin.ModelAdmin):
     """Admin for the Fall/Redemption tuning singleton."""
 
-    list_display = ("id", "celestial_to_primal_multiplier", "celestial_to_abyssal_multiplier")
+    list_display = ("id", "penance_exchange_rate", "fall_threshold_percent")
 
 
 @admin.register(FallRedemptionRecord)
@@ -2591,9 +2593,6 @@ class CorruptionConfigAdmin(admin.ModelAdmin):
     """#3831 - the singleton Corruption-foundation coefficient tuning surface."""
 
     list_display = [
-        "celestial_coefficient",
-        "primal_coefficient",
-        "abyssal_coefficient",
         "tier_1_coefficient",
         "tier_2_coefficient",
         "tier_3_coefficient",

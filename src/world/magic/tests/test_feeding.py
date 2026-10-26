@@ -162,7 +162,6 @@ class FeedAnimaTest(TestCase):
             feeding_taint_role=FeedingTaintRole.MURDER,
             target_resonance=resonance,
             amount=5,
-            is_cruelty=True,
         )
         with patch("world.magic.services.fall_redemption.grant_resonance") as grant:
             grant_blood_taint(self.feeder, FeedingTaintRole.MURDER)

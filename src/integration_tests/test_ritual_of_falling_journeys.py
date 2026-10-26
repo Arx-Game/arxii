@@ -30,8 +30,7 @@ class _AFalling(JourneyCase):
         self.primal_res = ResonanceFactory(name="Praedari", affinity=self.primal)
         ResonanceConversion.objects.create(
             source_resonance=self.cele_res,
-            target_affinity="primal",
-            target_affinity_ref=self.primal,
+            target_affinity=self.primal,
             target_resonance=self.primal_res,
         )
         RitualFactory(
@@ -53,8 +52,8 @@ class FallingByAffinityId(_AFalling):
         told = self.telnet(self.ysmay, f"ritual Ritual of Falling target_affinity={self.primal.pk}")
         self.assertIn("You perform Ritual of Falling.", told)
         record = FallRedemptionRecord.objects.get(character_sheet=self.sheet)
-        self.assertEqual(record.from_affinity_ref, self.celestial)
-        self.assertEqual(record.to_affinity_ref, self.primal)
+        self.assertEqual(record.from_affinity, self.celestial)
+        self.assertEqual(record.to_affinity, self.primal)
         primal_row = CharacterResonance.objects.get(
             character_sheet=self.sheet, resonance=self.primal_res
         )

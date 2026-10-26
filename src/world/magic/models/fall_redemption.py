@@ -21,7 +21,6 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.magic.constants import FeedingTaintRole
-from world.magic.types.aura import AffinityType
 
 _RESONANCE_FK = "arxii.Resonance"
 _CONFIG_VERBOSE = "Fall / Redemption Config"
@@ -60,14 +59,6 @@ class CompromiseActType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         help_text="Which feeding-taint rule this act type stands for. Blank = none.",
     )
-    is_cruelty = models.BooleanField(
-        default=False,
-        help_text=(
-            "Convenience flag: True when target_resonance.affinity is Abyssal. "
-            "Derivable from the FK but surfaced for admin filtering and future "
-            "content-authoring tooling."
-        ),
-    )
 
     class Meta:
         verbose_name = "Compromise Act Type"
@@ -97,7 +88,7 @@ class ResonanceConversion(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["source_resonance", "target_affinity"]
-        dependencies = [_RESONANCE_FK]
+        dependencies = [_RESONANCE_FK, "arxii.Affinity"]
 
     objects = NaturalKeyManager()
 
@@ -107,18 +98,11 @@ class ResonanceConversion(NaturalKeyMixin, SharedMemoryModel):
         related_name="conversion_sources",
         help_text="The resonance being converted away from.",
     )
-    target_affinity = models.CharField(
-        max_length=16,
-        choices=AffinityType.choices,
-        help_text="The destination affinity for this conversion path.",
-    )
-    target_affinity_ref = models.ForeignKey(
+    target_affinity = models.ForeignKey(
         "arxii.Affinity",
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
         related_name="+",
-        help_text="Row-keyed replacement for target_affinity (#4681).",
+        help_text="The destination affinity for this conversion path.",
     )
     target_resonance = models.ForeignKey(
         _RESONANCE_FK,
@@ -134,7 +118,8 @@ class ResonanceConversion(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return (
-            f"{self.source_resonance.name} → {self.target_affinity} → {self.target_resonance.name}"
+            f"{self.source_resonance.name} → {self.target_affinity.name} → "
+            f"{self.target_resonance.name}"
         )
 
 
@@ -152,44 +137,6 @@ class FallRedemptionConfig(NaturalKeyMixin, SharedMemoryModel):
 
     objects = NaturalKeyManager()
 
-    # Fall multipliers (>1.0 = gain)
-    celestial_to_primal_multiplier = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=Decimal("1.20"),
-        help_text="Multiplier on balance+lifetime_earned when a Celestial Falls to Primal.",
-    )
-    celestial_to_abyssal_multiplier = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=Decimal("1.50"),
-        help_text="Multiplier when a Celestial Falls to Abyssal (the dramatic Fall).",
-    )
-    primal_to_abyssal_multiplier = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=Decimal("1.20"),
-        help_text="Multiplier when a Primal Falls to Abyssal.",
-    )
-    # Redemption multipliers (<1.0 = loss)
-    abyssal_to_primal_multiplier = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=Decimal("0.70"),
-        help_text="Multiplier when an Abyssal character Redeems to Primal.",
-    )
-    primal_to_celestial_multiplier = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=Decimal("0.70"),
-        help_text="Multiplier when a Primal character Redeems to Celestial.",
-    )
-    abyssal_to_celestial_multiplier = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=Decimal("0.50"),
-        help_text="Multiplier when an Abyssal character Redeems to Celestial (the costly path).",
-    )
     # Atonement resonance conversion (partial, lossy)
     penance_exchange_rate = models.DecimalField(
         max_digits=4,
@@ -243,23 +190,17 @@ class FallRedemptionRecord(SharedMemoryModel):
         max_length=16,
         choices=ConversionType.choices,
     )
-    from_affinity = models.CharField(max_length=16, choices=AffinityType.choices)
-    to_affinity = models.CharField(max_length=16, choices=AffinityType.choices)
-    from_affinity_ref = models.ForeignKey(
+    from_affinity = models.ForeignKey(
         "arxii.Affinity",
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
         related_name="+",
-        help_text="Row-keyed replacement for from_affinity (#4681).",
+        help_text="The affinity converted away from.",
     )
-    to_affinity_ref = models.ForeignKey(
+    to_affinity = models.ForeignKey(
         "arxii.Affinity",
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
         related_name="+",
-        help_text="Row-keyed replacement for to_affinity (#4681).",
+        help_text="The affinity converted into.",
     )
     multiplier = models.DecimalField(max_digits=4, decimal_places=2)
     performed_at = models.DateTimeField(auto_now_add=True)
@@ -277,4 +218,4 @@ class FallRedemptionRecord(SharedMemoryModel):
         ordering = ["-performed_at"]
 
     def __str__(self) -> str:
-        return f"{self.conversion_type}: {self.from_affinity} → {self.to_affinity}"
+        return f"{self.conversion_type}: {self.from_affinity.name} → {self.to_affinity.name}"

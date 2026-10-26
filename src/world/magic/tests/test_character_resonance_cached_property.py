@@ -169,8 +169,8 @@ class CharacterResonanceColdCacheTests(TestCase):
         target_resonance = ResonanceFactory(name="Praedari", affinity=primal)
         ResonanceConversion.objects.get_or_create(
             source_resonance=source_resonance,
-            target_affinity_ref=primal,
-            defaults={"target_resonance": target_resonance, "target_affinity": "primal"},
+            target_affinity=primal,
+            defaults={"target_resonance": target_resonance},
         )
         sheet = CharacterSheetFactory()
         source_cr = CharacterResonanceFactory(

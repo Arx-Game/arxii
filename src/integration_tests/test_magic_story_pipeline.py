@@ -30,7 +30,7 @@ Discovery semantics:
 
 Cascade math for the Low celestial room (magnitude=10):
   AffinityInteraction(Abyssal→Celestial): OPPOSED, REJECT, severity=1.00
-  caster_alignment = aura.abyssal / 100 = 100/100 = 1.0
+  caster_alignment = the abyssal aura share / 100 = 100/100 = 1.0
   raw = 10 * 1.0 * 1.00 * base_coefficient(1.000) = 10.0
   magnitude = round(10.0) = 10
   backfire_difficulty = 30 + round(10 * 0.500) = 35
@@ -91,6 +91,7 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueFactory,
 )
+from world.magic.models.affinity import Affinity
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.seeds_resonance import first_authored_resonance
 from world.magic.services.resonance_environment import evaluate_resonance_environment
@@ -216,7 +217,9 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         # the technique gift. Resolved by affinity, not by name: no seeder mints a
         # Resonance since #2967, and the "Dissolution" this used to fetch was one
         # the seeder invented.
-        cls.dissolution_resonance = first_authored_resonance("Abyssal")
+        cls.dissolution_resonance = first_authored_resonance(
+            Affinity.objects.get_abyssal_affinity()
+        )
 
     def setUp(self) -> None:
         super().setUp()  # ResonanceCacheIsolationMixin.setUp() clears caches first
@@ -432,7 +435,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         # ------------------------------------------------------------------
         # T2: Difficulty assertion
         #
-        # caster_alignment = aura.abyssal / 100 = 100/100 = 1.0
+        # caster_alignment = the abyssal aura share / 100 = 100/100 = 1.0
         # AffinityInteraction(Abyssal→Celestial): OPPOSED, severity=1.00
         # base_coefficient=1.000; backfire_base=30; per_magnitude=0.500
         #
@@ -1049,7 +1052,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
 
         # The Celestial resonance tagged on low_room — resolved by affinity, not
         # by the invented "Light" name the seeder used to mint (#2967).
-        light_resonance = first_authored_resonance("Celestial")
+        light_resonance = first_authored_resonance(Affinity.objects.get_celestial_affinity())
 
         # Pre-cast: effective_value of Light on low_room = 10.
         light_ev_before = effective_value(self.low_room, resonance=light_resonance)

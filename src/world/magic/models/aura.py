@@ -18,7 +18,6 @@ from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.magic.constants import GlimpseState
 from world.magic.models.affinity import Affinity, Resonance
-from world.magic.types import AffinityType
 
 
 class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
@@ -34,27 +33,6 @@ class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="aura",
         help_text="The character this aura belongs to.",
-    )
-    celestial = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=Decimal("0.00"),
-        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
-        help_text="Percentage of Celestial affinity (0-100).",
-    )
-    primal = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=Decimal("80.00"),
-        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
-        help_text="Percentage of Primal affinity (0-100).",
-    )
-    abyssal = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=Decimal("20.00"),
-        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
-        help_text="Percentage of Abyssal affinity (0-100).",
     )
     glimpse_story = models.TextField(
         blank=True,
@@ -247,14 +225,11 @@ class AuraAffinityThreshold(SharedMemoryModel):
     check, not a Flows event) — see world/covenants/discovery.py.
     """
 
-    affinity = models.CharField(max_length=16, choices=AffinityType.choices)
-    affinity_ref = models.ForeignKey(
+    affinity = models.ForeignKey(
         "arxii.Affinity",
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
         related_name="+",
-        help_text="Row-keyed replacement for affinity (#4681); the CharField is removed later.",
+        help_text="The affinity whose share this threshold watches.",
     )
     threshold_percent = models.DecimalField(
         max_digits=5,
@@ -276,7 +251,7 @@ class AuraAffinityThreshold(SharedMemoryModel):
         verbose_name_plural = "Aura Affinity Thresholds"
 
     def __str__(self) -> str:
-        return f"{self.affinity} >= {self.threshold_percent}%"
+        return f"{self.affinity.name} >= {self.threshold_percent}%"
 
 
 def aura_shares_prefetch(prefix: str = "") -> Prefetch:

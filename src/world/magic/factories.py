@@ -3426,33 +3426,32 @@ def wire_fall_redemption_content() -> object:
         cele_res = reference_resonance(
             CompromiseActType.objects.filter(target_resonance__affinity=celestial_affinity),
             resonance_field="target_resonance",
-            affinity_name=celestial_affinity.name,
+            affinity=celestial_affinity,
         )
         primal_res = reference_resonance(
             CompromiseActType.objects.filter(target_resonance__affinity=primal_affinity),
             resonance_field="target_resonance",
-            affinity_name=primal_affinity.name,
+            affinity=primal_affinity,
         )
         abyssal_res = reference_resonance(
             CompromiseActType.objects.filter(target_resonance__affinity=abyssal_affinity),
             resonance_field="target_resonance",
-            affinity_name=abyssal_affinity.name,
+            affinity=abyssal_affinity,
         )
 
         if cele_res is not None and primal_res is not None and abyssal_res is not None:
             # Example compromise act types
-            for name, resonance, amount, is_cruelty in [
-                ("Combat Kill", primal_res, 10, False),
-                ("Pragmatic Choice", primal_res, 15, False),
-                ("Torture", abyssal_res, 25, True),
-                ("Malicious Harm", abyssal_res, 20, True),
+            for name, resonance, amount in [
+                ("Combat Kill", primal_res, 10),
+                ("Pragmatic Choice", primal_res, 15),
+                ("Torture", abyssal_res, 25),
+                ("Malicious Harm", abyssal_res, 20),
             ]:
                 act_type = authored_or_sample(
                     CompromiseActType,
                     {
                         "target_resonance": resonance,
                         "amount": amount,
-                        "is_cruelty": is_cruelty,
                         "description": f"Grants {amount} {resonance.name} resonance.",
                     },
                     name=name,
@@ -3461,23 +3460,19 @@ def wire_fall_redemption_content() -> object:
                     compromise_types.append(act_type)
 
             # Example ResonanceConversion mappings
-            for source_res, target_affinity, target_res, old_key in [
-                (cele_res, primal_affinity, primal_res, "primal"),
-                (cele_res, abyssal_affinity, abyssal_res, "abyssal"),
-                (primal_res, abyssal_affinity, abyssal_res, "abyssal"),
-                (primal_res, celestial_affinity, cele_res, "celestial"),
-                (abyssal_res, primal_affinity, primal_res, "primal"),
-                (abyssal_res, celestial_affinity, cele_res, "celestial"),
+            for source_res, target_affinity, target_res in [
+                (cele_res, primal_affinity, primal_res),
+                (cele_res, abyssal_affinity, abyssal_res),
+                (primal_res, abyssal_affinity, abyssal_res),
+                (primal_res, celestial_affinity, cele_res),
+                (abyssal_res, primal_affinity, primal_res),
+                (abyssal_res, celestial_affinity, cele_res),
             ]:
                 authored_or_sample(
                     ResonanceConversion,
-                    {
-                        "target_resonance": target_res,
-                        # Old column, still part of the unique key until the rename.
-                        "target_affinity": old_key,
-                    },
+                    {"target_resonance": target_res},
                     source_resonance=source_res,
-                    target_affinity_ref=target_affinity,
+                    target_affinity=target_affinity,
                 )
 
     return SimpleNamespace(
@@ -3642,7 +3637,7 @@ def author_reference_corruption_content() -> None:
                     corruption_resonance=None
                 ),
                 resonance_field="corruption_resonance",
-                affinity_name=affinity.name,
+                affinity=affinity,
             )
             for affinity in (primal_affinity, abyssal_affinity)
         )

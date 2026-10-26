@@ -141,7 +141,7 @@ class FireAuraThresholdCrossingsTests(TestCase):
 
         achievement = AchievementFactory(is_active=True)
         AuraAffinityThreshold.objects.create(
-            affinity_ref=self.abyssal,
+            affinity=self.abyssal,
             threshold_percent=Decimal("50.00"),
             discovery_achievement=achievement,
         )
@@ -177,7 +177,7 @@ class FireAuraThresholdCrossingsTests(TestCase):
             achievement=achievement, stat=allure, threshold=50, comparison=ComparisonType.GTE
         )
         AuraAffinityThreshold.objects.create(
-            affinity_ref=self.abyssal,
+            affinity=self.abyssal,
             threshold_percent=Decimal("50.00"),
             discovery_achievement=achievement,
         )

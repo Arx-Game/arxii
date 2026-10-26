@@ -91,7 +91,7 @@ class SituationParams:
 
     threshold_percent: int | None = None
     count_threshold: int | None = None
-    affinity_ref: Affinity | None = None
+    affinity: Affinity | None = None
     origin_side: str = ""
 
 

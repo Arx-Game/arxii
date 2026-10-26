@@ -1386,6 +1386,7 @@ def _seed_resonance_environment_rooms() -> None:
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+    from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.magic.seeds_resonance import first_authored_resonance  # noqa: PLC0415
     from world.magic.services.gain import tag_room_resonance  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
@@ -1429,8 +1430,8 @@ def _seed_resonance_environment_rooms() -> None:
     # particular one — they exercise the aligned/opposed cascade poles. They
     # used to name the invented "Light"/"Dissolution" (#2967); they now take
     # whichever the content repo authored, and skip when it authored none.
-    celestial_resonance = first_authored_resonance("Celestial")
-    abyssal_resonance = first_authored_resonance("Abyssal")
+    celestial_resonance = first_authored_resonance(Affinity.objects.get_celestial_affinity())
+    abyssal_resonance = first_authored_resonance(Affinity.objects.get_abyssal_affinity())
     if celestial_resonance is None or abyssal_resonance is None:
         return
 

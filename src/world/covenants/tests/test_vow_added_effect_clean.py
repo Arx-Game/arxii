@@ -166,7 +166,7 @@ class VowAddedEffectCleanTests(TestCase):
         row = VowAddedEffectFactory.build(
             covenant_role=self.role,
             situation=Situation.SURROUNDED,
-            affinity_ref=ensure_canonical_affinities()[2],
+            affinity=ensure_canonical_affinities()[2],
         )
         self.assertIn("affinity", self._keys(row))
 

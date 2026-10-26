@@ -23,7 +23,7 @@ accrue_corruption_for_cast). Direct calls to accrue_corruption_for_cast
 are unit-test territory; these tests prove the pipeline wiring.
 
 CorruptionConfig defaults (integer-tenths, all × 0.1):
-    abyssal_coefficient  = 10  (× 1.0 per involvement unit)
+    Abyssal.corruption_coefficient = 10  (× 1.0 per involvement unit)
     tier_1_coefficient   = 10  (× 1.0 for level 1–5 techniques)
     audere_multiplier    = 15  (× 1.5 on top of 10-neutral)
     deficit_multiplier   = 20  (× 2.0)

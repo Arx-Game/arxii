@@ -181,7 +181,7 @@ def fire_aura_threshold_crossings(character_sheet: CharacterSheet, drift: AuraDr
         if after_value <= before_value:
             continue
         thresholds = AuraAffinityThreshold.objects.filter(
-            affinity_ref=share.affinity,
+            affinity=share.affinity,
             threshold_percent__gt=before_value,
             threshold_percent__lte=after_value,
             discovery_achievement__isnull=False,

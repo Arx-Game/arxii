@@ -177,7 +177,14 @@ class AffinityInteraction(SharedMemoryModel):
             models.UniqueConstraint(
                 fields=["source_affinity", "environment_affinity"],
                 name="unique_affinity_interaction_pair",
-            )
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(conversion_multiplier__isnull=False) & ~models.Q(conversion_type="")
+                    | models.Q(conversion_multiplier__isnull=True, conversion_type="")
+                ),
+                name="affinity_interaction_conversion_pair_complete",
+            ),
         ]
 
     @cached_property

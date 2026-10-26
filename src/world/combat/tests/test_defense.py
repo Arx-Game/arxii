@@ -460,9 +460,9 @@ class ResolveNpcAttackSituationalPerkTests(TestCase):
             lo += 10
         return chart, outcomes
 
-    def _npc_action(self, *, affinity_ref: Affinity | None = None) -> CombatOpponentAction:
+    def _npc_action(self, *, affinity: Affinity | None = None) -> CombatOpponentAction:
         opponent = CombatOpponentFactory(
-            encounter=self.encounter, threat_pool=self.pool, affinity_ref=affinity_ref
+            encounter=self.encounter, threat_pool=self.pool, affinity=affinity
         )
         action = CombatOpponentAction.objects.create(
             opponent=opponent, round_number=1, threat_entry=self.entry
@@ -505,15 +505,15 @@ class ResolveNpcAttackSituationalPerkTests(TestCase):
         VowSituationalPerkSituationFactory(
             perk=perk,
             situation=Situation.ATTACKER_AFFINITY,
-            affinity_ref=ensure_canonical_affinities()[2],
+            affinity=ensure_canonical_affinities()[2],
         )
 
-        abyssal_action = self._npc_action(affinity_ref=ensure_canonical_affinities()[2])
+        abyssal_action = self._npc_action(affinity=ensure_canonical_affinities()[2])
         with force_check_outcome(outcomes[-1]):
             bound_result = resolve_npc_attack(abyssal_action, self.participant, self.check_type)
         self.assertEqual(bound_result.success_level, 1)
 
-        non_abyssal_action = self._npc_action(affinity_ref=ensure_canonical_affinities()[0])
+        non_abyssal_action = self._npc_action(affinity=ensure_canonical_affinities()[0])
         with force_check_outcome(outcomes[-1]):
             unbound_result = resolve_npc_attack(
                 non_abyssal_action, self.participant, self.check_type

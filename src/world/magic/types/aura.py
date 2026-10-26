@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from django.db import models
-
 if TYPE_CHECKING:
     from world.magic.models.affinity import Affinity
 
@@ -38,11 +36,3 @@ class AuraDrift:
 
     before: AuraPercentages
     after: AuraPercentages
-
-
-class AffinityType(models.TextChoices):
-    """The three magical affinities."""
-
-    CELESTIAL = "celestial", "Celestial"
-    PRIMAL = "primal", "Primal"
-    ABYSSAL = "abyssal", "Abyssal"

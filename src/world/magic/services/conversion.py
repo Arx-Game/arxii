@@ -94,7 +94,7 @@ def _resolve_target_resonance(
     try:
         mapping = ResonanceConversion.objects.get(
             source_resonance=source_resonance,
-            target_affinity_ref=target_affinity,
+            target_affinity=target_affinity,
         )
     except ResonanceConversion.DoesNotExist as exc:
         msg = (

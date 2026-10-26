@@ -905,7 +905,7 @@ class AttackerAffinityEvaluatorTests(TestCase):
     fallback — with ``params.threshold_percent`` set, that axis's percentage
     must be >= the threshold; unset, the aura's ``dominant_affinity`` must
     equal the axis, (3) otherwise False. ``affinity`` is a REQUIRED param
-    (``SITUATION_PARAM_SPECS``) — ``NO_PARAMS`` (no ``affinity_ref``) never
+    (``SITUATION_PARAM_SPECS``) — ``NO_PARAMS`` (no ``affinity``) never
     holds, regardless of attacker data. Never raises on missing relations;
     False when ``ctx.attacker`` is ``None``.
     """
@@ -924,13 +924,13 @@ class AttackerAffinityEvaluatorTests(TestCase):
         )
 
     def test_authored_affinity_axis_match(self) -> None:
-        opponent = CombatOpponentFactory(affinity_ref=ensure_canonical_affinities()[1])
-        params = SituationParams(affinity_ref=ensure_canonical_affinities()[1])
+        opponent = CombatOpponentFactory(affinity=ensure_canonical_affinities()[1])
+        params = SituationParams(affinity=ensure_canonical_affinities()[1])
         self.assertTrue(evaluators.attacker_affinity(self._ctx(opponent), params))
 
     def test_authored_affinity_axis_mismatch(self) -> None:
-        opponent = CombatOpponentFactory(affinity_ref=ensure_canonical_affinities()[2])
-        params = SituationParams(affinity_ref=ensure_canonical_affinities()[1])
+        opponent = CombatOpponentFactory(affinity=ensure_canonical_affinities()[2])
+        params = SituationParams(affinity=ensure_canonical_affinities()[1])
         self.assertFalse(evaluators.attacker_affinity(self._ctx(opponent), params))
 
     def test_aura_dominant_match_without_threshold(self) -> None:
@@ -944,7 +944,7 @@ class AttackerAffinityEvaluatorTests(TestCase):
             abyssal=Decimal("10.00"),
         )
         opponent = CombatOpponentFactory(persona=persona)
-        params = SituationParams(affinity_ref=ensure_canonical_affinities()[0])
+        params = SituationParams(affinity=ensure_canonical_affinities()[0])
         self.assertTrue(evaluators.attacker_affinity(self._ctx(opponent), params))
 
     def test_aura_axis_threshold_met(self) -> None:
@@ -956,9 +956,7 @@ class AttackerAffinityEvaluatorTests(TestCase):
             abyssal=Decimal("30.00"),
         )
         opponent = CombatOpponentFactory(persona=persona)
-        params = SituationParams(
-            affinity_ref=ensure_canonical_affinities()[1], threshold_percent=30
-        )
+        params = SituationParams(affinity=ensure_canonical_affinities()[1], threshold_percent=30)
         self.assertTrue(evaluators.attacker_affinity(self._ctx(opponent), params))
 
     def test_aura_axis_threshold_not_met(self) -> None:
@@ -970,25 +968,23 @@ class AttackerAffinityEvaluatorTests(TestCase):
             abyssal=Decimal("40.00"),
         )
         opponent = CombatOpponentFactory(persona=persona)
-        params = SituationParams(
-            affinity_ref=ensure_canonical_affinities()[1], threshold_percent=30
-        )
+        params = SituationParams(affinity=ensure_canonical_affinities()[1], threshold_percent=30)
         self.assertFalse(evaluators.attacker_affinity(self._ctx(opponent), params))
 
     def test_no_affinity_param_false(self) -> None:
         """affinity is a REQUIRED param — NO_PARAMS never holds, even against
         an attacker unambiguously typed to an axis."""
-        opponent = CombatOpponentFactory(affinity_ref=ensure_canonical_affinities()[2])
+        opponent = CombatOpponentFactory(affinity=ensure_canonical_affinities()[2])
         self.assertFalse(evaluators.attacker_affinity(self._ctx(opponent), NO_PARAMS))
 
     def test_false_with_no_affinity_and_no_aura_data(self) -> None:
         """A generic ephemeral opponent: no authored affinity, no CharacterAura row."""
         opponent = CombatOpponentFactory()
-        params = SituationParams(affinity_ref=ensure_canonical_affinities()[2])
+        params = SituationParams(affinity=ensure_canonical_affinities()[2])
         self.assertFalse(evaluators.attacker_affinity(self._ctx(opponent), params))
 
     def test_false_when_no_attacker(self) -> None:
-        params = SituationParams(affinity_ref=ensure_canonical_affinities()[2])
+        params = SituationParams(affinity=ensure_canonical_affinities()[2])
         self.assertFalse(evaluators.attacker_affinity(self._ctx(None), params))
 
 
