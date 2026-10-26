@@ -110,6 +110,66 @@ describe('battle map features (#4675)', () => {
     expect(onStepToSquare).toHaveBeenCalledWith({ x: 6, y: 4 });
   });
 
+  it('draws features over the route lines, under the places', () => {
+    const gate = place(3, 'Gate', { area_x: 20, area_y: 2, area_w: 2, area_h: 2 });
+    render(
+      <BattleMap
+        nodes={[FLOOR, gate]}
+        edges={[
+          {
+            position_a_id: 1,
+            position_b_id: 3,
+            is_passable: true,
+            blocks_flight: false,
+            gating_challenge_name: null,
+          },
+        ]}
+        occupantsByPosition={new Map()}
+        heldPositions={[]}
+        moveActions={[]}
+        ownPositionId={null}
+        onDispatchMove={vi.fn()}
+        onStepToSquare={vi.fn()}
+      />
+    );
+    const layer = screen.getByTestId('battle-map-features');
+    const route = screen.getByTestId('battle-map-edge-1-3');
+    const placeArea = screen.getByTestId('tactical-map-node-1');
+    expect(route.compareDocumentPosition(layer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      layer.compareDocumentPosition(placeArea) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("keeps an aerial place's unplaced features off its anchor's corner squares", () => {
+    const ground = place(5, 'Floor', {
+      area_x: 0,
+      area_y: 0,
+      area_w: 4,
+      area_h: 2,
+      features: [feature(51, 'Table')],
+    });
+    const air = place(6, 'Above Floor', {
+      kind: 'aerial',
+      elevation_anchor_id: 5,
+      features: [feature(61, 'Chandelier')],
+    });
+    render(
+      <BattleMap
+        nodes={[ground, air]}
+        edges={[]}
+        occupantsByPosition={new Map()}
+        heldPositions={[]}
+        moveActions={[]}
+        ownPositionId={null}
+        onDispatchMove={vi.fn()}
+        onStepToSquare={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('battle-map-feature-51')).toHaveAttribute('data-square', '3,0');
+    expect(screen.getByTestId('battle-map-feature-61')).toHaveAttribute('data-square', '2,0');
+  });
+
   it('stacks unplaced features leftwards and never past the area', () => {
     const nook = place(2, 'Nook', {
       area_x: 0,

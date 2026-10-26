@@ -107,14 +107,18 @@ export function BattleMapFeatures({
   areas: Map<number, MapArea>;
   uid: string;
 }) {
-  const marks = nodes.flatMap((node) => {
-    // An aerial place has no area of its own; its features stand over its anchor's.
+  // An aerial place has no area of its own; its features stand over its anchor's. Group
+  // by the area drawn on, so the air's and the ground's unplaced features never share a
+  // corner square.
+  const byArea = new Map<MapArea, MapFeature[]>();
+  for (const node of nodes) {
     const area =
       areas.get(node.id) ??
       (node.elevation_anchor_id !== null ? areas.get(node.elevation_anchor_id) : undefined);
-    if (!area) return [];
-    return featureSquares(area, node.features ?? []);
-  });
+    if (!area) continue;
+    byArea.set(area, [...(byArea.get(area) ?? []), ...(node.features ?? [])]);
+  }
+  const marks = [...byArea].flatMap(([area, features]) => featureSquares(area, features));
   if (marks.length === 0) return null;
   return (
     <g data-testid="battle-map-features" pointerEvents="none">

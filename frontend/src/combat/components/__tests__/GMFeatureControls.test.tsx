@@ -163,4 +163,13 @@ describe('GMFeatureControls', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('That square is outside Stage.'));
     expect(invalidate).not.toHaveBeenCalled();
   });
+
+  it('says so when the feature types cannot be loaded', () => {
+    withActions(['gm_attach_feature']);
+    mockUseFeatureTypes.mockReturnValue({ data: undefined, isError: true });
+    renderControls();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Feature types could not be loaded.');
+    expect(screen.getByRole('button', { name: 'Add feature' })).toBeDisabled();
+  });
 });

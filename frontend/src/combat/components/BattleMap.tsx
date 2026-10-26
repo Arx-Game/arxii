@@ -542,7 +542,6 @@ export function BattleMap({
         <g stroke="#000" strokeOpacity={0.2} strokeWidth={1} pointerEvents="none">
           {gridLines}
         </g>
-        <BattleMapFeatures nodes={nodes} areas={areas} uid={uid} />
 
         {/* Routes between places. */}
         <g pointerEvents="none">
@@ -570,6 +569,8 @@ export function BattleMap({
             );
           })}
         </g>
+
+        <BattleMapFeatures nodes={nodes} areas={areas} uid={uid} />
 
         {/* Places: tint, outline, label, clickable squares and their tokens. */}
         {groundNodes.map((node) => (

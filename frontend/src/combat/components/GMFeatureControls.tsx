@@ -58,7 +58,9 @@ export function GMFeatureControls({ sceneId, encounterId, characterId }: GMFeatu
   const attach = (actions?.results ?? []).find(
     (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'gm_attach_feature'
   );
-  const { data: featureTypes = [] } = useFeatureTypes(attach !== undefined);
+  const { data: featureTypes = [], isError: featureTypesFailed } = useFeatureTypes(
+    attach !== undefined
+  );
   const { mutateAsync: dispatchAction, isPending } = useDispatchPlayerAction(characterId);
   const queryClient = useQueryClient();
 
@@ -138,6 +140,11 @@ export function GMFeatureControls({ sceneId, encounterId, characterId }: GMFeatu
           </option>
         ))}
       </select>
+      {featureTypesFailed && (
+        <p role="alert" className="text-xs text-destructive">
+          Feature types could not be loaded.
+        </p>
+      )}
       <select
         aria-label="Feature"
         className={SELECT_CLASS}
