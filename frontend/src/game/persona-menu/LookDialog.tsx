@@ -10,6 +10,7 @@ import type { VisibleWornItem } from '@/inventory/api';
 import { cn } from '@/lib/utils';
 
 import { useDraggable } from './useDraggable';
+import { NO_DESCRIPTION } from '@/components/ui/dialog';
 
 export interface LookDialogProps {
   partition?: string;
@@ -58,7 +59,7 @@ export function LookDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange} modal={false}>
       <Dialog.Portal>
         <Dialog.Content
-          aria-describedby={undefined}
+          {...NO_DESCRIPTION}
           className={cn(
             'fixed left-1/2 top-24 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2',
             'max-h-[70vh] overflow-y-auto rounded-lg border bg-background shadow-lg'

@@ -1,7 +1,7 @@
 /**
  * CharactersBand tests (#3412 slice 2) — the Hall's "Your Characters" band.
  */
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -89,7 +89,10 @@ const bianca: MyRosterEntry = {
 
 describe('CharactersBand', () => {
   afterEach(() => {
-    store.dispatch(resetGame());
+    // Components are still mounted here; reset inside act so they re-render cleanly.
+    act(() => {
+      store.dispatch(resetGame());
+    });
     sessionStorage.clear();
     vi.clearAllMocks();
   });

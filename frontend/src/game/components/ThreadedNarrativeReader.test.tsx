@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
@@ -117,6 +117,14 @@ function renderInScrollAncestor(ui: ReactElement) {
     ancestor: screen.getByTestId('scroll-ancestor'),
     rerenderInner: (inner: ReactElement) => utils.rerender(wrap(inner)),
   };
+}
+
+// The reader saves its reading anchor on a ~300ms debounce and re-renders when
+// it fires; let that timer run inside act so the update is accounted for.
+async function waitOutAnchorDebounce() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
 }
 
 describe('ThreadedNarrativeReader', () => {
@@ -702,7 +710,7 @@ describe('ThreadedNarrativeReader', () => {
       // `null` inside a present entry.
       expect(loadConversationAnchor('scene:1')).toBeNull();
 
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
       expect(loadConversationAnchor('scene:1')?.anchors.threads).toEqual({
         poseId: '1',
         threadId: 'thread-a',
@@ -745,7 +753,7 @@ describe('ThreadedNarrativeReader', () => {
       );
 
       fireEvent.scroll(ancestor);
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
 
       expect(loadConversationAnchor('scene:1')?.anchors.threads).toEqual({
         poseId: '1',
@@ -771,7 +779,7 @@ describe('ThreadedNarrativeReader', () => {
       );
 
       fireEvent.scroll(screen.getByLabelText('Story reader'));
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
 
       expect(loadConversationAnchor('scene:1')?.anchors.threads).toEqual({
         poseId: '1',
@@ -811,7 +819,7 @@ describe('ThreadedNarrativeReader', () => {
       expect(screen.getByText('newer root')).toBeInTheDocument();
 
       fireEvent.scroll(screen.getByLabelText('Story reader'));
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
 
       const stored = loadConversationAnchor('scene:1');
       expect(stored?.anchors.threads).not.toBeNull();
@@ -840,7 +848,7 @@ describe('ThreadedNarrativeReader', () => {
       );
 
       fireEvent.scroll(screen.getByLabelText('Story reader'));
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
 
       expect(loadConversationAnchor('scene:1')).toBeNull();
     });
@@ -943,7 +951,7 @@ describe('ThreadedNarrativeReader', () => {
       );
 
       fireEvent.scroll(screen.getByLabelText('Story reader'));
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
 
       // Nothing was ever saved for this conversation, so the whole stored
       // entry is absent.
@@ -1335,7 +1343,7 @@ describe('ThreadedNarrativeReader', () => {
       fireEvent.scroll(screen.getByTestId('chrono-scroll-container'));
       expect(loadConversationAnchor('scene:1')).toBeNull();
 
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
       // Chronological mode writes into its OWN anchor slot (#3759 review
       // finding I5) -- switching modes must never write over Threads'.
       expect(loadConversationAnchor('scene:1')?.anchors.chronological).toEqual({
@@ -1368,7 +1376,7 @@ describe('ThreadedNarrativeReader', () => {
 
       // Save a Threads anchor (pose 1, offset -40).
       fireEvent.scroll(screen.getByLabelText('Story reader'));
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
       const threadsAnchor = loadConversationAnchor('scene:1')?.anchors.threads;
       expect(threadsAnchor).toEqual({ poseId: '1', threadId: 'thread-a', offsetPx: -40 });
 
@@ -1378,7 +1386,7 @@ describe('ThreadedNarrativeReader', () => {
       poseOffsets = { 1: -100, 2: -5 };
       await user.click(screen.getByRole('button', { name: /chronological/i }));
       fireEvent.scroll(screen.getByTestId('chrono-scroll-container'));
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
       expect(loadConversationAnchor('scene:1')?.anchors.chronological).toEqual({
         poseId: '2',
         threadId: 'thread-a',
@@ -1407,7 +1415,7 @@ describe('ThreadedNarrativeReader', () => {
       await user.click(screen.getByRole('button', { name: /chronological/i }));
 
       fireEvent.scroll(screen.getByTestId('chrono-scroll-container'));
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
 
       expect(loadConversationAnchor('scene:1')).toBeNull();
     });
@@ -1574,7 +1582,7 @@ describe('ThreadedNarrativeReader', () => {
       // fire one automatically for a plain property assignment) and let the
       // debounced save listener see it.
       fireEvent.scroll(ancestor);
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await waitOutAnchorDebounce();
 
       // The suppression flag absorbs exactly that one scroll -- the original
       // anchor (pose 999) survives unchanged, never overwritten with
@@ -1701,7 +1709,9 @@ describe('ThreadedNarrativeReader', () => {
           'true'
         );
 
-        await vi.advanceTimersByTimeAsync(2100);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(2100);
+        });
 
         expect(document.querySelector('[data-pose-id="10"]')).not.toHaveAttribute(
           'data-highlighted'

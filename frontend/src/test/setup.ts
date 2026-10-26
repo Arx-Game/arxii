@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { vi } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
 import React from 'react';
 
 // Polyfill ResizeObserver — not available in jsdom but required by Radix UI components
@@ -83,12 +83,20 @@ if (typeof window.PointerEvent === 'undefined') {
 vi.mock('framer-motion', async () => {
   const actual = await vi.importActual('framer-motion');
 
-  // Filter out motion-specific props
-  const filterProps = (props: Record<string, unknown>) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { initial, animate, exit, transition, variants, whileHover, whileTap, ...rest } = props;
-    return rest;
-  };
+  // Filter out motion-specific props, which a plain element does not take.
+  const motionProps = new Set([
+    'initial',
+    'animate',
+    'exit',
+    'transition',
+    'variants',
+    'whileHover',
+    'whileTap',
+    'onAnimationStart',
+    'onAnimationComplete',
+  ]);
+  const filterProps = (props: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(props).filter(([key]) => !motionProps.has(key)));
 
   type MotionComponentProps = {
     children?: React.ReactNode;
@@ -105,6 +113,50 @@ vi.mock('framer-motion', async () => {
         React.createElement('button', filterProps(props), children),
     },
   };
+});
+
+// Fail any test that makes React, Radix or react-redux log one of their
+// development warnings (#4677). They were ~2,500 lines of every CI log and hid
+// the real failures; each one is a test that let an update escape act(), a
+// dialog with no description, or a component bug (a duplicate key, invalid DOM
+// nesting, a selector that builds a new object every call). The message still
+// prints, so the failing test shows what to fix.
+// Limits: the check runs in the last afterEach (vitest's default hook order),
+// after Testing Library has unmounted; a test that silences console.error with
+// its own spy also silences this; a warning logged after a test's teardown is
+// not caught.
+const DEV_WARNINGS = [
+  'not wrapped in act(',
+  'Missing `Description` or `aria-describedby={undefined}`',
+  'Encountered two children with the same key',
+  'validateDOMNesting',
+  'Unknown event handler property',
+  'Function components cannot be given refs',
+  'returned a different result when called with the same parameters',
+];
+const caughtWarnings: string[] = [];
+for (const level of ['error', 'warn'] as const) {
+  const original = console[level].bind(console);
+  console[level] = (...args: unknown[]) => {
+    // React passes a `%s` format string; fill it so the message names the component.
+    const [first, ...rest] = args;
+    const text =
+      typeof first === 'string'
+        ? first.replace(/%s/g, () => String(rest.shift() ?? ''))
+        : args.map(String).join(' ');
+    const match = DEV_WARNINGS.find((needle) => text.includes(needle));
+    if (match) caughtWarnings.push(text.split('\n')[0]);
+    original(...args);
+  };
+}
+beforeEach(() => {
+  caughtWarnings.length = 0;
+});
+afterEach(() => {
+  if (caughtWarnings.length === 0) return;
+  const unique = [...new Set(caughtWarnings)];
+  caughtWarnings.length = 0;
+  throw new Error(`React development warning during this test:\n${unique.join('\n')}`);
 });
 
 // Add Vitest global types

@@ -871,43 +871,45 @@ export function Lattice({
                   );
                 }
                 const state = cellState(key, sketch);
+                // The unplan control sits beside the square's button, not inside it:
+                // a button inside a button is invalid HTML. It sets the square's text-xs
+                // itself, and its 5px inset is the old 4px plus the square's 1px border.
                 return (
-                  <button
-                    key={key}
-                    type="button"
-                    data-cell-key={key}
-                    data-testid={`lattice-cell-${x}-${y}`}
-                    data-cell-state={state}
-                    aria-label={squareHint(state)}
-                    className={cn(
-                      'relative flex min-h-24 flex-col justify-center rounded-none border px-2 py-1.5 text-left text-xs',
-                      state === 'empty' && 'border-dotted text-muted-foreground',
-                      state === 'planned' && 'border-dashed border-primary text-muted-foreground',
-                      state === 'void' && 'border-transparent opacity-35'
-                    )}
-                    onClick={() => handleCellLeftClick(key, state)}
-                    onContextMenu={(event) => handleCellRightClick(event, key)}
-                  >
+                  <div key={key} className="relative">
+                    <button
+                      type="button"
+                      data-cell-key={key}
+                      data-testid={`lattice-cell-${x}-${y}`}
+                      data-cell-state={state}
+                      aria-label={squareHint(state)}
+                      className={cn(
+                        'flex h-full min-h-24 w-full flex-col justify-center rounded-none border px-2 py-1.5 text-left text-xs',
+                        state === 'empty' && 'border-dotted text-muted-foreground',
+                        state === 'planned' && 'border-dashed border-primary text-muted-foreground',
+                        state === 'void' && 'border-transparent opacity-35'
+                      )}
+                      onClick={() => handleCellLeftClick(key, state)}
+                      onContextMenu={(event) => handleCellRightClick(event, key)}
+                    >
+                      {state === 'planned' && <span className="italic">planned</span>}
+                      {state === 'empty' && !overCeiling && <span aria-hidden>⊕</span>}
+                    </button>
                     {state === 'planned' && (
-                      <>
-                        <span className="italic">planned</span>
-                        <button
-                          type="button"
-                          aria-label="unplan this square"
-                          title="remove from the plan"
-                          className="absolute right-1 top-1 text-muted-foreground hover:text-primary"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            updateSketch((prev) => unplanCell(prev, key));
-                          }}
-                          data-testid={`lattice-unplan-${x}-${y}`}
-                        >
-                          ✕
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        aria-label="unplan this square"
+                        title="remove from the plan"
+                        className="absolute right-[5px] top-[5px] text-xs text-muted-foreground hover:text-primary"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          updateSketch((prev) => unplanCell(prev, key));
+                        }}
+                        data-testid={`lattice-unplan-${x}-${y}`}
+                      >
+                        ✕
+                      </button>
                     )}
-                    {state === 'empty' && !overCeiling && <span aria-hidden>⊕</span>}
-                  </button>
+                  </div>
                 );
               })}
             </div>

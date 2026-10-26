@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { useInventory } from '@/inventory/hooks/useInventory';
 import { useSacrifice } from '../queries';
@@ -82,7 +83,7 @@ export function SacrificeDialog({
           Sacrifice
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent {...NO_DESCRIPTION}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Sacrifice{beingName ? ` to ${beingName}` : ''}</DialogTitle>

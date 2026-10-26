@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { FacetPicker } from '@/magic/components/FacetPicker';
@@ -127,7 +128,7 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Attach Facet</DialogTitle>
         </DialogHeader>

@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -76,7 +77,7 @@ function SignonDialog({ orgId, appeal }: { orgId: number; appeal: OrgAppeal }) {
           Sign On
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Sign onto &ldquo;{appeal.title}&rdquo;</DialogTitle>
         </DialogHeader>
@@ -127,7 +128,7 @@ function ResolveDialog({ orgId, appeal }: { orgId: number; appeal: OrgAppeal }) 
           Resolve
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Resolve &ldquo;{appeal.title}&rdquo;</DialogTitle>
         </DialogHeader>

@@ -116,11 +116,20 @@ describe('BattleMapCanvas', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    flushSync(() => {
-      root.render(
-        <BattleMapCanvas detail={MOCK_DETAIL} selectedPlaceId={null} onSelectPlace={vi.fn()} />
-      );
-    });
+    // This render is deliberately outside act(), so tell React so rather than
+    // have it warn about the very thing the test sets out to do.
+    const actEnv = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const previousActEnv = actEnv.IS_REACT_ACT_ENVIRONMENT;
+    actEnv.IS_REACT_ACT_ENVIRONMENT = false;
+    try {
+      flushSync(() => {
+        root.render(
+          <BattleMapCanvas detail={MOCK_DETAIL} selectedPlaceId={null} onSelectPlace={vi.fn()} />
+        );
+      });
+    } finally {
+      actEnv.IS_REACT_ACT_ENVIRONMENT = previousActEnv;
+    }
 
     const renderedNodeCount = container.querySelectorAll(
       '[data-testid="battle-place-node"]'

@@ -21,6 +21,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { previewPull } from '../../api';
 import { useCharacterResonances, useThreads } from '../../queries';
@@ -192,7 +193,7 @@ export function ThreadPullDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg" data-testid="thread-pull-dialog">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-lg" data-testid="thread-pull-dialog">
         <DialogHeader>
           <DialogTitle>Pull Threads</DialogTitle>
         </DialogHeader>

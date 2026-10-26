@@ -1,4 +1,4 @@
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -886,12 +886,14 @@ describe('CombatTacticalMap', () => {
     const centerNode = screen.getByTestId('tactical-map-node-102');
     fireEvent.click(centerNode);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalledWith({
         ref: gmPlaceAction.ref,
         kwargs: { target_object_id: 10 },
       });
     });
+    // The picker resets once the dispatched placement resolves.
+    expect(await screen.findByText('Select a target…')).toBeInTheDocument();
   });
 
   it('does not show the Place toggle when no gm_place_in_position action is available', async () => {

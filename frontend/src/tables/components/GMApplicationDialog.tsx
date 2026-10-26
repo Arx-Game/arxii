@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -75,7 +76,7 @@ export function GMApplicationDialog({ children, onSuccess }: GMApplicationDialog
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Apply to be a GM</DialogTitle>
         </DialogHeader>

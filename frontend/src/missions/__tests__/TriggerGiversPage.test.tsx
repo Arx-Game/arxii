@@ -68,8 +68,10 @@ describe('TriggerGiversPage target picker', () => {
     patchMutate.mockClear();
   });
 
-  it('has no raw numeric target-id input', () => {
+  it('has no raw numeric target-id input', async () => {
     render(withProviders(<TriggerGiversPage />));
+    // Let the target picker resolve the saved target's name before asserting.
+    await screen.findByDisplayValue('Notice Board Plaza');
     expect(screen.queryByPlaceholderText('Room / object pk')).not.toBeInTheDocument();
   });
 

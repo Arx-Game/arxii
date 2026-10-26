@@ -167,7 +167,19 @@ function makeManager(area: WorldBuilderArea): WorldBuilderAreaManager {
       beginnings: [],
     },
     breadcrumb: [
-      { id: 1, name: 'Nitera', level: 80, level_display: 'World', grid_x: null, grid_y: null },
+      // The world is the root's ancestor, except when the root itself is the area.
+      ...(area.id === 1
+        ? []
+        : [
+            {
+              id: 1,
+              name: 'Nitera',
+              level: 80,
+              level_display: 'World',
+              grid_x: null,
+              grid_y: null,
+            },
+          ]),
       {
         id: area.id,
         name: area.name,

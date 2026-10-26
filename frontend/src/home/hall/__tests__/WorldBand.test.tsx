@@ -3,7 +3,7 @@
  * Occasions, The Crier all render from mocked queries; the persona tidings
  * digest plate is docked-only.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { WorldBand } from '../WorldBand';
@@ -89,7 +89,10 @@ function setDefaultMocks() {
 
 describe('WorldBand', () => {
   afterEach(() => {
-    store.dispatch(resetGame());
+    // Components are still mounted here; reset inside act so they re-render cleanly.
+    act(() => {
+      store.dispatch(resetGame());
+    });
     vi.clearAllMocks();
   });
 

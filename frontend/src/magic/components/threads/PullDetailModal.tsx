@@ -8,7 +8,13 @@
  * Per spec §5 of docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md.
  */
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { PullEffectPreview } from './PullEffectPreview';
 import type { Thread } from '@/magic/types';
 
@@ -29,11 +35,7 @@ export interface PullDetailModalProps {
 export function PullDetailModal({ thread, open, onOpenChange }: PullDetailModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-lg"
-        data-testid="pull-detail-modal"
-        aria-describedby={undefined}
-      >
+      <DialogContent className="max-w-lg" data-testid="pull-detail-modal" {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>{thread.name || `Thread #${thread.id}`}</DialogTitle>
         </DialogHeader>

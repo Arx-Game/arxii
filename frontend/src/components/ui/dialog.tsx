@@ -88,6 +88,13 @@ const DialogDescription = React.forwardRef<
 ));
 DialogDescription.displayName = DialogPrimitive.Description.displayName;
 
+/**
+ * Spread on a Dialog, AlertDialog or Sheet content that has no description:
+ * `<DialogContent {...NO_DESCRIPTION}>`. Radix otherwise warns that the
+ * description is missing; with an optional one, spread it only when absent.
+ */
+const NO_DESCRIPTION = { 'aria-describedby': undefined } as const;
+
 export {
   Dialog,
   DialogPortal,
@@ -99,4 +106,5 @@ export {
   DialogFooter,
   DialogTitle,
   DialogDescription,
+  NO_DESCRIPTION,
 };

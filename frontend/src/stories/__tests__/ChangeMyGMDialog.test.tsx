@@ -159,6 +159,8 @@ describe('ChangeMyGMDialog — withdraw step', () => {
     await user.click(screen.getByTestId('change-gm-button'));
 
     expect(screen.getByText('Withdraw from current GM?')).toBeInTheDocument();
+    // The withdraw step's description stays linked to the dialog (#4677).
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription(/Withdraw "/);
   });
 
   it('calls detachStoryFromTable when Withdraw is clicked', async () => {

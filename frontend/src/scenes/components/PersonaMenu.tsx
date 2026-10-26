@@ -69,6 +69,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -850,7 +851,7 @@ export function PersonaMenu({
         </DialogContent>
       </Dialog>
       <Dialog open={treatDialogOpen} onOpenChange={setTreatDialogOpen}>
-        <DialogContent>
+        <DialogContent {...NO_DESCRIPTION}>
           <DialogHeader>
             <DialogTitle>Offer treatment to {personaName}</DialogTitle>
           </DialogHeader>

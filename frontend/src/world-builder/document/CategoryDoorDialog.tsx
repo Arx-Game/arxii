@@ -12,7 +12,7 @@
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, NO_DESCRIPTION } from '@/components/ui/dialog';
 
 import { PlaceClueDialog } from '../components/PlaceClueDialog';
 import {
@@ -107,7 +107,7 @@ export function CategoryDoorDialog({
 }: CategoryDoorDialogProps) {
   return (
     <Dialog open={door != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+      <DialogContent {...NO_DESCRIPTION} className="max-h-[80vh] max-w-2xl overflow-y-auto">
         {door != null && (
           <>
             <DialogTitle>

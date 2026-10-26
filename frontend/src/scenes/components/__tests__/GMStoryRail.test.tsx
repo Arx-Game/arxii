@@ -83,6 +83,12 @@ function renderRail(scene: SceneDetail) {
   return render(<GMStoryRail scene={scene} />, { wrapper: Wrapper });
 }
 
+// Each participant row asks the server for its conditions on mount; wait for
+// the answer to land so the row's update happens before the test ends.
+async function conditionsLoaded() {
+  await screen.findAllByTestId('gm-rail-participant-conditions');
+}
+
 function buildScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
   return {
     id: 5,
@@ -191,9 +197,10 @@ describe('GMStoryRail', () => {
     expect(screen.getByTestId('gm-story-rail-no-beat')).toHaveTextContent('No beat running.');
   });
 
-  it('renders the beat summary section for a qualifying GM', () => {
+  it('renders the beat summary section for a qualifying GM', async () => {
     useGMStoryRailQuery.mockReturnValue({ data: buildPayload() });
     renderRail(buildScene());
+    await conditionsLoaded();
     const beatSection = screen.getByTestId('gm-story-rail-beat');
     expect(beatSection).toHaveTextContent('encounter');
     expect(beatSection).toHaveTextContent('moderate');
@@ -223,7 +230,7 @@ describe('GMStoryRail', () => {
     );
   });
 
-  it('a denied vitals fetch on one participant does not break the rail', () => {
+  it('a denied vitals fetch on one participant does not break the rail', async () => {
     useCharacterVitalsQuery.mockReturnValue({ data: null });
     useGMStoryRailQuery.mockReturnValue({
       data: buildPayload({
@@ -234,6 +241,7 @@ describe('GMStoryRail', () => {
       }),
     });
     renderRail(buildScene());
+    await conditionsLoaded();
 
     // Both participant rows still render even though neither has vitals.
     expect(screen.getByTestId('gm-rail-participant-100')).toHaveTextContent('Aerande');
@@ -241,7 +249,7 @@ describe('GMStoryRail', () => {
     expect(screen.getByTestId('gm-rail-participant-101')).toHaveTextContent('Bellamy');
   });
 
-  it('renders protected subjects and clue placements when served', () => {
+  it('renders protected subjects and clue placements when served', async () => {
     useGMStoryRailQuery.mockReturnValue({
       data: buildPayload({
         protected_subjects: [
@@ -266,11 +274,12 @@ describe('GMStoryRail', () => {
       }),
     });
     renderRail(buildScene());
+    await conditionsLoaded();
     expect(screen.getByTestId('gm-story-rail-protected-subjects')).toHaveTextContent('npc_fate');
     expect(screen.getByTestId('gm-story-rail-clue-placements')).toHaveTextContent('Torn Letter');
   });
 
-  it('renders the Stakes section with severity labels, activation, and a resolved outcome', () => {
+  it('renders the Stakes section with severity labels, activation, and a resolved outcome', async () => {
     useGMStoryRailQuery.mockReturnValue({
       data: buildPayload({
         stakes: [
@@ -293,6 +302,7 @@ describe('GMStoryRail', () => {
       }),
     });
     renderRail(buildScene());
+    await conditionsLoaded();
 
     const section = screen.getByTestId('gm-story-rail-stakes');
     expect(section).toHaveTextContent('Stakes');
@@ -314,16 +324,18 @@ describe('GMStoryRail', () => {
     expect(screen.queryByTestId('gm-story-rail-stake-outcome-12')).not.toBeInTheDocument();
   });
 
-  it('renders no Stakes section when there are no stakes and no activation', () => {
+  it('renders no Stakes section when there are no stakes and no activation', async () => {
     useGMStoryRailQuery.mockReturnValue({ data: buildPayload() });
     renderRail(buildScene());
+    await conditionsLoaded();
     expect(screen.queryByTestId('gm-story-rail-stakes')).not.toBeInTheDocument();
   });
 
-  it('renders the Scenario section with ballots and the last deed when gm is present', () => {
+  it('renders the Scenario section with ballots and the last deed when gm is present', async () => {
     useGMStoryRailQuery.mockReturnValue({ data: buildPayload() });
     useSceneScenarioQuery.mockReturnValue({ data: buildScenarioPayload() });
     renderRail(buildScene());
+    await conditionsLoaded();
     const section = screen.getByTestId('gm-story-rail-scenario');
     expect(section).toHaveTextContent('ambush');
     expect(section).toHaveTextContent('vote');
@@ -336,18 +348,20 @@ describe('GMStoryRail', () => {
     expect(screen.getByTestId('gm-story-rail-scenario-outcome')).toHaveTextContent('satisfied');
   });
 
-  it('renders no Scenario section when the scenario query has no gm view', () => {
+  it('renders no Scenario section when the scenario query has no gm view', async () => {
     useGMStoryRailQuery.mockReturnValue({ data: buildPayload() });
     useSceneScenarioQuery.mockReturnValue({ data: buildScenarioPayload({ gm: null }) });
     renderRail(buildScene());
+    await conditionsLoaded();
     expect(screen.queryByTestId('gm-story-rail-scenario')).not.toBeInTheDocument();
   });
 });
 
 describe('GMStoryRail scene clock (#3567)', () => {
-  it('renders no clock line when the running beat carries no clock', () => {
+  it('renders no clock line when the running beat carries no clock', async () => {
     useGMStoryRailQuery.mockReturnValue({ data: buildPayload() });
     renderRail(buildScene());
+    await conditionsLoaded();
     expect(screen.queryByTestId('gm-story-rail-clock')).not.toBeInTheDocument();
   });
 
@@ -372,22 +386,24 @@ describe('GMStoryRail scene clock (#3567)', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('The clock advances: 2/3.'));
   });
 
-  it('renders no Advance button once the clock is full', () => {
+  it('renders no Advance button once the clock is full', async () => {
     useGMStoryRailQuery.mockReturnValue({
       data: buildPayloadWithClock(3),
     });
     renderRail(buildScene({ clock: { size: 3, filled: 3 } }));
+    await conditionsLoaded();
 
     const clockLine = screen.getByTestId('gm-story-rail-clock');
     expect(clockLine).toHaveTextContent('3/3');
     expect(screen.queryByTestId('gm-story-rail-advance-clock')).not.toBeInTheDocument();
   });
 
-  it('renders the beat clock_size as the fallback 0/N count before scene.clock is available', () => {
+  it('renders the beat clock_size as the fallback 0/N count before scene.clock is available', async () => {
     useGMStoryRailQuery.mockReturnValue({
       data: buildPayloadWithClock(4),
     });
     renderRail(buildScene({ clock: null }));
+    await conditionsLoaded();
 
     expect(screen.getByTestId('gm-story-rail-clock')).toHaveTextContent('0/4');
     expect(screen.queryByTestId('gm-story-rail-advance-clock')).not.toBeInTheDocument();

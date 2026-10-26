@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -129,7 +130,7 @@ export function AuthorClueDialog({ trigger, lockedSecretId, onCreated }: AuthorC
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-h-[80vh] overflow-y-auto">
+      <DialogContent {...NO_DESCRIPTION} className="max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Author clue</DialogTitle>
         </DialogHeader>
