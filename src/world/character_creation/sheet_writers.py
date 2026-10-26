@@ -107,6 +107,23 @@ def _check_skill_caps(
             raise SheetWriteError(msg)
 
 
+def _check_band_skill_cap(
+    sheet: CharacterSheet,
+    skills: Mapping[Skill, int],
+    specializations: Mapping[Specialization, int],
+) -> None:
+    """Refuse a value above the sheet's level band skill cap (#4585)."""
+    from world.skills.services import stored_skill_cap  # noqa: PLC0415
+
+    cap = stored_skill_cap(sheet)
+    if cap is None:
+        return
+    for item, value in [*skills.items(), *specializations.items()]:
+        if value > cap:
+            msg = f"{item.name} cannot exceed {cap}, the skill cap for this character's band."
+            raise SheetWriteError(msg)
+
+
 def set_skill_values(
     sheet: CharacterSheet,
     skills: Mapping[Skill, int],
@@ -119,14 +136,16 @@ def set_skill_values(
 
     A skill also writes the matching ``CharacterTraitValue`` the check engine reads
     (#2894), at the same 1 to 100 value. ``enforce_caps`` holds the configured
-    ``max_skill_value`` / ``max_specialization_value``; character creation already
-    validated its picks and passes False. Lowering a skill to 0 keeps its row at 0.
+    ``max_skill_value`` / ``max_specialization_value`` and the sheet's level band
+    skill cap (#4585); character creation already validated its picks and passes False.
+    Lowering a skill to 0 keeps its row at 0.
     """
     from world.skills.models import CharacterSpecializationValue  # noqa: PLC0415
     from world.skills.services import set_skill_sheet_value, set_skill_trait  # noqa: PLC0415
 
     if enforce_caps:
         _check_skill_caps(skills, specializations)
+        _check_band_skill_cap(sheet, skills, specializations)
     with transaction.atomic():
         for skill, value in skills.items():
             set_skill_sheet_value(sheet, skill, value)

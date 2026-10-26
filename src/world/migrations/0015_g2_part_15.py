@@ -881,7 +881,7 @@ class Migration(BatchedCreateModelMigration):
                     "unlock_thread_level",
                     models.PositiveIntegerField(
                         default=0,
-                        help_text="The COVENANT_ROLE thread level at which this gift's techniques become available while engaged. 0 = always available.",
+                        help_text="Shown thread level (the number players see; a thread stored at 30 shows 3). The COVENANT_ROLE thread level at which this gift's techniques become available while engaged. 0 = always available.",
                     ),
                 ),
                 (

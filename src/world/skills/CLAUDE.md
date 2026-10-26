@@ -25,7 +25,7 @@ Parent skills and specializations for character abilities. Skills are linked to 
 - Internal: 10, 20, 30... (stored value)
 - Display: 1.0, 2.0, 3.0... (value / 10)
 - CG max: 30 (configurable via SkillPointBudget)
-- Post-CG max: 210+ (based on path level)
+- Post-CG max: the level band's `MaturationStatCap.skill_cap` (#4585); no cap when blank
 
 ### Development Points
 - Progress toward next level (e.g., 450/1000)
@@ -76,8 +76,9 @@ Parent skills and specializations for character abilities. Skills are linked to 
   through `_apply_development_to_skill`, writes the `DevelopmentTransaction`. Weekly training's skill
   branch and Academy courses both call it. `stop_at_boundary=True` clamps to
   `points_to_next_boundary` so nothing dissipates; the caller keeps the excess.
-- `points_to_next_boundary(skill_value) -> int | None` — rust + level costs up to the next boundary,
-  less banked points; only rust at a boundary; `None` above 49.
+- `points_to_next_boundary(skill_value) -> int | None` — rust + level costs up to the next boundary
+  or the band's skill cap (whichever is first), less banked points; only rust at a boundary or the
+  cap; `None` above 49 with no cap.
 
 **XP-Boundary Breakthrough (#2115):**
 - `purchase_skill_breakthrough(character, skill) -> tuple[bool, str]` — spends XP against
@@ -110,6 +111,13 @@ dev_points = base_gain + mentor_bonus
   (`PurchaseUnlockAction` `unlock_type="skill_breakthrough"`); default breakthroughs are
   seeded by the `"skills"` cluster (`world.seeds.game_content.skills`).
 - Specializations have no XP boundaries
+- **Band skill cap (#4585):** `MaturationStatCap.skill_cap` (shown units, blank = no cap) caps every
+  skill and specialization by the character's level band, like `stat_cap`. `stored_skill_cap(sheet)`
+  converts it (`skill_cap_for(sheet) * 10`). `_develop_skill_value`, `points_to_next_boundary`,
+  `_apply_development_to_specialization`, `purchase_skill_breakthrough`,
+  `DevelopmentPoints.award_points` (SKILL traits only) and staff edit's `set_skill_values` all stop
+  there; development at the cap dissipates as at an XP boundary, with `skill_cap_message` naming
+  the cap. Any new skill raise path must check it too.
 
 ### Rust System
 - Untrained skills accumulate `character_level + 5` rust per week

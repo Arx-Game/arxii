@@ -151,7 +151,7 @@ class _SignatureMotifE2EBase(CastScenarioMixin):
             resonance=resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=technique,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
         sheet.character.threads.invalidate()
         return technique, thread, bonus, condition, facet, resonance
@@ -208,7 +208,7 @@ class SignatureMotifE2ESelectionTests(_SignatureMotifE2EBase):
             resonance=resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=unowned_technique,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
         sheet.character.threads.invalidate()
 
@@ -230,7 +230,7 @@ class SignatureMotifE2ESelectionTests(_SignatureMotifE2EBase):
             resonance=resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=technique_b,
-            level=3,
+            level=30,  # stored; shows 3 (#4585)
         )
         sheet.character.threads.invalidate()
 

@@ -24,17 +24,10 @@ from django.db.models import Sum
 
 from world.locations.models import LocationValueModifier
 from world.locations.services import effective_owner, upsert_room_resonance_modifier
+from world.magic.constants import PATH_LEVEL_CAP_MULTIPLIER
 
 if TYPE_CHECKING:
     from world.magic.models import Resonance, SanctumDetails
-
-
-PATH_LEVEL_CAP_MULTIPLIER = 10
-"""Per-Path-level cap multiplier for a Sanctum's Homecoming-grown resonance.
-
-``cap = owner_character_path_level * PATH_LEVEL_CAP_MULTIPLIER`` (Personal);
-aggregate active-member Path levels × this (Covenant interim). Tunable.
-"""
 
 
 def compute_homecoming_cap(sanctum: SanctumDetails) -> int:

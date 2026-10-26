@@ -56,7 +56,7 @@ class CompanionCapacityTests(TestCase):
             target_kind=TargetKind.GIFT,
             resonance=self.resonance,
             tier=0,
-            min_thread_level=20,
+            min_thread_level=2,  # shown level; a thread stored at 20 shows 2 (#4585)
             target_gift=self.gift,
             effect_kind=EffectKind.FLAT_BONUS,
             flat_bonus_amount=15,

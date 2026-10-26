@@ -96,14 +96,14 @@ class FireSubroleDiscoveriesFirstEverTest(TestCase):
     def test_discovery_created_on_first_crossing(self):
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
 
         self.assertTrue(Discovery.objects.filter(achievement=self.ach).exists())
 
     def test_character_achievement_created(self):
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
 
         self.assertTrue(
             CharacterAchievement.objects.filter(
@@ -114,7 +114,7 @@ class FireSubroleDiscoveriesFirstEverTest(TestCase):
     def test_codex_knowledge_created_with_known_status(self):
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
 
         roster_entry = self.sheet.roster_entry
         ck = CharacterCodexKnowledge.objects.get(roster_entry=roster_entry, entry=self.codex_entry)
@@ -123,7 +123,7 @@ class FireSubroleDiscoveriesFirstEverTest(TestCase):
     def test_gamewide_narrative_message_includes_other_active_sheet(self):
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
 
         deliveries = NarrativeMessageDelivery.objects.filter(
             recipient_character_sheet=self.other_sheet,
@@ -136,7 +136,7 @@ class FireSubroleDiscoveriesFirstEverTest(TestCase):
     def test_gamewide_narrative_message_includes_discovering_sheet(self):
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
 
         deliveries = NarrativeMessageDelivery.objects.filter(
             recipient_character_sheet=self.sheet,
@@ -147,7 +147,7 @@ class FireSubroleDiscoveriesFirstEverTest(TestCase):
         from world.covenants.discovery import fire_variant_discoveries
         from world.narrative.constants import NarrativeCategory
 
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
 
         msg = NarrativeMessage.objects.order_by("-id").first()
         self.assertIsNotNone(msg)
@@ -184,7 +184,7 @@ class FireSubroleDiscoveriesSecondCharacterTest(TestCase):
 
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=thread1, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=thread1, starting_level=40, new_level=50)
 
         # Second character
         self.sheet2 = _make_active_sheet()
@@ -199,7 +199,7 @@ class FireSubroleDiscoveriesSecondCharacterTest(TestCase):
         from world.covenants.discovery import fire_variant_discoveries
 
         before = Discovery.objects.filter(achievement=self.ach).count()
-        fire_variant_discoveries(thread=self.thread2, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread2, starting_level=40, new_level=50)
         after = Discovery.objects.filter(achievement=self.ach).count()
         self.assertEqual(before, after, "No new Discovery should be created for second character.")
 
@@ -210,7 +210,7 @@ class FireSubroleDiscoveriesSecondCharacterTest(TestCase):
         NarrativeMessage.objects.all().delete()
         NarrativeMessageDelivery.objects.all().delete()
 
-        fire_variant_discoveries(thread=self.thread2, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread2, starting_level=40, new_level=50)
 
         # sheet2 should get a message
         self.assertTrue(
@@ -253,7 +253,7 @@ class FireSubroleDiscoveriesIdempotencyTest(TestCase):
         from world.covenants.discovery import fire_variant_discoveries
 
         # Same level — no crossing
-        fire_variant_discoveries(thread=self.thread, starting_level=5, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=50, new_level=50)
 
         self.assertFalse(CharacterAchievement.objects.filter(achievement=self.ach).exists())
 
@@ -261,13 +261,13 @@ class FireSubroleDiscoveriesIdempotencyTest(TestCase):
         from world.covenants.discovery import fire_variant_discoveries
 
         # First crossing
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
         count_after_first = CharacterAchievement.objects.filter(
             character_sheet=self.sheet, achievement=self.ach
         ).count()
 
         # Replay with same or higher range (idempotency gate must skip)
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
         count_after_replay = CharacterAchievement.objects.filter(
             character_sheet=self.sheet, achievement=self.ach
         ).count()
@@ -277,11 +277,11 @@ class FireSubroleDiscoveriesIdempotencyTest(TestCase):
     def test_no_duplicate_message_on_replay(self):
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
         count_after_first = NarrativeMessage.objects.count()
 
         # Replay — idempotency gate means no new message
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
         count_after_replay = NarrativeMessage.objects.count()
 
         self.assertEqual(count_after_first, count_after_replay)
@@ -307,14 +307,14 @@ class FireSubroleDiscoveriesNoSubroleTest(TestCase):
     def test_no_achievement_when_no_subrole_authored(self):
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
 
         self.assertEqual(CharacterAchievement.objects.count(), 0)
 
     def test_no_message_when_no_subrole_authored(self):
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
 
         self.assertEqual(NarrativeMessage.objects.count(), 0)
 
@@ -347,12 +347,12 @@ class FireSubroleDiscoveriesNullFKsTest(TestCase):
         from world.covenants.discovery import fire_variant_discoveries
 
         # Must not raise
-        fire_variant_discoveries(thread=self.thread, starting_level=2, new_level=3)
+        fire_variant_discoveries(thread=self.thread, starting_level=20, new_level=30)
 
     def test_no_achievement_created_when_null(self):
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=2, new_level=3)
+        fire_variant_discoveries(thread=self.thread, starting_level=20, new_level=30)
 
         self.assertEqual(CharacterAchievement.objects.count(), 0)
 
@@ -360,7 +360,7 @@ class FireSubroleDiscoveriesNullFKsTest(TestCase):
         """Even with null achievement/codex, a personal narrative message is still fired."""
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=2, new_level=3)
+        fire_variant_discoveries(thread=self.thread, starting_level=20, new_level=30)
 
         # is_first=False because no achievement was granted; personal message to sheet
         self.assertTrue(
@@ -382,7 +382,7 @@ class FireSubroleDiscoveriesNonCovenantThreadTest(TestCase):
     def test_no_beat_for_non_covenant_role_thread(self):
         from world.covenants.discovery import fire_variant_discoveries
 
-        fire_variant_discoveries(thread=self.thread, starting_level=4, new_level=5)
+        fire_variant_discoveries(thread=self.thread, starting_level=40, new_level=50)
 
         self.assertEqual(NarrativeMessage.objects.count(), 0)
         self.assertEqual(CharacterAchievement.objects.count(), 0)

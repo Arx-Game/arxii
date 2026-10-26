@@ -78,7 +78,7 @@ class VariantStrictBonusCostTests(TestCase):
             thread = next(
                 t for t in sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
             )
-            thread.level = 3
+            thread.level = 30  # stored; shows 3 (#4585)
             thread.save()
             sheet.character.threads.invalidate()
         return sheet.character, anima

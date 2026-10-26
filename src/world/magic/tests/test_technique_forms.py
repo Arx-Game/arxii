@@ -123,6 +123,7 @@ class AvailableTechniqueFormsTest(TestCase):
         )
 
     def _thread_at(self, level: int, resonance: Resonance | None = None) -> Thread:
+        """A GIFT thread SHOWN at ``level`` (stored level × 10, #4585)."""
         provision_latent_gift_thread(self.sheet, self.gift, resonance=resonance or self.resonance)
         thread = Thread.objects.get(
             owner=self.sheet,
@@ -130,7 +131,7 @@ class AvailableTechniqueFormsTest(TestCase):
             target_gift=self.gift,
             resonance=resonance or self.resonance,
         )
-        thread.level = level
+        thread.level = level * 10
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
         return thread

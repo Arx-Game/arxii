@@ -45,16 +45,17 @@ class AbstractSpecializedVariant(SharedMemoryModel):
     Shared columns (inherited by concrete subclasses — they keep their existing
     columns unchanged, so the CovenantRole refactor is a schema no-op):
     - ``resonance`` — the resonance this variant manifests.
-    - ``unlock_thread_level`` — 0 = base/parent; >=3 = variant.
+    - ``unlock_thread_level`` — 0 = base/parent; >=3 = variant. A SHOWN thread
+      level (stored // 10, #4585).
     - ``discovery_achievement`` — granted + global-first Discovery on first
       threshold crossing.
     - ``codex_entry`` — lore entry unlocked on manifestation.
 
     Shared behavior:
     - ``matching_variant`` — selection predicate (highest unlock_thread_level
-      <= thread.level at the thread's resonance, fallback None).
+      <= the thread's shown level at the thread's resonance, fallback None).
     - ``newly_crossed_variants`` — threshold-crossing predicate (variants whose
-      unlock_thread_level falls in (starting_level, new_level] at resonance_id).
+      unlock_thread_level falls in (shown start, shown new] at resonance_id).
     - ``discovery_narrative`` — entity-specific NarrativeMessage copy.
 
     The discovery *ceremony* (grant achievement -> unlock codex -> notify) is
@@ -73,7 +74,10 @@ class AbstractSpecializedVariant(SharedMemoryModel):
     )
     unlock_thread_level = models.PositiveIntegerField(
         default=0,
-        help_text="0 = base/parent; >=3 = variant (thread level needed to unlock).",
+        help_text=(
+            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
+            "0 = base/parent; 3 or more = variant."
+        ),
     )
     discovery_achievement = models.ForeignKey(
         "arxii.Achievement",
@@ -108,17 +112,25 @@ class AbstractSpecializedVariant(SharedMemoryModel):
         thread_level: int,
     ) -> AbstractSpecializedVariant | None:
         """Select the highest-unlock variant on ``parent`` whose
-        ``resonance_id == resonance.pk`` and ``unlock_thread_level <= thread_level``.
+        ``resonance_id == resonance.pk`` and ``unlock_thread_level`` is at or below
+        the shown level of ``thread_level``.
+
+        ``thread_level`` is the STORED thread level (``thread.level``);
+        ``unlock_thread_level`` is a shown level, so the comparison goes through
+        ``shown_thread_level`` (#4585): a variant unlocking at 3 resolves at stored 30.
 
         Returns ``None`` when no variant qualifies (caller falls back to ``parent``).
         Lifted verbatim from the proven ``resolve_effective_role`` loop
         (``covenants/services.py:584``). Single-depth: ``parent`` must itself be a
         base row (no variant-of-a-variant).
         """
+        from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+
+        shown_level = shown_thread_level(thread_level)
         variants = cls._variant_queryset(parent, resonance=resonance)
         best: AbstractSpecializedVariant | None = None
         for var in variants:
-            if var.unlock_thread_level <= thread_level and (
+            if var.unlock_thread_level <= shown_level and (
                 best is None or var.unlock_thread_level > best.unlock_thread_level
             ):
                 best = var
@@ -133,17 +145,24 @@ class AbstractSpecializedVariant(SharedMemoryModel):
         starting_level: int,
         new_level: int,
     ) -> Sequence[AbstractSpecializedVariant]:
-        """Variants on ``parent`` whose ``unlock_thread_level`` falls in
-        ``(starting_level, new_level]`` at ``resonance_id``.
+        """Variants on ``parent`` whose ``unlock_thread_level`` falls in the shown
+        range ``(shown(starting_level), shown(new_level)]`` at ``resonance_id``.
+
+        ``starting_level``/``new_level`` are STORED thread levels; the unlock level is
+        shown (#4585), so stored 29 → 30 crosses a variant unlocking at 3.
 
         Lifted from ``fire_variant_discoveries``'s list-comp
         (``covenants/discovery.py:37-44``). The discovery ceremony calls this to
         find which variants to fire beats for on an imbue.
         """
+        from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+
         if new_level <= starting_level:
             return []
+        shown_start = shown_thread_level(starting_level)
+        shown_new = shown_thread_level(new_level)
         variants = cls._variant_queryset(parent, resonance_id=resonance_id)
-        return [v for v in variants if starting_level < v.unlock_thread_level <= new_level]
+        return [v for v in variants if shown_start < v.unlock_thread_level <= shown_new]
 
     @classmethod
     def _variant_queryset(
@@ -255,6 +274,11 @@ class TechniqueVariant(NaturalKeyMixin, CreditedContent, AbstractSpecializedVari
                     unlock_thread_level__lte=CREATION_PERSONALIZATION_MAX_LEVEL,
                 ),
                 name="technique_variant_creation_cost_early_level",
+                violation_error_message=(
+                    "A form offered in creation needs an unlock thread level of "
+                    f"{CREATION_PERSONALIZATION_MAX_LEVEL}: a new character's threads stop "
+                    "there."
+                ),
             ),
         ]
 

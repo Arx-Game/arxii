@@ -80,7 +80,7 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   description: 'A test description.',
   level: 10,
   developed_points: 25,
-  path_cap: 20,
+  level_cap: 20,
   anchor_cap: 20,
   effective_cap: 20,
   retired_at: null,
@@ -224,8 +224,8 @@ describe('ThreadDetailPage', () => {
 
   it('renders cap fields in stats card', () => {
     render(<ThreadDetailPage />, { wrapper: createWrapper() });
-    // path_cap 20 / 10 = 2
-    expect(screen.getByTestId('thread-stat-path-cap')).toHaveTextContent('2');
+    // level_cap 20 / 10 = 2
+    expect(screen.getByTestId('thread-stat-level-cap')).toHaveTextContent('2');
     // anchor_cap 20 / 10 = 2
     expect(screen.getByTestId('thread-stat-anchor-cap')).toHaveTextContent('2');
     // effective_cap 20 / 10 = 2

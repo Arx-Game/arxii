@@ -67,7 +67,7 @@ from world.magic.services.threads import (
     apply_damage_reduction_from_threads,
     compute_anchor_cap,
     compute_effective_cap,
-    compute_path_cap,
+    compute_level_cap,
     compute_thread_weaving_xp_cost,
     cross_thread_xp_lock,
     get_imbue_cost_multiplier,
@@ -107,7 +107,7 @@ __all__ = [
     "coherence_cache_scope",
     "compute_anchor_cap",
     "compute_effective_cap",
-    "compute_path_cap",
+    "compute_level_cap",
     "compute_thread_weaving_xp_cost",
     # alterations
     "create_pending_alteration",

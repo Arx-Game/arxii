@@ -41,7 +41,7 @@ from world.magic.exceptions import (
 from world.magic.models import CharacterThreadWeavingUnlock, Ritual
 from world.magic.models.affinity import Resonance
 from world.magic.models.soul_tether_config import SoulTetherConfig
-from world.magic.services.threads import weave_thread
+from world.magic.services.threads import shown_thread_level, weave_thread
 from world.magic.types.aura import AffinityType
 from world.magic.types.soul_tether import (
     RescueOutcome,
@@ -526,7 +526,10 @@ def _compute_per_scene_sineating_cap(
 
     Formula (tunable via SoulTetherConfig singleton):
         cap = min(cfg.per_scene_cap_hard_max,
-                  thread.level * cfg.per_scene_cap_level_mult + cfg.per_scene_cap_base)
+                  shown_level * cfg.per_scene_cap_level_mult + cfg.per_scene_cap_base)
+
+    ``shown_level`` is the thread's shown level (stored // 10, #4585): the hard max
+    of 20 is reached around shown 8, not stored 8.
 
     Defaults reproduce original behaviour (hard_max=20, level_mult=2, base=5).
     When no Sinner Thread exists the bond has no Hollow; cap is 0.
@@ -547,7 +550,8 @@ def _compute_per_scene_sineating_cap(
     cfg = get_soul_tether_config()
     return min(
         cfg.per_scene_cap_hard_max,
-        sinner_thread.level * cfg.per_scene_cap_level_mult + cfg.per_scene_cap_base,
+        shown_thread_level(sinner_thread.level) * cfg.per_scene_cap_level_mult
+        + cfg.per_scene_cap_base,
     )
 
 
@@ -555,7 +559,9 @@ def _compute_hollow_max(sinner_thread: Thread) -> int:
     """Compute the Hollow's theoretical maximum for a given Thread.
 
     Formula (tunable via SoulTetherConfig singleton):
-        hollow_max = thread.level * cfg.hollow_max_level_mult
+        hollow_max = shown_level * cfg.hollow_max_level_mult
+
+    ``shown_level`` is the thread's shown level (stored // 10, #4585).
 
     Default multiplier is 10, reproducing the original behaviour.
 
@@ -566,7 +572,7 @@ def _compute_hollow_max(sinner_thread: Thread) -> int:
         The maximum number of units the Hollow can hold.
     """
     cfg = get_soul_tether_config()
-    return max(0, sinner_thread.level * cfg.hollow_max_level_mult)
+    return max(0, shown_thread_level(sinner_thread.level) * cfg.hollow_max_level_mult)
 
 
 def _increment_stat_safe(

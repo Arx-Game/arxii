@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0299_remove_schoolingline_magic_skill_floor"),
-    ]
+    dependencies = [("arxii", "0300_band_skill_cap_and_creation_ceiling")]
 
     operations = [
         migrations.AddField(

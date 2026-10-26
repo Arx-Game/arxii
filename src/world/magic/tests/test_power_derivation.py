@@ -1171,7 +1171,7 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=parent,
             target_trait=None,
-            level=10,
+            level=30,  # stored; shows 3, the sub-role's unlock level (#4585)
         )
         self.character.threads.invalidate()
         self.character.covenant_roles.invalidate()
@@ -1184,8 +1184,8 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         )
         technique = TechniqueFactory()
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
-        # anchor row (parent, 10*10/10=10) + sub-role's own row (10*5/10=5) = 15
-        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 15)
+        # anchor row (parent, 30*10/10=30) + sub-role's own row (30*5/10=15) = 45
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 45)
 
     def test_non_engaged_role_returns_zero(self):
         from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory

@@ -298,6 +298,13 @@ reached to `skills.CharacterSkillValue` (what the sheet shows) and first reconci
 stores to the higher value (#4496; see skills.md "One rating, two stores"). See `docs/systems/INDEX.md`'s Traits entry for the full
 `CharacterTraitChange` shape and its other writers (CG finalize, maturation).
 
+**Band skill cap (#4585).** For a SKILL-typed trait, `award_points` stops leveling at
+the level band's skill cap (`MaturationStatCap.skill_cap`, shown units, stored cap x 10
+via `world.skills.services.stored_skill_cap`) and lets surplus `total_earned` dissipate,
+as at an XP wall; `at_skill_cap()` reports it, and `award_development_points` appends the
+cap message to the transaction description. Stat and other traits are unaffected. See
+skills.md's "Band skill cap" section for every raise path the cap binds.
+
 **Language XP locks (#4090).** For a LANGUAGE-typed trait only, `award_points` stops
 leveling one rating below an authored `TraitRatingUnlock` and lets surplus `total_earned`
 dissipate instead of banking it, the same ephemerality skills follow at their XP

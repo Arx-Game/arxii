@@ -180,7 +180,10 @@ def _flourish_pick_error(
     bonus = next((f for f in option.flourishes if f.pk == pick.signature_bonus_id), None)
     if bonus is None:
         return "A chosen signature flourish is no longer available."
-    if bonus.min_crossing_level > _technique_anchor_cap(option.technique):
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+
+    # min_crossing_level is a shown level; the anchor cap is stored (#4585).
+    if bonus.min_crossing_level > shown_thread_level(_technique_anchor_cap(option.technique)):
         # A level-0 technique has anchor cap 0 (#4099 final fix): the weave at
         # finalize would reject this pick with AnchorCapExceeded, so it must fail
         # here instead, using the same cap function the weave uses.
@@ -327,8 +330,9 @@ def apply_creation_personalizations(
         hold.save(update_fields=["custom_name", "custom_description", "price", "early_form"])
         bonus = bonuses.get(pick.signature_bonus_id)
         if bonus is not None and resonance is not None:
+            # min_crossing_level is shown; the thread stores shown × 10 (#4585).
             thread = weave_creation_technique_thread(
-                sheet, hold.technique, resonance, level=bonus.min_crossing_level
+                sheet, hold.technique, resonance, level=bonus.min_crossing_level * 10
             )
             set_signature_bonus(thread, bonus)
     sheet.character.techniques.invalidate()

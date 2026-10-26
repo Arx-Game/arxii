@@ -355,8 +355,8 @@ class SoulTetherFullPipelineTests(TestCase):
         rel_out = CharacterRelationship.objects.get(source=self.sinner, target=self.sineater)
         sinner_thread = _get_sinner_thread(self.sinner, self.capstone, self.resonance)
 
-        # Bump thread level so the Hollow has capacity (level*10 = 30).
-        _bump_thread_level(sinner_thread, level=3)
+        # Bump thread to stored 30 (shown 3) so the Hollow has capacity (3*10 = 30).
+        _bump_thread_level(sinner_thread, level=30)
         sinner_thread.refresh_from_db()
 
         # ---- Step 2: Sineating fills the Hollow ----
@@ -736,8 +736,8 @@ class ManyToManyIndependenceTests(TestCase):
         # Bump thread levels so Hollows have capacity.
         thread_a = _get_sinner_thread(cls.sinner_a, cls.capstone_a, cls.resonance_a)
         thread_b = _get_sinner_thread(cls.sinner_b, cls.capstone_b, cls.resonance_b)
-        _bump_thread_level(thread_a, level=3)
-        _bump_thread_level(thread_b, level=3)
+        _bump_thread_level(thread_a, level=30)
+        _bump_thread_level(thread_b, level=30)
 
     def test_each_sinner_has_distinct_thread(self) -> None:
         """Sinner A and Sinner B own different Thread PKs."""
