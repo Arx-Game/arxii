@@ -68,6 +68,7 @@ class PerformRitualAction(Action):
         from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
         from world.magic.exceptions import (  # noqa: PLC0415
             AnchorCapExceeded,
+            FallRedemptionError,
             GhostTutorError,
             InvalidImbueAmount,
             ResonanceInsufficient,
@@ -138,6 +139,7 @@ class PerformRitualAction(Action):
             XPInsufficient,
             GhostTutorError,
             RitualPoolError,
+            FallRedemptionError,
             HonorRefused,
             UltimateNotLearnable,
         ) as exc:

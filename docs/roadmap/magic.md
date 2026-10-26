@@ -503,6 +503,10 @@ The remaining two were **already clean going into this branch**, not stripped by
 it — #2973 verified them against code, found no lazy-create/invention path left,
 and added the regression coverage that had never existed for either:
 
+- (#4681 affinity refactor, slice 1: affinity identity is now the `Affinity` row everywhere.
+  `CharacterAura` percentages are `CharacterAuraShare` rows, the Fall/Redemption multipliers live
+  on `AffinityInteraction.conversion_multiplier`/`conversion_type`, the corruption coefficients on
+  `Affinity.corruption_coefficient`, and the `AffinityType` enum is gone.)
 - 4 `CompromiseActType` + 6 `ResonanceConversion` fall-redemption examples
   (`wire_fall_redemption_content()`) — `authored_or_sample()`-gated since #2972,
   before this SDD series started. No production code changed; #2973 added

@@ -41,7 +41,8 @@ from world.covenants.factories import (
     VowSituationalPerkSituationFactory,
 )
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
-from world.magic.types.aura import AffinityType
+from world.magic.factories import ensure_canonical_affinities
+from world.magic.models import Affinity
 from world.scenes.constants import RoundStatus
 from world.seeds.checks import seed_check_resolution_tables
 from world.traits.factories import (
@@ -459,7 +460,7 @@ class ResolveNpcAttackSituationalPerkTests(TestCase):
             lo += 10
         return chart, outcomes
 
-    def _npc_action(self, *, affinity: str = "") -> CombatOpponentAction:
+    def _npc_action(self, *, affinity: Affinity | None = None) -> CombatOpponentAction:
         opponent = CombatOpponentFactory(
             encounter=self.encounter, threat_pool=self.pool, affinity=affinity
         )
@@ -502,15 +503,17 @@ class ResolveNpcAttackSituationalPerkTests(TestCase):
             beneficiary=PerkBeneficiary.SELF,
         )
         VowSituationalPerkSituationFactory(
-            perk=perk, situation=Situation.ATTACKER_AFFINITY, affinity=AffinityType.ABYSSAL
+            perk=perk,
+            situation=Situation.ATTACKER_AFFINITY,
+            affinity=ensure_canonical_affinities()[2],
         )
 
-        abyssal_action = self._npc_action(affinity=AffinityType.ABYSSAL)
+        abyssal_action = self._npc_action(affinity=ensure_canonical_affinities()[2])
         with force_check_outcome(outcomes[-1]):
             bound_result = resolve_npc_attack(abyssal_action, self.participant, self.check_type)
         self.assertEqual(bound_result.success_level, 1)
 
-        non_abyssal_action = self._npc_action(affinity=AffinityType.CELESTIAL)
+        non_abyssal_action = self._npc_action(affinity=ensure_canonical_affinities()[0])
         with force_check_outcome(outcomes[-1]):
             unbound_result = resolve_npc_attack(
                 non_abyssal_action, self.participant, self.check_type

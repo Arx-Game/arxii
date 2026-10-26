@@ -21,11 +21,11 @@ from world.conditions.models import ConditionInstance
 from world.conditions.services import decay_condition_severity
 from world.magic.exceptions import ProtagonismLockedError
 from world.magic.factories import (
-    AffinityFactory,
     CharacterAnimaFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
+    ensure_canonical_affinities,
     with_corruption_at_stage,
 )
 from world.magic.models.aura import CharacterResonance
@@ -435,7 +435,7 @@ def _make_abyssal_gift_and_technique(
 
     Returns (resonance, gift, technique).
     """
-    abyssal_affinity = AffinityFactory(name="Abyssal")
+    abyssal_affinity = ensure_canonical_affinities()[2]
     resonance = ResonanceFactory(affinity=abyssal_affinity)
     gift = GiftFactory()
     gift.resonances.add(resonance)
@@ -483,7 +483,7 @@ class FullCastPipelineCorruptionTests(TestCase):
 
     def test_celestial_cast_does_not_accrue_corruption(self) -> None:
         """Celestial Gift → no corruption accrual, even with authored content."""
-        celestial_affinity = AffinityFactory(name="Celestial")
+        celestial_affinity = ensure_canonical_affinities()[0]
         resonance = ResonanceFactory(affinity=celestial_affinity)
         gift = GiftFactory()
         gift.resonances.add(resonance)

@@ -4,15 +4,18 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import GiftKind, TargetKind
+from world.magic.constants import TargetKind
 from world.magic.factories import (
     AffinityFactory,
+    CharacterAuraFactory,
     CharacterGiftFactory,
     GiftFactory,
     ResonanceFactory,
     ThreadFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
+    set_aura_split,
 )
 from world.magic.models import TraditionTeachingConfig
 from world.magic.services.teaching_fit import (
@@ -87,7 +90,24 @@ class TeachingFitTests(TestCase):
         self.assertEqual((fit.gift_fit, fit.affinity_fit), (False, False))
         self.assertIsNone(fit.tradition)
 
-    def test_student_affinity_is_the_major_gift_threads_resonance(self) -> None:
+    def test_student_affinity_is_the_dominant_aura_affinity(self) -> None:
+        celestial, _primal, abyssal = ensure_canonical_affinities()
+        sheet = CharacterSheetFactory()
+        CharacterGiftFactory(character=sheet, gift=self.gift)
+        aura = CharacterAuraFactory(character=sheet, celestial="70", primal="20", abyssal="10")
+        traits = student_traits(sheet)
+        self.assertEqual(traits.major_gift, self.gift)
+        self.assertEqual(traits.affinity, celestial)
+        set_aura_split(aura, celestial="10", primal="20", abyssal="70")
+        self.assertEqual(student_traits(sheet).affinity, abyssal)
+
+    def test_student_without_an_aura_has_no_affinity(self) -> None:
+        sheet = CharacterSheetFactory()
+        CharacterGiftFactory(character=sheet, gift=self.gift)
+        self.assertIsNone(student_traits(sheet).affinity)
+        self.assertIsNone(student_traits(CharacterSheetFactory()).affinity)
+
+    def test_a_gift_thread_does_not_supply_the_affinity(self) -> None:
         sheet = CharacterSheetFactory()
         CharacterGiftFactory(character=sheet, gift=self.gift)
         ThreadFactory(
@@ -96,28 +116,6 @@ class TeachingFitTests(TestCase):
             target_kind=TargetKind.GIFT,
             target_trait=None,
             target_gift=self.gift,
-        )
-        traits = student_traits(sheet)
-        self.assertEqual(traits.major_gift, self.gift)
-        self.assertEqual(traits.affinity, self.affinity)
-
-    def test_student_without_a_gift_thread_has_no_affinity(self) -> None:
-        sheet = CharacterSheetFactory()
-        CharacterGiftFactory(character=sheet, gift=self.gift)
-        self.assertIsNone(student_traits(sheet).affinity)
-        self.assertIsNone(student_traits(CharacterSheetFactory()).affinity)
-
-    def test_a_thread_on_another_gift_does_not_supply_the_affinity(self) -> None:
-        sheet = CharacterSheetFactory()
-        CharacterGiftFactory(character=sheet, gift=self.gift)
-        minor = GiftFactory(kind=GiftKind.MINOR)
-        CharacterGiftFactory(character=sheet, gift=minor)
-        ThreadFactory(
-            owner=sheet,
-            resonance=ResonanceFactory(affinity=self.affinity),
-            target_kind=TargetKind.GIFT,
-            target_trait=None,
-            target_gift=minor,
         )
         traits = student_traits(sheet)
         self.assertEqual(traits.major_gift, self.gift)

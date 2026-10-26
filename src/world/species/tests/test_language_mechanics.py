@@ -6,6 +6,7 @@ from django.test import TestCase
 from world.character_creation.factories import BeginningsFactory, CharacterDraftFactory
 from world.character_creation.services import finalize_magic_data
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.factories import ensure_canonical_affinities
 from world.species.factories import SpeciesFactory
 from world.species.language_constants import (
     FLUENT_GRANT_VALUE,
@@ -137,6 +138,7 @@ class ProvisionStartingLanguagesFinalizeIntegrationTest(TestCase):
     def setUpTestData(cls) -> None:
         from world.magic.factories import TraditionFactory
 
+        ensure_canonical_affinities()
         khatic_trait = Trait.objects.create(
             name="TestPSLFinalizeKhatic",
             trait_type=TraitType.LANGUAGE,

@@ -36,7 +36,7 @@ from world.covenants.perks.constants import (
     SituationOriginSide,
 )
 from world.covenants.perks.context import SituationParams
-from world.magic.types.aura import AffinityType
+from world.magic.factories import ensure_canonical_affinities
 from world.missions.factories import MissionCategoryFactory, MissionTemplateFactory
 
 
@@ -367,7 +367,7 @@ class SituationParamValidationTests(TestCase):
         row = VowSituationalPerkSituationFactory.build(
             perk=self.perk,
             situation=Situation.ATTACKER_AFFINITY,
-            affinity=AffinityType.PRIMAL,
+            affinity=ensure_canonical_affinities()[1],
             threshold_percent=30,
         )
         row.full_clean()  # no raise
@@ -392,7 +392,7 @@ class SituationParamValidationTests(TestCase):
             perk=self.perk,
             rung_number=1,
             extra_situation=Situation.SURROUNDED,
-            affinity=AffinityType.ABYSSAL,
+            affinity=ensure_canonical_affinities()[2],
         )
         with self.assertRaises(ValidationError):
             rung.full_clean()
@@ -401,12 +401,12 @@ class SituationParamValidationTests(TestCase):
         row = VowSituationalPerkSituationFactory.build(
             perk=self.perk,
             situation=Situation.ATTACKER_AFFINITY,
-            affinity=AffinityType.CELESTIAL,
+            affinity=ensure_canonical_affinities()[0],
             threshold_percent=40,
         )
         self.assertEqual(
             row.params,
-            SituationParams(threshold_percent=40, affinity=AffinityType.CELESTIAL),
+            SituationParams(threshold_percent=40, affinity=ensure_canonical_affinities()[0]),
         )
 
     def test_threshold_percent_zero_rejected(self):

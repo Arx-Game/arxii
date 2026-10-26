@@ -20,7 +20,6 @@ from world.achievements.models import CharacterAchievement
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import AffinityFactory, CharacterAuraFactory, ResonanceFactory
 from world.magic.models import AuraAffinityThreshold, CharacterAura, CharacterResonance
-from world.magic.types import AffinityType
 from world.missions.constants import DeedRewardKind, DeedRewardSink, OptionKind, OptionSource
 from world.missions.factories import (
     MissionDeedRecordFactory,
@@ -46,7 +45,7 @@ class DeedResonanceAuraDriftE2ETest(TestCase):
         cruelty = ResonanceFactory(name="Cruelty", affinity=abyssal)
         achievement = AchievementFactory(is_active=True)
         AuraAffinityThreshold.objects.create(
-            affinity=AffinityType.ABYSSAL,
+            affinity=abyssal,
             threshold_percent=Decimal("50.00"),
             discovery_achievement=achievement,
         )
@@ -90,7 +89,7 @@ class DeedResonanceAuraDriftE2ETest(TestCase):
         assert cr.lifetime_earned == 100
 
         aura = CharacterAura.objects.get(character=sheet)
-        assert float(aura.abyssal) == 100.0
+        assert aura.percent_for(abyssal) == Decimal("100.00")
 
         assert CharacterAchievement.objects.filter(
             character_sheet=sheet, achievement=achievement

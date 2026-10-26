@@ -83,7 +83,6 @@ from world.fatigue.constants import EffortLevel
 from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
-from world.magic.types.aura import AffinityType
 from world.scenes.round_models import AbstractRound
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -899,17 +898,18 @@ class CombatOpponent(SharedMemoryModel):
     )
 
     # === Affinity field (#2536 slice 3 Task 6) ===
-    affinity = models.CharField(
-        max_length=20,
-        choices=AffinityType.choices,
+    affinity = models.ForeignKey(
+        "arxii.Affinity",
+        on_delete=models.PROTECT,
+        null=True,
         blank=True,
-        default="",
+        related_name="+",
         help_text=(
             "Authored magical affinity for non-persona NPCs (generic/ephemeral "
-            "opponents carry no CharacterAura row to infer from). Blank = "
-            "untyped/unauthored — the ATTACKER_AFFINITY situational-perk evaluator "
+            "opponents carry no CharacterAura row to infer from). Null = "
+            "untyped/unauthored: the ATTACKER_AFFINITY situational-perk evaluator "
             "(world.covenants.perks.evaluators) falls back to a reachable "
-            "ObjectDB's CharacterAura.dominant_affinity when this is blank."
+            "ObjectDB's aura when this is null."
         ),
     )
 

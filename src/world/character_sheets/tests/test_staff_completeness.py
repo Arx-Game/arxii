@@ -34,6 +34,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import CharacterAura, CharacterGift, CharacterTechnique
 from world.magic.models.ritual_check_config import RitualCheckConfig
@@ -53,6 +54,7 @@ from world.worship.models import WorshipDeclaration
 
 class StaffBuildsACompleteSheetTests(TestCase):
     def setUp(self) -> None:
+        ensure_canonical_affinities()
         self.stat = StatTraitFactory(name="completeness_focus")
         self.skill = SkillFactory()
         self.hair = FormTraitFactory(name="completeness_hair")

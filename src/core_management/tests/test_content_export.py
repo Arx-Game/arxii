@@ -1016,7 +1016,9 @@ class VowSituationalPerkContentExportTests(TestCase):
             VowSituationalPerkSituationFactory,
         )
         from world.covenants.perks.constants import PerkEffectKind, Situation
-        from world.magic.types.aura import AffinityType
+        from world.magic.factories import ensure_canonical_affinities
+
+        primal = ensure_canonical_affinities()[1]
 
         role = CovenantRoleFactory(
             name="Round Trip Params", slug="round-trip-params", sword_weight=1
@@ -1029,7 +1031,7 @@ class VowSituationalPerkContentExportTests(TestCase):
         situation = VowSituationalPerkSituationFactory(
             perk=perk,
             situation=Situation.ATTACKER_AFFINITY,
-            affinity=AffinityType.PRIMAL,
+            affinity=primal,
             threshold_percent=30,
         )
 
@@ -1042,7 +1044,7 @@ class VowSituationalPerkContentExportTests(TestCase):
             r for r in records if r["fields"]["perk"] == ["round-trip-params", "Primal Warder"]
         )
         assert record["fields"]["situation"] == Situation.ATTACKER_AFFINITY
-        assert record["fields"]["affinity"] == AffinityType.PRIMAL
+        assert record["fields"]["affinity"] == [primal.name]
         assert record["fields"]["threshold_percent"] == 30
         assert record["fields"]["count_threshold"] is None
         assert not record["fields"]["origin_side"]
@@ -1055,7 +1057,7 @@ class VowSituationalPerkContentExportTests(TestCase):
 
         situation.refresh_from_db()
         assert situation.situation == Situation.ATTACKER_AFFINITY
-        assert situation.affinity == AffinityType.PRIMAL
+        assert situation.affinity == primal
         assert situation.threshold_percent == 30
         assert situation.count_threshold is None
         assert not situation.origin_side

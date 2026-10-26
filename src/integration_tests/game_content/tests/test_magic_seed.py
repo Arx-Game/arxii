@@ -1413,12 +1413,13 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         from evennia.objects.models import ObjectDB
 
         from world.locations.services import effective_value
+        from world.magic.models.affinity import Affinity
         from world.magic.seeds_resonance import first_authored_resonance
         from world.seeds.game_content.magic import _seed_resonance_environment_rooms
 
         _seed_resonance_environment_rooms()
         low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
-        celestial = first_authored_resonance("Celestial")
+        celestial = first_authored_resonance(Affinity.objects.get_celestial_affinity())
         self.assertEqual(effective_value(low, resonance=celestial), 10)
 
     def test_high_room_cascade_magnitude(self):
@@ -1426,12 +1427,13 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         from evennia.objects.models import ObjectDB
 
         from world.locations.services import effective_value
+        from world.magic.models.affinity import Affinity
         from world.magic.seeds_resonance import first_authored_resonance
         from world.seeds.game_content.magic import _seed_resonance_environment_rooms
 
         _seed_resonance_environment_rooms()
         high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
-        celestial = first_authored_resonance("Celestial")
+        celestial = first_authored_resonance(Affinity.objects.get_celestial_affinity())
         self.assertEqual(effective_value(high, resonance=celestial), 80)
 
     def test_aligned_sanctum_cascade_magnitude(self):
@@ -1439,12 +1441,13 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         from evennia.objects.models import ObjectDB
 
         from world.locations.services import effective_value
+        from world.magic.models.affinity import Affinity
         from world.magic.seeds_resonance import first_authored_resonance
         from world.seeds.game_content.magic import _seed_resonance_environment_rooms
 
         _seed_resonance_environment_rooms()
         sanctum = ObjectDB.objects.get(db_key="The Resonant Sanctum (Aligned)")
-        abyssal = first_authored_resonance("Abyssal")
+        abyssal = first_authored_resonance(Affinity.objects.get_abyssal_affinity())
         self.assertEqual(effective_value(sanctum, resonance=abyssal), 60)
 
     def test_idempotent(self):
@@ -1454,12 +1457,13 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         from world.conditions.models import ConditionTemplate
         from world.locations.models import LocationValueModifier
         from world.locations.services import effective_value
+        from world.magic.models.affinity import Affinity
         from world.magic.seeds_resonance import first_authored_resonance
         from world.seeds.game_content.magic import _seed_resonance_environment_rooms
 
         _seed_resonance_environment_rooms()
-        light = first_authored_resonance("Celestial")
-        dissolution = first_authored_resonance("Abyssal")
+        light = first_authored_resonance(Affinity.objects.get_celestial_affinity())
+        dissolution = first_authored_resonance(Affinity.objects.get_abyssal_affinity())
         low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
         high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
         sanctum = ObjectDB.objects.get(db_key="The Resonant Sanctum (Aligned)")

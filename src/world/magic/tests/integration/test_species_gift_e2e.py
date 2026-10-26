@@ -57,6 +57,7 @@ from world.magic.factories import (
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
     TraditionFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import Resonance, Technique, Thread
 from world.magic.models.gifts import CharacterGift
@@ -150,6 +151,7 @@ class _SpeciesGiftJourneyBase(TestCase):
                 "selected_gift_resonance_id": self.resonance.id,
             },
         )
+        ensure_canonical_affinities()
         finalize_magic_data(draft, sheet)
         return sheet
 

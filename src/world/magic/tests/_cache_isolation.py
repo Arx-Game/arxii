@@ -30,6 +30,7 @@ T6, T7, T15 tasks must import and apply this mixin to their test classes.
 
 from __future__ import annotations
 
+from world.magic.models.affinity import Affinity
 from world.magic.models.resonance_environment import (
     AffinityInteraction,
     ResonanceAlignmentBoonTier,
@@ -46,5 +47,6 @@ class ResonanceCacheIsolationMixin:
 
     def setUp(self) -> None:
         AffinityInteraction.objects.clear_cache()
+        Affinity.objects.clear_cache()
         ResonanceAlignmentBoonTier.objects.clear_cache()
         super().setUp()  # type: ignore[misc]

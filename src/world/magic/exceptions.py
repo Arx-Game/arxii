@@ -857,3 +857,15 @@ class UnmergedFacetRelation(MagicError):
     """
 
     user_message = "These facets cannot be merged yet."
+
+
+class UnknownAffinity(MagicError):
+    """No Affinity row has the id a ritual was given (telnet and web share this refusal)."""
+
+    def __init__(self, affinity_id: object) -> None:
+        super().__init__(affinity_id)
+        self.user_message = f"No affinity with id {affinity_id}."
+
+
+class AffinityNotConfigured(MagicError):
+    user_message = "This affinity has not been set up yet."

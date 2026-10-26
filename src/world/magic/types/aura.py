@@ -1,17 +1,33 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from django.db import models
+if TYPE_CHECKING:
+    from world.magic.models.affinity import Affinity
 
 
-@dataclass
+@dataclass(frozen=True)
+class AffinityShare:
+    """One affinity's percentage of an aura."""
+
+    affinity: Affinity
+    percent: Decimal
+
+
+@dataclass(frozen=True)
 class AuraPercentages:
-    """Aura percentages across the three magical affinities."""
+    """An aura's percentages, one share per affinity the character holds."""
 
-    celestial: float
-    primal: float
-    abyssal: float
+    shares: tuple[AffinityShare, ...]
+
+    def percent_for(self, affinity: Affinity) -> Decimal:
+        """This affinity's percent, 0 when the aura holds no share of it."""
+        for share in self.shares:
+            if share.affinity.pk == affinity.pk:
+                return share.percent
+        return Decimal(0)
 
 
 @dataclass(frozen=True)
@@ -20,11 +36,3 @@ class AuraDrift:
 
     before: AuraPercentages
     after: AuraPercentages
-
-
-class AffinityType(models.TextChoices):
-    """The three magical affinities."""
-
-    CELESTIAL = "celestial", "Celestial"
-    PRIMAL = "primal", "Primal"
-    ABYSSAL = "abyssal", "Abyssal"

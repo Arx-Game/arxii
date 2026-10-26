@@ -4,7 +4,7 @@ Public surface is preserved for the flat-module era: importers that use
 ``from world.magic.types import <name>`` continue to work unchanged.
 Submodules:
 
-- ``aura``        — aura percentages and the AffinityType enum
+- ``aura``        — aura percentages and share types
 - ``ritual``      — ritual-related enums, RitualOutcome, and AnimaRegenTickSummary
 - ``threads``     — thread axis enum and Imbuing / XP-lock result types
 - ``techniques``  — runtime stats, anima cost, soulfray, mishap, use-technique results
@@ -21,7 +21,7 @@ from world.magic.types.alterations import (
     PendingAlterationResult,
     PendingAlterationTierReduction,
 )
-from world.magic.types.aura import AffinityType, AuraDrift, AuraPercentages
+from world.magic.types.aura import AffinityShare, AuraDrift, AuraPercentages
 from world.magic.types.gain import (
     ResonanceDailyTickSummary,
     ResonanceWeeklySettlementSummary,
@@ -65,7 +65,7 @@ from world.magic.types.ultimates import (
 )
 
 __all__ = [
-    "AffinityType",
+    "AffinityShare",
     "AlterationGateError",
     "AlterationResolutionError",
     "AlterationResolutionResult",

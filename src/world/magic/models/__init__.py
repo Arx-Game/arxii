@@ -82,7 +82,9 @@ from world.magic.models.appetites import (
 from world.magic.models.aura import (
     AuraAffinityThreshold,
     CharacterAura,
+    CharacterAuraShare,
     CharacterResonance,
+    aura_shares_prefetch,
 )
 from world.magic.models.commitments import CommittingDeclaration  # noqa: F401
 from world.magic.models.corruption_config import CorruptionConfig
@@ -305,6 +307,7 @@ __all__ = [
     "CastPowerLevel",
     "CharacterAnima",
     "CharacterAura",
+    "CharacterAuraShare",
     # prepared per-character Audere text (#4101)
     "CharacterCrossingText",
     # gifts
@@ -513,4 +516,5 @@ __all__ = [
     "TraditionTeachingConfig",
     # training outcome awards (#2727)
     "TrainingOutcomeAward",
+    "aura_shares_prefetch",
 ]

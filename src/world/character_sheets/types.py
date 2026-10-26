@@ -248,13 +248,20 @@ class GlimpseTagEntry(TypedDict):
     description: str
 
 
+class AuraShareEntry(TypedDict):
+    """One affinity's share of an aura."""
+
+    affinity_id: int
+    affinity_name: str
+    percent: Decimal
+
+
 class AuraData(TypedDict):
     """Full aura data including glimpse story (used in magic section)."""
 
     id: int
-    celestial: Decimal
-    primal: Decimal
-    abyssal: Decimal
+    shares: list[AuraShareEntry]
+    dominant_affinity: str
     glimpse_story: str
     glimpse_state: str
     glimpse_tags: list[GlimpseTagEntry]
@@ -264,9 +271,8 @@ class AuraData(TypedDict):
 class AuraThemingData(TypedDict):
     """Aura percentages for frontend styling (no glimpse story)."""
 
-    celestial: Decimal
-    primal: Decimal
-    abyssal: Decimal
+    shares: list[AuraShareEntry]
+    dominant_affinity: str
 
 
 class ResonanceBalanceEntry(TypedDict):

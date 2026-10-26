@@ -40,6 +40,7 @@ from world.magic.factories import (
     TechniqueStyleFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import CharacterTechnique
 from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME, get_standalone_cast_template
@@ -81,6 +82,7 @@ class CastUsesPerCharacterCheckTests(TestCase):
     def setUpTestData(cls) -> None:
         # finalize_character() looks up a seeded roster by roster_type (#2728).
         ensure_rosters()
+        ensure_canonical_affinities()
         # Full check system (outcomes/charts/ranks + stat traits) so perform_check
         # can resolve and so the cast pipeline runs end-to-end.
         CheckSystemSetupFactory.create()

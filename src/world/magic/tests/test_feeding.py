@@ -6,6 +6,7 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.constants import FeedingTaintRole
 from world.magic.models.anima import CharacterAnima
 from world.magic.models.appetites import FeedingRecord
 from world.magic.services.feeding import FeedMode, feed_anima
@@ -117,9 +118,7 @@ class FeedAnimaTest(TestCase):
             patch("world.magic.services.feeding.grant_blood_taint") as taint,
         ):
             feed_anima(self.feeder, self.victim, amount_mode=FeedMode.GORGE)
-        from world.magic.services.feeding import MURDER_TAINT_ACT
-
-        taint.assert_called_once_with(self.feeder, MURDER_TAINT_ACT)
+        taint.assert_called_once_with(self.feeder, FeedingTaintRole.MURDER)
 
     def test_essence_feeder_fires_seduction_taints(self):
         _anima(self.feeder, current=5)
@@ -130,10 +129,11 @@ class FeedAnimaTest(TestCase):
             patch("world.magic.services.feeding.grant_blood_taint") as taint,
         ):
             feed_anima(self.feeder, self.victim, amount_mode=FeedMode.SIP)
-        from world.magic.services.feeding import SEDUCTION_TAINT_ACTS
-
-        called_acts = [call.args[1] for call in taint.call_args_list]
-        self.assertEqual(called_acts, list(SEDUCTION_TAINT_ACTS))
+        called_roles = [call.args[1] for call in taint.call_args_list]
+        self.assertEqual(
+            called_roles,
+            [FeedingTaintRole.SEDUCTION_DECEPTION, FeedingTaintRole.SEDUCTION_PREDATION],
+        )
 
     def test_blood_feeder_fires_no_taint_on_survivable_feed(self):
         _anima(self.feeder, current=5)
@@ -149,7 +149,7 @@ class FeedAnimaTest(TestCase):
         from world.magic.services.feeding import grant_blood_taint
 
         # No CompromiseActType rows exist — must log-and-skip, never raise.
-        grant_blood_taint(self.feeder, "Murder by Anima Drain")
+        grant_blood_taint(self.feeder, FeedingTaintRole.MURDER)
 
     def test_grant_blood_taint_fires_authored_act(self):
         from world.magic.factories import ResonanceFactory
@@ -159,12 +159,13 @@ class FeedAnimaTest(TestCase):
         resonance = ResonanceFactory()
         CompromiseActType.objects.create(
             name="Murder by Anima Drain",
+            feeding_taint_role=FeedingTaintRole.MURDER,
             target_resonance=resonance,
             amount=5,
             is_cruelty=True,
         )
         with patch("world.magic.services.fall_redemption.grant_resonance") as grant:
-            grant_blood_taint(self.feeder, "Murder by Anima Drain")
+            grant_blood_taint(self.feeder, FeedingTaintRole.MURDER)
         grant.assert_called_once()
         self.assertEqual(grant.call_args.args[2], 5)
 

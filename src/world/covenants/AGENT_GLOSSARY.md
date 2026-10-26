@@ -188,7 +188,7 @@ resolved block).
 `Situation.ATTACKER_AFFINITY` (renamed from its original Abyssal-only situation, parameterized
 #2623) — holds
 when the DEFENSE-side `SituationContext.attacker` is typed to the row's authored `affinity` axis
-(required Situation Parameter, one of `AffinityType.CELESTIAL/PRIMAL/ABYSSAL` — no longer
+(required Situation Parameter, an `Affinity` row (Celestial, Primal or Abyssal) — no longer
 hardcoded to Abyssal). A `CombatOpponent` with a non-empty authored `affinity` matching the row's
 axis is definitional (checked first, `threshold_percent` ignored); otherwise falls back to a
 reachable `ObjectDB`'s `CharacterAura` — with `threshold_percent` set, that axis's Decimal
@@ -307,7 +307,7 @@ The typed knobs authored on ONE situation-requirement row (`VowSituationalPerkSi
 `VowSituationalPerkRung`), carried via `SituationRequirementMixin` (`world.covenants.models`,
 #2623): `threshold_percent` (0-100, percent-shaped floors — aura-axis floor, ally-health
 fraction), `count_threshold` (count-shaped floors — surrounded lock count, minimum affection),
-`affinity` (`AffinityType` axis selector for attacker typing), `origin_side`
+`affinity` (FK to `Affinity`, the axis selector for attacker typing), `origin_side`
 (`SituationOriginSide` — see below). Which situation reads which params — and which it
 REQUIRES — is `SITUATION_PARAM_SPECS` (`world.covenants.perks.constants`); the mixin's `clean()`
 enforces both directions, mirroring the per-effect-kind gating already on

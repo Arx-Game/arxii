@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models.affinity import Resonance
+    from world.magic.models.affinity import Affinity, Resonance
     from world.magic.services.conversion import ConversionResult
 
 
@@ -66,10 +66,6 @@ class AtonementNothingToAtone(AtonementError):
 # Amount reduced per successful Atonement (authored value, tuning surface).
 ATONEMENT_REDUCE_AMOUNT: int = 100
 
-# Affinity names (lower-case) used for gate checks.
-_ABYSSAL_AFFINITY_NAME: str = "abyssal"
-_FALLBACK_AFFINITY_NAME: str = "primal"
-_CELESTIAL_AFFINITY_NAME: str = "celestial"
 _MAX_ATONEMENT_STAGE: int = 2
 
 
@@ -97,18 +93,19 @@ class AtonementResult:
 # ---------------------------------------------------------------------------
 
 
-def _get_dominant_affinity_name(performer_sheet: CharacterSheet) -> str:
-    """Return the dominant affinity name (lower-case) for a character sheet.
+def _dominant_affinity(performer_sheet: CharacterSheet) -> Affinity | None:
+    """Return the performer's dominant Affinity row.
 
-    Reads the performer's stored CharacterAura; falls back to 'primal' if the
-    sheet has no CharacterAura row (not magically active — treat as non-Abyssal
-    so the gate is not accidentally over-restrictive for data-incomplete sheets).
+    Reads the performer's stored CharacterAura; None if the sheet has no
+    CharacterAura row or no shares (not magically active), which neither the Abyssal
+    gate nor the Celestial conversion treats as a match, so the gate is not
+    accidentally over-restrictive for data-incomplete sheets.
     """
     from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
 
     aura = magical_profile(performer_sheet)
-    if aura is None:
-        return _FALLBACK_AFFINITY_NAME  # safe neutral fallback
+    if aura is None or not aura.cached_shares:
+        return None
     return aura.dominant_affinity
 
 
@@ -121,16 +118,18 @@ def _try_resonance_conversion(
     Returns the first ConversionResult, or None if no conversion happened.
     """
     from world.magic.exceptions import ConversionMappingError  # noqa: PLC0415
+    from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
     from world.magic.services.conversion import (  # noqa: PLC0415
         convert_resonance,
         get_fall_redemption_config,
     )
 
+    celestial = Affinity.objects.get_celestial_affinity()
     non_native_rows = CharacterResonance.objects.filter(
         character_sheet=performer_sheet,
         balance__gt=0,
-    ).exclude(resonance__affinity__name__iexact=_CELESTIAL_AFFINITY_NAME)
+    ).exclude(resonance__affinity=celestial)
     non_native_rows = non_native_rows.select_related("resonance__affinity")
 
     if not non_native_rows.exists():
@@ -138,17 +137,17 @@ def _try_resonance_conversion(
 
     config = get_fall_redemption_config()
     converted_results = []
-    seen_affinities: set[str] = set()
+    seen_affinities: set[int] = set()
     for cr in non_native_rows:
-        source_affinity = cr.resonance.affinity.name.lower()
-        if source_affinity in seen_affinities:
+        source_affinity = cr.resonance.affinity
+        if source_affinity.pk in seen_affinities:
             continue
-        seen_affinities.add(source_affinity)
+        seen_affinities.add(source_affinity.pk)
         try:
             result = convert_resonance(
                 performer_sheet,
                 source_affinity=source_affinity,
-                target_affinity=_CELESTIAL_AFFINITY_NAME,
+                target_affinity=celestial,
                 multiplier=config.penance_exchange_rate,
                 partial=True,
                 penance_amount=penance_amount,
@@ -209,8 +208,10 @@ def perform_atonement_rite(
     """
 
     # --- Gate 1: affinity check ---
-    dominant = _get_dominant_affinity_name(performer_sheet)
-    if dominant == _ABYSSAL_AFFINITY_NAME:
+    from world.magic.models.affinity import Affinity  # noqa: PLC0415
+
+    dominant = _dominant_affinity(performer_sheet)
+    if dominant is not None and dominant.pk == Affinity.objects.get_abyssal_affinity().pk:
         msg = "The Rite of Atonement cannot be led by a soul whose primary affinity is Abyssal."
         raise AtonementAffinityRefused(msg)
 
@@ -243,7 +244,7 @@ def perform_atonement_rite(
 
     # --- Effect 2: resonance conversion (Celestial with non-native balance) ---
     resonance_conversion = None
-    if dominant == _CELESTIAL_AFFINITY_NAME:
+    if dominant is not None and dominant.pk == Affinity.objects.get_celestial_affinity().pk:
         resonance_conversion = _try_resonance_conversion(performer_sheet, penance_amount)
 
     # --- At least one effect must fire ---

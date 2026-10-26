@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models.affinity import Affinity
     from world.missions.models import MissionInstance
 
 
@@ -90,7 +91,7 @@ class SituationParams:
 
     threshold_percent: int | None = None
     count_threshold: int | None = None
-    affinity: str = ""
+    affinity: Affinity | None = None
     origin_side: str = ""
 
 

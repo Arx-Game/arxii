@@ -19,7 +19,13 @@ from world.distinctions.factories import DistinctionFactory
 from world.distinctions.models import CharacterDistinction
 from world.distinctions.types import DistinctionOrigin
 from world.magic.constants import AcquisitionOrigin, GiftKind, TargetKind
-from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory, TraditionFactory
+from world.magic.factories import (
+    GiftFactory,
+    ResonanceFactory,
+    TechniqueFactory,
+    TraditionFactory,
+    ensure_canonical_affinities,
+)
 from world.magic.models import Thread
 from world.magic.models.gifts import CharacterGift
 from world.magic.models.techniques import CharacterTechnique
@@ -286,6 +292,7 @@ class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        ensure_canonical_affinities()
         cls.resonance = ResonanceFactory()
         cls.minor_gift = GiftFactory(name="Test Elven Sight", kind=GiftKind.MINOR)
         cls.minor_gift.resonances.add(cls.resonance)

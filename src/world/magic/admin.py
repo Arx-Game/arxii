@@ -36,6 +36,7 @@ from world.magic.models import (
     CastPowerLevel,
     CharacterAnima,
     CharacterAura,
+    CharacterAuraShare,
     CharacterCrossingText,
     CharacterGift,
     CharacterGiftUnlock,
@@ -132,6 +133,7 @@ from world.magic.models import (
     TraditionGiftGrant,
     TraditionRitualGrant,
     TraditionTeachingConfig,
+    aura_shares_prefetch,
 )
 from world.magic.models.appetites import (
     AppetiteUpkeep,
@@ -164,7 +166,7 @@ from world.magic.specialization.models import (
 
 @admin.register(Affinity)
 class AffinityAdmin(admin.ModelAdmin):
-    list_display = ["name", "description"]
+    list_display = ["name", "corruption_coefficient", "description"]
     search_fields = ["name"]
 
 
@@ -208,8 +210,10 @@ class AffinityInteractionAdmin(admin.ModelAdmin):
         "kind",
         "aggressor",
         "severity_multiplier",
+        "conversion_type",
+        "conversion_multiplier",
     ]
-    list_filter = ["valence", "kind"]
+    list_filter = ["valence", "kind", "conversion_type"]
     raw_id_fields = ["source_affinity", "environment_affinity"]
 
 
@@ -657,17 +661,32 @@ class TechniqueAdmin(admin.ModelAdmin):
             self.message_user(request, warning, messages.WARNING)
 
 
+class CharacterAuraShareInline(admin.TabularInline):
+    """Read-only: shares are written only by set_aura_shares, which keeps the sum at 100."""
+
+    model = CharacterAuraShare
+    formset = OneRowPerFormSet
+    extra = 0
+    max_num = 0
+    can_delete = False
+    readonly_fields = ["affinity", "percent"]
+
+
 @admin.register(CharacterAura)
 class CharacterAuraAdmin(admin.ModelAdmin):
     autocomplete_fields = ["character"]
-    list_display = ["character", "celestial", "primal", "abyssal", "get_dominant"]
+    list_display = ["character", "get_dominant"]
+    inlines = [CharacterAuraShareInline]
     list_filter = ["updated_at"]
     search_fields = ["character__db_key"]
     readonly_fields = ["updated_at", "glimpse_state"]
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related(aura_shares_prefetch())
+
     @admin.display(description="Dominant")
     def get_dominant(self, obj):
-        return obj.dominant_affinity.label
+        return obj.dominant_affinity.name if obj.cached_shares else ""
 
     def save_model(self, request, obj, form, change):
         """Keep the glimpse_state cache truthful after an admin prose/tag edit (#2427).
@@ -2206,7 +2225,7 @@ class ResonanceConversionAdmin(admin.ModelAdmin):
 class FallRedemptionConfigAdmin(admin.ModelAdmin):
     """Admin for the Fall/Redemption tuning singleton."""
 
-    list_display = ("id", "celestial_to_primal_multiplier", "celestial_to_abyssal_multiplier")
+    list_display = ("id", "penance_exchange_rate", "fall_threshold_percent")
 
 
 @admin.register(FallRedemptionRecord)
@@ -2575,9 +2594,6 @@ class CorruptionConfigAdmin(admin.ModelAdmin):
     """#3831 - the singleton Corruption-foundation coefficient tuning surface."""
 
     list_display = [
-        "celestial_coefficient",
-        "primal_coefficient",
-        "abyssal_coefficient",
         "tier_1_coefficient",
         "tier_2_coefficient",
         "tier_3_coefficient",

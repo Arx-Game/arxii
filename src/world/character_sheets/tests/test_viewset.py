@@ -123,6 +123,11 @@ from world.worship.factories import WorshippedBeingFactory
 from world.worship.models import WorshipDeclaration
 
 
+def _aura_percents(aura: dict) -> dict[str, Decimal]:
+    """The aura payload's shares keyed by lower-cased affinity name."""
+    return {share["affinity_name"].lower(): share["percent"] for share in aura["shares"]}
+
+
 class TestCharacterSheetViewSet(TestCase):
     """Tests for CharacterSheetViewSet API endpoints."""
 
@@ -1353,19 +1358,19 @@ class TestMagicSectionFull(TestCase):
         """Aura entry contains the correct celestial percentage."""
 
         magic = self._get_magic()
-        assert magic["aura"]["celestial"] == Decimal("20.00")
+        assert _aura_percents(magic["aura"])["celestial"] == Decimal("20.00")
 
     def test_aura_primal(self) -> None:
         """Aura entry contains the correct primal percentage."""
 
         magic = self._get_magic()
-        assert magic["aura"]["primal"] == Decimal("50.00")
+        assert _aura_percents(magic["aura"])["primal"] == Decimal("50.00")
 
     def test_aura_abyssal(self) -> None:
         """Aura entry contains the correct abyssal percentage."""
 
         magic = self._get_magic()
-        assert magic["aura"]["abyssal"] == Decimal("30.00")
+        assert _aura_percents(magic["aura"])["abyssal"] == Decimal("30.00")
 
     def test_aura_glimpse_story(self) -> None:
         """Aura entry contains the glimpse story."""
@@ -1542,7 +1547,7 @@ class TestMagicPartialData(TestCase):
         response = self.client.get(url)
         assert response.status_code == 200
         magic = response.data["magic"]
-        assert magic["aura"]["celestial"] == Decimal("33.33")
+        assert _aura_percents(magic["aura"])["celestial"] == Decimal("33.33")
 
 
 class TestMagicGiftWithoutTechniques(TestCase):
@@ -1920,9 +1925,9 @@ class TestThemingSection(TestCase):
 
         theming = self._get_theming()
         aura = theming["aura"]
-        assert aura["celestial"] == Decimal("20.00")
-        assert aura["primal"] == Decimal("50.00")
-        assert aura["abyssal"] == Decimal("30.00")
+        assert _aura_percents(aura)["celestial"] == Decimal("20.00")
+        assert _aura_percents(aura)["primal"] == Decimal("50.00")
+        assert _aura_percents(aura)["abyssal"] == Decimal("30.00")
 
 
 class TestThemingNulls(TestCase):
@@ -2884,7 +2889,9 @@ class TestCharacterSheetQueryCount(TestCase):
         # (TechniqueMoraleEffect), one fixed query for the whole spellbook, folded into
         # 33-37 above. Prefetched without a to_attr so Django's nested-prefetch re-walk
         # finds it in the one-to-one cache instead of querying once per technique.
-        with self.assertNumQueries(57):
+        # +1 (#4681): the aura's affinity shares (one prefetch, select_related onto the
+        # affinity) feed both the magic and the theming section.
+        with self.assertNumQueries(58):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

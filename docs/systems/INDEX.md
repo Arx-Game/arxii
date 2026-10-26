@@ -678,10 +678,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     — validates resonance claim + per-scene cap; atomically creates tag, calls
     `grant_resonance(source=DRAMATIC_MOMENT)`, and calls `fire_renown_award` for the
     primary persona (skipped if none)
-- **Key Methods:** `CharacterAura.dominant_affinity`,
+- **Key Methods:** `CharacterAura.dominant_affinity` / `percent_for(affinity)` (shares are `CharacterAuraShare` rows), `Affinity.objects.get_celestial_affinity()` and siblings,
   `Thread.target` (populated FK), `Thread.display_name`,
   `ThreadWeavingUnlock.display_name`
-- **Enums:** `AffinityType`, `TargetKind` (Thread discriminator — values: TRAIT,
+- **Enums:** `TargetKind` (Thread discriminator — values: TRAIT,
   TECHNIQUE, FACET, RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE, COVENANT_ROLE,
   MANTLE, SANCTUM; bare ROOM removed), `EffectKind` (ThreadPullEffect — includes
   `RESISTANCE`: species-gift drawback mitigation, #1580; `resistance_amount` +
@@ -7628,7 +7628,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     (cumulative escalation tiers — rung N requires rungs 1..N-1 too, highest qualifying rung's
     magnitude replaces the base). Both inherit `SituationRequirementMixin` (#2623, ADR-0154) —
     four typed, nullable/blank parameter columns (Situation Parameters): `threshold_percent`
-    (0-100), `count_threshold`, `affinity` (`AffinityType` axis), `origin_side`
+    (0-100), `count_threshold`, `affinity` (FK to `Affinity`), `origin_side`
     (`SituationOriginSide.OURS`/`THEIRS`, blank = side-blind). No JSON (ADR-0007). Which
     situation reads/requires which params is `SITUATION_PARAM_SPECS`
     (`world.covenants.perks.constants`); the mixin's `clean()` enforces both directions. All
@@ -7636,7 +7636,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     code-defined library (15 values as of #2646: slice 1's 9 plus `CHAMPION_DUEL`,
     `COMBAT_OPENED_FROM_PARLEY`, `AMBUSH_UNDERWAY`, `ALLY_INTERCEPTED_FOR_ME`, and
     `ATTACKER_AFFINITY` — the Abyssal-only attacker-typing situation renamed and parameterized to
-    all three `AffinityType` axes by #2623 — plus `ON_CHOSEN_GROUND` (#2646)) with a registered
+    all three affinity rows by #2623 — plus `ON_CHOSEN_GROUND` (#2646)) with a registered
     evaluator per value
     (`world.covenants.perks.evaluators.SITUATION_EVALUATORS`) — attaching a situation to a perk
     (and tuning its params) is content; adding a new situation to the library is code.
@@ -8204,7 +8204,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `PreparedGround` (Room Features section below) for how a ground gets prepared. Read by
     `Situation.ON_CHOSEN_GROUND`, which mirrors `Situation.CHAMPION_DUEL`'s shape exactly (one
     cached FK read off the resolution's participant, False outside combat).
-  - `CombatOpponent.affinity` (`AffinityType` CharField, blank default) — authored magical
+  - `CombatOpponent.affinity` (nullable FK to `Affinity`) — authored magical
     affinity typing for non-persona/generic NPCs that carry no `CharacterAura` row to infer
     from. Read by `Situation.ATTACKER_AFFINITY`'s evaluator FIRST against the row's required
     `affinity` Situation Parameter (authored typing wins outright when present, matching that

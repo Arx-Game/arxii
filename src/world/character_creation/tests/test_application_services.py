@@ -41,6 +41,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.seeds_cast import get_standalone_cast_template
 from world.roster.seeds import ensure_rosters
@@ -634,6 +635,7 @@ class ApproveApplicationIntegrationTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        ensure_canonical_affinities()
         from decimal import Decimal
 
         from world.character_sheets.models import Gender

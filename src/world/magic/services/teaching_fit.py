@@ -87,9 +87,16 @@ def gift_affinity_for(sheet: CharacterSheet, gift: Gift | None) -> Affinity | No
 
 
 def student_traits(sheet: CharacterSheet) -> StudentTraits:
-    """The sheet's Major Gift and its Gift thread's affinity, what teaching fit reads."""
-    gift = major_gift_for(sheet)
-    return StudentTraits(major_gift=gift, affinity=gift_affinity_for(sheet, gift))
+    """The sheet's Major Gift and its aura's dominant affinity, what teaching fit reads.
+
+    The affinity follows the student's current aura, so it changes when the aura does;
+    ``gift_affinity_for`` stays for character creation, before an aura exists.
+    """
+    from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
+
+    aura = magical_profile(sheet)
+    affinity = aura.dominant_affinity if aura is not None and aura.cached_shares else None
+    return StudentTraits(major_gift=major_gift_for(sheet), affinity=affinity)
 
 
 def student_fit(tradition: Tradition | None, student: StudentTraits) -> TeachingFit:

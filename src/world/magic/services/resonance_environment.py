@@ -32,7 +32,6 @@ from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.aura import CharacterAura
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.services.magic_skills import activity_skill_terms
-from world.magic.types.aura import AffinityType
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
@@ -339,7 +338,7 @@ def _enriched_raw(
     """
     raw = Decimal(0)
     for g_aff in all_working:
-        g_alignment = getattr(aura, g_aff.name.lower(), Decimal("0.00")) / Decimal(100)
+        g_alignment = aura.percent_for(g_aff) / Decimal(100)
         for p_aff, p_mag in place_magnitudes.items():
             g_p = AffinityInteraction.objects.interaction_for(g_aff, p_aff)
             if g_p is None or g_p.valence != primary_valence:
@@ -409,12 +408,9 @@ def _working_affinity_presence_time(
     except CharacterAura.DoesNotExist:
         return None, None
 
-    dominant_type: AffinityType = aura.dominant_affinity
-    # Map AffinityType enum value ("celestial", "primal", "abyssal") to Affinity
-    try:
-        working_affinity = Affinity.objects.get(name__iexact=dominant_type.value)
-    except Affinity.DoesNotExist:
+    if not aura.cached_shares:
         return None, None
+    working_affinity = aura.dominant_affinity
 
     interaction = AffinityInteraction.objects.interaction_for(working_affinity, place_affinity)
     if interaction is None:
@@ -506,8 +502,7 @@ def evaluate_resonance_environment(
     except CharacterAura.DoesNotExist:
         return _inert()
 
-    aura_field = working_affinity.name.lower()
-    caster_aura_value: Decimal = getattr(aura, aura_field, Decimal("0.00"))
+    caster_aura_value: Decimal = aura.percent_for(working_affinity)
     caster_alignment = caster_aura_value / Decimal(100)
 
     # Step 6 (enriched): see _enriched_raw for formula details.

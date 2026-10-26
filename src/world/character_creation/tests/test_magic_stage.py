@@ -37,6 +37,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import CharacterAnima
 from world.magic.seeds_cast import get_standalone_cast_template
@@ -292,6 +293,9 @@ class MagicStageValidationTest(TestCase):
 class MagicFinalizationCGSeedingTest(TestCase):
     """finalize_magic_data seeds CharacterAnima and FatiguePool at CG completion (Phase 12)."""
 
+    def setUp(self):
+        ensure_canonical_affinities()
+
     def _make_draft_and_sheet(self):
         sheet = CharacterSheetFactory()
         # CharacterTradition creation is unconditional (#2426) — a tradition is
@@ -358,6 +362,9 @@ class AcademyEntranceObligationTest(TestCase):
     state, #3675), never its name; a defensive, logged skip covers an unseeded
     Academy.
     """
+
+    def setUp(self):
+        ensure_canonical_affinities()
 
     def _make_draft_and_sheet(self, *, tradition_name: str, self_taught: bool = False):
         sheet = CharacterSheetFactory()
@@ -433,6 +440,9 @@ class GiftGrantNotificationTest(TestCase):
     """Gift/technique grant during magic-stage finalization queues an ABILITY
     NarrativeMessage (#1606, updated to the catalog gift/technique contract #2426).
     """
+
+    def setUp(self):
+        ensure_canonical_affinities()
 
     def _make_draft_and_sheet(self):
         gift = GiftFactory(name="Umbral Sight")

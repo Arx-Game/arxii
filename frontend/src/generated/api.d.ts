@@ -30295,23 +30295,10 @@ export interface components {
       readonly id: number;
       /** @description The character this aura belongs to. */
       character: number;
-      /**
-       * Format: decimal
-       * @description Percentage of Celestial affinity (0-100).
-       */
-      celestial?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Primal affinity (0-100).
-       */
-      primal?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Abyssal affinity (0-100).
-       */
-      abyssal?: string;
+      readonly shares: components['schemas']['CharacterAuraShare'][];
+      /** @description The dominant affinity's name, blank before the aura holds any share. */
       readonly dominant_affinity: string;
-      /** @description Return the display label for the dominant affinity. */
+      /** @description The dominant affinity's name for display. */
       readonly dominant_affinity_display: string;
       /**
        * @description Deferral/progress state of the Glimpse (#2427). Cache of prose+tag truth — maintained by world.magic.services.glimpse, never written directly.
@@ -30328,21 +30315,16 @@ export interface components {
     CharacterAuraRequest: {
       /** @description The character this aura belongs to. */
       character: number;
+    };
+    /** @description One affinity's share of an aura. */
+    CharacterAuraShare: {
+      readonly affinity_id: number;
+      readonly affinity_name: string;
       /**
        * Format: decimal
-       * @description Percentage of Celestial affinity (0-100).
+       * @description This affinity's share of the aura, 0-100.
        */
-      celestial?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Primal affinity (0-100).
-       */
-      primal?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Abyssal affinity (0-100).
-       */
-      abyssal?: string;
+      readonly percent: string;
     };
     /** @description Full serializer for character class detail with core traits. */
     CharacterClass: {
@@ -44557,21 +44539,6 @@ export interface components {
     PatchedCharacterAuraRequest: {
       /** @description The character this aura belongs to. */
       character?: number;
-      /**
-       * Format: decimal
-       * @description Percentage of Celestial affinity (0-100).
-       */
-      celestial?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Primal affinity (0-100).
-       */
-      primal?: string;
-      /**
-       * Format: decimal
-       * @description Percentage of Abyssal affinity (0-100).
-       */
-      abyssal?: string;
     };
     /** @description Serializer for character drafts. */
     PatchedCharacterDraftRequest: {

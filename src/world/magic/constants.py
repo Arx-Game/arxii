@@ -797,3 +797,18 @@ class MagicActivity(models.TextChoices):
     CEREMONY = "ceremony", "Ceremony"
     COMPANION_BINDING = "companion_binding", "Companion binding"
     DREAM_PERIL = "dream_peril", "Dream peril"
+
+
+# Names of the three canonical Affinity rows. Looked up by the
+# ``Affinity.objects.get_*_affinity()`` getters; never matched anywhere else.
+AFFINITY_CELESTIAL = "Celestial"
+AFFINITY_PRIMAL = "Primal"
+AFFINITY_ABYSSAL = "Abyssal"
+
+
+class FeedingTaintRole(models.TextChoices):
+    """Which feeding-taint rule a CompromiseActType row stands for."""
+
+    MURDER = "murder", "Murder"
+    SEDUCTION_DECEPTION = "seduction_deception", "Seduction by deception"
+    SEDUCTION_PREDATION = "seduction_predation", "Seduction by predation"

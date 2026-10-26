@@ -204,9 +204,12 @@ function mockPayload(
 function makeAura(overrides: Partial<CharacterSheetAura> = {}): CharacterSheetAura {
   return {
     id: 42,
-    celestial: 10,
-    primal: 70,
-    abyssal: 20,
+    shares: [
+      { affinity_id: 2, affinity_name: 'Primal', percent: 70 },
+      { affinity_id: 3, affinity_name: 'Abyssal', percent: 20 },
+      { affinity_id: 1, affinity_name: 'Celestial', percent: 10 },
+    ],
+    dominant_affinity: 'Primal',
     glimpse_story: 'A candle guttered and did not go out.',
     glimpse_state: 'COMPLETE',
     glimpse_tags: [],
@@ -285,7 +288,18 @@ describe('SpellbookTab', () => {
   it('draws the aura as a proportional strip and says the split in words (#3898)', () => {
     // The spec asks for three segments sized by their share, with the split in words
     // beside them. The strip carries the proportions; the figures never reach the page.
-    mockPayload(makeMagic({ aura: makeAura({ celestial: 20, primal: 30, abyssal: 50 }) }));
+    mockPayload(
+      makeMagic({
+        aura: makeAura({
+          shares: [
+            { affinity_id: 3, affinity_name: 'Abyssal', percent: 50 },
+            { affinity_id: 2, affinity_name: 'Primal', percent: 30 },
+            { affinity_id: 1, affinity_name: 'Celestial', percent: 20 },
+          ],
+          dominant_affinity: 'Abyssal',
+        }),
+      })
+    );
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
 
     const strip = screen.getByTestId('spellbook-aura-strip');
@@ -319,7 +333,7 @@ describe('SpellbookTab', () => {
   });
 
   it('draws no strip for an aura with nothing in it', () => {
-    mockPayload(makeMagic({ aura: makeAura({ celestial: 0, primal: 0, abyssal: 0 }) }));
+    mockPayload(makeMagic({ aura: makeAura({ shares: [], dominant_affinity: '' }) }));
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
     expect(screen.queryByTestId('spellbook-aura-strip')).not.toBeInTheDocument();
   });

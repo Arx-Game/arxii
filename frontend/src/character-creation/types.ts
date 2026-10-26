@@ -530,12 +530,6 @@ export interface StatDefinition {
 // =============================================================================
 
 /**
- * The three fundamental affinity types in the magic system.
- */
-export const AFFINITY_TYPES = ['celestial', 'primal', 'abyssal'] as const;
-export type AffinityType = (typeof AFFINITY_TYPES)[number];
-
-/**
  * One standard schooling stance under a `living_masters` tradition (#3675).
  * Embedded on `Tradition.schooling`.
  */

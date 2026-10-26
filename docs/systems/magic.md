@@ -23,7 +23,7 @@ Techniques are the primary magical abilities, powered by intensity and control s
 
 ```python
 from world.magic.types import (
-    AffinityType,        # CELESTIAL, PRIMAL, ABYSSAL
+    AffinityShare,       # one affinity row + its percent
     AnimaRitualCategory, # SOLITARY, COLLABORATIVE, ENVIRONMENTAL, CEREMONIAL
 )
 
@@ -80,7 +80,7 @@ and the 5-axis Thread model no longer exist.
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
-| `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target`. Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
+| `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick), optional OneToOne `modifier_target`. Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne. Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
 
 **Note:** `Affinity` and `Resonance` are proper first-class domain models in
@@ -94,7 +94,7 @@ part of the Resonance Pivot — relationship flavor is now carried by
 
 | Model | Purpose | Key Fields | Relationship |
 |-------|---------|------------|--------------|
-| `CharacterAura` | Affinity percentages (must sum to 100) | `celestial`, `primal`, `abyssal` | OneToOne via `character.aura` |
+| `CharacterAura` | A character's aura. The percentages live in `CharacterAuraShare` rows (one per aura and affinity, `percent` 0-100, summing to 100; see `cached_shares`, `percent_for(affinity)`, `dominant_affinity`) | `character`, `glimpse_story`, `glimpse_state` | OneToOne via `character.aura` |
 | `CharacterResonance` | Per-character per-resonance identity + currency (Spec A §2.2) | `character_sheet` FK, `resonance` FK, `balance`, `lifetime_earned`, `claimed_at`, `flavor_text` | FK via `character_sheet.resonances` (unique_together: (character_sheet, resonance)) |
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
 | `CharacterTechnique` | Known techniques; the character's hold carries their own personalization of it (#4099, ADR-4099) | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques), `custom_name` (display only, never a lookup key; blank = the catalog name), `custom_description` (blank = the catalog description), `price` (FK `Restriction`, PRICE kind only, nullable), `early_form` (FK `TechniqueVariant`, nullable; bought in creation before the gift thread reaches its level) | FK via `character.character_techniques` |
@@ -1774,9 +1774,11 @@ real).
   `AnimaConfig.death_harvest_multiplier` (20) × the victim's full maximum (feeder overflow
   lands in `glut`; ritual harvests pour into the pool). Fires the murder taint.
 - **Blood taints:** extraction is affinity-neutral; the METHOD taints, via authored
-  `CompromiseActType` rows resolved by name at fire time (`grant_blood_taint` in
-  `services/feeding.py`, log-skip when unauthored): "Murder by Anima Drain" (+5 Praedari),
-  and both "Seduction Feeding" rows (+1 Insidia, +1 Praedari) on every essence-kind feed.
+  `CompromiseActType` rows chosen by their `feeding_taint_role` field (`FeedingTaintRole`:
+  murder, seduction by deception, seduction by predation), never by name (`grant_blood_taint`
+  in `services/feeding.py`, log-skip when unauthored). Staff must set `feeding_taint_role` on
+  each authored act, or the taint never fires: the murder act (+5 Praedari) and both
+  seduction acts (+1 Insidia, +1 Praedari) on every essence-kind feed.
 - **Pool gate** (`resolve_pool_gate`): met → as authored; ≥2× → spectacular tier
   (stashed into `session_kwargs["anima_pool"]` for requirement-bearing session rituals;
   `ActionResult.data["spectacular"]` for solo performs); underfilled → the ritual's own
@@ -3880,7 +3882,7 @@ failure-isolated (`logger.exception`) so the resonance grant itself always stand
 
 ### Aura Drift (#1737)
 
-`CharacterAura`'s stored celestial/primal/abyssal percentages are a write-through cache,
+`CharacterAura`'s stored `CharacterAuraShare` percentages are a write-through cache,
 recomputed by `recompute_aura(character_sheet)` (`world/magic/services/aura.py`) on
 **every** `grant_resonance()` call system-wide. The formula sums
 `CharacterResonance.lifetime_earned` grouped by `Resonance.affinity` and normalizes to
@@ -4159,13 +4161,14 @@ content lives in the lore repo, never as arxii seed data:**
 aura = character.aura  # May raise DoesNotExist if not created
 
 # Get dominant affinity
-aura.dominant_affinity  # Returns AffinityType enum (CELESTIAL, PRIMAL, or ABYSSAL)
+aura.dominant_affinity  # Returns the dominant Affinity row
 
-# Validation: percentages must sum to 100
-aura.celestial = Decimal("50.00")
-aura.primal = Decimal("30.00")
-aura.abyssal = Decimal("20.00")
-aura.save()  # Calls full_clean() automatically
+# One affinity's share, by row
+aura.percent_for(Affinity.objects.get_primal_affinity())  # Decimal
+
+# Write all shares at once (must sum to 100)
+from world.magic.services.aura import set_aura_shares
+set_aura_shares(aura, [AffinityShare(affinity=celestial, percent=Decimal("50.00")), ...])
 ```
 
 ### Thread (new Spec A model)
@@ -4385,14 +4388,9 @@ character_gifts = CharacterGift.objects.filter(character=character).select_relat
 ```python
 from world.magic.models import CharacterAura
 
-aura, created = CharacterAura.objects.get_or_create(
-    character=character,
-    defaults={
-        "celestial": Decimal("0.00"),
-        "primal": Decimal("80.00"),
-        "abyssal": Decimal("20.00"),
-    }
-)
+aura, created = CharacterAura.objects.get_or_create(character=character)
+if created:
+    set_aura_shares(aura, starting_aura_shares(None))  # 80 Primal / 20 Abyssal
 ```
 
 ### Get character's techniques from a specific gift
@@ -4673,8 +4671,6 @@ tag, arity violation) surface as HTTP 400 detail.
 ### Types
 `frontend/src/character-creation/types.ts`
 - `Affinity`, `Resonance`, `Gift`, `GiftListItem`, `AnimaRitualType`
-- `AFFINITY_TYPES` constant: `['celestial', 'primal', 'abyssal']`
-- `AffinityType` type alias
 
 ### API Hooks
 `frontend/src/character-creation/queries.ts`

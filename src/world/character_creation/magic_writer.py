@@ -202,6 +202,10 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
     """The aura, its Glimpse tags by axis, and its prose (versioned through the services)."""
     from world.magic.constants import GlimpseTagAxis  # noqa: PLC0415
     from world.magic.models import CharacterAura, GlimpseTag  # noqa: PLC0415
+    from world.magic.services.aura import (  # noqa: PLC0415
+        set_aura_shares,
+        starting_aura_shares,
+    )
     from world.magic.services.glimpse import (  # noqa: PLC0415
         refresh_glimpse_state,
         set_glimpse_prose,
@@ -213,6 +217,8 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
         aura = CharacterAura(character=sheet)
         aura.full_clean()
         aura.save()
+    if not aura.cached_shares:
+        set_aura_shares(aura, starting_aura_shares(picks.resonance))
     if picks.glimpse_tag_ids:
         tags = list(GlimpseTag.objects.filter(pk__in=list(picks.glimpse_tag_ids), is_active=True))
         for axis in GlimpseTagAxis:

@@ -4,7 +4,10 @@
 One of the three magical sources — Celestial, Primal, or Abyssal — modeled as a first-class domain entity with an optional link to the modifier system. Every Resonance belongs to one Affinity.
 
 **Aura**:
-A character's soul-state expressed as percentages across the three Affinities (celestial / primal / abyssal), constrained to sum to 100. Its presence is the derived gate for whether a character can work magic at all.
+A character's soul-state expressed as a percentage share per Affinity, one `CharacterAuraShare` row per affinity, constrained to sum to 100. Its presence is the derived gate for whether a character can work magic at all.
+
+**Aura share**:
+One affinity's percentage of a character's aura: a `CharacterAuraShare` row keyed on the aura and the `Affinity` row. Code reads shares by Affinity row, never by a name or a per-affinity column.
 
 **Glimpse**:
 The narrative of a character's first magical awakening — prose living on `CharacterAura.glimpse_story`. Authored at character creation via a guided, tag-driven flow (#2427) and revisable afterward through the "finish your Glimpse later" editor on the own-character sheet.

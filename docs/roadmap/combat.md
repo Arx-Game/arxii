@@ -877,7 +877,7 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   `SituationRequirementMixin`'s four typed columns (`threshold_percent`/`count_threshold`/
   `affinity`/`origin_side`) on both `VowSituationalPerkSituation` and `VowSituationalPerkRung`,
   a per-situation `SITUATION_PARAM_SPECS` allowed/required contract, `ATTACKER_AFFINITY`
-  authorable against any `AffinityType` axis (was Abyssal-only), and
+  authorable against any affinity row (was Abyssal-only), and
   `CombatEncounter.initiated_by_pc_side` recording who sprang a fight for `origin_side`-gated
   ambush/parley perks. #2646 follow-up adds a 15th situation, `ON_CHOSEN_GROUND` — "the fight
   was won yesterday": `CombatEncounter.on_chosen_ground` is stamped at CREATE time in the three

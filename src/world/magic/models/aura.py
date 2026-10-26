@@ -11,15 +11,16 @@ from typing import ClassVar
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Prefetch
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
-from evennia_extensions.mixins import RelatedCacheClearingMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.magic.constants import GlimpseState
-from world.magic.models.affinity import Resonance
-from world.magic.types import AffinityType
+from world.magic.models.affinity import Affinity, Resonance
 
 
-class CharacterAura(SharedMemoryModel):
+class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
     """
     Tracks a character's soul-state across the three affinities.
 
@@ -32,27 +33,6 @@ class CharacterAura(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="aura",
         help_text="The character this aura belongs to.",
-    )
-    celestial = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=Decimal("0.00"),
-        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
-        help_text="Percentage of Celestial affinity (0-100).",
-    )
-    primal = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=Decimal("80.00"),
-        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
-        help_text="Percentage of Primal affinity (0-100).",
-    )
-    abyssal = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=Decimal("20.00"),
-        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
-        help_text="Percentage of Abyssal affinity (0-100).",
     )
     glimpse_story = models.TextField(
         blank=True,
@@ -78,8 +58,13 @@ class CharacterAura(SharedMemoryModel):
         return f"Aura of {self.character}"
 
     def clean(self) -> None:
-        """Validate that percentages sum to 100."""
-        total = self.celestial + self.primal + self.abyssal
+        """Validate that the held shares sum to 100 (an aura with no shares yet is fine)."""
+        if self.pk is None:
+            return
+        shares = self.cached_shares
+        if not shares:
+            return
+        total = sum((share.percent for share in shares), Decimal(0))
         if total != Decimal("100.00"):
             msg = f"Aura percentages must sum to 100, got {total}."
             raise ValidationError(msg)
@@ -88,15 +73,70 @@ class CharacterAura(SharedMemoryModel):
         self.full_clean()
         super().save(*args, **kwargs)
 
+    @PrunedCachedProperty
+    def cached_shares(self) -> list["CharacterAuraShare"]:
+        """This aura's share rows (one per affinity held), cleared by set_aura_shares.
+
+        Fed cold by a ``Prefetch`` landing on this name in the character sheet
+        serializer's magic and theming sections.
+        """
+        return list(self.shares.select_related("affinity"))
+
+    def percent_for(self, affinity: Affinity) -> Decimal:
+        """This affinity's percent of the aura; 0 when there is no row."""
+        for share in self.cached_shares:
+            if share.affinity_id == affinity.pk:
+                return share.percent
+        return Decimal(0)
+
     @property
-    def dominant_affinity(self) -> AffinityType:
-        """Return the affinity type with the highest percentage."""
-        values = [
-            (self.celestial, AffinityType.CELESTIAL),
-            (self.primal, AffinityType.PRIMAL),
-            (self.abyssal, AffinityType.ABYSSAL),
+    def dominant_affinity(self) -> Affinity:
+        """The affinity with the highest percent; ties go to the lowest Affinity pk.
+
+        Raises ValueError for an aura with no shares (not yet formed).
+        """
+        if not self.cached_shares:
+            msg = "This aura holds no affinity shares."
+            raise ValueError(msg)
+        best = min(self.cached_shares, key=lambda share: (-share.percent, share.affinity_id))
+        return best.affinity
+
+
+class CharacterAuraShare(RelatedCacheClearingMixin, SharedMemoryModel):
+    """One affinity's percentage of a character's aura (one row per affinity held)."""
+
+    related_cache_fields: ClassVar[list[str]] = ["aura"]
+
+    aura = models.ForeignKey(
+        CharacterAura,
+        on_delete=models.CASCADE,
+        related_name="shares",
+    )
+    affinity = models.ForeignKey(
+        Affinity,
+        on_delete=models.PROTECT,
+        related_name="aura_shares",
+    )
+    percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
+        help_text="This affinity's share of the aura, 0-100.",
+    )
+
+    class Meta:
+        ordering = ["aura", "affinity"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["aura", "affinity"],
+                name="unique_aura_share_per_affinity",
+            )
         ]
-        return max(values, key=lambda x: x[0])[1]
+        verbose_name = "Character Aura Share"
+        verbose_name_plural = "Character Aura Shares"
+
+    def __str__(self) -> str:
+        return f"{self.affinity} {self.percent}% of {self.aura}"
 
 
 class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
@@ -185,7 +225,12 @@ class AuraAffinityThreshold(SharedMemoryModel):
     check, not a Flows event) — see world/covenants/discovery.py.
     """
 
-    affinity = models.CharField(max_length=16, choices=AffinityType.choices)
+    affinity = models.ForeignKey(
+        "arxii.Affinity",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The affinity whose share this threshold watches.",
+    )
     threshold_percent = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -206,4 +251,16 @@ class AuraAffinityThreshold(SharedMemoryModel):
         verbose_name_plural = "Aura Affinity Thresholds"
 
     def __str__(self) -> str:
-        return f"{self.affinity} >= {self.threshold_percent}%"
+        return f"{self.affinity.name} >= {self.threshold_percent}%"
+
+
+def aura_shares_prefetch(prefix: str = "") -> Prefetch:
+    """Feeds ``CharacterAura.cached_shares``: one query for every aura's shares, affinity joined.
+
+    ``prefix`` is the path to the aura from the queryset's model ("aura__" from a sheet).
+    """
+    return Prefetch(
+        f"{prefix}shares",
+        queryset=CharacterAuraShare.objects.select_related("affinity"),
+        to_attr="cached_shares",
+    )

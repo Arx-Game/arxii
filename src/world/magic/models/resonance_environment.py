@@ -24,6 +24,7 @@ from world.magic.constants import (
     AffinityInteractionKind,
     ResonanceValence,
 )
+from world.magic.models.fall_redemption import ConversionType
 
 if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
@@ -134,6 +135,19 @@ class AffinityInteraction(SharedMemoryModel):
         default=Decimal("1.00"),
         help_text="Scales the interaction's effect magnitude.",
     )
+    conversion_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Fall/Redemption conversion multiplier along this pair. Null = no conversion.",
+    )
+    conversion_type = models.CharField(
+        max_length=16,
+        choices=ConversionType.choices,
+        blank=True,
+        help_text="Whether converting along this pair is a Fall or a Redemption. Blank = none.",
+    )
     consequence_pool = models.ForeignKey(
         "arxii.ConsequencePool",
         on_delete=models.PROTECT,
@@ -163,7 +177,14 @@ class AffinityInteraction(SharedMemoryModel):
             models.UniqueConstraint(
                 fields=["source_affinity", "environment_affinity"],
                 name="unique_affinity_interaction_pair",
-            )
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(conversion_multiplier__isnull=False) & ~models.Q(conversion_type="")
+                    | models.Q(conversion_multiplier__isnull=True, conversion_type="")
+                ),
+                name="affinity_interaction_conversion_pair_complete",
+            ),
         ]
 
     @cached_property
