@@ -431,10 +431,13 @@ from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.places import JoinPlaceAction, LeavePlaceAction
 from actions.definitions.portals import DissolvePortalAnchorAction, InstallPortalAnchorAction
 from actions.definitions.positioning import (
+    GMAttachFeatureAction,
+    GMDetachFeatureAction,
     GMPlaceInPositionAction,
     LandAction,
     MoveToPositionAction,
     PassHeldGroundAction,
+    PerformStuntAction,
     SetTheStageAction,
     StepToSquareAction,
     TakeFlightAction,
@@ -816,6 +819,9 @@ _ALL_ACTIONS: list[Action] = [
     HomeAction(),
     MoveToPositionAction(),
     PassHeldGroundAction(),
+    PerformStuntAction(),
+    GMAttachFeatureAction(),
+    GMDetachFeatureAction(),
     TakePositionAction(),
     StepToSquareAction(),
     TakeFlightAction(),

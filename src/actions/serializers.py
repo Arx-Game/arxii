@@ -72,6 +72,7 @@ class ActionRefSerializer(serializers.Serializer):
     action_slot = serializers.CharField(allow_null=True, required=False)
     position_id = serializers.IntegerField(allow_null=True, required=False)
     blueprint_id = serializers.IntegerField(allow_null=True, required=False)
+    feature_id = serializers.IntegerField(allow_null=True, required=False)
     application_id = serializers.IntegerField(allow_null=True, required=False)
     target_object_id = serializers.IntegerField(allow_null=True, required=False)
 
@@ -249,6 +250,7 @@ class _DispatchRefSerializer(serializers.Serializer):
     action_slot = serializers.CharField(allow_null=True, required=False, default=None)
     position_id = serializers.IntegerField(allow_null=True, required=False, default=None)
     blueprint_id = serializers.IntegerField(allow_null=True, required=False, default=None)
+    feature_id = serializers.IntegerField(allow_null=True, required=False, default=None)
     application_id = serializers.IntegerField(allow_null=True, required=False, default=None)
     target_object_id = serializers.IntegerField(allow_null=True, required=False, default=None)
 
@@ -297,6 +299,7 @@ class DispatchActionSerializer(serializers.Serializer):
                 action_slot=ref_data.get("action_slot"),
                 position_id=ref_data.get("position_id"),
                 blueprint_id=ref_data.get("blueprint_id"),
+                feature_id=ref_data.get("feature_id"),
                 application_id=ref_data.get("application_id"),
                 target_object_id=ref_data.get("target_object_id"),
             )

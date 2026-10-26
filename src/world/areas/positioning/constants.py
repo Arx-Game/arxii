@@ -89,6 +89,24 @@ class FeatureReach(models.TextChoices):
     ELEVATED_ADJACENT = "elevated_adjacent", "A raised place next to its own"
 
 
+class StuntOutcome(models.TextChoices):
+    """How a stunt went (#4675): reached cleanly, reached roughly, or missed."""
+
+    CLEAN = "clean", "Clean"
+    PARTIAL = "partial", "Partial"
+    MISSED = "missed", "Missed"
+
+
+# Stunt copy (#4675, slice 3 of #4651). The player's own lines, then the room's.
+STUNT_CANT_FROM_HERE = "You can't do that from here."
+STUNT_CLEAN = "You use the {feature} to reach {place}."
+STUNT_PARTIAL = "You reach {place}, but not cleanly."
+STUNT_MISSED = "You don't make it."
+STUNT_ROOM_CLEAN = "{name} uses the {feature} to reach {place}."
+STUNT_ROOM_PARTIAL = "{name} uses the {feature} to reach {place}, but not cleanly."
+STUNT_ROOM_MISSED = "{name} tries the {feature} and doesn't make it."
+
+
 class RampartCrackState(models.TextChoices):
     """Coarse integrity band for a Rampart, read off ``Rampart.crack_state``."""
 
