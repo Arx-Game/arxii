@@ -101,7 +101,7 @@ export function SaveOutfitDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Save current look</DialogTitle>
         </DialogHeader>

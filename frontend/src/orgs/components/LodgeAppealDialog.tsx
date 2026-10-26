@@ -60,7 +60,7 @@ export function LodgeAppealDialog({ orgId, orgName }: { orgId: number; orgName: 
       <DialogTrigger asChild>
         <Button data-testid="appeal-to-org-trigger">Appeal to {orgName}</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Appeal to {orgName}</DialogTitle>
         </DialogHeader>

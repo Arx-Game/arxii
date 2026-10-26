@@ -130,7 +130,7 @@ export function BoardPanel({ boardId, boardName, characterId }: BoardPanelProps)
       )}
 
       <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Post to {boardName}</DialogTitle>
           </DialogHeader>

@@ -138,7 +138,7 @@ export function RequestClearanceDialog() {
           Request Clearance
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Request custody clearance</DialogTitle>
         </DialogHeader>

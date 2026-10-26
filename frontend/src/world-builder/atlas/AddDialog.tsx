@@ -477,7 +477,7 @@ export function AddDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogTitle className="sr-only">{copy.title}</DialogTitle>
         <div className="flex flex-col gap-3">
           {offersFork && !matchedUnplacedArea && (

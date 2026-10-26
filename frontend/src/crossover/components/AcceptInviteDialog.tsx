@@ -71,7 +71,7 @@ export function AcceptInviteDialog({ invite, open, onOpenChange }: AcceptInviteD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Accept Crossover Invite</DialogTitle>

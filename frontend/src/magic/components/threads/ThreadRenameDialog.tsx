@@ -43,7 +43,7 @@ export function ThreadRenameDialog({ thread, open, onOpenChange }: ThreadRenameD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="thread-rename-dialog">
+      <DialogContent aria-describedby={undefined} data-testid="thread-rename-dialog">
         <DialogHeader>
           <DialogTitle>Edit Thread</DialogTitle>
         </DialogHeader>

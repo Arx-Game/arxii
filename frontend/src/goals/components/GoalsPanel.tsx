@@ -89,7 +89,7 @@ function LogProgressDialog({ characterId }: { characterId: number }) {
           Log Progress
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Log Goal Progress</DialogTitle>
         </DialogHeader>

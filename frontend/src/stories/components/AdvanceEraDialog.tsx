@@ -40,7 +40,7 @@ export function AdvanceEraDialog({ open, onClose, era }: AdvanceEraDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Advance to Season {era.season_number}?</DialogTitle>
         </DialogHeader>

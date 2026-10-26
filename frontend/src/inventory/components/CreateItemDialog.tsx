@@ -116,7 +116,7 @@ export function CreateItemDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Craft an item</DialogTitle>
         </DialogHeader>

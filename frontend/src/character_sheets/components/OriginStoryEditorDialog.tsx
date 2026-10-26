@@ -83,7 +83,7 @@ export function OriginStoryEditorDialog({ characterId, sheet }: OriginStoryEdito
           Finish Origin Story
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[80vh] overflow-y-auto">
+      <DialogContent aria-describedby={undefined} className="max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Origin Story</DialogTitle>
         </DialogHeader>

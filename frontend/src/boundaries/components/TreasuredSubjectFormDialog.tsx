@@ -170,7 +170,7 @@ export function TreasuredSubjectFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>
             {isEdit ? 'Edit treasured subject' : 'Flag a treasured subject'}

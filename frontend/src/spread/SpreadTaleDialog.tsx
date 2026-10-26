@@ -56,7 +56,7 @@ export function SpreadTaleDialog({ personaId }: { personaId: number }) {
           Spread a Tale
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Spread a Tale</DialogTitle>
         </DialogHeader>

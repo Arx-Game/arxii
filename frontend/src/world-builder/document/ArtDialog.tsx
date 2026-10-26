@@ -70,7 +70,7 @@ export function ArtDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent aria-describedby={undefined} className="max-w-2xl">
         <DialogTitle>Art for {subjectName}</DialogTitle>
 
         {currentArtUrl && (

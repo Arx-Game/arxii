@@ -46,7 +46,7 @@ export function PictureDetailsDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent aria-describedby={undefined} className="max-w-lg">
         <form
           className="refsheet gallery-dialog"
           onSubmit={(event) => {

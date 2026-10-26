@@ -147,7 +147,7 @@ export function NarrationComposer({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           {/* F5: "Tied to" is its own labelled chip line below, not folded
               into the title -- the title stays for the accessible name only. */}

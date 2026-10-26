@@ -79,7 +79,7 @@ export function DramaticMomentTagDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Tag Dramatic Moment</DialogTitle>
         </DialogHeader>

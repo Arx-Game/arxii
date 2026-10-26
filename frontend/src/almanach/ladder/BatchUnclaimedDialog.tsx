@@ -89,7 +89,7 @@ export function BatchUnclaimedDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="almanach max-w-md">
+      <DialogContent aria-describedby={undefined} className="almanach max-w-md">
         <DialogTitle>Batch unclaimed</DialogTitle>
         <div className="row2">
           <div className="field">

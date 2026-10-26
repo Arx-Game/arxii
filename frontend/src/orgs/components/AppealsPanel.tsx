@@ -76,7 +76,7 @@ function SignonDialog({ orgId, appeal }: { orgId: number; appeal: OrgAppeal }) {
           Sign On
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Sign onto &ldquo;{appeal.title}&rdquo;</DialogTitle>
         </DialogHeader>
@@ -127,7 +127,7 @@ function ResolveDialog({ orgId, appeal }: { orgId: number; appeal: OrgAppeal }) 
           Resolve
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Resolve &ldquo;{appeal.title}&rdquo;</DialogTitle>
         </DialogHeader>

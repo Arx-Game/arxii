@@ -55,7 +55,7 @@ export function PutInDialog({ open, onOpenChange, containers, onConfirm }: PutIn
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Put item in…</DialogTitle>
         </DialogHeader>

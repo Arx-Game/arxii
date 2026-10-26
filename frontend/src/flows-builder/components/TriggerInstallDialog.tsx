@@ -112,7 +112,7 @@ export function TriggerInstallDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Install a trigger</DialogTitle>
         </DialogHeader>

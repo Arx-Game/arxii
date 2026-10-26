@@ -102,6 +102,7 @@ export function GlimpseEditorDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        aria-describedby={undefined}
         className="max-h-[90vh] max-w-2xl overflow-y-auto"
         data-testid="glimpse-editor-dialog"
       >

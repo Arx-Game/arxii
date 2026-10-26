@@ -46,7 +46,7 @@ export function AddLookFlow({ open, entryId, sheetId, ink, onClose }: AddLookFlo
   return (
     <>
       <Dialog open={open && cropping === null} onOpenChange={(next) => !next && onClose()}>
-        <DialogContent className="max-w-lg">
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
           <div className="refsheet gallery-dialog">
             <DialogTitle className="gallery-dialog-title">Add a look</DialogTitle>
             <div className="gallery-pick">

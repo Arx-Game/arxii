@@ -100,7 +100,7 @@ export function EraFormDialog({ open, onClose, era }: EraFormDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent aria-describedby={undefined} className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit Era' : 'Create Era'}</DialogTitle>
         </DialogHeader>

@@ -75,7 +75,7 @@ export function GiveMissionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Give mission to {targetPersonaName}</DialogTitle>
         </DialogHeader>

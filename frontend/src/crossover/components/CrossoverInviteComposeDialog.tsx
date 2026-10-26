@@ -142,7 +142,7 @@ export function CrossoverInviteComposeDialog({
           Invite Story to Crossover
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Send Crossover Invite</DialogTitle>

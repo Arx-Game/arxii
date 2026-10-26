@@ -111,7 +111,7 @@ export function EstateLeaf({ estate, onPlan }: EstateLeafProps) {
           if (!next) setPlanOpen(false);
         }}
       >
-        <DialogContent className="almanach max-w-md">
+        <DialogContent aria-describedby={undefined} className="almanach max-w-md">
           <DialogTitle>Plan the estate</DialogTitle>
           <div className="field">
             <Label htmlFor="plan-estate-name">name</Label>

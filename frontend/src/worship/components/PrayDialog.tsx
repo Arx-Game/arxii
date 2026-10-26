@@ -77,7 +77,7 @@ export function PrayDialog({ characterId, defaultBeingId }: PrayDialogProps) {
           Pray
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Pray</DialogTitle>

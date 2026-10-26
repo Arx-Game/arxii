@@ -71,7 +71,7 @@ export function ExitEditorDialog({ open, onOpenChange, exit, runAction }: ExitEd
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogTitle>Exit: {exit.name}</DialogTitle>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">

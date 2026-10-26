@@ -63,7 +63,7 @@ export function ReportMissionDialog({ instanceId, templateName }: ReportMissionD
           Report in
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Report {templateName}</DialogTitle>
         </DialogHeader>

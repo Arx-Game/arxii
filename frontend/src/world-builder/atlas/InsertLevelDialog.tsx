@@ -50,7 +50,11 @@ export function InsertLevelDialog({ between, onClose, onConfirm }: InsertLevelDi
 
   return (
     <Dialog open={between != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md" data-testid="insert-level-dialog">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-w-md"
+        data-testid="insert-level-dialog"
+      >
         <DialogTitle className="font-body text-base font-normal">
           {between ? `Insert between ${between.upper.name} and ${between.lower.name}` : ''}
         </DialogTitle>

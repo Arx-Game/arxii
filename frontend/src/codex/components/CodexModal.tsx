@@ -150,7 +150,10 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
         onOpenChange(open);
       }}
     >
-      <DialogContent className={cn('sm:max-w-md', entry && !entry.is_public && 'codex-restricted')}>
+      <DialogContent
+        aria-describedby={undefined}
+        className={cn('sm:max-w-md', entry && !entry.is_public && 'codex-restricted')}
+      >
         {renderEntry()}
       </DialogContent>
     </Dialog>

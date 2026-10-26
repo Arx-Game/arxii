@@ -72,7 +72,7 @@ export function UnseenPresenceRow({ viewerPersonaId }: UnseenPresenceRowProps) {
         )}
       </div>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Report unseen presence</DialogTitle>
           </DialogHeader>

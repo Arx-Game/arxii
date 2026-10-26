@@ -549,7 +549,7 @@ function AddOpponentDialog({
           Add Opponent
         </Button>
       </DialogTrigger>
-      <DialogContent data-testid="add-opponent-dialog">
+      <DialogContent aria-describedby={undefined} data-testid="add-opponent-dialog">
         <DialogHeader>
           <DialogTitle>Add Opponent</DialogTitle>
         </DialogHeader>
@@ -921,7 +921,7 @@ function AddParticipantDialog({ encounterId }: { encounterId: number }) {
           Add PC
         </Button>
       </DialogTrigger>
-      <DialogContent data-testid="add-participant-dialog">
+      <DialogContent aria-describedby={undefined} data-testid="add-participant-dialog">
         <DialogHeader>
           <DialogTitle>Add PC</DialogTitle>
         </DialogHeader>
@@ -1055,7 +1055,7 @@ function StartLethalDuelDialog({ sceneId }: { sceneId: number }) {
           Start Lethal Duel
         </Button>
       </DialogTrigger>
-      <DialogContent data-testid="start-lethal-duel-dialog">
+      <DialogContent aria-describedby={undefined} data-testid="start-lethal-duel-dialog">
         <DialogHeader>
           <DialogTitle>Start Lethal Duel</DialogTitle>
         </DialogHeader>

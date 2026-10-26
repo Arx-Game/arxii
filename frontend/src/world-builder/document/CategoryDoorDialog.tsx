@@ -107,7 +107,10 @@ export function CategoryDoorDialog({
 }: CategoryDoorDialogProps) {
   return (
     <Dialog open={door != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-h-[80vh] max-w-2xl overflow-y-auto"
+      >
         {door != null && (
           <>
             <DialogTitle>

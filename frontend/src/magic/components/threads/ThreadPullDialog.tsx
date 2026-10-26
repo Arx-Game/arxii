@@ -192,7 +192,11 @@ export function ThreadPullDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg" data-testid="thread-pull-dialog">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-w-lg"
+        data-testid="thread-pull-dialog"
+      >
         <DialogHeader>
           <DialogTitle>Pull Threads</DialogTitle>
         </DialogHeader>

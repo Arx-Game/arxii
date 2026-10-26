@@ -106,7 +106,7 @@ export function DigRoomDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Dig world room</DialogTitle>
           {areaBreadcrumb && (

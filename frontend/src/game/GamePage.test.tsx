@@ -40,6 +40,14 @@ import type { EncounterDetail } from '@/combat/types';
 
 const ACTIVE_NAME = 'Aria';
 
+// Dispatch inside act(): the page is mounted for most of these, and a store
+// update outside act() is a React warning that fails the test (#4677).
+function dispatch(action: Parameters<typeof store.dispatch>[0]): void {
+  act(() => {
+    store.dispatch(action);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Mock the roster query — GamePage now derives `personaId` from it directly
 // (lifted from GameWindow, #2156 review fold-in) and GameWindow/PoseUnit's
@@ -329,8 +337,8 @@ vi.mock('@/scenes/components/EndorsementControl', () => ({
 }));
 
 function seedActiveSceneWithPose() {
-  store.dispatch(startSession(ACTIVE_NAME));
-  store.dispatch(
+  dispatch(startSession(ACTIVE_NAME));
+  dispatch(
     setSessionScene({
       character: ACTIVE_NAME,
       scene: {
@@ -354,7 +362,7 @@ function seedActiveSceneWithPose() {
     receiver_persona_ids: [],
     target_persona_ids: [],
   };
-  store.dispatch(addSceneInteraction({ character: ACTIVE_NAME, interaction }));
+  dispatch(addSceneInteraction({ character: ACTIVE_NAME, interaction }));
 }
 
 // Seeds a second, distinct thread (a whisper to persona 9) alongside the room
@@ -373,7 +381,7 @@ function seedWhisperThread() {
     receiver_persona_ids: [9],
     target_persona_ids: [],
   };
-  store.dispatch(addSceneInteraction({ character: ACTIVE_NAME, interaction }));
+  dispatch(addSceneInteraction({ character: ACTIVE_NAME, interaction }));
 }
 
 // Seeds both room AND scene (#2156 Task 6) — real ROOM_STATE broadcasts always
@@ -381,8 +389,8 @@ function seedWhisperThread() {
 // Place-bar/isAtPlace room id from `session.room.id`, so the toolset needs a
 // seeded room to mount PlaceBar and derive `isAtPlace` at all.
 function seedActiveSceneWithRoom(viewerPlaceId: number | null = null) {
-  store.dispatch(startSession(ACTIVE_NAME));
-  store.dispatch(
+  dispatch(startSession(ACTIVE_NAME));
+  dispatch(
     setSessionRoom({
       character: ACTIVE_NAME,
       room: {
@@ -400,7 +408,7 @@ function seedActiveSceneWithRoom(viewerPlaceId: number | null = null) {
       },
     })
   );
-  store.dispatch(
+  dispatch(
     setSessionScene({
       character: ACTIVE_NAME,
       scene: {
@@ -437,7 +445,7 @@ function blockOf(element: HTMLElement): HTMLElement {
 
 describe('GamePage', () => {
   beforeEach(() => {
-    store.dispatch(setAccount(null));
+    dispatch(setAccount(null));
     // #2165: the save effect now writes real localStorage during render, so
     // clear between tests to keep them isolated from each other.
     localStorage.clear();
@@ -450,7 +458,7 @@ describe('GamePage', () => {
   });
 
   afterEach(() => {
-    store.dispatch(resetGame());
+    dispatch(resetGame());
   });
 
   it('prompts to log in when not authenticated', () => {
@@ -461,9 +469,9 @@ describe('GamePage', () => {
   });
 
   it('a fresh connection poses what is typed instead of sending it verbatim (#3857)', async () => {
-    store.dispatch(setAccount(mockAccount));
-    store.dispatch(startSession(ACTIVE_NAME));
-    store.dispatch(
+    dispatch(setAccount(mockAccount));
+    dispatch(startSession(ACTIVE_NAME));
+    dispatch(
       setSessionRoom({
         character: ACTIVE_NAME,
         room: {
@@ -481,7 +489,7 @@ describe('GamePage', () => {
         },
       })
     );
-    store.dispatch(setSessionConnectionStatus({ character: ACTIVE_NAME, status: true }));
+    dispatch(setSessionConnectionStatus({ character: ACTIVE_NAME, status: true }));
 
     renderWithProviders(<GamePage />);
 
@@ -493,7 +501,7 @@ describe('GamePage', () => {
   });
 
   it('shows game interface when authenticated', () => {
-    store.dispatch(setAccount(mockAccount));
+    dispatch(setAccount(mockAccount));
     renderWithProviders(<GamePage />);
     expect(screen.queryByText(/you must be logged in/i)).not.toBeInTheDocument();
   });
@@ -504,7 +512,7 @@ describe('GamePage', () => {
 
   describe('structured scene feed + conversation rail', () => {
     it('renders a pose-unit bubble and the conversation rail when a scene is active', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
 
       renderWithProviders(<GamePage />);
@@ -518,7 +526,7 @@ describe('GamePage', () => {
       // conversation alone, the room row the room's own lines, and All the
       // whole feed. See the "conversation rail (#4129)" block below for the
       // composer side of that contract.
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
 
@@ -561,7 +569,7 @@ describe('GamePage', () => {
     });
 
     it('marks the selected thread seen as it grows, while other threads accumulate unread badges (#2156)', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
 
@@ -592,7 +600,7 @@ describe('GamePage', () => {
       await user.click(whisperButton());
 
       // A new pose arrives in the (unselected) room thread from someone else.
-      store.dispatch(
+      dispatch(
         addSceneInteraction({
           character: ACTIVE_NAME,
           interaction: {
@@ -625,7 +633,7 @@ describe('GamePage', () => {
       // the SCENE once at load instead, so a thread with no prior
       // `threadLastSeen` entry falls back to that scene baseline and counts
       // unread from message one.
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
 
       const user = userEvent.setup();
@@ -646,7 +654,7 @@ describe('GamePage', () => {
       // A brand-new whisper thread arrives mid-session — the very first
       // message anyone has ever sent in it, from someone other than the
       // viewer, while it's unselected.
-      store.dispatch(
+      dispatch(
         addSceneInteraction({
           character: ACTIVE_NAME,
           interaction: {
@@ -691,7 +699,7 @@ describe('GamePage', () => {
       // stayed null for the rest of the scene and new-thread badging died.
       // Fix: `clearSceneInteractions` no longer touches `sceneBaselineId` —
       // only an actual scene-id change (via `setSessionScene`) resets it.
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
 
       renderWithProviders(<GamePage />);
@@ -701,13 +709,13 @@ describe('GamePage', () => {
       // Simulate room churn: someone enters/leaves, the backend broadcasts
       // ROOM_STATE for the SAME scene, and handleRoomStatePayload dispatches
       // clearSceneInteractions.
-      store.dispatch(clearSceneInteractions(ACTIVE_NAME));
+      dispatch(clearSceneInteractions(ACTIVE_NAME));
 
       const sidebar = screen.getByLabelText('Conversations');
 
       // A first-ever whisper arrives after the churn, from someone other than
       // the viewer, while it's unselected.
-      store.dispatch(
+      dispatch(
         addSceneInteraction({
           character: ACTIVE_NAME,
           interaction: {
@@ -744,7 +752,7 @@ describe('GamePage', () => {
       // remounts on route change). A thread filter picked in the OLD scene
       // must not silently keep hiding interactions once the puppet moves
       // into a brand-new scene.
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
 
@@ -766,7 +774,7 @@ describe('GamePage', () => {
       expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
 
       // The puppet moves into an entirely new scene.
-      store.dispatch(
+      dispatch(
         setSessionScene({
           character: ACTIVE_NAME,
           scene: {
@@ -778,7 +786,7 @@ describe('GamePage', () => {
           },
         })
       );
-      store.dispatch(
+      dispatch(
         addSceneInteraction({
           character: ACTIVE_NAME,
           interaction: {
@@ -810,11 +818,11 @@ describe('GamePage', () => {
       // (the ref now held "200") and wiped A's badge back to 0. Gating on the
       // per-puppet Redux `sceneBaselineId == null` instead means A's own
       // baseline, once set, survives any number of puppet round trips.
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
-      store.dispatch(startSession(SECOND_NAME));
-      store.dispatch(
+      dispatch(startSession(SECOND_NAME));
+      dispatch(
         setSessionScene({
           character: SECOND_NAME,
           scene: {
@@ -828,7 +836,7 @@ describe('GamePage', () => {
       );
       // startSession(SECOND_NAME) above made Bianca active — switch back to
       // Aria before rendering (this test starts with Aria in view).
-      store.dispatch(setActiveSession(ACTIVE_NAME));
+      dispatch(setActiveSession(ACTIVE_NAME));
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
@@ -852,7 +860,7 @@ describe('GamePage', () => {
       // Select the whisper thread so the (now unselected) room thread
       // accumulates unread from a new arrival.
       await user.click(whisperButton());
-      store.dispatch(
+      dispatch(
         addSceneInteraction({
           character: ACTIVE_NAME,
           interaction: {
@@ -874,8 +882,8 @@ describe('GamePage', () => {
       });
 
       // Round-trip through puppet B, who is in a completely different scene.
-      store.dispatch(setActiveSession(SECOND_NAME));
-      store.dispatch(setActiveSession(ACTIVE_NAME));
+      dispatch(setActiveSession(SECOND_NAME));
+      dispatch(setActiveSession(ACTIVE_NAME));
 
       // Puppet A's room-thread badge must still read 1 — not wiped by the
       // round trip.
@@ -892,9 +900,9 @@ describe('GamePage', () => {
       // message never badged. Fix: store `0` as the "baselined empty" sentinel
       // (interaction ids are DB pks and never 0), and `countUnread` treats any
       // number, including 0, as a live threshold.
-      store.dispatch(setAccount(mockAccount));
-      store.dispatch(startSession(ACTIVE_NAME));
-      store.dispatch(
+      dispatch(setAccount(mockAccount));
+      dispatch(startSession(ACTIVE_NAME));
+      dispatch(
         setSessionScene({
           character: ACTIVE_NAME,
           scene: {
@@ -912,7 +920,7 @@ describe('GamePage', () => {
 
       await screen.findByLabelText('Conversations');
 
-      store.dispatch(
+      dispatch(
         addSceneInteraction({
           character: ACTIVE_NAME,
           interaction: {
@@ -942,8 +950,8 @@ describe('GamePage', () => {
     });
 
     it('falls back to the quiet-room reader with no active scene; the rail stays, with the room row alone', () => {
-      store.dispatch(setAccount(mockAccount));
-      store.dispatch(startSession(ACTIVE_NAME));
+      dispatch(setAccount(mockAccount));
+      dispatch(startSession(ACTIVE_NAME));
 
       renderWithProviders(<GamePage />);
 
@@ -960,7 +968,7 @@ describe('GamePage', () => {
   // ---------------------------------------------------------------------------
 
   it('shows the active character on the speaking-as composer chip', async () => {
-    store.dispatch(setAccount(mockAccount));
+    dispatch(setAccount(mockAccount));
     seedActiveSceneWithPose();
 
     renderWithProviders(<GamePage />);
@@ -977,7 +985,7 @@ describe('GamePage', () => {
 
   describe('feed filter chips (#3856)', () => {
     it('shows the strip above the scene feed; All switches the column off, a chip brings one kind back', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
 
       renderWithProviders(<GamePage />);
@@ -1001,9 +1009,9 @@ describe('GamePage', () => {
     });
 
     it('pressing Roleplay hides the poses while a note keeps showing, and the layout persists per account', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
-      store.dispatch(
+      dispatch(
         addFeedNote({
           character: ACTIVE_NAME,
           note: {
@@ -1027,7 +1035,7 @@ describe('GamePage', () => {
     });
 
     it('minimizes a pose to a stub, reopens it, and dismisses it from this view only', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
 
       renderWithProviders(<GamePage />);
@@ -1047,9 +1055,9 @@ describe('GamePage', () => {
 
   describe('Show hidden recovery (#4029)', () => {
     it('restores dismissed pose and note together in their prior order, then focuses All', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
-      store.dispatch(
+      dispatch(
         addFeedNote({
           character: ACTIVE_NAME,
           note: {
@@ -1093,7 +1101,7 @@ describe('GamePage', () => {
     });
 
     it('remains available with All off, and respects All and chip filters when restoring', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       renderWithProviders(<GamePage />);
       const pose = await screen.findByText('stretches languidly.');
@@ -1124,7 +1132,7 @@ describe('GamePage', () => {
     });
 
     it('recovers from the keyboard with Enter and Space and returns focus to All', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
@@ -1152,9 +1160,9 @@ describe('GamePage', () => {
     });
 
     it('restores a quiet-room ambient interaction without a scene', async () => {
-      store.dispatch(setAccount(mockAccount));
-      store.dispatch(startSession(ACTIVE_NAME));
-      store.dispatch(
+      dispatch(setAccount(mockAccount));
+      dispatch(startSession(ACTIVE_NAME));
+      dispatch(
         setSessionRoom({
           character: ACTIVE_NAME,
           room: {
@@ -1172,7 +1180,7 @@ describe('GamePage', () => {
           },
         })
       );
-      store.dispatch(
+      dispatch(
         addAmbientInteraction({
           character: ACTIVE_NAME,
           interaction: {
@@ -1198,7 +1206,7 @@ describe('GamePage', () => {
     });
 
     it('recovers a dismissed minimized stub as an expanded block', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       renderWithProviders(<GamePage />);
       const pose = await screen.findByText('stretches languidly.');
@@ -1216,7 +1224,7 @@ describe('GamePage', () => {
     });
 
     it('a picked conversation shows a hidden line in full; All keeps it hidden until Show hidden (#4129)', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
       renderWithProviders(<GamePage />);
@@ -1244,9 +1252,9 @@ describe('GamePage', () => {
     });
 
     it('does not show live restore inside historical reference', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
-      store.dispatch(dismissFeedItem({ character: ACTIVE_NAME, key: 'i:1' }));
+      dispatch(dismissFeedItem({ character: ACTIVE_NAME, key: 'i:1' }));
       renderWithProviders(<GamePage />, {
         initialEntries: ['/game?referenceKind=scene&referenceKey=scene:100'],
       });
@@ -1259,9 +1267,9 @@ describe('GamePage', () => {
     });
 
     it('does not widen a restored whisper to another character outside its audience', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
-      store.dispatch(
+      dispatch(
         addSceneInteraction({
           character: ACTIVE_NAME,
           interaction: {
@@ -1278,8 +1286,8 @@ describe('GamePage', () => {
           },
         })
       );
-      store.dispatch(startSession(SECOND_NAME));
-      store.dispatch(
+      dispatch(startSession(SECOND_NAME));
+      dispatch(
         setSessionScene({
           character: SECOND_NAME,
           scene: {
@@ -1293,8 +1301,8 @@ describe('GamePage', () => {
       );
       // Even an identical key on the other puppet's session must not fetch
       // or expose Aria's whisper; audience 7 does not include Bianca (8).
-      store.dispatch(dismissFeedItem({ character: SECOND_NAME, key: 'i:90' }));
-      store.dispatch(setActiveSession(ACTIVE_NAME));
+      dispatch(dismissFeedItem({ character: SECOND_NAME, key: 'i:90' }));
+      dispatch(setActiveSession(ACTIVE_NAME));
       renderWithProviders(<GamePage />);
       const whisper = await screen.findByText('a secret only Aria hears.');
       await hideBlock(whisper.closest('[data-feed-block]') as HTMLElement);
@@ -1310,7 +1318,7 @@ describe('GamePage', () => {
     });
 
     it('keeps a dismissed key across a real room transition, then clears it without phantom content', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithRoom();
       seedActiveSceneWithPose();
       renderWithProviders(<GamePage />);
@@ -1343,7 +1351,7 @@ describe('GamePage', () => {
             revision: { epoch: 'garden-visit', sequence: 1 },
           })
         );
-        store.dispatch(
+        dispatch(
           addSceneInteraction({
             character: ACTIVE_NAME,
             interaction: {
@@ -1373,12 +1381,12 @@ describe('GamePage', () => {
     });
 
     it('clears only the active character, including stale keys', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
-      store.dispatch(startSession(SECOND_NAME));
-      store.dispatch(dismissFeedItem({ character: ACTIVE_NAME, key: 'i:1' }));
-      store.dispatch(dismissFeedItem({ character: ACTIVE_NAME, key: 'i:old-room' }));
-      store.dispatch(dismissFeedItem({ character: SECOND_NAME, key: 'i:other' }));
+      dispatch(startSession(SECOND_NAME));
+      dispatch(dismissFeedItem({ character: ACTIVE_NAME, key: 'i:1' }));
+      dispatch(dismissFeedItem({ character: ACTIVE_NAME, key: 'i:old-room' }));
+      dispatch(dismissFeedItem({ character: SECOND_NAME, key: 'i:other' }));
       renderWithProviders(<GamePage />);
       expect(screen.getByRole('button', { name: 'Show hidden' })).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: SECOND_NAME }));
@@ -1400,11 +1408,11 @@ describe('GamePage', () => {
 
   describe('puppet tab bar attention badge (#2166)', () => {
     it('badges a background puppet tab with a numeric direct count on an unseen whisper', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
-      store.dispatch(startSession(SECOND_NAME));
-      store.dispatch(setSceneBaseline({ character: SECOND_NAME, baselineId: 0 }));
-      store.dispatch(
+      dispatch(startSession(SECOND_NAME));
+      dispatch(setSceneBaseline({ character: SECOND_NAME, baselineId: 0 }));
+      dispatch(
         addSceneInteraction({
           character: SECOND_NAME,
           interaction: {
@@ -1422,7 +1430,7 @@ describe('GamePage', () => {
         })
       );
       // Back to Aria active; Bianca stays a background session.
-      store.dispatch(setActiveSession(ACTIVE_NAME));
+      dispatch(setActiveSession(ACTIVE_NAME));
 
       const { container } = renderWithProviders(<GamePage />);
       await screen.findByText('stretches languidly.');
@@ -1435,13 +1443,13 @@ describe('GamePage', () => {
     });
 
     it('shows a muted ambient dot on a background puppet tab with unread but no direct attention', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
-      store.dispatch(startSession(SECOND_NAME));
+      dispatch(startSession(SECOND_NAME));
       // Switch back to Aria BEFORE the message arrives, so addSessionMessage
       // sees an inactive Bianca session and increments her unread scalar.
-      store.dispatch(setActiveSession(ACTIVE_NAME));
-      store.dispatch(
+      dispatch(setActiveSession(ACTIVE_NAME));
+      dispatch(
         addSessionMessage({
           character: SECOND_NAME,
           message: { content: 'The kitchen stirs.', timestamp: Date.now(), type: 'text' },
@@ -1458,10 +1466,10 @@ describe('GamePage', () => {
     });
 
     it('renders no badge on the active puppet tab', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
-      store.dispatch(startSession(SECOND_NAME));
-      store.dispatch(setActiveSession(ACTIVE_NAME));
+      dispatch(startSession(SECOND_NAME));
+      dispatch(setActiveSession(ACTIVE_NAME));
 
       const { container } = renderWithProviders(<GamePage />);
       await screen.findByText('stretches languidly.');
@@ -1474,12 +1482,12 @@ describe('GamePage', () => {
     });
 
     it('never badges the active puppet tab for its own unseen whisper on a non-selected thread, while a background character with the same shape does badge (#2166 review fold-in)', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       // Aria (active) has an unseen whisper on a thread she hasn't opened —
       // her own attention belongs to the conversation rail, not her puppet tab.
       seedActiveSceneWithPose();
-      store.dispatch(setSceneBaseline({ character: ACTIVE_NAME, baselineId: 0 }));
-      store.dispatch(
+      dispatch(setSceneBaseline({ character: ACTIVE_NAME, baselineId: 0 }));
+      dispatch(
         addSceneInteraction({
           character: ACTIVE_NAME,
           interaction: {
@@ -1499,9 +1507,9 @@ describe('GamePage', () => {
 
       // Bianca (background) gets an unseen whisper of the identical shape —
       // she still should badge, since #2166's routing is for background puppets.
-      store.dispatch(startSession(SECOND_NAME));
-      store.dispatch(setSceneBaseline({ character: SECOND_NAME, baselineId: 0 }));
-      store.dispatch(
+      dispatch(startSession(SECOND_NAME));
+      dispatch(setSceneBaseline({ character: SECOND_NAME, baselineId: 0 }));
+      dispatch(
         addSceneInteraction({
           character: SECOND_NAME,
           interaction: {
@@ -1518,7 +1526,7 @@ describe('GamePage', () => {
           },
         })
       );
-      store.dispatch(setActiveSession(ACTIVE_NAME));
+      dispatch(setActiveSession(ACTIVE_NAME));
 
       const { container } = renderWithProviders(<GamePage />);
       // Task 8's default-collapse can hide the room pose text; wait on the
@@ -1548,7 +1556,7 @@ describe('GamePage', () => {
     });
 
     it('renders ConsentPrompt/PlaceBar/ActionPanel/PendingActionAttachments when a scene is active', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithRoom();
 
       renderWithProviders(<GamePage />);
@@ -1560,8 +1568,8 @@ describe('GamePage', () => {
     });
 
     it('does not render the scene toolset when there is no active scene', () => {
-      store.dispatch(setAccount(mockAccount));
-      store.dispatch(startSession(ACTIVE_NAME));
+      dispatch(setAccount(mockAccount));
+      dispatch(startSession(ACTIVE_NAME));
 
       renderWithProviders(<GamePage />);
 
@@ -1572,7 +1580,7 @@ describe('GamePage', () => {
     });
 
     it('passes isAtPlace=true to ModeSelector, offering the tt mode, when roomData.viewer_place_id is set (#3810)', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithRoom(9);
       mockFetchPlaces.mockResolvedValue({
         results: [{ id: 9, name: 'The Fountain', description: '', viewer_is_present: true }],
@@ -1588,7 +1596,7 @@ describe('GamePage', () => {
     });
 
     it('does not offer the tt mode when roomData.viewer_place_id is null (#3810)', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithRoom(null);
       mockFetchPlaces.mockResolvedValue({
         results: [{ id: 9, name: 'The Fountain', description: '', viewer_is_present: false }],
@@ -1619,7 +1627,7 @@ describe('GamePage', () => {
 
   describe('encounter/aftermath boundary (#3760 Task 13)', () => {
     it('does not reset or unmount the draft-store-owning composer when hasActiveEncounter flips', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithRoom();
 
       // A single stable provider tree across both render calls: `render`'s
@@ -1683,7 +1691,7 @@ describe('GamePage', () => {
     });
 
     it('passes viewerCanGm and scene to CombatRail once the scene detail resolves (#3761)', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithRoom();
       mockUseEncounterForScene.mockReturnValue({
         data: { id: 5, scene: 42 },
@@ -1722,7 +1730,7 @@ describe('GamePage', () => {
 
   describe('battle map in the center (#4670)', () => {
     it('renders the map above the feed during a fight', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithRoom();
       mockUseEncounterForScene.mockReturnValue({
         data: { id: 7 },
@@ -1738,7 +1746,7 @@ describe('GamePage', () => {
     });
 
     it('renders no map outside a fight', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithRoom();
       mockUseEncounterForScene.mockReturnValue({
         data: null,
@@ -1765,7 +1773,7 @@ describe('GamePage', () => {
 
   describe('outcome banner lingering (final-review Finding I1)', () => {
     it('keeps CombatRail mounted after the poll drops the encounter, until the player dismisses it', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithRoom();
 
       mockUseEncounterForScene.mockReturnValue({
@@ -1850,7 +1858,7 @@ describe('GamePage', () => {
     const railAll = (rail: HTMLElement) => within(rail).getByRole('button', { name: 'All' });
 
     it('picking a whisper row narrows the feed, locks the composer to it and marks the row', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
 
@@ -1879,7 +1887,7 @@ describe('GamePage', () => {
     });
 
     it('All restores the full feed and re-enables the mode dropdown', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
 
@@ -1901,7 +1909,7 @@ describe('GamePage', () => {
     });
 
     it('counts a whisper on its row while All is current, and clears it on pick', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
 
@@ -1909,7 +1917,7 @@ describe('GamePage', () => {
       renderWithProviders(<GamePage />);
       const rail = await screen.findByLabelText('Conversations');
 
-      store.dispatch(
+      dispatch(
         addSceneInteraction({
           character: ACTIVE_NAME,
           interaction: {
@@ -1943,7 +1951,7 @@ describe('GamePage', () => {
     });
 
     it('resets the selection to All when the active puppet moves into a new scene', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
 
@@ -1953,7 +1961,7 @@ describe('GamePage', () => {
       await user.click(railWhisperRow(rail));
       expect(railWhisperRow(rail)).toHaveAttribute('aria-current', 'true');
 
-      store.dispatch(
+      dispatch(
         setSessionScene({
           character: ACTIVE_NAME,
           scene: {
@@ -1972,7 +1980,7 @@ describe('GamePage', () => {
     });
 
     it('the room row resets a stale composer mode left by a drawer whisper', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
 
       const user = userEvent.setup();
@@ -1996,9 +2004,9 @@ describe('GamePage', () => {
     });
 
     it('lists a page correspondent under OOC Pages and addresses the composer to them', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
-      store.dispatch(
+      dispatch(
         addFeedNote({
           character: ACTIVE_NAME,
           note: {
@@ -2027,7 +2035,7 @@ describe('GamePage', () => {
     });
 
     it('the find box narrows the feed to matching lines, marks them, and Esc clears', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
 
@@ -2062,8 +2070,8 @@ describe('GamePage', () => {
 
   describe('dreamspace takeover (#3003)', () => {
     it('renders DreamspacePanel in the Room tab when the active character is dreamside', () => {
-      store.dispatch(setAccount(mockAccount));
-      store.dispatch(startSession(ACTIVE_NAME));
+      dispatch(setAccount(mockAccount));
+      dispatch(startSession(ACTIVE_NAME));
       mockUseDreamState.mockReturnValue({
         data: {
           is_dreamside: true,
@@ -2086,8 +2094,8 @@ describe('GamePage', () => {
     });
 
     it('keeps FocusPanel/RoomPanel mounted for every other state', () => {
-      store.dispatch(setAccount(mockAccount));
-      store.dispatch(startSession(ACTIVE_NAME));
+      dispatch(setAccount(mockAccount));
+      dispatch(startSession(ACTIVE_NAME));
       // Default mock from beforeEach: data undefined (not dreaming).
 
       renderWithProviders(<GamePage />);
@@ -2105,8 +2113,8 @@ describe('GamePage', () => {
     // active character's dream-state query on every action result, the same
     // trigger that already drove the (working) exit transition.
     it('invalidates the active character dream-state query on the next action result', () => {
-      store.dispatch(setAccount(mockAccount));
-      store.dispatch(startSession(ACTIVE_NAME));
+      dispatch(setAccount(mockAccount));
+      dispatch(startSession(ACTIVE_NAME));
       // Default mock from beforeEach: data undefined (not dreaming) — the
       // FocusPanel-mounted state the transition starts from.
 
@@ -2139,12 +2147,12 @@ describe('GamePage', () => {
 
   describe('Enter-the-world auto-start (#3412)', () => {
     it('auto-starts and connects a hydrated selection that has no session yet', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       // Reload-hydration shape: `active` set via `hydrateActiveCharacter`,
       // deliberately WITHOUT `startSession` — mirrors what `useAccountQuery`
       // actually dispatches, unlike this file's other tests which seed a
       // session directly.
-      store.dispatch(hydrateActiveCharacter({ name: ACTIVE_NAME, entryId: rosterEntry.id }));
+      dispatch(hydrateActiveCharacter({ name: ACTIVE_NAME, entryId: rosterEntry.id }));
 
       renderWithProviders(<GamePage />);
 
@@ -2156,7 +2164,7 @@ describe('GamePage', () => {
     });
 
     it('does not re-start or reconnect a session that already exists', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       // A live session already exists (e.g. GameTopBar was used to switch
       // puppets) — the mount-path effect must leave it alone: no second
       // `connect()` call, and no `startSession` re-dispatch that would zero
@@ -2170,8 +2178,8 @@ describe('GamePage', () => {
     });
 
     it('spends the auto-start once per mount: a later selection change never connects', async () => {
-      store.dispatch(setAccount(mockAccount));
-      store.dispatch(hydrateActiveCharacter({ name: ACTIVE_NAME, entryId: rosterEntry.id }));
+      dispatch(setAccount(mockAccount));
+      dispatch(hydrateActiveCharacter({ name: ACTIVE_NAME, entryId: rosterEntry.id }));
 
       renderWithProviders(<GamePage />);
 
@@ -2195,7 +2203,7 @@ describe('GamePage', () => {
     });
 
     it('a mount that finds a live session also spends the crossing', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       // SPA re-nav shape: GamePage remounts while Redux still holds a live
       // session for the active character. No connect fires (existing-session
       // rule) — but the mount's one crossing must be SPENT anyway, or a later
@@ -2216,7 +2224,7 @@ describe('GamePage', () => {
     });
 
     it('does nothing when there is no selection at all', () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       // No hydration, no session — the logged-in-but-no-selection state.
 
       renderWithProviders(<GamePage />);
@@ -2228,7 +2236,7 @@ describe('GamePage', () => {
 
   describe('historical reference query identity', () => {
     it('threads reference.timestamp through to fetchPlayContext, not just the pose id', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
 
       renderWithProviders(<GamePage />, {
         initialEntries: [
@@ -2258,7 +2266,7 @@ describe('GamePage', () => {
       // renders the REAL GameWindow (not a fixture handing the reader a
       // pre-built prop) and asserts what the wiring actually sends the
       // service call, not just that the call happened.
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       const markSpy = vi
         .spyOn(playQueries, 'markConversationRead')
@@ -2294,7 +2302,7 @@ describe('GamePage', () => {
       // the reference/live boundary, so clicking "Return to live" updates
       // props on the existing ThreadedNarrativeReader instance instead of
       // mounting a fresh one.
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
 
       renderWithProviders(<GamePage />, {
@@ -2339,7 +2347,7 @@ describe('GamePage', () => {
 
   describe('per-tab scroll memory vs anchor bypass (#3759 review findings I2/I5)', () => {
     it('keeps remembering the room tab scroll position after its first anchor-based visit, instead of being permanently disabled (#3759 review finding I2)', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
       // A persisted anchor for this scene, present from the very first
@@ -2398,7 +2406,7 @@ describe('GamePage', () => {
     });
 
     it('never records a raw room-tab scroll position while reading a historical reference, so it cannot corrupt the position restored on Return to live (#3759 review finding I5)', async () => {
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
 
       renderWithProviders(<GamePage />, {
@@ -2451,7 +2459,7 @@ describe('GamePage', () => {
 
     it('stays at the bottom as the feed grows, and leaves a reader who scrolled up where they are', () => {
       const observer = stubResizeObserver();
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       renderWithProviders(<GamePage />);
       const feed = screen.getByTestId('feed-scroll-container');
@@ -2471,7 +2479,7 @@ describe('GamePage', () => {
 
     it('does not pull a reader off the reading position the room tab restores', () => {
       const observer = stubResizeObserver();
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       saveConversationAnchor(
         '100',
@@ -2492,7 +2500,7 @@ describe('GamePage', () => {
 
     it('does not follow while a historical reference is being read', async () => {
       const observer = stubResizeObserver();
-      store.dispatch(setAccount(mockAccount));
+      dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       renderWithProviders(<GamePage />, {
         initialEntries: [
@@ -2538,8 +2546,8 @@ describe('GamePage', () => {
           notes_for_player: 'She distrusts the Guild.',
         },
       ];
-      store.dispatch(setAccount(mockAccount));
-      store.dispatch(hydrateActiveCharacter(null));
+      dispatch(setAccount(mockAccount));
+      dispatch(hydrateActiveCharacter(null));
 
       renderWithProviders(<GamePage />);
 
@@ -2577,8 +2585,8 @@ describe('GamePage', () => {
           notes_for_player: '',
         },
       ];
-      store.dispatch(setAccount(mockAccount));
-      store.dispatch(hydrateActiveCharacter({ name: 'Sergeant Mira', entryId: 9 }));
+      dispatch(setAccount(mockAccount));
+      dispatch(hydrateActiveCharacter({ name: 'Sergeant Mira', entryId: 9 }));
 
       renderWithProviders(<GamePage />);
       await userEvent.click(await screen.findByRole('button', { name: 'Accept' }));

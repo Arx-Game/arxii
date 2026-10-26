@@ -69,7 +69,7 @@ export function SendVisionFromBeingDialog({ beingId, beingName }: SendVisionFrom
       <DialogTrigger asChild>
         <Button data-testid="send-vision-button">Send Vision…</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>A vision from {beingName}</DialogTitle>

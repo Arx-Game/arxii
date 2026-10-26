@@ -301,7 +301,7 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
       />
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent aria-describedby={undefined} className="max-w-md">
           <DialogHeader>
             <DialogTitle>Find a room</DialogTitle>
           </DialogHeader>

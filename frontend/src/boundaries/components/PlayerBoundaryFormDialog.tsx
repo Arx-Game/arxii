@@ -158,7 +158,7 @@ export function PlayerBoundaryFormDialog({ open, onOpenChange, boundary, onSucce
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit boundary' : 'Add a content boundary'}</DialogTitle>
         </DialogHeader>

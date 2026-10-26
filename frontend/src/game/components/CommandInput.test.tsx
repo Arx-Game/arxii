@@ -191,6 +191,12 @@ vi.mock('@/companions/api', () => ({
   companionEmote: (...args: [number, string, string?]) => companionEmoteMock(...args),
 }));
 
+// A scene pose goes out over REST and the composer clears when it lands. Wait
+// for that, so the update happens inside the test rather than after it (#4677).
+async function poseLands(): Promise<void> {
+  await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue(''));
+}
+
 describe('CommandInput', () => {
   beforeEach(() => {
     sendMock.mockClear();
@@ -239,7 +245,7 @@ describe('CommandInput', () => {
       expect(executeActionMock).not.toHaveBeenCalled();
     });
 
-    it('a / line in a scene goes over the socket as typed, never to the pose endpoint', () => {
+    it('a / line in a scene goes over the socket as typed, never to the pose endpoint', async () => {
       render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
       const textarea = screen.getByRole('textbox');
       fireEvent.change(textarea, { target: { value: '/look' } });
@@ -257,9 +263,10 @@ describe('CommandInput', () => {
       expect(submitPoseMock).toHaveBeenCalledWith(
         expect.objectContaining({ scene_id: 5, content: 'look' })
       );
+      await poseLands();
     });
 
-    it('a // line in a scene poses a literal slash through the pose endpoint', () => {
+    it('a // line in a scene poses a literal slash through the pose endpoint', async () => {
       render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
       const textarea = screen.getByRole('textbox');
       fireEvent.change(textarea, { target: { value: '//shrugs' } });
@@ -268,6 +275,7 @@ describe('CommandInput', () => {
         expect.objectContaining({ scene_id: 5, content: '/shrugs' })
       );
       expect(sendMock).not.toHaveBeenCalled();
+      await poseLands();
     });
 
     it('a line starting with // poses a literal slash', () => {
@@ -348,22 +356,24 @@ describe('CommandInput', () => {
         expect(sendMock).toHaveBeenCalledWith('Alice', 'pose @Bob waves');
       });
 
-      it('addresses someone here in a scene through target names, keeping the name in the text', () => {
+      it('addresses someone here in a scene through target names, keeping the name in the text', async () => {
         render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
         sendLine('@bob waves');
         expect(submitPoseMock).toHaveBeenCalledWith(
           expect.objectContaining({ scene_id: 5, content: '@bob waves', target_names: ['bob'] })
         );
         expect(sendMock).not.toHaveBeenCalled();
+        await poseLands();
       });
 
-      it('sends a picked and a typed spelling of one person as one target', () => {
+      it('sends a picked and a typed spelling of one person as one target', async () => {
         const toBob: ComposerMode = { command: 'pose', targets: ['Bob'], label: 'Pose' };
         render(<CommandInput character="Alice" composerMode={toBob} sceneId="5" personaId={9} />);
         sendLine('@bob waves');
         expect(submitPoseMock).toHaveBeenCalledWith(
           expect.objectContaining({ target_names: ['Bob'] })
         );
+        await poseLands();
       });
 
       it('never holds a page for naming someone elsewhere', () => {
@@ -374,7 +384,7 @@ describe('CommandInput', () => {
         expect(sendMock).toHaveBeenCalledWith('Alice', 'page Nyx=@Gone said you were late');
       });
 
-      it('holds nobody as absent before the room is known', () => {
+      it('holds nobody as absent before the room is known', async () => {
         mockRoomKnown = false;
         render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
         sendLine('@Nyx waves');
@@ -382,6 +392,7 @@ describe('CommandInput', () => {
         expect(submitPoseMock).toHaveBeenCalledWith(
           expect.objectContaining({ content: '@Nyx waves', target_names: ['Nyx'] })
         );
+        await poseLands();
       });
 
       it('lets someone here win over a command of the same name', () => {
@@ -391,7 +402,7 @@ describe('CommandInput', () => {
         expect(sendMock).toHaveBeenCalledWith('Alice', 'pose @Sheet nods');
       });
 
-      it('poses @@ and ++ with one literal character', () => {
+      it('poses @@ and ++ with one literal character', async () => {
         render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
         sendLine('@@everyone gets a drink');
         expect(submitPoseMock).toHaveBeenLastCalledWith(
@@ -400,6 +411,7 @@ describe('CommandInput', () => {
         expect(submitPoseMock).toHaveBeenLastCalledWith(
           expect.not.objectContaining({ target_names: expect.anything() })
         );
+        await poseLands();
       });
 
       it('sends @@ single behind a picked target, where the server would not unescape it', () => {
@@ -726,9 +738,10 @@ describe('CommandInput', () => {
       client_request_id: expect.any(String),
       action_link_ids: [10],
     });
+    await poseLands();
   });
 
-  it('pose without detachments still uses REST submitPose (scene poses always take REST)', () => {
+  it('pose without detachments still uses REST submitPose (scene poses always take REST)', async () => {
     const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose' };
     render(
       <CommandInput
@@ -752,9 +765,10 @@ describe('CommandInput', () => {
       content: 'stands ready',
       client_request_id: expect.any(String),
     });
+    await poseLands();
   });
 
-  it('plain pose (no composerMode) with sceneId/personaId uses REST submitPose', () => {
+  it('plain pose (no composerMode) with sceneId/personaId uses REST submitPose', async () => {
     render(<CommandInput character="Alice" sceneId="5" personaId={9} />);
     const textarea = screen.getByRole('textbox');
 
@@ -768,6 +782,7 @@ describe('CommandInput', () => {
       content: 'looks around',
       client_request_id: expect.any(String),
     });
+    await poseLands();
   });
 
   it('pose with no sceneId uses WebSocket send', () => {
@@ -803,7 +818,7 @@ describe('CommandInput', () => {
     });
   });
 
-  it('directed pose composer mode sends target_names on the REST path (#2156)', () => {
+  it('directed pose composer mode sends target_names on the REST path (#2156)', async () => {
     const mode: ComposerMode = { command: 'pose', targets: ['Bob'], label: 'Pose → Bob' };
     render(<CommandInput character="Alice" composerMode={mode} sceneId="5" personaId={9} />);
     const textarea = screen.getByRole('textbox');
@@ -818,6 +833,7 @@ describe('CommandInput', () => {
       client_request_id: expect.any(String),
       target_names: ['Bob'],
     });
+    await poseLands();
   });
 
   it('keeps the draft and surfaces an error toast when submitPose rejects (#2156)', async () => {
@@ -847,7 +863,7 @@ describe('CommandInput', () => {
   // above, adapted for the promise-based REST flow.
   // ---------------------------------------------------------------------------
 
-  it('a REST pose retry of unmodified content reuses the same client_request_id (#3760 fix)', () => {
+  it('a REST pose retry of unmodified content reuses the same client_request_id (#3760 fix)', async () => {
     seedDraft(
       {
         status: 'rejected',
@@ -872,6 +888,7 @@ describe('CommandInput', () => {
       content: 'looks around',
       client_request_id: 'req-pose-rejected',
     });
+    await poseLands();
   });
 
   it('does not clear a newer edit made after a REST pose request was sent but before the response arrives', async () => {
@@ -925,13 +942,14 @@ describe('CommandInput', () => {
     expect(screen.getByTestId('entrance-technique-attachment')).toBeInTheDocument();
   });
 
-  it('sends the first pose as the entrance', () => {
+  it('sends the first pose as the entrance', async () => {
     mockScene = { id: 1, viewer_entered: false };
     render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'steps in from the rain.' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
     expect(submitPoseMock).toHaveBeenCalledWith(expect.objectContaining({ pose_kind: 'entry' }));
+    await poseLands();
   });
 
   it('submitting an entrance pose with an attached technique dispatches createActionRequest with the submitPose response id (#2183)', async () => {
@@ -2090,7 +2108,7 @@ describe('reply chip, reply_to wiring, and pre-emptive refusal (#3787)', () => {
     await waitFor(() => expect(onCancelReply).toHaveBeenCalled());
   });
 
-  it('omits reply_to entirely when there is no reply target (unchanged shape for an ordinary pose)', () => {
+  it('omits reply_to entirely when there is no reply target (unchanged shape for an ordinary pose)', async () => {
     render(<CommandInput character="Alice" sceneId="5" personaId={9} />);
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'looks around' } });
@@ -2102,9 +2120,10 @@ describe('reply chip, reply_to wiring, and pre-emptive refusal (#3787)', () => {
       content: 'looks around',
       client_request_id: expect.any(String),
     });
+    await poseLands();
   });
 
-  it('allows a reply to a room-held target while the viewer is at a Place (#3811 -- a Place declutters, it does not isolate)', () => {
+  it('allows a reply to a room-held target while the viewer is at a Place (#3811 -- a Place declutters, it does not isolate)', async () => {
     render(
       <CommandInput
         character="Alice"
@@ -2128,6 +2147,7 @@ describe('reply chip, reply_to wiring, and pre-emptive refusal (#3787)', () => {
       client_request_id: expect.any(String),
       reply_to: { id: 5, timestamp: '2026-01-01T00:00:05Z' },
     });
+    await poseLands();
   });
 
   it('renders no refusal when the reply target is reachable', () => {

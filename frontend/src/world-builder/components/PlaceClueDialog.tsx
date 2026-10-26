@@ -69,7 +69,7 @@ export function PlaceClueDialog({ roomId, open, onOpenChange, runAction }: Place
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle>{isPassive ? 'Place clue trigger' : 'Place clue'}</DialogTitle>
         </DialogHeader>

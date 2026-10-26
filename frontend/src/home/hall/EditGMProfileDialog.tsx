@@ -51,7 +51,7 @@ export function EditGMProfileDialog({ open, onOpenChange }: EditGMProfileDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Edit GM Profile</DialogTitle>
         </DialogHeader>

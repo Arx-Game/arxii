@@ -44,7 +44,7 @@ export function MessagePlayerDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Message the player of {recipientDisplay}</DialogTitle>
         </DialogHeader>

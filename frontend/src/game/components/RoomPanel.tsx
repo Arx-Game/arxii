@@ -326,7 +326,7 @@ export function RoomPanel({
 
       {room.is_owner && characterId != null && (
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
-          <DialogContent>
+          <DialogContent aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>Edit room</DialogTitle>
             </DialogHeader>

@@ -255,7 +255,7 @@ export function RitualSessionDraftDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{ritual.name}</DialogTitle>

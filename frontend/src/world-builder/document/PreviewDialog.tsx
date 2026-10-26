@@ -39,7 +39,7 @@ export function PreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent aria-describedby={undefined} className="max-w-2xl">
         <DialogTitle className="sr-only">Preview: {name || 'unnamed room'}</DialogTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <Plate className="p-4" data-testid="preview-web-card">

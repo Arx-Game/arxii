@@ -108,7 +108,7 @@ export function ProtectedSubjectFormDialog({ storyId, onSuccess }: Props) {
         </Button>
       </DialogTrigger>
 
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Protect a subject</DialogTitle>
         </DialogHeader>

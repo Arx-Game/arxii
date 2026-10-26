@@ -99,7 +99,7 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => (isOpen ? undefined : onClose())}>
-      <DialogContent className="journals max-h-[85vh] overflow-y-auto">
+      <DialogContent aria-describedby={undefined} className="journals max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Write a journal entry</DialogTitle>
         </DialogHeader>

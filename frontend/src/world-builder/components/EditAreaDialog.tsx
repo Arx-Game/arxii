@@ -117,7 +117,7 @@ export function EditAreaDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Edit {area.name}</DialogTitle>
           {area.effective_climate && (

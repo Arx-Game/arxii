@@ -59,7 +59,7 @@ export function ResolveClearanceDialog({ clearanceId }: Props) {
           Resolve
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Resolve escalated clearance</DialogTitle>
         </DialogHeader>

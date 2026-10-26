@@ -100,7 +100,7 @@ export function SendVisionDialog({
           Send vision
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[80vh] overflow-y-auto">
+      <DialogContent aria-describedby={undefined} className="max-h-[80vh] overflow-y-auto">
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Send {recipientName} a vision</DialogTitle>

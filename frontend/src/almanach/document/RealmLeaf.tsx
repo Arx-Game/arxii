@@ -198,7 +198,7 @@ export function RealmLeaf({ houseId, houseName, realm, onSwear, extra }: RealmLe
           if (!next) setSwearOpen(false);
         }}
       >
-        <DialogContent className="almanach max-w-md">
+        <DialogContent aria-describedby={undefined} className="almanach max-w-md">
           <DialogTitle>Swear a house</DialogTitle>
           <div className="field">
             <Label htmlFor="swear-house">house</Label>

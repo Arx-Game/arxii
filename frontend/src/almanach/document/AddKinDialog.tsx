@@ -205,7 +205,7 @@ export function AddKinDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="almanach max-w-md">
+      <DialogContent aria-describedby={undefined} className="almanach max-w-md">
         <DialogTitle>
           {defaultHousehold ? 'A person of the household' : 'A child · a spouse'}
         </DialogTitle>

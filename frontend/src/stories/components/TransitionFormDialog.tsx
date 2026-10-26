@@ -485,7 +485,10 @@ export function TransitionFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-h-[85vh] overflow-y-auto sm:max-w-xl"
+      >
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{isEdit ? 'Edit Transition' : 'Create Transition'}</DialogTitle>

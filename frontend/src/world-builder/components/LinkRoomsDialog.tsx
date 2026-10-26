@@ -110,7 +110,7 @@ export function LinkRoomsDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Link {fromRoom.name} to another room</DialogTitle>
         </DialogHeader>

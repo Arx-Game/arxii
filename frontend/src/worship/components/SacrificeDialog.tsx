@@ -82,7 +82,7 @@ export function SacrificeDialog({
           Sacrifice
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Sacrifice{beingName ? ` to ${beingName}` : ''}</DialogTitle>

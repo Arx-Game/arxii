@@ -41,7 +41,7 @@ export function ArchiveEraDialog({ open, onClose, era }: ArchiveEraDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Archive Era?</DialogTitle>
         </DialogHeader>

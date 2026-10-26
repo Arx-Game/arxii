@@ -51,7 +51,7 @@ export function PlacePortalAnchorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Place portal anchor</DialogTitle>
         </DialogHeader>

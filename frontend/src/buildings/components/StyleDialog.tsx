@@ -39,7 +39,7 @@ export function StyleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent aria-describedby={undefined} className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Set building style</DialogTitle>
         </DialogHeader>

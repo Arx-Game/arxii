@@ -87,7 +87,7 @@ export function CatalogSuggestionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="suggestion-dialog">
+      <DialogContent aria-describedby={undefined} data-testid="suggestion-dialog">
         <DialogHeader>
           <DialogTitle>Suggest a catalog entry</DialogTitle>
         </DialogHeader>

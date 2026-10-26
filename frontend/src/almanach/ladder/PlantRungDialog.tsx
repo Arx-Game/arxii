@@ -165,7 +165,7 @@ export function PlantRungDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="almanach max-w-md">
+      <DialogContent aria-describedby={undefined} className="almanach max-w-md">
         <DialogTitle>Plant a rung</DialogTitle>
         {canOfferRoot && parent && (
           <div className="field">
