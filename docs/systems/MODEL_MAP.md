@@ -2514,6 +2514,7 @@
 **Foreign Keys:**
   - opponent -> combat.CombatOpponent [FK]
   - threat_entry -> combat.ThreatPoolEntry [FK]
+  - covered_position -> areas.Position [FK] (nullable)
   - targets -> combat.CombatParticipant [M2M]
   - opponent_targets -> combat.CombatOpponent [M2M]
 **Pointed to by:**
@@ -2531,6 +2532,7 @@
   - encounter -> combat.CombatEncounter [FK]
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - covenant_role -> covenants.CovenantRole [FK] (nullable)
+  - dodge_landing -> areas.Position [FK] (nullable)
 **Pointed to by:**
   - mirror_surface <- combat.CombatOpponent
   - vow_effect_firings <- combat.VowAddedEffectFiring
@@ -2722,6 +2724,7 @@
   - opponent -> combat.CombatOpponent [FK]
   - threat_entry -> combat.ThreatPoolEntry [FK]
   - target -> combat.CombatParticipant [FK] (nullable)
+  - covered_position -> areas.Position [FK] (nullable)
 
 ### PendingSelection
 **Foreign Keys:**
