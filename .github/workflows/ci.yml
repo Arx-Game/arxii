@@ -462,7 +462,35 @@ jobs:
           FACEBOOK_APP_SECRET: test-facebook-secret
         run: uv run python tools/check_missing_migrations.py
 
-  frontend-test:
+  # #4677: the frontend gate is three parallel jobs, not one serial one. The
+  # vitest run was ~430s of a ~10 min job, and 64% of it was per-file overhead
+  # (jsdom startup, imports, setup), so it splits across shards almost linearly.
+  # typecheck (~42s) and build (~60s) no longer wait behind it.
+  frontend-shard:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.4
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test --shard=${{ matrix.shard }}/4
+
+  frontend-typecheck:
     needs: changes
     if: needs.changes.outputs.frontend == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -481,14 +509,33 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm test
+
+  frontend-build:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.4
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
   # Aggregator mirroring `backend`: the REQUIRED check named "frontend" always
-  # runs and reports success when `frontend-test` was skipped (no frontend
-  # changes), so a backend-only PR never leaves this check pending.
+  # runs and reports success when the frontend jobs were skipped (no frontend
+  # changes), so a backend-only PR never leaves this check pending. The three
+  # jobs share one gate, so they are skipped together or run together.
   frontend:
-    needs: [changes, frontend-test]
+    needs: [changes, frontend-shard, frontend-typecheck, frontend-build]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -499,13 +546,14 @@ jobs:
             echo "changes job did not succeed (status: ${{ needs.changes.result }})"
             exit 1
           fi
-          # No frontend changes -> frontend-test skipped -> this check passes.
-          if [[ "${{ needs.frontend-test.result }}" == "skipped" ]]; then
+          results="${{ needs.frontend-shard.result }} ${{ needs.frontend-typecheck.result }} ${{ needs.frontend-build.result }}"
+          # No frontend changes -> all three skipped -> this check passes.
+          if [[ "$results" == "skipped skipped skipped" ]]; then
             echo "No frontend changes — frontend tests not required. Passing."
             exit 0
           fi
-          if [[ "${{ needs.frontend-test.result }}" != "success" ]]; then
-            echo "Frontend job failed (status: ${{ needs.frontend-test.result }})"
+          if [[ "$results" != "success success success" ]]; then
+            echo "A frontend job failed (shards, typecheck, build: $results)"
             exit 1
           fi
           echo "Frontend passed."
