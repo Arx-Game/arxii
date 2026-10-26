@@ -140,7 +140,6 @@ def resolve_challenge(
         target_difficulty=challenge_instance.effective_severity,
         extra_modifiers=_roll_modifiers(capability_source, breakdown, extra_modifiers),
         extra_traits=extra_traits,
-        extra_standing=breakdown.standing_total if breakdown is not None else 0,
     )
     if breakdown is not None:
         # Lazy import: world.conditions.services imports world.checks at load time.
@@ -530,7 +529,6 @@ def _resolve_via_template(  # noqa: PLR0913 - mirrors resolve_challenge's inputs
         context=context,
         extra_modifiers=_roll_modifiers(capability_source, breakdown, extra_modifiers),
         extra_traits=extra_traits,
-        extra_standing=breakdown.standing_total if breakdown is not None else 0,
     )
     if breakdown is not None:
         spend_or_defer_condition_uses(pending, breakdown)

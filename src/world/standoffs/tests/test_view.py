@@ -12,11 +12,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierLane, ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
 from world.checks.modifier_models import ModifierTaper
-from world.checks.services import (
-    OppositionPoints,
-    collect_check_modifiers,
-    preview_check_difficulty,
-)
+from world.checks.services import collect_check_modifiers, preview_check_difficulty
 from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.combat.constants import CauseKind, OpponentTier
 from world.combat.factories import (
@@ -230,18 +226,13 @@ class PresentationTests(ViewBase):
         with (
             patch(PREVIEW, return_value=4) as preview,
             patch(CHART, return_value=True),
-            patch(
-                "world.standoffs.services.view.level_opposition_points",
-                return_value=OppositionPoints(standing=9, modifiers=-3),
-            ) as opposition,
+            patch("world.standoffs.services.view.level_opposition", return_value=9) as opposition,
         ):
             group = self.view_for(self.sheet_b).groups[0]
         self.assertEqual((group.read_grade, group.read_grade_label), ("easy", "Easy"))
         self.assertEqual(group.read_check, self.config.read_check_type.name)
         self.assertEqual(opposition.call_args.kwargs["level"], 2)
-        self.assertEqual(preview.call_args.args[2], 6)
-        # The group's conditions reach the preview as target modifiers (#4601).
-        self.assertEqual(preview.call_args.kwargs["target_modifiers"], -3)
+        self.assertEqual(preview.call_args.args[2], 9)
 
     def test_cause_gloss_only_once_the_cause_is_revealed(self) -> None:
         self.template.cause = CauseKind.PREDATION

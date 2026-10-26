@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from flows.constants import EventName
 from flows.events.payloads import AttackPreResolvePayload
 from world.checks.constants import ModifierSourceKind
-from world.checks.services import level_opposition_points
+from world.checks.services import level_opposition
 from world.checks.types import ModifierContribution
 from world.combat import services as _svc
 from world.combat.constants import StrikeDelivery, TargetingMode, wind_penalty
@@ -251,7 +251,7 @@ def resolve_npc_attack(
     # sourced from the side being acted upon.
     from world.combat.stat_mapping import DEFENSE_STAT  # noqa: PLC0415
 
-    opposition = level_opposition_points(
+    difficulty = level_opposition(
         check_type,
         level=opponent_action.opponent.level,
         character=opponent_action.opponent.objectdb,
@@ -270,8 +270,7 @@ def resolve_npc_attack(
     result: CheckResult = perform_check_fn(
         character,
         check_type,
-        target_difficulty=opposition.total,
-        target_modifiers=opposition.modifiers,
+        target_difficulty=difficulty,
         extra_modifiers=breakdown.extra_modifiers_total + dodge_modifier,
         situation_ctx=situation_ctx,
         stat_override=DEFENSE_STAT,

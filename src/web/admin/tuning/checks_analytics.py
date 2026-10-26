@@ -10,8 +10,8 @@ rank_difference the same way `_compute_check_breakdown`
 specific roller/target pair" sub-panel mirrors production exactly.
 
 Since #4601 the matchup reads the slid chart the engine itself builds
-(`world.checks.slide.resolve_standing`): band positions, the slide toward the next
-chart, and the hopeless pin decided on own standing. `compute_slide_table` shows the
+(`world.checks.slide.resolve_standing`): band positions and the slide toward the next
+chart, from both sides' full totals (#4723). `compute_slide_table` shows the
 slide at 0%, 25%, 50%, 75% and 100% through every chart's band. Nothing here
 reimplements the slide; it only tallies the engine's own slid bands under a roll
 modifier.
@@ -206,17 +206,14 @@ def compute_matchup(
     ``roller_points`` and ``target_difficulty`` are each side's own standing;
     ``modifier_points`` is added to the roller as modifiers (a pile of buffs) and
     ``target_modifier_points`` to the target (positive buffs it, negative debuffs it).
-    The engine's ``resolve_standing`` decides the band positions, the slide and the
-    hopeless pin; the result carries it as ``standing``. ``rank_difference`` is the
+    The engine's ``resolve_standing`` decides the band positions and the slide from the
+    full totals (#4723); the result carries it as ``standing``. ``rank_difference`` is the
     whole difference of the chart the roll uses, which may differ from ``chart_name``'s
     chart field when the lookup falls back to the nearest authored chart. Returns
     ``None`` only when no ``ResultChart`` exists at all.
     """
     standing = resolve_standing(
-        roller_points + modifier_points,
-        target_difficulty + target_modifier_points,
-        own_roller_points=roller_points,
-        own_target_points=target_difficulty,
+        roller_points + modifier_points, target_difficulty + target_modifier_points
     )
     if standing.chart is None:
         return None
@@ -344,9 +341,9 @@ class ModifierPileReport:
     The check lane's piece of the simulator: ``count`` modifiers of one level and size,
     each valued by the value table, tapered as CONDITION contributions, laid on a
     character whose own total is the level baseline, against a target at that same
-    baseline. The odds are the engine's own (#4601): the baseline is own standing and the
-    tapered pile is modifiers, so they slide by band position and a hopeless own standing
-    stays pinned however large the pile.
+    baseline. The odds are the engine's own (#4601): the baseline plus the tapered pile
+    slides by band position, and a big enough pile lifts the roll onto a higher chart
+    (#4723).
     """
 
     baseline: int

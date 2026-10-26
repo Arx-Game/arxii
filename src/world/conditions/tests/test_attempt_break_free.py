@@ -140,20 +140,6 @@ class AttemptBreakFreeTest(TestCase):
         # difficulty should be > base (10) because of caster level opposition
         self.assertGreater(kwargs.get("target_difficulty"), 10)
 
-    @patch("world.conditions.services.opponent_condition_opposition", return_value=-6)
-    @patch("world.checks.services.perform_check")
-    def test_caster_conditions_reach_the_roll_as_target_modifiers(self, mock_check, conds):
-        """The caster's conditions are modifiers, not the hold's own standing (#4601)."""
-        caster = ObjectDBFactory()
-        CharacterSheetFactory(character=caster)
-        self.instance.source_character = caster
-        self.instance.save(update_fields=["source_character"])
-        mock_check.return_value = _mock_check_result(success_level=0)
-        attempt_break_free(self.instance)
-        _, kwargs = mock_check.call_args
-        self.assertEqual(kwargs.get("target_modifiers"), -6)
-        conds.assert_called_once()
-
     @patch("world.checks.services.perform_check")
     def test_no_caster_uses_base_difficulty(self, mock_check):
         """When source_character is None, difficulty = base only."""
@@ -161,7 +147,6 @@ class AttemptBreakFreeTest(TestCase):
         attempt_break_free(self.instance)
         _, kwargs = mock_check.call_args
         self.assertEqual(kwargs.get("target_difficulty"), 10)
-        self.assertEqual(kwargs.get("target_modifiers"), 0)
 
     @patch("world.checks.services.perform_check")
     def test_level_override_forwarded(self, mock_check):

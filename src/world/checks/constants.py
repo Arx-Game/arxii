@@ -102,13 +102,6 @@ class ModifierSourceKind(models.TextChoices):
     FAVOR = "favor", "Favor"
 
 
-# Contribution kinds that are the character's own standing, not modifiers (#4551
-# decision 7, #4601): the hopeless pin is decided without modifiers, and these stay in.
-# Effort reaches checks through ``effort_level``, never as a contribution.
-OWN_STANDING_SOURCE_KINDS: frozenset[str] = frozenset(
-    {ModifierSourceKind.FATIGUE, ModifierSourceKind.STRAIN, ModifierSourceKind.SOULFRAY}
-)
-
 # Kinds ``perform_check`` already counts on its own, so a caller never feeds them back in
 # through ``extra_modifiers`` (``ModifierBreakdown.extra_modifiers_total``).
 ROLL_COUNTED_SOURCE_KINDS: frozenset[str] = frozenset(

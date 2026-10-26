@@ -125,7 +125,7 @@ class RevealConditionAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.checks.services import level_opposition_points, perform_check  # noqa: PLC0415
+        from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
         from world.conditions.models import ConditionInstance  # noqa: PLC0415
         from world.magic.constants import MagicActivity  # noqa: PLC0415
         from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
@@ -159,14 +159,10 @@ class RevealConditionAction(Action):
             return ActionResult(success=False, message="Cannot determine how to detect this.")
 
         difficulty = template.subtlety
-        caster_modifiers = 0
         caster = instance.source_character
         if caster is not None:
             caster_level = get_character_path_level(caster)
-            opposition = level_opposition_points(check_type, level=caster_level, character=caster)
-            difficulty += opposition.total
-            # The caster's conditions are modifiers, not its standing (#4601).
-            caster_modifiers = opposition.modifiers
+            difficulty += level_opposition(check_type, level=caster_level, character=caster)
 
         # Spotting a loss of self (corruption, atavism, possession) is sensing magic.
         sensing = (
@@ -179,7 +175,6 @@ class RevealConditionAction(Action):
             check_type,
             target_difficulty=difficulty,
             extra_traits=sensing,
-            target_modifiers=caster_modifiers,
         )
         if result.success_level > 0:
             instance.is_aware = True
@@ -215,7 +210,7 @@ class RallyAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.checks.services import level_opposition_points, perform_check  # noqa: PLC0415
+        from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
         from world.conditions.services import attempt_break_free  # noqa: PLC0415
         from world.progression.services.skill_development import (  # noqa: PLC0415
             get_character_path_level,
@@ -255,20 +250,15 @@ class RallyAction(Action):
             return ActionResult(success=False, message="Cannot determine how to rally them.")
 
         difficulty = instance.condition.break_free_difficulty
-        caster_modifiers = 0
         caster = instance.source_character
         if caster is not None:
             caster_level = get_character_path_level(caster)
-            opposition = level_opposition_points(check_type, level=caster_level, character=caster)
-            difficulty += opposition.total
-            # The caster's conditions are modifiers, not its standing (#4601).
-            caster_modifiers = opposition.modifiers
+            difficulty += level_opposition(check_type, level=caster_level, character=caster)
 
         result = perform_check(
             actor,
             check_type,
             target_difficulty=difficulty,
-            target_modifiers=caster_modifiers,
         )
         sl = result.success_level
 

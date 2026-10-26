@@ -173,10 +173,6 @@
 <table class="tuning-table matchup-standing">
   <tbody>
     <tr>
-      <th>{% translate "Own standing" %}</th>
-      <td>{{ matchup.standing.own_roller.text }} {% translate "against" %} {{ matchup.standing.own_target.text }}</td>
-    </tr>
-    <tr>
       <th>{% translate "With modifiers" %}</th>
       <td>{{ matchup.standing.roller.text }} {% translate "against" %} {{ matchup.standing.target.text }}</td>
     </tr>
@@ -187,15 +183,6 @@
         {% widthratio matchup.standing.share 1 100 %}% {% translate "of the way toward" %} {{ matchup.standing.slid.toward.name }} (rank difference {{ matchup.standing.slid.toward.rank_difference }}){% endif %}
       </td>
     </tr>
-    {% if matchup.standing.hopeless %}
-    <tr>
-      <th>{% translate "Hopeless" %}</th>
-      <td class="matchup-hopeless">
-        {% translate "Own standing lands on a chart with no Success (1). Modifiers only slide the odds within that chart, never onto another." %}
-        {% if matchup.standing.pinned %}{% translate "Pinned: without the hopeless rule these modifiers would have lifted the roll onto a higher chart." %}{% endif %}
-      </td>
-    </tr>
-    {% endif %}
   </tbody>
 </table>
 <p>
@@ -227,7 +214,7 @@
 
 <h3>{% translate "The slide" %}</h3>
 <p>
-  {% translate "Each chart's odds at 0%, 25%, 50%, 75% and 100% of the way through its band, sliding toward the next chart over the chart's own outcomes only. A chart with no Success (1) is impossible: a check whose own standing lands there is held on it." %}
+  {% translate "Each chart's odds at 0%, 25%, 50%, 75% and 100% of the way through its band, sliding toward the next chart over the chart's own outcomes only. A chart with no Success (1) is impossible at that total; enough modifiers lift a check off it." %}
 </p>
 <ul class="chart-checks">
   <li>

@@ -1,4 +1,4 @@
-"""Band positions, the slide and the hopeless pin (#4601, slice b of #4551).
+"""Band positions and the slide (#4601, slice b of #4551).
 
 Every total sits part of the way through its rank band (its **band position**). The
 rank difference between roller and target is therefore fractional: whole part ``lo``,
@@ -12,11 +12,9 @@ chart ``lo + 1``:
   outcomes shrink, the better ones grow, and no outcome the chart lacks appears until the
   total reaches the next rank. Critical Success (2) first appears at difference 0.
 
-**The hopeless pin.** When the character's own standing (both sides' totals without
-modifiers) lands on a chart with no outcome above success level 0 (an impossible chart,
-the same test as ``chart_has_success_outcomes``), modifiers only slide the odds within
-that chart, up to 100% of its band. They never lift the roll onto another chart. Net
-penalties still resolve normally, onto a lower (also impossible) chart.
+The chart comes from both sides' full totals, modifiers included. A big enough buff
+lifts a check off an impossible chart (one with no Success outcome) like any other
+(#4723, which removed #4601's hopeless pin).
 
 A difference below the lowest authored chart sits at 0% of that chart's band; one at or
 above the highest authored chart uses that chart as it is. Nothing here is a tuning
@@ -220,34 +218,19 @@ def slide_chart(
     )
 
 
-def chart_is_impossible(rows: Sequence[ResultChartOutcome], chart: ResultChart | None) -> bool:
-    """True when ``chart`` has no outcome above success level 0 (or no chart at all)."""
-    if chart is None:
-        return True
-    return not any(row.chart_id == chart.pk and row.outcome.success_level > 0 for row in rows)
-
-
 @dataclass(frozen=True)
 class CheckStanding:
     """Both sides' band positions, the fractional difference, and the chart the roll uses.
 
-    ``difference`` is roller minus target with every point counted; ``own_difference``
-    the same on own standing alone (no modifiers on either side). ``chart_difference`` is
-    the whole difference of the chart the roll uses and ``slid.share`` how far it slides
-    toward the next. ``hopeless`` is True when own standing lands on an impossible chart;
-    ``pinned`` when that held the roll on its own chart against modifiers that would
-    otherwise have lifted it.
+    ``difference`` is roller minus target with every point counted. ``chart_difference``
+    is the whole difference of the chart the roll uses and ``slid.share`` how far it
+    slides toward the next.
     """
 
     roller: BandPosition
     target: BandPosition
-    own_roller: BandPosition
-    own_target: BandPosition
     difference: float
-    own_difference: float
     chart_difference: int
-    hopeless: bool
-    pinned: bool
     slid: SlidChart
 
     @property
@@ -289,25 +272,16 @@ def resolve_standing(
     roller_points: int,
     target_points: int,
     *,
-    own_roller_points: int | None = None,
-    own_target_points: int | None = None,
     ranks: Sequence[CheckRank] | None = None,
 ) -> CheckStanding:
-    """Band positions, the slide and the hopeless pin for one check, without rolling.
+    """Band positions, the slide and the chart for one check, without rolling.
 
-    ``roller_points`` and ``target_points`` count everything. ``own_roller_points`` and
-    ``own_target_points`` are the same totals without modifiers; ``None`` means the side
-    carries no modifiers.
+    ``roller_points`` and ``target_points`` count everything, modifiers included.
     """
     ranks = load_ranks() if ranks is None else ranks
-    own_roller_points = roller_points if own_roller_points is None else own_roller_points
-    own_target_points = target_points if own_target_points is None else own_target_points
     roller = band_position(roller_points, ranks)
     target = band_position(target_points, ranks)
-    own_roller = band_position(own_roller_points, ranks)
-    own_target = band_position(own_target_points, ranks)
     difference = roller.value - target.value
-    own_difference = own_roller.value - own_target.value
 
     authored = ResultChart.authored_range()
     if authored is None:
@@ -315,43 +289,21 @@ def resolve_standing(
         return CheckStanding(
             roller=roller,
             target=target,
-            own_roller=own_roller,
-            own_target=own_target,
             difference=difference,
-            own_difference=own_difference,
             chart_difference=math.floor(difference),
-            hopeless=False,
-            pinned=False,
             slid=empty,
         )
     lowest, highest = authored
 
-    own_whole, _own_share = _normalize(own_difference, lowest, highest)
-    own_chart = ResultChart.get_chart_for_difference(own_whole)
-    own_rows = _chart_rows(own_chart)
-    hopeless = chart_is_impossible(own_rows, own_chart)
-
     whole, share = _normalize(difference, lowest, highest)
-    pinned = hopeless and whole > own_whole
-    if pinned:
-        # The pin: modifiers slide within the own-standing chart, to at most its full
-        # band, and never lift the roll onto a higher chart. Anything that stays on or
-        # below the own-standing chart resolves exactly as it would unpinned.
-        whole, share = own_whole, 1.0
     chart = ResultChart.get_chart_for_difference(whole)
     toward = ResultChart.get_chart_for_difference(whole + 1) if share > 0 else None
-    rows = own_rows if chart is own_chart and toward is None else _chart_rows(chart, toward)
     return CheckStanding(
         roller=roller,
         target=target,
-        own_roller=own_roller,
-        own_target=own_target,
         difference=difference,
-        own_difference=own_difference,
         chart_difference=whole,
-        hopeless=hopeless,
-        pinned=pinned,
-        slid=slide_chart(chart, toward, share, rows),
+        slid=slide_chart(chart, toward, share, _chart_rows(chart, toward)),
     )
 
 

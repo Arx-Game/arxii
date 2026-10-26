@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from world.checks.constants import ModifierSourceKind
-from world.checks.services import OppositionPoints, level_opposition_points
+from world.checks.services import level_opposition
 from world.checks.types import ModifierContribution
 from world.combat import services as _svc
 from world.combat.constants import (
@@ -216,14 +216,14 @@ class CombatTechniqueResolver:
         # she was. No focused opponent (untargeted/ally-targeted technique)
         # stays unopposed at 0.
         focused = self.action.focused_opponent_target
-        opposition = (
-            level_opposition_points(
+        target_difficulty = (
+            level_opposition(
                 self.offense_check_type,
                 level=focused.level,
                 character=focused.objectdb,
             )
             if focused is not None
-            else OppositionPoints(standing=0, modifiers=0)
+            else 0
         )
         from world.combat.stat_mapping import weapon_stat_override  # noqa: PLC0415
 
@@ -231,8 +231,7 @@ class CombatTechniqueResolver:
         result = check_fn(
             character,
             self.offense_check_type,
-            target_difficulty=opposition.total,
-            target_modifiers=opposition.modifiers,
+            target_difficulty=target_difficulty,
             extra_modifiers=extra_modifiers,
             effort_level=self.action.effort_level,
             fatigue_penalty=penalty,
@@ -759,14 +758,11 @@ class CombatTechniqueResolver:
         # #2707 decision 6: additive on top of the authored ward -- the level
         # term never replaces barrier_strength. A warded high-level mage is
         # harder to penetrate than a warded low-level one with the identical ward.
-        pen_opposition = level_opposition_points(
-            pen_check_type, level=target.level, character=target.objectdb
-        )
         pen_result = _svc.perform_check(
             caster,
             pen_check_type,
-            target_difficulty=ward + pen_opposition.total,
-            target_modifiers=pen_opposition.modifiers,
+            target_difficulty=ward
+            + level_opposition(pen_check_type, level=target.level, character=target.objectdb),
             extra_modifiers=pen_breakdown.extra_modifiers_total,
             situation_ctx=situation_ctx,
             extra_traits=pen_extra_traits,

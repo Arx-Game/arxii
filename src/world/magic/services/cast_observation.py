@@ -29,7 +29,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
-from world.checks.services import level_opposition_points, perform_check_with_modifiers
+from world.checks.services import level_opposition, perform_check_with_modifiers
 from world.magic.constants import (
     CAST_DETECTION_ATTRIBUTION_LEVEL,
     DETECT_CAST_CHECK_NAME,
@@ -256,12 +256,11 @@ def _roll_cast_audience(
         get_character_path_level,
     )
 
-    opposition = level_opposition_points(
+    difficulty = concealment + level_opposition(
         check_type,
         level=get_character_path_level(caster),
         character=caster,
     )
-    difficulty = concealment + opposition.total
 
     # Per-observer query-in-a-loop, by the letter of the standing rule (django_notes.md)
     # -- but each observer needs their OWN independent roll, so this can't collapse into
@@ -277,8 +276,6 @@ def _roll_cast_audience(
             check_type,
             target_difficulty=difficulty,
             extra_traits=sensing_terms,
-            # The caster's conditions are modifiers, not its standing (#4601).
-            target_modifiers=opposition.modifiers,
         )
         if result.success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL:
             full.append(persona)

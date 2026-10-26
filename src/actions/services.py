@@ -109,7 +109,6 @@ def start_action_resolution(  # noqa: PLR0913
     check_type: CheckType | None = None,
     effort_level: str | None = None,
     extra_traits: Sequence[ExtraTraitTerm] = (),
-    extra_standing: int = 0,
 ) -> PendingActionResolution:
     """Start an action resolution pipeline and run it to completion or pause.
 
@@ -134,10 +133,6 @@ def start_action_resolution(  # noqa: PLR0913
     ``extra_traits`` (#4450): skill terms the main check adds at call time, passed to
     ``perform_check`` and stored on the pending record so a GATED resume rolls the same
     terms. Gates are unaffected. ``()`` (the default) leaves every roll unchanged.
-
-    ``extra_standing`` (#4601): the part of ``extra_modifiers`` that is the roller's own
-    standing (social fatigue), passed to the main check's ``perform_check`` so the hopeless
-    pin is decided on own standing, and kept on the pending record for a resume.
     """
     pending = PendingActionResolution(
         template_id=template.pk,
@@ -153,7 +148,6 @@ def start_action_resolution(  # noqa: PLR0913
         extra_modifiers=extra_modifiers,
         effort_level=effort_level,
         extra_traits=tuple(extra_traits),
-        extra_standing=extra_standing,
     )
 
     if template.pipeline == Pipeline.GATED:
@@ -189,7 +183,6 @@ def start_action_resolution(  # noqa: PLR0913
         check_type=check_type,
         effort_level=effort_level,
         extra_traits=extra_traits,
-        extra_standing=extra_standing,
     )
     pending.main_result = main_result
     pending.current_phase = ResolutionPhase.MAIN_RESOLVED
@@ -315,7 +308,6 @@ def _resume_confirmed(
             pending.extra_modifiers,
             effort_level=pending.effort_level,
             extra_traits=pending.extra_traits,
-            extra_standing=pending.extra_standing,
         )
         pending.current_phase = ResolutionPhase.MAIN_RESOLVED
         # The main check just rolled with the condition terms the caller folded into
@@ -420,7 +412,6 @@ def _run_main_step(  # noqa: PLR0913
     check_type: CheckType | None = None,
     effort_level: str | None = None,
     extra_traits: Sequence[ExtraTraitTerm] = (),
-    extra_standing: int = 0,
 ) -> StepResult:
     """Run the main resolution step."""
     check_result = perform_check(
@@ -430,7 +421,6 @@ def _run_main_step(  # noqa: PLR0913
         extra_modifiers=extra_modifiers,
         effort_level=effort_level,
         extra_traits=extra_traits,
-        extra_standing=extra_standing,
     )
 
     if template.consequence_pool is None:
