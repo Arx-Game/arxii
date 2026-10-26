@@ -99,8 +99,10 @@ def free_units(domain: Domain, *, exclude_holding: DomainHolding | None = None) 
     return max(0, total - occupied_units(domain, exclude_holding=exclude_holding))
 
 
-def _stream_name(site_name: str) -> str:
-    return f"{site_name}: territory"[:100]
+def _stream_name(site_name: str, *, source: str, source_id: int) -> str:
+    """Keep the source identity intact when a display label repeats or is truncated."""
+    suffix = f": territory [{source}:{source_id}]"
+    return f"{site_name[: 100 - len(suffix)]}{suffix}"
 
 
 def ensure_turf_stream(turf: Turf) -> OrgIncomeStream | None:
@@ -114,7 +116,7 @@ def ensure_turf_stream(turf: Turf) -> OrgIncomeStream | None:
     if stream is None:
         stream = OrgIncomeStream.objects.create(
             organization=turf.controlling_org,
-            name=_stream_name(turf.site_name),
+            name=_stream_name(turf.site_name, source="turf", source_id=turf.pk),
             kind=IncomeStreamKind.TERRITORY,
             gross_amount=0,
             area=turf.area,
@@ -124,7 +126,8 @@ def ensure_turf_stream(turf: Turf) -> OrgIncomeStream | None:
         turf.save(update_fields=["income_stream"])
     elif stream.organization_id != turf.controlling_org_id:
         stream.organization = turf.controlling_org
-        stream.save(update_fields=["organization"])
+        stream.name = _stream_name(turf.site_name, source="turf", source_id=turf.pk)
+        stream.save(update_fields=["organization", "name"])
     return stream
 
 
@@ -139,7 +142,9 @@ def ensure_domain_stream(domain: Domain) -> OrgIncomeStream | None:
     if stream is None:
         stream = OrgIncomeStream.objects.create(
             organization=domain.owner_org,
-            name=_stream_name(domain.name or domain.area.name),
+            name=_stream_name(
+                domain.name or domain.area.name, source="domain", source_id=domain.pk
+            ),
             kind=IncomeStreamKind.TERRITORY,
             gross_amount=0,
             area=domain.area,
@@ -148,7 +153,10 @@ def ensure_domain_stream(domain: Domain) -> OrgIncomeStream | None:
         domain.save(update_fields=["territory_stream"])
     elif stream.organization_id != domain.owner_org_id:
         stream.organization = domain.owner_org
-        stream.save(update_fields=["organization"])
+        stream.name = _stream_name(
+            domain.name or domain.area.name, source="domain", source_id=domain.pk
+        )
+        stream.save(update_fields=["organization", "name"])
     return stream
 
 

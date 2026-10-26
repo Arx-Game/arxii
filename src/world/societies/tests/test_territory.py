@@ -16,7 +16,11 @@ from world.societies.constants import ControlKind
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.services import create_domain
 from world.societies.models import Turf
-from world.societies.territory import ensure_territory_streams, territory_units
+from world.societies.territory import (
+    ensure_domain_stream,
+    ensure_territory_streams,
+    territory_units,
+)
 from world.societies.turf_services import apply_turf_push
 
 
@@ -180,3 +184,118 @@ class TerritoryStreamTests(TestCase):
         ensure_territory_streams()
 
         self.assertFalse(OrgIncomeStream.objects.filter(kind=IncomeStreamKind.TERRITORY).exists())
+
+
+class TerritoryStreamIdentityTests(TestCase):
+    """Cross-system: rollover provisioning and income accrual on real territory rows.
+
+    No player command invokes the weekly provisioning phase; use its caller seam.
+    """
+
+    def test_unnamed_domains_with_shared_area_labels_accrue_separately(self):
+        org = OrganizationFactory()
+        domains = [
+            create_domain(area=AreaFactory(name="Shared coast"), name="", owner_org=org)
+            for _ in range(2)
+        ]
+        for domain in domains:
+            _room(domain.area)
+
+        ensure_territory_streams()
+        ensure_territory_streams()
+
+        streams = []
+        for domain in domains:
+            domain.refresh_from_db()
+            stream = domain.territory_stream
+            accrue_income_stream(stream)
+            stream.refresh_from_db()
+            self.assertEqual(stream.uncollected_pool, TERRITORY_BASE_PER_UNIT)
+            streams.append(stream)
+        self.assertNotEqual(streams[0].pk, streams[1].pk)
+        self.assertEqual(org.income_streams.count(), 2)
+
+    def test_long_domain_labels_keep_distinct_streams(self):
+        org = OrganizationFactory()
+        domains = [
+            create_domain(area=AreaFactory(), name="Coast" * 22 + ending, owner_org=org)
+            for ending in (" East", " West")
+        ]
+
+        ensure_territory_streams()
+
+        for domain in domains:
+            domain.refresh_from_db()
+            self.assertLessEqual(len(domain.territory_stream.name), 100)
+        self.assertEqual(org.income_streams.count(), 2)
+
+    def test_domain_and_turfs_with_shared_labels_have_separate_streams(self):
+        org = OrganizationFactory()
+        area = AreaFactory(name="Shared coast", level=AreaLevel.WARD)
+        domain = create_domain(area=area, name="Shared coast", owner_org=org)
+        corner = _room(area)
+        # The room and area may carry the same display label too.
+        corner.objectdb.db_key = "Shared coast"
+        corner.objectdb.save(update_fields=["db_key"])
+        apply_turf_push(org, area, 50)
+        apply_turf_push(org, corner, 50)
+
+        ensure_territory_streams()
+        ensure_territory_streams()
+
+        domain.refresh_from_db()
+        self.assertEqual(org.income_streams.count(), 3)
+        self.assertEqual(domain.territory_stream.organization, org)
+
+    def test_transfer_of_legacy_stream_keeps_pool_and_avoids_name_collision(self):
+        org = OrganizationFactory()
+        rival = OrganizationFactory()
+        domains = [
+            create_domain(area=AreaFactory(name="Shared coast"), name="", owner_org=owner)
+            for owner in (org, rival)
+        ]
+        ensure_territory_streams()
+        for domain in domains:
+            domain.refresh_from_db()
+            stream = domain.territory_stream
+            stream.name = "Shared coast: territory"
+            stream.uncollected_pool = 73
+            stream.save(update_fields=["name", "uncollected_pool"])
+        original_stream_id = domains[0].territory_stream_id
+        domains[0].owner_org = rival
+        domains[0].save(update_fields=["owner_org"])
+
+        ensure_domain_stream(domains[0])
+        ensure_territory_streams()
+
+        domains[0].refresh_from_db()
+        stream = domains[0].territory_stream
+        self.assertEqual(stream.pk, original_stream_id)
+        self.assertEqual(stream.organization, rival)
+        self.assertEqual(stream.uncollected_pool, 73)
+        self.assertEqual(rival.income_streams.count(), 2)
+
+    def test_turf_flip_preserves_legacy_pool_despite_shared_site_labels(self):
+        org = OrganizationFactory()
+        rival = OrganizationFactory()
+        areas = [AreaFactory(name="Shared quay", level=AreaLevel.WARD) for _ in range(2)]
+        turfs = [
+            apply_turf_push(owner, area, 30)
+            for owner, area in zip((org, rival), areas, strict=True)
+        ]
+        for turf in turfs:
+            stream = turf.income_stream
+            stream.name = "Shared quay: territory"
+            stream.uncollected_pool = 91
+            stream.save(update_fields=["name", "uncollected_pool"])
+        original_stream_id = turfs[0].income_stream_id
+
+        apply_turf_push(rival, areas[0], 60)
+        ensure_territory_streams()
+
+        turfs[0].refresh_from_db()
+        stream = turfs[0].income_stream
+        self.assertEqual(stream.pk, original_stream_id)
+        self.assertEqual(stream.organization, rival)
+        self.assertEqual(stream.uncollected_pool, 91)
+        self.assertEqual(rival.income_streams.count(), 2)
