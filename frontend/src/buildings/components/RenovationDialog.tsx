@@ -1,6 +1,12 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 
 import { useBuildingKindsQuery } from '../queries';
 import type { BuildingKind, RoomBuilderActionKey } from '../types';
@@ -52,7 +58,7 @@ export function RenovationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Renovate the building</DialogTitle>
         </DialogHeader>

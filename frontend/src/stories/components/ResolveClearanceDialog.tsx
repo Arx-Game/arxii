@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -59,7 +60,7 @@ export function ResolveClearanceDialog({ clearanceId }: Props) {
           Resolve
         </Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined} className="sm:max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Resolve escalated clearance</DialogTitle>
         </DialogHeader>

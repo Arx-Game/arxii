@@ -6,6 +6,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -75,7 +76,7 @@ export function GiveMissionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Give mission to {targetPersonaName}</DialogTitle>
         </DialogHeader>

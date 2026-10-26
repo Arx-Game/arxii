@@ -16,7 +16,13 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -111,7 +117,7 @@ export function EstateLeaf({ estate, onPlan }: EstateLeafProps) {
           if (!next) setPlanOpen(false);
         }}
       >
-        <DialogContent aria-describedby={undefined} className="almanach max-w-md">
+        <DialogContent {...NO_DESCRIPTION} className="almanach max-w-md">
           <DialogTitle>Plan the estate</DialogTitle>
           <div className="field">
             <Label htmlFor="plan-estate-name">name</Label>

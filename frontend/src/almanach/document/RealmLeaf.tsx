@@ -28,7 +28,13 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -198,7 +204,7 @@ export function RealmLeaf({ houseId, houseName, realm, onSwear, extra }: RealmLe
           if (!next) setSwearOpen(false);
         }}
       >
-        <DialogContent aria-describedby={undefined} className="almanach max-w-md">
+        <DialogContent {...NO_DESCRIPTION} className="almanach max-w-md">
           <DialogTitle>Swear a house</DialogTitle>
           <div className="field">
             <Label htmlFor="swear-house">house</Label>

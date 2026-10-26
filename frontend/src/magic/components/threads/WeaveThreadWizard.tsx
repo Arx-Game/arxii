@@ -30,6 +30,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -976,11 +977,7 @@ export function WeaveThreadWizard({
 
   return (
     <Dialog open={open} onOpenChange={resetAndClose}>
-      <DialogContent
-        className="sm:max-w-lg"
-        data-testid="weave-thread-wizard"
-        aria-describedby={undefined}
-      >
+      <DialogContent className="sm:max-w-lg" data-testid="weave-thread-wizard" {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Weave a New Thread</DialogTitle>
           <p className="text-xs text-muted-foreground" data-testid="wizard-step-label">

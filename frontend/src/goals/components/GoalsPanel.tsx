@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -89,7 +90,7 @@ function LogProgressDialog({ characterId }: { characterId: number }) {
           Log Progress
         </Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Log Goal Progress</DialogTitle>
         </DialogHeader>

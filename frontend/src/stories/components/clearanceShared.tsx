@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -152,7 +153,7 @@ export function ClearanceNoteDialog({
           {triggerLabel}
         </Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined} className="sm:max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
@@ -265,7 +266,7 @@ export function ClearanceConfirmButton({
         </Button>
       </AlertDialogTrigger>
       {/* No description given: say so, rather than point at one that is not there. */}
-      <AlertDialogContent {...(description ? {} : { 'aria-describedby': undefined })}>
+      <AlertDialogContent {...(description ? {} : NO_DESCRIPTION)}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description && <AlertDialogDescription>{description}</AlertDialogDescription>}

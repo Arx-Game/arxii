@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -60,7 +61,7 @@ export function LodgeAppealDialog({ orgId, orgName }: { orgId: number; orgName: 
       <DialogTrigger asChild>
         <Button data-testid="appeal-to-org-trigger">Appeal to {orgName}</Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Appeal to {orgName}</DialogTitle>
         </DialogHeader>

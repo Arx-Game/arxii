@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -83,7 +84,7 @@ export function OriginStoryEditorDialog({ characterId, sheet }: OriginStoryEdito
           Finish Origin Story
         </Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined} className="max-h-[80vh] overflow-y-auto">
+      <DialogContent {...NO_DESCRIPTION} className="max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Origin Story</DialogTitle>
         </DialogHeader>

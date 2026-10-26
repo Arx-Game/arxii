@@ -15,6 +15,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -55,7 +56,7 @@ export function PutInDialog({ open, onOpenChange, containers, onConfirm }: PutIn
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Put item in…</DialogTitle>
         </DialogHeader>

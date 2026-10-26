@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -71,7 +72,7 @@ export function AcceptInviteDialog({ invite, open, onOpenChange }: AcceptInviteD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Accept Crossover Invite</DialogTitle>

@@ -9,6 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { apiFetch } from '@/evennia_replacements/api';
@@ -72,7 +73,7 @@ export function UnseenPresenceRow({ viewerPersonaId }: UnseenPresenceRowProps) {
         )}
       </div>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent {...NO_DESCRIPTION}>
           <DialogHeader>
             <DialogTitle>Report unseen presence</DialogTitle>
           </DialogHeader>

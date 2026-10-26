@@ -39,7 +39,13 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -205,7 +211,7 @@ export function AddKinDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent aria-describedby={undefined} className="almanach max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="almanach max-w-md">
         <DialogTitle>
           {defaultHousehold ? 'A person of the household' : 'A child · a spouse'}
         </DialogTitle>

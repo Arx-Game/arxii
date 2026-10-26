@@ -16,6 +16,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -194,10 +195,7 @@ export function EpisodeFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        aria-describedby={undefined}
-        className="max-h-[85vh] overflow-y-auto sm:max-w-xl"
-      >
+      <DialogContent {...NO_DESCRIPTION} className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{isEdit ? 'Edit Episode' : 'Create Episode'}</DialogTitle>

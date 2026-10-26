@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -69,7 +70,7 @@ export function SendVisionFromBeingDialog({ beingId, beingName }: SendVisionFrom
       <DialogTrigger asChild>
         <Button data-testid="send-vision-button">Send Vision…</Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent {...NO_DESCRIPTION}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>A vision from {beingName}</DialogTitle>

@@ -11,7 +11,7 @@
  * it's left out rather than invented — exits and the breadcrumb-derived
  * location line are the only "occupancy"-adjacent facts this dialog has.
  */
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, NO_DESCRIPTION } from '@/components/ui/dialog';
 import { Plate } from '@/components/folio';
 
 export interface PreviewDialogProps {
@@ -39,7 +39,7 @@ export function PreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-w-2xl">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-2xl">
         <DialogTitle className="sr-only">Preview: {name || 'unnamed room'}</DialogTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <Plate className="p-4" data-testid="preview-web-card">

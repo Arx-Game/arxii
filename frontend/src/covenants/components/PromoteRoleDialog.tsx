@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useSubroles, usePromoteMembership } from '@/covenants/queries';
@@ -113,7 +114,7 @@ export function PromoteRoleDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Promote {parentRole.name}</DialogTitle>
         </DialogHeader>

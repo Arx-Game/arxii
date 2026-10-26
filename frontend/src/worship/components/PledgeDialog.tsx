@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -97,10 +98,7 @@ export function PledgeDialog({
           Pledge yourself
         </Button>
       </DialogTrigger>
-      <DialogContent
-        aria-describedby={undefined}
-        className="max-h-[90vh] overflow-y-auto sm:max-w-xl"
-      >
+      <DialogContent {...NO_DESCRIPTION} className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Pledge yourself to {beingName}</DialogTitle>

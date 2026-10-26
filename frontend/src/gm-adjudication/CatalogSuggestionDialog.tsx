@@ -21,6 +21,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -87,7 +88,7 @@ export function CatalogSuggestionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} data-testid="suggestion-dialog">
+      <DialogContent {...NO_DESCRIPTION} data-testid="suggestion-dialog">
         <DialogHeader>
           <DialogTitle>Suggest a catalog entry</DialogTitle>
         </DialogHeader>

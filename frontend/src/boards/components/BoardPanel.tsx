@@ -16,7 +16,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
 import { BOARD_KEYS, useBoardPostsQuery } from '@/boards/queries';
@@ -130,7 +136,7 @@ export function BoardPanel({ boardId, boardName, characterId }: BoardPanelProps)
       )}
 
       <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent {...NO_DESCRIPTION}>
           <DialogHeader>
             <DialogTitle>Post to {boardName}</DialogTitle>
           </DialogHeader>

@@ -16,7 +16,13 @@
  * context; otherwise omit it and `ComposeMailForm` falls back to
  * `MyTenureSelect` so the player picks among their own tenures.
  */
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { ComposeMailForm } from '@/mail/components/ComposeMailForm';
 
@@ -44,7 +50,7 @@ export function MessagePlayerDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Message the player of {recipientDisplay}</DialogTitle>
         </DialogHeader>

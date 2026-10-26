@@ -20,6 +20,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -101,7 +102,7 @@ export function SaveOutfitDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Save current look</DialogTitle>
         </DialogHeader>

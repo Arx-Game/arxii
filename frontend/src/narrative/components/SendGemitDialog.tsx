@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -110,7 +111,7 @@ export function SendGemitDialog() {
         </Button>
       </DialogTrigger>
 
-      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Broadcast Gemit</DialogTitle>

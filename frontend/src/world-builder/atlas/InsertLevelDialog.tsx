@@ -12,7 +12,13 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -50,11 +56,7 @@ export function InsertLevelDialog({ between, onClose, onConfirm }: InsertLevelDi
 
   return (
     <Dialog open={between != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        aria-describedby={undefined}
-        className="max-w-md"
-        data-testid="insert-level-dialog"
-      >
+      <DialogContent {...NO_DESCRIPTION} className="max-w-md" data-testid="insert-level-dialog">
         <DialogTitle className="font-body text-base font-normal">
           {between ? `Insert between ${between.upper.name} and ${between.lower.name}` : ''}
         </DialogTitle>

@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogTitle } from '@/components/
 import type { GalleryPicture } from '@/roster/gallery';
 import { type DeleteChoice, deleteChoiceFor, formatBytes } from './labels';
 import { cn } from '@/lib/utils';
+import { NO_DESCRIPTION } from '@/components/ui/dialog';
 
 interface PictureDeleteConfirmProps {
   picture: GalleryPicture | null;
@@ -51,7 +52,7 @@ export function PictureDeleteConfirm({
 
   return (
     <AlertDialog open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent aria-describedby={undefined} className="max-w-md">
+      <AlertDialogContent {...NO_DESCRIPTION} className="max-w-md">
         <div className="refsheet gallery-dialog">
           <AlertDialogTitle className="gallery-dialog-title">{copy.title}</AlertDialogTitle>
           <p>{copy.body}</p>

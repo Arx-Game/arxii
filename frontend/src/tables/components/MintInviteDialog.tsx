@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,7 +93,7 @@ export function MintInviteDialog({ children }: MintInviteDialogProps) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent aria-describedby={undefined} className="sm:max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Mint Invite</DialogTitle>
         </DialogHeader>

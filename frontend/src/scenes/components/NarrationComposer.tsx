@@ -36,6 +36,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -147,7 +148,7 @@ export function NarrationComposer({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           {/* F5: "Tied to" is its own labelled chip line below, not folded
               into the title -- the title stays for the accessible name only. */}

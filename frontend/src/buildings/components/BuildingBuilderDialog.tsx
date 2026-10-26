@@ -1,7 +1,13 @@
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import type { GhostCell } from '@/map-canvas/ghosts';
 
 import { useBuildingManagerQuery, useRoomBuilderAction, useRoomSizeTiersQuery } from '../queries';
@@ -70,7 +76,7 @@ export function BuildingBuilderDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        aria-describedby={undefined}
+        {...NO_DESCRIPTION}
         className="flex h-[92vh] w-[96vw] max-w-none flex-col sm:max-w-[96vw]"
       >
         <DialogHeader className="flex-row flex-wrap items-center justify-between gap-4 space-y-0 pr-8">

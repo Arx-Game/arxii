@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -106,7 +107,7 @@ export function DigRoomDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Dig world room</DialogTitle>
           {areaBreadcrumb && (

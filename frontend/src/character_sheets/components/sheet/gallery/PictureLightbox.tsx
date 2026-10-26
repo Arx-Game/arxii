@@ -3,7 +3,7 @@
  * set it was opened from. A veiled picture stays veiled here until clicked.
  */
 import { useEffect } from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, NO_DESCRIPTION } from '@/components/ui/dialog';
 import type { GalleryPicture } from '@/roster/gallery';
 import { cn } from '@/lib/utils';
 
@@ -45,7 +45,7 @@ export function PictureLightbox({
   return (
     <Dialog open={picture !== undefined} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        aria-describedby={undefined}
+        {...NO_DESCRIPTION}
         className="max-w-6xl border-0 bg-transparent p-0 text-[#f1e6d6] shadow-none"
       >
         <DialogTitle className="sr-only">{picture?.title || 'Picture'}</DialogTitle>

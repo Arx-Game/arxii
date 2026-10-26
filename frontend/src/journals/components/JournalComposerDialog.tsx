@@ -24,6 +24,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
@@ -99,7 +100,7 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => (isOpen ? undefined : onClose())}>
-      <DialogContent aria-describedby={undefined} className="journals max-h-[85vh] overflow-y-auto">
+      <DialogContent {...NO_DESCRIPTION} className="journals max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Write a journal entry</DialogTitle>
         </DialogHeader>

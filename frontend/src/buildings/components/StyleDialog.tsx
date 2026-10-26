@@ -1,6 +1,12 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 
 import { useArchitecturalStylesQuery } from '../queries';
 import type { RoomBuilderActionKey } from '../types';
@@ -39,7 +45,7 @@ export function StyleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Set building style</DialogTitle>
         </DialogHeader>

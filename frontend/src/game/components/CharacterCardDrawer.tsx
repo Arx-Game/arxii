@@ -9,6 +9,7 @@ import { useRosterEntryByNameQuery, useRosterEntryQuery } from '@/roster/queries
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import { JournalComposerDialog } from '@/journals/components/JournalComposerDialog';
 import { MessagePlayerDialog } from './MessagePlayerDialog';
+import { NO_DESCRIPTION } from '@/components/ui/dialog';
 
 export interface CharacterCardDrawerProps {
   /** The clicked bubble's persona identity; `null` means the drawer is closed. */
@@ -118,11 +119,7 @@ export function CharacterCardDrawer({
         if (!open) onClose();
       }}
     >
-      <SheetContent
-        aria-describedby={undefined}
-        side="right"
-        className="w-full overflow-y-auto sm:max-w-md"
-      >
+      <SheetContent {...NO_DESCRIPTION} side="right" className="w-full overflow-y-auto sm:max-w-md">
         {persona && (
           <>
             <SheetHeader>

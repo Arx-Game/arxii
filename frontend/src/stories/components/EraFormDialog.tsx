@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -100,7 +101,7 @@ export function EraFormDialog({ open, onClose, era }: EraFormDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent aria-describedby={undefined} className="max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit Era' : 'Create Era'}</DialogTitle>
         </DialogHeader>

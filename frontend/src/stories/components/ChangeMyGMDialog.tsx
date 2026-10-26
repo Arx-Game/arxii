@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -364,7 +365,7 @@ export function ChangeMyGMDialog({ story }: ChangeMyGMDialogProps) {
         </Button>
       </DialogTrigger>
 
-      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="sm:max-w-lg">
         {step === 'withdraw' ? (
           <WithdrawStep story={story} onSuccess={handleWithdrawSuccess} onCancel={handleCancel} />
         ) : (

@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, NO_DESCRIPTION } from '@/components/ui/dialog';
 import { fetchPlayerMedia, uploadPlayerMedia } from '@/roster/api';
 import type { PlayerMedia } from '@/roster/types';
 
@@ -70,7 +70,7 @@ export function ArtDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-w-2xl">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-2xl">
         <DialogTitle>Art for {subjectName}</DialogTitle>
 
         {currentArtUrl && (

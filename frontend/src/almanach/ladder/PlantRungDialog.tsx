@@ -30,7 +30,13 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+  NO_DESCRIPTION,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -165,7 +171,7 @@ export function PlantRungDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent aria-describedby={undefined} className="almanach max-w-md">
+      <DialogContent {...NO_DESCRIPTION} className="almanach max-w-md">
         <DialogTitle>Plant a rung</DialogTitle>
         {canOfferRoot && parent && (
           <div className="field">

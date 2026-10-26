@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -108,7 +109,7 @@ export function ProtectedSubjectFormDialog({ storyId, onSuccess }: Props) {
         </Button>
       </DialogTrigger>
 
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Protect a subject</DialogTitle>
         </DialogHeader>

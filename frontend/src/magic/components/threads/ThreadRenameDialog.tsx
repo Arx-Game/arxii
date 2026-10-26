@@ -10,6 +10,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,7 +44,7 @@ export function ThreadRenameDialog({ thread, open, onOpenChange }: ThreadRenameD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} data-testid="thread-rename-dialog">
+      <DialogContent {...NO_DESCRIPTION} data-testid="thread-rename-dialog">
         <DialogHeader>
           <DialogTitle>Edit Thread</DialogTitle>
         </DialogHeader>

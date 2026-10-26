@@ -20,6 +20,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Combobox, type ComboboxItem } from '@/components/ui/combobox';
@@ -181,10 +182,7 @@ export function EditOutfitDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        aria-describedby={undefined}
-        className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
-      >
+      <DialogContent {...NO_DESCRIPTION} className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit outfit</DialogTitle>
         </DialogHeader>

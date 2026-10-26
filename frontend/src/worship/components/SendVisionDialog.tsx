@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -100,7 +101,7 @@ export function SendVisionDialog({
           Send vision
         </Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined} className="max-h-[80vh] overflow-y-auto">
+      <DialogContent {...NO_DESCRIPTION} className="max-h-[80vh] overflow-y-auto">
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Send {recipientName} a vision</DialogTitle>
