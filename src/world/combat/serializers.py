@@ -21,7 +21,6 @@ from world.areas.positioning.serializers import (
 from world.checks.serializers import ConsequenceOutcomeSerializer
 from world.combat.constants import (
     ENTITY_TYPE_PC,
-    REACTIONS_PER_ROUND,
     SIGNIFICANT_NPC_TIERS,
     ActionCategory,
     ClashActionSlot,
@@ -431,6 +430,22 @@ class AftermathDigestSerializer(serializers.Serializer):
     won_over = WonOverRowSerializer(many=True)
 
 
+class DodgeLandingSerializer(serializers.Serializer):
+    """One place a dodge can land in (#4676)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class DodgePlanSerializer(serializers.Serializer):
+    """Schema-only shape of the viewer's own dodge plan (#4676). Private to its owner."""
+
+    enabled = serializers.BooleanField()
+    landing_id = serializers.IntegerField(allow_null=True)
+    options = DodgeLandingSerializer(many=True)
+    cost_line = serializers.CharField()
+
+
 class ParticipantSerializer(serializers.ModelSerializer):
     """Read serializer for combat participants.
 
@@ -458,7 +473,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     current_square = serializers.SerializerMethodField()
     aftermath = serializers.SerializerMethodField()
     reactions_used = serializers.SerializerMethodField(required=False)
-    reactions_remaining = serializers.SerializerMethodField(required=False)
+    dodge_plan = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -482,12 +497,51 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "current_square",
             "aftermath",
             "reactions_used",
-            "reactions_remaining",
+            "dodge_plan",
         ]
 
     @extend_schema_field(SquareSerializer(allow_null=True))
     def get_current_square(self, obj: CombatParticipant) -> dict[str, int] | None:
         return _square_payload(obj.character_sheet.character)
+
+    @extend_schema_field(DodgePlanSerializer(allow_null=True))
+    def get_dodge_plan(self, obj: CombatParticipant) -> dict[str, Any] | None:
+        """The viewer's own dodge plan and choices (#4676); None for anyone else.
+
+        Never shown to other players or to a GM: where she means to land shows only
+        when it happens. None also when nothing she has lets her dodge.
+        """
+        if not self._is_viewers_own(obj):
+            return None
+        from world.combat.services.reactions import (  # noqa: PLC0415
+            dodge_cost_line,
+            dodge_landing_options,
+            dodge_sources,
+        )
+
+        sources = dodge_sources(obj)
+        if not sources:
+            return None
+        return {
+            "enabled": obj.dodge_enabled,
+            "landing_id": obj.dodge_landing_id,
+            "options": [{"id": p.pk, "name": p.name} for p in dodge_landing_options(obj)],
+            "cost_line": dodge_cost_line(sources[0]),
+        }
+
+    def _is_viewers_own(self, obj: CombatParticipant) -> bool:
+        """True when the requesting account plays this participant's character."""
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        viewer_character_ids = self.context.get("viewer_character_ids")
+        if viewer_character_ids is None:
+            try:
+                viewer_character_ids = request.user.played_character_sheet_ids
+            except AttributeError:
+                viewer_character_ids = frozenset()
+            self.context["viewer_character_ids"] = viewer_character_ids
+        return obj.character_sheet.character_id in viewer_character_ids
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
         """Check if the requesting user can see this participant's vitals.
@@ -521,12 +575,6 @@ class ParticipantSerializer(serializers.ModelSerializer):
     def get_reactions_used(self, obj: CombatParticipant) -> int | None:
         """Return spent reactions only to the owner, GM, or staff."""
         return obj.reactions_used if self._can_view_vitals(obj) else None
-
-    def get_reactions_remaining(self, obj: CombatParticipant) -> int | None:
-        """Return the remaining reaction availability without exposing other pools."""
-        if not self._can_view_vitals(obj):
-            return None
-        return max(REACTIONS_PER_ROUND - obj.reactions_used, 0)
 
     def get_health(self, obj: CombatParticipant) -> int | None:
         """Return current health — only if viewer has permission."""
@@ -1223,6 +1271,9 @@ class PendingAttackSerializer(serializers.Serializer):
     called_out = serializers.BooleanField()
     damage_scale = serializers.FloatField()
     cancelled = serializers.BooleanField()
+    attack_name = serializers.CharField()
+    covered_position_id = serializers.IntegerField(allow_null=True)
+    covered_position_name = serializers.CharField(allow_null=True)
 
 
 class PendingSelectionOptionSerializer(serializers.Serializer):
@@ -1784,7 +1835,12 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         rows = (
             PendingOpponentAttack.objects.filter(encounter=obj)
-            .select_related("opponent", "target__character_sheet__character")
+            .select_related(
+                "opponent",
+                "threat_entry",
+                "covered_position",
+                "target__character_sheet__character",
+            )
             .order_by("resolves_round", "id")
         )
         return [
@@ -1803,6 +1859,12 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 "called_out": row.called_out,
                 "damage_scale": windup_damage_scale(row.downgrades),
                 "cancelled": row.downgrades >= WINDUP_FIZZLE_DOWNGRADES,
+                # A place-covering wind-up (#4676): the place it lands on.
+                "attack_name": row.threat_entry.name,
+                "covered_position_id": row.covered_position_id,
+                "covered_position_name": (
+                    row.covered_position.name if row.covered_position_id else None
+                ),
             }
             for row in rows
         ]

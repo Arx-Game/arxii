@@ -42,6 +42,7 @@ _SUBVERBS: dict[str, str] = {
     "taunt": "combat_taunt",
     "parley": "combat_parley",
     "mark": "combat_mark",
+    "dodge": "combat_dodge",
     "charge": "combat_charge",
     "await": "combat_await_opening",
     "joust": "combat_joust",
@@ -118,6 +119,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat taunt <opp>          - draw an NPC's aggro toward you
         combat parley <opp>          - talk a wavering foe down mid-fight
         combat mark <opp>           - mark a foe for your covenant-mates this round
+        combat dodge [<place>|here|off] - where you land if you dodge this round
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
         combat await <technique> [soulfray] - wait for an opening: strike first at the
                                      first enemy to come within reach or attack you
@@ -179,7 +181,20 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return {"combo_id": self._resolve_combo_pk(self._require_rest("a combo name"))}
         if self._subverb == "use":  # noqa: STRING_LITERAL
             return self._resolve_use_item_args(self._require_rest("an item"))
+        if self._subverb == "dodge":  # noqa: STRING_LITERAL
+            return self._resolve_dodge_args(self._rest)
         return self._resolve_technique_subverb_args()
+
+    @staticmethod
+    def _resolve_dodge_args(text: str) -> dict[str, Any]:
+        """``dodge`` / ``dodge here`` dodge in place, ``dodge off`` turns it off,
+        ``dodge <place>`` sets where she lands (#4676)."""
+        text = (text or "").strip()
+        if text.lower() == "off":  # noqa: STRING_LITERAL
+            return {"dodge": False}
+        if not text or text.lower() == "here":  # noqa: STRING_LITERAL
+            return {}
+        return {"place": text}
 
     def _resolve_technique_subverb_args(self) -> dict[str, Any]:
         """charge / await / joust: the subverbs that carry a technique."""

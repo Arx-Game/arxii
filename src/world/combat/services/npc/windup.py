@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from world.combat.constants import (
     WINDUP_BLIND_DOWNGRADE,
     WINDUP_CALLED_OUT_DOWNGRADE,
@@ -19,6 +21,7 @@ from world.combat.models import (
     PendingOpponentAttack,
     ThreatPoolEntry,
 )
+from world.combat.services.npc.area_attacks import place_of_participant
 from world.combat.services.npc.npc_targeting import (
     _npc_action_target_pool,
     _select_opponent_targets,
@@ -33,6 +36,9 @@ from world.combat.services.npc.windup_narration import (
 )
 from world.combat.types import ActionOutcome, OpponentDamageResult
 from world.conditions.constants import Allegiance
+
+if TYPE_CHECKING:
+    from world.areas.positioning.models import Position
 
 
 def _select_windup_targets(  # noqa: PLR0913
@@ -102,7 +108,12 @@ def _declare_windup_attack(  # noqa: PLR0913
         shield_participant_ids=shield_participant_ids,
     )
     single_target = selected[0] if targeting_participants and len(selected) == 1 else None
-    _create_pending_opponent_attack(opponent, entry, encounter, single_target)
+    covered = (
+        place_of_participant(selected[0])
+        if entry.covers_place and targeting_participants and selected
+        else None
+    )
+    _create_pending_opponent_attack(opponent, entry, encounter, single_target, covered=covered)
 
 
 def _create_pending_opponent_attack(
@@ -110,6 +121,8 @@ def _create_pending_opponent_attack(
     entry: ThreatPoolEntry,
     encounter: CombatEncounter,
     target: CombatParticipant | None,
+    *,
+    covered: Position | None = None,
 ) -> PendingOpponentAttack:
     """Telegraph a wind-up instead of a same-round attack (#2637 design 2-3, 6).
 
@@ -132,6 +145,7 @@ def _create_pending_opponent_attack(
         declared_round=round_number,
         resolves_round=round_number + entry.windup_rounds,
         called_out=caller is not None,
+        covered_position=covered,
     )
     caller_name = str(caller.character_sheet.character) if caller is not None else None
     _broadcast_windup_telegraph(pending, caller_name=caller_name)
@@ -165,6 +179,20 @@ def _mature_one_pending_attack(
 
     entry = pending.threat_entry
     scale = windup_damage_scale(pending.downgrades)
+
+    # A place-covering wind-up lands on its place whoever stands there (#4676):
+    # cover_place picks the occupants when it resolves.
+    if pending.covered_position_id is not None:
+        CombatOpponentAction.objects.create(
+            opponent=pending.opponent,
+            round_number=round_number,
+            threat_entry=entry,
+            damage_scale=scale,
+            matured_from_called_out_windup=pending.called_out,
+            covered_position=pending.covered_position,
+        )
+        pending.delete()
+        return
 
     if pending.target_id is not None:
         target = pending.target

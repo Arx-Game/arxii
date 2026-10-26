@@ -24,6 +24,15 @@ from world.combat.services.combos.combo_outcome import _damage_multiplier_for_su
 from world.combat.services.npc.npc_movement import strike_pool_key
 from world.combat.services.npc.npc_targeting import _set_npc_action_targets
 from world.combat.services.npc.windup import _declare_windup_attack
+from world.combat.services.reactions import (
+    choose_dodge,
+    covered_place,
+    dodge_roll_active,
+    land_dodge,
+    pay_for_dodge,
+    reaction_penalty,
+    record_reaction,
+)
 from world.combat.types import DefenseResult, ParticipantDamageResult
 from world.conditions.services import spend_contributing_conditions
 
@@ -247,18 +256,32 @@ def resolve_npc_attack(
         level=opponent_action.opponent.level,
         character=opponent_action.opponent.objectdb,
     )
+    # The automatic dodge (#4676): a capability that dodges adds its value to this
+    # roll, costs anima or fatigue, and each reaction already made this round takes
+    # a step off. A place-covering attack is escaped only by landing outside it.
+    covered = covered_place(opponent_action, participant)
+    dodge = choose_dodge(participant, covered_position=covered)
+    dodge_modifier = 0
+    if dodge is not None and pay_for_dodge(participant, dodge):
+        dodge_modifier = dodge.source.value - reaction_penalty(participant)
+        record_reaction(participant)
+    else:
+        dodge = None
     result: CheckResult = perform_check_fn(
         character,
         check_type,
         target_difficulty=opposition.total,
         target_modifiers=opposition.modifiers,
-        extra_modifiers=breakdown.extra_modifiers_total,
+        extra_modifiers=breakdown.extra_modifiers_total + dodge_modifier,
         situation_ctx=situation_ctx,
         stat_override=DEFENSE_STAT,
     )
     spend_contributing_conditions(breakdown)
+    moved_out = dodge is not None and land_dodge(participant, dodge, result.success_level)
 
     multiplier = _damage_multiplier_for_success(result.success_level)
+    if covered is not None and moved_out:
+        multiplier = 0.0  # she left the covered place before it landed
     # damage_multiplier is a Decimal field (authored per-opponent scaling);
     # damage_scale (#2637, the wind-up downgrade ladder) is a plain float —
     # apply them in two steps so Decimal never multiplies directly against a
@@ -269,15 +292,19 @@ def resolve_npc_attack(
     base_damage = int(base_damage * opponent_action.damage_scale)
     final_damage = math.floor(base_damage * multiplier)
 
-    damage_result = _svc.apply_damage_to_participant(
-        participant,
-        final_damage,
-        damage_type=opponent_action.threat_entry.damage_type,
-        source=opponent_action.opponent,
-        on_hit_pool=opponent_action.threat_entry.on_hit_consequence_pool,
-        delivery=opponent_action.threat_entry.delivery,
-        is_area=opponent_action.threat_entry.targeting_mode != TargetingMode.SINGLE,
-    )
+    with dodge_roll_active():
+        damage_result = _svc.apply_damage_to_participant(
+            participant,
+            final_damage,
+            damage_type=opponent_action.threat_entry.damage_type,
+            source=opponent_action.opponent,
+            on_hit_pool=opponent_action.threat_entry.on_hit_consequence_pool,
+            delivery=opponent_action.threat_entry.delivery,
+            is_area=(
+                opponent_action.threat_entry.targeting_mode != TargetingMode.SINGLE
+                or covered is not None
+            ),
+        )
 
     return DefenseResult(
         success_level=result.success_level,

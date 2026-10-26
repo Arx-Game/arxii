@@ -72,10 +72,13 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     for reset_participant in reset_participants:
         reset_participant.reactions_used = 0
         reset_participant.hops_used = 0
+        # The dodge plan is per round (#4676): dodge again, in place, until set.
+        reset_participant.dodge_enabled = True
+        reset_participant.dodge_landing = None
     if reset_participants:
         CombatParticipant.objects.bulk_update_with_reason(
             reset_participants,
-            ["reactions_used", "hops_used"],
+            ["reactions_used", "hops_used", "dodge_enabled", "dodge_landing"],
             reason="issue #3817: intentional bulk write",
         )
 

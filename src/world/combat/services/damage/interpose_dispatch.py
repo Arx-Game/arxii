@@ -22,31 +22,21 @@ if TYPE_CHECKING:
 def _narrate_reaction_declined(
     interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
     protected: object,
-    *,
-    cap: bool,
 ) -> None:
-    """Tell a guardian, privately, why their armed guard did not fire (#3574).
+    """Tell a guardian, privately, that enough hands already answered this blow (#3574).
 
-    ``cap=False``: the guardian's own ``REACTIONS_PER_ROUND`` budget is spent.
-    ``cap=True``: ``ABSORPTION_CAP_PER_MOMENT`` interceptors already answered
-    this payload. No room line either way: ADR-0161 chose a silent no-op so the
-    table never learns a guardian's budget, and this keeps that while the
-    guardian themselves stops guessing. ``protected`` is whatever the fire
-    seam holds (a participant character, an ally summon's objectdb, or the
-    Sent Flying victim) and is only ever stringified.
+    ``ABSORPTION_CAP_PER_MOMENT`` interceptors already answered this payload. Guarding
+    has no per-round cap since #4676 (each reaction makes the next roll harder instead).
+    No room line: ADR-0161 chose a silent no-op so the table never learns a guardian's
+    state, and this keeps that while the guardian stops guessing. ``protected`` is
+    whatever the fire seam holds and is only ever stringified.
     """
     from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
 
-    if cap:
-        text = (
-            f"Enough hands have already answered that blow; your guard over {protected} stays down."
-        )
-    else:
-        text = (
-            f"You have already spent your reaction this round; "
-            f"{protected} takes the blow unguarded."
-        )
-    narrate_privately(interposer, text)
+    narrate_privately(
+        interposer,
+        f"Enough hands have already answered that blow; your guard over {protected} stays down.",
+    )
 
 
 def _settle_technique_interpose_cost(  # noqa: PLR0913 - debit + accrue needs all of it

@@ -1002,3 +1002,91 @@ class MarkAction(Action):
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
         return ActionResult(success=True, message=f"You mark {opponent.name}.")
+
+
+_DODGE_KWARG = "dodge"
+_NO_DODGE_MSG = "Nothing you have lets you dodge."
+_DODGE_OFF_MSG = "You won't dodge this round."
+_DODGE_IN_PLACE_MSG = "If you're attacked, you'll dodge in place."
+_DODGE_TO_MSG = "If you're attacked, you'll dodge to {place}."
+_DODGE_CANNOT_REACH_MSG = "Your dodge can't reach {place}."
+_DODGE_NO_SUCH_PLACE_MSG = "There is no such place here."
+
+
+@dataclass
+class DodgePlanAction(Action):
+    """Set this round's dodge plan while declaring (#4676).
+
+    The dodge itself is automatic (``world.combat.services.reactions``); this only
+    says whether to dodge and where to land. Kwargs: ``dodge`` (false turns dodging
+    off), and ``position_id`` (web) or ``place`` (telnet name) for the landing; with
+    neither she dodges in place. A plan is private and resets each round.
+    """
+
+    key: str = "combat_dodge"
+    name: str = "Dodge plan"
+    icon: str = "wind"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.kwarg_parsing import truthy_kwarg  # noqa: PLC0415
+        from world.combat.services.reactions import (  # noqa: PLC0415
+            dodge_landing_options,
+            dodge_sources,
+        )
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        if _DODGE_KWARG in kwargs and not truthy_kwarg(kwargs[_DODGE_KWARG]):
+            participant.dodge_enabled = False
+            participant.dodge_landing = None
+            participant.save(update_fields=["dodge_enabled", "dodge_landing"])
+            return ActionResult(success=True, message=_DODGE_OFF_MSG)
+        if not dodge_sources(participant):
+            return ActionResult(success=False, message=_NO_DODGE_MSG)
+        options = dodge_landing_options(participant)
+        landing = _dodge_landing_from(options, kwargs)
+        if isinstance(landing, str):
+            return ActionResult(success=False, message=landing)
+        current = options[0] if options else None
+        participant.dodge_enabled = True
+        participant.dodge_landing = None if landing is None or landing == current else landing
+        participant.save(update_fields=["dodge_enabled", "dodge_landing"])
+        if participant.dodge_landing is None:
+            return ActionResult(success=True, message=_DODGE_IN_PLACE_MSG)
+        return ActionResult(success=True, message=_DODGE_TO_MSG.format(place=landing.name))
+
+
+def _dodge_landing_from(options: list, kwargs: dict[str, Any]) -> Any:
+    """The planned landing among ``options``; None for in place; a refusal line as a str."""
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+
+    position_id = kwargs.get("position_id")
+    place = (kwargs.get("place") or "").strip()
+    if position_id in (None, "") and not place:
+        return None
+    by_pk = {p.pk: p for p in options}
+    if position_id not in (None, ""):
+        try:
+            chosen = by_pk.get(int(position_id))
+        except (TypeError, ValueError):
+            return _DODGE_NO_SUCH_PLACE_MSG
+        if chosen is not None:
+            return chosen
+        named = Position.objects.filter(pk=position_id).first()
+        if named is None:
+            return _DODGE_NO_SUCH_PLACE_MSG
+        return _DODGE_CANNOT_REACH_MSG.format(place=named.name)
+    for option in options:
+        if option.name.lower() == place.lower():
+            return option
+    return _DODGE_CANNOT_REACH_MSG.format(place=place)
