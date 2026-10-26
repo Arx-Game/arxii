@@ -14,6 +14,8 @@ interface EntryProps {
   name: string;
   gloss?: string;
   tag: string;
+  /** Further tags beside `tag`, each its own bordered `.tag` (e.g. "Teaches well", #4659). */
+  tags?: string[];
   chosen: boolean;
   /** A gated entry: readable, not choosable. */
   closed?: boolean;
@@ -36,6 +38,7 @@ export function Entry({
   name,
   gloss,
   tag,
+  tags,
   chosen,
   closed,
   open,
@@ -68,7 +71,18 @@ export function Entry({
             {gloss && <span className="entry-gloss">{gloss}</span>}
           </span>
           <span className="entry-tag">
-            <span>{tag}</span>
+            <span>
+              {tag}
+              {tags && tags.length > 0 && (
+                <span className="tags">
+                  {tags.map((extra) => (
+                    <span key={extra} className="tag">
+                      {extra}
+                    </span>
+                  ))}
+                </span>
+              )}
+            </span>
             {!closed && onChoose && (
               <button
                 type="button"

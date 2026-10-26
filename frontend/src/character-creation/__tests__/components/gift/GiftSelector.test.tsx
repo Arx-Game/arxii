@@ -31,12 +31,14 @@ const updateDraftMock = vi.fn();
 // getCGGifts is never invoked because the query cache is pre-seeded below.
 vi.mock('../../../api', () => ({
   getCGGifts: vi.fn(),
+  getCGExplanations: vi.fn(),
   updateDraft: (...args: unknown[]) => updateDraftMock(...args),
 }));
 
 function renderSelector(draft: CharacterDraft) {
   const queryClient = createTestQueryClient();
   seedQueryData(queryClient, characterCreationKeys.cgGifts(draft.id), mockCGGiftOptions);
+  seedQueryData(queryClient, characterCreationKeys.explanations(), {});
   // The gift options include a codex_entry_id (12) — CodexTerm/CodexModal mount
   // unconditionally and fetch on render, not just on open. Seed it so that
   // fetch never hits the (unmocked, real) codex API in tests.
@@ -60,6 +62,21 @@ describe('GiftSelector', () => {
 
     expect(screen.getByText('Whispers of Shadow')).toBeInTheDocument();
     expect(screen.getByText('Flame Ascendant')).toBeInTheDocument();
+  });
+
+  it("tags a Gift the draft's Tradition favors as Teaches well (#4659)", () => {
+    const draft = createMockDraft({
+      id: 1,
+      selected_tradition: mockTradition,
+      selected_path: mockPath,
+    });
+    renderSelector(draft);
+
+    // A tag of its own beside the kind, never folded into it.
+    const tag = screen.getByText('Teaches well');
+    expect(tag).toHaveClass('tag');
+    expect(screen.getAllByText('Teaches well')).toHaveLength(1);
+    expect(screen.getAllByText('major')).toHaveLength(2);
   });
 
   it('shows a prompt instead of gift cards when no tradition is selected', () => {

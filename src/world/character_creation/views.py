@@ -86,6 +86,8 @@ from world.character_creation.serializers import (
     SpeciesSerializer,
     StartingAreaSerializer,
     TraditionSerializer,
+    favored_affinity_names_by_tradition,
+    favored_gift_names_by_tradition,
     schooling_rows,
 )
 from world.character_creation.services import (
@@ -116,6 +118,7 @@ from world.magic.models import (
     GlimpseTag,
     Technique,
     Tradition,
+    TraditionGiftGrant,
 )
 from world.magic.services.cg_catalog import (
     get_gift_options,
@@ -464,6 +467,14 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
             sl.state: sl for sl in TraditionStateLine.objects.select_related("carries")
         }
         context["schooling"] = schooling_rows()
+        # What each Tradition teaches well (#4659): one query each for the whole list.
+        tradition_ids = (
+            [bt.tradition_id for bt in beginning.cached_beginning_traditions]
+            if beginning is not None
+            else []
+        )
+        context["favored_gift_names"] = favored_gift_names_by_tradition(tradition_ids)
+        context["favored_affinity_names"] = favored_affinity_names_by_tradition(tradition_ids)
         return context
 
     @extend_schema(responses=PerspectiveEntrySerializer(many=True))
@@ -545,6 +556,24 @@ class CGGiftOptionViewSet(viewsets.ReadOnlyModelViewSet):
             gift.id for gift in get_gift_options(draft.selected_tradition, draft.selected_path)
         ]
         return Gift.objects.filter(id__in=gift_ids).select_related("codex_entry").order_by("name")
+
+    def get_serializer_context(self) -> dict[str, Any]:
+        """Pass the Gift ids the draft's Tradition favors, for each row's ``favored`` (#4659).
+
+        Resolves the draft again rather than holding it on the view (ADR-0260).
+        """
+        context = super().get_serializer_context()
+        draft = self._get_draft()
+        context["favored_gift_ids"] = (
+            frozenset(
+                TraditionGiftGrant.objects.filter(
+                    tradition_id=draft.selected_tradition_id
+                ).values_list("gift_id", flat=True)
+            )
+            if draft is not None and draft.selected_tradition_id is not None
+            else frozenset()
+        )
+        return context
 
 
 class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):

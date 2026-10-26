@@ -3,6 +3,7 @@ Character Creation serializers.
 """
 
 from collections import defaultdict
+from collections.abc import Iterable
 
 from django.db.models import Q
 from drf_spectacular.utils import extend_schema_field
@@ -44,6 +45,7 @@ from world.character_creation.models import (
     StartingArea,
     TraditionStateLine,
 )
+from world.character_creation.offers import schooling_training_points
 from world.character_creation.services import (
     age_bounds,
     assign_route,
@@ -59,7 +61,7 @@ from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.game_clock.constants import IC_MONTH_NAMES
 from world.game_clock.services import get_ic_now
-from world.magic.models import Gift, GlimpseTag, Technique, Tradition
+from world.magic.models import Gift, GlimpseTag, Technique, Tradition, TraditionGiftGrant
 from world.magic.serializers import TechniqueEffectSummarySerializer
 from world.magic.types.personalization import PersonalizationOptionSet
 from world.mechanics.constants import GOAL_CATEGORY_NAME
@@ -347,8 +349,9 @@ class SchoolingLineSerializer(serializers.Serializer):
     player_line = serializers.CharField()
     price = serializers.IntegerField()
     techniques = serializers.IntegerField()
-    magic_skill_floor = serializers.IntegerField()
+    training_points = serializers.IntegerField()
     grants_distinction_id = serializers.IntegerField(allow_null=True)
+    grants_distinction_name = serializers.CharField(allow_null=True)
     offer_id = serializers.IntegerField(allow_null=True)
 
 
@@ -364,6 +367,7 @@ def schooling_rows() -> list[dict]:
     isn't set up (mirrors the ``get_required_distinction_id`` fallback this replaces).
     """
     lines = list(SchoolingLine.objects.select_related("grants").order_by("rank"))
+    training_points = schooling_training_points(lines)
     offers = DistinctionOffer.objects.filter(
         chapter=OfferChapter.TRADITION_STEP,
         schooling_line__in=lines,
@@ -382,12 +386,43 @@ def schooling_rows() -> list[dict]:
             "player_line": line.player_line,
             "price": line.price,
             "techniques": 1 + line.rank,
-            "magic_skill_floor": line.magic_skill_floor,
+            "training_points": training_points[line.rank],
             "grants_distinction_id": line.grants_id,
+            "grants_distinction_name": line.grants.name if line.grants is not None else None,
             "offer_id": offer_by_line_id.get(line.id),
         }
         for line in lines
     ]
+
+
+def favored_gift_names_by_tradition(tradition_ids: Iterable[int]) -> dict[int, list[str]]:
+    """Each Tradition's favored Gift names, from its ``TraditionGiftGrant`` rows (#4659).
+
+    One query for the whole list. Built per request in
+    ``TraditionViewSet.get_serializer_context`` (key ``"favored_gift_names"``), not
+    prefetched onto the identity-mapped Tradition, so a grant staff add shows on the
+    next request.
+    """
+    names: dict[int, list[str]] = {}
+    grants = TraditionGiftGrant.objects.filter(tradition_id__in=list(tradition_ids))
+    for tradition_id, gift_name in grants.order_by("gift__name").values_list(
+        "tradition_id", "gift__name"
+    ):
+        names.setdefault(tradition_id, []).append(gift_name)
+    return names
+
+
+def favored_affinity_names_by_tradition(tradition_ids: Iterable[int]) -> dict[int, list[str]]:
+    """Each Tradition's ``favored_affinities`` names (#4659); one query for the list."""
+    names: dict[int, list[str]] = {}
+    links = Tradition.favored_affinities.through.objects.filter(
+        tradition_id__in=list(tradition_ids)
+    )
+    for tradition_id, affinity_name in links.order_by("affinity__name").values_list(
+        "tradition_id", "affinity__name"
+    ):
+        names.setdefault(tradition_id, []).append(affinity_name)
+    return names
 
 
 class TraditionSerializer(serializers.ModelSerializer):
@@ -399,6 +434,8 @@ class TraditionSerializer(serializers.ModelSerializer):
     own_wording = serializers.SerializerMethodField()
     refund = serializers.SerializerMethodField()
     schooling = serializers.SerializerMethodField()
+    favored_gift_names = serializers.SerializerMethodField()
+    favored_affinity_names = serializers.SerializerMethodField()
 
     class Meta:
         model = Tradition
@@ -414,6 +451,8 @@ class TraditionSerializer(serializers.ModelSerializer):
             "own_wording",
             "refund",
             "schooling",
+            "favored_gift_names",
+            "favored_affinity_names",
         ]
         read_only_fields = fields
 
@@ -491,6 +530,20 @@ class TraditionSerializer(serializers.ModelSerializer):
             rows = schooling_rows()
         return [row for row in rows if row["rank"] <= max_rank]
 
+    def get_favored_gift_names(self, obj) -> list[str]:
+        """The Gifts this Tradition teaches well (its ``TraditionGiftGrant`` rows, #4659)."""
+        names = self.context.get("favored_gift_names")
+        if names is None:
+            names = favored_gift_names_by_tradition([obj.pk])
+        return names.get(obj.pk, [])
+
+    def get_favored_affinity_names(self, obj) -> list[str]:
+        """The affinities this Tradition teaches well (``favored_affinities``, #4659)."""
+        names = self.context.get("favored_affinity_names")
+        if names is None:
+            names = favored_affinity_names_by_tradition([obj.pk])
+        return names.get(obj.pk, [])
+
 
 class CGGiftOptionSerializer(serializers.ModelSerializer):
     """Gift row for the CG gift-options list (#2426).
@@ -501,11 +554,19 @@ class CGGiftOptionSerializer(serializers.ModelSerializer):
     """
 
     codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
+    favored = serializers.SerializerMethodField()
 
     class Meta:
         model = Gift
-        fields = ["id", "name", "description", "kind", "codex_entry_id"]
+        fields = ["id", "name", "description", "kind", "codex_entry_id", "favored"]
         read_only_fields = fields
+
+    def get_favored(self, obj: Gift) -> bool:
+        """Whether the draft's Tradition favors this Gift: a ``TraditionGiftGrant`` (#4659).
+
+        The view passes the favored Gift ids in context (one query for the list).
+        """
+        return obj.pk in self.context.get("favored_gift_ids", frozenset())
 
 
 class CGTechniqueOptionSerializer(serializers.ModelSerializer):
@@ -1319,7 +1380,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # base 1 + any distinction bonus; the GiftStage funnel's technique picker
     # needs it for the "n of m chosen" budget banner.
     starting_technique_picks = serializers.IntegerField(read_only=True)
-    starting_magic_skill_floor = serializers.IntegerField(read_only=True)
+    # The Magic-skill training pool and the player's allocation of it (#4659).
+    magic_training = serializers.SerializerMethodField()
     # The age range CG accepts for this draft: the general cap tightened by
     # eternal youth and by the heritage's first appearance (#3663). The
     # appearance stage clamps to these instead of knowing the rule.
@@ -1397,7 +1459,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
-            "starting_magic_skill_floor",
+            "magic_training",
             "age_min",
             "age_max",
             "ic_month_names",
@@ -1428,7 +1490,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
-            "starting_magic_skill_floor",
+            "magic_training",
             "bundled_distinctions",
             "derived_anchors",
         ]
@@ -1460,6 +1522,49 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stage_errors(self, obj: CharacterDraft) -> StageValidationErrors:
         """Get validation errors for each stage."""
         return obj.get_stage_validation_errors()
+
+    @extend_schema_field(serializers.DictField())
+    def get_magic_training(self, obj: CharacterDraft) -> dict:
+        """The Magic-skill training pool, its fit bonuses and the skills to spend it on."""
+        from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+        from world.skills.models import SkillPointBudget  # noqa: PLC0415
+
+        pool = obj.magic_training_pool
+        raw = obj.draft_data.get("magic_skills")
+        allocation = raw if isinstance(raw, dict) else {}
+        budget = SkillPointBudget.get_active_budget()
+        max_value = budget.max_skill_value
+
+        def value_of(skill_id: int) -> int:
+            value = allocation.get(str(skill_id), 0)
+            return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+        skills = [
+            {"id": skill.pk, "name": skill.name, "value": value_of(skill.pk), "max": max_value}
+            for skill in magic_category_skills().select_related("trait").order_by("trait__name")
+        ]
+        return {
+            "base_sources": [
+                {
+                    "name": source.name,
+                    "rank": source.rank,
+                    "points": source.points,
+                    # Only a multi-rank distinction names its rank (slice 2 of #4659).
+                    "show_rank": source.max_rank > 1,
+                }
+                for source in pool.sources
+            ],
+            "gift_bonus": pool.gift_bonus,
+            "affinity_bonus": pool.affinity_bonus,
+            "favored_gift_name": pool.fit.favored_gift_name,
+            "favored_affinity_name": pool.fit.favored_affinity_name,
+            "total": pool.total,
+            "required_spend": pool.required_spend,
+            # Magic skills move a whole tier at a time, like the Skills stage.
+            "step": budget.points_per_tier,
+            "allocated": sum(skill["value"] for skill in skills),
+            "skills": skills,
+        }
 
     def get_cg_points_spent(self, obj: CharacterDraft) -> int:
         """Get total CG points spent."""

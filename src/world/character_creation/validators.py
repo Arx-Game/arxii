@@ -617,6 +617,51 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     if errors:
         return errors[:1]
 
+    return _magic_skill_allocation_errors(draft)
+
+
+def _parse_magic_allocation(raw: object) -> dict[int, int] | None:
+    """``draft_data["magic_skills"]`` as {skill id: value}, or None when malformed."""
+    if raw in (None, {}):
+        return {}
+    if not isinstance(raw, dict):
+        return None
+    parsed: dict[int, int] = {}
+    for key, value in raw.items():
+        if (
+            not isinstance(key, str)
+            or not key.isdecimal()
+            or isinstance(value, bool)
+            or not isinstance(value, int)
+        ):
+            return None
+        parsed[int(key)] = value
+    return parsed
+
+
+def _magic_skill_allocation_errors(draft: CharacterDraft) -> list[str]:
+    """The Magic skill allocation spends exactly the training pool, in tiers (#4659)."""
+    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+    from world.skills.models import SkillPointBudget  # noqa: PLC0415
+
+    allocation = _parse_magic_allocation(draft.draft_data.get("magic_skills"))
+    pool = draft.magic_training_pool
+    if allocation is None:
+        return ["Magic skills only"]
+    if pool.required_spend <= 0 and not allocation:
+        return []
+    budget = SkillPointBudget.get_active_budget()
+    step = budget.points_per_tier
+    maximum = budget.max_skill_value
+    if set(allocation) - set(magic_category_skills().values_list("pk", flat=True)):
+        return ["Magic skills only"]
+    if any(v < 0 or v > maximum or v % step for v in allocation.values()):
+        return [f"Magic skill values go in steps of {step} up to {maximum}"]
+    spent = sum(allocation.values())
+    if spent > pool.total:
+        return [f"Your magical training is over by {spent - pool.total}"]
+    if spent < pool.required_spend:
+        return [f"Spend all of your magical training: {pool.required_spend - spent} left"]
     return []
 
 

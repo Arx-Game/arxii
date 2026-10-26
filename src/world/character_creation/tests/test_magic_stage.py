@@ -546,6 +546,17 @@ class CGGiftOptionEndpointTest(TestCase):
         cls.empty_gift = GiftFactory(name="Nothing Yet")
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.empty_gift)
 
+        # Offered on the path, but no grant row from this tradition: not favored (#4659).
+        cls.unfavored_gift = GiftFactory(name="Unfavored Gift")
+        unfavored_grant = PathGiftGrantFactory(path=cls.path, gift=cls.unfavored_gift)
+        unfavored_grant.starter_techniques.set(
+            TechniqueFactory.create_batch(
+                1,
+                gift=cls.unfavored_gift,
+                action_template=get_standalone_cast_template(),
+            )
+        )
+
     def setUp(self):
         self.client = APIClient()
         self.client.force_authenticate(user=self.account)
@@ -572,6 +583,20 @@ class CGGiftOptionEndpointTest(TestCase):
         gift_ids = [row["id"] for row in response.data]
         assert self.available_gift.id in gift_ids
         assert self.empty_gift.id not in gift_ids
+
+    def test_rows_say_whether_the_drafts_tradition_favors_the_gift(self):
+        """``favored`` is a TraditionGiftGrant from the draft's Tradition (#4659)."""
+        draft = CharacterDraftFactory(
+            account=self.account,
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+        )
+
+        response = self.client.get("/api/character-creation/gifts/", {"draft_id": draft.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        favored = {row["id"]: row["favored"] for row in response.data}
+        assert favored == {self.available_gift.id: True, self.unfavored_gift.id: False}
 
     def test_missing_draft_id_returns_empty_list(self):
         response = self.client.get("/api/character-creation/gifts/")

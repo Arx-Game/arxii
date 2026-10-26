@@ -17,6 +17,8 @@ from django.db.models import Q
 from world.character_creation.constants import (
     AGE_PICKS_FROM_AGE,
     AGE_PICKS_YEARS_PER_PICK,
+    CG_MODIFIER_CATEGORY,
+    MAGIC_TRAINING_POINTS_TARGET,
     ActorSheetPrompt,
     BeatMode,
     BeatSelection,
@@ -34,6 +36,7 @@ from world.character_creation.models import (
     LifeBeat,
     LifeBeatExclusion,
     OfferFirstLook,
+    SchoolingLine,
     TraditionStateLine,
 )
 from world.character_creation.questionnaire import DraftAnswers, anchor_for, visible_slot_ids
@@ -115,6 +118,34 @@ def _slate_line(draft: CharacterDraft) -> BeginningTradition | None:
     )
 
 
+def schooling_training_points(lines: Iterable[SchoolingLine]) -> dict[int, int]:
+    """The Magic-skill training points each stance gives, keyed by rank (slice 2 of #4659).
+
+    A stance's points are its ``grants`` distinction's ``magic_training_points`` effect
+    at the stance's rank; 0 for rank 0, a line that grants nothing, or a distinction
+    with no such effect. One query for every line. Read by the tradition serializer's
+    stance rows and the tradition slate page's derived line; the draft itself reads
+    its pool through ``CharacterDraft.magic_training_pool``.
+    """
+    lines = list(lines)
+    effects = {
+        effect.distinction_id: effect
+        for effect in DistinctionEffect.objects.filter(
+            distinction_id__in={line.grants_id for line in lines if line.grants_id},
+            target__name=MAGIC_TRAINING_POINTS_TARGET,
+            target__category__name=CG_MODIFIER_CATEGORY,
+        )
+    }
+    return {
+        line.rank: (
+            effects[line.grants_id].get_value_at_rank(line.rank)
+            if line.rank and line.grants_id in effects
+            else 0
+        )
+        for line in lines
+    }
+
+
 #: A life's stages in the order a life has them, for pooling and grouping beats;
 #: the choice values sort alphabetically, which is not that order.
 LIFE_STAGE_ORDER: dict[str, int] = {value: i for i, value in enumerate(LifeStage.values)}
@@ -182,43 +213,6 @@ def picked_offer_ids(draft: CharacterDraft) -> set[int]:
         for offer_id in entry.get("offer_ids", [])
         if isinstance(offer_id, int)
     }
-
-
-def schooling_magic_skill_floor(draft: CharacterDraft) -> int:
-    """The level every Magic skill starts at for this draft's schooling stance (#4457).
-
-    0 unless the picked tradition's slate state opens stances. Otherwise the highest
-    ``magic_skill_floor`` among the Tradition Step offers the draft picked, counting a
-    pick only when its schooling line grants the very distinction the pick holds. Called
-    by ``CharacterDraft.starting_magic_skill_floor``; computed on every call, never
-    memoised (a draft is idmapper-shared).
-    """
-    line = _slate_line(draft)
-    if line is None or schooling_max_rank(line.state) is None:
-        return 0
-    distinction_by_offer = {
-        offer_id: entry.get("distinction_id")
-        for entry in draft.draft_data.get("distinctions", [])
-        for offer_id in entry.get("offer_ids", [])
-        if isinstance(offer_id, int)
-    }
-    if not distinction_by_offer:
-        return 0
-    # A legacy pick of an offer saved without its stance names no line, so it lifts nothing.
-    offers = DistinctionOffer.objects.filter(
-        pk__in=distinction_by_offer,
-        chapter=OfferChapter.TRADITION_STEP,
-        is_active=True,
-        schooling_line__isnull=False,
-    ).select_related("schooling_line")
-    return max(
-        (
-            offer.schooling_line.magic_skill_floor
-            for offer in offers
-            if offer.schooling_line.grants_id == distinction_by_offer[offer.pk]
-        ),
-        default=0,
-    )
 
 
 def _draft_beat_states(draft: CharacterDraft) -> dict[int, dict]:

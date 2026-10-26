@@ -135,8 +135,8 @@ lowered; it just cannot rise. Journeys: `integration_tests/test_skill_band_cap_j
 - **Magic skills are not bought with these points (#4457, ADR-4457-A).** A skill in the MAGIC
   trait category (`magic_category_skills()`), or a specialization of one, is refused by the skills
   stage (`CharacterDraft.validate_path_skills`, called by `get_skill_allocation_errors`, naming each, message
-  `MAGIC_SKILL_POINTS_REFUSAL`). They start at the level of the Tradition schooling stance the
-  player picked (`SchoolingLine.magic_skill_floor`), or untrained; see `docs/systems/magic.md`,
+  `MAGIC_SKILL_POINTS_REFUSAL`). They start at the values the player spent their magical training points on
+  (`CharacterDraft.magic_training_pool`, from the Tradition schooling stance and other distinctions), or untrained; see `docs/systems/magic.md`,
   "Tradition training and Academy skill courses".
 
 ---

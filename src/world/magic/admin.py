@@ -4,6 +4,7 @@ from django.contrib.admin import helpers
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Prefetch
 from django.forms.models import BaseInlineFormSet
+from django.http import HttpRequest
 from django.template.response import TemplateResponse
 from django.utils.html import format_html
 
@@ -130,6 +131,7 @@ from world.magic.models import (
     Tradition,
     TraditionGiftGrant,
     TraditionRitualGrant,
+    TraditionTeachingConfig,
 )
 from world.magic.models.appetites import (
     AppetiteUpkeep,
@@ -1031,6 +1033,7 @@ class TraditionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     list_filter = ["is_active"]
     search_fields = ["name", "description"]
     list_editable = ["sort_order", "is_active"]
+    filter_horizontal = ["favored_affinities"]
     inlines = [TraditionCodexGrantInline, TraditionGiftGrantInline]
 
     @admin.display(description="Current members")
@@ -2043,6 +2046,22 @@ class GiftAcquisitionConfigAdmin(admin.ModelAdmin):
         "weekly_training_cap",
         "cross_path_cap_divisor",
     ]
+
+
+@admin.register(TraditionTeachingConfig)
+class TraditionTeachingConfigAdmin(admin.ModelAdmin):
+    list_display = [
+        "gift_fit_training_bonus",
+        "affinity_fit_training_bonus",
+        "course_ease_gift_fit",
+        "course_ease_affinity_fit",
+    ]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
+        return not TraditionTeachingConfig.objects.filter(pk=1).exists()
+
+    def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:  # noqa: ARG002
+        return False
 
 
 @admin.register(TechniqueGrant)

@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0297_mapterrain_blueprintposition_area_h_and_more"),
-    ]
+    dependencies = [("arxii", "0299_remove_schoolingline_magic_skill_floor")]
 
     operations = [
         migrations.AlterModelOptions(
