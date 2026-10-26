@@ -346,6 +346,14 @@ export function CombatTacticalMap({
             edges={encounter.position_edges ?? []}
             occupantsByPosition={occupantsByPosition}
             heldPositions={encounter.held_positions ?? []}
+            telegraphs={(encounter.pending_attacks ?? [])
+              .filter((a) => !a.cancelled && a.covered_position_id !== null)
+              .map((a) => ({
+                id: a.id,
+                positionId: a.covered_position_id as number,
+                attackName: a.attack_name,
+                roundsUntilLanding: a.rounds_until_landing,
+              }))}
             links={lockLinks}
             moveActions={moveActions}
             ownPositionId={ownPositionId}
