@@ -13,6 +13,7 @@ from django.utils.functional import cached_property
 from core.descriptors import ReverseOneToOneOrNone
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
 from world.areas.positioning.constants import (
     FeatureReach,
     PositionKind,
@@ -316,7 +317,7 @@ class Position(PositionNodeBase):
     def all_edges_as_a(self) -> list[PositionEdge]:
         return list(self.edges_as_a.select_related("gating_challenge__template", "source_rampart"))
 
-    @cached_property
+    @PrunedCachedProperty
     def features_cached(self) -> list[PositionFeature]:
         return list(self.features.select_related("feature_type__art"))
 
