@@ -584,8 +584,12 @@ class BridgeEvacuationAcceptanceTests(TestCase):
         )
 
     @override_settings(SEED_SAMPLE_CONTENT=True)
-    def test_telegraphed_attack_falls_back_to_second_interpose_guardian(self) -> None:
-        """A called-out attack resolves through the real guardian selection path."""
+    def test_telegraphed_attack_is_answered_by_a_guardian_who_already_reacted(self) -> None:
+        """A called-out attack resolves through the real guardian selection path.
+
+        No reaction cap (#4676): the first guardian answers again (a harder roll) rather
+        than falling back to the second.
+        """
         from world.combat.interpose_content import ensure_interpose_content
         from world.magic.effect_palette_content import (
             REFLECT_TECHNIQUE_NAME,
@@ -655,11 +659,15 @@ class BridgeEvacuationAcceptanceTests(TestCase):
             resolve_round(encounter)
 
         victim_vitals.refresh_from_db()
+        first_anima = CharacterAnima.objects.get(character=first.character_sheet)
         second_anima = CharacterAnima.objects.get(character=second.character_sheet)
         self.assertEqual(victim_vitals.health, 10)
-        self.assertEqual(second_anima.current, 20)
-        second.refresh_from_db()
-        self.assertEqual(second.reactions_used, 1)
+        # Only the first guardian paid the Mirror Ward interpose cost on top of anything both
+        # paid this round.
+        self.assertEqual(second_anima.current - first_anima.current, 2)
+        for guardian in (first, second):
+            guardian.refresh_from_db()
+        self.assertEqual((first.reactions_used, second.reactions_used), (2, 0))
         self.assertFalse(PendingOpponentAttack.objects.filter(opponent=opponent).exists())
 
     def test_ally_support_combo_uses_target_while_combo_resolves(self) -> None:

@@ -76,6 +76,46 @@ The PC rolls a defense check; the success level scales incoming damage.
   `docs/systems/checks.md`'s "Opposed checks" section for the shared helper and its
   deliberate exclusivity rule.
 
+## Dodging and area attacks (#4676, slice 4 of #4651)
+
+**The automatic dodge [BUILT & WIRED].** A character dodges an NPC attack that carries a
+defense check when a capability she holds above its innate baseline has a
+`CapabilityType.reaction_reach` other than `none`, or a Phase Step ward is on her
+(`world/combat/services/reactions.py`, called from `resolve_npc_attack`). The dodge is her
+defense roll with that capability's value added as a bonus (as a challenge adds its
+capability source, ADR-0145), so the roll's normal degrees decide the hit. It costs
+`MovementConfig.dodge_anima_cost` anima, or `dodge_fatigue_cost` physical fatigue when the
+capability's `reaction_cost_kind` is `fatigue`; a Phase Step ward charges through its own
+payer rule (`_try_spend_reactive`, #2208). If she cannot pay she does not dodge. Each
+reaction she has already made this round takes `MovementConfig.reaction_difficulty_step`
+off the roll (`reaction_penalty`); there is no cap. With no MovementConfig row the field
+defaults apply (2 anima, 1 fatigue, step 2).
+
+**The dodge plan.** `CombatParticipant.dodge_enabled` and `dodge_landing`, set while
+declaring through `combat_dodge` (`DodgePlanAction`; telnet `combat dodge [<place>|here|off]`;
+web Your Turn "If you're attacked this round"). A landing must be a place her strongest
+reach covers (`dodge_landing_options`: in place; adjacent over open edges; airborne adds the
+air above her place when that layer exists and the place is not roofed; any place). A dodge
+whose roll at least partly succeeds (`DEFENSE_REDUCED_THRESHOLD`) moves her there
+(`force_move_to_position`); otherwise she stays. With no landing she dodges in place. An away
+player dodges in place too. The plan resets each round in `begin_declaration_phase`. The
+participant payload's `dodge_plan` reaches its owner only.
+
+**Area attacks.** `ThreatPoolEntry.covers_place` hits everyone in the target's place
+(`world/combat/services/npc/area_attacks.cover_place`, run before reach in
+`_resolve_npc_action`). A wound-up one fixes its place when telegraphed
+(`PendingOpponentAttack.covered_position`, copied to `CombatOpponentAction.covered_position`
+at maturation) and the encounter payload's `pending_attacks` names it, so the map tints the
+place and Your Turn warns whoever stands there. Only leaving escapes it: walking out on her
+turn, or a dodge whose landing is outside the place (that dodge, at least partly
+successful, takes no damage). With no landing outside, she does not dodge it (no cost) and
+takes the plain defense roll.
+
+**Guarding and catching.** Interpose and the Sent Flying catch count as reactions too, with
+no cap; interpose's roll takes the same penalty. A guardian's repeat answer in one round
+resolves a fresh Interpose challenge instance (`world.mechanics.reactions._fresh_reaction_instance`),
+since a character resolves one instance once.
+
 ## Rampart interception (position-anchored barrier)
 
 A `Rampart` (#2209) covering the target's `Position` chips first — upstream of every
@@ -104,7 +144,9 @@ A hit on a PC ward is answered by at most one guardian. `_try_interpose`
 3. **Declared guard-anyone Interpose**, by participant id.
 
 All three reach the same tail, `_attempt_guardian_interpose`, so a standing guard counts
-against `REACTIONS_PER_ROUND` and `ABSORPTION_CAP_PER_MOMENT`, and pays interpose fatigue
+as one of her reactions this round (each one makes her next roll harder by
+`MovementConfig.reaction_difficulty_step`, no cap, #4676) and against
+`ABSORPTION_CAP_PER_MOMENT`, and pays interpose fatigue
 (physical, very low effort: she declared nothing to read an effort from). She still takes
 her own turn. A guardian who cannot act (`can_act`: knocked unconscious, though still
 ACTIVE) is never tried. An unavailable guardian falls through to the next; an attempt, even
@@ -141,7 +183,7 @@ numbers.
 | Event | Where | Who is told |
 |---|---|---|
 | Technique-guardian cannot pay `reactive_anima_cost` | `_narrate_technique_interpose_fizzle` (`world/combat/services/`) | guardian (private, names the unguarded ally); room (soft line) |
-| Reaction declined by `REACTIONS_PER_ROUND` / `ABSORPTION_CAP_PER_MOMENT` | `_narrate_reaction_declined` (`_attempt_guardian_interpose`, `_try_catch_sent_flying`), declared or standing guard | guardian only (private) |
+| Reaction declined by `ABSORPTION_CAP_PER_MOMENT` | `_narrate_reaction_declined` (`_attempt_guardian_interpose`, `_try_catch_sent_flying`), declared or standing guard | guardian only (private) |
 | Ward lapses at upkeep | `_narrate_upkeep_lapse` (`drain_reactive_upkeep`) | payer (private, why); bearer if different (private, that); room |
 | Standing ward cannot pay its fee | `_narrate_reactive_fizzle` (`world/magic/services/effect_handlers.py`, from `_try_spend_reactive`) | payer (private, why); bearer if different (private, that); room only inside an encounter |
 

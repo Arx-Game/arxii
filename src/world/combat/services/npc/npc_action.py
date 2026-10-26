@@ -13,6 +13,7 @@ from world.combat.models import (
     CombatOpponentAction,
     CombatParticipant,
 )
+from world.combat.services.npc.area_attacks import cover_place
 from world.combat.services.npc.npc_attack import resolve_npc_attack
 from world.combat.services.npc.npc_movement import broadcast_cannot_reach, refit_targets
 from world.combat.services.sent_flying.sent_flying import _trigger_sent_flying
@@ -261,6 +262,9 @@ def _resolve_npc_action(
     # Source from threat entry when no external override is provided (#1994).
     effective_defense_check_type = defense_check_type or npc_action.threat_entry.defense_check_type
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_NPC, entity_label=str(opponent))
+
+    # A place-covering attack hits whoever stands in its place now (#4676).
+    cover_place(npc_action)
 
     # Reach is live (#4607): drop the stored targets this strike no longer reaches
     # (a PC stepped away at declaration, or this opponent's advance fell short).

@@ -271,8 +271,8 @@ The plummet pattern's first "in-flight" clone, and the template for future conse
 events (#2638, ADR-0162): a `sends_flying` `ThreatPoolEntry`'s attack that lands damage
 > 0 applies the seeded "Sent Flying" marker `ConditionTemplate` — a produced, reactable
 moment, dual-dispatched loud ("X is sent FLYING by the blow!"). The moment is
-IMMEDIATELY answerable by an armed guardian INTERPOSE (budget-gated via
-`REACTIONS_PER_ROUND`, no skill roll — a mid-air catch is a binary rescue, not gradeable
+IMMEDIATELY answerable by an armed guardian INTERPOSE (one more reaction this round, no
+cap since #4676, no skill roll — a mid-air catch is a binary rescue, not gradeable
 damage mitigation, unlike mundane Interpose); a caught victim's marker clears with a
 celebration naming the catcher (+ the wind-up's caller, if the source attack was called
 out). Left unanswered, the marker resolves EXPLICITLY at the end of `resolve_round` —

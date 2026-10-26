@@ -160,8 +160,15 @@ class ThreatPoolEntryAdmin(admin.ModelAdmin):
         "defense_check_type",
         "weight",
         "targeting_mode",
+        "covers_place",
     ]
-    list_filter = ["attack_category", "targeting_mode", "target_selection", "defense_check_type"]
+    list_filter = [
+        "attack_category",
+        "targeting_mode",
+        "target_selection",
+        "defense_check_type",
+        "covers_place",
+    ]
 
 
 @admin.register(BossPhase)
@@ -571,7 +578,14 @@ class FleeConfigAdmin(admin.ModelAdmin):
 class MovementConfigAdmin(admin.ModelAdmin):
     """#4663 - the singleton authored movement wiring (the held-ground pass)."""
 
-    list_display = ["pk", "held_ground_challenge", "updated_at"]
+    list_display = [
+        "pk",
+        "held_ground_challenge",
+        "dodge_anima_cost",
+        "dodge_fatigue_cost",
+        "reaction_difficulty_step",
+        "updated_at",
+    ]
     autocomplete_fields = ["held_ground_challenge", "updated_by"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002

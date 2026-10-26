@@ -8,7 +8,7 @@ import core.natural_keys
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0300_band_skill_cap_and_creation_ceiling")]
+    dependencies = [("arxii", "0301_capabilitytype_reaction_cost_kind_and_more")]
 
     operations = [
         migrations.CreateModel(

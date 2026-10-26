@@ -55510,6 +55510,38 @@ components:
       - id
       - name
       - slug
+    DodgeLanding:
+      type: object
+      description: One place a dodge can land in (#4676).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    DodgePlan:
+      type: object
+      description: Schema-only shape of the viewer's own dodge plan (#4676). Private
+        to its owner.
+      properties:
+        enabled:
+          type: boolean
+        landing_id:
+          type: integer
+          nullable: true
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/DodgeLanding'
+        cost_line:
+          type: string
+      required:
+      - cost_line
+      - enabled
+      - landing_id
+      - options
     DomainEnum:
       enum:
       - BEAST
@@ -77800,11 +77832,10 @@ components:
           nullable: true
           description: Return spent reactions only to the owner, GM, or staff.
           readOnly: true
-        reactions_remaining:
-          type: integer
+        dodge_plan:
+          allOf:
+          - $ref: '#/components/schemas/DodgePlan'
           nullable: true
-          description: Return the remaining reaction availability without exposing
-            other pools.
           readOnly: true
       required:
       - active_conditions
@@ -77816,13 +77847,13 @@ components:
       - control_modifier
       - current_position
       - current_square
+      - dodge_plan
       - escalation_level
       - fatigue
       - health
       - id
       - intensity_modifier
       - max_health
-      - reactions_remaining
       - reactions_used
       - thumbnail_media_url
       - thumbnail_url
@@ -81567,9 +81598,20 @@ components:
           format: double
         cancelled:
           type: boolean
+        attack_name:
+          type: string
+        covered_position_id:
+          type: integer
+          nullable: true
+        covered_position_name:
+          type: string
+          nullable: true
       required:
+      - attack_name
       - called_out
       - cancelled
+      - covered_position_id
+      - covered_position_name
       - damage_scale
       - declared_round
       - downgrades

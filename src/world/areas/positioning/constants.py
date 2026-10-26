@@ -24,6 +24,28 @@ class CreatureTraversal(models.TextChoices):
     FLIES = "flies", "Flies"
 
 
+class ReactionReach(models.TextChoices):
+    """How far a capability lets its holder move when she dodges an attack (#4676).
+
+    NONE gives no dodge. IN_PLACE dodges without moving. ADJACENT may land in a place
+    next to hers, ANY_PLACE anywhere in the room, AIRBORNE next door or in the air
+    above her place.
+    """
+
+    NONE = "none", "No dodge"
+    IN_PLACE = "in_place", "In place"
+    ADJACENT = "adjacent", "An adjacent place"
+    ANY_PLACE = "any_place", "Any place in the room"
+    AIRBORNE = "airborne", "An adjacent place or the air above"
+
+
+class ReactionCostKind(models.TextChoices):
+    """What a dodge with this capability costs: anima, or fatigue for a physical one (#4676)."""
+
+    ANIMA = "anima", "Anima"
+    FATIGUE = "fatigue", "Fatigue"
+
+
 AERIAL_PROPERTY_NAME = "aerial"
 
 

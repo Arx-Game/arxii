@@ -8,7 +8,9 @@ export interface CommitmentPanelProps {
 export function CommitmentPanel({ encounter }: CommitmentPanelProps) {
   const commitments = encounter.sustained_actions ?? [];
   const protection = encounter.protection_commitments ?? [];
-  const reactions = encounter.participants.filter((p) => p.reactions_remaining != null);
+  const reactions = encounter.participants.filter(
+    (p) => p.reactions_used != null && p.reactions_used > 0
+  );
   if (commitments.length === 0 && protection.length === 0 && reactions.length === 0) return null;
   return (
     <section
@@ -46,8 +48,8 @@ export function CommitmentPanel({ encounter }: CommitmentPanelProps) {
           className="text-xs text-muted-foreground"
           data-testid="reaction-availability"
         >
-          {participant.character_name}: {participant.reactions_remaining} reaction
-          {participant.reactions_remaining === 1 ? '' : 's'} available
+          {participant.character_name}: {participant.reactions_used} reaction
+          {participant.reactions_used === 1 ? '' : 's'} this round
         </p>
       ))}
     </section>

@@ -269,7 +269,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           current_position: { id: 10, name: 'North Gate' },
           aftermath: null,
           reactions_used: null,
-          reactions_remaining: null,
+          dodge_plan: null,
         },
       ],
       opponents: [
@@ -397,7 +397,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           current_position: { id: 10, name: 'North Gate' },
           aftermath: null,
           reactions_used: null,
-          reactions_remaining: null,
+          dodge_plan: null,
         },
       ],
       opponents: [
@@ -552,7 +552,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           current_position: { id: 10, name: 'North Gate' },
           aftermath: null,
           reactions_used: null,
-          reactions_remaining: null,
+          dodge_plan: null,
         },
       ],
       opponents: [
@@ -687,7 +687,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           current_position: { id: 10, name: 'North Gate' },
           aftermath: null,
           reactions_used: null,
-          reactions_remaining: null,
+          dodge_plan: null,
         },
         {
           id: 7,
@@ -709,7 +709,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           current_position: { id: 20, name: 'South Gate' },
           aftermath: null,
           reactions_used: null,
-          reactions_remaining: null,
+          dodge_plan: null,
         },
       ],
       opponents: [
@@ -791,7 +791,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           current_position: { id: 10, name: 'North Gate' },
           aftermath: null,
           reactions_used: null,
-          reactions_remaining: null,
+          dodge_plan: null,
         },
       ],
     });

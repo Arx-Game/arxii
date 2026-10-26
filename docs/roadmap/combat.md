@@ -114,10 +114,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   WHICH-to-call is a follow-up). Since #3572 every telegraph names its target and
   pending wind-ups are visible on the rail (threat strip with Guard/Strike prefills)
   and in the telnet `combat` hub. `Situation.ENEMY_WINDUP_UNDERWAY`/
-  `ENEMY_WINDUP_CALLED_OUT` are live evaluators. Separately, `REACTIONS_PER_ROUND` (1)
-  and `ABSORPTION_CAP_PER_MOMENT` (2) now gate the shared interpose fire seam
-  (`world/combat/tests/test_reaction_economy.py`: second reaction declines, resets
-  next round, a third answer on one payload declines). In-PR investigation found
+  `ENEMY_WINDUP_CALLED_OUT` are live evaluators. Separately, `ABSORPTION_CAP_PER_MOMENT`
+  (2) gates the shared interpose fire seam (a third answer on one payload declines); the
+  per-participant reaction cap that sat beside it is gone since #4676 (a later reaction
+  is a harder roll instead, `world/combat/tests/test_reaction_economy.py`). In-PR investigation found
   `select_npc_actions` had zero production callers — `resolve_round` now auto-selects
   as a conservative fallback when a round has no NPC selection yet (see ADR-0161).
 - **PC sustained actions — the wind-up mirror, for a PC's own commitments (#2705,
@@ -415,7 +415,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   the game page for the whole fight; the rail keeps Your Turn, and GM for a GM. Outside a
   fight the scene map is still `SceneTacticalMap`. Journeys:
   `test_battle_map_drawing_journeys.py`. Not built: staff tools to draw areas on a canvas
-  (areas are authored as numbers in admin), and the slice-4 work of #4651.
+  (areas are authored as numbers in admin).
 - **Features and stunts (#4675, slice 3 of #4651, ADR-4675) [BUILT & WIRED].** Staff author a
   catalog of feature types in admin (art, a reach rule, and a challenge template) and attach them to
   blueprint places; staging copies them to the live places, and a GM can add or remove one mid-fight
@@ -426,7 +426,22 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   is with the template's consequences applied, and every try spends one hop in a declaring round.
   Landing in held ground stops her. The map draws features in a layer under the tokens. NPCs do not
   use features and no prone condition is coded. Journeys: `test_features_and_stunts_journeys.py`.
-  Not built: slice 4 of #4651.
+  Not built: NPCs using features.
+- **Reactions and area attacks (#4676, slice 4 of #4651, ADR-4676) [BUILT & WIRED].** A
+  capability with a `reaction_reach` (or a Phase Step ward) makes a character dodge NPC attacks
+  automatically: the defense roll gets the capability's value as a bonus, the dodge costs anima
+  or physical fatigue (`MovementConfig.dodge_anima_cost`/`dodge_fatigue_cost`), and each
+  reaction already made this round takes `reaction_difficulty_step` off the roll. The
+  one-reaction-per-round cap is gone; guarding and catching count as reactions under the same
+  step, and a guardian's repeat answer resolves a fresh Interpose challenge instance. While
+  declaring she sets a dodge plan (`combat_dodge`; telnet `combat dodge`; Your Turn "If
+  you're attacked this round"): dodge in place, land somewhere her reach covers, or not at
+  all. Phase Step now lands on that plan, never on a place the game picks, and against an NPC
+  attack its all-or-nothing cancel is the defense roll. `ThreatPoolEntry.covers_place` hits
+  everyone in a place; a wound-up one is drawn on the map a round ahead and warns whoever stands
+  there, and only leaving the place (on her turn or by a dodge landing outside it) escapes it.
+  Journeys: `test_dodging_journeys.py`. Not built: NPCs dodging, and covering attacks that
+  spread past one place.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips

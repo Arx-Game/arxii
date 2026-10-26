@@ -74,7 +74,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     current_position: null,
     aftermath: null,
     reactions_used: null,
-    reactions_remaining: null,
+    dodge_plan: null,
     ...overrides,
   };
 }

@@ -3,8 +3,9 @@
 Two independent budgets share the interpose fire seam
 (``_dispatch_interpose_action``, F-10c):
 
-- ``CombatParticipant.reactions_used`` vs ``REACTIONS_PER_ROUND`` — how many
-  reactions ONE participant may spend this round (v1: 1). Reset each round in
+- ``CombatParticipant.reactions_used`` — how many reactions ONE participant has made
+  this round. No cap since #4676: each one makes her next reaction's roll harder by
+  ``MovementConfig.reaction_difficulty_step`` (default 2). Reset each round in
   ``begin_declaration_phase``.
 - ``DamagePreApplyPayload.answers_consumed`` vs ``ABSORPTION_CAP_PER_MOMENT``
   — how many interceptors may answer ONE landing hit (v1: 2), regardless of
@@ -25,7 +26,7 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ABSORPTION_CAP_PER_MOMENT, REACTIONS_PER_ROUND, CombatManeuver
+from world.combat.constants import ABSORPTION_CAP_PER_MOMENT, CombatManeuver
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -79,8 +80,8 @@ class InterposeGuardianSelectionTests(TestCase):
         )
 
     @patch("world.combat.services.dispatch_interpose")
-    def test_exhausted_first_guardian_falls_through_to_fresh_backup(self, dispatch) -> None:
-        """A spent first reaction leaves the fresh guardian available."""
+    def test_a_guardian_who_already_reacted_still_answers_first(self, dispatch) -> None:
+        """No cap (#4676): the first guardian guards again, 2 harder; the backup waits."""
         first = CombatParticipantFactory(encounter=self.encounter, reactions_used=1)
         backup = CombatParticipantFactory(encounter=self.encounter)
         self._action(first, target=self.victim)
@@ -90,9 +91,10 @@ class InterposeGuardianSelectionTests(TestCase):
         _try_interpose(self.victim, _payload())
 
         self.assertEqual(dispatch.call_count, 1)
-        self.assertEqual(dispatch.call_args.args[0], backup.character_sheet.character)
-        backup.refresh_from_db()
-        self.assertEqual(backup.reactions_used, 1)
+        self.assertEqual(dispatch.call_args.args[0], first.character_sheet.character)
+        self.assertEqual(dispatch.call_args.kwargs["extra_modifiers"], -2)
+        first.refresh_from_db()
+        self.assertEqual(first.reactions_used, 2)
 
     @patch("world.combat.services.dispatch_interpose")
     def test_attempted_failure_does_not_retry_backup(self, dispatch) -> None:
@@ -129,7 +131,7 @@ class InterposeGuardianSelectionTests(TestCase):
 
 
 class ReactionsPerRoundGateTests(TestCase):
-    """CombatParticipant.reactions_used vs REACTIONS_PER_ROUND (v1: 1/round)."""
+    """CombatParticipant.reactions_used: no cap, a harder roll each time (#4676)."""
 
     def setUp(self) -> None:
         self.encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=1)
@@ -156,32 +158,17 @@ class ReactionsPerRoundGateTests(TestCase):
         self.assertEqual(mock_dispatch.call_count, 1)
 
     @patch("world.combat.services.dispatch_interpose")
-    def test_second_declared_reaction_this_round_declines(self, mock_dispatch) -> None:
+    def test_a_second_reaction_this_round_fires_with_a_harder_roll(self, mock_dispatch) -> None:
         mock_dispatch.return_value = MagicMock()
 
         _dispatch_interpose_action(self.action, self.protected, _payload())
-        self.interposer.refresh_from_db()
-        self.assertEqual(self.interposer.reactions_used, REACTIONS_PER_ROUND)
-
-        payload_two = _payload()
-        with (
-            patch("world.scenes.interaction_services.narrate_privately") as private,
-            patch("world.combat.services._broadcast_commitment_line") as room,
-        ):
-            _dispatch_interpose_action(self.action, self.protected, payload_two)
+        _dispatch_interpose_action(self.action, self.protected, _payload())
 
         self.interposer.refresh_from_db()
-        # Budget exhausted: no second dispatch attempt, no further increment,
-        # payload untouched — the same "did not fire" shape as an unaffordable
-        # or failed reaction.
-        self.assertEqual(mock_dispatch.call_count, 1)
-        self.assertEqual(self.interposer.reactions_used, REACTIONS_PER_ROUND)
-        self.assertEqual(payload_two.amount, 10)
-        # #3574: the guardian is told, privately only (ADR-0161 keeps the table blind).
-        private.assert_called_once()
-        self.assertEqual(private.call_args.args[0].pk, self.interposer.character_sheet.character.pk)
-        self.assertIn("already spent your reaction", private.call_args.args[1])
-        room.assert_not_called()
+        self.assertEqual(mock_dispatch.call_count, 2)
+        self.assertEqual(self.interposer.reactions_used, 2)
+        first, second = (call.kwargs["extra_modifiers"] for call in mock_dispatch.call_args_list)
+        self.assertEqual(first - second, 2)  # one reaction already made: 2 harder
 
     @patch("world.combat.services.dispatch_interpose")
     def test_reset_next_round(self, mock_dispatch) -> None:

@@ -323,6 +323,7 @@ class ActionRegistryTests(TestCase):
             "combat_taunt",
             "combat_parley",
             "combat_mark",
+            "combat_dodge",
             "standoff_read",
             "standoff_press",
             "standoff_terms",

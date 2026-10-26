@@ -246,21 +246,17 @@ class SentFlyingCatchSeamTests(TestCase):
 
         self.assertIsNone(_try_catch_sent_flying(self.victim))
 
-    def test_budget_exhausted_guardian_does_not_catch(self) -> None:
-        from unittest.mock import patch
-
-        from world.combat.constants import REACTIONS_PER_ROUND
-
+    def test_a_guardian_who_already_reacted_still_catches(self) -> None:
         guardian = self._guardian(focused_ally_target=self.victim)
-        guardian.reactions_used = REACTIONS_PER_ROUND
+        guardian.reactions_used = 1
         guardian.save(update_fields=["reactions_used"])
 
-        with patch("world.scenes.interaction_services.narrate_privately") as private:
-            self.assertIsNone(_try_catch_sent_flying(self.victim))
-        # #3574: the would-be catcher is told why they did not catch.
-        private.assert_called_once()
-        self.assertEqual(private.call_args.args[0].pk, guardian.character_sheet.character.pk)
-        self.assertIn("already spent your reaction", private.call_args.args[1])
+        catcher = _try_catch_sent_flying(self.victim)
+
+        # No cap since #4676: the catch is one more reaction this round.
+        self.assertEqual(catcher.pk, guardian.character_sheet.character.pk)
+        guardian.refresh_from_db()
+        self.assertEqual(guardian.reactions_used, 2)
 
     def test_outside_resolving_status_returns_none(self) -> None:
         self._guardian(focused_ally_target=self.victim)

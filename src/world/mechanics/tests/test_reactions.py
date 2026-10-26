@@ -181,6 +181,16 @@ class DispatchCapabilityReactionNoActionsTest(TestCase):
 class DispatchCapabilityReactionSelectionTest(TestCase):
     """Selects action by capability name and invokes outcome_fn with the result."""
 
+    def setUp(self) -> None:
+        # resolve_challenge is mocked here, so the repeat-answer check (#4676) has no
+        # real instance to query; it passes the mocked instance through.
+        patcher = patch(
+            "world.mechanics.reactions._fresh_reaction_instance",
+            side_effect=lambda _actor, instance: instance,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_selects_matching_capability_and_calls_outcome_fn(self) -> None:
         actor = MagicMock()
         actor.location = MagicMock()

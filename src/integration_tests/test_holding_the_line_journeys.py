@@ -21,8 +21,9 @@ not something read back from the code under test:
   sits on Cassian with Brenna as its source: 50 - 5 = 45 brute health, 20 - 2 = 18 anima.
 - "Bodyguard's Watch" (the source guards the bearer) sits on Cassian with Brenna as its source.
   Her interpose roll is fixed at success level 2, a clean block, and a standing guard pays the
-  interpose base fatigue 3 at very low effort (x 0.1), floored at 1: 1 physical fatigue. She
-  has one reaction a round, so a brute with 2 actions lands its second blow (100 - 12 = 88).
+  interpose base fatigue 3 at very low effort (x 0.1), floored at 1: 1 physical fatigue. Her
+  guard has no cap (#4676): against a brute with 2 actions she guards twice, pays twice, and her
+  second roll is 2 harder (the default reaction step).
 - "Steadying Word" (once only) and "Steady Hand" (3 rounds) each add 3 to Brenna's technique
   check. A look at the roll (``collect_check_modifiers``, which the consider check and the
   standoff grade view call; other previews use their own paths) counts the +3 and spends
@@ -542,13 +543,13 @@ class BrennaStandsGuard(_TheYard):
         # Her own declared turn still rolled.
         self.assertEqual([call[0] for call in self.offense_calls], [self.brenna])
 
-    def test_past_her_reaction_the_second_blow_lands_and_brenna_is_told(self) -> None:
+    def test_she_guards_every_blow_and_pays_for_each(self) -> None:
         self.brute.actions_per_round = 2
         self.brute.save(update_fields=["actions_per_round"])
-        self.watch(self.brenna)
 
         self._guarded_round()
 
-        self.assertEqual(self._health(self.cassian), PC_HEALTH - BRUTE_SWING)
-        self.assertEqual(self._physical_fatigue(self.brenna), GUARD_FATIGUE)
-        self.assertShownRow(self.brenna, "You have already spent your reaction this round")
+        self.assertEqual(self._health(self.cassian), PC_HEALTH)
+        self.assertEqual(self._physical_fatigue(self.brenna), 2 * GUARD_FATIGUE)
+        self.brenna_seat.refresh_from_db()
+        self.assertEqual(self.brenna_seat.reactions_used, 2)
