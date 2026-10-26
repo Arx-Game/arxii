@@ -43,7 +43,8 @@ of `not wrapped in act(...)` warnings in CI.
 vitest 5 detects that an AI agent is driving it and switches to its `agent` reporter, which
 drops console output from passing tests (#4677). Pass `--reporter=default` to see what CI
 sees: `pnpm exec vitest run <path> --reporter=default`. `pnpm test` is `vitest run` (it
-exits), and CI runs it in four shards (`--shard=i/4`). Since #4677, `src/test/setup.ts`
+exits), and CI runs it in four shards with `pnpm exec vitest run --shard=i/4` (CI's pnpm 9
+refuses `pnpm test --shard=...` as an unknown pnpm option; a newer local pnpm passes it). Since #4677, `src/test/setup.ts`
 fails any test during which React, Radix or react-redux logs a development warning (act,
 missing dialog Description, duplicate key, invalid DOM nesting, a selector that returns a
 new object each call), so a warning is a red test under either reporter; the default

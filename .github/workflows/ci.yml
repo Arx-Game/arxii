@@ -488,7 +488,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test --shard=${{ matrix.shard }}/4
+      # vitest directly: pnpm 9 reads `pnpm test --shard` as its own option and refuses it.
+      - run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
 
   frontend-typecheck:
     needs: changes
