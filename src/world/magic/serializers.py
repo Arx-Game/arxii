@@ -43,6 +43,7 @@ from world.magic.models import (
     Affinity,
     CharacterAnima,
     CharacterAura,
+    CharacterAuraShare,
     CharacterCrossingText,
     CharacterGift,
     CharacterResonance,
@@ -574,10 +575,22 @@ class GiftListSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
+class CharacterAuraShareSerializer(serializers.ModelSerializer):
+    """One affinity's share of an aura."""
+
+    affinity_name = serializers.CharField(source="affinity.name", read_only=True)
+
+    class Meta:
+        model = CharacterAuraShare
+        fields = ["affinity_id", "affinity_name", "percent"]
+        read_only_fields = fields
+
+
 class CharacterAuraSerializer(serializers.ModelSerializer):
     """Serializer for CharacterAura records."""
 
-    dominant_affinity = serializers.CharField(read_only=True)
+    shares = CharacterAuraShareSerializer(source="cached_shares", many=True, read_only=True)
+    dominant_affinity = serializers.SerializerMethodField()
     dominant_affinity_display = serializers.SerializerMethodField()
 
     class Meta:
@@ -585,9 +598,7 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "character",
-            "celestial",
-            "primal",
-            "abyssal",
+            "shares",
             "dominant_affinity",
             "dominant_affinity_display",
             "glimpse_state",
@@ -595,15 +606,20 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "shares",
             "dominant_affinity",
             "dominant_affinity_display",
             "glimpse_state",
             "updated_at",
         ]
 
+    def get_dominant_affinity(self, obj: CharacterAura) -> str:
+        """The dominant affinity's name, blank before the aura holds any share."""
+        return obj.dominant_affinity.name if obj.cached_shares else ""
+
     def get_dominant_affinity_display(self, obj: CharacterAura) -> str:
-        """Return the display label for the dominant affinity."""
-        return obj.dominant_affinity.label
+        """The dominant affinity's name for display."""
+        return self.get_dominant_affinity(obj)
 
 
 class GlimpseSetTagsSerializer(serializers.Serializer):
@@ -623,26 +639,6 @@ class GlimpseDistinctionLinkSerializer(serializers.Serializer):
     """Input for CharacterAuraViewSet.link/unlink_glimpse_distinction (#2427)."""
 
     character_distinction_id = serializers.IntegerField()
-
-
-class CharacterAuraCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating/updating CharacterAura."""
-
-    class Meta:
-        model = CharacterAura
-        fields = ["character", "celestial", "primal", "abyssal"]
-
-    def validate(self, attrs):
-        """Ensure percentages sum to 100."""
-        required_total = 100
-        celestial = attrs.get("celestial", 0)
-        primal = attrs.get("primal", 0)
-        abyssal = attrs.get("abyssal", 0)
-        total = celestial + primal + abyssal
-        if total != required_total:
-            msg = f"Aura percentages must sum to {required_total}, got {total}."
-            raise serializers.ValidationError(msg)
-        return attrs
 
 
 class CharacterResonanceSerializer(serializers.ModelSerializer):

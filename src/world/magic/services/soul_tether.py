@@ -95,7 +95,7 @@ def _resolve_primary_affinity(sheet: CharacterSheet) -> str:
     Raises AttributeError if the character has no CharacterAura row.
     """
     aura = sheet.character.aura  # OneToOne: ObjectDB → CharacterAura
-    return aura.dominant_affinity
+    return aura.dominant_affinity.name.lower()
 
 
 def _validate_affinity_gates(sinner_sheet: CharacterSheet, sineater_sheet: CharacterSheet) -> None:

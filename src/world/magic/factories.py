@@ -312,6 +312,13 @@ class DistinctionResonanceRankThresholdFactory(factory.django.DjangoModelFactory
 
 
 class CharacterAuraFactory(factory.django.DjangoModelFactory):
+    """An aura with share rows.
+
+    ``celestial`` / ``primal`` / ``abyssal`` are convenience percentages for the three
+    canonical affinities (rows named Celestial / Primal / Abyssal, created if absent);
+    a zero percent writes no row. They are not model fields.
+    """
+
     class Meta:
         model = CharacterAura
 
@@ -319,6 +326,32 @@ class CharacterAuraFactory(factory.django.DjangoModelFactory):
     celestial = Decimal("10.00")
     primal = Decimal("70.00")
     abyssal = Decimal("20.00")
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        from world.magic.constants import (
+            AFFINITY_ABYSSAL,
+            AFFINITY_CELESTIAL,
+            AFFINITY_PRIMAL,
+        )
+        from world.magic.services.aura import set_aura_shares
+        from world.magic.types import AffinityShare
+
+        percents = {
+            AFFINITY_CELESTIAL: Decimal(kwargs.pop("celestial")),
+            AFFINITY_PRIMAL: Decimal(kwargs.pop("primal")),
+            AFFINITY_ABYSSAL: Decimal(kwargs.pop("abyssal")),
+        }
+        aura = super()._create(model_class, *args, **kwargs)
+        shares = [
+            AffinityShare(affinity=AffinityFactory(name=name), percent=percent)
+            for name, percent in percents.items()
+            if percent > 0
+        ]
+        Affinity.objects.clear_cache()
+        if shares:
+            set_aura_shares(aura, shares)
+        return aura
 
 
 class CharacterResonanceFactory(factory.django.DjangoModelFactory):

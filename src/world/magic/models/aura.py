@@ -11,15 +11,16 @@ from typing import ClassVar
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils.functional import cached_property
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
-from evennia_extensions.mixins import RelatedCacheClearingMixin
+from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.magic.constants import GlimpseState
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.types import AffinityType
 
 
-class CharacterAura(SharedMemoryModel):
+class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
     """
     Tracks a character's soul-state across the three affinities.
 
@@ -78,8 +79,13 @@ class CharacterAura(SharedMemoryModel):
         return f"Aura of {self.character}"
 
     def clean(self) -> None:
-        """Validate that percentages sum to 100."""
-        total = self.celestial + self.primal + self.abyssal
+        """Validate that the held shares sum to 100 (an aura with no shares yet is fine)."""
+        if self.pk is None:
+            return
+        shares = self.cached_shares
+        if not shares:
+            return
+        total = sum((share.percent for share in shares), Decimal(0))
         if total != Decimal("100.00"):
             msg = f"Aura percentages must sum to 100, got {total}."
             raise ValidationError(msg)
@@ -88,19 +94,35 @@ class CharacterAura(SharedMemoryModel):
         self.full_clean()
         super().save(*args, **kwargs)
 
+    @cached_property
+    def cached_shares(self) -> list["CharacterAuraShare"]:
+        """This aura's share rows (one per affinity held), cleared by set_aura_shares."""
+        return list(self.shares.select_related("affinity"))
+
+    def percent_for(self, affinity: Affinity) -> Decimal:
+        """This affinity's percent of the aura; 0 when there is no row."""
+        for share in self.cached_shares:
+            if share.affinity_id == affinity.pk:
+                return share.percent
+        return Decimal(0)
+
     @property
-    def dominant_affinity(self) -> AffinityType:
-        """Return the affinity type with the highest percentage."""
-        values = [
-            (self.celestial, AffinityType.CELESTIAL),
-            (self.primal, AffinityType.PRIMAL),
-            (self.abyssal, AffinityType.ABYSSAL),
-        ]
-        return max(values, key=lambda x: x[0])[1]
+    def dominant_affinity(self) -> Affinity:
+        """The affinity with the highest percent; ties go to the lowest Affinity pk.
+
+        Raises ValueError for an aura with no shares (not yet formed).
+        """
+        if not self.cached_shares:
+            msg = "This aura holds no affinity shares."
+            raise ValueError(msg)
+        best = min(self.cached_shares, key=lambda share: (-share.percent, share.affinity_id))
+        return best.affinity
 
 
-class CharacterAuraShare(SharedMemoryModel):
+class CharacterAuraShare(RelatedCacheClearingMixin, SharedMemoryModel):
     """One affinity's percentage of a character's aura (one row per affinity held)."""
+
+    related_cache_fields: ClassVar[list[str]] = ["aura"]
 
     aura = models.ForeignKey(
         CharacterAura,

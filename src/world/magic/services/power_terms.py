@@ -153,9 +153,8 @@ def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: 
     alignment = 0
     affinities = {r.affinity for r in resonances}
     for affinity in affinities:
-        pct = getattr(aura, affinity.name.lower(), None)
-        if pct is not None:
-            alignment += int(pct / 100 * config.affinity_alignment_bonus)
+        pct = aura.percent_for(affinity)
+        alignment += int(pct / 100 * config.affinity_alignment_bonus)
     return alignment
 
 

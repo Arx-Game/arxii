@@ -857,8 +857,6 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
     if attacker is None:
         return False
 
-    from world.magic.types.aura import AffinityType  # noqa: PLC0415
-
     try:
         affinity = attacker.affinity
     except AttributeError:
@@ -870,16 +868,18 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
     if aura is None:
         return False
     if params.threshold_percent is not None:
-        axis_value = {
-            AffinityType.CELESTIAL: aura.celestial,
-            AffinityType.PRIMAL: aura.primal,
-            AffinityType.ABYSSAL: aura.abyssal,
-        }.get(params.affinity)
-        # ``.get()`` (not ``[...]``) — a non-choice affinity string bypassing
-        # full_clean (e.g. a row authored directly in the DB) yields None
-        # here rather than a KeyError; never raise, just miss.
+        axis_value = next(
+            (
+                share.percent
+                for share in aura.cached_shares
+                if share.affinity.name.lower() == params.affinity
+            ),
+            None,
+        )
+        # A miss (no share, or a non-choice affinity string authored directly in the DB)
+        # is None; never raise, just miss.
         return axis_value is not None and axis_value >= params.threshold_percent
-    return aura.dominant_affinity == params.affinity
+    return bool(aura.cached_shares) and aura.dominant_affinity.name.lower() == params.affinity
 
 
 @register(Situation.ENEMY_WINDUP_UNDERWAY)

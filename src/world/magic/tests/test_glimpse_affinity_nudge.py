@@ -39,9 +39,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         )
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.celestial == Decimal("10.00")
-        assert aura.primal == Decimal("70.00")
-        assert aura.abyssal == Decimal("20.00")
+        assert aura.percent_for(self.celestial) == Decimal("10.00")
+        assert aura.percent_for(self.primal) == Decimal("70.00")
+        assert aura.percent_for(self.abyssal) == Decimal("20.00")
 
     def test_tag_without_affinity_no_change(self):
         """A tag with affinity=None is inert."""
@@ -55,9 +55,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.celestial == Decimal("10.00")
-        assert aura.primal == Decimal("70.00")
-        assert aura.abyssal == Decimal("20.00")
+        assert aura.percent_for(self.celestial) == Decimal("10.00")
+        assert aura.percent_for(self.primal) == Decimal("70.00")
+        assert aura.percent_for(self.abyssal) == Decimal("20.00")
 
     def test_consequence_tag_no_change(self):
         """CONSEQUENCE axis tags are ignored even if they have an affinity."""
@@ -72,9 +72,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.celestial == Decimal("10.00")
-        assert aura.primal == Decimal("70.00")
-        assert aura.abyssal == Decimal("20.00")
+        assert aura.percent_for(self.celestial) == Decimal("10.00")
+        assert aura.percent_for(self.primal) == Decimal("70.00")
+        assert aura.percent_for(self.abyssal) == Decimal("20.00")
 
     def test_sensory_tag_no_change(self):
         """SENSORY axis tags are ignored."""
@@ -87,9 +87,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.celestial == Decimal("10.00")
-        assert aura.primal == Decimal("70.00")
-        assert aura.abyssal == Decimal("20.00")
+        assert aura.percent_for(self.celestial) == Decimal("10.00")
+        assert aura.percent_for(self.primal) == Decimal("70.00")
+        assert aura.percent_for(self.abyssal) == Decimal("20.00")
 
     def test_witness_tag_no_change(self):
         """WITNESS axis tags are ignored."""
@@ -104,9 +104,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.celestial == Decimal("10.00")
-        assert aura.primal == Decimal("70.00")
-        assert aura.abyssal == Decimal("20.00")
+        assert aura.percent_for(self.celestial) == Decimal("10.00")
+        assert aura.percent_for(self.primal) == Decimal("70.00")
+        assert aura.percent_for(self.abyssal) == Decimal("20.00")
 
     def test_tone_tag_nudges_celestial(self):
         """A TONE tag with affinity=Celestial shifts celestial up."""
@@ -121,9 +121,13 @@ class GlimpseAffinityNudgeTests(TestCase):
         aura.refresh_from_db()
         nudge = Decimal(GLIMPSE_AFFINITY_NUDGE_PERCENT)
         # celestial goes up by nudge, primal and abyssal each down by nudge/2
-        assert aura.celestial == (Decimal("33.33") + nudge).quantize(Decimal("0.01"))
+        assert aura.percent_for(self.celestial) == (Decimal("33.33") + nudge).quantize(
+            Decimal("0.01")
+        )
         # sum must be 100.00
-        assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
+        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
+            self.abyssal
+        ) == Decimal("100.00")
 
     def test_trigger_tag_nudges_abyssal(self):
         """A TRIGGER tag with affinity=Abyssal shifts abyssal up."""
@@ -137,8 +141,12 @@ class GlimpseAffinityNudgeTests(TestCase):
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
         nudge = Decimal(GLIMPSE_AFFINITY_NUDGE_PERCENT)
-        assert aura.abyssal == (Decimal("20.00") + nudge).quantize(Decimal("0.01"))
-        assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
+        assert aura.percent_for(self.abyssal) == (Decimal("20.00") + nudge).quantize(
+            Decimal("0.01")
+        )
+        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
+            self.abyssal
+        ) == Decimal("100.00")
 
     def test_tone_and_trigger_both_nudge(self):
         """A TONE tag and a TRIGGER tag both fire (different affinities).
@@ -164,10 +172,12 @@ class GlimpseAffinityNudgeTests(TestCase):
         aura.refresh_from_db()
         # The key invariant: sum stays 100.00 and both nudged affinities
         # end up higher than they started.
-        assert aura.celestial > Decimal("33.33")
-        assert aura.abyssal > Decimal("33.33")
-        assert aura.primal < Decimal("33.34")
-        assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
+        assert aura.percent_for(self.celestial) > Decimal("33.33")
+        assert aura.percent_for(self.abyssal) > Decimal("33.33")
+        assert aura.percent_for(self.primal) < Decimal("33.34")
+        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
+            self.abyssal
+        ) == Decimal("100.00")
 
     def test_tone_and_trigger_same_affinity_stacks(self):
         """TONE and TRIGGER both nudging the same affinity stack."""
@@ -186,8 +196,10 @@ class GlimpseAffinityNudgeTests(TestCase):
         aura.refresh_from_db()
         nudge = Decimal(GLIMPSE_AFFINITY_NUDGE_PERCENT)
         expected_abyssal = Decimal("10.00") + nudge * 2
-        assert aura.abyssal == expected_abyssal.quantize(Decimal("0.01"))
-        assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
+        assert aura.percent_for(self.abyssal) == expected_abyssal.quantize(Decimal("0.01"))
+        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
+            self.abyssal
+        ) == Decimal("100.00")
 
     def test_aura_percentages_sum_to_100(self):
         """After nudge, the three percentages always sum to exactly 100.00."""
@@ -200,7 +212,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
+        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
+            self.abyssal
+        ) == Decimal("100.00")
 
     def test_no_negative_percentages(self):
         """Clamping prevents any affinity from going below 0."""
@@ -215,7 +229,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.celestial >= Decimal("0.00")
-        assert aura.primal >= Decimal("0.00")
-        assert aura.abyssal >= Decimal("0.00")
-        assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
+        assert aura.percent_for(self.celestial) >= Decimal("0.00")
+        assert aura.percent_for(self.primal) >= Decimal("0.00")
+        assert aura.percent_for(self.abyssal) >= Decimal("0.00")
+        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
+            self.abyssal
+        ) == Decimal("100.00")

@@ -21,7 +21,7 @@ from world.magic.types.alterations import (
     PendingAlterationResult,
     PendingAlterationTierReduction,
 )
-from world.magic.types.aura import AffinityType, AuraDrift, AuraPercentages
+from world.magic.types.aura import AffinityShare, AffinityType, AuraDrift, AuraPercentages
 from world.magic.types.gain import (
     ResonanceDailyTickSummary,
     ResonanceWeeklySettlementSummary,
@@ -65,6 +65,7 @@ from world.magic.types.ultimates import (
 )
 
 __all__ = [
+    "AffinityShare",
     "AffinityType",
     "AlterationGateError",
     "AlterationResolutionError",

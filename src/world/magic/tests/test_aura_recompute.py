@@ -6,7 +6,7 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import AffinityFactory, CharacterAuraFactory, ResonanceFactory
-from world.magic.models import CharacterAura, CharacterResonance
+from world.magic.models import Affinity, CharacterAura, CharacterResonance
 from world.magic.services.aura import recompute_aura
 from world.roster.factories import grant_test_tenure
 
@@ -22,6 +22,9 @@ class RecomputeAuraTests(TestCase):
         cls.primal_resonance = ResonanceFactory(affinity=cls.primal)
         cls.abyssal_resonance = ResonanceFactory(affinity=cls.abyssal)
 
+    def setUp(self):
+        Affinity.objects.clear_cache()
+
     def test_no_aura_row_returns_none_and_does_nothing(self):
         # sheet has no CharacterAura row at all (e.g. Quiescent/NPC)
         result = recompute_aura(self.sheet)
@@ -31,10 +34,10 @@ class RecomputeAuraTests(TestCase):
     def test_zero_lifetime_earned_leaves_stored_values_untouched(self):
         CharacterAuraFactory(character=self.sheet)
         before = CharacterAura.objects.get(character=self.sheet)
-        before_celestial = before.celestial
+        before_celestial = before.percent_for(self.celestial)
         recompute_aura(self.sheet)
         after = CharacterAura.objects.get(character=self.sheet)
-        assert after.celestial == before_celestial
+        assert after.percent_for(self.celestial) == before_celestial
 
     def test_recompute_shifts_stored_percentages_toward_earned_affinity(self):
         CharacterAuraFactory(character=self.sheet)
@@ -53,9 +56,9 @@ class RecomputeAuraTests(TestCase):
         drift = recompute_aura(self.sheet)
         aura = CharacterAura.objects.get(character=self.sheet)
         assert drift is not None
-        assert float(aura.celestial) == 50.0
-        assert float(aura.abyssal) == 50.0
-        assert float(aura.primal) == 0.0
+        assert float(aura.percent_for(self.celestial)) == 50.0
+        assert float(aura.percent_for(self.abyssal)) == 50.0
+        assert float(aura.percent_for(self.primal)) == 0.0
 
     def test_lopsided_split_stays_within_bounds_and_sums_to_100(self):
         # Heavily skewed but organic split (not adversarial) — confirms ordinary
@@ -77,9 +80,9 @@ class RecomputeAuraTests(TestCase):
         drift = recompute_aura(self.sheet)
         aura = CharacterAura.objects.get(character=self.sheet)
         assert drift is not None
-        for value in (aura.celestial, aura.primal, aura.abyssal):
-            assert Decimal("0.00") <= value <= Decimal("100.00")
-        assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
+        for share in aura.cached_shares:
+            assert Decimal("0.00") <= share.percent <= Decimal("100.00")
+        assert sum(share.percent for share in aura.cached_shares) == Decimal("100.00")
 
     def test_recompute_never_violates_bounds_across_integer_split_range(self):
         # Property-style sweep proving the sum/range invariant holds across the
@@ -116,9 +119,9 @@ class RecomputeAuraTests(TestCase):
                 drift = recompute_aura(self.sheet)
                 assert drift is not None
                 aura = CharacterAura.objects.get(character=self.sheet)
-                for value in (aura.celestial, aura.primal, aura.abyssal):
-                    assert Decimal("0.00") <= value <= Decimal("100.00")
-                assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
+                for share in aura.cached_shares:
+                    assert Decimal("0.00") <= share.percent <= Decimal("100.00")
+                assert sum(share.percent for share in aura.cached_shares) == Decimal("100.00")
 
 
 class FireAuraThresholdCrossingsTests(TestCase):
@@ -135,11 +138,10 @@ class FireAuraThresholdCrossingsTests(TestCase):
         from world.achievements.models import CharacterAchievement
         from world.magic.models import AuraAffinityThreshold
         from world.magic.services.aura import fire_aura_threshold_crossings, recompute_aura
-        from world.magic.types import AffinityType
 
         achievement = AchievementFactory(is_active=True)
         AuraAffinityThreshold.objects.create(
-            affinity=AffinityType.ABYSSAL,
+            affinity_ref=self.abyssal,
             threshold_percent=Decimal("50.00"),
             discovery_achievement=achievement,
         )
@@ -168,7 +170,6 @@ class FireAuraThresholdCrossingsTests(TestCase):
         from world.achievements.models import CharacterAchievement
         from world.magic.models import AuraAffinityThreshold
         from world.magic.services.aura import fire_aura_threshold_crossings, recompute_aura
-        from world.magic.types import AffinityType
 
         allure = StatDefinitionFactory()
         achievement = AchievementFactory(is_active=True)
@@ -176,7 +177,7 @@ class FireAuraThresholdCrossingsTests(TestCase):
             achievement=achievement, stat=allure, threshold=50, comparison=ComparisonType.GTE
         )
         AuraAffinityThreshold.objects.create(
-            affinity=AffinityType.ABYSSAL,
+            affinity_ref=self.abyssal,
             threshold_percent=Decimal("50.00"),
             discovery_achievement=achievement,
         )

@@ -9,6 +9,7 @@ FK-presence precedent).
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from world.distinctions.models import CharacterDistinction
+    from world.magic.models.affinity import Affinity
     from world.magic.models.aura import CharacterAura
     from world.magic.models.glimpse import GlimpseTag
 
@@ -137,47 +139,53 @@ def apply_glimpse_affinity_nudge(aura: CharacterAura) -> None:
     if not tag_ids:
         return
 
-    # Count how many tags nudge each affinity.
-    affinity_counts: dict[str, int] = {}
+    affinity_counts: dict[int, int] = {}
+    affinities: dict[int, Affinity] = {}
     for tag in GlimpseTag.objects.filter(pk__in=tag_ids).select_related("affinity"):
         if tag.affinity is None:
             continue
-        name = tag.affinity.name.lower()
-        affinity_counts[name] = affinity_counts.get(name, 0) + 1
+        affinities[tag.affinity.pk] = tag.affinity
+        affinity_counts[tag.affinity.pk] = affinity_counts.get(tag.affinity.pk, 0) + 1
 
     if not affinity_counts:
         return
 
-    from decimal import Decimal  # noqa: PLC0415
+    from world.magic.services.aura import set_aura_shares  # noqa: PLC0415
+    from world.magic.types import AffinityShare  # noqa: PLC0415
 
+    values: dict[int, Decimal] = {}
+    for share in aura.cached_shares:
+        affinities[share.affinity_id] = share.affinity
+        values[share.affinity_id] = Decimal(share.percent)
+    for pk in affinity_counts:
+        values.setdefault(pk, Decimal(0))
+    _spread_nudges(values, affinity_counts)
+
+    # Clamp to [0, 100] and scale so the shares sum to 100; set_aura_shares fixes the
+    # last cent of rounding.
+    clamped = {pk: max(Decimal(0), min(Decimal(100), v)) for pk, v in values.items()}
+    total = sum(clamped.values())
+    if total == 0:
+        return
+    set_aura_shares(
+        aura,
+        [
+            AffinityShare(affinity=affinities[pk], percent=v * Decimal(100) / total)
+            for pk, v in sorted(clamped.items())
+            if v > 0
+        ],
+    )
+
+
+def _spread_nudges(values: dict[int, Decimal], affinity_counts: dict[int, int]) -> None:
+    """Add each tagged affinity's nudge to it and take it evenly from the other shares."""
     nudge = Decimal(GLIMPSE_AFFINITY_NUDGE_PERCENT)
-
-    # Apply nudges: add to the tagged affinity, subtract proportionally from
-    # the others to keep the sum at 100.00.
-    celestial = Decimal(aura.celestial)
-    primal = Decimal(aura.primal)
-    abyssal = Decimal(aura.abyssal)
-
-    values = {"celestial": celestial, "primal": primal, "abyssal": abyssal}
-
-    for affinity_name, count in affinity_counts.items():
+    for pk, count in affinity_counts.items():
         shift = nudge * count
-        values[affinity_name] += shift
-        # Subtract evenly from the other two to keep sum == 100.
-        others = [k for k in values if k != affinity_name]
+        values[pk] += shift
+        others = [k for k in values if k != pk]
+        if not others:
+            continue
         per_other = shift / Decimal(len(others))
         for other in others:
             values[other] -= per_other
-
-    # Clamp to [0, 100] and fix rounding so the three sum to exactly 100.00.
-    for k, v in values.items():
-        values[k] = max(Decimal(0), min(Decimal(100), v))
-
-    celestial = values["celestial"].quantize(Decimal("0.01"))
-    primal = values["primal"].quantize(Decimal("0.01"))
-    abyssal = (Decimal("100.00") - celestial - primal).quantize(Decimal("0.01"))
-
-    aura.celestial = celestial
-    aura.primal = primal
-    aura.abyssal = abyssal
-    aura.save()

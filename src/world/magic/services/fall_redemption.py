@@ -116,11 +116,20 @@ def perform_fall(
         msg = "This character has no aura — they are not magically active."
         raise FallEligibilityError(msg) from exc
 
-    dominant = aura.dominant_affinity  # AffinityType enum
-    from_affinity = dominant.value  # "celestial", "primal", "abyssal"
+    if not aura.cached_shares:
+        msg = "This character has no aura — they are not magically active."
+        raise FallEligibilityError(msg)
+    from_affinity = aura.dominant_affinity.name.lower()  # "celestial", "primal", "abyssal"
 
     # Gate 1: target affinity must have crossed the threshold
-    target_percent = getattr(aura, target_affinity, Decimal(0))
+    target_percent = next(
+        (
+            share.percent
+            for share in aura.cached_shares
+            if share.affinity.name.lower() == target_affinity
+        ),
+        Decimal(0),
+    )
     if target_percent < config.fall_threshold_percent:
         msg = (
             f"Your {target_affinity} affinity is only {target_percent}%; "

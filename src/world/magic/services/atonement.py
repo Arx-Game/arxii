@@ -109,7 +109,7 @@ def _get_dominant_affinity_name(performer_sheet: CharacterSheet) -> str:
     aura = magical_profile(performer_sheet)
     if aura is None:
         return _FALLBACK_AFFINITY_NAME  # safe neutral fallback
-    return aura.dominant_affinity
+    return aura.dominant_affinity.name.lower()
 
 
 def _try_resonance_conversion(

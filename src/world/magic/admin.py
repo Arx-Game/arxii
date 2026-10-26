@@ -36,6 +36,7 @@ from world.magic.models import (
     CastPowerLevel,
     CharacterAnima,
     CharacterAura,
+    CharacterAuraShare,
     CharacterCrossingText,
     CharacterGift,
     CharacterGiftUnlock,
@@ -657,17 +658,24 @@ class TechniqueAdmin(admin.ModelAdmin):
             self.message_user(request, warning, messages.WARNING)
 
 
+class CharacterAuraShareInline(admin.TabularInline):
+    model = CharacterAuraShare
+    extra = 0
+    autocomplete_fields = ["affinity"]
+
+
 @admin.register(CharacterAura)
 class CharacterAuraAdmin(admin.ModelAdmin):
     autocomplete_fields = ["character"]
-    list_display = ["character", "celestial", "primal", "abyssal", "get_dominant"]
+    list_display = ["character", "get_dominant"]
+    inlines = [CharacterAuraShareInline]
     list_filter = ["updated_at"]
     search_fields = ["character__db_key"]
     readonly_fields = ["updated_at", "glimpse_state"]
 
     @admin.display(description="Dominant")
     def get_dominant(self, obj):
-        return obj.dominant_affinity.label
+        return obj.dominant_affinity.name if obj.cached_shares else ""
 
     def save_model(self, request, obj, form, change):
         """Keep the glimpse_state cache truthful after an admin prose/tag edit (#2427).
