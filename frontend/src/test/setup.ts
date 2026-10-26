@@ -121,6 +121,10 @@ vi.mock('framer-motion', async () => {
 // dialog with no description, or a component bug (a duplicate key, invalid DOM
 // nesting, a selector that builds a new object every call). The message still
 // prints, so the failing test shows what to fix.
+// Limits: the check runs in the last afterEach (vitest's default hook order),
+// after Testing Library has unmounted; a test that silences console.error with
+// its own spy also silences this; a warning logged after a test's teardown is
+// not caught.
 const DEV_WARNINGS = [
   'not wrapped in act(',
   'Missing `Description` or `aria-describedby={undefined}`',
