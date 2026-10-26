@@ -6,10 +6,7 @@ from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
-from world.checks.constants import (
-    OWN_STANDING_SOURCE_KINDS,
-    ROLL_COUNTED_SOURCE_KINDS,
-)
+from world.checks.constants import ROLL_COUNTED_SOURCE_KINDS
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -61,9 +58,9 @@ class CheckResult:
     "no roll happened" (forced test outcomes, defaulted duck-types) and
     contributes no luck.
 
-    ``standing`` (#4601) holds both sides' band positions, the slid chart the roll used
-    and whether the hopeless pin held it. ``rank_difference`` is that chart's whole
-    difference. None on hand-built results (missions, test doubles).
+    ``standing`` (#4601) holds both sides' band positions and the slid chart the roll
+    used. ``rank_difference`` is that chart's whole difference. None on hand-built
+    results (missions, test doubles).
     """
 
     check_type: CheckType
@@ -79,7 +76,7 @@ class CheckResult:
     capability_points: int = 0  # #2505 — weighted authored CheckTypeCapabilityModifier points
     level_points: int = 0  # #2707 — LEVEL_POINTS_PER_LEVEL x class level, on every check
     effective_roll: int = 0  # #2886 — the clamped d100; 0 = no roll (forced/duck-typed)
-    standing: CheckStanding | None = None  # #4601 — band positions, slide, hopeless pin
+    standing: CheckStanding | None = None  # #4601: band positions and the slide
 
     @property
     def rank_text(self) -> str:
@@ -303,27 +300,6 @@ class ModifierBreakdown:
                     c.counted
                     for c in self.counted()
                     if c.contribution.source_kind not in ROLL_COUNTED_SOURCE_KINDS
-                ),
-                Decimal(0),
-            )
-        )
-
-    @property
-    def standing_total(self) -> int:
-        """The part of ``extra_modifiers_total`` that is the character's own standing.
-
-        Fatigue, strain and soulfray contributions count as own standing (#4551 decision
-        7); everything else gathered here is a modifier. ``perform_check`` takes this as
-        ``extra_standing`` so the hopeless pin is decided on own standing (#4601). Counted
-        after the taper like ``extra_modifiers_total``, so own standing is exactly the total
-        less the tapered modifier pile (#4594 tapers none of these kinds by default).
-        """
-        return _round_half_up(
-            sum(
-                (
-                    c.counted
-                    for c in self.counted()
-                    if c.contribution.source_kind in OWN_STANDING_SOURCE_KINDS
                 ),
                 Decimal(0),
             )

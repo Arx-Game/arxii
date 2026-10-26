@@ -1,4 +1,4 @@
-"""Band positions, the slide and the hopeless pin (#4601, slice b of #4551).
+"""Band positions and the slide (#4601, slice b of #4551; the pin removed in #4723).
 
 Against the seeded rank ladder (0/10/25/50/80/115/155/200/250) and result charts.
 """
@@ -104,38 +104,34 @@ class StandingTests(SlideTestBase):
         standing = resolve_standing(37, 50)
         self.assertEqual(standing.chart_difference, -1)
         self.assertAlmostEqual(standing.share, 12 / 25)
-        self.assertFalse(standing.hopeless)
 
     def test_one_buff_moves_the_odds_inside_a_band(self):
         plain = resolve_standing(30, 50)
-        buffed = resolve_standing(36, 50, own_roller_points=30)
+        buffed = resolve_standing(36, 50)
         self.assertEqual(plain.chart_difference, buffed.chart_difference)
         self.assertGreater(buffed.slid.at_least(1), plain.slid.at_least(1))
 
-    def test_hopeless_own_standing_is_pinned_against_a_pile_of_buffs(self):
-        # Own: Novice (rank 1), 67% through, against Mythic (rank 8): -6.33 -> chart -7.
-        own = 20
-        target = 250
-        buffed = resolve_standing(own + 120, target, own_roller_points=own)
-        self.assertTrue(buffed.hopeless)
-        self.assertTrue(buffed.pinned)
-        self.assertEqual(buffed.chart_difference, -7)
-        self.assertEqual(buffed.share, 1.0)
-        self.assertEqual(buffed.slid.at_least(1), 0)
-        self.assertGreater(buffed.slid.at_least(0), resolve_standing(own, target).slid.at_least(0))
+    def test_a_pile_of_buffs_lifts_a_check_off_an_impossible_chart(self):
+        """#4723: modifiers count in full, so a big enough pile reaches a winnable chart."""
+        # Unbuffed: Novice (rank 1), 67% through, against Mythic (rank 8): -6.33, chart -7.
+        plain = resolve_standing(20, 250)
+        self.assertEqual(plain.chart_difference, -7)
+        self.assertEqual(plain.slid.at_least(1), 0)
+        # +120 points: Grandmaster (rank 5), 62.5% through: -2.375, chart -3 slid 62.5%.
+        buffed = resolve_standing(20 + 120, 250)
+        self.assertEqual(buffed.chart_difference, -3)
+        self.assertAlmostEqual(buffed.share, 0.625)
+        self.assertGreater(buffed.slid.at_least(1), 0)
 
-    def test_target_modifiers_do_not_count_toward_own_standing(self):
-        """A debuffed opponent far above stays hopeless: debuffs on the target are modifiers."""
-        standing = resolve_standing(20, 120, own_target_points=250)
-        self.assertTrue(standing.hopeless)
-        self.assertEqual(standing.chart_difference, -7)
-        self.assertEqual(standing.slid.at_least(1), 0)
+    def test_modifiers_on_the_target_count_in_full(self):
+        """A heavily debuffed opponent is rolled against at its debuffed total."""
+        standing = resolve_standing(20, 120)
+        self.assertEqual(standing.chart_difference, -4)
+        self.assertGreater(standing.slid.at_least(1), 0)
 
     def test_buffs_count_in_full_at_a_three_rank_gap(self):
         plain = resolve_standing(20, 80)
-        buffed = resolve_standing(120, 80, own_roller_points=20)
-        self.assertFalse(buffed.hopeless)
-        self.assertFalse(buffed.pinned)
+        buffed = resolve_standing(120, 80)
         self.assertGreater(buffed.slid.at_least(1), plain.slid.at_least(1) + 0.3)
 
     def test_below_the_lowest_chart_sits_at_the_bottom_of_its_band(self):
@@ -143,27 +139,18 @@ class StandingTests(SlideTestBase):
         self.assertEqual(standing.chart_difference, -8)
         self.assertEqual(standing.share, 0.0)
 
-    def test_net_penalties_on_a_hopeless_check_still_resolve_lower(self):
-        standing = resolve_standing(0, 250, own_roller_points=20)
-        self.assertTrue(standing.hopeless)
-        self.assertFalse(standing.pinned)
-        self.assertEqual(standing.chart_difference, -8)
-
-    def test_a_buff_that_stays_on_the_own_chart_slides_as_it_would_unpinned(self):
-        # Own: Incompetent (rank 0) against Mythic (rank 8): -8.0. +5 points: -7.5.
-        standing = resolve_standing(5, 250, own_roller_points=0)
-        self.assertTrue(standing.hopeless)
-        self.assertFalse(standing.pinned)
+    def test_a_small_buff_slides_within_the_impossible_chart(self):
+        # Incompetent (rank 0) against Mythic (rank 8) is -8.0. +5 points: -7.5.
+        standing = resolve_standing(5, 250)
         self.assertEqual(standing.chart_difference, -8)
         self.assertAlmostEqual(standing.share, 0.5)
 
-    def test_buffs_below_the_lowest_chart_never_slide_further_than_unpinned(self):
-        """Own standing below the lowest chart: a buff that leaves the total still below
-        it gives that chart's own odds, never a slide (review finding on #4604)."""
+    def test_a_total_below_the_lowest_chart_never_slides(self):
+        """A total still below the lowest chart gives that chart's own odds, never a slide
+        (review finding on #4604)."""
         ResultChart.objects.filter(rank_difference=-8).delete()
         ResultChart.clear_cache()
-        # Own -8.0 is now below the lowest chart (-7); +5 points is -7.5, still below.
-        standing = resolve_standing(5, 250, own_roller_points=0)
-        self.assertTrue(standing.hopeless)
+        # -7.5 is below the lowest chart (-7) once chart -8 is gone.
+        standing = resolve_standing(5, 250)
         self.assertEqual(standing.chart_difference, -7)
         self.assertEqual(standing.share, 0.0)

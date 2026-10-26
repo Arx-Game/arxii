@@ -36,12 +36,12 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
   probability breakdown for every seeded `ResultChart`, ordered by `rank_difference`.
 - `compute_matchup(*, roller_points, target_difficulty, roll_modifier=0, modifier_points=0, target_modifier_points=0) -> ChartDistribution | None` —
   one matchup exactly as `perform_check` rolls it (#4601): `roller_points` and
-  `target_difficulty` are own standing, the two modifier arguments are added on top, and
-  `world.checks.slide.resolve_standing` decides band positions, the slide and the hopeless
-  pin. The odds are tallied over the slid chart under the roll modifier, face by face, the
+  `target_difficulty` are each side without modifiers, the two modifier arguments are
+  added on top, and `world.checks.slide.resolve_standing` decides band positions and the
+  slide from the full totals (no hopeless pin since #4723). The odds are tallied over
+  the slid chart under the roll modifier, face by face, the
   way the engine reads a face plus a fraction. `rank_difference` is the whole difference of
-  the chart used (the pinned chart when hopeless); `standing` carries both sides' rank
-  text. Returns `None` only when no `ResultChart` exists at all.
+  the chart used; `standing` carries both sides' rank text. Returns `None` only when no `ResultChart` exists at all.
 - `compute_slide_table(*, roll_modifier=0) -> list[SlideRow]` (#4601) — every authored
   chart's odds at 0%, 25%, 50%, 75% and 100% of the way through its band, built with the
   engine's `slide_chart`, each row flagged `impossible` when the chart has no Success (1).
@@ -62,10 +62,10 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
 
 The panel template (`_checks_panel.html`) hosts the `roll_modifier` / `roller_points` /
 `target_difficulty` / `modifier_points` / `target_modifier_points` slider form itself,
-since each slider re-renders this same fragment. The matchup shows own standing and the
-standing with modifiers ("Novice (rank 1), 67% toward Competent (rank 2) against Mythic
-(rank 8)"), the chart and how far it slides, and a Hopeless note (with "Pinned" when the
-rule held modifiers back). Below it, "The slide" table. A second form, for the modifier pile
+since each slider re-renders this same fragment. The matchup shows the standing with
+modifiers ("Grandmaster (rank 5), 62% toward Peerless (rank 6) against Mythic (rank 8)")
+and the chart and how far it slides; a big enough pile lifts it off an impossible chart
+(#4723). Below it, "The slide" table. A second form, for the modifier pile
 (`pile_character_level`, `pile_modifier_level`, `pile_size`, `pile_count`), sits under that and
 includes the first form's values.
 

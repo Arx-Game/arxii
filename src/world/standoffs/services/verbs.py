@@ -18,7 +18,7 @@ from django.db import transaction
 from world.checks.services import (
     collect_check_modifiers,
     compute_resist_increment,
-    level_opposition_points,
+    level_opposition,
     perform_check,
 )
 from world.checks.social_target import DriveHit, SocialDifficulty, social_target_difficulty
@@ -272,15 +272,12 @@ def standoff_read(
 
     sheet = participant.character_sheet
     first, level = _roll_inputs(members)
-    opposition = level_opposition_points(
-        config.read_check_type, level=level, character=first.objectdb
-    )
+    difficulty = level_opposition(config.read_check_type, level=level, character=first.objectdb)
     breakdown = collect_check_modifiers(sheet, config.read_check_type)
     result = perform_check(
         sheet.character,
         config.read_check_type,
-        target_difficulty=opposition.total,
-        target_modifiers=opposition.modifiers,
+        target_difficulty=difficulty,
         extra_modifiers=breakdown.extra_modifiers_total,
     )
     spend_contributing_conditions(breakdown)

@@ -17,11 +17,11 @@ How a check's odds move inside a band. The rank difference is fractional (roller
 _Avoid_: blend (the owner's first word; "slide" is the term), interpolation, chart mix
 
 **Own standing** (#4551 decision 7, #4601):
-A side's check total without modifiers: traits, skills, specialization, level points, path aspect, capabilities, perks, effort, fatigue, strain and soulfray, against the target's difficulty without the modifiers on it. Modifiers are everything else gathered for the roll (conditions, equipment, distinctions, scene, fashion, relationships, favor, caller bonuses) and the defender's conditions in `level_opposition`. `perform_check(..., extra_standing=, target_modifiers=)` carries the split.
+A side's check total without modifiers: traits, skills, specialization, level points, path aspect, capabilities, perks, effort, fatigue, strain and soulfray, against the target's difficulty without the modifiers on it. Modifiers are everything else gathered for the roll (conditions, equipment, distinctions, scene, fashion, relationships, favor, caller bonuses) and the defender's conditions in `level_opposition`. The taper never tapers own standing. The chart reads own standing and modifiers together; nothing in the engine keeps them apart since #4723.
 _Avoid_: base total, unbuffed total, raw total
 
-**Hopeless pin** (#4601):
-The rule that holds a check on the chart its own standing lands on when that chart has no Success (1) (an impossible chart, -7 and -8 today): modifiers only slide the odds within it, up to 100% of its band, never onto another chart. Net penalties still resolve normally onto a lower chart. The preview grades Impossible on own standing, so a buff never changes that label. Outcome guarantees are capped at the chart's best outcome.
+**Hopeless pin** (#4601, removed by #4723, ADR-4723-A):
+A withdrawn rule. It held a check on the chart its own standing landed on when that chart had no Success (1), whatever the modifiers. The owner reversed it: big effects make the impossible possible. A check's chart now comes from both full totals, modifiers included, so enough buffs lift it off charts -7 and -8; buffs short of the next rank only slide it, and the slide never shows an outcome its chart lacks. "Impossible" describes the odds at the current total, not a wall. Outcome guarantees are still capped at the landed chart's best outcome.
 _Avoid_: hopeless clamp, impossible lock, cap
 
 **ResultChart**:

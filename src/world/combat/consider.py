@@ -351,7 +351,7 @@ def consider_opponent(participant: CombatParticipant, opponent: CombatOpponent) 
     """
     from world.checks.services import (  # noqa: PLC0415
         collect_check_modifiers,
-        level_opposition_points,
+        level_opposition,
         perform_check,
     )
     from world.combat.models import ConsiderReading  # noqa: PLC0415
@@ -370,9 +370,7 @@ def consider_opponent(participant: CombatParticipant, opponent: CombatOpponent) 
     is_enhanced = _has_engaged_assessment_role(sheet)
 
     check_type = ensure_consider_check_type()
-    opposition = level_opposition_points(
-        check_type, level=opponent.level, character=opponent.objectdb
-    )
+    difficulty = level_opposition(check_type, level=opponent.level, character=opponent.objectdb)
 
     # Route through the central modifier aggregator so conditions, equipment,
     # scene modifiers, fashion, and distinction-sourced check modifiers reach
@@ -385,8 +383,7 @@ def consider_opponent(participant: CombatParticipant, opponent: CombatOpponent) 
     result = perform_check(
         character,
         check_type,
-        target_difficulty=opposition.total,
-        target_modifiers=opposition.modifiers,
+        target_difficulty=difficulty,
         extra_modifiers=modifier_breakdown.extra_modifiers_total,
     )
     spend_contributing_conditions(modifier_breakdown)

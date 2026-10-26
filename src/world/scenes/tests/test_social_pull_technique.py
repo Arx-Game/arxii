@@ -199,39 +199,3 @@ class TechniqueSocialPullTests(APITestCase):
             character_sheet=self.sheet, resonance=self.resonance
         ).balance
         assert balance == 18
-
-    def _standing_seen(self, *, technique) -> list[int]:
-        """Accept a flirt with a -7 fatigue penalty; the main check's extra_standing."""
-        request = create_action_request(
-            scene=self.scene,
-            initiator_persona=self.initiator,
-            target_persona=self.target,
-            action_key="flirt",
-            technique=technique,
-        )
-        request.action_template = self.flirt_template
-        request.save(update_fields=["action_template"])
-        import actions.services as pipeline
-
-        seen: list[int] = []
-        real = pipeline.perform_check
-
-        def spy(*args, **kwargs):
-            seen.append(kwargs.get("extra_standing", 0))
-            return real(*args, **kwargs)
-
-        with (
-            patch("world.scenes.action_services._accrue_engagement_for_primary"),
-            patch.object(pipeline, "perform_check", side_effect=spy),
-            patch("world.fatigue.services.get_fatigue_penalty", return_value=-7),
-        ):
-            respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
-        return seen
-
-    def test_fatigue_counts_as_own_standing_on_the_technique_branch(self) -> None:
-        """Social fatigue is folded into the roll's modifiers but is her own standing, so
-        the hopeless pin reads it as standing (#4601)."""
-        self.assertIn(-7, self._standing_seen(technique=self.technique))
-
-    def test_fatigue_counts_as_own_standing_on_the_plain_branch(self) -> None:
-        self.assertIn(-7, self._standing_seen(technique=None))

@@ -115,7 +115,7 @@ def tuning_checks_fragment(request: HttpRequest) -> HttpResponse:
     Sliders (`roll_modifier`, `roller_points`, `target_difficulty`, and since #4601
     `modifier_points` and `target_modifier_points`) re-render this same fragment via
     `hx-get` query params so the panel form must live inside the fragment template (see
-    `_checks_panel.html`). The matchup reads the engine's slide and hopeless pin; the
+    `_checks_panel.html`). The matchup reads the engine's slide; the
     slide table shows every chart at 0% to 100% through its band.
     """
     roll_modifier = _int_query_param(request, "roll_modifier", 0)

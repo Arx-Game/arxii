@@ -159,7 +159,20 @@ fraction), the hopeless pin decided on own standing (`extra_standing` / `target_
 `perform_check`, `level_opposition_points`), outcome guarantees capped at the chart's best
 outcome, result text with ranks, numbers and band positions, the slid chart on the outcome
 wheel, and the tuning dashboard's matchup (modifiers on either side, the pin) and slide table.
-Journey: `integration_tests/test_every_point_counts_journeys.py`.
+Journey: `integration_tests/test_every_point_counts_journeys.py`. The pin and its own-standing
+plumbing were removed by slice 7 (below).
+
+✅ **Check math, slice 7 (#4723 of #4551, ADR-4723-A)** - the owner reversed decision 3: big
+effects make the impossible possible. Built here: `resolve_standing` picks the chart from both
+sides' full totals, modifiers included, with no pin. Removed with it: `extra_standing` /
+`target_modifiers`, `PendingActionResolution.extra_standing`, `ModifierBreakdown.standing_total`,
+`OWN_STANDING_SOURCE_KINDS`, `level_opposition_points` / `OppositionPoints`,
+`chart_is_impossible`, `CheckStanding`'s own-standing, `hopeless` and `pinned` fields, and the
+tuning panel's Own standing, Hopeless and Pinned rows. Kept: the slide, charts -7 and -8, the
+Impossible listing at the current total, guarantees capped at the landed chart's best outcome,
+the light taper. Journey: `integration_tests/test_every_point_counts_journeys.py` (a crowd of
+buffs lifts a character from chart -8 onto chart -2; too few leave her on chart -8 with no
+Success band).
 
 ✅ **Check math, slice c1 (#4594 of #4551, ADR-4594-A)** — the tuning-curve design pass 2F asked
 for is spec #4551. Built here: modifiers carry a level and a size (`ModifierSize`); the

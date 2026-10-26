@@ -14,13 +14,8 @@ _NO_RANK = BandPosition(points=0, rank=None, next_rank=None, share=0.0)
 _NO_STANDING = CheckStanding(
     roller=_NO_RANK,
     target=_NO_RANK,
-    own_roller=_NO_RANK,
-    own_target=_NO_RANK,
     difference=0.0,
-    own_difference=0.0,
     chart_difference=0,
-    hopeless=False,
-    pinned=False,
     slid=SlidChart(chart=None, toward=None, share=0.0, bands=()),
 )
 

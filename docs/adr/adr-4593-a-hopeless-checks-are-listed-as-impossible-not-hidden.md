@@ -24,7 +24,9 @@ example numbers.
 ## Why
 
 The owner's decision (#4551 decisions 3, 5 and 6): hopeless stays hopeless, and impossible
-approaches are shown rather than hidden. Hiding them made the list lie about what the
+approaches are shown rather than hidden. Decision 3 ("hopeless stays hopeless") was withdrawn on
+2026-10-26 (ADR-4723-A): modifiers may lift a check off charts -7 and -8. Listing an approach as
+Impossible stays, as a description of the odds at its current total. Hiding them made the list lie about what the
 world offers. Keeping chart -6 winnable meant the lowest chart could never be hopeless,
 which the later modifier work needs.
 

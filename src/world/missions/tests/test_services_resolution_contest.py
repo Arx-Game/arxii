@@ -76,20 +76,6 @@ class ContestResolutionTests(TestCase):
         self.assertEqual(capture.target_difficulty, expected)
         self.assertEqual(capture.check_type, self.check_type)
 
-    def test_opposition_conditions_reach_the_roll_as_target_modifiers(self) -> None:
-        """The opposition's conditions are modifiers, not its standing (#4601)."""
-        with (
-            mock.patch(_LEVEL, return_value=4),
-            mock.patch("world.conditions.services.opponent_condition_opposition", return_value=-9),
-            force_check_outcome(self.success) as capture,
-        ):
-            resolve_option(self.instance, self.entry, self.contest, self.actor)
-        expected = self.template.risk_tier + level_opposition(
-            self.opp_check, level=4, character=self.opposition.character
-        )
-        self.assertEqual(capture.target_difficulty, expected - 9)
-        self.assertEqual(capture.target_modifiers, -9)
-
     def test_tiers_route_like_check(self) -> None:
         with mock.patch(_LEVEL, return_value=1), force_check_outcome(self.failure):
             deed = resolve_option(self.instance, self.entry, self.contest, self.actor)

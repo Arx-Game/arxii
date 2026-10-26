@@ -100,8 +100,8 @@ _OUTCOMES: tuple[tuple[str, int], ...] = tuple(CANONICAL_OUTCOME_LEVELS.items())
 # (1) but keeps Partial Success (0); -8 has only varieties of failure. They carry
 # placeholder names ("Failure -7", "Impossible") for the owner to author, and their
 # odds are example rows. A check on either is listed to the player labelled
-# Impossible (chart_has_success_outcomes is False), not dropped. Modifiers never
-# lift a check off them (slice b of #4551).
+# Impossible (chart_has_success_outcomes is False), not dropped. Enough modifiers
+# lift a check off them like any other chart (#4723).
 #
 _IMPOSSIBLE_BANDS: tuple[tuple[str, int, int], ...] = (
     (_CRITICAL_FAILURE, 1, 20),

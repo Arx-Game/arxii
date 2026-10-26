@@ -225,7 +225,7 @@ class TuningChecksFragmentViewTests(TestCase):
 
 
 class SlideAnalyticsTests(TestCase):
-    """The matchup and slide table read the engine's slide and hopeless pin (#4601)."""
+    """The matchup and slide table read the engine's slide (#4601, #4723)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -247,13 +247,15 @@ class SlideAnalyticsTests(TestCase):
         assert round(matchup.success_probability, 4) == round(0.22 + 0.48 * 0.18, 4)
         assert matchup.standing.roller.text == "Competent (rank 2), 48% toward Expert (rank 3)"
 
-    def test_matchup_pins_a_hopeless_check_against_a_pile_of_modifiers(self) -> None:
+    def test_a_pile_of_modifiers_lifts_the_matchup_off_an_impossible_chart(self) -> None:
+        plain = compute_matchup(roller_points=20, target_difficulty=250)
+        assert plain is not None
+        assert plain.rank_difference == -7
+        assert plain.success_probability == 0
         matchup = compute_matchup(roller_points=20, target_difficulty=250, modifier_points=120)
         assert matchup is not None
-        assert matchup.standing.hopeless
-        assert matchup.standing.pinned
-        assert matchup.rank_difference == -7
-        assert matchup.success_probability == 0
+        assert matchup.rank_difference == -3
+        assert matchup.success_probability > 0
 
     def test_matchup_tally_under_a_roll_modifier_matches_the_engine_clamp(self) -> None:
         plain = compute_matchup(roller_points=37, target_difficulty=50)
@@ -278,7 +280,7 @@ class SlideAnalyticsTests(TestCase):
         assert by_difference[-7].impossible
         assert all(step.success_probability == 0 for step in by_difference[-7].steps)
 
-    def test_panel_shows_ranks_with_numbers_and_the_hopeless_note(self) -> None:
+    def test_panel_shows_ranks_with_numbers_and_the_lifted_chart(self) -> None:
         self.client.force_login(self.super)
         resp = self.client.get(
             reverse("admin_tuning_checks"),
@@ -286,9 +288,11 @@ class SlideAnalyticsTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
-        assert "Novice (rank 1), 67% toward Competent (rank 2)" in body
+        assert "Grandmaster (rank 5)" in body
         assert "Mythic (rank 8)" in body
-        assert "Pinned" in body
+        assert "rank difference -3" in body
+        assert "Pinned" not in body
+        assert "Hopeless" not in body
         assert 'name="modifier_points"' in body
         assert "The slide" in body
         assert "Impossible zone" in body
