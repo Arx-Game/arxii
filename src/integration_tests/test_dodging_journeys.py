@@ -36,6 +36,13 @@ from unittest.mock import MagicMock
 
 from django.test import override_settings
 
+from flows.constants import EventName
+from flows.consts import FlowActionChoices
+from flows.factories import (
+    FlowDefinitionFactory,
+    FlowStepDefinitionFactory,
+    TriggerDefinitionFactory,
+)
 from integration_tests.harness import JourneyCase
 from world.areas.positioning.constants import ReactionCostKind, ReactionReach
 from world.areas.positioning.factories import PositionFactory
@@ -59,10 +66,16 @@ from world.combat.factories import (
 from world.combat.models import CombatParticipant, PendingOpponentAttack
 from world.combat.services import begin_declaration_phase, resolve_round
 from world.combat.services.boss.creature_spawn import spawn_from_creature_template
-from world.conditions.factories import CapabilityTypeFactory
+from world.conditions.constants import BLINK_CONDITION_NAME
+from world.conditions.factories import (
+    CapabilityTypeFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
 from world.fatigue.models import FatiguePool
 from world.magic.factories import CharacterAnimaFactory
 from world.magic.models.anima import CharacterAnima
+from world.magic.services.effect_handlers import BLINK_DODGE_HANDLER_PATH
 from world.mechanics.factories import CharacterEngagementFactory, ModifierCategoryFactory
 from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 from world.scenes.constants import RoundStatus
@@ -385,3 +398,43 @@ class GettingClearOfAnAreaAttack(_TheCellar):
 
         self.assertLess(self.health(self.malvaine), 100)
         self.assertEqual(self.participant(self.malvaine).reactions_used, 0)  # no dodge, no cost
+
+
+class PhaseStepFollowsTheDodgePlan(_TheCellar):
+    """Phase Step is a dodge source against an NPC attack (#4676): her defense roll
+    decides the hit, her plan decides the landing, and the ward's own cost is charged."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.bram = self.fighter("Bram", at=self.floor)
+        template = ConditionTemplateFactory(name=BLINK_CONDITION_NAME, reactive_anima_cost=3)
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name=BLINK_DODGE_HANDLER_PATH,
+        )
+        template.reactive_triggers.add(
+            TriggerDefinitionFactory(flow_definition=flow, event_name=EventName.DAMAGE_PRE_APPLY)
+        )
+        ConditionInstanceFactory(condition=template, target=self.bram)
+        self.blade("Archer", at=self.doorway)
+
+    def test_a_good_roll_lands_her_where_she_planned_and_the_ward_is_paid(self) -> None:
+        told = self.web(self.bram, "combat_dodge", position_id=self.gallery.pk)
+        self.assertEqual(told.detail.message, DODGED_TO.format(place="Gallery"))
+
+        self.resolve(RecordingRoll(2))
+
+        self.assertEqual(position_of(self.bram), self.gallery)
+        self.assertEqual(self.anima(self.bram), 17)  # the ward's 3, not the dodge's 2
+        self.assertEqual(self.health(self.bram), 100)
+
+    def test_a_failed_roll_is_a_hit_not_an_all_or_nothing_cancel(self) -> None:
+        self.web(self.bram, "combat_dodge", position_id=self.gallery.pk)
+
+        self.resolve(RecordingRoll(0))
+
+        self.assertEqual(position_of(self.bram), self.floor)
+        self.assertLess(self.health(self.bram), 100)
+        self.assertEqual(self.anima(self.bram), 17)  # paid for the attempt
