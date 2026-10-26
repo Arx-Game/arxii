@@ -1673,13 +1673,10 @@ def seed_canonical_affinities() -> None:
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
+    # Affinity is content: an authored row keeps whatever coefficient the content repo
+    # gave it, so the seed supplies the canonical value only when it creates the row.
     for name, coefficient in _CORRUPTION_COEFFICIENTS.items():
-        affinity = authored_or_sample(Affinity, {"corruption_coefficient": coefficient}, name=name)
-        # An authored row arrives with the column default of 0; fill it in, but never
-        # overwrite a value staff already tuned.
-        if affinity is not None and affinity.corruption_coefficient == 0 and coefficient:
-            affinity.corruption_coefficient = coefficient
-            affinity.save(update_fields=["corruption_coefficient"])
+        authored_or_sample(Affinity, {"corruption_coefficient": coefficient}, name=name)
 
 
 # Task RC1 — directed RPS affinity interaction matrix
