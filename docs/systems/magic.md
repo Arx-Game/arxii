@@ -1774,9 +1774,11 @@ real).
   `AnimaConfig.death_harvest_multiplier` (20) × the victim's full maximum (feeder overflow
   lands in `glut`; ritual harvests pour into the pool). Fires the murder taint.
 - **Blood taints:** extraction is affinity-neutral; the METHOD taints, via authored
-  `CompromiseActType` rows resolved by name at fire time (`grant_blood_taint` in
-  `services/feeding.py`, log-skip when unauthored): "Murder by Anima Drain" (+5 Praedari),
-  and both "Seduction Feeding" rows (+1 Insidia, +1 Praedari) on every essence-kind feed.
+  `CompromiseActType` rows chosen by their `feeding_taint_role` field (`FeedingTaintRole`:
+  murder, seduction by deception, seduction by predation), never by name (`grant_blood_taint`
+  in `services/feeding.py`, log-skip when unauthored). Staff must set `feeding_taint_role` on
+  each authored act, or the taint never fires: the murder act (+5 Praedari) and both
+  seduction acts (+1 Insidia, +1 Praedari) on every essence-kind feed.
 - **Pool gate** (`resolve_pool_gate`): met → as authored; ≥2× → spectacular tier
   (stashed into `session_kwargs["anima_pool"]` for requirement-bearing session rituals;
   `ActionResult.data["spectacular"]` for solo performs); underfilled → the ritual's own

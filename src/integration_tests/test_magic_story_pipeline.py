@@ -239,8 +239,8 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         grant_test_tenure(self.sheet)  # achievement eligibility gate (#3024)
         self.caster = self.sheet.character  # ObjectDB
 
-        # CharacterAura: abyssal=100 so caster_alignment=1.0 against any room.
-        # celestial=0, primal=0 (sum must equal 100 per clean()).
+        # CharacterAura: one Abyssal share row at 100 percent (a zero percent writes no
+        # row), so caster_alignment=1.0 against any room.
         self.aura = CharacterAuraFactory(
             character=self.caster.sheet_data,
             celestial=Decimal("0.00"),
