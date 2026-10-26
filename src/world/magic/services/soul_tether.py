@@ -86,15 +86,22 @@ _MSG_RESONANCE_NOT_ACCRUED = "Resonance specified is not one the Sinner accrues.
 _MSG_PER_SCENE_CAP_REACHED = "Per-scene Sineating cap reached for this bond."
 
 
+#: An aura that holds no shares yet counts as Primal (neutral), as atonement does.
+_FALLBACK_PRIMARY_AFFINITY = "primal"
+
+
 def _resolve_primary_affinity(sheet: CharacterSheet) -> str:
     """Return the AffinityType value of the sheet's dominant affinity.
 
     Reads CharacterAura.dominant_affinity via sheet.character (ObjectDB).
     Returns one of AffinityType.CELESTIAL / .PRIMAL / .ABYSSAL (lowercase values).
 
-    Raises AttributeError if the character has no CharacterAura row.
+    Raises AttributeError if the character has no CharacterAura row; an aura with no
+    shares reads as primal.
     """
     aura = sheet.character.aura  # OneToOne: ObjectDB → CharacterAura
+    if not aura.cached_shares:
+        return _FALLBACK_PRIMARY_AFFINITY
     return aura.dominant_affinity.name.lower()
 
 

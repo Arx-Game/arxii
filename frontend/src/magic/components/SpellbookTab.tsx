@@ -417,10 +417,12 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
               words. The demo draws it this way, and the magic app's narrative-not-
               numerical rule is why the numbers stay off the page. */}
           <AuraStrip aura={magic.aura} />
-          <Ledger>
-            {auraSplitSentence(magic.aura) ||
-              `It reads as ${magic.aura.dominant_affinity.toLowerCase()}.`}
-          </Ledger>
+          {(auraSplitSentence(magic.aura) || magic.aura.dominant_affinity) && (
+            <Ledger>
+              {auraSplitSentence(magic.aura) ||
+                `It reads as ${magic.aura.dominant_affinity.toLowerCase()}.`}
+            </Ledger>
+          )}
           {isMyCharacter && <Ledger>{glimpseStateLine(magic.aura.glimpse_state)}</Ledger>}
           {magic.aura.glimpse_tags.length > 0 && (
             <div className="refsheet-tags" data-testid="spellbook-glimpse-tags">

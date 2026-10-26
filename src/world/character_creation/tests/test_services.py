@@ -1187,7 +1187,7 @@ class FinalizeCharacterDistinctionResonanceTests(FinalizationTestMixin, TestCase
 
         # The stored CharacterAura reflects the seeded resonance.
         aura = CharacterAura.objects.get(character=character.sheet_data)
-        assert aura.abyssal > 0
+        assert aura.percent_for(self.abyssal_resonance.affinity) > 0
 
         # The resonance-category-targeted DistinctionEffect on "Serene" produces NO
         # resonance-category CharacterModifier at CG (dead write path removed).
@@ -1397,9 +1397,11 @@ class FinalizeGiftAndTechniquesTests(TestCase):
         finalize_magic_data(draft, sheet)
 
         aura = CharacterAura.objects.get(character=sheet)
-        assert aura.celestial == Decimal("0.00")
-        assert aura.primal == Decimal("80.00")
-        assert aura.abyssal == Decimal("20.00")
+        # The draft picked self.resonance: its affinity holds 80, Abyssal 20.
+        _, _, abyssal = ensure_canonical_affinities()
+        assert aura.percent_for(self.resonance.affinity) == Decimal("80.00")
+        assert aura.percent_for(abyssal) == Decimal("20.00")
+        assert sum(share.percent for share in aura.cached_shares) == Decimal("100.00")
         assert aura.glimpse_story == ""
 
     def test_aura_saves_glimpse_story(self) -> None:
@@ -1721,9 +1723,11 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
 
         aura = CharacterAura.objects.get(character=character.sheet_data)
-        assert aura.celestial == Decimal("0.00")
-        assert aura.primal == Decimal("80.00")
-        assert aura.abyssal == Decimal("20.00")
+        # The draft picked self.resonance: its affinity holds 80, Abyssal 20.
+        _, _, abyssal = ensure_canonical_affinities()
+        assert aura.percent_for(self.resonance.affinity) == Decimal("80.00")
+        assert aura.percent_for(abyssal) == Decimal("20.00")
+        assert sum(share.percent for share in aura.cached_shares) == Decimal("100.00")
 
     def test_finalize_saves_glimpse_story(self):
         """glimpse_story from draft_data should be saved on the CharacterAura."""

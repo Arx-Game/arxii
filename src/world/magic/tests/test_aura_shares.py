@@ -19,10 +19,7 @@ class AuraShareTests(TestCase):
         cls.celestial = AffinityFactory(name="Celestial")
         cls.primal = AffinityFactory(name="Primal")
         cls.abyssal = AffinityFactory(name="Abyssal")
-
-    def setUp(self):
-        Affinity.objects.clear_cache()
-        self.sheet = CharacterSheetFactory()
+        cls.sheet = CharacterSheetFactory()
 
     def _earn(self, affinity, amount):
         CharacterResonance.objects.create(

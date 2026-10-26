@@ -133,6 +133,7 @@ from world.magic.models import (
     TraditionGiftGrant,
     TraditionRitualGrant,
     TraditionTeachingConfig,
+    aura_shares_prefetch,
 )
 from world.magic.models.appetites import (
     AppetiteUpkeep,
@@ -659,9 +660,13 @@ class TechniqueAdmin(admin.ModelAdmin):
 
 
 class CharacterAuraShareInline(admin.TabularInline):
+    """Read-only: shares are written only by set_aura_shares, which keeps the sum at 100."""
+
     model = CharacterAuraShare
     extra = 0
-    autocomplete_fields = ["affinity"]
+    max_num = 0
+    can_delete = False
+    readonly_fields = ["affinity", "percent"]
 
 
 @admin.register(CharacterAura)
@@ -672,6 +677,9 @@ class CharacterAuraAdmin(admin.ModelAdmin):
     list_filter = ["updated_at"]
     search_fields = ["character__db_key"]
     readonly_fields = ["updated_at", "glimpse_state"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related(aura_shares_prefetch())
 
     @admin.display(description="Dominant")
     def get_dominant(self, obj):

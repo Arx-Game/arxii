@@ -113,7 +113,6 @@ from world.locations.models import LocationTenancy
 from world.magic.constants import GlimpseState, RitualExecutionKind
 from world.magic.models import (
     CharacterAura,
-    CharacterAuraShare,
     CharacterGift,
     CharacterGlimpseTag,
     CharacterTechnique,
@@ -124,6 +123,7 @@ from world.magic.models import (
     MotifResonanceStyle,
     Ritual,
     TechniqueVariant,
+    aura_shares_prefetch,
 )
 from world.magic.services.technique_effects import technique_payload_prefetches
 from world.magic.services.technique_forms import (
@@ -895,12 +895,6 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
     ]
 
 
-# Feeds CharacterAura.cached_shares for both the magic and the theming section.
-_AURA_SHARES_PREFETCH = Prefetch(
-    "aura__shares",
-    queryset=CharacterAuraShare.objects.select_related("affinity"),
-    to_attr="cached_shares",
-)
 _MAGIC_SELECT_RELATED: tuple[str, ...] = ("aura",)
 _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     # Style is caster-derived (#2700) — the magic section reads the current path's style.
@@ -978,7 +972,7 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         queryset=CharacterGlimpseTag.objects.select_related("tag"),
         to_attr="cached_glimpse_tags",
     ),
-    _AURA_SHARES_PREFETCH,
+    aura_shares_prefetch("aura__"),
 )
 
 
@@ -1553,7 +1547,7 @@ def _build_personas(
 
 
 _THEMING_SELECT_RELATED: tuple[str, ...] = ("aura",)
-_THEMING_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_AURA_SHARES_PREFETCH,)
+_THEMING_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (aura_shares_prefetch("aura__"),)
 
 
 def _build_theming(sheet: CharacterSheet) -> ThemingSection:

@@ -84,6 +84,7 @@ from world.magic.models.aura import (
     CharacterAura,
     CharacterAuraShare,
     CharacterResonance,
+    aura_shares_prefetch,
 )
 from world.magic.models.commitments import CommittingDeclaration  # noqa: F401
 from world.magic.models.corruption_config import CorruptionConfig
@@ -515,4 +516,5 @@ __all__ = [
     "TraditionTeachingConfig",
     # training outcome awards (#2727)
     "TrainingOutcomeAward",
+    "aura_shares_prefetch",
 ]

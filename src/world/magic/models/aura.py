@@ -11,6 +11,7 @@ from typing import ClassVar
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Prefetch
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.cached_property import PrunedCachedProperty
@@ -276,3 +277,15 @@ class AuraAffinityThreshold(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.affinity} >= {self.threshold_percent}%"
+
+
+def aura_shares_prefetch(prefix: str = "") -> Prefetch:
+    """Feeds ``CharacterAura.cached_shares``: one query for every aura's shares, affinity joined.
+
+    ``prefix`` is the path to the aura from the queryset's model ("aura__" from a sheet).
+    """
+    return Prefetch(
+        f"{prefix}shares",
+        queryset=CharacterAuraShare.objects.select_related("affinity"),
+        to_attr="cached_shares",
+    )

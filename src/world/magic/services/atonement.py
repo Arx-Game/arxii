@@ -107,7 +107,7 @@ def _get_dominant_affinity_name(performer_sheet: CharacterSheet) -> str:
     from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
 
     aura = magical_profile(performer_sheet)
-    if aura is None:
+    if aura is None or not aura.cached_shares:
         return _FALLBACK_AFFINITY_NAME  # safe neutral fallback
     return aura.dominant_affinity.name.lower()
 

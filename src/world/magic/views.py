@@ -85,6 +85,7 @@ from world.magic.models import (
     TechniqueStyle,
     Thread,
     ThreadWeavingTeachingOffer,
+    aura_shares_prefetch,
 )
 from world.magic.models.dramatic_moment import (
     DramaticMomentTag,
@@ -668,9 +669,11 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         """Filter to characters the current user plays (or all if staff)."""
         user = self.request.user
         if user.is_staff:
-            return CharacterAura.objects.all()
+            return CharacterAura.objects.prefetch_related(aura_shares_prefetch())
         character_ids = RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
-        return CharacterAura.objects.filter(character_id__in=character_ids)
+        return CharacterAura.objects.filter(character_id__in=character_ids).prefetch_related(
+            aura_shares_prefetch()
+        )
 
     @extend_schema(request=GlimpseSetTagsSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-tags")

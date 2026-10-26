@@ -332,12 +332,29 @@ class DistinctionResonanceRankThresholdFactory(factory.django.DjangoModelFactory
     lifetime_earned_threshold = 10
 
 
+def set_aura_split(aura: CharacterAura, *, celestial: str, primal: str, abyssal: str) -> None:
+    """Set an aura's shares to a Celestial / Primal / Abyssal split (zero writes no row)."""
+    from world.magic.services.aura import set_aura_shares
+    from world.magic.types import AffinityShare
+
+    rows = ensure_canonical_affinities()
+    set_aura_shares(
+        aura,
+        [
+            AffinityShare(affinity=row, percent=Decimal(percent))
+            for row, percent in zip(rows, (celestial, primal, abyssal), strict=True)
+            if Decimal(percent) > 0
+        ],
+    )
+
+
 class CharacterAuraFactory(factory.django.DjangoModelFactory):
     """An aura with share rows.
 
     ``celestial`` / ``primal`` / ``abyssal`` are convenience percentages for the three
     canonical affinities (rows named Celestial / Primal / Abyssal, created if absent);
-    a zero percent writes no row. They are not model fields.
+    a zero percent writes no row. The three old columns of the same names still exist on
+    the model until Task 7 drops them; the factory never writes them.
     """
 
     class Meta:
