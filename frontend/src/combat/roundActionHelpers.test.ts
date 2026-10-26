@@ -27,7 +27,13 @@ function entry(registryKey: string, description: string, met = true): PlayerActi
 
 describe('isMoveAction (#4663)', () => {
   it('counts a step, a take-off, a landing and a pass roll as moves', () => {
-    for (const key of ['move_to_position', 'take_flight', 'land', 'pass_held_ground']) {
+    for (const key of [
+      'move_to_position',
+      'take_flight',
+      'land',
+      'pass_held_ground',
+      'perform_stunt',
+    ]) {
       expect(isMoveAction(entry(key, ''))).toBe(true);
     }
     expect(isMoveAction(entry('take_position', ''))).toBe(false);

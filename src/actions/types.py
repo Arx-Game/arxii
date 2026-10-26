@@ -199,6 +199,8 @@ class ActionRef:
     position_id: int | None = None
     # Blueprint pk for set_the_stage: identifies which PositionBlueprint to instantiate.
     blueprint_id: int | None = None
+    # PositionFeature pk for perform_stunt (#4675): which feature in her place is used.
+    feature_id: int | None = None
     # WORLD_INTERACTION (#2503): identifies the Application + target ObjectDB for a
     # bare-object affordance that has no ChallengeInstance yet. Both ints are stable
     # before any instance is minted.

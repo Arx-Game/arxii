@@ -55,6 +55,7 @@ const node = (
   area_h: null,
   terrain_name: null,
   terrain_art_url: null,
+  features: [],
   ...overrides,
 });
 
@@ -136,6 +137,44 @@ describe('TacticalMap', () => {
         edges={[edge(1, 2)]}
         occupantsByPosition={new Map()}
         moveActions={[moveAction(2), pass]}
+        onDispatchMove={onDispatchMove}
+      />
+    );
+    fireEvent.click(screen.getByTestId('tactical-map-node-2'));
+    expect(onDispatchMove).toHaveBeenCalledWith(moveAction(2));
+  });
+
+  it('a place reachable only by a stunt or a pass is not clicked into a roll (#4675)', () => {
+    const onDispatchMove = vi.fn();
+    const rolled = (key: string): PlayerAction => ({
+      ...moveAction(2),
+      ref: { ...moveAction(2).ref, registry_key: key, feature_id: 9 },
+    });
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary'), node(2)]}
+        edges={[edge(1, 2)]}
+        occupantsByPosition={new Map()}
+        moveActions={[rolled('perform_stunt'), rolled('pass_held_ground')]}
+        onDispatchMove={onDispatchMove}
+      />
+    );
+    fireEvent.click(screen.getByTestId('tactical-map-node-2'));
+    expect(onDispatchMove).not.toHaveBeenCalled();
+  });
+
+  it('a place with a plain move and a stunt dispatches the plain move (#4675)', () => {
+    const onDispatchMove = vi.fn();
+    const stunt: PlayerAction = {
+      ...moveAction(2),
+      ref: { ...moveAction(2).ref, registry_key: 'perform_stunt', feature_id: 9 },
+    };
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary'), node(2)]}
+        edges={[edge(1, 2)]}
+        occupantsByPosition={new Map()}
+        moveActions={[stunt, moveAction(2)]}
         onDispatchMove={onDispatchMove}
       />
     );

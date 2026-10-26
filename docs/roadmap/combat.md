@@ -415,7 +415,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   the game page for the whole fight; the rail keeps Your Turn, and GM for a GM. Outside a
   fight the scene map is still `SceneTacticalMap`. Journeys:
   `test_battle_map_drawing_journeys.py`. Not built: staff tools to draw areas on a canvas
-  (areas are authored as numbers in admin), and the slice-3 work of #4651.
+  (areas are authored as numbers in admin).
+- **Features and stunts (#4675, slice 3 of #4651, ADR-4675) [BUILT & WIRED].** Staff author a
+  catalog of feature types in admin (art, a reach rule, and a challenge template) and attach them to
+  blueprint places; staging copies them to the live places, and a GM can add or remove one mid-fight
+  from the GM tab (`gm_attach_feature`, `gm_detach_feature`, `GET /api/areas/feature-types/`). A
+  character standing in a place with a feature, and a capability that matches one of the
+  template's approaches, sees "<Feature> to <Place>" in her move list and rolls it
+  (`perform_stunt`, telnet `position/stunt`): clean or partial moves her, a miss leaves her where she
+  is with the template's consequences applied, and every try spends one hop in a declaring round.
+  Landing in held ground stops her. The map draws features in a layer under the tokens. NPCs do not
+  use features and no prone condition is coded. Journeys: `test_features_and_stunts_journeys.py`.
+  Not built: NPCs using features.
 - **Reactions and area attacks (#4676, slice 4 of #4651, ADR-4676) [BUILT & WIRED].** A
   capability with a `reaction_reach` (or a Phase Step ward) makes a character dodge NPC attacks
   automatically: the defense roll gets the capability's value as a bonus, the dodge costs anima

@@ -55,6 +55,7 @@ import {
 import type { BattleOccupant } from '../battleMapPalette';
 import { AreaTelegraphLayer, type AreaTelegraph } from './AreaTelegraphLayer';
 import { CoverBadges, LabelChip, RouteLabel, Token } from './battleMapPieces';
+import { BattleMapFeatures } from './battleMapFeatures';
 
 export type { BattleOccupant, CombatSide } from '../battleMapPalette';
 
@@ -348,6 +349,8 @@ export function BattleMap({
   const moveActionByPositionId = useMemo(() => {
     const map = new Map<number, PlayerAction>();
     for (const action of moveActions) {
+      // A stunt is a panel choice only (#4675): a click never rolls one by surprise.
+      if (action.ref.registry_key === 'perform_stunt') continue;
       // The plain move comes first; a pass roll into the same held place stays a
       // panel choice, so a click never rolls by surprise (#4663).
       if (action.ref.position_id != null && !map.has(action.ref.position_id)) {
@@ -570,6 +573,8 @@ export function BattleMap({
             );
           })}
         </g>
+
+        <BattleMapFeatures nodes={nodes} areas={areas} uid={uid} />
 
         {/* Places: tint, outline, label, clickable squares and their tokens. */}
         {groundNodes.map((node) => (

@@ -1606,6 +1606,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/AreaList'
           description: ''
+  /api/areas/feature-types/:
+    get:
+      operationId: areas_feature_types_list
+      description: |-
+        The feature types a GM can add to a place mid-scene (#4675, slice 3 of #4651).
+
+        Read-only: staff author feature types in the admin. GMs and staff only, since
+        the list feeds the GM attach control.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: reach
+        schema:
+          type: string
+          enum:
+          - adjacent
+          - any_place
+          - elevated_adjacent
+          - same_type
+        description: |-
+          Where the feature can take her.
+
+          * `adjacent` - A place next to its own
+          * `any_place` - Any place in the room
+          * `same_type` - Another place with the same feature
+          * `elevated_adjacent` - A raised place next to its own
+      - in: query
+        name: search
+        schema:
+          type: string
+      tags:
+      - areas
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFeatureTypeList'
+          description: ''
+  /api/areas/feature-types/{id}/:
+    get:
+      operationId: areas_feature_types_retrieve
+      description: |-
+        The feature types a GM can add to a place mid-scene (#4675, slice 3 of #4651).
+
+        Read-only: staff author feature types in the admin. GMs and staff only, since
+        the list feeds the GM attach control.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this feature type.
+        required: true
+      tags:
+      - areas
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureType'
+          description: ''
   /api/areas/presence/:
     get:
       operationId: areas_presence_retrieve
@@ -44961,6 +45039,9 @@ components:
         blueprint_id:
           type: integer
           nullable: true
+        feature_id:
+          type: integer
+          nullable: true
         application_id:
           type: integer
           nullable: true
@@ -58598,6 +58679,49 @@ components:
       - ic_day
       - ic_month
       - name
+    FeatureType:
+      type: object
+      description: 'One feature type a GM can add to a place (#4675): the GM attach
+        control''s list.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        reach:
+          allOf:
+          - $ref: '#/components/schemas/FeatureTypeReachEnum'
+          readOnly: true
+          description: |-
+            Where the feature can take her.
+
+            * `adjacent` - A place next to its own
+            * `any_place` - Any place in the room
+            * `same_type` - Another place with the same feature
+            * `elevated_adjacent` - A raised place next to its own
+        art_url:
+          type: string
+          nullable: true
+          readOnly: true
+      required:
+      - art_url
+      - id
+      - name
+      - reach
+    FeatureTypeReachEnum:
+      enum:
+      - adjacent
+      - any_place
+      - same_type
+      - elevated_adjacent
+      type: string
+      description: |-
+        * `adjacent` - A place next to its own
+        * `any_place` - Any place in the room
+        * `same_type` - Another place with the same feature
+        * `elevated_adjacent` - A raised place next to its own
     FieldEnum:
       enum:
       - background
@@ -73481,6 +73605,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FashionPresentation'
+    PaginatedFeatureTypeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeatureType'
     PaginatedFlowDefinitionListList:
       type: object
       required:
@@ -83575,6 +83722,34 @@ components:
       - max_integrity
       - position_a_id
       - position_b_id
+    PositionFeature:
+      type: object
+      description: Read-only serializer for one feature standing in a place (#4675).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        art_url:
+          type: string
+          readOnly: true
+          nullable: true
+        square_x:
+          type: integer
+          readOnly: true
+          nullable: true
+        square_y:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - art_url
+      - id
+      - name
+      - square_x
+      - square_y
     PositionNode:
       type: object
       description: Read-only serializer for one PositionNode — tactical-map node shape
@@ -83647,12 +83822,18 @@ components:
           type: string
           readOnly: true
           nullable: true
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionFeature'
+          readOnly: true
       required:
       - area_h
       - area_w
       - area_x
       - area_y
       - elevation_anchor_id
+      - features
       - id
       - is_roofed
       - kind

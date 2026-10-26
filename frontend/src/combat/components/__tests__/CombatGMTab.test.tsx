@@ -46,6 +46,12 @@ vi.mock('@/scenes/components/GMAdjudicationPanel', () => ({
   ),
 }));
 
+vi.mock('@/combat/components/GMFeatureControls', () => ({
+  GMFeatureControls: ({ characterId }: { characterId: number }) => (
+    <div data-testid="gm-feature-controls-stub" data-character-id={characterId} />
+  ),
+}));
+
 import { CombatGMTab } from '../CombatGMTab';
 import type { SceneDetail } from '@/scenes/types';
 
@@ -58,7 +64,7 @@ beforeEach(() => {
 describe('CombatGMTab', () => {
   it('renders the GM tools with the combat tab set and a rail title', () => {
     mockUseCombatEncounter.mockReturnValue({ data: undefined });
-    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm />);
+    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm characterId={5} />);
     const panel = screen.getByTestId('gm-adjudication-panel-stub');
     expect(panel).toHaveAttribute('data-tabs', 'condition,dramaticbeat,traps');
     expect(panel).toHaveAttribute('data-title', 'Fight Tools');
@@ -66,13 +72,13 @@ describe('CombatGMTab', () => {
 
   it('withholds the encounter controls until the encounter query has data', () => {
     mockUseCombatEncounter.mockReturnValue({ data: undefined });
-    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm />);
+    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm characterId={5} />);
     expect(screen.queryByTestId('gm-encounter-controls-stub')).not.toBeInTheDocument();
   });
 
   it('mounts the encounter controls with the loaded encounter', () => {
     mockUseCombatEncounter.mockReturnValue({ data: { id: 7, is_gm: true } });
-    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm />);
+    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm characterId={5} />);
     const controls = screen.getByTestId('gm-encounter-controls-stub');
     expect(controls).toHaveAttribute('data-encounter-id', '7');
     expect(controls).toHaveAttribute('data-scene-id', '1');
@@ -83,7 +89,7 @@ describe('CombatGMTab', () => {
     mockUseCombatEncounter.mockReturnValue({
       data: { id: 7, is_gm: true, round_number: 0, gm_standoff: null },
     });
-    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm />);
+    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm characterId={5} />);
     await userEvent.setup().click(screen.getByRole('button', { name: 'Open a standoff' }));
     expect(mockOpenStandoff).toHaveBeenCalled();
   });
@@ -93,7 +99,7 @@ describe('CombatGMTab', () => {
       data: { id: 7, is_gm: true, round_number: 2, gm_standoff: null },
     });
     const { unmount } = render(
-      <CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm />
+      <CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm characterId={5} />
     );
     expect(screen.queryByRole('button', { name: 'Open a standoff' })).toBeNull();
     unmount();
@@ -105,8 +111,17 @@ describe('CombatGMTab', () => {
         gm_standoff: { place: 'x', participants: [], groups: [] },
       },
     });
-    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm />);
+    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm characterId={5} />);
     expect(screen.getByTestId('gm-standoff-panel')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Open a standoff' })).toBeNull();
+  });
+
+  it('mounts the Add feature control with the GM character (#4675)', () => {
+    mockUseCombatEncounter.mockReturnValue({ data: undefined });
+    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm characterId={5} />);
+    expect(screen.getByTestId('gm-feature-controls-stub')).toHaveAttribute(
+      'data-character-id',
+      '5'
+    );
   });
 });

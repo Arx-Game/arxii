@@ -249,6 +249,14 @@ describe('BattleMap', () => {
     expect(props.onDispatchMove).toHaveBeenCalledWith(props.moveActions[0], null);
   });
 
+  it('never moves by a stunt entry, even listed first (#4675)', () => {
+    const stunt = moveAction(2);
+    stunt.ref.registry_key = 'perform_stunt';
+    const props = renderMap({ moveActions: [stunt, moveAction(2), moveAction(3), moveAction(4)] });
+    fireEvent.click(screen.getByTestId('battle-map-square-2-8-4'));
+    expect(props.onDispatchMove).toHaveBeenCalledWith(props.moveActions[1], { x: 8, y: 4 });
+  });
+
   it('refuses a place no move reaches', () => {
     const props = renderMap({ moveActions: [] });
     fireEvent.click(screen.getByTestId('battle-map-square-2-8-4'));

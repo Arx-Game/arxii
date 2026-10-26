@@ -5,6 +5,7 @@ import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload } from '@/hooks/types';
+import { isMapOnlyAction } from '@/combat/roundActionHelpers';
 import { useAvailableActionsQuery } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerAction } from '../actionTypes';
 
@@ -92,7 +93,8 @@ export function ActionAttachment({
   }
 
   const availableActions: { action: PlayerAction; targeted: boolean }[] = (data?.results ?? [])
-    .filter((a) => a.prerequisite_met)
+    // Moves, stunts and GM placements live on the map and combat panels (#4675).
+    .filter((a) => a.prerequisite_met && !isMapOnlyAction(a))
     .map((a) => ({ action: a, targeted: false }));
   const hasActions = availableActions.length > 0;
 
@@ -131,7 +133,7 @@ export function ActionAttachment({
             <div className="space-y-1">
               {availableActions.map(({ action, targeted }) => (
                 <button
-                  key={`${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
+                  key={`${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}-${action.ref.position_id ?? ''}-${action.ref.feature_id ?? ''}`}
                   type="button"
                   className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                   onClick={() => handleSelect(action, targeted)}

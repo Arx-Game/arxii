@@ -36,7 +36,7 @@ describe('actionQueries', () => {
 
       const result = await fetchAvailableActions(42);
 
-      expect(apiFetch).toHaveBeenCalledWith('/api/actions/characters/42/available/');
+      expect(apiFetch).toHaveBeenCalledWith('/api/actions/characters/42/available/?page_size=100');
       expect(result).toEqual(mockData);
     });
 

@@ -103,6 +103,7 @@ export function CombatRail({
               encounterId={encounterId}
               scene={scene}
               viewerCanGm={viewerCanGm}
+              characterId={characterId}
             />
           </TabsContent>
         )}

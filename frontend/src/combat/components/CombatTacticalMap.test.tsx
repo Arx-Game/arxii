@@ -208,6 +208,7 @@ describe('CombatTacticalMap', () => {
             area_h: null,
             terrain_name: null,
             terrain_art_url: null,
+            features: [],
           },
           {
             id: 102,
@@ -228,6 +229,7 @@ describe('CombatTacticalMap', () => {
             area_h: null,
             terrain_name: null,
             terrain_art_url: null,
+            features: [],
           },
         ],
         position_edges: [
@@ -332,6 +334,7 @@ describe('CombatTacticalMap', () => {
             area_h: null,
             terrain_name: null,
             terrain_art_url: null,
+            features: [],
           },
         ],
         position_edges: [],
@@ -453,6 +456,7 @@ describe('CombatTacticalMap', () => {
     area_h: null,
     terrain_name: null,
     terrain_art_url: null,
+    features: [],
   }));
   const overlayEdges = [
     {
@@ -587,6 +591,7 @@ describe('CombatTacticalMap', () => {
             area_h: null,
             terrain_name: null,
             terrain_art_url: null,
+            features: [],
           },
           {
             id: 102,
@@ -607,6 +612,7 @@ describe('CombatTacticalMap', () => {
             area_h: null,
             terrain_name: null,
             terrain_art_url: null,
+            features: [],
           },
         ],
         position_edges: [
@@ -839,6 +845,7 @@ describe('CombatTacticalMap', () => {
             area_h: null,
             terrain_name: null,
             terrain_art_url: null,
+            features: [],
           },
           {
             id: 102,
@@ -859,6 +866,7 @@ describe('CombatTacticalMap', () => {
             area_h: null,
             terrain_name: null,
             terrain_art_url: null,
+            features: [],
           },
         ],
         position_edges: [],
@@ -982,6 +990,7 @@ describe('CombatTacticalMap', () => {
             area_h: null,
             terrain_name: null,
             terrain_art_url: null,
+            features: [],
           },
         ],
         position_edges: [],
@@ -1083,6 +1092,7 @@ describe('CombatTacticalMap', () => {
             area_h: null,
             terrain_name: null,
             terrain_art_url: null,
+            features: [],
           },
         ],
         position_edges: [],

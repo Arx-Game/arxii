@@ -88,6 +88,17 @@ export interface PositionNode {
   area_h: number | null;
   terrain_name: string | null;
   terrain_art_url: string | null;
+  /** Features standing in the place (#4675): drawn on the map, used by stunts. */
+  features: PositionFeature[];
+}
+
+/** One feature standing in a place (#4675). */
+export interface PositionFeature {
+  id: number;
+  name: string;
+  art_url: string | null;
+  square_x: number | null;
+  square_y: number | null;
 }
 
 /** A position-graph edge — passability/gating state for obstacle visibility (#2006). */

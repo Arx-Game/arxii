@@ -13,12 +13,19 @@ from django.test.utils import CaptureQueriesContext
 
 from evennia_extensions.factories import MediaFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
-from world.areas.positioning.factories import MapTerrainFactory, PositionFactory
-from world.areas.positioning.models import ObjectPosition
+from world.areas.positioning.factories import (
+    FeatureTypeFactory,
+    MapTerrainFactory,
+    PositionFactory,
+    PositionFeatureFactory,
+)
+from world.areas.positioning.models import ObjectPosition, PositionFeature
 from world.areas.positioning.services import (
     add_blueprint_position,
+    attach_feature,
     connect_positions,
     create_blueprint,
+    detach_feature,
     instantiate_blueprint,
     place_in_position,
     position_of,
@@ -35,6 +42,7 @@ from world.conditions.models import CapabilityType
 from world.mechanics.factories import ModifierCategoryFactory
 from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 from world.scenes.constants import RoundStatus
+from world.scenes.factories import SceneFactory
 from world.vitals.seeds import ensure_foundational_capabilities
 
 
@@ -362,3 +370,125 @@ class TheEncounterPayloadCarriesTheDrawing(JourneyCase):
             self.body()
 
         self.assertEqual(self.reads(many), self.reads(few))
+
+
+class TheFeaturesOfAPlaceReachTheMap(TheEncounterPayloadCarriesTheDrawing):
+    """What the map draws of a place's features: name, art and square (#4675)."""
+
+    def feature(self, place, name: str, *, art=None, square=None):
+        kind = FeatureTypeFactory(name=name, art=art)
+        x, y = square if square is not None else (None, None)
+        return PositionFeatureFactory(position=place, feature_type=kind, square_x=x, square_y=y)
+
+    def test_the_encounter_lists_each_feature_with_its_art_and_square(self):
+        chandelier = self.feature(self.hall, "Chandelier", art=self.art, square=(4, 3))
+        rope = self.feature(self.hall, "Rope", square=None)
+
+        nodes = {node["name"]: node for node in self.body()["position_nodes"]}
+
+        self.assertEqual(
+            nodes["Hall"]["features"],
+            [
+                {
+                    "id": chandelier.pk,
+                    "name": "Chandelier",
+                    "art_url": self.art.cloudinary_url,
+                    "square_x": 4,
+                    "square_y": 3,
+                },
+                {
+                    "id": rope.pk,
+                    "name": "Rope",
+                    "art_url": None,
+                    "square_x": None,
+                    "square_y": None,
+                },
+            ],
+        )
+        self.assertEqual(nodes["Porch"]["features"], [])
+
+    def test_the_scene_lists_the_same_features(self):
+        chandelier = self.feature(self.hall, "Chandelier", art=self.art, square=(4, 3))
+        scene = SceneFactory(room=self.room)
+
+        response = self.api(self.account_of(self.ann)).get(f"/api/scenes/{scene.pk}/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        nodes = {node["name"]: node for node in response.json()["position_nodes"]}
+        self.assertEqual(
+            nodes["Hall"]["features"],
+            [
+                {
+                    "id": chandelier.pk,
+                    "name": "Chandelier",
+                    "art_url": self.art.cloudinary_url,
+                    "square_x": 4,
+                    "square_y": 3,
+                }
+            ],
+        )
+
+    def test_the_query_count_does_not_grow_with_the_number_of_features(self):
+        self.body()  # warm content types
+        self.feature(self.hall, "Chandelier", art=self.art, square=(4, 3))
+        with CaptureQueriesContext(connection) as few:
+            self.body()
+        for index in range(4):
+            self.feature(self.hall, f"Rail {index}", art=MediaFactory())
+        self.feature(self.porch, "Stairs", art=MediaFactory())
+        with CaptureQueriesContext(connection) as many:
+            self.body()
+
+        self.assertEqual(self.reads(many), self.reads(few))
+
+    def test_a_feature_added_after_a_read_shows_on_the_next_read(self):
+        self.assertEqual(self.body()["position_nodes"][0]["features"], [])
+        attach_feature(self.hall, FeatureTypeFactory(name="Balcony rail", art=None))
+
+        nodes = {node["name"]: node for node in self.body()["position_nodes"]}
+
+        self.assertEqual([f["name"] for f in nodes["Hall"]["features"]], ["Balcony rail"])
+
+    def test_a_feature_removed_after_a_read_is_gone_from_the_next_reads(self):
+        rope = self.feature(self.hall, "Rope", square=(4, 3))
+        scene = SceneFactory(room=self.room)
+        client = self.api(self.account_of(self.ann))
+
+        def hall_features(body: dict) -> list[str]:
+            nodes = {node["name"]: node for node in body["position_nodes"]}
+            return [f["name"] for f in nodes["Hall"]["features"]]
+
+        self.assertEqual(hall_features(self.body()), ["Rope"])
+        self.assertEqual(hall_features(client.get(f"/api/scenes/{scene.pk}/").json()), ["Rope"])
+
+        detach_feature(rope)
+
+        self.assertEqual(hall_features(self.body()), [])
+        response = client.get(f"/api/scenes/{scene.pk}/")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(hall_features(response.json()), [])
+
+    def test_an_admin_style_save_move_and_delete_shows_on_the_next_scene_read(self):
+        scene = SceneFactory(room=self.room)
+        client = self.api(self.account_of(self.ann))
+
+        def where(name: str) -> list[str]:
+            response = client.get(f"/api/scenes/{scene.pk}/")
+            self.assertEqual(response.status_code, 200, response.content)
+            return [
+                node["name"]
+                for node in response.json()["position_nodes"]
+                if name in [f["name"] for f in node["features"]]
+            ]
+
+        self.assertEqual(where("Banner"), [])
+        row = PositionFeature(position=self.hall, feature_type=FeatureTypeFactory(name="Banner"))
+        row.save()
+        self.assertEqual(where("Banner"), ["Hall"])
+
+        row.position = self.porch
+        row.save()
+        self.assertEqual(where("Banner"), ["Porch"])
+
+        row.delete()
+        self.assertEqual(where("Banner"), [])

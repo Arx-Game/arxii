@@ -238,4 +238,39 @@ describe('MovementActions', () => {
 
     expect(toast.success).toHaveBeenCalledWith('You get past Bandit into Gatehouse.');
   });
+
+  // ---------------------------------------------------------------------------
+  // Stunts (#4675)
+  // ---------------------------------------------------------------------------
+
+  it('lists two stunts to the same place as two buttons with their notes', async () => {
+    const stunt = (featureId: number, approachId: number, name: string, note: string) => {
+      const action = makeMoveAction(2, name, 'perform_stunt');
+      return {
+        ...action,
+        description: note,
+        ref: { ...action.ref, feature_id: featureId, approach_id: approachId },
+      };
+    };
+    const actions = [
+      stunt(11, 5, 'Chandelier to Stage', 'Acrobatics · Hard'),
+      stunt(12, 6, 'Rope to Stage', 'Climbing · Medium'),
+      makeMoveAction(2, 'Move to Stage'),
+    ];
+    const dispatchAction = vi.fn(okDispatch);
+    const user = userEvent.setup();
+
+    render(<MovementActions actions={actions} isLocked={false} dispatchAction={dispatchAction} />);
+
+    expect(screen.getByTestId('move-note-perform_stunt-2-11-5')).toHaveTextContent(
+      'Acrobatics · Hard'
+    );
+    expect(screen.getByTestId('move-note-perform_stunt-2-12-6')).toHaveTextContent(
+      'Climbing · Medium'
+    );
+    expect(screen.getByTestId('move-btn-move_to_position-2')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('move-btn-perform_stunt-2-12-6'));
+    expect(dispatchAction).toHaveBeenCalledWith({ ref: actions[1].ref, kwargs: {} });
+  });
 });

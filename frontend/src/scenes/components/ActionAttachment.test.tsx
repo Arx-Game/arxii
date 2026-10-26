@@ -145,6 +145,46 @@ describe('ActionAttachment', () => {
     expect(screen.getByText('Intimidate')).toBeInTheDocument();
   });
 
+  it('leaves out moves, stunts and the GM Add feature entry (#4675)', async () => {
+    const ref = (registry_key: string, extra: Record<string, number> = {}) => ({
+      backend: 'registry' as const,
+      challenge_instance_id: null,
+      approach_id: null,
+      technique_id: null,
+      registry_key,
+      ...extra,
+    });
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      ...MOCK_ACTIONS,
+      results: [
+        ...MOCK_ACTIONS.results,
+        makeAction({
+          display_name: 'Move to Stage',
+          ref: ref('move_to_position', { position_id: 2 }),
+        }),
+        makeAction({
+          display_name: 'Chandelier to Stage',
+          ref: ref('perform_stunt', { position_id: 2, feature_id: 11, approach_id: 5 }),
+        }),
+        makeAction({ display_name: 'Add feature', ref: ref('gm_attach_feature') }),
+      ],
+    });
+    const user = userEvent.setup();
+
+    render(
+      <ActionAttachment sceneId="1" attachment={null} onAttach={vi.fn()} onDetach={vi.fn()} />,
+      { wrapper: createWrapper() }
+    );
+    await user.click(screen.getByRole('button', { name: 'Attach action' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Perform')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Move to Stage')).not.toBeInTheDocument();
+    expect(screen.queryByText('Chandelier to Stage')).not.toBeInTheDocument();
+    expect(screen.queryByText('Add feature')).not.toBeInTheDocument();
+  });
+
   it('calls onAttach when an action is selected', async () => {
     vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
     const user = userEvent.setup();

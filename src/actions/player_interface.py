@@ -217,6 +217,12 @@ def _dispatch_registry(
         merged_kwargs["position_id"] = ref.position_id
     if ref.blueprint_id is not None:
         merged_kwargs["blueprint_id"] = ref.blueprint_id
+    if ref.feature_id is not None:
+        merged_kwargs["feature_id"] = ref.feature_id
+    # A ref's approach_id overrides kwargs["approach_id"]; only stunt refs set it
+    # (pass refs carry the approach in kwargs).
+    if ref.approach_id is not None:
+        merged_kwargs["approach_id"] = ref.approach_id
     result = action_obj.run(actor=character, **merged_kwargs)
     _drive_scene_round_for_turn_cost(action_obj, ctx)
     return DispatchResult(backend=ActionBackend.REGISTRY, deferred=False, detail=result)
@@ -525,6 +531,7 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_set_the_stage_actions(character))
     actions.extend(_gm_place_in_position_actions(character))
     actions.extend(_battle_staging_actions(character))
+    actions.extend(_gm_attach_feature_actions(character))
     # Registry backend: all remaining registry actions excluded (no ActionTemplate /
     # check_type) — see module docstring.  When a registry action gains ActionTemplate
     # backing, or needs web-panel visibility without one, add it to an adapter above
@@ -1245,6 +1252,41 @@ def _pass_entry(  # noqa: PLR0913 - the list's shared refusal state rides along
     return [entry]
 
 
+def _stunt_entries(character: ObjectDB, move_met: bool, move_reason: str) -> list[PlayerAction]:
+    """One "<Feature> to <Place>" entry per stunt she could make from her place (#4675).
+
+    Read from ``stunts.stunt_options``: nothing when no feature in her place pairs with a
+    capability she holds. The note names the capability she qualifies with and the difficulty.
+    A stunt costs one hop, so it carries the step's refusal (``move_met``/``move_reason``).
+    """
+    from world.areas.positioning.stunts import stunt_options  # noqa: PLC0415
+    from world.mechanics.constants import DifficultyIndicator  # noqa: PLC0415
+
+    entries = []
+    for option in stunt_options(character):
+        approach = option.approach
+        capability_name = approach.application.capability.name
+        difficulty = DifficultyIndicator(option.difficulty).label
+        entries.append(
+            PlayerAction(
+                backend=ActionBackend.REGISTRY,
+                display_name=f"{option.feature.feature_type.name} to {option.destination.name}",
+                ref=ActionRef(
+                    backend=ActionBackend.REGISTRY,
+                    registry_key="perform_stunt",
+                    position_id=option.destination.pk,
+                    feature_id=option.feature.pk,
+                    approach_id=approach.pk,
+                ),
+                description=f"{capability_name} · {difficulty}",
+                action_category=ActionCategory.PHYSICAL,
+                prerequisite_met=move_met,
+                prerequisite_reasons=[] if move_met else [move_reason],
+            )
+        )
+    return entries
+
+
 def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     """Surface a move_to_position ``PlayerAction`` for each directly adjacent open position.
 
@@ -1393,6 +1435,7 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
             )
         )
 
+    result.extend(_stunt_entries(character, move_met, move_reason))
     return result
 
 
@@ -1494,6 +1537,34 @@ def _gm_place_in_position_actions(character: ObjectDB) -> list[PlayerAction]:
             action_category=ActionCategory.PHYSICAL,
         )
         for position in Position.objects.filter(room=character.location)
+    ]
+
+
+def _gm_attach_feature_actions(character: ObjectDB) -> list[PlayerAction]:
+    """One ``gm_attach_feature`` entry for a GM in a staged room (#4675).
+
+    Gated as ``_gm_place_in_position_actions`` is (``_actor_may_gm_place``, which
+    ``GMAttachFeatureAction.execute()`` re-checks). One entry, not one per place: the
+    available-actions list is paged, and per-place entries would push other GM tools off
+    its first page. The GM control picks the place, the feature type and an optional
+    square, and sends them as kwargs.
+    """
+    from actions.definitions.positioning import _actor_may_gm_place  # noqa: PLC0415
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+
+    room = character.location
+    if room is None or not _actor_may_gm_place(character):
+        return []
+    if not Position.objects.filter(room=room).exists():
+        return []
+    return [
+        PlayerAction(
+            backend=ActionBackend.REGISTRY,
+            display_name="Add feature",
+            ref=ActionRef(backend=ActionBackend.REGISTRY, registry_key="gm_attach_feature"),
+            description="",
+            action_category=ActionCategory.PHYSICAL,
+        )
     ]
 
 

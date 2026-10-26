@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
@@ -18,10 +20,27 @@ from actions.types import ActionContext, ActionResult, TargetType
 from commands.utils.gm_resolution import resolve_account_or_none
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import send_room_state
-from world.areas.positioning.constants import CreatureTraversal
+from world.areas.positioning.constants import (
+    STUNT_CANT_FROM_HERE,
+    STUNT_CLEAN,
+    STUNT_MISSED,
+    STUNT_PARTIAL,
+    STUNT_ROOM_CLEAN,
+    STUNT_ROOM_MISSED,
+    STUNT_ROOM_PARTIAL,
+    CreatureTraversal,
+    StuntOutcome,
+)
 from world.areas.positioning.exceptions import PositionError
-from world.areas.positioning.models import Position, PositionBlueprint
+from world.areas.positioning.models import (
+    FeatureType,
+    Position,
+    PositionBlueprint,
+    PositionFeature,
+)
 from world.areas.positioning.services import (
+    attach_feature,
+    detach_feature,
     edge_between,
     edge_blocks_crossing,
     enter_aerial,
@@ -35,6 +54,7 @@ from world.areas.positioning.services import (
     take_position,
     validate_square,
 )
+from world.areas.positioning.stunts import perform_stunt
 from world.areas.positioning.traversal import best_crossing_cost, traversals_of
 from world.combat.constants import (
     HELD_GROUND_GOT_PAST,
@@ -54,6 +74,7 @@ from world.combat.services.movement_budget import (
     spend_combat_hop,
 )
 from world.gm.constants import GMLevel
+from world.mechanics.models import ChallengeApproach
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
@@ -233,6 +254,119 @@ class PassHeldGroundAction(Action):
         send_room_state(sdm.initialize_state_for_object(actor))
         message = _PASS_MESSAGES[result.outcome].format(name=result.holder_name)
         return ActionResult(success=True, message=message)
+
+
+_STUNT_MESSAGES = {
+    StuntOutcome.CLEAN: STUNT_CLEAN,
+    StuntOutcome.PARTIAL: STUNT_PARTIAL,
+    StuntOutcome.MISSED: STUNT_MISSED,
+}
+_STUNT_ROOM_LINES = {
+    StuntOutcome.CLEAN: STUNT_ROOM_CLEAN,
+    StuntOutcome.PARTIAL: STUNT_ROOM_PARTIAL,
+    StuntOutcome.MISSED: STUNT_ROOM_MISSED,
+}
+
+
+def _resolve_stunt(
+    kwargs: dict[str, Any],
+) -> tuple[PositionFeature, Position, ChallengeApproach | None] | ActionResult:
+    """The feature, destination and optional approach a stunt names, or a refusal."""
+    feature_id, position_id = kwargs.get("feature_id"), kwargs.get("position_id")
+    if feature_id is None or position_id is None:
+        return ActionResult(success=False, message="Stunt to where, with what?")
+    feature = (
+        PositionFeature.objects.filter(pk=feature_id)
+        .select_related("feature_type__challenge_template", "position")
+        .first()
+    )
+    destination = Position.objects.filter(pk=position_id).first()
+    if feature is None or destination is None:
+        return ActionResult(success=False, message=STUNT_CANT_FROM_HERE)
+    approach = None
+    approach_id = kwargs.get("approach_id")
+    if approach_id is not None:
+        approach = ChallengeApproach.objects.filter(pk=approach_id).first()
+        if approach is None:
+            return ActionResult(success=False, message=STUNT_CANT_FROM_HERE)
+    return feature, destination, approach
+
+
+@dataclass
+class PerformStuntAction(Action):
+    """Use a feature in her place to reach another place (#4675, slice 3 of #4651).
+
+    ``stunts.perform_stunt`` rolls the feature's challenge with her strongest matching
+    approach (or ``approach_id``). Clean or partial, she is in the destination; missed,
+    she stays and the template's consequences are what happen. In a declaring round it
+    costs one hop whatever the outcome, and landing in held ground stops her there like
+    any entry. Outside a fight it costs nothing.
+
+    Dispatch convention: REGISTRY ActionRef ``registry_key="perform_stunt"``,
+    ``feature_id=<PositionFeature.pk>``, ``position_id=<Position.pk>``, optional
+    ``approach_id=<ChallengeApproach.pk>``.
+    """
+
+    key: str = "perform_stunt"
+    name: str = "Stunt"
+    icon: str = "running"
+    category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CombatMovementPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        resolved = _resolve_stunt(kwargs)
+        if isinstance(resolved, ActionResult):
+            return resolved
+        feature, destination, approach = resolved
+
+        participant = _declaring_participant(actor)
+        # Read before the move: her own place never counts as held against her.
+        held = held_position_ids_against(actor) if participant is not None else frozenset()
+        feature_name = feature.feature_type.name
+        try:
+            # The roll, the move, the hop and the held-ground stop land together or not at all.
+            with transaction.atomic():
+                outcome = perform_stunt(actor, feature, destination, approach)
+                message = _STUNT_MESSAGES[outcome].format(
+                    feature=feature_name, place=destination.name
+                )
+                if participant is not None:
+                    spend_combat_hop(participant)  # a miss still spends the hop
+                    if outcome != StuntOutcome.MISSED:
+                        stopped = _stop_in_held_ground(actor, participant, destination, held)
+                        if stopped:
+                            message = f"{message} {stopped}"
+        except PositionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        _narrate_stunt(actor, feature_name, destination, outcome)
+        sdm = context.scene_data if context else SceneDataManager()
+        send_room_state(sdm.initialize_state_for_object(actor))
+        return ActionResult(success=True, message=message)
+
+
+def _narrate_stunt(actor: ObjectDB, feature_name: str, destination: Position, outcome: str) -> None:
+    """Tell the room how the stunt went, naming her by persona (#4675)."""
+    from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    room = actor.location
+    if room is None:
+        return
+    name = persona_names_for_sheets([actor.pk]).get(actor.pk, actor.key)
+    narrate_room_outcome(
+        room,
+        _STUNT_ROOM_LINES[outcome].format(name=name, feature=feature_name, place=destination.name),
+    )
 
 
 def _narrate_pass(actor: ObjectDB, target: Position, outcome: str, holder_name: str) -> None:
@@ -610,6 +744,105 @@ class GMPlaceInPositionAction(Action):
         send_room_state(target_state)
 
         return ActionResult(success=True)
+
+
+_ERR_NO_FEATURE_TYPE = "Add which feature?"
+_ERR_FEATURE_TYPE_NOT_FOUND = "That feature does not exist."
+_ERR_NO_FEATURE = "Remove which feature?"
+
+
+@dataclass
+class GMAttachFeatureAction(Action):
+    """GM/staff: put a feature (a chandelier, a rope) in a live place (#4675).
+
+    Gated like ``GMPlaceInPositionAction``: staff, or the GM of the active scene in the
+    actor's room, checked in ``execute``. The place must be in the actor's room.
+
+    Dispatch convention: REGISTRY ActionRef ``registry_key="gm_attach_feature"``,
+    ``position_id=<Position.pk>``, kwargs ``feature_type_id`` and optional
+    ``square_x``/``square_y``.
+    """
+
+    key: str = "gm_attach_feature"
+    name: str = "Add feature"
+    icon: str = "map-marker"
+    category: str = "gm"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        if not _actor_may_gm_place(actor):
+            return ActionResult(success=False, message=_ERR_NO_GM_PERMISSION)
+        position_id = kwargs.get("position_id")
+        if position_id is None:
+            return ActionResult(success=False, message=_ERR_NO_POSITION)
+        position = Position.objects.filter(pk=position_id, room=actor.location).first()
+        if position is None:
+            return ActionResult(success=False, message=_ERR_POSITION_NOT_FOUND)
+        feature_type_id = kwargs.get("feature_type_id")
+        if feature_type_id is None:
+            return ActionResult(success=False, message=_ERR_NO_FEATURE_TYPE)
+        feature_type = FeatureType.objects.filter(pk=feature_type_id).first()
+        if feature_type is None:
+            return ActionResult(success=False, message=_ERR_FEATURE_TYPE_NOT_FOUND)
+        try:
+            attach_feature(position, feature_type, square=_square_from(kwargs))
+        except PositionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        except ValidationError as exc:
+            return ActionResult(success=False, message=" ".join(exc.messages))
+
+        sdm = context.scene_data if context else SceneDataManager()
+        send_room_state(sdm.initialize_state_for_object(actor))
+        return ActionResult(
+            success=True, message=f"You add the {feature_type.name} to {position.name}."
+        )
+
+
+@dataclass
+class GMDetachFeatureAction(Action):
+    """GM/staff: take a feature out of a live place in the actor's room (#4675).
+
+    Gated like ``GMAttachFeatureAction``. Dispatch convention: REGISTRY ActionRef
+    ``registry_key="gm_detach_feature"``, ``feature_id=<PositionFeature.pk>``.
+    """
+
+    key: str = "gm_detach_feature"
+    name: str = "Remove feature"
+    icon: str = "map-marker"
+    category: str = "gm"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        if not _actor_may_gm_place(actor):
+            return ActionResult(success=False, message=_ERR_NO_GM_PERMISSION)
+        feature_id = kwargs.get("feature_id")
+        if feature_id is None:
+            return ActionResult(success=False, message=_ERR_NO_FEATURE)
+        feature = (
+            PositionFeature.objects.filter(pk=feature_id, position__room=actor.location)
+            .select_related("feature_type", "position")
+            .first()
+        )
+        if feature is None:
+            return ActionResult(success=False, message=_ERR_NO_FEATURE)
+        name, place = feature.feature_type.name, feature.position.name
+        detach_feature(feature)
+
+        sdm = context.scene_data if context else SceneDataManager()
+        send_room_state(sdm.initialize_state_for_object(actor))
+        return ActionResult(success=True, message=f"You remove the {name} from {place}.")
 
 
 @dataclass
