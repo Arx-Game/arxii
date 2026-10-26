@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.db.models import Prefetch, QuerySet
+from django.http import HttpRequest
+from django.utils.html import format_html, format_html_join
 
 from world.admin_utils import OneRowPerFormSet
 from world.areas.models import Area, AreaElevationRequirement
@@ -15,6 +18,8 @@ from world.areas.positioning.models import (
     RampartElementResistance,
 )
 from world.areas.worldmap.models import RegionMap, RegionMapUpload
+from world.mechanics.models import ChallengeTemplateConsequence, ChallengeTemplateProperty
+from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 
 
 @admin.register(Area)
@@ -68,17 +73,94 @@ class PositionBlueprintAdmin(admin.ModelAdmin):
     list_display = ["name"]
     search_fields = ["name", "description"]
     inlines = [BlueprintPositionInline, BlueprintEdgeInline]
+    readonly_fields = ["features_table"]
+
+    @admin.display(description="Features")
+    def features_table(self, obj: PositionBlueprint) -> str:
+        """Every feature the blueprint's places carry, read-only (edited on each place)."""
+        if obj.pk is None:
+            return "-"
+        rows = BlueprintFeature.objects.filter(blueprint_position__blueprint=obj).select_related(
+            "feature_type", "blueprint_position"
+        )
+        if not rows:
+            return "No features yet."
+        body = format_html_join(
+            "",
+            "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+            (
+                (
+                    row.feature_type.name,
+                    row.blueprint_position.name,
+                    "-" if row.square_x is None else f"{row.square_x}, {row.square_y}",
+                )
+                for row in rows
+            ),
+        )
+        return format_html(
+            "<table><thead><tr><th>Feature type</th><th>Where</th><th>Square</th></tr></thead>"
+            "<tbody>{}</tbody></table>",
+            body,
+        )
 
 
 @admin.register(FeatureType)
 class FeatureTypeAdmin(admin.ModelAdmin):
     """#4675 - a feature staff attach to any place; its template is what a stunt rolls."""
 
-    list_display = ["name", "reach", "challenge_template", "art"]
+    list_display = [
+        "name",
+        "reach",
+        "challenge_template",
+        "properties",
+        "difficulty",
+        "on_a_miss",
+        "art",
+    ]
     list_filter = ["reach"]
     search_fields = ["name"]
     list_select_related = ["challenge_template", "art"]
     autocomplete_fields = ["art", "challenge_template"]
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[FeatureType]:
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related(
+                # Read through .all() on the cached rows; no per-instance attribute is wanted.
+                Prefetch(  # noqa: PREFETCH_STRING
+                    "challenge_template__challenge_template_properties",
+                    queryset=ChallengeTemplateProperty.objects.select_related("property"),
+                ),
+                Prefetch(  # noqa: PREFETCH_STRING
+                    "challenge_template__challenge_consequences",
+                    queryset=ChallengeTemplateConsequence.objects.select_related(
+                        "consequence__outcome_tier"
+                    ),
+                ),
+            )
+        )
+
+    @admin.display(description="Properties")
+    def properties(self, obj: FeatureType) -> str:
+        links = obj.challenge_template.challenge_template_properties.all()
+        return ", ".join(link.property.name for link in links)
+
+    @admin.display(description="Difficulty")
+    def difficulty(self, obj: FeatureType) -> str:
+        """The band whose value sits nearest the template's severity."""
+        severity = obj.challenge_template.severity
+        band = min(DIFFICULTY_VALUES, key=lambda b: abs(DIFFICULTY_VALUES[b] - severity))
+        return DifficultyChoice(band).label
+
+    @admin.display(description="On a miss")
+    def on_a_miss(self, obj: FeatureType) -> str:
+        links = obj.challenge_template.challenge_consequences.all()
+        return ", ".join(
+            link.consequence.label
+            for link in links
+            if link.consequence.outcome_tier.success_level < 1
+        )
 
 
 class BlueprintFeatureInline(admin.TabularInline):

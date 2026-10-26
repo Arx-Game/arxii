@@ -94,11 +94,23 @@ class FeatureType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     name = models.CharField(max_length=60, unique=True)
     art = models.ForeignKey(
-        "arxii.Media", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+        "arxii.Media",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="From the shared art library.",
     )
-    reach = models.CharField(max_length=20, choices=FeatureReach.choices)
+    reach = models.CharField(
+        max_length=20, choices=FeatureReach.choices, help_text="Where the feature can take her."
+    )
     challenge_template = models.ForeignKey(
-        "arxii.ChallengeTemplate", on_delete=models.PROTECT, related_name="+"
+        "arxii.ChallengeTemplate",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "Difficulty, properties, approaches and what a miss does live on this challenge."
+        ),
     )
 
     objects = NaturalKeyManager()

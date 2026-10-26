@@ -1256,7 +1256,7 @@ def _stunt_entries(character: ObjectDB, move_met: bool, move_reason: str) -> lis
     """One "<Feature> to <Place>" entry per stunt she could make from her place (#4675).
 
     Read from ``stunts.stunt_options``: nothing when no feature in her place pairs with a
-    capability she holds. The note names the approach she would roll and its difficulty.
+    capability she holds. The note names the capability she qualifies with and the difficulty.
     A stunt costs one hop, so it carries the step's refusal (``move_met``/``move_reason``).
     """
     from world.areas.positioning.stunts import stunt_options  # noqa: PLC0415
@@ -1265,7 +1265,7 @@ def _stunt_entries(character: ObjectDB, move_met: bool, move_reason: str) -> lis
     entries = []
     for option in stunt_options(character):
         approach = option.approach
-        approach_name = approach.display_name or approach.application.name
+        capability_name = approach.application.capability.name
         difficulty = DifficultyIndicator(option.difficulty).label
         entries.append(
             PlayerAction(
@@ -1278,7 +1278,7 @@ def _stunt_entries(character: ObjectDB, move_met: bool, move_reason: str) -> lis
                     feature_id=option.feature.pk,
                     approach_id=approach.pk,
                 ),
-                description=f"{approach_name} · {difficulty}",
+                description=f"{capability_name} · {difficulty}",
                 action_category=ActionCategory.PHYSICAL,
                 prerequisite_met=move_met,
                 prerequisite_reasons=[] if move_met else [move_reason],

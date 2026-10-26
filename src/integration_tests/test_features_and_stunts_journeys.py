@@ -12,8 +12,11 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from actions.player_interface import dispatch_player_action, get_player_actions
@@ -22,10 +25,12 @@ from integration_tests.harness import JourneyCase
 from world.areas.positioning.constants import FeatureReach
 from world.areas.positioning.factories import (
     BlueprintFeatureFactory,
+    BlueprintPositionFactory,
     FeatureTypeFactory,
+    PositionBlueprintFactory,
     PositionFactory,
 )
-from world.areas.positioning.models import PositionFeature
+from world.areas.positioning.models import FeatureType, PositionFeature
 from world.areas.positioning.services import (
     add_blueprint_position,
     attach_feature,
@@ -74,8 +79,10 @@ from world.mechanics.factories import (
     ChallengeApproachFactory,
     ChallengeTemplateConsequenceFactory,
     ChallengeTemplateFactory,
+    ChallengeTemplatePropertyFactory,
     CharacterEngagementFactory,
     ModifierCategoryFactory,
+    PropertyFactory,
 )
 from world.mechanics.models import (
     ChallengeInstance,
@@ -354,8 +361,8 @@ class AStuntInTheMoveList(_TheHall):
             set(stunts), {STUNT_ENTRY.format(place="Stage"), STUNT_ENTRY.format(place="Gallery")}
         )
         entry = stunts[STUNT_ENTRY.format(place="Stage")]
-        approach, _, difficulty = entry.description.partition(" · ")
-        self.assertEqual(approach, "Swing across")
+        capability, _, difficulty = entry.description.partition(" · ")
+        self.assertEqual(capability, "acrobatics")
         self.assertIn(difficulty, DIFFICULTY_LABELS)
         self.assertTrue(entry.prerequisite_met)
         self.assertEqual(entry.ref.feature_id, self.chandelier.pk)
@@ -636,3 +643,76 @@ class TheFeatureTypeList(JourneyCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertIn(self.api().get("/api/areas/feature-types/").status_code, (401, 403))
+
+
+class StaffReadWhatAFeatureTypeDoes(TestCase):
+    """The admin changelist and blueprint page show a feature type's challenge (#4675)."""
+
+    def setUp(self) -> None:
+        staff = get_user_model().objects.create_superuser("keeper", "k@example.com", "pw-123456")
+        self.client.force_login(staff)
+
+    def make_type(self, name: str, *, miss: str = "Fall") -> FeatureType:
+        template = ChallengeTemplateFactory(name=f"{name} challenge", severity=60)
+        ChallengeTemplatePropertyFactory(
+            challenge_template=template, property=PropertyFactory(name=f"{name}-aerial")
+        )
+        missed = CheckOutcomeFactory(name=f"{name}-Missed", success_level=-1)
+        clean = CheckOutcomeFactory(name=f"{name}-Clean", success_level=1)
+        for tier, label in ((missed, miss), (clean, f"{name} lands")):
+            ChallengeTemplateConsequenceFactory(
+                challenge_template=template,
+                consequence=ConsequenceFactory(outcome_tier=tier, label=label),
+            )
+        return FeatureTypeFactory(name=name, challenge_template=template)
+
+    def changelist(self):
+        return self.client.get(reverse("admin:arxii_featuretype_changelist"))
+
+    def test_the_list_shows_properties_difficulty_and_the_miss_result(self) -> None:
+        self.make_type("Chandelier")
+
+        response = self.changelist()
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        for expected in ("Chandelier-aerial", "Hard", "Fall", "Properties", "On a miss"):
+            self.assertIn(expected, html)
+        self.assertNotIn("Chandelier lands", html)
+
+    def test_more_rows_cost_no_more_queries(self) -> None:
+        self.make_type("Chandelier")
+        with CaptureQueriesContext(connection) as one:
+            self.changelist()
+        self.make_type("Rope")
+        self.make_type("Rail")
+        with CaptureQueriesContext(connection) as three:
+            self.changelist()
+
+        self.assertEqual(len(three), len(one))
+
+    def test_the_form_carries_help_lines(self) -> None:
+        feature_type = self.make_type("Chandelier")
+
+        response = self.client.get(
+            reverse("admin:arxii_featuretype_change", args=[feature_type.pk])
+        )
+
+        self.assertContains(response, "From the shared art library.")
+        self.assertContains(response, "Where the feature can take her.")
+
+    def test_the_blueprint_page_lists_every_feature_with_its_place(self) -> None:
+        blueprint = PositionBlueprintFactory(name="Velvet Cellar")
+        floor = BlueprintPositionFactory(blueprint=blueprint, name="Floor")
+        bar = BlueprintPositionFactory(blueprint=blueprint, name="Bar")
+        BlueprintFeatureFactory(blueprint_position=floor, feature_type=self.make_type("Chandelier"))
+        BlueprintFeatureFactory(blueprint_position=bar, feature_type=self.make_type("Rope"))
+
+        response = self.client.get(
+            reverse("admin:arxii_positionblueprint_change", args=[blueprint.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        for expected in ("Feature type", "Where", "Square", "Chandelier", "Floor", "Rope", "Bar"):
+            self.assertIn(expected, html)
