@@ -20,6 +20,7 @@ from django.db import models
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
+from world.magic.constants import FeedingTaintRole
 from world.magic.types.aura import AffinityType
 
 _RESONANCE_FK = "arxii.Resonance"
@@ -53,6 +54,12 @@ class CompromiseActType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=10,
         help_text="Resonance amount granted by this act.",
     )
+    feeding_taint_role = models.CharField(
+        max_length=24,
+        choices=FeedingTaintRole.choices,
+        blank=True,
+        help_text="Which feeding-taint rule this act type stands for. Blank = none.",
+    )
     is_cruelty = models.BooleanField(
         default=False,
         help_text=(
@@ -66,6 +73,13 @@ class CompromiseActType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         verbose_name = "Compromise Act Type"
         verbose_name_plural = "Compromise Act Types"
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["feeding_taint_role"],
+                condition=~models.Q(feeding_taint_role=""),
+                name="unique_feeding_taint_role",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.name} → {self.target_resonance.name} ({self.amount})"
@@ -97,6 +111,14 @@ class ResonanceConversion(NaturalKeyMixin, SharedMemoryModel):
         max_length=16,
         choices=AffinityType.choices,
         help_text="The destination affinity for this conversion path.",
+    )
+    target_affinity_ref = models.ForeignKey(
+        "arxii.Affinity",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Row-keyed replacement for target_affinity (#4681).",
     )
     target_resonance = models.ForeignKey(
         _RESONANCE_FK,
@@ -223,6 +245,22 @@ class FallRedemptionRecord(SharedMemoryModel):
     )
     from_affinity = models.CharField(max_length=16, choices=AffinityType.choices)
     to_affinity = models.CharField(max_length=16, choices=AffinityType.choices)
+    from_affinity_ref = models.ForeignKey(
+        "arxii.Affinity",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Row-keyed replacement for from_affinity (#4681).",
+    )
+    to_affinity_ref = models.ForeignKey(
+        "arxii.Affinity",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Row-keyed replacement for to_affinity (#4681).",
+    )
     multiplier = models.DecimalField(max_digits=4, decimal_places=2)
     performed_at = models.DateTimeField(auto_now_add=True)
     scene = models.ForeignKey(

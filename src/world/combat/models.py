@@ -912,6 +912,14 @@ class CombatOpponent(SharedMemoryModel):
             "ObjectDB's CharacterAura.dominant_affinity when this is blank."
         ),
     )
+    affinity_ref = models.ForeignKey(
+        "arxii.Affinity",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Row-keyed replacement for affinity (#4681); the CharField is removed later.",
+    )
 
     class Meta:
         constraints = [

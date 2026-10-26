@@ -2109,6 +2109,14 @@ class SituationRequirementMixin(models.Model):
         default="",
         help_text="Affinity axis for attacker typing (ATTACKER_AFFINITY).",
     )
+    affinity_ref = models.ForeignKey(
+        "arxii.Affinity",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Row-keyed replacement for affinity (#4681); the CharField is removed later.",
+    )
     origin_side = models.CharField(
         max_length=10,
         choices=SituationOriginSide.choices,

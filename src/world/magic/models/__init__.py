@@ -82,6 +82,7 @@ from world.magic.models.appetites import (
 from world.magic.models.aura import (
     AuraAffinityThreshold,
     CharacterAura,
+    CharacterAuraShare,
     CharacterResonance,
 )
 from world.magic.models.commitments import CommittingDeclaration  # noqa: F401
@@ -305,6 +306,7 @@ __all__ = [
     "CastPowerLevel",
     "CharacterAnima",
     "CharacterAura",
+    "CharacterAuraShare",
     # prepared per-character Audere text (#4101)
     "CharacterCrossingText",
     # gifts

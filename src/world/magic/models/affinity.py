@@ -72,6 +72,10 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         help_text="Description of this affinity.",
     )
+    corruption_coefficient = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Integer tenths of corruption per cast tick for this affinity's resonances.",
+    )
     objects = AffinityManager()
 
     class NaturalKeyConfig:

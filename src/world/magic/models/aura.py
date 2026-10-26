@@ -15,7 +15,7 @@ from django.db import models
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.magic.constants import GlimpseState
-from world.magic.models.affinity import Resonance
+from world.magic.models.affinity import Affinity, Resonance
 from world.magic.types import AffinityType
 
 
@@ -97,6 +97,41 @@ class CharacterAura(SharedMemoryModel):
             (self.abyssal, AffinityType.ABYSSAL),
         ]
         return max(values, key=lambda x: x[0])[1]
+
+
+class CharacterAuraShare(SharedMemoryModel):
+    """One affinity's percentage of a character's aura (one row per affinity held)."""
+
+    aura = models.ForeignKey(
+        CharacterAura,
+        on_delete=models.CASCADE,
+        related_name="shares",
+    )
+    affinity = models.ForeignKey(
+        Affinity,
+        on_delete=models.PROTECT,
+        related_name="aura_shares",
+    )
+    percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
+        help_text="This affinity's share of the aura, 0-100.",
+    )
+
+    class Meta:
+        ordering = ["aura", "affinity"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["aura", "affinity"],
+                name="unique_aura_share_per_affinity",
+            )
+        ]
+        verbose_name = "Character Aura Share"
+        verbose_name_plural = "Character Aura Shares"
+
+    def __str__(self) -> str:
+        return f"{self.affinity} {self.percent}% of {self.aura}"
 
 
 class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
@@ -186,6 +221,14 @@ class AuraAffinityThreshold(SharedMemoryModel):
     """
 
     affinity = models.CharField(max_length=16, choices=AffinityType.choices)
+    affinity_ref = models.ForeignKey(
+        "arxii.Affinity",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Row-keyed replacement for affinity (#4681); the CharField is removed later.",
+    )
     threshold_percent = models.DecimalField(
         max_digits=5,
         decimal_places=2,
