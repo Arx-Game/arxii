@@ -11,9 +11,9 @@ from typing import ClassVar
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from django.utils.functional import cached_property
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.magic.constants import GlimpseState
 from world.magic.models.affinity import Affinity, Resonance
@@ -94,9 +94,13 @@ class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
         self.full_clean()
         super().save(*args, **kwargs)
 
-    @cached_property
+    @PrunedCachedProperty
     def cached_shares(self) -> list["CharacterAuraShare"]:
-        """This aura's share rows (one per affinity held), cleared by set_aura_shares."""
+        """This aura's share rows (one per affinity held), cleared by set_aura_shares.
+
+        Fed cold by a ``Prefetch`` landing on this name in the character sheet
+        serializer's magic and theming sections.
+        """
         return list(self.shares.select_related("affinity"))
 
     def percent_for(self, affinity: Affinity) -> Decimal:
