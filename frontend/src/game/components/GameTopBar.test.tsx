@@ -1,4 +1,4 @@
-import { screen, within, fireEvent, render } from '@testing-library/react';
+import { screen, within, fireEvent, render, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import type { ReactNode } from 'react';
@@ -116,7 +116,10 @@ describe('GameTopBar', () => {
   });
 
   afterEach(() => {
-    store.dispatch(resetGame());
+    // Components are still mounted here; reset inside act so they re-render cleanly.
+    act(() => {
+      store.dispatch(resetGame());
+    });
     vi.clearAllMocks();
   });
 

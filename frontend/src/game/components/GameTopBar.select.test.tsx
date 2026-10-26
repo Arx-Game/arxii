@@ -12,7 +12,7 @@
  * a socket. A focus switch between two already-connected sessions is
  * tab-local and writes nothing durable (puppeting already recorded both).
  */
-import { screen } from '@testing-library/react';
+import { screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 
@@ -93,7 +93,10 @@ describe('GameTopBar character switch ordering (#3812)', () => {
   });
 
   afterEach(() => {
-    store.dispatch(resetGame());
+    // Components are still mounted here; reset inside act so they re-render cleanly.
+    act(() => {
+      store.dispatch(resetGame());
+    });
     vi.clearAllMocks();
   });
 

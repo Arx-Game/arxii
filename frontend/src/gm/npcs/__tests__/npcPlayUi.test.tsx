@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, act } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GameTopBar } from '@/game/components/GameTopBar';
@@ -47,7 +47,10 @@ const vael = {
 } as unknown as MyRosterEntry;
 
 afterEach(() => {
-  store.dispatch(resetGame());
+  // Components are still mounted here; reset inside act so they re-render cleanly.
+  act(() => {
+    store.dispatch(resetGame());
+  });
   vi.clearAllMocks();
 });
 
