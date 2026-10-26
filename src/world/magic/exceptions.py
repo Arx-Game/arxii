@@ -857,3 +857,7 @@ class UnmergedFacetRelation(MagicError):
     """
 
     user_message = "These facets cannot be merged yet."
+
+
+class AffinityNotConfigured(MagicError):
+    user_message = "This affinity has not been set up yet."

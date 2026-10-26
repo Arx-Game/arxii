@@ -797,3 +797,10 @@ class MagicActivity(models.TextChoices):
     CEREMONY = "ceremony", "Ceremony"
     COMPANION_BINDING = "companion_binding", "Companion binding"
     DREAM_PERIL = "dream_peril", "Dream peril"
+
+
+# Names of the three canonical Affinity rows. Looked up by the
+# ``Affinity.objects.get_*_affinity()`` getters; never matched anywhere else.
+AFFINITY_CELESTIAL = "Celestial"
+AFFINITY_PRIMAL = "Primal"
+AFFINITY_ABYSSAL = "Abyssal"
