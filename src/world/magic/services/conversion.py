@@ -29,11 +29,12 @@ from world.magic.models.fall_redemption import (
     FallRedemptionConfig,
     ResonanceConversion,
 )
+from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services.resonance import grant_resonance
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models.affinity import Resonance
+    from world.magic.models.affinity import Affinity, Resonance
 
 
 @dataclass(frozen=True)
@@ -68,9 +69,22 @@ def get_fall_redemption_config() -> FallRedemptionConfig:
     return config
 
 
+def conversion_pair(source: Affinity, target: Affinity) -> AffinityInteraction:
+    """The AffinityInteraction row authored for converting ``source`` into ``target``.
+
+    The pair carries the multiplier and the Fall / Redemption type. Raises
+    ConversionMappingError when the pair has no row or no ``conversion_multiplier``.
+    """
+    pair = AffinityInteraction.objects.interaction_for(source, target)
+    if pair is None or pair.conversion_multiplier is None:
+        msg = f"No conversion is authored from {source.name} to {target.name}."
+        raise ConversionMappingError(msg)
+    return pair
+
+
 def _resolve_target_resonance(
     source_resonance: Resonance,
-    target_affinity: str,
+    target_affinity: Affinity,
 ) -> Resonance:
     """Look up the target resonance via ResonanceConversion mapping.
 
@@ -79,21 +93,15 @@ def _resolve_target_resonance(
     try:
         mapping = ResonanceConversion.objects.get(
             source_resonance=source_resonance,
-            target_affinity=target_affinity,
+            target_affinity_ref=target_affinity,
         )
     except ResonanceConversion.DoesNotExist as exc:
         msg = (
             f"No ResonanceConversion mapping for source_resonance="
-            f"{source_resonance.name} → target_affinity={target_affinity}."
+            f"{source_resonance.name} → target_affinity={target_affinity.name}."
         )
         raise ConversionMappingError(msg) from exc
     return mapping.target_resonance
-
-
-def _get_multiplier(config: FallRedemptionConfig, from_affinity: str, to_affinity: str) -> Decimal:
-    """Return the conversion multiplier for a given path."""
-    key = f"{from_affinity}_to_{to_affinity}_multiplier"
-    return getattr(config, key)
 
 
 @transaction.atomic
@@ -198,16 +206,16 @@ def _convert_full(
 def convert_resonance(  # noqa: PLR0913
     character_sheet: CharacterSheet,
     *,
-    source_affinity: str,
-    target_affinity: str,
+    source_affinity: Affinity,
+    target_affinity: Affinity,
     multiplier: Decimal,
     partial: bool = False,
     penance_amount: int | None = None,
 ) -> ConversionResult:
     """Convert resonance balances and lifetime_earned between affinities.
 
-    For each CharacterResonance row whose resonance.affinity.name.lower()
-    matches source_affinity:
+    For each CharacterResonance row whose resonance.affinity is
+    ``source_affinity``:
 
     1. Look up the target resonance via ResonanceConversion mapping.
     2. Apply multiplier to balance (gain or loss).
@@ -233,7 +241,7 @@ def convert_resonance(  # noqa: PLR0913
     source_rows = list(
         CharacterResonance.objects.filter(
             character_sheet=character_sheet,
-            resonance__affinity__name__iexact=source_affinity,
+            resonance__affinity=source_affinity,
         ).select_related("resonance__affinity")
     )
 
@@ -291,7 +299,7 @@ def _reanchor_threads(
     character_sheet: CharacterSheet,
     converted: list[ConvertedResonance],
     multiplier: Decimal,
-    source_affinity: str,
+    source_affinity: Affinity,
 ) -> int:
     """Re-anchor all Threads on source resonances to their target resonances.
 
@@ -306,7 +314,7 @@ def _reanchor_threads(
 
     threads = Thread.objects.filter(
         owner=character_sheet,
-        resonance__affinity__name__iexact=source_affinity,
+        resonance__affinity=source_affinity,
         retired_at__isnull=True,
     )
 

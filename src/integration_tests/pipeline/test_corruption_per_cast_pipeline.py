@@ -126,13 +126,13 @@ class TestCorruptionPerCastPipeline(TestCase):
         spreads evenly across all of them.
         """
         from world.magic.factories import (
-            AffinityFactory,
             GiftFactory,
             ResonanceFactory,
             TechniqueFactory,
+            ensure_canonical_affinities,
         )
 
-        abyssal_affinity = AffinityFactory(name="Abyssal")
+        abyssal_affinity = ensure_canonical_affinities()[2]
         resonances = [
             ResonanceFactory(name=f"Test Abyssal Res {i}", affinity=abyssal_affinity)
             for i in range(resonance_count)

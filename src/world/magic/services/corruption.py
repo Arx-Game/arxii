@@ -42,11 +42,6 @@ _WARNING_STAGES = (3, 4)
 # Staff can surface this via a config model in a future phase; hardcoded for now.
 _CORRUPTION_RESISTANCE_THRESHOLD = 1000
 
-# Affinity name strings — used for coefficient lookup (case-insensitive)
-_AFFINITY_CELESTIAL = "celestial"
-_AFFINITY_PRIMAL = "primal"
-_AFFINITY_ABYSSAL = "abyssal"
-
 # Lookup for tier coefficient attribute names
 _TIER_COEF_ATTRS = {
     1: "tier_1_coefficient",
@@ -63,24 +58,6 @@ def get_corruption_config() -> CorruptionConfig:
     if config is None:
         config, _ = CorruptionConfig.objects.get_or_create(pk=1)
     return config
-
-
-def _resolve_affinity_coefficient(resonance: Resonance, config: CorruptionConfig) -> int:
-    """Return the integer-tenths affinity coefficient for a resonance (case-insensitive name match).
-
-    Celestial → config.celestial_coefficient (default 0)
-    Primal    → config.primal_coefficient    (default 2)
-    Abyssal   → config.abyssal_coefficient   (default 10)
-    Unknown   → 0 (treats unknown affinities like Celestial — no corruption)
-    """
-    affinity_name = resonance.affinity.name.lower()
-    if affinity_name == _AFFINITY_CELESTIAL:
-        return config.celestial_coefficient
-    if affinity_name == _AFFINITY_PRIMAL:
-        return config.primal_coefficient
-    if affinity_name == _AFFINITY_ABYSSAL:
-        return config.abyssal_coefficient
-    return 0
 
 
 def _resolve_tier_coefficient(tier: int, config: CorruptionConfig) -> int:
@@ -142,7 +119,7 @@ def accrue_corruption_for_cast(
 
     for inv in technique_use_result.resonance_involvements:
         resonance = inv.resonance
-        affinity_coef = _resolve_affinity_coefficient(resonance, config)
+        affinity_coef = resonance.affinity.corruption_coefficient
 
         # Celestial always has coefficient 0 — skip entirely (no accrual, no audit noise)
         if affinity_coef == 0:

@@ -10,13 +10,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
 
 from world.magic.constants import GainSource
-from world.magic.exceptions import FallEligibilityError
+from world.magic.exceptions import ConversionMappingError, FallEligibilityError
 from world.magic.models.aura import CharacterAura
 from world.magic.models.fall_redemption import (
     ConversionType,
@@ -24,6 +23,7 @@ from world.magic.models.fall_redemption import (
 )
 from world.magic.services.conversion import (
     ConversionResult,
+    conversion_pair,
     convert_resonance,
     get_fall_redemption_config,
 )
@@ -31,15 +31,8 @@ from world.magic.services.resonance import grant_resonance
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models.affinity import Affinity
     from world.magic.models.fall_redemption import CompromiseActType
-
-# Affinity name constants (lower-case for comparison)
-_CELESTIAL = "celestial"
-_PRIMAL = "primal"
-_ABYSSAL = "abyssal"
-
-# The affinity ordering: lower = "higher" (more redeemable)
-_AFFINITY_RANK = {_CELESTIAL: 0, _PRIMAL: 1, _ABYSSAL: 2}
 
 
 def grant_compromise_resonance(
@@ -72,8 +65,8 @@ class FallResult:
 
     conversion_result: ConversionResult
     conversion_type: ConversionType
-    from_affinity: str
-    to_affinity: str
+    from_affinity: Affinity
+    to_affinity: Affinity
     record_id: int
 
 
@@ -81,7 +74,7 @@ class FallResult:
 def perform_fall(
     character_sheet: CharacterSheet,
     *,
-    target_affinity: str,
+    target_affinity: Affinity,
     scene: object | None = None,
 ) -> FallResult:
     """Perform the full Fall/Redemption conversion ceremony.
@@ -96,16 +89,16 @@ def perform_fall(
 
     Args:
         character_sheet: The character undergoing the Fall/Redemption.
-        target_affinity: The destination affinity ("primal", "abyssal",
-            "celestial"). A Fall goes down (Celestial→Primal→Abyssal);
-            Redemption goes up.
+        target_affinity: The destination Affinity row. Whether the path is a Fall
+            or a Redemption comes from the authored ``AffinityInteraction`` pair.
         scene: Optional scene FK for the audit record.
 
     Returns:
         FallResult with conversion details.
 
     Raises:
-        FallEligibilityError: if aura threshold not met or already converted.
+        FallEligibilityError: if aura threshold not met, already converted, or no
+            conversion is authored for the path.
     """
     config = get_fall_redemption_config()
 
@@ -119,47 +112,42 @@ def perform_fall(
     if not aura.cached_shares:
         msg = "This character has no aura — they are not magically active."
         raise FallEligibilityError(msg)
-    from_affinity = aura.dominant_affinity.name.lower()  # "celestial", "primal", "abyssal"
+    from_affinity = aura.dominant_affinity
 
     # Gate 1: target affinity must have crossed the threshold
-    target_percent = next(
-        (
-            share.percent
-            for share in aura.cached_shares
-            if share.affinity.name.lower() == target_affinity
-        ),
-        Decimal(0),
-    )
+    target_percent = aura.percent_for(target_affinity)
     if target_percent < config.fall_threshold_percent:
         msg = (
-            f"Your {target_affinity} affinity is only {target_percent}%; "
+            f"Your {target_affinity.name} affinity is only {target_percent}%; "
             f"you must reach {config.fall_threshold_percent}% to convert."
         )
         raise FallEligibilityError(msg)
 
     # Can't convert to the same affinity
-    if from_affinity == target_affinity:
-        msg = f"You are already dominant in {target_affinity}."
+    if from_affinity.pk == target_affinity.pk:
+        msg = f"You are already dominant in {target_affinity.name}."
         raise FallEligibilityError(msg)
 
     # Gate 2: irreversibility — check for existing record
     if FallRedemptionRecord.objects.filter(
         character_sheet=character_sheet,
-        from_affinity=from_affinity,
-        to_affinity=target_affinity,
+        from_affinity_ref=from_affinity,
+        to_affinity_ref=target_affinity,
     ).exists():
         msg = "You have already undergone this conversion."
         raise FallEligibilityError(msg)
 
-    # Determine conversion type (Fall = going down, Redemption = going up)
-    from_rank = _AFFINITY_RANK.get(from_affinity, 1)
-    to_rank = _AFFINITY_RANK.get(target_affinity, 1)
-    conversion_type = ConversionType.FALL if to_rank > from_rank else ConversionType.REDEMPTION
-
-    # Get the multiplier for this path
-    from world.magic.services.conversion import _get_multiplier  # noqa: PLC0415
-
-    multiplier = _get_multiplier(config, from_affinity, target_affinity)
+    # The authored pair carries the multiplier and whether this is a Fall or Redemption
+    try:
+        pair = conversion_pair(from_affinity, target_affinity)
+    except ConversionMappingError as exc:
+        msg = (
+            f"No conversion is authored from {from_affinity.name} to "
+            f"{target_affinity.name}; the ceremony cannot be performed."
+        )
+        raise FallEligibilityError(msg) from exc
+    conversion_type = ConversionType(pair.conversion_type)
+    multiplier = pair.conversion_multiplier
 
     # Perform the conversion
     result = convert_resonance(
@@ -174,8 +162,8 @@ def perform_fall(
     record = FallRedemptionRecord.objects.create(
         character_sheet=character_sheet,
         conversion_type=conversion_type,
-        from_affinity=from_affinity,
-        to_affinity=target_affinity,
+        from_affinity_ref=from_affinity,
+        to_affinity_ref=target_affinity,
         multiplier=multiplier,
         scene=scene,
     )

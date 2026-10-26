@@ -169,8 +169,8 @@ class CharacterResonanceColdCacheTests(TestCase):
         target_resonance = ResonanceFactory(name="Praedari", affinity=primal)
         ResonanceConversion.objects.get_or_create(
             source_resonance=source_resonance,
-            target_affinity="primal",
-            defaults={"target_resonance": target_resonance},
+            target_affinity_ref=primal,
+            defaults={"target_resonance": target_resonance, "target_affinity": "primal"},
         )
         sheet = CharacterSheetFactory()
         source_cr = CharacterResonanceFactory(
@@ -179,8 +179,8 @@ class CharacterResonanceColdCacheTests(TestCase):
         # cached_resonances has never been read on this instance -- cold.
         convert_resonance(
             sheet,
-            source_affinity="celestial",
-            target_affinity="primal",
+            source_affinity=celestial,
+            target_affinity=primal,
             multiplier=Decimal("1.0"),
         )
         target_cr = CharacterResonance.objects.get(

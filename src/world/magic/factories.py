@@ -44,6 +44,7 @@ from world.magic.constants import (
     TechniqueFunction,
     VitalBonusTarget,
 )
+from world.magic.exceptions import AffinityNotConfigured
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
@@ -117,6 +118,7 @@ from world.magic.models import (
     TraditionGiftGrant,
 )
 from world.magic.models.anima import AnimaConfig
+from world.magic.models.fall_redemption import ConversionType
 from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.models.manifestation import CharacterManifestation, TechniqueManifestOption
 from world.magic.types.ritual import SoulfrayContent
@@ -255,8 +257,48 @@ def ensure_canonical_affinities() -> tuple[Affinity, Affinity, Affinity]:
         AffinityFactory(name=AFFINITY_PRIMAL),
         AffinityFactory(name=AFFINITY_ABYSSAL),
     )
+    for row, coefficient in zip(rows, _CANONICAL_CORRUPTION_COEFFICIENTS, strict=True):
+        if row.corruption_coefficient != coefficient:
+            row.corruption_coefficient = coefficient
+            row.save(update_fields=["corruption_coefficient"])
     Affinity.objects.clear_cache()
     return rows
+
+
+#: Corruption tenths per cast tick for (Celestial, Primal, Abyssal), as production authors them.
+_CANONICAL_CORRUPTION_COEFFICIENTS = (0, 2, 10)
+
+
+def ensure_conversion_pairs() -> tuple[Affinity, Affinity, Affinity]:
+    """Author the six Fall / Redemption conversion pairs between the canonical affinities.
+
+    Creates the canonical rows if absent, then upserts each cross pair's
+    ``AffinityInteraction`` with the production ``conversion_multiplier`` and
+    ``conversion_type``. Returns (celestial, primal, abyssal).
+    """
+    celestial, primal, abyssal = ensure_canonical_affinities()
+    for source, target, conversion_type, multiplier in (
+        (celestial, primal, ConversionType.FALL, "1.20"),
+        (celestial, abyssal, ConversionType.FALL, "1.50"),
+        (primal, abyssal, ConversionType.FALL, "1.20"),
+        (abyssal, primal, ConversionType.REDEMPTION, "0.70"),
+        (primal, celestial, ConversionType.REDEMPTION, "0.70"),
+        (abyssal, celestial, ConversionType.REDEMPTION, "0.50"),
+    ):
+        pair, _ = AffinityInteraction.objects.get_or_create(
+            source_affinity=source,
+            environment_affinity=target,
+            defaults={
+                "valence": ResonanceValence.OPPOSED,
+                "kind": AffinityInteractionKind.REJECT,
+                "aggressor": AffinityInteractionAggressor.ENVIRONMENT,
+            },
+        )
+        pair.conversion_multiplier = Decimal(multiplier)
+        pair.conversion_type = conversion_type
+        pair.save(update_fields=["conversion_multiplier", "conversion_type"])
+    AffinityInteraction.objects.clear_cache()
+    return celestial, primal, abyssal
 
 
 class AffinityInteractionFactory(factory.django.DjangoModelFactory):
@@ -2240,8 +2282,6 @@ def wire_soulfray_aftermath(content: SoulfrayContent) -> None:
 # Scope #7 Phase 9 — Reference Corruption content factories
 # =============================================================================
 
-_ABYSSAL_AFFINITY_NAME: str = "abyssal"
-
 
 def _make_magical_endurance_check_type() -> Any:
     """Return a 'Magical Endurance' CheckType — factory-owned, not the gated #709 seed (#2698).
@@ -2301,7 +2341,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
 
     These values are PLACEHOLDERS for Phase 14 tuning via SoulTetherConfig.
 
-    The affinity is inferred from corruption_resonance.affinity.name.lower().
+    The affinity is read from the canonical Abyssal row against corruption_resonance.affinity.
     """
 
     class Meta:
@@ -2338,7 +2378,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
         from world.conditions.types import AdvancementResistFailureKind
 
         thresholds = [50, 200, 500, 1000, 1500]
-        is_abyssal = self.corruption_resonance.affinity.name.lower() == _ABYSSAL_AFFINITY_NAME
+        is_abyssal = self.corruption_resonance.affinity_id == ensure_canonical_affinities()[2].pk
         difficulties = [12, 18, 25, 30, 35] if is_abyssal else [8, 12, 18, 22, 28]
         check_type = _make_resist_corruption_check_type()
 
@@ -3369,16 +3409,14 @@ def wire_fall_redemption_content() -> object:
     # the canonical Affinities exist, and only their own Resonances/
     # CompromiseActType/ResonanceConversion rows are content-repo-owned #2698)
     compromise_types = []
-    celestial_affinity = Affinity.objects.filter(name__iexact="Celestial").first()
-    primal_affinity = Affinity.objects.filter(name__iexact="Primal").first()
-    abyssal_affinity = Affinity.objects.filter(name__iexact="Abyssal").first()
+    try:
+        celestial_affinity = Affinity.objects.get_celestial_affinity()
+        primal_affinity = Affinity.objects.get_primal_affinity()
+        abyssal_affinity = Affinity.objects.get_abyssal_affinity()
+    except AffinityNotConfigured:
+        celestial_affinity = primal_affinity = abyssal_affinity = None
 
-    have_affinities = (
-        celestial_affinity is not None
-        and primal_affinity is not None
-        and abyssal_affinity is not None
-    )
-    if have_affinities:
+    if celestial_affinity is not None:
         # One authored resonance per affinity to hang the examples off. This used
         # to name "Bene"/"Praedari"/"Dissolution" and authored_or_sample them into
         # existence -- two canonical names minted with whatever affinity this
@@ -3424,18 +3462,22 @@ def wire_fall_redemption_content() -> object:
 
             # Example ResonanceConversion mappings
             for source_res, target_affinity, target_res in [
-                (cele_res, "primal", primal_res),
-                (cele_res, "abyssal", abyssal_res),
-                (primal_res, "abyssal", abyssal_res),
-                (primal_res, "celestial", cele_res),
-                (abyssal_res, "primal", primal_res),
-                (abyssal_res, "celestial", cele_res),
+                (cele_res, primal_affinity, primal_res),
+                (cele_res, abyssal_affinity, abyssal_res),
+                (primal_res, abyssal_affinity, abyssal_res),
+                (primal_res, celestial_affinity, cele_res),
+                (abyssal_res, primal_affinity, primal_res),
+                (abyssal_res, celestial_affinity, cele_res),
             ]:
                 authored_or_sample(
                     ResonanceConversion,
-                    {"target_resonance": target_res},
+                    {
+                        "target_resonance": target_res,
+                        # Old column, still part of the unique key until the rename.
+                        "target_affinity": target_affinity.name.lower(),
+                    },
                     source_resonance=source_res,
-                    target_affinity=target_affinity,
+                    target_affinity_ref=target_affinity,
                 )
 
     return SimpleNamespace(

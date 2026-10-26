@@ -39,10 +39,9 @@ from world.magic.exceptions import (
     StageAdvanceBonusError,
 )
 from world.magic.models import CharacterThreadWeavingUnlock, Ritual
-from world.magic.models.affinity import Resonance
+from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.soul_tether_config import SoulTetherConfig
 from world.magic.services.threads import shown_thread_level, weave_thread
-from world.magic.types.aura import AffinityType
 from world.magic.types.soul_tether import (
     RescueOutcome,
     SineatingOffer,
@@ -86,23 +85,18 @@ _MSG_RESONANCE_NOT_ACCRUED = "Resonance specified is not one the Sinner accrues.
 _MSG_PER_SCENE_CAP_REACHED = "Per-scene Sineating cap reached for this bond."
 
 
-#: An aura that holds no shares yet counts as Primal (neutral), as atonement does.
-_FALLBACK_PRIMARY_AFFINITY = "primal"
+def _resolve_primary_affinity(sheet: CharacterSheet) -> Affinity | None:
+    """Return the sheet's dominant Affinity row.
 
+    Reads CharacterAura.dominant_affinity via sheet.character (ObjectDB). An aura that
+    holds no shares yet has no primary affinity (None), which matches neither gate.
 
-def _resolve_primary_affinity(sheet: CharacterSheet) -> str:
-    """Return the AffinityType value of the sheet's dominant affinity.
-
-    Reads CharacterAura.dominant_affinity via sheet.character (ObjectDB).
-    Returns one of AffinityType.CELESTIAL / .PRIMAL / .ABYSSAL (lowercase values).
-
-    Raises AttributeError if the character has no CharacterAura row; an aura with no
-    shares reads as primal.
+    Raises AttributeError if the character has no CharacterAura row.
     """
     aura = sheet.character.aura  # OneToOne: ObjectDB → CharacterAura
     if not aura.cached_shares:
-        return _FALLBACK_PRIMARY_AFFINITY
-    return aura.dominant_affinity.name.lower()
+        return None
+    return aura.dominant_affinity
 
 
 def _validate_affinity_gates(sinner_sheet: CharacterSheet, sineater_sheet: CharacterSheet) -> None:
@@ -117,9 +111,13 @@ def _validate_affinity_gates(sinner_sheet: CharacterSheet, sineater_sheet: Chara
     sinner_primary = _resolve_primary_affinity(sinner_sheet)
     sineater_primary = _resolve_primary_affinity(sineater_sheet)
 
-    if sineater_primary == AffinityType.ABYSSAL:
+    if sineater_primary is not None and sineater_primary.pk == (
+        Affinity.objects.get_abyssal_affinity().pk
+    ):
         raise AffinityGateError(_MSG_SINEATER_GATE)
-    if sinner_primary == AffinityType.CELESTIAL:
+    if sinner_primary is not None and sinner_primary.pk == (
+        Affinity.objects.get_celestial_affinity().pk
+    ):
         raise AffinityGateError(_MSG_SINNER_GATE)
 
 
