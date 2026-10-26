@@ -216,6 +216,12 @@ penetration, flee, environmental, clash, **and defense** via `resolve_npc_attack
 through this seam with `scene=encounter.scene`, so fashion/covenant/conditions
 apply uniformly to attack and defense (#750/#512).
 
+**No hopeless pin (#4723, ADR-4723-A).** `world.checks.slide.resolve_standing` picks the
+chart from both sides' full totals, modifiers included. Big effects can lift a check off an
+impossible chart (-7, -8); buffs short of the next rank only slide it, and the slide never shows
+an outcome its chart lacks. Do not add an own-standing split back to `perform_check`: the taper
+is the brake on piles, and an approach is listed Impossible only at its current total.
+
 **Level, size and the light taper (#4594, ADR-4594-A).** `ModifierContribution` carries `level`,
 `size` and `vow_part`; the breakdown the seam returns carries `tapers` (the check lane's
 `ModifierTaper` rows, `modifier_values.load_taper_rules`), so `.total` and

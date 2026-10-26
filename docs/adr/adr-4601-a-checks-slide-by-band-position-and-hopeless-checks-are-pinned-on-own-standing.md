@@ -1,7 +1,8 @@
 # ADR-4601-A: Checks slide by band position, and hopeless checks are pinned on own standing
 
 **Date:** 2026-10-23
-**Status:** Accepted (spec approved on #4551)
+**Status:** Accepted (spec approved on #4551); the hopeless pin paragraph is superseded by
+ADR-4723-A (2026-10-26): the pin and its own-standing plumbing are removed, the slide stands
 **Issue:** #4601 (slice (b) of #4551). Builds on ADR-4593-A (charts -7 and -8) and keeps
 #2707's chip charts.
 
@@ -19,7 +20,7 @@ exactly where it always did. A difference below the lowest chart sits at 0% of i
 or above the highest chart uses that chart unslid. The code is `world/checks/slide.py`;
 `perform_check` and the tuning dashboard both use it.
 
-**The hopeless pin.** Own standing is each side's total without modifiers (#4551 decision
+**The hopeless pin (superseded by ADR-4723-A, removed in #4723).** Own standing is each side's total without modifiers (#4551 decision
 7: effort, fatigue, strain and soulfray are own standing; conditions, equipment,
 distinctions, scene, fashion, relationships, favor and caller bonuses are modifiers, and so
 are the defender's conditions inside `level_opposition`). When own standing lands on a

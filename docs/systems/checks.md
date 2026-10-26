@@ -24,13 +24,13 @@ from world.checks.types import (
 | `chart` | `ResultChart \| None` | The result chart used |
 | `roller_rank` | `CheckRank \| None` | Roller's rank |
 | `target_rank` | `CheckRank \| None` | Target's rank |
-| `rank_difference` | `int` | Whole rank difference of the chart the roll used (#4601: the floor of the fractional difference, or the pinned chart) |
+| `rank_difference` | `int` | Whole rank difference of the chart the roll used (#4601: the floor of the fractional difference) |
 | `trait_points` | `int` | Points from weighted traits |
 | `aspect_bonus` | `int` | Bonus from path aspects |
 | `specialization_points` | `int` | Points from owned specializations (default 0, #1688) |
 | `capability_points` | `int` | Weighted authored `CheckTypeCapabilityModifier` points (default 0, #2505) |
 | `total_points` | `int` | trait_points + specialization_points + aspect_bonus + capability_points + extra_modifiers |
-| `standing` | `CheckStanding \| None` | #4601: both sides' band positions, own standing, the slid chart, `hopeless` and `pinned`. None on hand-built results |
+| `standing` | `CheckStanding \| None` | #4601: both sides' band positions and the slid chart the roll used. None on hand-built results |
 
 ### CheckResult Properties
 
@@ -198,8 +198,6 @@ result = perform_check(
     check_type=check_type,         # CheckType instance
     target_difficulty=0,           # Target points to beat (default 0)
     extra_modifiers=0,             # Bonus/penalty from caller (goals, magic, combat, conditions)
-    extra_standing=0,              # #4601: the part of extra_modifiers that is own standing
-    target_modifiers=0,            # #4601: the part of target_difficulty that is modifiers
 )
 
 # Use the result
@@ -388,11 +386,8 @@ term would double-count it. See ADR-0166.
 4. Band positions and the slide (#4601, world/checks/slide.py resolve_standing):
    each total -> its CheckRank and band position (rank number + share of the band)
    difference = roller position - target position (fractional)
-   own standing = total - extra_modifiers + extra_standing, against
-                  target_difficulty - target_modifiers
-   if own standing lands on a chart with no Success (1): the hopeless pin holds the
-     roll on that chart, sliding it at most 100% of its band
-   else: chart = floor(difference), slid by the remainder toward the next chart
+   chart = floor(difference), slid by the remainder toward the next chart
+   (both totals count every point, modifiers included; #4723 removed the hopeless pin)
 
 5. The slid chart: each "at least X" chance of the chart's own outcomes moves toward the
    next chart's (its extra outcomes counted as the nearest outcome this chart has)
@@ -454,7 +449,7 @@ anything below -8 resolves to chart -8 (there is no clamp).
   if any "at least X" chance falls between neighbouring charts, if an impossible chart sits
   above a winnable one, or if a difference below -8 stops resolving to chart -8.
 
-## The slide and the hopeless pin (#4601, ADR-4601-A)
+## The slide (#4601, ADR-4601-A; the pin removed by #4723, ADR-4723-A)
 
 `world/checks/slide.py` is the one implementation; `perform_check`,
 `preview_check_difficulty`, the outcome wheel and the tuning dashboard all read it.
@@ -474,24 +469,13 @@ anything below -8 resolves to chart -8 (there is no clamp).
 - **One roll.** The d100 face (with rollmod, clamped 1 to 100 as before) plus a fraction
   inside the face. Unslid, every face lands where it always did; slid, every point of a
   modifier moves the odds.
-- **Own standing** is each side without modifiers. `perform_check(..., extra_standing=,
-  target_modifiers=)` carries the split; `perform_check_with_modifiers` passes the gathered
-  fatigue, strain and soulfray contributions (`ModifierBreakdown.standing_total`,
-  `OWN_STANDING_SOURCE_KINDS`) as `extra_standing`. `level_opposition_points` splits the
-  defender's condition modifiers out of `level_opposition`, and every roll against a
-  `level_opposition` difficulty passes them as `target_modifiers`: combat offense,
-  penetration and NPC attack, consider, the standoff read (roll and preview grade),
-  reveal, rally, break-free, cast detection, mission contests and the allegiance break.
-  Social scene actions fold the fatigue penalty into `extra_modifiers` and pass it as
-  `extra_standing` too (`start_action_resolution(..., extra_standing=)`, kept on
-  `PendingActionResolution`). `force_check_outcome`'s capture records
-  `target_modifiers`.
-- **The hopeless pin.** When own standing lands on a chart with no Success (1) (the
-  `chart_has_success_outcomes` test), the roll stays on that chart; modifiers slide it at
-  most to 100% of its band (`CheckStanding.pinned` says they would have lifted it).
-  Net penalties resolve normally onto a lower chart. Because `preview_check_difficulty`
-  returns the pinned chart's difference, a buffed preview of a hopeless check still grades
-  Impossible.
+- **No pin (#4723, ADR-4723-A).** The chart comes from both sides' full totals,
+  modifiers included, so a big enough buff or pile of buffs lifts a check off charts -7
+  and -8 like any other. Buffs that stay short of the next rank leave the roll on its
+  chart, and the slide never shows an outcome that chart lacks, so a check on an
+  impossible chart has no Success outcome until its total reaches a chart that has one.
+  `preview_check_difficulty` grades the same full total, so an approach is listed
+  Impossible only while its current total lands on a chart with no Success (1).
 - **Guarantees capped.** `_lowest_outcome_at_or_above` returns the chart's best outcome when
   the chart has nothing at the floor (a Success floor on chart -7 gives Partial Success);
   the global outcome table is only the fallback when there is no chart.
@@ -643,7 +627,7 @@ All models registered with appropriate admin interfaces:
 - **Mechanics app**: `resolve_challenge()` gathers the character's modifiers with
   `collect_check_modifiers` (the active scene at the challenge's location) once, BEFORE the roll
   (#4629), and rolls `perform_check()` with `extra_modifiers = caller bonus + capability_source.value +
-  breakdown.extra_modifiers_total` and `extra_standing = breakdown.standing_total`. Each term counts once:
+  breakdown.extra_modifiers_total`. Each term counts once:
   the capability source's value (a `CapabilitySource`, e.g. from a technique; ADR-0145's narrower channel)
   is added there, authored `CheckTypeCapabilityModifier` points are added by `perform_check` itself, and
   both appear in the breakdown only as CAPABILITY rows, which `extra_modifiers_total` leaves out. Once-only
