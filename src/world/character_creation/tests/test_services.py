@@ -32,6 +32,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
 )
 from world.roster.seeds import ensure_rosters
 from world.skills.factories import SkillFactory
@@ -1208,6 +1209,7 @@ class FinalizeGiftAndTechniquesTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_canonical_affinities()
         from world.magic.factories import (
             TechniqueFactory,
             TraditionFactory,
@@ -1855,6 +1857,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
 class FinalizeGMCharacterTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_canonical_affinities()
         from world.gm.factories import GMProfileFactory, GMTableFactory
 
         # finalize_gm_character() looks up a seeded roster by roster_type (#2728).
@@ -1993,6 +1996,7 @@ class FinalizeGMCharacterClaimAsNpcTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_canonical_affinities()
         from world.gm.constants import GMLevel
         from world.gm.factories import GMProfileFactory, GMTableFactory, seed_default_gm_level_caps
 

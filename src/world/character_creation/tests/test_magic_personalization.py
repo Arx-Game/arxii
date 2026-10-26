@@ -18,6 +18,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueVariantFactory,
     TraditionFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import CharacterTechnique
 from world.magic.services.creation_personalization import (
@@ -228,6 +229,7 @@ class FinalizeTests(_Catalog, TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_canonical_affinities()
         cls._make_catalog()
 
     def test_finalize_writes_the_hold_thread_and_motif(self) -> None:

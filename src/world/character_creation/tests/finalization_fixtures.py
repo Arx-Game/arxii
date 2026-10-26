@@ -24,6 +24,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.seeds_cast import get_standalone_cast_template
 from world.realms.models import Realm
@@ -76,6 +77,9 @@ class FinalizationTestMixin:
         # via ensure_rosters(). Seed all seven shelves here so any finalization test
         # can add_to_roster=True/False or approve without a Roster.DoesNotExist.
         ensure_rosters()
+        # CG finalize gives every new aura its starting split from the canonical
+        # Celestial / Primal / Abyssal rows (#4681).
+        ensure_canonical_affinities()
 
         target.realm = Realm.objects.create(name=f"{prefix} Realm", description="Test")
         target.area = StartingArea.objects.create(

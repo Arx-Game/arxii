@@ -10,6 +10,7 @@ from django.utils.functional import cached_property
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from core.testing import register_test_cache_flusher
 from world.contributors.models import CreditedContent
 from world.magic.constants import AFFINITY_ABYSSAL, AFFINITY_CELESTIAL, AFFINITY_PRIMAL
 from world.magic.exceptions import AffinityNotConfigured
@@ -53,6 +54,11 @@ class AffinityManager(NaturalKeyManager):
 
     def get_abyssal_affinity(self) -> "Affinity":
         return self._canonical(AFFINITY_ABYSSAL)
+
+
+# A rolled-back test leaves the canonical rows cached with primary keys the database no
+# longer holds; the test runner drops them after every test, as a restart would.
+register_test_cache_flusher(AffinityManager.clear_cache)
 
 
 class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
