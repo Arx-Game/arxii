@@ -55,6 +55,11 @@ This is a common oversight - the app's `urls.py` may be complete but the endpoin
 
 ### `views.py`
 - General web interface view functions
+- `FrontendAppView` serves the React `index.html` and, via `link_previews.py`, writes the
+  requested page's title and description meta tags into it (Discord and other unfurlers never
+  run JavaScript). Realm pages and public Codex entries (`/codex?entry=<id>`) preview their
+  first paragraph; everything else gets the default line. Only rows an anonymous visitor can
+  read are used. To preview a new page type, add a case to `preview_for`.
 - Integration with Evennia web functionality
 
 ## Integration Points
