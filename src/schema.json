@@ -49431,6 +49431,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/CanonReviewStatusEnum'
           readOnly: true
+          default: pending
         reviewer:
           type: integer
           readOnly: true
@@ -49871,7 +49872,9 @@ components:
         location:
           type: integer
         status:
-          $ref: '#/components/schemas/CeremonyStatusEnum'
+          allOf:
+          - $ref: '#/components/schemas/CeremonyStatusEnum'
+          default: open
         opened_at:
           type: string
           format: date-time
@@ -59329,7 +59332,9 @@ components:
           type: string
           description: Staff feedback on the application.
         status:
-          $ref: '#/components/schemas/StatusBa9Enum'
+          allOf:
+          - $ref: '#/components/schemas/StatusBa9Enum'
+          default: pending
         created_at:
           type: string
           format: date-time
@@ -59369,7 +59374,9 @@ components:
           type: string
           description: Staff feedback on the application.
         status:
-          $ref: '#/components/schemas/StatusBa9Enum'
+          allOf:
+          - $ref: '#/components/schemas/StatusBa9Enum'
+          default: pending
       required:
       - application_text
     GMApplicationQueue:
@@ -61645,6 +61652,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/GroupStoryStatusEnum'
           readOnly: true
+          default: pending
         claimed_by:
           type: integer
           readOnly: true
@@ -68952,6 +68960,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/NPCLoanStatusEnum'
           readOnly: true
+          default: offered
       required:
       - id
       - roster_entry
@@ -78696,7 +78705,9 @@ components:
           type: string
           description: Staff feedback on the application.
         status:
-          $ref: '#/components/schemas/StatusBa9Enum'
+          allOf:
+          - $ref: '#/components/schemas/StatusBa9Enum'
+          default: pending
     PatchedGMProfileMineRequest:
       type: object
       description: |-
@@ -82216,6 +82227,7 @@ components:
         persona_type:
           allOf:
           - $ref: '#/components/schemas/PersonaTypeEnum'
+          default: temporary
           description: |-
             PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise, ALTERNATE = an alternate self's persona (shapeshift/possession/past-life)
 
@@ -89684,6 +89696,7 @@ components:
             finish.
         is_active:
           type: boolean
+          default: true
         opened_by:
           type: integer
           nullable: true
@@ -89722,6 +89735,7 @@ components:
             finish.
         is_active:
           type: boolean
+          default: true
         opened_by:
           type: integer
           nullable: true

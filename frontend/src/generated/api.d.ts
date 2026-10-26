@@ -29824,6 +29824,7 @@ export interface components {
       readonly id: number;
       readonly story: number;
       readonly tier: components['schemas']['TierAbfEnum'];
+      /** @default pending */
       readonly status: components['schemas']['CanonReviewStatusEnum'];
       readonly reviewer: number;
       readonly notes: string;
@@ -30042,7 +30043,8 @@ export interface components {
       readonly officiant_name: string;
       readonly presented_being_name: string;
       location: number;
-      status?: components['schemas']['CeremonyStatusEnum'];
+      /** @default open */
+      status: components['schemas']['CeremonyStatusEnum'];
       /** Format: date-time */
       readonly opened_at: string;
       /** Format: date-time */
@@ -34462,7 +34464,8 @@ export interface components {
       application_text: string;
       /** @description Staff feedback on the application. */
       staff_response?: string;
-      status?: components['schemas']['StatusBa9Enum'];
+      /** @default pending */
+      status: components['schemas']['StatusBa9Enum'];
       /** Format: date-time */
       readonly created_at: string;
       /** Format: date-time */
@@ -34477,7 +34480,8 @@ export interface components {
       application_text: string;
       /** @description Staff feedback on the application. */
       staff_response?: string;
-      status?: components['schemas']['StatusBa9Enum'];
+      /** @default pending */
+      status: components['schemas']['StatusBa9Enum'];
     };
     /** @description Pending application surfaced to the overseeing GM. */
     GMApplicationQueue: {
@@ -35484,6 +35488,7 @@ export interface components {
       readonly requested_by_account: number;
       /** @description Optional pitch text. Visible to the whole (staff-vetted) GM pool. */
       readonly message: string;
+      /** @default pending */
       readonly status: components['schemas']['GroupStoryStatusEnum'];
       /** @description The GM who claimed this request, once ACCEPTED. */
       readonly claimed_by: number | null;
@@ -39090,6 +39095,7 @@ export interface components {
     NPCLoan: {
       readonly id: number;
       readonly roster_entry: number;
+      /** @default offered */
       readonly status: components['schemas']['NPCLoanStatusEnum'];
     };
     /**
@@ -44808,7 +44814,8 @@ export interface components {
       application_text?: string;
       /** @description Staff feedback on the application. */
       staff_response?: string;
-      status?: components['schemas']['StatusBa9Enum'];
+      /** @default pending */
+      status: components['schemas']['StatusBa9Enum'];
     };
     /**
      * @description The requesting GM's own profile: operational fields are writable (#3478).
@@ -46851,8 +46858,9 @@ export interface components {
        *     * `established` - Established
        *     * `temporary` - Temporary
        *     * `alternate` - Alternate
+       * @default temporary
        */
-      persona_type?: components['schemas']['PersonaTypeEnum'];
+      persona_type: components['schemas']['PersonaTypeEnum'];
       /** Format: uri */
       thumbnail_url?: string;
       readonly thumbnail_media_url: string | null;
@@ -50300,7 +50308,8 @@ export interface components {
       room: number;
       /** @description Active scene when the queue was opened, for auto-clear on scene finish. */
       scene?: number | null;
-      is_active?: boolean;
+      /** @default true */
+      is_active: boolean;
       /** @description Persona who opened the queue. */
       opened_by?: number | null;
       readonly opened_by_name: string;
@@ -50315,7 +50324,8 @@ export interface components {
       room: number;
       /** @description Active scene when the queue was opened, for auto-clear on scene finish. */
       scene?: number | null;
-      is_active?: boolean;
+      /** @default true */
+      is_active: boolean;
       /** @description Persona who opened the queue. */
       opened_by?: number | null;
     };
