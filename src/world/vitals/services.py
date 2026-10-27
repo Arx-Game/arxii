@@ -894,6 +894,10 @@ def process_damage_consequences(  # noqa: PLR0913 - each param is a distinct sur
     """
     if character_sheet is None:
         return DamageConsequenceResult(message="No vitals found")
+    from world.conditions.services import resolved_damage_type  # noqa: PLC0415
+
+    # Untyped damage is Physical (#4742), so it routes to Physical's wound/death pools.
+    damage_type = resolved_damage_type(damage_type)
     try:
         vitals = character_sheet.vitals
     except (AttributeError, ObjectDoesNotExist):

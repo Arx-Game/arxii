@@ -17,7 +17,6 @@ from flows.consts import FlowActionChoices
 from flows.models.flows import FlowStepDefinition
 from flows.models.triggers import TriggerDefinition
 from world.conditions.models import ConditionTemplate
-from world.conditions.services import is_untargetable
 from world.magic.models.techniques import ConditionTargetKind, Technique
 from world.magic.services.hostility import is_technique_hostile
 from world.mechanics.services import prerequisites_met
@@ -546,8 +545,6 @@ def resolve_targets(
         initiator_persona=initiator_persona,
         scene_personas=scene_personas,
     )
-    # Exclude intangible targets — they are untargetable regardless of technique type.
-    eligible = [p for p in eligible if not is_untargetable(p.character_sheet.character)]
     if technique.cached_target_prerequisites:
         caster_od = initiator_persona.character_sheet.character
         eligible = [p for p in eligible if _target_meets_prerequisites(technique, caster_od, p)]

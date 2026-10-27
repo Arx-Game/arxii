@@ -225,9 +225,12 @@ def _apply_combo_rider(
     if target.status == OpponentStatus.DEFEATED:
         return
     combo = action.combo_upgrade
+    from world.conditions.services import scaled_outgoing_damage  # noqa: PLC0415
+
     dmg_result = _svc.apply_damage_to_opponent(
         target,
-        combo.bonus_damage,
+        # Untyped (so Physical): the attacker's damage-dealt rows apply (#4742).
+        scaled_outgoing_damage(participant.character_sheet.character, combo.bonus_damage, None),
         bypass_soak=combo.bypass_soak,
         source_sheet=participant.character_sheet,
     )

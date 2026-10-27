@@ -438,12 +438,17 @@ def apply_resolved_damage(
     reactive beat needed) and by ``world.scenes.sudden_harm.resolve_pending_interpose_harm``
     (post-interpose resolution). Returns the actual amount dealt (0 if fully absorbed).
     """
-    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
+    from world.conditions.services import (  # noqa: PLC0415
+        resolve_damage_type_resistance,
+        resolved_damage_type,
+    )
     from world.magic.services import (  # noqa: PLC0415
         apply_damage_reduction_from_threads,
         coherence_cache_scope,
     )
 
+    # Untyped damage is Physical (#4742).
+    damage_type = resolved_damage_type(damage_type)
     with coherence_cache_scope():
         effective = amount
         if hasattr(target, "threads"):

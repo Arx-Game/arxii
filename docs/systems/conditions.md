@@ -146,6 +146,7 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 | `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `value` (additive integer; negative reduces, positive enhances), `scales_with_severity` (inherited from `ConditionOrStageEffect`; honoured by all three readers as of #2708 — see "Capability magnitude curve" below) |
 | `ConditionCheckModifier` | How a condition modifies checks | `check_type` OR `check_category` (exactly one; category targets all checks in a category, including per-character magic checks — #2697), `modifier_value`, `scales_with_severity` |
 | `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value`, `scales_with_severity` (#4728: multiplies by the instance's `effective_severity`; unset rows are flat, with no stage-multiplier fallback, because stage rows are authored per stage. One rule, `scaled_resistance_value`, read by the damage seam through `CharacterConditionHandler.resistance_modifier` and by `get_resistance_modifier`) |
+| `ConditionDamageDealtModifier` | How a condition changes its bearer's OUTGOING damage of one type (#4742) | `damage_type` (required; a type with no row is unchanged), `modifier_percent` (-75 = a quarter), `scales_with_severity` (same rule as resistance, `scaled_damage_dealt_percent`). Read by `scaled_outgoing_damage` (PC technique profiles, combo riders, joust, NPC attacks) through `ConditionHandler.damage_dealt_percent` |
 | `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` (after combat, a settled ROUNDS row ticks these through the non-lethal clamp, see "Settled round effects") |
 
 #### DoT tick timing (`DamageTickTiming`) — #1762
@@ -292,6 +293,34 @@ damage — the clamp bounds only the live application; the unclamped sum still r
 on the returned `DamageInteractionResult`. See `docs/systems/magic.md`'s "The Damage
 Identity" section for the sibling bounded percent lane (the ally-buff side) and
 ADR-0158.
+
+### Incorporeal and untyped damage (#4742, ADR-4742-A) [BUILT & WIRED]
+
+- **Untyped damage is Physical.** `resolved_damage_type(damage_type)` returns the given type, or
+  `VitalsConsequenceConfig.physical_damage_type` when it is empty (set by migration 0311 and the
+  survivability seeder; code never looks Physical up by name). Every damage seam calls it at
+  entry: `apply_damage_to_participant`, `apply_damage_to_opponent`, `apply_resolved_damage`,
+  `process_damage_consequences`, `resolve_damage_type_resistance` and
+  `CombatTechniqueResolver._profile_damage`. So Physical and all-types resistance rows, cover,
+  property bonuses, damage interactions and Physical's consequence pools all meet weapon hits.
+  With no Physical row configured (an empty database) untyped damage stays untyped.
+- **Incorporeal is resistance, never untargetability.** `ConditionCategory.grants_intangibility`
+  (`is_intangible`) is read only by held ground: an incorporeal PC blocks nobody. NPC picks and
+  area casts include her. Her protection is a severity-scaled Physical
+  `ConditionResistanceModifier` on the form's condition, so a hit below it does nothing and an
+  overwhelming hit lands the difference.
+- **Riders need a hit that survives resistance.** In `apply_damage_to_participant` the on-hit
+  pool (knockback) fires only when damage remains after thread damage reduction and resistance;
+  armor soak and cover still allow it. Sent flying already needs `damage_dealt > 0`. Grapples
+  and grips are resisted by degrees through the condition's own resist roll
+  (`_check_application_resist`) plus the form's check modifiers on that roll.
+- **Her own strikes.** `ConditionDamageDealtModifier` rows change the bearer's outgoing damage
+  of one type by a percent, through one seam, `scaled_outgoing_damage(attacker, amount, type)`:
+  PC technique profiles (end of `_profile_damage`), PC combo riders and joust strikes, and NPC
+  attacks (`npc_attack`, `npc_action`) all call it. Battle failure damage and falls are not
+  strikes and do not. A smoke form with
+  Physical -75 and no Fire row hits a quarter as hard with plain steel and at full strength with
+  a Fire profile.
 
 ### Bounded-Percent Lane Pricing (#2643)
 
@@ -480,7 +509,7 @@ by its field and never by the condition's name:
 | `affects_turn_order`, `turn_order_modifier` | `effective_speed_ranks` (`world/combat/services/combos/resolution_order.py`), through `turn_order_modifier_by_target` | Round order sorts on the combatant's base speed rank (covenant role `speed_rank`, `NO_ROLE_SPEED_RANK`, or `NPC_SPEED_RANK`) minus its summed modifier, so a positive modifier acts earlier. PCs and NPC opponents both shift. `get_resolution_order` and the encounter payload's `resolution_order` (the initiative chips) sort on the same ranks. |
 | `ConditionDamageOverTime` | `tick_round_for_targets` -> `_apply_round_tick_damage` (`world/vitals/services.py`) | An NPC opponent has no sheet or vitals, so its tick damage goes through `apply_damage_to_opponent` with damage-type resistance netted once, no armor soak and no `DAMAGE_PRE_APPLY` (the same as PC DoT); defeat follows as from a hit. |
 | `absorb_remaining`, a reactive trigger calling `reflect_damage` | `absorb_pool`, `reflect_damage` (`world/magic/services/effect_handlers.py`) | The barrier handlers designate their condition by field: `absorb_pool` takes the bearer's oldest active instance holding a buffer, `reflect_damage` takes an instance whose template carries a reactive trigger calling the handler. A barrier staff name anything else works. The "Aegis Field" / "Mirror Ward" name constants remain for seed content only. |
-| `forces_attack_on_source` | `select_npc_actions` (`_provoking_participant_ids`, `_narrow_to_locked_or_provoker`), through `provoking_source_by_target` (#4584) | **Provoke.** An NPC opponent carrying the condition attacks only the condition's `source_character` (the newest active instance with a source wins). An active `EngagementLock` that narrowed the pool wins over it. A source who is down, untargetable, out of the fight or not a PC falls back to the opponent's normal target choice, never a skipped turn. Charmed, turned and summoned opponents ignore it (they do not target the PC side) and so does a PC bearer (PCs choose their own targets). |
+| `forces_attack_on_source` | `select_npc_actions` (`_provoking_participant_ids`, `_narrow_to_locked_or_provoker`), through `provoking_source_by_target` (#4584) | **Provoke.** An NPC opponent carrying the condition attacks only the condition's `source_character` (the newest active instance with a source wins). An active `EngagementLock` that narrowed the pool wins over it. A source who is down, out of the fight or not a PC falls back to the opponent's normal target choice, never a skipped turn. Charmed, turned and summoned opponents ignore it (they do not target the PC side) and so does a PC bearer (PCs choose their own targets). |
 | `source_guards_bearer` | `_ensure_interpose_challenges` and `_try_interpose` (`world/combat/services/damage/`), through `guardians_by_target` (#4584, ADR-4584-A) | **Standing guard.** The condition's source tries the mundane interpose on every hit on the bearer, through the shared tail `_attempt_guardian_interpose`. It counts as one of her reactions this round (no cap; a harder roll each time, #4676) and against `ABSORPTION_CAP_PER_MOMENT`, and pays interpose fatigue at very low effort, but she still takes her own turn. A guardian who declared any Interpose that round acts only through her declaration. A guardian who cannot act (`can_act`: knocked unconscious, though still ACTIVE) does not step in. A self-cast guard never interposes. PC wards in combat only. |
 | `prevents_knockout` | `_process_knockout_tier` (`world/vitals/services.py`), through `knockout_preventing_instance` (#4584) | **Grace.** The knockout roll is skipped (looked up only after the difficulty and check-type guards, so it is used only when a roll would happen). An `UNTIL_USED` grace stops one knockout and ends; a `ROUNDS` grace stops every knockout while it lasts. `CHARACTER_INCAPACITATED` still fires on entering the band. PCs only: NPC opponents have no knockout roll. |
 | `retaliation_damage`, `retaliation_damage_type`, `retaliation_condition` | `_answer_with_strike_backs` in `_emit_post_damage_events` (`world/combat/services/damage/damage.py`) calls `strike_back` for each instance `retaliating_instances` finds (#4584) | **Strike-back.** After a hit lands on a PC bearer, each ward answers the NPC that dealt it: `retaliation_damage` (typed by `retaliation_damage_type`) through `apply_damage_to_opponent`, and `retaliation_condition` laid with the ward's source as its source (not on an NPC the damage defeated). It is a hard-coded read at the damage seam, not a flow, trigger or seeded row. It answers hits on PC bearers only and strikes `CombatOpponent` attackers only (never a PC, ADR-0023). It pays `reactive_anima_cost` (a fizzle speaks, a success is not narrated: known gap), counts as the caster's threat, as duel interference and as probing, as rampart retaliation does. |
