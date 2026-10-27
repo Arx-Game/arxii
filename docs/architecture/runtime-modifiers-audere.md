@@ -358,9 +358,11 @@ condition). `world/combat/surge_rolls.apply_rolled_surge` picks the band (the ou
 own, else the nearest worse) and writes it through the same `apply_dramatic_surge` seam,
 which adds the band's `control_change` to `control_modifier` in the same save and keeps
 the outcome, potency and applied condition on the `DramaticSurgeRecord`. The surged
-player's character is sent a roll line once the round's transaction commits; the round
-payload's `surge_beats` carries the roll fields for the surged player's owner, GMs and
-staff only (a bystander gets the generic beat). A band that scales to 0 intensity with no
+player's character is sent a roll caption once the round's transaction commits
+(`Composure check vs taunt potency 60 · Failure · Intensity +2 · control -1 · Goaded`); the
+record also keeps a `cause` line (who taunted or rallied, or the wound), and the round
+payload's `surge_beats` carries the roll fields and the cause for the surged player's owner,
+GMs and staff only (a bystander gets the generic beat, and none when it is empty). A band that scales to 0 intensity with no
 control change and no condition writes nothing and leaves the round's slot free; with a
 control change or condition it is written without the room's "power surges" line.
 **All three kinds are inert until staff author a `SurgeTuning` row per kind with bands**

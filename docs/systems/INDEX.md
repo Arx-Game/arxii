@@ -8404,7 +8404,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
   trigger_kind, subject_sheet=None, reason="", subject_opponent=None,
   subject_phase_number=None, subject_companion=None, outcome=None, potency=None,
-  control_change=0, repeat_round=None, narrate=True)` (`world/combat/escalation.py`) - the
+  control_change=0, repeat_round=None, narrate=True, cause="")` (`world/combat/escalation.py`) - the
   one write path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
   every subject FK is `CASCADE`, `subject_sheet` since #4464, because a nulled subject lands
   in the subject-less slice of the dedup index;
@@ -8458,8 +8458,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   that carries no control change and no condition writes nothing and leaves the round's slot
   free; with a control change or condition the record is written but the room gets no
   "power surges" line (`narrate=False`) and the round payload narration is "". The record
-  stores `outcome`, `potency`, `control_change` and `condition` (the condition only if it
-  took hold), and rolled rows dedup once per round per subject (`repeat_round` equals
+  stores `outcome`, `potency`, `control_change`, `condition` (the condition only if it
+  took hold) and `cause` (the line the surged player, GMs and staff read: "<name> taunts
+  you.", "<name> rallies you.", the NPC entry's authored taunt text as the room is told it,
+  or "<ally>, bonded to you, loses N% of their health."), and rolled rows dedup once per round per subject (`repeat_round` equals
   `round_number`; one `nulls_distinct=False` unique constraint, the two older subject-keyed
   ones now apply where `repeat_round` is null). Sources: PC on PC taunt (`declare_taunt`
   accepts a `CombatParticipant`; the target's difficulty is the taunter's check RATING for the
@@ -8474,9 +8476,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `escalation_spike_on_damage` room trigger, wound-scaled). Surfaces: `TauntAction`
   (`opponent_id` XOR `ally_participant_id`), REST `taunt` (`participant_id` XOR
   `opponent_id`), telnet `combat taunt <opponent or ally>`, `surge_beats` roll fields
-  (outcome, potency, control_change, condition, roll) for the surged player's owner, GMs and
-  staff (a bystander gets only `id` and `narration`), the round log roll line and an ally
-  taunt in the Combatants row menu. On a player character a compulsion such as Goaded is a
+  (outcome, potency, control_change, condition, roll, cause) for the surged player's owner,
+  GMs and staff (a bystander gets only `id` and `narration`, and no beat at all when the
+  narration is empty), the round log (the cause line over the roll caption, which reads
+  `Composure check vs taunt potency 60 · Failure · Intensity +2 · control -1 · Goaded`,
+  with "bond difficulty" and "(scaled by the wound)" for a hurt ally), an ally taunt in the
+  Combatants row menu and a "Taunting <name>" badge in Your Turn. On a player character a compulsion such as Goaded is a
   debuff `ConditionTemplate` a band applies (owner call 2026-10-27), never a declaration
   lock. Not built: implore and challenge verbs, a Pressure card, a targeting lock. Journeys:
   `integration_tests/test_surge_rolls_journeys.py`, `test_taunt_targets_journeys.py`.

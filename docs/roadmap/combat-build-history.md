@@ -386,13 +386,14 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   check at the fixed rally difficulty and surges the ally by its outcome; a hurt bonded ally
   surges its bonded
   co-combatants through the new `escalation_spike_on_damage` room trigger, scaled by the
-  wound. `DramaticSurgeRecord` gained `outcome`, `potency`, `control_change`, `condition`
-  and `repeat_round`; a rolled kind surges once per round per subject, the older kinds stay
+  wound. `DramaticSurgeRecord` gained `outcome`, `potency`, `control_change`, `condition`,
+  `cause` and `repeat_round`; a rolled kind surges once per round per subject, the older kinds stay
   once per encounter (ADR-4737). Surfaces: `TauntAction` and REST `taunt` take an ally,
   telnet `combat taunt <opponent or ally>`, the surged player's character is sent a roll
-  line, `surge_beats` carries the roll fields for the surged player's owner, GMs and
-  staff, and the web round log shows the line with an ally taunt in the Combatants row menu.
-  Migrations 0312 and 0313. Owner rulings: Rally is the only encouragement verb built
+  caption, `surge_beats` carries the roll fields and the cause line for the surged player's
+  owner, GMs and staff, and the web round log shows them in the demo's card shape with an
+  ally taunt in the Combatants row menu and a "Taunting" badge in Your Turn.
+  Migrations 0314 and 0315. Owner rulings: Rally is the only encouragement verb built
   (implore and challenge are not); the surge is `Inspired`'s effect; Goaded on a player
   character is an authored debuff condition on a degree band, not a targeting lock; no
   Pressure card. Journeys: `integration_tests/test_surge_rolls_journeys.py` and
