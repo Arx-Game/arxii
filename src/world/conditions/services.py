@@ -35,7 +35,7 @@ from world.checks.constants import ModifierLane, ModifierSourceKind
 from world.checks.models import CheckType
 from world.checks.modifier_values import ValueTable, load_taper_rules, load_value_table
 from world.checks.services import perform_check_with_modifiers
-from world.checks.types import ModifierBreakdown, ModifierContribution
+from world.checks.types import ModifierBreakdown, ModifierContribution, round_half_up
 from world.conditions.constants import (
     POISON_CATEGORY_NAME,
     POISON_DAMAGE_TYPE_NAME,
@@ -1367,18 +1367,43 @@ def _stamp_modifier_sizing(instance: "ConditionInstance", app: BulkConditionAppl
 
     A re-application keeps the higher level, the way intensity stacking keeps the
     higher severity; the size is the applying technique's own, so the latest wins.
-    No-op for an unsized application.
+    The vow step (#4747) keeps the stronger of the old and the new, compared by level
+    and then share, so a re-cast by a caster with no step never strips one already
+    there. No-op for an unsized application.
     """
     if app.modifier_level is None or app.modifier_size is None:
         return
     level = app.modifier_level
     if instance.modifier_level is not None:
         level = max(level, instance.modifier_level)
-    if instance.modifier_level == level and instance.modifier_size == app.modifier_size:
+    steps = [
+        (vow_level, tenths)
+        for vow_level, tenths in (
+            (app.modifier_vow_level, app.modifier_vow_tenths),
+            (instance.modifier_vow_level, instance.modifier_vow_tenths),
+        )
+        if vow_level and tenths
+    ]
+    vow_level, vow_tenths = max(steps) if steps else (None, None)
+    if (
+        instance.modifier_level == level
+        and instance.modifier_size == app.modifier_size
+        and instance.modifier_vow_level == vow_level
+        and instance.modifier_vow_tenths == vow_tenths
+    ):
         return
     instance.modifier_level = level
     instance.modifier_size = app.modifier_size
-    instance.save(update_fields=["modifier_level", "modifier_size"])
+    instance.modifier_vow_level = vow_level
+    instance.modifier_vow_tenths = vow_tenths
+    instance.save(
+        update_fields=[
+            "modifier_level",
+            "modifier_size",
+            "modifier_vow_level",
+            "modifier_vow_tenths",
+        ]
+    )
 
 
 def _make_just_installed_triggers_live(target: "ObjectDB") -> None:  # noqa: OBJECTDB_PARAM
@@ -2331,7 +2356,8 @@ def condition_target_contributions(
     and is never scaled again by severity or stage, as on the check lane
     (``_check_modifier_for_target``). An unsized instance, or a pair no table row covers,
     keeps ``scaled_condition_effect_value``. The table loads only when a sized instance
-    has a matching effect, so an ordinary read adds no query.
+    has a matching effect, so an ordinary read adds no query. A vow-stepped instance
+    (#4747) adds the caster's size step as the contribution's untapered ``vow_part``.
     """
     matched: list[tuple[ConditionInstance, ConditionModifierEffect]] = []
     for instance in get_active_conditions(character_sheet.character):
@@ -2351,17 +2377,22 @@ def condition_target_contributions(
 
     contributions: list[ModifierContribution] = []
     for instance, effect in matched:
-        sized = _sized_modifier_value(instance, effect.value, value_table)
+        priced = _priced_sized_modifier(instance, effect.value, value_table)
         label = instance.condition.name
         if instance.current_stage is not None:
             label = f"{label} ({instance.current_stage.name})"
+        if priced is None:
+            value, vow_part = scaled_condition_effect_value(effect, instance), 0
+        else:
+            value, vow_part = priced
         contributions.append(
             ModifierContribution(
                 source_kind=ModifierSourceKind.CONDITION,
                 source_label=label,
-                value=scaled_condition_effect_value(effect, instance) if sized is None else sized,
-                level=instance.modifier_level if sized is not None else None,
-                size=instance.modifier_size if sized is not None else None,
+                value=value,
+                level=instance.modifier_level if priced is not None else None,
+                size=instance.modifier_size if priced is not None else None,
+                vow_part=vow_part,
             )
         )
     return contributions
@@ -2771,6 +2802,51 @@ def _sized_modifier_value(
     return value_table.signed_value(authored_value, instance.modifier_level, instance.modifier_size)
 
 
+def _vow_step_value(
+    instance: ConditionInstance,
+    authored_value: int,
+    value_table: ValueTable,
+) -> int:
+    """The caster's vow size step on one of ``instance``'s sized modifiers, or 0 (#4747).
+
+    (value(L, size + 1) - value(L, size)) x tenths / 10 at the stored
+    ``modifier_vow_level`` L and ``modifier_vow_tenths``, rounded half up and signed
+    like the authored value, so a debuff's step is a further penalty. 0 when the
+    instance has no step or the table lacks either row. Read from stored columns only:
+    no query.
+    """
+    vow_level = instance.modifier_vow_level
+    tenths = instance.modifier_vow_tenths
+    if not vow_level or not tenths or not _is_sized(instance):
+        return 0
+    stepped = value_table.signed_value(authored_value, vow_level, instance.modifier_size + 1)
+    base = value_table.signed_value(authored_value, vow_level, instance.modifier_size)
+    if stepped is None or base is None:
+        return 0
+    return round_half_up(Decimal(stepped - base) * tenths / 10)
+
+
+def _priced_sized_modifier(
+    instance: ConditionInstance,
+    authored_value: int,
+    value_table: ValueTable | None,
+) -> tuple[int, int] | None:
+    """(value, vow_part) for one of ``instance``'s sized modifiers, or None (#4747).
+
+    The one pricing rule every condition read shares (the check lane, the opponent
+    path and the stat lane): the value table's number at the buff's level and size
+    (``_sized_modifier_value``) plus the caster's vow size step
+    (``_vow_step_value``), which is also returned as the ``vow_part`` a
+    ``ModifierBreakdown`` never tapers. None (keep the flat authored value) when the
+    modifier is unsized or no table row covers it.
+    """
+    sized = _sized_modifier_value(instance, authored_value, value_table)
+    if sized is None or value_table is None:
+        return None
+    step = _vow_step_value(instance, authored_value, value_table)
+    return sized + step, step
+
+
 def _check_modifier_for_target(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     check_type: CheckType,
@@ -2816,23 +2892,25 @@ def _check_modifier_for_target(
 
         for mod in modifiers:
             modifier_value = mod.modifier_value
-            sized_value = _sized_modifier_value(instance, mod.modifier_value, value_table)
+            vow_part = 0
+            priced = _priced_sized_modifier(instance, mod.modifier_value, value_table)
 
             # effective_severity already folds in the stage multiplier, so scaling
             # by severity and by the stage are mutually exclusive — if/elif, not two
             # ifs, mirroring get_condition_modifier_total. (Two ifs double-applied
             # the stage multiplier for a staged, severity-scaled modifier.)
-            if sized_value is not None:
+            if priced is not None:
                 # The level already carries the cast's power and outcome, so a sized
-                # value is never scaled again by severity or stage.
-                modifier_value = sized_value
+                # value is never scaled again by severity or stage. #4747: it carries
+                # the caster's vow size step, kept apart as the untapered vow part.
+                modifier_value, vow_part = priced
             elif mod.scales_with_severity:
                 modifier_value = int(modifier_value * instance.effective_severity)
             elif instance.current_stage:
                 modifier_value = int(modifier_value * instance.current_stage.severity_multiplier)
 
             result.total_modifier += modifier_value
-            result.breakdown.append((instance, modifier_value))
+            result.breakdown.append((instance, modifier_value, vow_part))
 
     return result
 
@@ -2880,8 +2958,9 @@ def opponent_condition_opposition(
                 source_kind=ModifierSourceKind.CONDITION,
                 source_label=instance.condition.name,
                 value=value,
+                vow_part=vow_part,
             )
-            for instance, value in result.breakdown
+            for instance, value, vow_part in result.breakdown
         ],
         tapers={ModifierSourceKind.CONDITION: rule},
     ).total
@@ -2904,7 +2983,7 @@ def condition_contributions(
     """
     result = get_check_modifier(character_sheet, check_type)
     contributions: list[ModifierContribution] = []
-    for instance, modifier_value in result.breakdown:
+    for instance, modifier_value, vow_part in result.breakdown:
         label = instance.condition.name
         if instance.current_stage is not None:
             label = f"{label} ({instance.current_stage.name})"
@@ -2916,6 +2995,7 @@ def condition_contributions(
                 condition_instance_id=instance.pk,
                 level=instance.modifier_level if _is_sized(instance) else None,
                 size=instance.modifier_size if _is_sized(instance) else None,
+                vow_part=vow_part,
             )
         )
     return contributions

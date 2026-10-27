@@ -118,7 +118,11 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   to the parent's rather than replacing them, so a specialized (promoted) member reads as
   strictly more specialized than an unpromoted one. Read by
   `covenant_role_specialty_power_term` (`world.magic.services.power_terms`, see
-  `docs/systems/magic.md`). Lore-repo content
+  `docs/systems/magic.md`), and since #4747 (ADR-4747-A) by `caster_vow_step`: a sized buff
+  or debuff cast by a holder whose first engaged vow specializes in the technique's function
+  counts one size step stronger at her vow thread's shown level, scaled by the same
+  `multiplier_tenths` (the larger when role and sub-role both match; a secondary vow's tenths
+  times `SecondaryVowConfig.potency_tenths / 10`), never tapered. Points only. Lore-repo content
   (`covenants.covenantroletechniquespecialty` in `CONTENT_MODELS`).
 - **`VowSituationalPerk`** (#2536, ADR-0151/ADR-0152/ADR-0153; **Layer 4** of the vow-power model
   — "the point of vows") — the authoring model for deterministic, situational bonuses:
@@ -1135,7 +1139,8 @@ summary with a link to its own page.
 ### The dividing line
 
 - **Specialties** (`CovenantRoleTechniqueSpecialty`, Layer 2) add cast power for matching
-  functions. **Situational perks** (`VowSituationalPerk`, Layer 4) add a numeric bonus or
+  functions, and step a matching sized buff by `multiplier_tenths` of one size at the vow
+  thread's level (#4747). **Situational perks** (`VowSituationalPerk`, Layer 4) add a numeric bonus or
   outcome guarantee with an announced line. A **vow added effect** adds payload: conditions,
   strips, treatments or damage riding the cast. A numeric bonus with an announce line stays a
   perk; a condition or damage rider is an added effect (a perk kind would carry six columns
