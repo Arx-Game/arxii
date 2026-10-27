@@ -1610,6 +1610,13 @@ actions, backends, and service functions.
   `src/actions/CLAUDE.md` and `world/magic/CLAUDE.md` "Technique Entrance") instead — the
   technique cast IS the entrance's check. `CmdFlourish` (`flourish <resonance>`) — thin
   wrapper resolving a pending entry-flourish offer via `ResolveFlourishOfferAction`.
+- **`drift_correction.py`** (#4733): `CmdDrift` (`drift`): bare `drift` shows the character's
+  open conversion offer (per target resonance: cap, drift sources with rate and projected yield,
+  focus bonus, carried items that count as the offering); `drift convert <from>=<into>
+  [<amount>]` dispatches `PerformDriftCorrectionAction` (no amount means the most allowed, and
+  every carried item is offered, the rite spends only what qualifies); `drift decline`
+  dispatches `DeclineDriftCorrectionAction`. Thin: rules live in
+  `world/magic/services/drift_correction.py`.
 
 ### Magic-Adjacent Commands (`commands/`)
 - **`dramatic_moments.py`** (#2183, #2227): `CmdMoment` (`moment`) — the GM-facing

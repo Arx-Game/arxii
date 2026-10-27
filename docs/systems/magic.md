@@ -3857,6 +3857,8 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
 - `DISTINCTION` — a distinction's authored `DistinctionResonanceGrant` flat seed
   (#1834); typed source FK `source_character_distinction`. See "Distinction → Resonance
   (#1834)" in `docs/systems/distinctions.md` for the model + reconcile/accelerator services.
+- `DRIFT_CORRECTION` - the target side of a drift correction conversion (#4733); no typed source
+  FK (`res_grant_drift_correction_shape`), never accelerated, not a deed. See "Drift correction".
 
 **Telnet visibility (#2032).** Balances were earnable/spendable via telnet (pulls, imbuing,
 sanctum weaving) but had no telnet surface showing `CharacterResonance.balance` at all. Two
@@ -3923,6 +3925,103 @@ remains a separate, still-open stub).
 Note: `get_aura_percentages()`/`CharacterAffinityTotal` — unwired legacy code from
 before `CharacterAura`'s stored-percentage mechanism existed — were removed in
 #1739. `recompute_aura` never used them.
+
+### Drift correction (#4733, slice 4 of #4672) [BUILT & WIRED]
+
+**Vocabulary.** "Drift" here is resonance a character holds that sits off their aura: a
+`CharacterResonance` with `balance > 0` whose resonance's affinity differs from the aura's
+`dominant_affinity` (`drift_holdings`, `world/magic/services/drift.py`). It has no threshold in
+this slice. `AuraDrift` / `recompute_aura` (the section above) is the older, different sense:
+the shift in the aura's stored percentages. Drift correction converts held drift into the
+character's own resonances through deeds; it is separate from Fall and Redemption, which change
+affinity. Drift correction reuses their pair rates (`AffinityInteraction.conversion_multiplier`).
+
+**Deed classification.** `DEED_GAIN_SOURCES` / `NON_DEED_GAIN_SOURCES` (`constants.py`)
+partition every `GainSource`; `test_deed_classification.py` fails when a member is in neither or
+both. Deeds are the poses and scene entries others endorsed, entry flourishes, dramatic
+moments, style presentations, mission rewards and reports, stake rewards, project
+contributions, combo discoveries and worship rites. Passive trickles (room residence, outfit),
+staff grants, sanctum sources, distinction seeds, compromise, penance and both conversions
+(`FALL_CONVERSION`, `DRIFT_CORRECTION`) are not deeds. Casting never counts. A new `GainSource`
+member must be placed in one set.
+
+**When an offer opens.** `grant_resonance` calls `open_or_extend_conversion_offer(grant)` after
+the aura recompute. It does nothing unless all of these hold: the source is a deed; the
+character has an aura with shares; the granted resonance's affinity is the aura's own; the
+character holds convertible drift (drift with an authored conversion pair into the granted
+resonance's affinity); and the character stands in a live scene. The scene is the one cached on
+the grantee's current room at grant time (`get_active_scene`, which skips a Battle's backing
+scene), not the scene the deed came from. A deed settled away
+from a scene, such as the weekly pose-endorsement settlement, therefore opens no offer. This is
+an accepted consequence, not an error. A finished scene cached on a room counts as no scene.
+
+One `DriftConversionOffer` exists per character and scene (unique constraint); it holds one
+`DriftConversionCap` per target resonance. Each qualifying grant adds `max(1, amount x
+cap_percent // 100)` to that cap and is linked in `cap.grants`, which stops a grant counting
+twice. `cap` is a snapshot: a later change to `cap_percent` does not rewrite it. The offer row
+is locked with `select_for_update` while a cap changes.
+
+**Notices.** A new offer or a new cap row sends a telnet-only line on commit
+(`send_text_to_non_web`, after `transaction.on_commit`); web players learn from the polled
+pending endpoint. A cap bump says nothing. `lapse_conversion_offers(scene)` deletes the scene's
+offers and sends the lapse line; `Scene.finish_scene` calls it, so every finish route lapses
+them, and the rite refuses an offer whose scene has finished.
+
+**The rite.** `DriftCorrectionConfig` (singleton, pk 1, created lazily) designates the rite
+(`rite` FK to `Ritual`) and the roll (`check_type` FK to `CheckType`, `check_difficulty`), plus
+`cap_percent`. The check type is deliberately not a `RitualCheckConfig` sidecar, which needs a
+stat and a skill and looks up by ritual name. `DriftCorrectionOutcomeShare` (an
+`OutcomeTierAward`) maps each `CheckOutcome` to `converted_share`; `clean` keeps a better tier
+from converting less than a worse one. `perform_drift_correction_rite` (`drift_correction.py`),
+in one transaction: locks the offer; refuses an unset rite or check type or any `CheckOutcome`
+with no share row (`DriftCorrectionNotConfiguredError`, before anything is consumed); validates
+the amount against the cap and the held balance and the source against `convertible_drift`;
+consumes the offering through `resolve_and_consume_ritual_components` with the target as
+`resonance_context`; rolls the check with `focus_bonus` as extra modifiers; then converts
+`floor(amount x share)` of the source through `convert_resonance_amount`, granted as
+`GainSource.DRIFT_CORRECTION` at `max(1, floor(converted x pair multiplier))` (an uphill pair
+never rounds to zero). The cap shrinks by what converted; an empty cap row is deleted, and the
+offer with it when no cap is left. A tier with no share converts nothing, consumes the offering
+and leaves the cap intact. Source and target lifetime move by the proportional share, so the
+aura follows (`recompute_aura`).
+
+**Component modes.** `RitualComponentRequirement` has a third mode, `matches_target_resonance`
+(exclusive with `item_template` and `min_touchstone_tier`), with optional `min_item_meaning`
+(minimum 1; blank turns the third route off). `qualifying_components` admits an item under the
+first matching `ComponentMode`: `MATERIAL` (template tied to the target resonance), `FACET`
+(a live item facet in the performer's motif for the target), `KEEPSAKE` (item meaning to the
+performer at or over the bar). Results are ordered material, facet, keepsake, so spending in
+order burns a plain material first. Items already allocated to a template or touchstone row are
+not offered again.
+
+**Focus.** `focus_bonus(sheet, target)` = `equipment_walk_total` on the target resonance's
+modifier target + `touchstone_cast_bonus`. It adds to the check, not to the output.
+
+**Exceptions** (`exceptions.py`): `DriftCorrectionError` (base) with
+`DriftCorrectionNotConfiguredError`, `DriftOfferNotFoundError`, `DriftConversionInvalidError`;
+`ConversionMappingError` for an unauthored pair; `RitualComponentError` for the offering.
+
+**Surfaces.** Actions `perform_drift_correction` and `decline_drift_correction`
+(`actions/definitions/drift_correction.py`); telnet `drift`, `drift convert <from>=<into>
+[<amount>]`, `drift decline` (offers every carried item; only the qualifying amount is
+consumed); REST `GET /api/magic/drift-correction/pending/` (+ `{id}/`), `POST .../convert/`,
+`POST .../decline/`, all scoped to the caller's own characters. React:
+`DriftConversionOfferGate` polls the inbox and `DriftConversionOfferDialog` answers it; the gate
+is mounted on `SceneDetailPage` and `GamePage`, keyed by scene id so each shows the offer of the
+scene it displays. See `frontend/src/magic/CLAUDE.md`.
+
+**Authoring and tuning.** Staff author `DriftCorrectionConfig`, one
+`DriftCorrectionOutcomeShare` per outcome tier, the rite's `RitualComponentRequirement` rows and
+the Fall and Redemption pair multipliers in admin; offers and caps are read-only there. Until
+the rite and check type are set and every tier has a share, the rite refuses ("not set up yet")
+though offers still open; the `drift-correction-config` Required content probe reports it.
+`max_yield_per_earned_point(config)` is the anti-farm estimator: `cap_percent / 100 x largest
+pair multiplier x largest share`, kept below 1 so correcting never out-earns the deed.
+
+**Tests.** `test_deed_classification.py`, `test_drift_models.py`, `test_drift_offer.py`,
+`test_drift_correction_rite.py`, `test_conversion_amount.py`,
+`test_ritual_components_target_mode.py`, `test_drift_correction_views.py`; journey
+`integration_tests/test_drift_correction_journeys.py` (telnet, web, lapse, negatives).
 
 ### Resonance-Environment Interaction (universal path — 2026-05-16)
 

@@ -60,6 +60,28 @@
   `_academy_for` is shared by TRAIN, the course and settle-obligation. Three Required content
   TUNING rows. Details: [magic.md](magic.md) "Tradition training and Academy skill courses".
 
+- **Drift correction (#4733, slice 4 of #4672):** a deed (`DEED_GAIN_SOURCES` /
+  `NON_DEED_GAIN_SOURCES` in `constants.py`, a total classification of `GainSource`) that grows
+  a resonance of the character's own affinity, made in a live scene by a character holding
+  convertible off-aura resonance ("drift", not the older `AuraDrift`), opens a
+  `DriftConversionOffer` (one per sheet and scene) with a `DriftConversionCap` per target
+  resonance (`open_or_extend_conversion_offer`, called from `grant_resonance`;
+  `lapse_conversion_offers` from `Scene.finish_scene`). The player performs a configured rite:
+  `DriftCorrectionConfig` (singleton: `rite`, `check_type`, `check_difficulty`, `cap_percent`)
+  and `DriftCorrectionOutcomeShare` (share of the cap converted per `CheckOutcome`) feed
+  `perform_drift_correction_rite` (`services/drift_correction.py`), which converts through
+  `convert_resonance_amount` (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the
+  `AffinityInteraction` pair rate. `RitualComponentRequirement.matches_target_resonance` +
+  `min_item_meaning` add a third component mode (`ComponentMode`: material, facet, keepsake;
+  `qualifying_components`). Helpers: `drift_holdings`, `convertible_drift`, `focus_bonus`,
+  `preview_conversion`, `offer_options`, `max_yield_per_earned_point`. Exceptions:
+  `DriftCorrectionError` with `DriftCorrectionNotConfiguredError`, `DriftOfferNotFoundError`,
+  `DriftConversionInvalidError`. Actions `perform_drift_correction` and
+  `decline_drift_correction`; telnet `drift`; REST `/api/magic/drift-correction/`
+  (`pending/`, `convert/`, `decline/`); React `DriftConversionOfferGate` and
+  `DriftConversionOfferDialog` on the scene page and game page. One Required content row,
+  `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
+
 - **Facet vocabulary guards (#4197, ADR-4197):** `Facet` is a flat vocabulary typed by many
   hands. `world/magic/services/facets.py` holds the one spelling rule (`facet_key`),
   `find_facet` / `near_facets` (what a spelling resolves to, and what it is near; aliases

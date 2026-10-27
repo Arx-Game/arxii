@@ -39,6 +39,11 @@ They do not use the command system, dispatchers, or handlers.
   `ritual.py` — `PerformRitualAction`, key `"perform_ritual"`, the
   action.run() seam for SERVICE/FLOW ritual performance shared by telnet
   `CmdRitual` and the web `RitualPerformView`, #1331;
+  `drift_correction.py` (#4733): `PerformDriftCorrectionAction` (`"perform_drift_correction"`)
+  and `DeclineDriftCorrectionAction` (`"decline_drift_correction"`), REGISTRY, `target_type=SELF`,
+  `category="magic"`; each checks the offer belongs to the actor's sheet, and the rite also
+  that every offered item is held by it. Shared by telnet `CmdDrift` and the web
+  `DriftCorrectionConvertView` / `DriftCorrectionDeclineView`;
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
   seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below;
   `combat_maneuvers.py` (#1453/#1452, Succor #1744, USE_ITEM/READY-pace #2120) — the
