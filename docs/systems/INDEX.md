@@ -89,8 +89,11 @@
   `ThreadResonanceChangeError`); within the affinity one to one, across it at the authored pair
   rate floored at 1, merging into a live same-anchor thread via `conversion._reanchor_thread`.
   `PerformRitualAction._precheck` refuses before anything is spent. Telnet `ritual <rite>
-  thread=<id> resonance=<id>`; REST `GET /api/magic/threads/{id}/resonance-options/`. Required
-  content row `thread-resonance-ritual`. Details: [magic.md](magic.md) "Thread retune".
+  thread=<id> resonance=<id>`; REST `GET /api/magic/threads/{id}/resonance-options/`; the
+  Spellbook's `ThreadResonanceDialog`. Anchor rules: `thread_resonance_refusal` (sanctum,
+  signed technique), gift threads narrowed to the gift's resonances; `ThreadAnchorTakenError` on
+  a lost unique-index race. Required content rows `thread-resonance-ritual`,
+  `thread-resonance-ritual-single`, `thread-resonance-ritual-web-payable`. Details: [magic.md](magic.md) "Thread retune".
 
 - **Facet vocabulary guards (#4197, ADR-4197):** `Facet` is a flat vocabulary typed by many
   hands. `world/magic/services/facets.py` holds the one spelling rule (`facet_key`),

@@ -4383,19 +4383,35 @@ the way the Rite of Honors is found by `HONORS_SERVICE_PATH`. No roll.
   are shared by telnet's `ritual` command and `RitualPerformView`: a non-integer, unknown or
   foreign id is a plain refusal (telnet) or a 400 (web), never a 500. `target_resonance` is
   resolved for every ritual; `thread_id` through this resolver for the retune rite.
+- **Anchor rules**: `thread_resonance_refusal(thread)` holds a SANCTUM thread (its sanctum's
+  resonance; the Ritual of Purging changes it) and a TECHNIQUE thread whose `signature_bonus`
+  has a `required_resonance` (clear the signature first); `thread_resonance_options` returns
+  none for either, and narrows a GIFT thread to `gift.cached_resonances` when that set is
+  non-empty (the `weave_thread` rule). `check_thread_resonance_change` applies both, so telnet
+  and web refuse alike. Service refusals carry no telnet syntax; the `ritual` command adds
+  `thread=<id>` / `resonance=<id>` hints before dispatch (`_refuse_incomplete_retune`).
+- **Race**: a re-anchor that loses the partial unique index to another process raises
+  `ThreadAnchorTakenError` (a `ThreadResonanceChangeError`) from a savepoint in
+  `_reanchor_thread`, with the cached thread's `resonance_id` and `developed_points` put back.
 - **Surfaces**: telnet `ritual <rite> thread=<id> resonance=<id>` (alias `target_resonance=`;
-  leave it out to list the options); web `POST /api/magic/rituals/perform/` with
+  leave it out to list the options); the Spellbook's `ThreadResonanceDialog` on the thread
+  detail page (vitest `ThreadResonanceDialog.test.tsx`); web `POST /api/magic/rituals/perform/` with
   `kwargs: {thread_id, target_resonance}` (`RitualPerformView` resolves both; the result is
   `ThreadResonanceChangeResult`: `thread_id` of the survivor, `from_resonance_id`,
   `to_resonance_id`, `points_before`, `points_moved`, `points_after`, `merged`,
   `conversion_type`); `GET /api/magic/threads/{id}/resonance-options/` (owner only) returns
-  `{ritual_id | null, options: [{resonance_id, resonance_name, affinity_name, conversion_type,
-  projected_points, qualifying: [{item_id, name, mode}]}]}`; the view works out every option's
+  `{ritual_id | null, offering_required, offering_count, unavailable_reason, options:
+  [{resonance_id, resonance_name, affinity_name, conversion_type (FALL / REDEMPTION / null),
+  projected_points, merges_into_thread_id | null, qualifying: [{item_id, name, mode}]}]}`
+  (`offering_count` sums the rite's `matches_target_resonance` quantities via
+  `target_resonance_offering_count`; `qualifying` is filled only when it is non-zero;
+  `unavailable_reason` from `thread_resonance_unavailable_reason`); the view works out every option's
   qualifying items in one batch (`qualifying_components_by_target` in `services/drift.py`), so
   its query count does not grow with the number of options. Required content rows
   `thread-resonance-ritual` ("No ritual changes a thread's resonance") and
   `thread-resonance-ritual-single` (TUNING: a second ritual on the path, which the Spellbook
-  never offers). Journey:
+  never offers) and `thread-resonance-ritual-web-payable` (TUNING: the rite has an
+  item-template or touchstone component the Spellbook cannot pay). Journey:
   `integration_tests/test_thread_resonance_journeys.py`.
 
 ### Resonance-Environment Interaction (universal path — 2026-05-16)

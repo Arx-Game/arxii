@@ -2082,8 +2082,11 @@ same affinity one to one, across affinities at the `conversion_pair` rate floore
 into a live same-anchor thread via `conversion._reanchor_thread` (shared with the full Fall).
 `PerformRitualAction._precheck` calls `check_thread_resonance_change` before components and anima
 are spent; `kwargs["target_resonance"]` is the components' `resonance_context`. Telnet
-`resonance=<id>`, REST `GET /api/magic/threads/{id}/resonance-options/`, Required content row
-`thread-resonance-ritual`. Details: `docs/systems/magic.md` "Thread retune".
+`resonance=<id>`, REST `GET /api/magic/threads/{id}/resonance-options/`. A SANCTUM thread or a
+TECHNIQUE thread whose signature bonus requires a resonance cannot move
+(`thread_resonance_refusal`); a GIFT thread stays within a non-empty `gift.cached_resonances`.
+Required content rows `thread-resonance-ritual`, `thread-resonance-ritual-single`,
+`thread-resonance-ritual-web-payable`. Details: `docs/systems/magic.md` "Thread retune".
 
 **Seed content:** `wire_fall_redemption_content()` in `factories.py`,
 called by `seed_magic_dev()`. Seeds the "Ritual of Falling" Ritual row
