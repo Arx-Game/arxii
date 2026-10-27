@@ -232,13 +232,14 @@ def grant_gift_to_character(
     return character_gift, created
 
 
-def _active_alt_self_resonance(sheet: CharacterSheet) -> Resonance | None:
+def active_alt_self_resonance(sheet: CharacterSheet) -> Resonance | None:
     """Return the resonance of the character's active alternate self, if any.
 
     When a character has assumed an ``AlternateSelf`` that carries a
-    ``resonance`` FK, that resonance overrides the GIFT thread's own
-    resonance for variant resolution (#1619). The thread's *level* still
-    gates which variant tier unlocks — only the resonance axis shifts.
+    ``resonance`` FK, that resonance replaces the GIFT thread's own
+    resonance in variant resolution only (#1619); ``gift_resonances_for`` is
+    unchanged by it. The thread's *level* still gates which variant tier
+    unlocks. Also read by ``acting_aura`` for the aura the character acts with.
 
     Derive-on-read (ADR-0014): no snapshot, no write-on-assume. Uses a
     direct DB query rather than the cached reverse OneToOne accessor
@@ -300,9 +301,9 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     (#1578). "Covering" walks the gift lineage (#2891) — a Vulpi thread manifests
     the Khati techniques Vulpi inherits, at the Vulpi thread's resonance.
 
-    When an ``AlternateSelf`` with a ``resonance`` is active, that resonance
-    overrides the thread's (#1619) — the gift manifests as the alt-self's
-    resonance, not the thread's own.
+    An active ``AlternateSelf``'s resonance does NOT change this list; it is
+    applied later, in the variant resolver (#1619), which decides the variant
+    that manifests.
 
     Reads the thread through the cached ``character.threads`` handler (the
     single cached queryset for a character's threads) with a list-comp filter,
@@ -438,7 +439,7 @@ def _effective_variant_resonance(sheet, thread, preferred_resonance):
     """Choose cast-time, alt-self, or thread resonance in priority order."""
     if preferred_resonance is not None:
         return preferred_resonance
-    resonance = _active_alt_self_resonance(sheet)
+    resonance = active_alt_self_resonance(sheet)
     return thread.resonance if resonance is None else resonance
 
 

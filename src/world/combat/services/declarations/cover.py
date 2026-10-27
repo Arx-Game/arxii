@@ -110,12 +110,13 @@ def apply_position_cover(character: Character, damage: int, damage_type: DamageT
     Reads the character's current position and sums PositionShelter rows with
     applies_to_attacks=True for the given damage type. No-op when the character
     is unpositioned (lenient — matching technique_can_reach) or when damage_type
-    is None (untyped damage has no cover).
+    is None. Combat seams resolve untyped damage to Physical first (#4742), so None
+    reaches here only when no Physical row is configured.
 
     Args:
         character: The target character taking damage.
         damage: The incoming damage amount (after armor soak, before condition interactions).
-        damage_type: The damage type of the incoming attack (None = untyped, no cover).
+        damage_type: The incoming attack's damage type (None only with no Physical row set).
 
     Returns:
         The damage after cover reduction, floored at 0.

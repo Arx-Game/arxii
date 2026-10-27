@@ -60,7 +60,10 @@ from world.conditions.constants import (
     BLINK_CONDITION_NAME,
     FORCE_FIELD_CONDITION_NAME,
     INCORPOREAL_CONDITION_NAME,
+    INCORPOREAL_PHYSICAL_DAMAGE_DEALT_PERCENT,
+    INCORPOREAL_PHYSICAL_RESISTANCE_PER_SEVERITY,
     OBSTACLE_CONDITION_NAME,
+    PHYSICAL_DAMAGE_TYPE_NAME,
     REFLECT_CONDITION_NAME,
     SINK_CONDITION_NAME,
     SUMMONING_CONDITION_NAME,
@@ -919,8 +922,10 @@ def _seed_intangibility_condition(
     """Get-or-create a ``ConditionTemplate`` whose category has ``grants_intangibility=True``.
 
     Used by Ghostform (incorporeal) and Earthmeld (sink into earth).  These conditions
-    carry no reactive triggers — the Task 8 targeting gate reads ``grants_intangibility``
-    to make the bearer untargetable while the condition is active.
+    carry no reactive triggers.  ``grants_intangibility`` makes the bearer hold no
+    ground; the bearer stays targetable and is protected instead by a severity-scaled
+    Physical resistance row, with a Physical damage-dealt penalty on its own strikes
+    (#4742).  Both numbers are seed values for staff to retune.
     """
     from world.conditions.models import ConditionCategory  # noqa: PLC0415
 
@@ -928,8 +933,8 @@ def _seed_intangibility_condition(
         name="Incorporeal",
         defaults={
             "description": (
-                "Conditions that render the bearer untargetable by phasing them out of "
-                "the physical plane (incorporeal flight, earthbound sink, etc.)."
+                "Conditions that phase the bearer out of the physical plane (incorporeal "
+                "flight, earthbound sink, etc.): physical harm mostly passes through."
             ),
             "is_negative": False,
             "display_order": 30,
@@ -949,7 +954,38 @@ def _seed_intangibility_condition(
             "can_be_dispelled": True,
         },
     )
+    _seed_incorporeal_mitigation(template)
     return template
+
+
+def _seed_incorporeal_mitigation(template: ConditionTemplate) -> None:
+    """Physical resistance (per severity) and a Physical damage-dealt penalty (#4742).
+
+    Skipped when no Physical ``DamageType`` is authored (content-repo row).
+    """
+    from world.conditions.models import (  # noqa: PLC0415
+        ConditionDamageDealtModifier,
+        ConditionResistanceModifier,
+        DamageType,
+    )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    physical = authored_or_sample(DamageType, {}, name=PHYSICAL_DAMAGE_TYPE_NAME)
+    if physical is None:
+        return
+    ConditionResistanceModifier.objects.get_or_create(
+        condition=template,
+        damage_type=physical,
+        defaults={
+            "modifier_value": INCORPOREAL_PHYSICAL_RESISTANCE_PER_SEVERITY,
+            "scales_with_severity": True,
+        },
+    )
+    ConditionDamageDealtModifier.objects.get_or_create(
+        condition=template,
+        damage_type=physical,
+        defaults={"modifier_percent": INCORPOREAL_PHYSICAL_DAMAGE_DEALT_PERCENT},
+    )
 
 
 def ensure_teleport_content() -> None:
@@ -1090,9 +1126,9 @@ def ensure_obstacle_content() -> None:
 def ensure_incorporeal_content() -> None:
     """Idempotently seed the Ghostform (incorporeal) bundle (#1584, Task 14c).
 
-    No handler or trigger is wired — the Task 8 targeting gate reads
-    ``ConditionCategory.grants_intangibility`` to make the bearer untargetable while
-    Ghostform is active.  Creates (get_or_create):
+    No handler or trigger is wired. ``ConditionCategory.grants_intangibility`` makes
+    the bearer hold no ground, and the seeded Physical resistance row protects her
+    (#4742); she stays targetable.  Creates (get_or_create):
 
     1. An "Incorporeal" ``ConditionCategory`` with ``grants_intangibility=True``.
     2. A "Ghostform" ``ConditionTemplate`` (``INCORPOREAL_CONDITION_NAME``) lasting
@@ -1105,7 +1141,7 @@ def ensure_incorporeal_content() -> None:
         INCORPOREAL_CONDITION_NAME,
         description=(
             "The caster's body becomes insubstantial, phasing through physical matter "
-            "and rendering them untargetable by mundane attacks.  Lasts until the end "
+            "so that mundane blows mostly pass through them.  Lasts until the end "
             "of combat or until dispelled."
         ),
         default_duration_type=DurationType.UNTIL_END_OF_COMBAT,
@@ -1119,7 +1155,7 @@ def ensure_incorporeal_content() -> None:
         description="Techniques that phase the caster out of the physical plane.",
         technique_description=(
             "Render yourself incorporeal for the duration of the encounter, passing "
-            "through physical barriers and becoming untargetable by mundane weapons."
+            "through physical barriers while mundane weapons mostly pass through you."
         ),
         condition_template=condition,
     )
@@ -1143,8 +1179,8 @@ def ensure_sink_content() -> None:
     condition = _seed_intangibility_condition(
         SINK_CONDITION_NAME,
         description=(
-            "The caster sinks into the earth momentarily, becoming untargetable for "
-            "one round before surfacing.  A brief but potent defensive maneuver."
+            "The caster sinks into the earth momentarily, beyond the reach of most blows "
+            "for one round before surfacing.  A brief but potent defensive maneuver."
         ),
         default_duration_type=DurationType.ROUNDS,
         default_duration_value=1,
@@ -1156,7 +1192,7 @@ def ensure_sink_content() -> None:
         effect_type_name="Earth Sink",
         description="Techniques that merge the caster with the earth for a fleeting moment.",
         technique_description=(
-            "Sink into the earth for one round, becoming untargetable.  "
+            "Sink into the earth for one round, beyond the reach of most blows.  "
             "A burst defensive technique with the shortest possible window of intangibility."
         ),
         condition_template=condition,

@@ -73,8 +73,11 @@ def encounter_holds(
     when ``acting_participants`` (the round's PCs who can act) is not handed in.
 
     ``NpcRoundContext.active_participants`` is that list for a planning pass (PCs who can
-    act and are not intangible: an incorporeal or phased PC blocks nobody).
+    act). Intangible PCs are dropped here either way: an incorporeal or sunk PC is still
+    a target (#4742) but blocks nobody.
     """
+    from world.conditions.services import is_intangible  # noqa: PLC0415
+
     enemy: set[int] = set()
     ally: set[int] = set()
     for allegiance, position_id in CombatOpponent.objects.filter(
@@ -85,7 +88,11 @@ def encounter_holds(
         (ally if allegiance == CombatAllegiance.ALLY else enemy).add(position_id)
     if acting_participants is None:
         acting_participants = _acting_participants(encounter)
-    sheet_ids = [p.character_sheet_id for p in acting_participants]
+    sheet_ids = [
+        p.character_sheet_id
+        for p in acting_participants
+        if not is_intangible(p.character_sheet.character)
+    ]
     acting = (
         ObjectPosition.objects.filter(objectdb_id__in=sheet_ids).values_list(
             "position_id", flat=True
@@ -101,10 +108,11 @@ def encounter_holds(
 
 
 def _acting_participants(encounter: CombatEncounter) -> list[CombatParticipant]:
-    """The encounter's PCs who hold ground: ACTIVE, able to act, and not intangible.
+    """The encounter's PCs able to hold ground: ACTIVE and able to act.
 
     The planning pass's own filter (``npc_targeting._targetable_participants``, the list
     ``NpcRoundContext.active_participants`` carries), so resolution and planning agree.
+    ``encounter_holds`` drops intangible PCs from it (#4742).
     """
     from world.combat.services.npc.npc_targeting import (  # noqa: PLC0415
         _targetable_participants,

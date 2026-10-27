@@ -312,6 +312,8 @@ def format_ultimate_reveal(reveal) -> str:
             text = text[:-1] + f"; bond: {group.being.name})"
         elif group.source == UltimateSource.COMPANION:
             text = text[:-1] + f"; bond: {group.companion.name})"
+        elif group.source == UltimateSource.ALTERNATE_SELF:
+            text = text[:-1] + f"; bond: {group.alternate_self.shown_name})"
         elif group.source == UltimateSource.GIFT:
             text = text[:-1] + f"; gift: {group.gift.name})"
         lines.append(f"  {number}) {text}")

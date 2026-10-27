@@ -70,6 +70,17 @@ def _flat_threat_damage(npc_action: CombatOpponentAction, opponent: CombatOppone
     return int(base_damage * npc_action.damage_scale)
 
 
+def _npc_outgoing_damage(opponent: CombatOpponent, npc_action: CombatOpponentAction) -> int:
+    """An undefended NPC hit's amount, after the attacker's damage-dealt rows (#4742, #4756)."""
+    from world.conditions.services import scaled_outgoing_damage  # noqa: PLC0415
+
+    return scaled_outgoing_damage(
+        opponent.objectdb,
+        _flat_threat_damage(npc_action, opponent),
+        npc_action.threat_entry.damage_type,
+    )
+
+
 def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution needs full context
     target_participant: CombatParticipant,
     *,
@@ -122,7 +133,7 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
         else:
             dmg_result = _svc.apply_damage_to_participant(
                 target_participant,
-                _flat_threat_damage(npc_action, opponent),
+                _npc_outgoing_damage(opponent, npc_action),
                 damage_type=npc_action.threat_entry.damage_type,
                 source=opponent,
                 on_hit_pool=npc_action.threat_entry.on_hit_consequence_pool,
@@ -238,7 +249,7 @@ def _resolve_npc_action_on_opponent_target(  # noqa: PLR0913 - needs full resolu
 
     dmg_result = _svc.apply_damage_to_opponent(
         target_opponent,
-        _flat_threat_damage(npc_action, opponent),
+        _npc_outgoing_damage(opponent, npc_action),
         damage_type=npc_action.threat_entry.damage_type,
         source_sheet=_allegiance_credit_sheet(opponent, opponent.encounter),
     )
