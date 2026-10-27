@@ -11,7 +11,7 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     ResonanceFactory,
 )
-from world.magic.models import CharacterResonance, ResonanceGrant
+from world.magic.models import CharacterResonance, Resonance, ResonanceGrant
 from world.magic.services.conversion import convert_resonance_amount
 
 
@@ -38,7 +38,7 @@ class ConvertResonanceAmountTests(TestCase):
             gain_source=GainSource.DRIFT_CORRECTION,
         )
 
-    def _row(self, resonance) -> CharacterResonance:
+    def _row(self, resonance: Resonance) -> CharacterResonance:
         return CharacterResonance.objects.get(character_sheet=self.sheet, resonance=resonance)
 
     def test_moves_proportional_lifetime_and_writes_one_grant(self) -> None:
@@ -69,3 +69,21 @@ class ConvertResonanceAmountTests(TestCase):
     def test_non_positive_amount_raises(self) -> None:
         with self.assertRaises(ValueError):
             self._convert(0, "0.5")
+
+    def test_no_row_for_the_source_raises_and_grants_nothing(self) -> None:
+        unheld = ResonanceFactory(affinity=self.abyssal.affinity)
+        with self.assertRaises(ValueError):
+            convert_resonance_amount(
+                self.sheet,
+                source_resonance=unheld,
+                target_resonance=self.celestial,
+                amount=5,
+                multiplier=Decimal("0.5"),
+                gain_source=GainSource.DRIFT_CORRECTION,
+            )
+        self.assertFalse(
+            CharacterResonance.objects.filter(
+                character_sheet=self.sheet, resonance=self.celestial
+            ).exists()
+        )
+        self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.sheet).exists())

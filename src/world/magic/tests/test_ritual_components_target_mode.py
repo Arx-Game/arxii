@@ -34,6 +34,7 @@ from world.magic.services.drift import qualifying_components
 from world.magic.services.ritual_components import (
     _partition_requirements,
     resolve_and_consume_ritual_components,
+    resolve_ritual_components,
 )
 from world.magic.types import QualifyingComponent
 
@@ -201,6 +202,62 @@ class TargetModeConsumptionTests(TestCase):
                 resonance_context=self.target,
             )
         assert ItemInstance.objects.filter(pk=item.pk).exists()
+
+    def test_a_stack_of_two_pays_two_target_rows_one_unit_each(self) -> None:
+        self._target_requirement()
+        self._target_requirement()
+        stack = ItemInstanceFactory(template=_tied_template(self.target), quantity=2)
+        allocations = resolve_ritual_components(
+            ritual=self.ritual,
+            components=[stack],
+            performer_sheet=self.sheet,
+            resonance_context=self.target,
+        )
+        assert allocations == [(stack, 1), (stack, 1)]
+        resolve_and_consume_ritual_components(
+            ritual=self.ritual,
+            components=[stack],
+            performer_sheet=self.sheet,
+            resonance_context=self.target,
+        )
+        assert not ItemInstance.objects.filter(pk=stack.pk, quantity__gt=0).exists()
+
+    def test_an_item_a_template_row_took_is_not_offered_to_a_target_row(self) -> None:
+        # The template is tied to the target, so the one item would satisfy either row;
+        # the template row claims it first and the target row finds nothing left.
+        tied = _tied_template(self.target)
+        RitualComponentRequirementFactory(ritual=self.ritual, item_template=tied)
+        self._target_requirement()
+        item = ItemInstanceFactory(template=tied)
+        with self.assertRaises(RitualComponentError):
+            resolve_ritual_components(
+                ritual=self.ritual,
+                components=[item],
+                performer_sheet=self.sheet,
+                resonance_context=self.target,
+            )
+        second = ItemInstanceFactory(template=tied)
+        allocations = resolve_ritual_components(
+            ritual=self.ritual,
+            components=[item, second],
+            performer_sheet=self.sheet,
+            resonance_context=self.target,
+        )
+        assert sorted((inst.pk, amount) for inst, amount in allocations) == sorted(
+            [(item.pk, 1), (second.pk, 1)]
+        )
+
+    def test_resolving_writes_nothing(self) -> None:
+        self._target_requirement()
+        item = self._material()
+        resolve_ritual_components(
+            ritual=self.ritual,
+            components=[item],
+            performer_sheet=self.sheet,
+            resonance_context=self.target,
+        )
+        assert ItemInstance.objects.filter(pk=item.pk, quantity=1).exists()
+        assert (item.quantity, item.destroyed_at) == (1, None)
 
     def test_the_requirement_min_item_meaning_bar_admits_a_keepsake(self) -> None:
         self._target_requirement(min_item_meaning=2)
