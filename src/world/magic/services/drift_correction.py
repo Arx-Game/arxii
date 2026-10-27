@@ -19,6 +19,7 @@ from django.db import transaction
 from django.db.models import Max
 
 from world.checks.services import perform_check_with_modifiers
+from world.items.services.materials import consume_materials
 from world.magic.constants import GainSource
 from world.magic.exceptions import (
     ConversionMappingError,
@@ -40,7 +41,7 @@ from world.magic.services.drift import (
     get_drift_correction_config,
     qualifying_components,
 )
-from world.magic.services.ritual_components import resolve_and_consume_ritual_components
+from world.magic.services.ritual_components import resolve_ritual_components
 from world.magic.services.touchstone import touchstone_cast_bonus
 from world.magic.types.drift import (
     DriftConversionPreview,
@@ -238,12 +239,13 @@ def perform_drift_correction_rite(
 ) -> DriftCorrectionResult:
     """Perform the drift correction rite under ``offer``.
 
-    Locks the offer, refuses a lapsed or unconfigured rite and an invalid request, consumes
-    the offering, rolls the configured check with ``focus_bonus`` as extra modifiers, then
-    converts ``floor(amount x share)`` of the source at the pair rate, granting it as
-    ``DRIFT_CORRECTION``. The cap shrinks by what converted; an exhausted cap row is
-    deleted, and the offer with it once no cap is left. A tier with no share still consumes
-    the offering and moves nothing.
+    Locks the offer, refuses a lapsed or unconfigured rite and an invalid request, picks
+    the offering without spending it, rolls the configured check with ``focus_bonus`` as
+    extra modifiers, converts ``floor(amount x share)`` of the source at the pair rate,
+    granting it as ``DRIFT_CORRECTION``, and only then spends the offering. The cap shrinks
+    by what converted; an exhausted cap row is deleted, and the offer with it once no cap is
+    left. A tier whose share is 0.00 still spends the offering and moves nothing; a tier with
+    no share row at all is refused up front (``_require_every_share``).
 
     Raises:
         DriftOfferNotFoundError: The offer is gone, its scene finished, or no cap targets
@@ -270,7 +272,11 @@ def perform_drift_correction_rite(
     pair = _validated_source(sheet, source_resonance, target_resonance, amount, cap_value)
     _require_every_share()
 
-    resolve_and_consume_ritual_components(
+    # Every step that can refuse runs before anything is written: the offering is only
+    # chosen here, and spent after the roll, the share and the conversion. A raise after a
+    # write would roll the tables back but leave the shared cached rows (the item's
+    # quantity and destroyed_at, the resonance balances) ahead of them.
+    allocations = resolve_ritual_components(
         ritual=config.rite,
         components=components,
         performer_sheet=sheet,
@@ -308,6 +314,8 @@ def perform_drift_correction_rite(
         except ValueError as exc:
             msg = "You no longer hold enough of that resonance."
             raise DriftConversionInvalidError(msg) from exc
+    consume_materials(allocations)
+    if converted > 0:
         remaining = cap_value - converted
         if remaining > 0:
             cap.cap = remaining

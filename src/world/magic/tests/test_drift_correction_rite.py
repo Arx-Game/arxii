@@ -318,6 +318,38 @@ class RefusalTests(DriftRiteTestBase):
             self.perform()
         convert.assert_called_once()
 
+    def assert_component_untouched(self) -> None:
+        """Neither the table nor the shared cached instance has spent the offering."""
+        self.assertFalse(_consumed(self.component_pk))
+        self.assertEqual(
+            (self.component.pk, self.component.quantity, self.component.destroyed_at),
+            (self.component_pk, 1, None),
+        )
+
+    def test_a_roll_with_no_outcome_spends_nothing(self) -> None:
+        roll = MagicMock(return_value=MagicMock(outcome=None))
+        with patch(ROLL_PATH, roll), self.assertRaises(DriftCorrectionNotConfiguredError):
+            perform_drift_correction_rite(
+                self.offer,
+                source_resonance=self.dread,
+                target_resonance=self.dawnlight,
+                amount=12,
+                components=[self.component],
+            )
+        roll.assert_called_once()
+        self.assert_component_untouched()
+        self.assertEqual(self.cap_value(), 12)
+        self.assertEqual(_balance(self.sheet, self.dread), 30)
+
+    def test_a_conversion_that_raises_leaves_the_offering_in_memory_too(self) -> None:
+        convert = MagicMock(side_effect=ValueError("Cannot convert 12 of a 0 balance."))
+        with (
+            patch("world.magic.services.drift_correction.convert_resonance_amount", convert),
+            self.assertRaises(DriftConversionInvalidError),
+        ):
+            self.perform()
+        self.assert_component_untouched()
+
     def test_pair_with_no_authored_conversion(self) -> None:
         _author_pair(self.abyssal, self.celestial, None, "")
         with self.assertRaises(DriftConversionInvalidError):

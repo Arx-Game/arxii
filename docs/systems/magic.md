@@ -3980,13 +3980,16 @@ from converting less than a worse one. `perform_drift_correction_rite` (`drift_c
 in one transaction: locks the offer; refuses an unset rite or check type or any `CheckOutcome`
 with no share row (`DriftCorrectionNotConfiguredError`, before anything is consumed); validates
 the amount against the cap and the held balance and the source against `convertible_drift`;
-consumes the offering through `resolve_and_consume_ritual_components` with the target as
-`resonance_context`; rolls the check with `focus_bonus` as extra modifiers; then converts
+picks the offering with `resolve_ritual_components` (no writes) with the target as
+`resonance_context`; rolls the check with `focus_bonus` as extra modifiers; converts
 `floor(amount x share)` of the source through `convert_resonance_amount`, granted as
 `GainSource.DRIFT_CORRECTION` at `max(1, floor(converted x pair multiplier))` (an uphill pair
-never rounds to zero). The cap shrinks by what converted; an empty cap row is deleted, and the
-offer with it when no cap is left. A tier with no share converts nothing, consumes the offering
-and leaves the cap intact. Source and target lifetime move by the proportional share, so the
+never rounds to zero); and only then spends the offering with `consume_materials`. Every step
+that can raise runs before the first item write, so a refusal never leaves a cached item or
+balance ahead of the rolled-back table. The cap shrinks by what converted; an empty cap row is
+deleted, and the offer with it when no cap is left. A tier with no share row is refused up
+front by `_require_every_share`; a tier whose share is 0.00 converts nothing, spends the
+offering and leaves the cap intact. Source and target lifetime move by the proportional share, so the
 aura follows (`recompute_aura`).
 
 **Component modes.** `RitualComponentRequirement` has a third mode, `matches_target_resonance`

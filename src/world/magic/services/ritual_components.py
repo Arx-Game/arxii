@@ -175,14 +175,14 @@ def _partition_requirements(
     return template_reqs, touchstone_reqs, target_reqs
 
 
-def resolve_and_consume_ritual_components(
+def resolve_ritual_components(
     *,
     ritual: Ritual,
     components: list[ItemInstance],
     performer_sheet: CharacterSheet,
     resonance_context: Resonance | None = None,
-) -> None:
-    """Validate and atomically consume ``ritual``'s components from ``components``.
+) -> list[tuple[ItemInstance, int]]:
+    """Work out which of ``components`` pay ``ritual``'s requirements, writing nothing.
 
     Partitions ``ritual.requirements.all()`` into template-mode
     (``item_template_id is not None``), touchstone-mode
@@ -190,8 +190,7 @@ def resolve_and_consume_ritual_components(
     (``matches_target_resonance``) rows. Template-mode rows use the
     existing ``gather_consumable_pks``; touchstone-mode rows resolve via
     ``_resolve_touchstone_pks``; target-resonance rows via
-    ``_resolve_target_resonance_allocations``. All-or-nothing: raises before consuming
-    anything if ANY set of requirements is unsatisfied.
+    ``_resolve_target_resonance_allocations``.
 
     Args:
         ritual: The Ritual whose requirements to check.
@@ -203,9 +202,12 @@ def resolve_and_consume_ritual_components(
             resonance a target-resonance-mode requirement is converting toward, and
             is required for such a requirement.
 
+    Returns:
+        ``(item, amount)`` allocations for ``consume_materials``. A touchstone is
+        allocated an amount of 1.
+
     Raises:
-        RitualComponentError: If any requirement is unsatisfied. Nothing is
-            consumed when this is raised.
+        RitualComponentError: If any requirement is unsatisfied.
     """
     requirements = list(
         ritual.requirements.select_related(
@@ -246,10 +248,37 @@ def resolve_and_consume_ritual_components(
         },
     )
 
-    # Touchstones are non-stackable (quantity=1); consuming amount=1 decrements to 0 → delete.
-    all_allocations = [
+    # Touchstones are non-stackable (quantity=1); consuming amount=1 decrements to 0 -> delete.
+    return [
         *template_allocations,
         *((inst, 1) for inst in touchstone_instances),
         *target_allocations,
     ]
-    consume_materials(all_allocations)
+
+
+def resolve_and_consume_ritual_components(
+    *,
+    ritual: Ritual,
+    components: list[ItemInstance],
+    performer_sheet: CharacterSheet,
+    resonance_context: Resonance | None = None,
+) -> None:
+    """Validate and atomically consume ``ritual``'s components from ``components``.
+
+    ``resolve_ritual_components`` then ``consume_materials``. All-or-nothing: raises
+    before consuming anything if ANY set of requirements is unsatisfied. A caller with a
+    raising step between choosing the offering and spending it (a roll) calls the two
+    halves itself, so nothing is spent before that step can refuse.
+
+    Raises:
+        RitualComponentError: If any requirement is unsatisfied. Nothing is
+            consumed when this is raised.
+    """
+    consume_materials(
+        resolve_ritual_components(
+            ritual=ritual,
+            components=components,
+            performer_sheet=performer_sheet,
+            resonance_context=resonance_context,
+        )
+    )
