@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import RitualExecutionKind
+from world.magic.constants import RitualExecutionKind, TargetKind
 from world.magic.exceptions import (
     ConversionMappingError,
     ThreadResonanceChangeError,
@@ -31,7 +31,8 @@ from world.magic.exceptions import (
 )
 from world.magic.models import Resonance, Ritual, Thread
 from world.magic.models.fall_redemption import ConversionType, ResonanceConversion
-from world.magic.services.conversion import _reanchor_thread, conversion_pair
+from world.magic.seeds_sanctum import PURGING_RITUAL_NAME
+from world.magic.services.conversion import _reanchor_thread, conversion_pair, same_anchor_threads
 from world.magic.types.threads import ThreadResonanceChangeResult, ThreadResonanceOption
 
 if TYPE_CHECKING:
@@ -41,7 +42,16 @@ THREAD_RESONANCE_SERVICE_PATH = "world.magic.services.thread_resonance.change_th
 
 NO_THREAD_MESSAGE = UnknownOwnedThread.user_message
 THREAD_MOVED_MESSAGE = "That thread has just changed resonance; look at it again."
-NAME_A_THREAD_MESSAGE = "Name the thread to move: thread=<id>."
+NAME_A_THREAD_MESSAGE = "Name the thread to move."
+NAME_A_RESONANCE_MESSAGE = "Name the resonance to move it to."
+NO_OPTIONS_MESSAGE = "This thread has no resonance it can move to."
+NO_RITE_MESSAGE = "No ritual can change a thread's resonance yet."
+SANCTUM_THREAD_MESSAGE = (
+    f"A sanctum thread channels its sanctum's resonance; the {PURGING_RITUAL_NAME} changes it."
+)
+SIGNATURE_THREAD_MESSAGE = (
+    "This thread's signature flourish is tied to a resonance; clear the signature before moving it."
+)
 
 
 def _id_from(raw: object) -> int | None:
@@ -104,24 +114,53 @@ def scaled_thread_points(points: int, multiplier: Decimal) -> int:
     return max(1, int(Decimal(points) * multiplier))
 
 
+def thread_resonance_refusal(thread: Thread) -> str:
+    """Why ``thread`` cannot move to any resonance at all, or "" when it may.
+
+    Two anchors hold a thread's resonance in place (ruled on the final review of slice 6):
+    a SANCTUM thread channels its sanctum's consecrated resonance, which the Ritual of
+    Purging changes; a TECHNIQUE thread whose signature bonus requires a resonance would
+    keep a flourish it no longer qualifies for, so the signature is cleared first.
+    """
+    if thread.target_kind == TargetKind.SANCTUM:
+        return SANCTUM_THREAD_MESSAGE
+    if (
+        thread.signature_bonus_id is not None
+        and thread.signature_bonus.required_resonance_id is not None
+    ):
+        return SIGNATURE_THREAD_MESSAGE
+    return ""
+
+
+def _gift_allows(thread: Thread) -> set[int] | None:
+    """A GIFT thread's supported resonance pks, or None when any resonance is allowed.
+
+    The rule ``weave_thread`` enforces: an empty supported set is unrestricted.
+    """
+    if thread.target_kind != TargetKind.GIFT or thread.target_gift_id is None:
+        return None
+    supported = {resonance.pk for resonance in thread.target_gift.cached_resonances}
+    return supported or None
+
+
 def thread_resonance_options(thread: Thread) -> list[ThreadResonanceOption]:
     """Every resonance ``thread`` may be moved to, with the rate and the points it would hold.
 
     Every other resonance of the thread's affinity (rate 1, no conversion type), and for each
     other affinity, the ``ResonanceConversion`` counterpart of the thread's resonance when an
     authored pair (``conversion_pair``) joins the two affinities. A target with no mapping or
-    no pair is not offered. Sorted for display: own affinity first, then by affinity and
-    resonance name.
+    no pair is not offered. A thread ``thread_resonance_refusal`` holds in place has none; a
+    GIFT thread is offered only its gift's supported resonances when the gift names any.
+    ``merges_into_thread_id`` is the owner's live thread on the same anchor already at that
+    resonance (the move would merge into it), read in one query for every option. Sorted
+    for display: own affinity first, then by affinity and resonance name.
     """
+    if thread_resonance_refusal(thread):
+        return []
     source = thread.resonance
     points = thread.developed_points
-    options = [
-        ThreadResonanceOption(
-            resonance=resonance,
-            conversion_type=None,
-            multiplier=Decimal(1),
-            projected_points=points,
-        )
+    candidates: list[tuple[Resonance, str | None, Decimal]] = [
+        (resonance, None, Decimal(1))
         for resonance in Resonance.objects.filter(affinity_id=source.affinity_id)
         .exclude(pk=source.pk)
         .select_related("affinity")
@@ -137,14 +176,27 @@ def thread_resonance_options(thread: Thread) -> list[ThreadResonanceOption]:
             pair = conversion_pair(source.affinity, mapping.target_affinity)
         except ConversionMappingError:
             continue
-        options.append(
-            ThreadResonanceOption(
-                resonance=mapping.target_resonance,
-                conversion_type=pair.conversion_type,
-                multiplier=pair.conversion_multiplier,
-                projected_points=scaled_thread_points(points, pair.conversion_multiplier),
-            )
+        candidates.append(
+            (mapping.target_resonance, pair.conversion_type, pair.conversion_multiplier)
         )
+    allowed = _gift_allows(thread)
+    if allowed is not None:
+        candidates = [c for c in candidates if c[0].pk in allowed]
+    merges_into = dict(
+        same_anchor_threads(thread)
+        .filter(resonance_id__in=[c[0].pk for c in candidates])
+        .values_list("resonance_id", "pk")
+    )
+    options = [
+        ThreadResonanceOption(
+            resonance=resonance,
+            conversion_type=conversion_type,
+            multiplier=multiplier,
+            projected_points=scaled_thread_points(points, multiplier),
+            merges_into_thread_id=merges_into.get(resonance.pk),
+        )
+        for resonance, conversion_type, multiplier in candidates
+    ]
     options.sort(
         key=lambda option: (
             option.conversion_type is not None,
@@ -153,6 +205,24 @@ def thread_resonance_options(thread: Thread) -> list[ThreadResonanceOption]:
         )
     )
     return options
+
+
+def thread_resonance_unavailable_reason(
+    thread: Thread, ritual: Ritual | None, options: list[ThreadResonanceOption]
+) -> str:
+    """Why the Spellbook cannot move ``thread`` now, or "" when it can.
+
+    The thread's own refusal first (it holds whatever is authored), then a missing rite,
+    then no options.
+    """
+    refusal = thread_resonance_refusal(thread)
+    if refusal:
+        return refusal
+    if ritual is None:
+        return NO_RITE_MESSAGE
+    if not options:
+        return NO_OPTIONS_MESSAGE
+    return ""
 
 
 def _thread_label(thread: Thread) -> str:
@@ -185,19 +255,24 @@ def change_message(  # noqa: PLR0913 - every number the line names
     )
 
 
-def _option_label(option: ThreadResonanceOption) -> str:
+def option_label(option: ThreadResonanceOption, *, with_id: bool = False) -> str:
+    """ "Lumen (same affinity)", or with ``with_id`` "Lumen (12, same affinity)" for telnet."""
     kind = (
         "same affinity"
         if option.conversion_type is None
         else ConversionType(option.conversion_type).label
     )
-    return f"{option.resonance.name} ({option.resonance.pk}, {kind})"
+    if with_id:
+        return f"{option.resonance.name} ({option.resonance.pk}, {kind})"
+    return f"{option.resonance.name} ({kind})"
 
 
-def _options_sentence(options: list[ThreadResonanceOption]) -> str:
+def options_sentence(options: list[ThreadResonanceOption], *, with_ids: bool = False) -> str:
+    """The "It can move to: ..." sentence; telnet asks for ids to type."""
     if not options:
-        return "This thread has no resonance it can move to."
-    return "It can move to: " + ", ".join(_option_label(option) for option in options) + "."
+        return NO_OPTIONS_MESSAGE
+    labels = ", ".join(option_label(option, with_id=with_ids) for option in options)
+    return f"It can move to: {labels}."
 
 
 def check_thread_resonance_change(
@@ -213,20 +288,25 @@ def check_thread_resonance_change(
 
     Raises:
         ThreadResonanceChangeError: No thread named, a thread that is not the performer's or
-            is retired, no target named (the message lists the options), a target that is
-            not among the options.
+            is retired, a thread its anchor holds in place (``thread_resonance_refusal``), no
+            target named (the message lists the options), a target that is not among the
+            options. The messages carry no telnet syntax; the ``ritual`` command adds its
+            own hint before it dispatches.
     """
     if thread is None:
         raise ThreadResonanceChangeError(NAME_A_THREAD_MESSAGE)
     if thread.owner_id != character_sheet.pk or thread.retired_at is not None:
         raise ThreadResonanceChangeError(NO_THREAD_MESSAGE)
+    refusal = thread_resonance_refusal(thread)
+    if refusal:
+        raise ThreadResonanceChangeError(refusal)
     options = thread_resonance_options(thread)
     if target_resonance is None:
-        msg = f"Name the resonance to move it to: resonance=<id>. {_options_sentence(options)}"
+        msg = f"{NAME_A_RESONANCE_MESSAGE} {options_sentence(options)}"
         raise ThreadResonanceChangeError(msg)
     chosen = next((o for o in options if o.resonance.pk == target_resonance.pk), None)
     if chosen is None:
-        msg = f"This thread cannot move to {target_resonance.name}. {_options_sentence(options)}"
+        msg = f"This thread cannot move to {target_resonance.name}. {options_sentence(options)}"
         raise ThreadResonanceChangeError(msg)
     return chosen
 

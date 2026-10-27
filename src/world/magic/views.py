@@ -1104,27 +1104,32 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
         GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
 
-        Response: ``{ritual_id, options: [{resonance_id, resonance_name, affinity_name,
-        conversion_type, projected_points, qualifying: [{item_id, name, mode}]}]}``.
+        Response: ``{ritual_id, offering_required, offering_count, unavailable_reason,
+        options: [{resonance_id, resonance_name, affinity_name, conversion_type,
+        projected_points, merges_into_thread_id, qualifying: [{item_id, name, mode}]}]}``.
         ``ritual_id`` is null while no retune rite is authored; perform it through
         ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+        ``qualifying`` is filled only when the rite asks for a target-resonance offering.
         """
         from world.magic.services.drift import (  # noqa: PLC0415
             qualifying_components_by_target,
         )
         from world.magic.services.ritual_components import (  # noqa: PLC0415
             target_resonance_meaning_bar,
+            target_resonance_offering_count,
         )
         from world.magic.services.thread_resonance import (  # noqa: PLC0415
             thread_resonance_options,
             thread_resonance_ritual,
+            thread_resonance_unavailable_reason,
         )
 
         thread = self.get_object()
         ritual = thread_resonance_ritual()
-        options = thread_resonance_options(thread)
+        options = thread_resonance_options(thread) if ritual is not None else []
+        offering_count = target_resonance_offering_count(ritual) if ritual is not None else 0
         qualifying = {}
-        if ritual is not None:
+        if offering_count:
             items = list(
                 ItemInstance.objects.filter(
                     holder_character_sheet_id=thread.owner_id
@@ -1137,7 +1142,13 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 min_item_meaning=target_resonance_meaning_bar(ritual),
             )
         serializer = ThreadResonanceOptionsSerializer(
-            {"ritual_id": ritual.pk if ritual is not None else None, "options": options},
+            {
+                "ritual_id": ritual.pk if ritual is not None else None,
+                "offering_required": offering_count > 0,
+                "offering_count": offering_count,
+                "unavailable_reason": thread_resonance_unavailable_reason(thread, ritual, options),
+                "options": options,
+            },
             context={"qualifying": qualifying},
         )
         return Response(serializer.data)

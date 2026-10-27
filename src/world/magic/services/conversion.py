@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.magic.constants import GainSource
@@ -34,6 +34,8 @@ from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services.resonance import grant_resonance
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Thread
     from world.magic.models.affinity import Affinity, Resonance
@@ -416,6 +418,12 @@ def _reanchor_thread(thread: Thread, target_resonance_id: int, new_points: int) 
     survives. Otherwise ``thread`` itself is re-anchored with ``new_points`` and survives.
     ``level`` is left as it is either way. The caller scales the points (the full
     conversion and a single-thread retune floor them differently).
+
+    Raises:
+        ThreadAnchorTakenError: Another process put a live thread on the same anchor in the
+            target resonance after the lookup, so the partial unique index refused the move.
+            The save runs in a savepoint and ``thread``'s cached fields are put back, so the
+            shared instance does not claim a move the database never made.
     """
     existing = _find_existing_target_thread(thread, target_resonance_id)
     if existing is not None:
@@ -433,37 +441,46 @@ def _reanchor_thread(thread: Thread, target_resonance_id: int, new_points: int) 
         thread.retired_at = timezone.now()
         thread.save(update_fields=["retired_at"])
         return existing
+    from world.magic.exceptions import ThreadAnchorTakenError  # noqa: PLC0415
+
+    old_resonance_id, old_points = thread.resonance_id, thread.developed_points
     thread.resonance_id = target_resonance_id
     thread.developed_points = new_points
-    thread.save(update_fields=["resonance", "developed_points"])
+    try:
+        with transaction.atomic():
+            thread.save(update_fields=["resonance", "developed_points"])
+    except IntegrityError as exc:
+        thread.resonance_id = old_resonance_id
+        thread.developed_points = old_points
+        raise ThreadAnchorTakenError from exc
     return thread
 
 
-def _find_existing_target_thread(source_thread: Thread, target_resonance_id: int) -> Thread | None:
-    """Find the owner's live thread on the target resonance with the same anchor, if any.
+def same_anchor_threads(source_thread: Thread) -> QuerySet[Thread]:
+    """The owner's other live threads on ``source_thread``'s anchor, at any resonance.
 
     Two threads share an anchor when they share ``target_kind`` and the typed target FK.
     Every typed FK is compared, null included, so only the one the kind sets can match.
     """
     from world.magic.models import Thread  # noqa: PLC0415
 
-    return (
-        Thread.objects.filter(
-            owner_id=source_thread.owner_id,
-            resonance_id=target_resonance_id,
-            retired_at__isnull=True,
-            target_kind=source_thread.target_kind,
-            target_trait_id=source_thread.target_trait_id,
-            target_technique_id=source_thread.target_technique_id,
-            target_facet_id=source_thread.target_facet_id,
-            target_relationship_id=source_thread.target_relationship_id,
-            target_capstone_id=source_thread.target_capstone_id,
-            target_covenant_role_id=source_thread.target_covenant_role_id,
-            target_gift_id=source_thread.target_gift_id,
-            target_mantle_id=source_thread.target_mantle_id,
-            target_sanctum_details_id=source_thread.target_sanctum_details_id,
-            target_organization_id=source_thread.target_organization_id,
-        )
-        .exclude(pk=source_thread.pk)
-        .first()
-    )
+    return Thread.objects.filter(
+        owner_id=source_thread.owner_id,
+        retired_at__isnull=True,
+        target_kind=source_thread.target_kind,
+        target_trait_id=source_thread.target_trait_id,
+        target_technique_id=source_thread.target_technique_id,
+        target_facet_id=source_thread.target_facet_id,
+        target_relationship_id=source_thread.target_relationship_id,
+        target_capstone_id=source_thread.target_capstone_id,
+        target_covenant_role_id=source_thread.target_covenant_role_id,
+        target_gift_id=source_thread.target_gift_id,
+        target_mantle_id=source_thread.target_mantle_id,
+        target_sanctum_details_id=source_thread.target_sanctum_details_id,
+        target_organization_id=source_thread.target_organization_id,
+    ).exclude(pk=source_thread.pk)
+
+
+def _find_existing_target_thread(source_thread: Thread, target_resonance_id: int) -> Thread | None:
+    """Find the owner's live thread on the target resonance with the same anchor, if any."""
+    return same_anchor_threads(source_thread).filter(resonance_id=target_resonance_id).first()

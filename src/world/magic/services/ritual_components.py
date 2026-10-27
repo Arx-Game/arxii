@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import Min
+from django.db.models import Min, Sum
 
 from world.items.exceptions import InsufficientMaterials
 from world.items.services.materials import consume_materials, gather_consumable_pks
@@ -34,6 +34,17 @@ def target_resonance_meaning_bar(ritual: Ritual) -> int | None:
     return ritual.requirements.filter(
         matches_target_resonance=True, min_item_meaning__isnull=False
     ).aggregate(bar=Min("min_item_meaning"))["bar"]
+
+
+def target_resonance_offering_count(ritual: Ritual) -> int:
+    """How many offering units ``ritual``'s target-resonance requirements ask for, 0 if none.
+
+    The sum of their ``quantity``. The Spellbook's retune dialog asks for that many picks.
+    """
+    total = ritual.requirements.filter(matches_target_resonance=True).aggregate(
+        total=Sum("quantity")
+    )["total"]
+    return total or 0
 
 
 def has_target_resonance_requirement(ritual: Ritual) -> bool:

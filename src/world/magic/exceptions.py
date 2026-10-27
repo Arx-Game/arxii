@@ -937,6 +937,18 @@ class ThreadResonanceChangeError(MagicError):
             self.user_message = user_message
 
 
+class ThreadAnchorTakenError(ThreadResonanceChangeError):
+    """Another process put a live thread on the same anchor at the target resonance first.
+
+    The partial unique index refused the re-anchor; nothing moved.
+    """
+
+    user_message = "Another thread has just taken that place; look at your threads again."
+
+    def __init__(self) -> None:
+        super().__init__(ThreadAnchorTakenError.user_message)
+
+
 class UnknownResonance(MagicError):
     """No Resonance row has the id a ritual was given (telnet and web share this refusal)."""
 

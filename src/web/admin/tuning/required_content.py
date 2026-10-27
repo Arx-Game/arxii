@@ -1570,6 +1570,37 @@ def _probe_single_thread_resonance_ritual() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_thread_resonance_ritual_web_payable() -> ProbeResult:
+    """The Spellbook's retune rite asks only for offerings the web can pay (slice 6 of #4672).
+
+    Consumer: `ThreadViewSet.resonance_options` and the Spellbook's ThreadResonanceDialog,
+    which pay a target-resonance requirement only (the options carry `offering_count`). An
+    item-template or touchstone requirement on `thread_resonance_ritual()` has no picker on
+    the web, so every web retune is refused; telnet, which offers everything carried, can
+    still pay it. Missing: the rite's name.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.magic.services.thread_resonance import thread_resonance_ritual  # noqa: PLC0415
+
+    ritual = thread_resonance_ritual()
+    if ritual is None:
+        return ProbeResult(present=True)
+    unpayable = ritual.requirements.filter(
+        Q(item_template__isnull=False) | Q(min_touchstone_tier__isnull=False)
+    ).exists()
+    if unpayable:
+        return ProbeResult(
+            present=False,
+            missing=(ritual.name,),
+            detail=(
+                f"{ritual.name} asks for an item-template or touchstone component; the "
+                "Spellbook pays only target-resonance offerings, so it cannot perform it."
+            ),
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_standoff_cause_glosses() -> ProbeResult:
     """Every cause other than None has an authored gloss (#4354)."""
     from world.combat.constants import CauseKind  # noqa: PLC0415
@@ -3029,6 +3060,22 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "one's offering; a second row is reachable by name only."
             ),
             probe=CustomProbe(fn=_probe_single_thread_resonance_ritual),
+            admin_model="Ritual",
+        ),
+        ContentDependency(
+            key="thread-resonance-ritual-web-payable",
+            label="Thread retune ritual payable on the web",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/magic/views.py ThreadViewSet.resonance_options, "
+                "frontend ThreadResonanceDialog (target-resonance offerings only)"
+            ),
+            consequence=(
+                "The Spellbook's Retune thread button pays only target-resonance offerings; "
+                "a retune rite with an item-template or touchstone component is refused on "
+                "every web retune and can be performed from telnet only."
+            ),
+            probe=CustomProbe(fn=_probe_thread_resonance_ritual_web_payable),
             admin_model="Ritual",
         ),
         ContentDependency(

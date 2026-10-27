@@ -25,26 +25,45 @@ from integration_tests.harness import JourneyCase
 from web.admin.tuning.required_content import (
     _probe_single_thread_resonance_ritual,
     _probe_thread_resonance_ritual,
+    _probe_thread_resonance_ritual_web_payable,
 )
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.items.services.materialize import materialize_item_game_object
-from world.magic.constants import GainSource, RitualExecutionKind
+from world.magic.constants import GainSource, RitualExecutionKind, SanctumSlotKind, TargetKind
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
+    CharacterTechniqueFactory,
+    GiftFactory,
     ResonanceFactory,
     ResonanceTierFactory,
     RitualFactory,
+    SignatureMotifBonusFactory,
+    TechniqueFactory,
     ThreadFactory,
     ThreadRetuneRiteFactory,
     ensure_conversion_pairs,
     set_aura_split,
 )
-from world.magic.models import CharacterAnima, ResonanceConversion, Thread
+from world.magic.models import (
+    CharacterAnima,
+    ResonanceConversion,
+    RitualComponentRequirement,
+    SanctumDetails,
+    SanctumOwnerMode,
+    Thread,
+)
 from world.magic.services.resonance import grant_resonance
+from world.magic.services.thread_resonance import (
+    NO_RITE_MESSAGE,
+    SANCTUM_THREAD_MESSAGE,
+    SIGNATURE_THREAD_MESSAGE,
+)
+from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
 
 PERFORM_URL = "/api/magic/rituals/perform/"
+OPTIONS_URL = "/api/magic/threads/{}/resonance-options/"
 RITE = "Rite of Retuning"
 NO_THREAD = "You have no active thread with that id."
 
@@ -252,6 +271,10 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
         self.assertIn(f"You perform {RITE}.", told)
         self.assertEqual(anima(), 6)
 
+    def test_naming_no_thread_tells_her_what_to_type(self) -> None:
+        told = strip_ansi(self.telnet(self.ysmay, f"ritual {RITE} resonance={self.lumen.pk}"))
+        self.assertIn("Name the thread to move: thread=<id>.", told)
+
     def test_an_unknown_resonance_id_is_refused_plainly(self) -> None:
         told = strip_ansi(
             self.telnet(self.ysmay, f"ritual {RITE} thread={self.thread.pk} resonance=999999")
@@ -337,30 +360,97 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
         self.assertEqual(response.status_code, 400, response.content)
         self.assertEqual(stored(hers)["resonance_id"], self.bene.pk)
 
+    def options(self, thread: Thread):
+        response = self.api(self.account_of(self.ysmay)).get(OPTIONS_URL.format(thread.pk))
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.data
+
     def test_the_options_list_where_the_thread_can_go_and_what_pays_for_it(self) -> None:
         candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
-        response = self.api(self.account_of(self.ysmay)).get(
-            f"/api/magic/threads/{self.thread.pk}/resonance-options/"
+        held = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.ruin,
+            target_trait=self.thread.target_trait,
+            developed_points=5,
         )
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.data["ritual_id"], self.rite.pk)
+        data = self.options(self.thread)
+        self.assertEqual(data["ritual_id"], self.rite.pk)
+        self.assertTrue(data["offering_required"])
+        self.assertEqual(data["offering_count"], 1)
+        self.assertEqual(data["unavailable_reason"], "")
         shown = {
             option["resonance_name"]: (
                 option["affinity_name"],
                 option["conversion_type"],
                 option["projected_points"],
+                option["merges_into_thread_id"],
                 [(item["item_id"], item["mode"]) for item in option["qualifying"]],
             )
-            for option in response.data["options"]
+            for option in data["options"]
         }
         self.assertEqual(
             shown,
             {
-                "Lumen": ("Celestial", None, 40, [(candle, "material")]),
-                "Ruin": ("Abyssal", "FALL", 60, []),
-                "Praedari": ("Primal", "FALL", 48, []),
+                "Lumen": ("Celestial", None, 40, None, [(candle, "material")]),
+                "Ruin": ("Abyssal", "FALL", 60, held.pk, []),
+                "Praedari": ("Primal", "FALL", 48, None, []),
             },
         )
+
+    def test_a_rite_that_asks_no_offering_lists_none_to_pick(self) -> None:
+        self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        self.rite.requirements.all().delete()
+        data = self.options(self.thread)
+        self.assertFalse(data["offering_required"])
+        self.assertEqual(data["offering_count"], 0)
+        self.assertEqual([o["qualifying"] for o in data["options"]], [[], [], []])
+        response = self.perform(self.thread, self.lumen, [])
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(stored(self.thread)["resonance_id"], self.lumen.pk)
+
+    def test_a_rite_asking_two_offerings_says_so(self) -> None:
+        for requirement in self.rite.requirements.all():
+            requirement.quantity = 2
+            requirement.save(update_fields=["quantity"])
+        data = self.options(self.thread)
+        self.assertTrue(data["offering_required"])
+        self.assertEqual(data["offering_count"], 2)
+
+    def test_with_no_rite_the_options_say_why(self) -> None:
+        self.rite.delete()
+        data = self.options(self.thread)
+        self.assertIsNone(data["ritual_id"])
+        self.assertEqual(data["options"], [])
+        self.assertEqual(data["unavailable_reason"], NO_RITE_MESSAGE)
+
+    def test_a_missing_target_is_refused_without_telnet_syntax(self) -> None:
+        response = self.post(
+            self.ysmay,
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.rite.pk,
+                "kwargs": {"thread_id": self.thread.pk},
+            },
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(
+            response.data["detail"],
+            "Name the resonance to move it to. It can move to: Lumen (same affinity), "
+            "Ruin (Fall), Praedari (Fall).",
+        )
+
+    def test_a_merge_returns_the_thread_that_survives(self) -> None:
+        held = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.lumen,
+            target_trait=self.thread.target_trait,
+            developed_points=10,
+        )
+        candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        response = self.perform(self.thread, self.lumen, [candle])
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.data["result"]["merged"])
+        self.assertEqual(response.data["result"]["thread_id"], held.pk)
 
     def test_the_options_cost_the_same_queries_however_many_there_are(self) -> None:
         for requirement in self.rite.requirements.all():
@@ -402,6 +492,111 @@ class TheRiteOnTheRequiredContentDashboard(ThreadRetuneCase):
             f"/api/magic/threads/{self.thread.pk}/resonance-options/"
         )
         self.assertIsNone(response.data["ritual_id"])
+
+
+class TheDashboardFlagsARiteTheWebCannotPay(ThreadRetuneCase):
+    def test_a_template_component_on_the_rite_is_listed(self) -> None:
+        self.assertTrue(_probe_thread_resonance_ritual_web_payable().present)
+        RitualComponentRequirement.objects.create(
+            ritual=self.rite, item_template=ItemTemplateFactory(name="Tuning Fork"), quantity=1
+        )
+        result = _probe_thread_resonance_ritual_web_payable()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (RITE,))
+
+
+class AnchorsThatHoldAResonance(ThreadRetuneCase):
+    """Gift, sanctum and signed technique threads follow the rules weaving set for them."""
+
+    def options(self, thread: Thread):
+        response = self.api(self.account_of(self.ysmay)).get(OPTIONS_URL.format(thread.pk))
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.data
+
+    def test_a_gift_thread_moves_only_within_its_gifts_resonances(self) -> None:
+        gift = GiftFactory(name="Gift of the Long Dark")
+        gift.resonances.add(self.bene, self.ruin)
+        woven = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.bene,
+            target_kind=TargetKind.GIFT,
+            target_trait=None,
+            target_gift=gift,
+            developed_points=20,
+        )
+        data = self.options(woven)
+        self.assertEqual([o["resonance_name"] for o in data["options"]], ["Ruin"])
+
+        candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        told = self.retune(woven, self.lumen)
+        self.assertIn("This thread cannot move to Lumen. It can move to: Ruin (Fall).", told)
+        self.assertFalse(consumed(candle))
+        self.assertEqual(stored(woven)["resonance_id"], self.bene.pk)
+
+        shard = self.carry(self.ysmay, self.ruin, "Ruin Shard")
+        self.assertIn(f"You perform {RITE}.", self.retune(woven, self.ruin))
+        self.assertEqual(stored(woven)["resonance_id"], self.ruin.pk)
+        self.assertTrue(consumed(shard))
+
+    def test_a_gift_that_names_no_resonance_does_not_narrow_the_options(self) -> None:
+        woven = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.bene,
+            target_kind=TargetKind.GIFT,
+            target_trait=None,
+            target_gift=GiftFactory(name="Gift of Open Hands"),
+            developed_points=20,
+        )
+        self.assertEqual(len(self.options(woven)["options"]), 3)
+
+    def test_a_sanctum_thread_is_sent_to_the_ritual_of_purging(self) -> None:
+        sanctum = SanctumDetails.objects.create(
+            feature_instance=RoomFeatureInstanceFactory(
+                feature_kind=RoomFeatureKindFactory(), level=2
+            ),
+            resonance_type=self.bene,
+            owner_mode=SanctumOwnerMode.PERSONAL,
+        )
+        woven = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.bene,
+            target_kind=TargetKind.SANCTUM,
+            target_trait=None,
+            target_sanctum_details=sanctum,
+            slot_kind=SanctumSlotKind.PERSONAL_OWN,
+            developed_points=20,
+        )
+        data = self.options(woven)
+        self.assertEqual(data["options"], [])
+        self.assertEqual(data["unavailable_reason"], SANCTUM_THREAD_MESSAGE)
+        self.assertIn("Ritual of Purging", SANCTUM_THREAD_MESSAGE)
+
+        candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        self.assertIn(SANCTUM_THREAD_MESSAGE, self.retune(woven, self.lumen))
+        self.assertIn(SANCTUM_THREAD_MESSAGE, self.retune(woven))
+        self.assertFalse(consumed(candle))
+        self.assertEqual(stored(woven)["resonance_id"], self.bene.pk)
+
+    def test_a_signed_technique_thread_moves_once_the_signature_is_cleared(self) -> None:
+        technique = TechniqueFactory(name="Dawnstrike")
+        CharacterTechniqueFactory(character=self.sheet, technique=technique)
+        woven = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.bene,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=technique,
+            signature_bonus=SignatureMotifBonusFactory(required_resonance=self.bene),
+            developed_points=20,
+        )
+        self.assertEqual(self.options(woven)["unavailable_reason"], SIGNATURE_THREAD_MESSAGE)
+        candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        self.assertIn(SIGNATURE_THREAD_MESSAGE, self.retune(woven, self.lumen))
+        self.assertFalse(consumed(candle))
+
+        self.telnet(self.ysmay, "signature clear technique=Dawnstrike")
+        self.assertIn(f"You perform {RITE}.", self.retune(woven, self.lumen))
+        self.assertEqual(stored(woven)["resonance_id"], self.lumen.pk)
 
 
 class TheDashboardFlagsASecondRetuneRite(ThreadRetuneCase):

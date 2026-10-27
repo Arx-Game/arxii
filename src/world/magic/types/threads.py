@@ -66,13 +66,16 @@ class ThreadResonanceOption:
 
     ``conversion_type`` is None for a retune within the thread's own affinity (rate 1),
     else the authored pair's Fall / Redemption type. ``projected_points`` is what the
-    thread's ``developed_points`` become at ``multiplier``.
+    thread's ``developed_points`` become at ``multiplier``. ``merges_into_thread_id`` is the
+    owner's live thread on the same anchor already at ``resonance``, which the move would
+    merge into, or None.
     """
 
     resonance: Resonance
     conversion_type: str | None
     multiplier: Decimal
     projected_points: int
+    merges_into_thread_id: int | None = None
 
 
 @dataclass(frozen=True)

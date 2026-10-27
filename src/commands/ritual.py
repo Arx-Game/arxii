@@ -550,11 +550,46 @@ class CmdRitual(ArxCommand):
                 raise CommandError(err.user_message) from err
 
         self._move_target_resonance(raw_kwargs, service_kwargs)
+        self._refuse_incomplete_retune(ritual, service_kwargs)
 
         service_kwargs.update(raw_kwargs)
 
         components = self._gather_components()
         return {"ritual": ritual, "components_provided": components, **service_kwargs}
+
+    @staticmethod
+    def _refuse_incomplete_retune(ritual: Any, service_kwargs: dict[str, Any]) -> None:
+        """Give the retune rite's telnet syntax before dispatch when a thread or target is missing.
+
+        The service's own refusals carry no syntax (the web reads them too); here a player
+        who left out ``thread=`` or ``resonance=`` is told what to type, and a thread with no
+        ``resonance=`` lists where it can go, with the ids. A thread its anchor holds in
+        place gets that refusal instead. Nothing has been spent: this runs before the action.
+        """
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            THREAD_RESONANCE_SERVICE_PATH,
+            options_sentence,
+            thread_resonance_options,
+            thread_resonance_refusal,
+        )
+
+        if ritual.service_function_path != THREAD_RESONANCE_SERVICE_PATH:
+            return
+        thread = service_kwargs.get("thread")
+        if thread is None:
+            msg = "Name the thread to move: thread=<id>."
+            raise CommandError(msg)
+        if service_kwargs.get(_TARGET_RESONANCE_KWARG) is not None:
+            return
+        refusal = thread_resonance_refusal(thread)
+        if refusal:
+            raise CommandError(refusal)
+        options = thread_resonance_options(thread)
+        msg = (
+            "Name the resonance to move it to: resonance=<id>. "
+            f"{options_sentence(options, with_ids=True)}"
+        )
+        raise CommandError(msg)
 
     def _move_target_resonance(
         self, raw_kwargs: dict[str, int], service_kwargs: dict[str, Any]
