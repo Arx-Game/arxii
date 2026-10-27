@@ -1,0 +1,137 @@
+"""Steeling yourself (#4738, slice 2 of #4727): a player character raises her own intensity.
+
+In combat a player character may steel herself: she rolls the checks staff set on the
+``STEELED`` ``SurgeTuning`` and her combat engagement's intensity rises by the band her
+outcome picks. It is an immediate act, not the round's declared action, and she may do it
+once a round. It costs fatigue from the pool ``StrainConfig`` names, unless she holds a free
+steel (an ally's successful Rally grants them), which is spent instead. A failed roll still
+costs what it cost.
+
+Player characters roll; a non-player opponent never steels.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
+
+from world.combat.constants import ParticipantStatus, SurgeTriggerKind
+from world.combat.models import CombatEncounter, StrainConfig
+from world.combat.surge_rolls import (
+    apply_rolled_surge,
+    persona_name_of,
+    rolled_surge_possible,
+    surge_roll_for_participant,
+    surge_tuning_for,
+)
+from world.combat.types import SteelResult
+from world.fatigue.constants import EffortLevel
+from world.fatigue.services import apply_fatigue
+from world.mechanics.constants import EngagementType
+from world.mechanics.engagement import CharacterEngagement
+from world.scenes.constants import RoundStatus
+
+if TYPE_CHECKING:
+    from world.combat.models import CombatParticipant
+
+NOT_IN_A_FIGHT_MESSAGE = "You are not in a fight you can steel yourself in."
+ALREADY_STEELED_MESSAGE = "You have already steeled yourself this round."
+NO_STEEL_TUNING_MESSAGE = "There is nothing to steel yourself with yet."
+NO_PRESSURE_MESSAGE = "Nothing in this fight is pressing you to steel yourself."
+
+
+class SteelRefusedError(Exception):
+    """A steel the rules refuse; ``user_message`` is safe to show the player."""
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message
+
+
+def combat_engagement_of(participant: CombatParticipant) -> CharacterEngagement | None:
+    """The participant's COMBAT engagement sourced to her encounter, or None."""
+    return CharacterEngagement.objects.filter(
+        character=participant.character_sheet,
+        engagement_type=EngagementType.COMBAT,
+        source_content_type=ContentType.objects.get_for_model(CombatEncounter),
+        source_id=participant.encounter_id,
+    ).first()
+
+
+def steel_config() -> StrainConfig:
+    """The ``StrainConfig`` singleton, or an unsaved one carrying the model defaults."""
+    return StrainConfig.objects.filter(pk=1).first() or StrainConfig()
+
+
+def grant_free_steels(engagement: CharacterEngagement, count: int) -> None:
+    """Add ``count`` free steels to ``engagement`` (the identity-mapped row, saved narrowly)."""
+    if count <= 0:
+        return
+    engagement.free_steels += count
+    engagement.save(update_fields=["free_steels"])
+
+
+def _spend_free_steel(engagement: CharacterEngagement) -> bool:
+    """Spend one free steel if the engagement holds one; True when it did."""
+    if engagement.free_steels <= 0:
+        return False
+    engagement.free_steels -= 1
+    engagement.save(update_fields=["free_steels"])
+    return True
+
+
+def steel_yourself(participant: CombatParticipant) -> SteelResult:
+    """Steel ``participant``: pay, roll resolve, surge her intensity by the outcome's band.
+
+    Refuses (``SteelRefusedError``) when she is not an active participant in a declaring
+    round with a COMBAT engagement, when the fight has no escalation curve to surge on,
+    when she already steeled this round, or when staff have not set the ``STEELED``
+    tuning. Nothing is spent on a refusal. Otherwise, in one transaction: a free steel is
+    spent if she holds one, else the configured fatigue is charged (whatever the roll
+    gives); the tuning's check is rolled against its ``potency_base``; and the outcome's
+    band is written through ``apply_rolled_surge``.
+    """
+    encounter = participant.encounter
+    if participant.status != ParticipantStatus.ACTIVE or encounter.status != RoundStatus.DECLARING:
+        raise SteelRefusedError(NOT_IN_A_FIGHT_MESSAGE)
+    engagement = combat_engagement_of(participant)
+    if engagement is None:
+        raise SteelRefusedError(NOT_IN_A_FIGHT_MESSAGE)
+    if encounter.escalation_curve is None:
+        raise SteelRefusedError(NO_PRESSURE_MESSAGE)
+    tuning = surge_tuning_for(SurgeTriggerKind.STEELED)
+    if tuning is None:
+        raise SteelRefusedError(NO_STEEL_TUNING_MESSAGE)
+    if not rolled_surge_possible(encounter, participant, SurgeTriggerKind.STEELED, None):
+        raise SteelRefusedError(ALREADY_STEELED_MESSAGE)
+
+    config = steel_config()
+    with transaction.atomic():
+        used_free = _spend_free_steel(engagement)
+        fatigue_spent = 0
+        if not used_free:
+            fatigue_spent = apply_fatigue(
+                participant.character_sheet,
+                config.steel_fatigue_category,
+                config.steel_fatigue_cost,
+                EffortLevel.MEDIUM,
+            )
+        result = surge_roll_for_participant(participant, tuning.check_type, tuning.potency_base)
+        beat = apply_rolled_surge(
+            encounter=encounter,
+            participant=participant,
+            trigger_kind=SurgeTriggerKind.STEELED,
+            outcome=result.outcome,
+            potency=tuning.potency_base,
+            source_character=participant.character_sheet.character,
+            tuning=tuning,
+            cause=f"{persona_name_of(participant)} steels herself.",
+        )
+    return SteelResult(
+        outcome=result.outcome,
+        surge_amount=beat.amount if beat is not None else 0,
+        used_free_steel=used_free,
+        fatigue_spent=fatigue_spent,
+    )

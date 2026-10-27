@@ -459,6 +459,22 @@ class EscalationTickResult:
 
 
 @dataclass(frozen=True)
+class SteelResult:
+    """What a character's steeling of herself did (#4738).
+
+    ``outcome`` is the resolve roll's outcome (None when the check could not run),
+    ``surge_amount`` the intensity the band gave (0 when it gave none), ``used_free_steel``
+    whether a free steel was spent in place of fatigue, and ``fatigue_spent`` the fatigue
+    actually charged (0 when a free steel paid).
+    """
+
+    outcome: CheckOutcome | None
+    surge_amount: int
+    used_free_steel: bool
+    fatigue_spent: int
+
+
+@dataclass(frozen=True)
 class DramaticSurgeBeat:
     """One dramatic-surge event produced by ``apply_dramatic_surge`` (#2013).
 

@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         CombatParticipant,
         CombatRoundAction,
     )
+    from world.combat.types import SteelResult
     from world.magic.models import Technique
 
 # Repeated ActionResult failure messages, extracted to satisfy S1192.
@@ -863,6 +864,47 @@ class RallyAction(Action):
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
         return ActionResult(success=True, message="You rally your ally.")
+
+
+@dataclass
+class SteelYourselfAction(Action):
+    """Steel yourself: roll resolve to raise your own intensity (wraps ``steel_yourself``).
+
+    An immediate act, once a round; it is not the round's declared action (#4738).
+    """
+
+    key: str = "combat_steel"
+    name: str = "Steel yourself"
+    icon: str = "shield"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.MENTAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.steel import SteelRefusedError, steel_yourself  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        try:
+            result = steel_yourself(participant)
+        except SteelRefusedError as err:
+            return ActionResult(success=False, message=err.user_message)
+        return ActionResult(success=True, message=_steel_message(result))
+
+
+def _steel_message(result: SteelResult) -> str:
+    """The line the player reads after steeling: the outcome and what it cost."""
+    outcome = result.outcome.name if result.outcome is not None else "No result"
+    gain = f"intensity +{result.surge_amount}" if result.surge_amount else "no surge"
+    cost = "a free steel" if result.used_free_steel else f"{result.fatigue_spent} fatigue"
+    return f"You steel yourself. {outcome}: {gain}. Cost: {cost}."
 
 
 @dataclass

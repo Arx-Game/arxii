@@ -449,6 +449,14 @@ class DodgePlanSerializer(serializers.Serializer):
     cost_line = serializers.CharField()
 
 
+class SteelOfferSerializer(serializers.Serializer):
+    """What steeling herself costs the viewer's own character right now (#4738); read-only."""
+
+    free_steels = serializers.IntegerField(help_text="Free steels she holds.")
+    fatigue_category = serializers.CharField(help_text="Fatigue pool a steel is paid from.")
+    fatigue_cost = serializers.IntegerField(help_text="Fatigue a steel costs without a free one.")
+
+
 class ParticipantSerializer(serializers.ModelSerializer):
     """Read serializer for combat participants.
 
@@ -477,6 +485,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     aftermath = serializers.SerializerMethodField()
     reactions_used = serializers.SerializerMethodField(required=False)
     dodge_plan = serializers.SerializerMethodField()
+    steel = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -501,7 +510,23 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "aftermath",
             "reactions_used",
             "dodge_plan",
+            "steel",
         ]
+
+    @extend_schema_field(SteelOfferSerializer(allow_null=True))
+    def get_steel(self, obj: CombatParticipant) -> dict[str, Any] | None:
+        """What steeling costs the viewer's own character (#4738); None for anyone else."""
+        if not self._is_viewers_own(obj):
+            return None
+        from world.combat.steel import steel_config  # noqa: PLC0415
+
+        engagement = self._combat_engagement(obj)
+        config = steel_config()
+        return {
+            "free_steels": engagement.free_steels if engagement is not None else 0,
+            "fatigue_category": config.steel_fatigue_category,
+            "fatigue_cost": config.steel_fatigue_cost,
+        }
 
     @extend_schema_field(SquareSerializer(allow_null=True))
     def get_current_square(self, obj: CombatParticipant) -> dict[str, int] | None:

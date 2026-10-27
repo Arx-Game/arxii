@@ -38,6 +38,7 @@ _SUBVERBS: dict[str, str] = {
     "revert": "combat_revert",
     "yield": "yield",
     "rally": "combat_rally",
+    "steel": "combat_steel",
     "demoralize": "combat_demoralize",
     "taunt": "combat_taunt",
     "parley": "combat_parley",
@@ -115,6 +116,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat succor <ally>        - shelter an ally from environmental hazards
         combat use <item> [on <target>] - use a held on-use item this round
         combat rally <ally>         - inspire an ally, bolstering their next action
+        combat steel                - roll resolve to raise your intensity (fatigue, or a
+                                     free steel from an ally's rally); once a round
         combat demoralize <opp>     - break an opponent's nerve (morale damage)
         combat taunt <opp|ally>      - draw an NPC's aggro, or goad an ally into a surge
         combat parley <opp>          - talk a wavering foe down mid-fight

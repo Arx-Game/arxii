@@ -488,6 +488,7 @@ class CombatEncounterViewSet(ModelViewSet):
             "use_item",
             "leave",
             "rally",
+            "steel",
             "demoralize",
             "taunt",
             "parley",
@@ -1314,6 +1315,31 @@ class CombatEncounterViewSet(ModelViewSet):
         if not self._action_succeeded(result):
             return Response(
                 {"detail": _ERR_DECLARE_FAILED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def steel(self, request: Request, pk: int | None = None) -> Response:
+        """Steel yourself: roll resolve to raise your own intensity (#4738).
+
+        An immediate act, once a round. A refusal carries the rules' own message.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if not participant:
+            return Response(
+                {"detail": _ERR_NOT_PARTICIPANT},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        result = self._dispatch_combat_action(
+            participant.character_sheet.character,
+            "combat_steel",
+        )
+        if not self._action_succeeded(result):
+            detail = result.detail.message if isinstance(result.detail, ActionResult) else ""
+            return Response(
+                {"detail": detail or _ERR_DECLARE_FAILED},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return self._serialize_encounter(request, encounter)

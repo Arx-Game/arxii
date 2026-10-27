@@ -110,6 +110,29 @@ def _surge_rallied_ally(
     )
 
 
+def _grant_free_steels(rallier: CombatParticipant, ally: CombatParticipant) -> None:
+    """A successful Rally gives the ally free steels, and tells her (#4738).
+
+    The count is ``StrainConfig.free_steels_per_encouragement``. A quiet no-op for an ally
+    with no combat engagement here or when the count is 0.
+    """
+    from world.combat.steel import (  # noqa: PLC0415
+        combat_engagement_of,
+        grant_free_steels,
+        steel_config,
+    )
+
+    count = steel_config().free_steels_per_encouragement
+    engagement = combat_engagement_of(ally)
+    if count <= 0 or engagement is None:
+        return
+    grant_free_steels(engagement, count)
+    noun = "a free steel" if count == 1 else f"{count} free steels"
+    ally.character_sheet.character.msg(
+        f"{persona_name_of(rallier)}'s encouragement gives you {noun}."
+    )
+
+
 def _resolve_rally(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -161,6 +184,8 @@ def _resolve_rally(
                 source_character=participant.character_sheet.character,
                 source_description="Rallied in combat.",
             )
+
+        _grant_free_steels(participant, ally)
 
         # Great success: restore morale to ally-side summon opponents.
         if success_level >= RALLY_GREAT_SUCCESS_LEVEL:
