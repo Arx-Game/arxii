@@ -23,6 +23,10 @@
  * (derived by CombatTurnPanel from `is_participant && status === 'declaring'`
  * — GM/observer rows never get the menu) and a `characterId` to dispatch as.
  *
+ * Ally click-menu (#4737): an active ally's row (never the viewer's own) carries the same
+ * kebab with Taunt, dispatched with `ally_participant_id` instead of `opponent_id`. The
+ * target is goaded into a rolled surge at round resolution; exactly one id is ever sent.
+ *
  * Engagement-lock badge (#3386): an opponent row shows "Locked: <PC name>" when
  * an active EngagementLock names them. The kebab menu additionally offers
  * "Engage in a duel" (hidden while anyone holds the lock) and "Disengage"
@@ -149,19 +153,95 @@ function HpBar({ health, maxHealth, className }: HpBarProps) {
   );
 }
 
+/** One ally-targeted maneuver offered by a participant row's click-menu (#4737). */
+const ALLY_MANEUVERS: { key: 'combat_taunt'; label: string }[] = [
+  { key: 'combat_taunt', label: 'Taunt' },
+];
+
+interface AllyMenuProps {
+  participant: Participant;
+  encounterId: number;
+  characterId: number;
+}
+
+/** Kebab menu on an ally row (#4737). Its own component so the dispatch hook mounts only
+ * on rows that can be acted on. */
+function AllyMenu({ participant, encounterId, characterId }: AllyMenuProps) {
+  const { mutateAsync, isPending } = useRegistryDispatch(encounterId, characterId);
+
+  async function handleManeuver(registryKey: string, label: string) {
+    try {
+      const result = await mutateAsync({
+        registryKey,
+        kwargs: { ally_participant_id: participant.id },
+      });
+      if (isDispatchFailure(result)) {
+        toast.error(result.message ?? `Failed to ${label.toLowerCase()}.`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Failed to ${label.toLowerCase()}.`);
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          data-testid={`participant-menu-trigger-${participant.id}`}
+          aria-label={`Actions on ${participant.character_name}`}
+          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {ALLY_MANEUVERS.map(({ key, label }) => (
+          <DropdownMenuItem
+            key={key}
+            disabled={isPending}
+            data-testid={`participant-${key}-${participant.id}`}
+            onClick={() => {
+              handleManeuver(key, label).catch(() => {});
+            }}
+          >
+            {label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // ParticipantRow — one PC combatant row
 // ---------------------------------------------------------------------------
 
 interface ParticipantRowProps {
   participant: Participant;
+  encounterId: number;
+  characterId?: number;
+  /** True when this row is the viewer's own participant: you cannot taunt yourself (#4737). */
+  isViewer?: boolean;
+  canDeclareManeuvers?: boolean;
   /** Name of the opponent this PC is engagement-locked to, if any (#3555). */
   lockedToName?: string;
   /** Names of companions currently ordered to defend this participant (#3576). */
   guardedByNames?: string[];
 }
 
-function ParticipantRow({ participant, lockedToName, guardedByNames = [] }: ParticipantRowProps) {
+function ParticipantRow({
+  participant,
+  encounterId,
+  characterId,
+  isViewer = false,
+  canDeclareManeuvers = false,
+  lockedToName,
+  guardedByNames = [],
+}: ParticipantRowProps) {
+  const showMenu =
+    canDeclareManeuvers && characterId != null && !isViewer && participant.status === 'active';
+
   return (
     <div
       className="flex items-center gap-2 rounded p-1.5 hover:bg-accent/30"
@@ -219,6 +299,11 @@ function ParticipantRow({ participant, lockedToName, guardedByNames = [] }: Part
         {/* Condition badges — deep-link to the condition-detail modal on click. */}
         <ConditionRow conditions={participant.active_conditions} />
       </div>
+
+      {/* Ally click-menu (#4737) - a kebab, like the opponent rows'. */}
+      {showMenu && (
+        <AllyMenu participant={participant} encounterId={encounterId} characterId={characterId} />
+      )}
     </div>
   );
 }
@@ -572,6 +657,10 @@ export function CombatantsList({
                 <ParticipantRow
                   key={p.id}
                   participant={p}
+                  encounterId={encounter.id}
+                  characterId={characterId}
+                  isViewer={p.id === viewerParticipantId}
+                  canDeclareManeuvers={canDeclareManeuvers}
                   lockedToName={lockedParticipantNames.get(p.id)}
                   guardedByNames={guardedByNames.get(p.id)}
                 />

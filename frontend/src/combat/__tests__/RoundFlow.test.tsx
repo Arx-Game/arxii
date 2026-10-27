@@ -312,6 +312,44 @@ describe('SurgeBeats', () => {
     );
   });
 
+  it('shows the roll line under a surge beat for the owner', () => {
+    const encounter = makeEncounter([], [], 1, {
+      surge_beats: [
+        {
+          id: 2,
+          narration: "Kira's temper breaks loose.",
+          trigger_kind: 'taunt',
+          amount: 5,
+          participant: 1,
+          outcome: 'Partial',
+          potency: 14,
+          control_change: 0,
+          condition: null,
+          roll: 'Composure check vs taunt potency 14. Partial. Intensity +5, control 0.',
+        },
+      ],
+    });
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('surge-beat-roll')).toHaveTextContent(
+      'Composure check vs taunt potency 14. Partial. Intensity +5, control 0.'
+    );
+  });
+
+  it('does not show a roll line for beats without roll fields', () => {
+    const encounter = makeEncounter([], [], 1, {
+      surge_beats: [{ id: 3, narration: "Kira's power surges with sudden, dramatic force." }],
+    });
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('surge-beat-line')).toBeInTheDocument();
+    expect(screen.queryByTestId('surge-beat-roll')).not.toBeInTheDocument();
+  });
+
   it('renders nothing when there are no surge beats this round', () => {
     const encounter = makeEncounter([], [], 1, {
       escalation_curve_name: 'Standard Dramatic Escalation',

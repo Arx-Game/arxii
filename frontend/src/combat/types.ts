@@ -64,19 +64,10 @@ export type PendingAttack = components['schemas']['PendingAttack'];
 // For Phase 7 we surface them as opaque blobs; a typed shape is a follow-up.
 export type RoundAction = Record<string, unknown>;
 
-// surge_beats is typed as {[key: string]: unknown}[] in the schema — the
-// backend serializes owner-scoped keys (trigger_kind/amount/participant)
-// conditionally, so only `narration` is guaranteed present.
-export type SurgeBeat = Record<string, unknown>;
-
-export interface SurgeBeatTyped extends SurgeBeat {
-  /** DramaticSurgeRecord pk — the stable list key (#2423). */
-  id: number;
-  narration: string;
-  trigger_kind?: string;
-  amount?: number;
-  participant?: number;
-}
+// surge_beats is schema-typed (SurgeBeatSerializer, #4737). Every viewer gets `id` and
+// `narration`; the rest, roll fields included, reach only the surged participant's owner,
+// GMs and staff, and the roll fields only for a rolled surge - so all of them are optional.
+export type SurgeBeatTyped = components['schemas']['SurgeBeat'];
 
 /**
  * Typed overlay for RoundAction entries from RoundActionSerializer.

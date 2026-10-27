@@ -108,20 +108,28 @@ function EscalationStrip({ encounter }: { encounter: EncounterDetail }) {
 // ---------------------------------------------------------------------------
 
 function SurgeBeats({ encounter }: { encounter: EncounterDetail }) {
-  const beats = (encounter.surge_beats ?? []) as SurgeBeatTyped[];
+  const beats: SurgeBeatTyped[] = encounter.surge_beats ?? [];
   if (beats.length === 0) {
     return null;
   }
   return (
     <div className="space-y-1" data-testid="surge-beats">
       {beats.map((beat) => (
-        <p
+        <div
           key={beat.id}
-          className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs font-semibold italic text-rose-300"
+          className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1"
           data-testid="surge-beat-line"
         >
-          {beat.narration}
-        </p>
+          <p className="text-xs font-semibold italic text-rose-300">{beat.narration}</p>
+          {beat.roll && (
+            <p
+              className="mt-0.5 font-mono text-[10px] text-muted-foreground"
+              data-testid="surge-beat-roll"
+            >
+              {beat.roll}
+            </p>
+          )}
+        </div>
       ))}
     </div>
   );
