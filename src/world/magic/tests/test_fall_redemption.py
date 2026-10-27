@@ -453,6 +453,30 @@ class TestExtendedAtonement(TestCase):
         # Resonance conversion did fire
         self.assertIsNotNone(result.resonance_conversion)
 
+    def test_atonement_moves_the_whole_lifetime_share_of_a_partial_penance(self):
+        """4 of a 30 Primal balance with 30 lifetime moves 4 lifetime, not 3 (exact ratio)."""
+        sheet = CharacterSheetFactory()
+        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
+        grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
+        grant_resonance(sheet, primal_res, 30, source=GainSource.STAFF_GRANT)
+        _set_aura(sheet, celestial=77, primal=23, abyssal=0)
+
+        result = perform_atonement_rite(
+            performer_sheet=sheet,
+            target_sheet=sheet,
+            resonance=primal_res,
+            penance_amount=4,
+        )
+
+        (conv,) = result.resonance_conversion.converted_resonances
+        self.assertEqual((conv.balance_before, conv.balance_after), (30, 26))
+        self.assertEqual((conv.lifetime_earned_before, conv.lifetime_earned_after), (30, 26))
+        # 4 x 0.5 penance rate = 2 balance; the lifetime share is 4 x 30 // 30 = 4.
+        self.assertEqual((conv.granted_balance, conv.granted_lifetime), (2, 4))
+        celestial = CharacterResonance.objects.get(character_sheet=sheet, resonance=cele_res)
+        self.assertEqual(celestial.lifetime_earned, 104)
+
     def test_atonement_both_effects_fire(self):
         """Celestial with corruption AND drift gets both effects."""
         sheet = CharacterSheetFactory()

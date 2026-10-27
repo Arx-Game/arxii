@@ -527,3 +527,19 @@ _Avoid_: magic check type, roll category, skill bundle.
 **Technique skill** (#4450, ADR-4450):
 The one skill a technique cast adds to its roll, on top of the caster's Anima Check. Resolved in order: the technique's own `skill` override; otherwise, for a Major Gift technique, the `technique_skill` of the Path it is cast from (the caster's current Path when that is one of the technique's own Paths, else the technique's first own Path in Path order, else the caster's current Path for a technique on no Path's list, #4555, ADR-4555-A); otherwise, for a Minor Gift technique, the Gift's `technique_skill` (set on Minor Gifts only). A technique's own Paths are those whose Path Gift Grant lists it (`technique_paths`), so a technique learned on one Path and cast after a Crossing still adds its own Path's skill, and a Path never inherits its parent's. It enters the roll at weight 1.00 as an `ExtraTraitTerm`. With none set, or an inactive skill, the cast adds nothing. Resolved by `technique_skill_term` / `resolve_cast_check`.
 _Avoid_: casting skill, path skill (it is the Path's setting, but the Gift and the technique can set it too), spell skill.
+
+**Drift** (#4672, slice 4 #4733):
+Resonance a character holds that conflicts with their aura: a `CharacterResonance` with a positive balance whose resonance's affinity is not the affinity their aura is mostly made of (`drift_holdings`). It is held balance, not a change in the aura. Slice 4 gives it no threshold; any such balance with an authored conversion pair is drift the character may correct.
+_Avoid_: aura drift (that is `AuraDrift`, the older, different sense: the shift in the aura's stored percentages when `recompute_aura` runs), corruption, taint, off-affinity resonance.
+
+**Drift correction** (#4733):
+Converting drift into the character's own resonance through deeds: a deed in a live scene opens a **Conversion offer**, and the character answers it with the **Conversion rite**. It is separate from **Fall** and **Redemption**, which change a character's affinity; correcting drift moves held balance toward a resonance the character is growing and leaves the affinity alone, although the aura follows because `lifetime_earned` moves with the balance. It uses the same authored pair rates as Fall and Redemption (`AffinityInteraction.conversion_multiplier`).
+_Avoid_: atonement (the Rite of Atonement is a different rite), purge, cleansing, aura correction.
+
+**Conversion offer** (#4733):
+A `DriftConversionOffer`: a character's open chance to correct drift, one per character and scene, opened when a deed (a `GainSource` in `DEED_GAIN_SOURCES`) grows a resonance of their own affinity while they hold drift they could convert toward it and stand in a live scene. It holds one `DriftConversionCap` per target resonance, the most that may be converted toward it. It ends when the character declines, no cap is left, or the scene finishes. A deed settled away from a scene opens none.
+_Avoid_: pending offer (the `AbstractPendingOffer` family is a different shape), conversion window, correction quest.
+
+**Conversion rite** (#4733):
+The ritual a character performs under a conversion offer, designated by `DriftCorrectionConfig.rite`: they offer up an item that counts (tied to the target resonance, carrying a motif facet of it, or meaning enough to them), a configured check is rolled with their worn focus added, and the check's outcome tier sets what share of the requested amount converts (`DriftCorrectionOutcomeShare`). A failed roll spends the offering and moves nothing. Performed by `perform_drift_correction_rite`.
+_Avoid_: correction check, drift roll, purification.

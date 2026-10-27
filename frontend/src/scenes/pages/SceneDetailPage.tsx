@@ -21,6 +21,7 @@ import { SceneLinesAndVeilsCard } from '@/boundaries/components/SceneLinesAndVei
 import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
 import { EntryFlourishOfferGate } from '@/magic/components/EntryFlourishOfferGate';
+import { DriftConversionOfferGate } from '@/magic/components/DriftConversionOfferGate';
 import { WitnessReactionOfferGate } from '@/justice/components/WitnessReactionOfferGate';
 import { CommandInput } from '@/game/components/CommandInput';
 import type { ComposerMode } from '@/game/components/CommandInput';
@@ -402,6 +403,7 @@ export function SceneDetailPage() {
             {isActive && <SineatingInbox />}
             {isActive && <SoulTetherRescuePrompt />}
             {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
+            {isActive && <DriftConversionOfferGate sceneId={scene ? Number(scene.id) : null} />}
             {isActive && <WitnessReactionOfferGate personaId={personaId} />}
             {/* #3557 combat layout. Everything above this line either needs an
             answer (consent, sineating, soul-tether, flourish, witness) or is the scene's

@@ -1324,6 +1324,46 @@ def _probe_soulfray_death_risk() -> ProbeResult:
     )
 
 
+def _probe_drift_correction_config() -> ProbeResult:
+    """The drift correction rite has a rite, a check type, and a share for every tier (#4733).
+
+    Consumer: `world/magic/services/drift_correction.py perform_drift_correction_rite()`.
+    It refuses with "not set up yet" unless `rite_is_ready()`: `DriftCorrectionConfig.rite`
+    and `.check_type` set and a `DriftCorrectionOutcomeShare` row for every `CheckOutcome`
+    (`outcome_tiers_without_a_share()` empty), since the roll can land on any of them. The
+    probe reads the same conditions, through the same tier query.
+    """
+    from world.magic.models import DriftCorrectionConfig  # noqa: PLC0415
+    from world.magic.services.drift_correction import (  # noqa: PLC0415
+        outcome_tiers_without_a_share,
+    )
+
+    config = DriftCorrectionConfig.objects.cached_singleton()
+    # (the label the panel lists as missing, the bare noun the detail sentence uses)
+    gaps: list[tuple[str, str]] = []
+    if config is None or config.rite_id is None:
+        gaps.append(("the rite", "rite"))
+    if config is None or config.check_type_id is None:
+        gaps.append(("the check type", "check type"))
+    if gaps:
+        nouns = " and no ".join(noun for _label, noun in gaps)
+        return ProbeResult(
+            present=False,
+            missing=tuple(label for label, _noun in gaps),
+            detail=f"The drift correction configuration has no {nouns}.",
+        )
+    missing = tuple(
+        outcome_tiers_without_a_share().order_by("success_level").values_list("name", flat=True)
+    )
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail=f"No drift correction share for outcome(s): {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_standoff_cause_glosses() -> ProbeResult:
     """Every cause other than None has an authored gloss (#4354)."""
     from world.combat.constants import CauseKind  # noqa: PLC0415
@@ -2686,6 +2726,23 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "to defer."
             ),
             probe=CustomProbe(fn=_probe_soulfray_death_risk),
+        ),
+        ContentDependency(
+            key="drift-correction-config",
+            label="Drift correction rite, check and outcome shares",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/drift_correction.py rite_is_ready(), "
+                "perform_drift_correction_rite()"
+            ),
+            consequence=(
+                "A deed still opens a conversion offer and tells the player, but telnet "
+                "drift, the web dialog and the rite say 'not set up yet' while the rite, "
+                "the check type or any outcome tier's share is missing; nothing is consumed "
+                "or converted until staff author them."
+            ),
+            probe=CustomProbe(fn=_probe_drift_correction_config),
+            admin_model="DriftCorrectionConfig",
         ),
         ContentDependency(
             key="stakes-escalation-curves",

@@ -140,6 +140,14 @@ vi.mock('@/combat/api', async (importOriginal) => ({
   postDispatchAction: (...args: unknown[]) => answerDispatch(...args),
 }));
 
+// #4733: the drift conversion inbox; empty unless a test sets an offer.
+const driftOffers = vi.hoisted(() => ({ current: [] as unknown[] }));
+const getDriftOffers = vi.hoisted(() => vi.fn());
+vi.mock('@/magic/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/magic/api')>()),
+  getPendingDriftConversionOffers: (...args: unknown[]) => getDriftOffers(...args),
+}));
+
 // #4418: the Guide's offers; empty unless a test sets one.
 const npcOffers = vi.hoisted(() => ({ current: [] as unknown[] }));
 vi.mock('@/gm/npcs/queries', async (importOriginal) => ({
@@ -445,6 +453,16 @@ function blockOf(element: HTMLElement): HTMLElement {
 
 describe('GamePage', () => {
   beforeEach(() => {
+    driftOffers.current = [];
+    getDriftOffers.mockReset();
+    getDriftOffers.mockImplementation(() =>
+      Promise.resolve({
+        count: driftOffers.current.length,
+        next: null,
+        previous: null,
+        results: driftOffers.current,
+      })
+    );
     dispatch(setAccount(null));
     // #2165: the save effect now writes real localStorage during render, so
     // clear between tests to keep them isolated from each other.
@@ -1565,6 +1583,44 @@ describe('GamePage', () => {
       expect(screen.getByTestId('place-bar')).toBeInTheDocument();
       expect(screen.getByTestId('action-panel')).toBeInTheDocument();
       expect(screen.getByTestId('pending-action-attachments')).toBeInTheDocument();
+    });
+
+    it('shows the drift conversion strip for the session scene, and only with a scene', async () => {
+      driftOffers.current = [{ id: 12, scene_id: 100, caps: [] }];
+      dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('drift-conversion-gate-strip')).toBeInTheDocument();
+    });
+
+    it('hides the drift conversion strip when the offer is for another scene', async () => {
+      driftOffers.current = [{ id: 12, scene_id: 999, caps: [] }];
+      dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('consent-prompt')).toBeInTheDocument();
+      // The inbox must have been asked AND answered before absence means anything.
+      await waitFor(() => {
+        expect(getDriftOffers).toHaveBeenCalled();
+      });
+      await act(async () => {
+        await getDriftOffers.mock.results[0].value;
+      });
+      expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
+    });
+
+    it('does not render the drift conversion strip without a scene', () => {
+      driftOffers.current = [{ id: 12, scene_id: 100, caps: [] }];
+      dispatch(setAccount(mockAccount));
+      dispatch(startSession(ACTIVE_NAME));
+
+      renderWithProviders(<GamePage />);
+
+      expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
     });
 
     it('does not render the scene toolset when there is no active scene', () => {

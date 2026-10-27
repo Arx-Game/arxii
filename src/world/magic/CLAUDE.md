@@ -843,8 +843,12 @@ admin all converge on the same service layer.
   creates `PendingRitualEffect` (finisher command completes the ritual);
   `SCENE_ACTION` → fires a check via `RitualCheckConfig`.
   `site_property` optionally gates where it can be performed.
-- `RitualComponentRequirement` - FK to `Ritual` + FK to `ItemTemplate` with
-  `quantity` and optional `min_quality_tier`. Consumed during ritual dispatch.
+- `RitualComponentRequirement` - FK to `Ritual`, `quantity`, optional `min_quality_tier`,
+  and exactly one of three modes (DB `CheckConstraint`): `item_template` (template mode),
+  `min_touchstone_tier` (touchstone mode, #707), or `matches_target_resonance` (target-resonance
+  mode, #4733; optional `min_item_meaning` opens the keepsake route, allowed only in this mode).
+  Resolved by `resolve_ritual_components` (no writes) and consumed by
+  `resolve_and_consume_ritual_components` during ritual dispatch.
 - `PendingRitualEffect` - In-progress CEREMONY record. Unique per
   `(character, ritual)`. Created by `PerformRitualAction` on CEREMONY invocation;
   consumed (deleted) by the finisher action (`WeaveThreadAction`, `ImbueThreadAction`)
@@ -1999,6 +2003,44 @@ Repeatable (not a Fall); each conversion loses half the value.
 **New `GainSource` values** (all `NON_ACCELERATED_GAIN_SOURCES`):
 `COMPROMISE`, `PENANCE`, `FALL_CONVERSION`. No typed source FK
 (MISSION_REPORT shape). Three new `ResonanceGrant` CheckConstraints.
+`DRIFT_CORRECTION` (#4733) joins them with `res_grant_drift_correction_shape`.
+
+**Drift correction (#4733, slice 4 of #4672).** "Drift" here is `CharacterResonance` balance
+held off the aura's dominant affinity (`drift_holdings`); `AuraDrift` / `recompute_aura` is the
+older sense (shift in aura percentages). Do not mix the two in names.
+- Models (`models/drift.py`): `DriftCorrectionConfig` (singleton; `rite`, `check_type` null until
+  staff author them; `check_difficulty`; `cap_percent`), `DriftCorrectionOutcomeShare` (an
+  `OutcomeTierAward`; `converted_share` is the fraction of the requested amount that converts,
+  not of the cap; `clean` keeps it monotonic by success level),
+  `DriftConversionOffer` (one per sheet and scene), `DriftConversionCap` (per offer and target
+  resonance; `grants` names the deed grants it was measured from; `cap` is a snapshot).
+  `RitualComponentRequirement` has a third mode, `matches_target_resonance` (optional
+  `min_item_meaning`, minimum 1), exclusive with `item_template` and `min_touchstone_tier`.
+- Deeds: every `GainSource` is in exactly one of `DEED_GAIN_SOURCES` / `NON_DEED_GAIN_SOURCES`
+  (test-enforced); a new member must be placed. `grant_resonance` ends with
+  `open_or_extend_conversion_offer(grant)` (`services/drift.py`): deed, own-affinity target,
+  convertible drift, and the grantee standing in a live scene (room scene at grant time, so a
+  deed settled away from a scene opens nothing). `Scene.finish_scene` calls
+  `lapse_conversion_offers`.
+- The rite (`services/drift_correction.py`): `perform_drift_correction_rite` refuses before it
+  consumes anything unless the config has a rite, a check type and a share for every
+  `CheckOutcome`; converts `floor(amount x share)` through `convert_resonance_amount` as
+  `DRIFT_CORRECTION`; failure consumes the offering and leaves the cap. The check type is NOT a
+  `RitualCheckConfig` sidecar. Never match the rite, check or affinities by name.
+  `rite_is_ready(config=None)` (rite, check type and a tier's share all present; one query,
+  through `outcome_tiers_without_a_share()`, which the Required content probe reads too) is the
+  one readiness test; while it is false the rite, telnet `drift`/`drift convert` and the
+  pending serializer (`rite_ready`, `rite_not_ready_message`, from the view's
+  `context["rite_ready"]`, once per request) say `RITE_NOT_READY_MESSAGE`, the exception's own
+  `user_message`.
+- Components: `qualifying_components` (`ComponentMode` MATERIAL, FACET, KEEPSAKE, in that order).
+  `focus_bonus` adds to the check, not the output. `max_yield_per_earned_point` is the anti-farm
+  estimator (per point). A cap grows by `amount x cap_percent // 100` per deed; only the deed
+  that creates the cap row is floored at 1; `cap_percent` 0 opens no offer.
+- Surfaces: actions in `actions/definitions/drift_correction.py`, telnet `drift`
+  (`commands/drift_correction.py`), REST `/api/magic/drift-correction/`, React gate on the scene
+  and game pages (`frontend/src/magic/CLAUDE.md`). Required content row `drift-correction-config`.
+  Details: `docs/systems/magic.md` "Drift correction".
 
 **Seed content:** `wire_fall_redemption_content()` in `factories.py`,
 called by `seed_magic_dev()`. Seeds the "Ritual of Falling" Ritual row
