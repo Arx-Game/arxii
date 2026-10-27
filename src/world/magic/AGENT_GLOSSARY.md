@@ -9,6 +9,12 @@ A character's soul-state expressed as a percentage share per Affinity, one `Char
 **Acting aura**:
 The aura a character acts with right now: 100% of the worn alternate self's resonance affinity when it has one, otherwise her true aura. Casts (alignment, and the affinity the cast works in), places of power, defilement and covenant attacker affinity read it; the Fall, the Soul Tether gate and the sheet display keep the true aura. Looked up with `acting_aura(sheet)`. _Avoid_: effective aura, mask aura.
 
+**Drift**:
+Resonance a character carries outside the affinity she acts with: the sum of her balances in other affinities, each times `AffinityInteraction.conflict_weight`, measured by `drift_for(sheet)` against `acting_aura(sheet).dominant_affinity`. Drift strictly past the `DriftConfig` threshold makes a cast call for a focus check. _Avoid_: corruption, taint.
+
+**Resonance Conflict**:
+The authored condition a failed focus check (`check_resonance_focus`) puts on a character for the template's duration (authored as the scene), designated by `DriftConfig.conflict_condition`; its own check modifier is the penalty. Her category is `self_shakeable`, never `alters_behavior`. She shakes it off with `breakfree`; others stir it up through authored social actions.
+
 **Aura share**:
 One affinity's percentage of a character's aura: a `CharacterAuraShare` row keyed on the aura and the `Affinity` row. Code reads shares by Affinity row, never by a name or a per-affinity column.
 

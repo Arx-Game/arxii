@@ -192,6 +192,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     #     isolated unit tests that do not wire a CombatParticipant degrade
     #     gracefully (situation_ctx=None, exactly as a non-combat cast).
     from world.combat.models import CombatParticipant  # noqa: PLC0415
+    from world.combat.pull_helpers import round_pull_resonance  # noqa: PLC0415
 
     participant = CombatParticipant.objects.filter(
         encounter_id=clash.encounter_id,
@@ -220,6 +221,8 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     #     through the shared collect_check_modifiers seam so the clash check honors
     #     condition + rollmod sources (the #851 individualization lever).
     #     The summed .extra_modifiers_total reaches perform_check as extra_modifiers.
+    #     Gathered inside resolve_fn, after use_technique's focus check against carried
+    #     drift (#4732), so a conflict that check applies reaches this same roll.
     extra_contributions: list[ModifierContribution] = []
     if check_modifier_extra:
         extra_contributions.append(
@@ -234,15 +237,6 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     from world.relationships.services import bond_combat_bonus  # noqa: PLC0415
 
     extra_contributions.extend(bond_combat_bonus(character_sheet, clash.encounter))
-
-    breakdown = collect_check_modifiers(
-        character_sheet,
-        check_type,
-        scene=clash.encounter.scene,
-        extra_contributions=extra_contributions,
-        extra_traits=cast_check.extra_traits,
-    )
-    check_extra_modifiers = breakdown.extra_modifiers_total
 
     # 3. Build a resolve closure that performs only the check — no damage, no
     #    conditions.  use_technique calls resolve_fn() and stores its return
@@ -278,15 +272,22 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         # extra_modifiers carries FLAT_BONUS pull effects from use_technique; combat
         # pulls already apply their flat bonus via the CombatAction offense path and
         # cast_pull is never set in clash, so extra_modifiers will always be 0 here.
+        breakdown = collect_check_modifiers(
+            character_sheet,
+            check_type,
+            scene=clash.encounter.scene,
+            extra_contributions=extra_contributions,
+            extra_traits=cast_check.extra_traits,
+        )
         result = perform_check(
             objectdb,
             check_type,
             target_difficulty=0,
-            extra_modifiers=check_extra_modifiers + extra_modifiers,
+            extra_modifiers=breakdown.extra_modifiers_total + extra_modifiers,
             situation_ctx=check_situation_ctx,
             extra_traits=cast_check.extra_traits,
         )
-        # Spent here, not above: use_technique may stop before calling this closure.
+        # Spent here: use_technique may stop before calling this closure.
         spend_contributing_conditions(breakdown)
         return result
 
@@ -317,6 +318,8 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         # threaded here. Reuses ``round_ctx`` (built above for the check-side
         # CHECK_BONUS threading, #2536 Task 5) rather than re-resolving it.
         situation_ctx=round_ctx,
+        # #4732: the contribution's committed pull counts toward its focus roll.
+        pulled_resonance=round_pull_resonance(participant) if participant is not None else None,
     )
 
     # 5. Guard against unconfirmed result (confirm_soulfray_risk=True should

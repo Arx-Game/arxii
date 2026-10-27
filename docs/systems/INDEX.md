@@ -103,6 +103,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   (`world/forms/services`): a self chosen in the Audere reveal is assumed on the choice's
   commit and reverted from `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
   work in the worn self's affinity. See magic.md.
+- **Drift and Resonance Conflict (#4732):** `DriftConfig` (singleton, `get_drift_config()`),
+  `AffinityInteraction.conflict_weight`, `drift_for(sheet)`, and `check_resonance_focus` (once per
+  cast, inside `use_technique`'s `_complete_technique_cast`, so every cast path rolls it; the combat
+  round and clash name their committed pull through `use_technique(pulled_resonance=...)`, read by
+  `world/combat/pull_helpers.py` `round_pull_resonance`); the conflict condition is authored and
+  `ConditionCategory.self_shakeable` lets `breakfree`/`rally` reach it. See magic.md.
 - **Audere control step and Soulfray anima-0 stage (#4740):**
   `AudereThreshold.control_per_stage_earlier` + `required_stage_order(threshold,
   runtime_control)` (`world/magic/audere.py`) let high control open the Audere offer at an
@@ -1205,6 +1211,8 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 
 - **Models:** `ConditionCategory` (`alters_behavior` bool — marks behavior-altering categories
   such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent;
+  `self_shakeable` bool: the character may shake the category's conditions off with `breakfree`
+  without them altering her behaviour (Resonance Conflict, #4732; `breakable_condition_filter()`),
   `grants_intangibility` bool — marks incorporeal categories; `is_intangible` queries this for held ground only, #4742),
   `ConditionTemplate` (`upkeep_anima_per_round` int — anima drained per round for reactive
   conditions; `reactive_anima_cost` int — anima paid per reactive-defense fire; ADR-0060),

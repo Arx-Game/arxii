@@ -841,6 +841,7 @@ class MagicActivity(models.TextChoices):
     CEREMONY = "ceremony", "Ceremony"
     COMPANION_BINDING = "companion_binding", "Companion binding"
     DREAM_PERIL = "dream_peril", "Dream peril"
+    KEEPING_FOCUS = "keeping_focus", "Keeping focus against carried drift"
 
 
 # Names of the three canonical Affinity rows. Looked up by the

@@ -129,6 +129,22 @@ class JourneyCase(TestCase):
         """The account playing ``character`` (set by ``make_player``)."""
         return character.db_account
 
+    def seed_social_engagement(self) -> None:
+        """Seed the kudos category an accepted scene action awards, and reset its memo.
+
+        The Postgres tier seeds ``social_engagement`` (``world/progression/seeds.py``);
+        the SQLite fast tier does not. ``_get_social_engagement_category`` memoizes the
+        row at module level, so the memo is cleared now and again after the test.
+        """
+        from world.progression.seeds import (  # noqa: PLC0415
+            seed_social_engagement_kudos_category,
+        )
+        from world.scenes import action_services  # noqa: PLC0415
+
+        seed_social_engagement_kudos_category()
+        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None  # noqa: SLF001
+        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+
     # -- what the game told whom ----------------------------------------------
 
     def watch(self, *objects: ObjectDB) -> None:
