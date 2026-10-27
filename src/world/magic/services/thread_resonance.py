@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import RitualExecutionKind, TargetKind
+from world.magic.constants import RitualExecutionKind
 from world.magic.exceptions import ConversionMappingError, ThreadResonanceChangeError
 from world.magic.models import Resonance, Ritual, Thread
 from world.magic.models.fall_redemption import ConversionType, ResonanceConversion
@@ -33,18 +33,6 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
 THREAD_RESONANCE_SERVICE_PATH = "world.magic.services.thread_resonance.change_thread_resonance"
-
-# The target kinds whose Thread UniqueConstraint (owner, resonance, anchor) counts retired rows
-# too (uniq_thread_trait / _technique / _rel_track / _rel_capstone in models/threads.py). Every
-# other kind's constraint is either conditioned on retired_at IS NULL or ignores resonance.
-RETIREMENT_BLIND_TARGET_KINDS = frozenset(
-    {
-        TargetKind.TRAIT,
-        TargetKind.TECHNIQUE,
-        TargetKind.RELATIONSHIP_TRACK,
-        TargetKind.RELATIONSHIP_CAPSTONE,
-    }
-)
 
 NO_THREAD_MESSAGE = "You have no active thread with that id."
 NAME_A_THREAD_MESSAGE = "Name the thread to move: thread=<id>."
@@ -120,6 +108,36 @@ def thread_resonance_options(thread: Thread) -> list[ThreadResonanceOption]:
     return options
 
 
+def _thread_label(thread: Thread) -> str:
+    """The thread's own name, else "Your <anchor> thread"."""
+    from world.magic.crossing.handlers import _anchor_label_for  # noqa: PLC0415
+
+    return thread.name or f"Your {_anchor_label_for(thread)} thread"
+
+
+def change_message(  # noqa: PLR0913 - every number the line names
+    label: str,
+    *,
+    from_name: str,
+    to_name: str,
+    points_before: int,
+    points_moved: int,
+    points_after: int,
+    merged: bool,
+) -> str:
+    """The line a performer reads after a retune, telnet and web alike."""
+    if merged:
+        return (
+            f"{label} left {from_name} and merged into your {to_name} thread on the same "
+            f"anchor: its {points_before} points brought {points_moved}, and that thread "
+            f"now holds {points_after}."
+        )
+    return (
+        f"{label} left {from_name} and now channels {to_name} "
+        f"({points_before} points, now {points_after})."
+    )
+
+
 def _option_label(option: ThreadResonanceOption) -> str:
     kind = (
         "same affinity"
@@ -133,27 +151,6 @@ def _options_sentence(options: list[ThreadResonanceOption]) -> str:
     if not options:
         return "This thread has no resonance it can move to."
     return "It can move to: " + ", ".join(_option_label(option) for option in options) + "."
-
-
-def _retired_anchor_blocks(thread: Thread, target: Resonance) -> bool:
-    """Whether a retired thread on the same anchor already holds ``target``'s place.
-
-    For the target kinds in ``RETIREMENT_BLIND_TARGET_KINDS`` the database keeps one row per
-    (owner, resonance, anchor) whether retired or not, so moving onto such a place would be
-    rejected by the database.
-    """
-    if thread.target_kind not in RETIREMENT_BLIND_TARGET_KINDS:
-        return False
-    return Thread.objects.filter(
-        owner_id=thread.owner_id,
-        resonance=target,
-        retired_at__isnull=False,
-        target_kind=thread.target_kind,
-        target_trait_id=thread.target_trait_id,
-        target_technique_id=thread.target_technique_id,
-        target_relationship_id=thread.target_relationship_id,
-        target_capstone_id=thread.target_capstone_id,
-    ).exists()
 
 
 def check_thread_resonance_change(
@@ -170,7 +167,7 @@ def check_thread_resonance_change(
     Raises:
         ThreadResonanceChangeError: No thread named, a thread that is not the performer's or
             is retired, no target named (the message lists the options), a target that is
-            not among the options, or a retired thread on the same anchor in the target.
+            not among the options.
     """
     if thread is None:
         raise ThreadResonanceChangeError(NAME_A_THREAD_MESSAGE)
@@ -183,12 +180,6 @@ def check_thread_resonance_change(
     chosen = next((o for o in options if o.resonance.pk == target_resonance.pk), None)
     if chosen is None:
         msg = f"This thread cannot move to {target_resonance.name}. {_options_sentence(options)}"
-        raise ThreadResonanceChangeError(msg)
-    if _retired_anchor_blocks(thread, target_resonance):
-        msg = (
-            f"A retired thread on the same anchor already holds {target_resonance.name}, "
-            "so this thread cannot move there."
-        )
         raise ThreadResonanceChangeError(msg)
     return chosen
 
@@ -222,17 +213,28 @@ def change_thread_resonance(
     chosen = check_thread_resonance_change(
         character_sheet, thread=thread, target_resonance=target_resonance
     )
-    from_resonance_id = thread.resonance_id
+    from_resonance = thread.resonance
     points_before = thread.developed_points
+    label = _thread_label(thread)
     survivor = _reanchor_thread(thread, chosen.resonance.pk, chosen.projected_points)
     character_sheet.character.threads.invalidate()
+    merged = survivor.pk != thread.pk
     return ThreadResonanceChangeResult(
         thread_id=survivor.pk,
-        from_resonance_id=from_resonance_id,
+        from_resonance_id=from_resonance.pk,
         to_resonance_id=chosen.resonance.pk,
         points_before=points_before,
         points_moved=chosen.projected_points,
         points_after=survivor.developed_points,
-        merged=survivor.pk != thread.pk,
+        merged=merged,
         conversion_type=chosen.conversion_type,
+        message=change_message(
+            label,
+            from_name=from_resonance.name,
+            to_name=chosen.resonance.name,
+            points_before=points_before,
+            points_moved=chosen.projected_points,
+            points_after=survivor.developed_points,
+            merged=merged,
+        ),
     )

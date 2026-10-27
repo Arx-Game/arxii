@@ -81,7 +81,8 @@ class ThreadResonanceChangeResult:
 
     ``thread_id`` is the surviving thread: the moved thread itself, or, when ``merged``,
     the live thread on the same anchor that took its points (the moved one is retired).
-    ``points_after`` is the survivor's ``developed_points``.
+    ``points_after`` is the survivor's ``developed_points``. ``message`` is the line the
+    performer reads (``PerformRitualAction`` appends it, so telnet and web say the same).
     """
 
     thread_id: int
@@ -92,3 +93,4 @@ class ThreadResonanceChangeResult:
     points_after: int
     merged: bool
     conversion_type: str | None
+    message: str

@@ -16,6 +16,7 @@ Celestial a Redemption at 0.50. Expected numbers are worked out by hand from tho
 
 from __future__ import annotations
 
+from django.utils import timezone
 from evennia.utils.ansi import strip_ansi
 
 from integration_tests.harness import JourneyCase
@@ -23,16 +24,19 @@ from web.admin.tuning.required_content import _probe_thread_resonance_ritual
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.items.services.materialize import materialize_item_game_object
+from world.magic.constants import GainSource, RitualExecutionKind
 from world.magic.factories import (
     CharacterAuraFactory,
     ResonanceFactory,
     ResonanceTierFactory,
+    RitualFactory,
     ThreadFactory,
     ThreadRetuneRiteFactory,
     ensure_conversion_pairs,
     set_aura_split,
 )
 from world.magic.models import ResonanceConversion, Thread
+from world.magic.services.resonance import grant_resonance
 
 PERFORM_URL = "/api/magic/rituals/perform/"
 RITE = "Rite of Retuning"
@@ -104,7 +108,12 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
     def test_a_retune_within_her_affinity_keeps_every_point(self) -> None:
         candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
         told = self.retune(self.thread, self.lumen)
-        self.assertIn(f"You perform {RITE}.", told)
+        trait = self.thread.target_trait.name
+        self.assertIn(
+            f"You perform {RITE}. Your {trait} thread left Bene and now channels Lumen "
+            "(40 points, now 40).",
+            told,
+        )
         row = stored(self.thread)
         self.assertEqual(row["resonance_id"], self.lumen.pk)
         self.assertEqual(row["developed_points"], 40)
@@ -113,7 +122,12 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
 
     def test_a_fall_converts_her_points_at_the_pair_rate(self) -> None:
         fang = self.carry(self.ysmay, self.praedari, "Praedari Fang")
-        self.retune(self.thread, self.praedari)
+        self.thread.name = "Mercy of the Healer"
+        self.thread.save(update_fields=["name"])
+        told = self.retune(self.thread, self.praedari)
+        self.assertIn(
+            "Mercy of the Healer left Bene and now channels Praedari (40 points, now 48).", told
+        )
         row = stored(self.thread)
         self.assertEqual(row["resonance_id"], self.praedari.pk)
         self.assertEqual(row["developed_points"], 48)
@@ -135,15 +149,20 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
             developed_points=10,
         )
         self.carry(self.ysmay, self.lumen, "Lumen Candle")
-        self.retune(self.thread, self.lumen)
+        told = self.retune(self.thread, self.lumen)
+        self.assertIn(
+            f"Your {self.thread.target_trait.name} thread left Bene and merged into your Lumen "
+            "thread on the same anchor: its 40 points brought 40, and that thread now holds 50.",
+            told,
+        )
         self.assertEqual(stored(held)["developed_points"], 50)
         source = stored(self.thread)
         self.assertIsNotNone(source["retired_at"])
         self.assertEqual(source["resonance_id"], self.bene.pk)
 
-    def test_moving_back_onto_the_place_a_retired_thread_holds_is_refused(self) -> None:
-        # The merge above leaves the old Bene thread retired on the same trait; the database
-        # keeps that (owner, Bene, trait) place, so the survivor cannot move back to Bene.
+    def test_a_merged_thread_can_move_back_onto_the_place_the_retired_one_left(self) -> None:
+        # The merge leaves the old Bene thread retired on the same trait. A retired thread
+        # holds no place, so the survivor can move to Bene.
         held = ThreadFactory(
             owner=self.sheet,
             resonance=self.lumen,
@@ -154,9 +173,11 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
         self.retune(self.thread, self.lumen)
         lamp = self.carry(self.ysmay, self.bene, "Bene Lamp")
         told = self.retune(held, self.bene)
-        self.assertIn("A retired thread on the same anchor already holds Bene", told)
-        self.assertFalse(consumed(lamp))
-        self.assertEqual(stored(held)["resonance_id"], self.lumen.pk)
+        self.assertIn(f"You perform {RITE}.", told)
+        self.assertEqual(stored(held)["resonance_id"], self.bene.pk)
+        self.assertEqual(stored(held)["developed_points"], 50)
+        self.assertIsNone(stored(held)["retired_at"])
+        self.assertTrue(consumed(lamp))
 
     def test_naming_no_resonance_lists_where_the_thread_can_go(self) -> None:
         candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
@@ -230,6 +251,8 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
         self.assertEqual(result["points_after"], 60)
         self.assertEqual(result["conversion_type"], "FALL")
         self.assertFalse(result["merged"])
+        self.assertEqual(response.data["message"], f"You perform {RITE}. {result['message']}")
+        self.assertIn("left Bene and now channels Ruin (40 points, now 60).", result["message"])
         self.assertEqual(stored(self.thread)["developed_points"], 60)
         self.assertTrue(consumed(fang))
 
@@ -290,3 +313,46 @@ class TheRiteOnTheRequiredContentDashboard(ThreadRetuneCase):
             f"/api/magic/threads/{self.thread.pk}/resonance-options/"
         )
         self.assertIsNone(response.data["ritual_id"])
+
+
+class AFallAfterAMergeReanchorsOntoTheRetiredPlace(JourneyCase):
+    """The full Fall re-anchors every thread; a retired thread in the target holds no place."""
+
+    def test_the_fall_moves_her_thread_where_a_retired_one_sits(self) -> None:
+        celestial, primal, _abyssal = ensure_conversion_pairs()
+        bene = ResonanceFactory(name="Bene", affinity=celestial)
+        praedari = ResonanceFactory(name="Praedari", affinity=primal)
+        ResonanceConversion.objects.create(
+            source_resonance=bene, target_affinity=primal, target_resonance=praedari
+        )
+        RitualFactory(
+            name="Ritual of Falling",
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path="world.magic.services.fall_redemption.perform_fall",
+        )
+        room = self.make_room("The Threshold")
+        ysmay = self.make_player("Ysmay", room=room)
+        sheet = ysmay.sheet_data
+        set_aura_split(
+            CharacterAuraFactory(character=sheet), celestial="50", primal="45", abyssal="5"
+        )
+        grant_resonance(sheet, bene, 100, source=GainSource.STAFF_GRANT)
+        grant_resonance(sheet, praedari, 100, source=GainSource.STAFF_GRANT)
+        live = ThreadFactory(owner=sheet, resonance=bene, developed_points=10)
+        retired = ThreadFactory(
+            owner=sheet,
+            resonance=praedari,
+            target_trait=live.target_trait,
+            developed_points=5,
+            retired_at=timezone.now(),
+        )
+
+        told = self.telnet(ysmay, f"ritual Ritual of Falling target_affinity={primal.pk}")
+
+        self.assertIn("You perform Ritual of Falling.", told)
+        row = stored(live)
+        self.assertEqual(row["resonance_id"], praedari.pk)
+        # Celestial -> Primal is a Fall at 1.20: int(10 x 1.20) = 12.
+        self.assertEqual(row["developed_points"], 12)
+        self.assertIsNone(row["retired_at"])
+        self.assertEqual(stored(retired)["developed_points"], 5)

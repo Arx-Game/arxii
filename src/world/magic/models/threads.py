@@ -667,24 +667,30 @@ class Thread(SharedMemoryModel):
     class Meta:
         constraints = [
             # ---- Per-kind partial UniqueConstraints (one per TargetKind) ---------
+            # Live threads only: a retired thread keeps its row (history) but never holds
+            # the (owner, resonance, anchor) place, so a thread can be re-anchored onto it.
             models.UniqueConstraint(
                 fields=["owner", "resonance", "target_trait"],
-                condition=models.Q(target_kind=TargetKind.TRAIT),
+                condition=models.Q(target_kind=TargetKind.TRAIT, retired_at__isnull=True),
                 name="uniq_thread_trait",
             ),
             models.UniqueConstraint(
                 fields=["owner", "resonance", "target_technique"],
-                condition=models.Q(target_kind=TargetKind.TECHNIQUE),
+                condition=models.Q(target_kind=TargetKind.TECHNIQUE, retired_at__isnull=True),
                 name="uniq_thread_technique",
             ),
             models.UniqueConstraint(
                 fields=["owner", "resonance", "target_relationship"],
-                condition=models.Q(target_kind=TargetKind.RELATIONSHIP_TRACK),
+                condition=models.Q(
+                    target_kind=TargetKind.RELATIONSHIP_TRACK, retired_at__isnull=True
+                ),
                 name="uniq_thread_rel_track",
             ),
             models.UniqueConstraint(
                 fields=["owner", "resonance", "target_capstone"],
-                condition=models.Q(target_kind=TargetKind.RELATIONSHIP_CAPSTONE),
+                condition=models.Q(
+                    target_kind=TargetKind.RELATIONSHIP_CAPSTONE, retired_at__isnull=True
+                ),
                 name="uniq_thread_rel_capstone",
             ),
             # ---- Per-kind CheckConstraints (exactly one target_* set) -----------

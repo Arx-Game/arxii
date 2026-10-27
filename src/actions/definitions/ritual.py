@@ -158,6 +158,9 @@ class PerformRitualAction(Action):
             if ritual.execution_kind == RitualExecutionKind.CEREMONY
             else f"You perform {ritual.name}."
         )
+        result_line = _service_result_line(result)
+        if result_line:
+            msg = f"{msg} {result_line}"
         return ActionResult(
             success=True,
             message=msg,
@@ -280,6 +283,19 @@ class PerformRitualAction(Action):
         return resolve_pool_gate(
             ritual=ritual, performer_sheet=performer_sheet, pool=contribution.amount
         )
+
+
+def _service_result_line(result: Any) -> str:
+    """The line a SERVICE ritual's result adds to "You perform X.", or "" when it adds none.
+
+    Only the thread retune carries one today (slice 6 of #4672); the web response returns the
+    same message, so telnet and web read the same words.
+    """
+    from world.magic.types.threads import ThreadResonanceChangeResult  # noqa: PLC0415
+
+    if isinstance(result, ThreadResonanceChangeResult):
+        return result.message
+    return ""
 
 
 def _anima_ritual_message(ritual: Any, outcome: Any) -> str:

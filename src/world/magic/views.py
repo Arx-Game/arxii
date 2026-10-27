@@ -1554,6 +1554,9 @@ class RitualPerformView(APIView):
             "execution_kind": ritual.execution_kind,
         }
         if ritual.execution_kind == RitualExecutionKind.SERVICE and result is not None:
+            # The action's line, which a service result may extend (the thread retune does),
+            # so the web shows what telnet prints.
+            payload["message"] = action_result.message
             payload["result"] = (
                 asdict(result, dict_factory=_model_ref_dict)
                 if dataclasses.is_dataclass(result)
