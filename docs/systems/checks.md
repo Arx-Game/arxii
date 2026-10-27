@@ -154,7 +154,8 @@ A modifier on a stat target (a `ModifierTarget` whose `target_trait` is a STAT t
 and tapered in the `stat` lane, in internal stat units (stats are stored x10, so 10 is one shown
 point). The lane applies wherever a stat is read: the change is in
 `TraitHandler._get_stat_modifier`, so checks (inside trait points), fatigue capacity, stamina's
-health term, carrying capacity, scandal and the stat sheet all read the same buffed number.
+health term, carrying capacity and scandal all read the same buffed number. The web sheet
+shows the stored, unbuffed stats (`_build_stats` in `world/character_sheets/serializers.py`).
 
 - **Contributions.** The stat read builds the stat target's CHARACTER and EQUIPMENT
   contributions with `modifier_target_contributions(sheet, target, lane=ModifierLane.STAT)`
