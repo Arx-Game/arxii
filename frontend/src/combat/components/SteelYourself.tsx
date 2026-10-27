@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { components } from '@/generated/api';
 import { isDispatchFailure, type DispatchActionRequest, type DispatchResult } from '@/combat/types';
-import { steelCostLabel, steelRequest } from '@/combat/steeling';
+import { steelChipLabel, steelCostLabel, steelRequest } from '@/combat/steeling';
 
 type SteelOffer = components['schemas']['SteelOffer'];
 
@@ -66,7 +66,7 @@ export function SteelYourself({
           className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs"
           data-testid="steel-chip"
         >
-          {offer.free_steels === 1 ? '1 free steel' : `${offer.free_steels} free steels`}
+          {steelChipLabel(offer)}
         </p>
       )}
     </section>

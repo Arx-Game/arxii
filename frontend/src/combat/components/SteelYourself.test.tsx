@@ -2,9 +2,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { SteelYourself } from './SteelYourself';
-import { steelCostLabel } from '../steeling';
+import { steelChipLabel, steelCostLabel } from '../steeling';
 
-const paid = { free_steels: 0, fatigue_category: 'mental', fatigue_cost: 3 };
+const paid = { free_steels: 0, fatigue_category: 'mental', fatigue_cost: 3, given_by: null };
 
 describe('steelCostLabel', () => {
   it('names the fatigue pool and amount', () => {
@@ -13,6 +13,21 @@ describe('steelCostLabel', () => {
 
   it('says free while a free steel is held', () => {
     expect(steelCostLabel({ ...paid, free_steels: 1 })).toBe('Free');
+  });
+});
+
+describe('steelChipLabel', () => {
+  it('credits the ally whose encouragement gave the steel', () => {
+    expect(steelChipLabel({ ...paid, free_steels: 1, given_by: 'Bram' })).toBe(
+      "1 free steel from Bram's encouragement"
+    );
+    expect(steelChipLabel({ ...paid, free_steels: 2, given_by: 'Bram' })).toBe(
+      "2 free steels from Bram's encouragement"
+    );
+  });
+
+  it('falls back to the bare count with no giver', () => {
+    expect(steelChipLabel({ ...paid, free_steels: 1 })).toBe('1 free steel');
   });
 });
 
