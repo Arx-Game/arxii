@@ -261,6 +261,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     # situation_ctx=None, exactly like a non-combat check.
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+    from world.magic.services.burn import burn_strain_units_for_participant  # noqa: PLC0415
 
     round_ctx = CombatRoundContext(participant) if participant is not None else None
     check_situation_ctx = (
@@ -307,6 +308,10 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         lethal=clash.encounter.is_lethal,
         strain_config=config_strain,
         cast_check=cast_check,
+        # #4736: resonance burned with this round's pull (resolved at declaration).
+        burn_strain_units=(
+            burn_strain_units_for_participant(participant) if participant is not None else 0
+        ),
         # #2536 Task 4 review fix: thread the live round context (when a
         # CombatParticipant resolves — see step 0b above) so situational-perk
         # POWER_BONUS providers can read combat-positioning situations

@@ -1654,6 +1654,9 @@ class ThreadPullPreviewRequestSerializer(serializers.Serializer):
     # (matching the charge-time excluded_kinds behavior for social pulls).
     scene_id = serializers.IntegerField(required=False, allow_null=True)
     exclude_gift = serializers.BooleanField(required=False, default=False)
+    # #4736: the technique the pull rides. When given, the response's ``burn`` carries
+    # the burn ceiling and the strain value of one burned point.
+    technique_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_character_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve + ownership-check the caller-supplied character_sheet_id."""
@@ -1681,6 +1684,21 @@ class ResolvedPullEffectSerializer(serializers.Serializer):
         return obj.source_thread.pk
 
 
+class BurnPreviewSerializer(serializers.Serializer):
+    """Wire shape for the burn numbers of a pull preview (#4736).
+
+    ``ceiling`` is the most she may burn now (intensity ceiling capped by the balance
+    left after the pull). ``strain_units_per_point`` is what one burned point adds to
+    her strain. ``hasty_fall`` is True when the burn falls at the pair rate.
+    ``available`` is False when no strain check is designated, so a burn is refused.
+    """
+
+    ceiling = serializers.IntegerField()
+    strain_units_per_point = serializers.DecimalField(max_digits=8, decimal_places=4)
+    hasty_fall = serializers.BooleanField()
+    available = serializers.BooleanField()
+
+
 class ThreadPullPreviewResponseSerializer(serializers.Serializer):
     """Response serializer for POST /api/magic/thread-pull-preview/."""
 
@@ -1689,6 +1707,7 @@ class ThreadPullPreviewResponseSerializer(serializers.Serializer):
     affordable = serializers.BooleanField()
     resolved_effects = ResolvedPullEffectSerializer(many=True)
     capped_intensity = serializers.BooleanField()
+    burn = BurnPreviewSerializer(allow_null=True)
 
 
 # ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from world.conditions.models import CapabilityType, DamageType
     from world.forms.models import CharacterForm
     from world.magic.models import Resonance, Thread
+    from world.magic.types.burn import BurnPreview
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,7 @@ class ResonancePullResult:
     resonance_spent: int
     anima_spent: int
     resolved_effects: list[ResolvedPullEffect]
+    resonance_burned: int = 0
 
 
 @dataclass(frozen=True)
@@ -152,3 +154,6 @@ class PullPreviewResult:
     affordable: bool
     resolved_effects: list[ResolvedPullEffect]
     capped_intensity: bool
+    #: The burn ceiling and per-point value for the technique the pull rides (#4736);
+    #: None when the preview names no technique.
+    burn: BurnPreview | None = None

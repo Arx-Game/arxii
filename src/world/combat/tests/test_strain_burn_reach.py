@@ -75,9 +75,11 @@ class StrainProbeTests(TestCase):
         result = probe.resolve(None)
         self.assertFalse(result.present)
         self.assertEqual(set(result.missing), set(CANONICAL_OUTCOME_LEVELS))
-        for tier in list(tiers.values())[:-1]:
-            StrainBurnReach.objects.create(outcome_tier=tier, reach_percent=50)
+        left_out = "Critical Success"
+        for name, tier in tiers.items():
+            if name != left_out:
+                StrainBurnReach.objects.create(outcome_tier=tier, reach_percent=50)
         partial = probe.resolve(None)
-        self.assertEqual(partial.missing, (list(tiers)[-1],))
-        StrainBurnReach.objects.create(outcome_tier=list(tiers.values())[-1], reach_percent=50)
+        self.assertEqual(set(partial.missing), {left_out})
+        StrainBurnReach.objects.create(outcome_tier=tiers[left_out], reach_percent=50)
         self.assertTrue(probe.resolve(None).present)

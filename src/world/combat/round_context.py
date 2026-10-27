@@ -301,6 +301,42 @@ class CombatRoundContext(RoundContext):
 
         return resolve_cast_position_params(self._participant, technique, position_params)
 
+    def _commit_focused_pull(
+        self,
+        participant: CombatParticipant,
+        technique: Any,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Commit the web form's thread pull (and any burn) with a focused cast (#4736).
+
+        The web declaration card sends ``pull_resonance_id`` / ``pull_tier`` /
+        ``pull_thread_ids`` (and ``pull_burn``) on the COMBAT backend, which records the
+        declaration here rather than through ``CastTechniqueAction.round_declaration``;
+        without this the pull was dropped. Same commit as the telnet seam.
+        """
+        from world.combat.pull_helpers import (  # noqa: PLC0415
+            commit_combat_pull,
+            resolve_pull_from_kwargs,
+        )
+        from world.magic.exceptions import MagicError  # noqa: PLC0415
+        from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
+
+        sheet = participant.character_sheet
+        try:
+            cast_pull = resolve_pull_from_kwargs(sheet, kwargs)
+        except MagicError as exc:
+            raise ActionDispatchError(ActionDispatchError.PULL_INVALID) from exc
+        if cast_pull is None:
+            return
+        commit_combat_pull(
+            cast_pull=cast_pull,
+            participant=participant,
+            encounter=self._encounter,
+            technique_id=technique.pk,
+            target=resolve_focused_target_objectdb(self._encounter, kwargs),
+            cast_check=resolve_cast_check(sheet.character, technique),
+        )
+
     @transaction.atomic
     def _record_combat_declaration(
         self,
@@ -330,13 +366,15 @@ class CombatRoundContext(RoundContext):
         from world.combat.services import declare_action  # noqa: PLC0415
         from world.fatigue.constants import EffortLevel  # noqa: PLC0415
 
+        slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
+        if slot == CombatActionSlot.FOCUSED:
+            self._commit_focused_pull(participant, technique, kwargs)
+
         # The frontend dispatches the focused action and each passive as SEPARATE
         # /dispatch/ calls, every one routing through here. To land them all on a
         # single CombatRoundAction row we read the existing row, apply only the
         # slot this call names, and write the merged full row back through
         # declare_action (which itself does a full-row update_or_create).
-        slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
-
         existing = CombatRoundAction.objects.filter(
             participant=participant,
             round_number=self._encounter.round_number,

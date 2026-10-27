@@ -125,12 +125,16 @@ def resolve_combat_technique(
         participant.character_sheet.character, action.focused_action
     )
 
+    from world.magic.services.burn import burn_strain_units_for_participant  # noqa: PLC0415
+
     technique_use_result = use_technique(
         character=participant.character_sheet.character,
         technique=action.focused_action,
         resolve_fn=resolver,
         confirm_soulfray_risk=action.confirm_soulfray_risk,
         strain_commitment=action.strain_commitment,
+        # #4736: resonance burned with this round's pull (resolved at declaration).
+        burn_strain_units=burn_strain_units_for_participant(participant),
         targets=targets,
         lethal=encounter.is_lethal,
         cast_check=cast_check,
