@@ -53266,8 +53266,9 @@ export interface components {
     /**
      * @description One resonance a thread may move to, with the carried items that pay the rite (read-only).
      *
-     *     ``qualifying`` needs ``context["ritual"]`` (the retune rite, or None), ``context["sheet"]``
-     *     and ``context["items"]`` (what the owner carries, fetched once by the view).
+     *     ``qualifying`` reads ``context["qualifying"]``: the carried items that pay, keyed by
+     *     resonance pk, worked out once for every option by the view
+     *     (``qualifying_components_by_target``), so this serializer queries nothing per option.
      *     ``conversion_type`` is null for a retune within the thread's own affinity.
      */
     ThreadResonanceOption: {
