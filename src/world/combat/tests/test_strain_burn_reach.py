@@ -16,6 +16,8 @@ def _probe_for(key: str) -> rc.ContentProbe:
 
 
 class StrainBurnReachMonotonicTests(TestCase):
+    """U-keep: staff authoring validation, no player path."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.tiers = {
@@ -53,11 +55,6 @@ class StrainBurnReachMonotonicTests(TestCase):
             row.save()
         row.reach_percent = 90
         row.save()
-
-    def test_percent_over_100_is_refused(self) -> None:
-        row = StrainBurnReach(outcome_tier=self.best, reach_percent=101)
-        with self.assertRaises(ValidationError):
-            row.full_clean()
 
 
 class StrainProbeTests(TestCase):

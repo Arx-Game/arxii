@@ -7,7 +7,9 @@ reaches (StrainBurnReach: Critical Failure 0%, Failure 25%, Partial 50%, Success
 Critical Success 100%); she is debited only what she reached, and is told so.
 
 Hand-worked numbers used below (StrainConfig curve 10 per point for the first 5 points,
-then 9): 4 strain units give 40 power, 6 give 59. A pull costs 1 resonance. Corruption
+then 9): 4 strain units give 40 power, 6 give 59, 10 give 95. The technique channels 20
+intensity before strain, so a scene cast's "channeled intensity" is 20 plus that. A pull
+costs 1 resonance. Corruption
 (tier 1 coefficient 10, Abyssal coefficient 10, Primal 2, Celestial 0):
 - a hasty fall of 4 Celestial points at the 1.50 Fall rate is valued 6 Abyssal; the
   tick is ceil(6 x 1.0 x 1.0 x 2.0 hasty) = 12 on the burned Celestial resonance;
@@ -25,7 +27,13 @@ from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import PathFactory
-from world.combat.constants import ActionCategory, ClashActionSlot, ClashStatus, OpponentTier
+from world.combat.constants import (
+    ActionCategory,
+    ClashActionSlot,
+    ClashStatus,
+    OpponentTier,
+    PullBurnAction,
+)
 from world.combat.factories import (
     ClashConfigFactory,
     ClashFactory,
@@ -40,7 +48,7 @@ from world.combat.services import resolve_round
 from world.combat.services.encounter.config import get_strain_config
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.fatigue.constants import EffortLevel
-from world.magic.constants import EffectKind, TargetKind
+from world.magic.constants import EffectKind, PowerStage, TargetKind
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
@@ -64,7 +72,7 @@ from world.mechanics.factories import CharacterEngagementFactory
 from world.progression.factories import CharacterPathHistoryFactory
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
-from world.scenes.models import Scene
+from world.scenes.models import InteractionPowerLedgerEntry, Scene
 from world.skills.factories import SkillFactory
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
@@ -158,7 +166,8 @@ class _BurningResonance(JourneyCase):
             flat_bonus_amount=2,
             effect_kind=EffectKind.FLAT_BONUS,
         )
-        CharacterThreadWeavingUnlockFactory(character=sheet, unlock=self.skill_unlock)
+        if not sheet.thread_weaving_unlocks.filter(unlock=self.skill_unlock).exists():
+            CharacterThreadWeavingUnlockFactory(character=sheet, unlock=self.skill_unlock)
         return weave_thread(
             sheet, TargetKind.TRAIT, self.skill.trait, resonance, name=f"{resonance.name} Strand"
         )
@@ -181,29 +190,32 @@ class _BurningResonance(JourneyCase):
             f"resonance={thread.resonance.name} burn={burn}"
         )
 
-    def cast_with_outcome(self, character, line: str, outcome_name: str) -> tuple[str, list[int]]:
+    def cast_with_outcome(self, character, line: str, outcome_name: str) -> tuple[str, int]:
         """Type ``line`` with the strain check forced to ``outcome_name``.
 
         The strain check is the cast's first roll, so it takes the forced outcome.
 
-        Returns what she was told and the strain units each curve call received.
+        Returns what she was told and the channeled intensity her cast's power ledger
+        recorded (the technique's 20 plus what strain bought).
         """
-        units: list[int] = []
-
-        def curve(*, strain_commitment: int, config) -> int:
-            units.append(strain_commitment)
-            return strain_to_intensity(strain_commitment=strain_commitment, config=config)
-
         outcome = CheckOutcome.objects.get(name=outcome_name)
-        with (
-            force_check_outcome(outcome),
-            patch("world.magic.services.techniques.strain_to_intensity", side_effect=curve),
-            self.captureOnCommitCallbacks(execute=True),
-        ):
-            told = self.telnet(character, line)
+        with force_check_outcome(outcome), self.captureOnCommitCallbacks(execute=True):
+            self.telnet(character, line)
         # The burn line is sent on commit, after the command's own reply.
-        told = self.said(character)
-        return told, units
+        return self.said(character), self.channeled_intensity(character)
+
+    @staticmethod
+    def channeled_intensity(character) -> int:
+        """The channeled intensity on her latest cast's persisted power ledger."""
+        entry = (
+            InteractionPowerLedgerEntry.objects.filter(
+                interaction__persona=character.sheet_data.primary_persona,
+                stage=PowerStage.BASE,
+            )
+            .order_by("-pk")
+            .first()
+        )
+        return entry.amount if entry is not None else 0
 
 
 class BurningResonanceOutOfCombat(_BurningResonance):
@@ -214,11 +226,11 @@ class BurningResonanceOutOfCombat(_BurningResonance):
         resonance = ResonanceFactory(affinity=self.primal)
         thread = self.thread_for(ysmay, resonance)
 
-        told, units = self.cast_with_outcome(ysmay, self.cast_line(thread, 6), "Success")
+        told, channeled = self.cast_with_outcome(ysmay, self.cast_line(thread, 6), "Success")
 
         self.assertIn(f"You burn 4 of 6 {resonance.name} resonance.", told)
         self.assertEqual(self.balance(ysmay, resonance), 10 - 1 - 4)
-        self.assertEqual(units, [4])
+        self.assertEqual(channeled, 20 + 40)
         self.assertFalse(CharacterEngagement.objects.filter(character=ysmay.sheet_data).exists())
 
     def test_burn_is_capped_by_the_intensity_ceiling(self) -> None:
@@ -226,11 +238,13 @@ class BurningResonanceOutOfCombat(_BurningResonance):
         resonance = ResonanceFactory(affinity=self.primal)
         thread = self.thread_for(ysmay, resonance, balance=30)
 
-        told, units = self.cast_with_outcome(ysmay, self.cast_line(thread, 50), "Critical Success")
+        told, channeled = self.cast_with_outcome(
+            ysmay, self.cast_line(thread, 50), "Critical Success"
+        )
 
         self.assertIn(f"You burn 10 of 50 {resonance.name} resonance.", told)
         self.assertEqual(self.balance(ysmay, resonance), 30 - 1 - 10)
-        self.assertEqual(units, [10])
+        self.assertEqual(channeled, 20 + 95)
 
     def test_burn_never_overdraws_the_balance(self) -> None:
         ysmay = self.caster("Ysmay")
@@ -244,21 +258,34 @@ class BurningResonanceOutOfCombat(_BurningResonance):
 
     def test_a_worse_roll_never_reaches_more(self) -> None:
         reached = {}
+        told = {}
         for index, outcome in enumerate(("Critical Failure", "Failure", "Success")):
             caster = self.caster(f"Caster{index}")
             resonance = ResonanceFactory(affinity=self.primal)
             thread = self.thread_for(caster, resonance)
-            self.cast_with_outcome(caster, self.cast_line(thread, 8), outcome)
+            told[outcome], _channeled = self.cast_with_outcome(
+                caster, self.cast_line(thread, 8), outcome
+            )
             reached[outcome] = 10 - 1 - self.balance(caster, resonance)
+            told[outcome] = told[outcome].replace(resonance.name, "<resonance>")
 
         self.assertEqual(reached, {"Critical Failure": 0, "Failure": 2, "Success": 6})
+        self.assertIn(
+            "You burn none of the 8 <resonance> resonance you asked for: "
+            "your strain check reached none of it.",
+            told["Critical Failure"],
+        )
+        self.assertIn("You burn 2 of 8 <resonance> resonance.", told["Failure"])
+        self.assertIn("You burn 6 of 8 <resonance> resonance.", told["Success"])
 
     def test_a_botch_burns_nothing_and_says_so(self) -> None:
         ysmay = self.caster("Ysmay")
         resonance = ResonanceFactory(affinity=self.primal)
         thread = self.thread_for(ysmay, resonance)
 
-        told, units = self.cast_with_outcome(ysmay, self.cast_line(thread, 6), "Critical Failure")
+        told, channeled = self.cast_with_outcome(
+            ysmay, self.cast_line(thread, 6), "Critical Failure"
+        )
 
         self.assertIn(
             f"You burn none of the 6 {resonance.name} resonance you asked for: "
@@ -266,7 +293,7 @@ class BurningResonanceOutOfCombat(_BurningResonance):
             told,
         )
         self.assertEqual(self.balance(ysmay, resonance), 9)
-        self.assertEqual(units, [])
+        self.assertEqual(channeled, 20)
 
     def test_burn_without_a_pull_is_refused(self) -> None:
         ysmay = self.caster("Ysmay")
@@ -296,12 +323,12 @@ class BurningResonanceOutOfCombat(_BurningResonance):
         resonance = ResonanceFactory(affinity=self.celestial)
         thread = self.thread_for(ysmay, resonance)
 
-        told, units = self.cast_with_outcome(ysmay, self.cast_line(thread, 6), "Success")
+        told, channeled = self.cast_with_outcome(ysmay, self.cast_line(thread, 6), "Success")
 
         self.assertIn(
             f"You burn 4 of 6 {resonance.name} resonance; it falls at the pair rate to 6.", told
         )
-        self.assertEqual(units, [6])
+        self.assertEqual(channeled, 20 + 59)
         self.assertEqual(self.balance(ysmay, resonance), 5)
         self.assertEqual(self.corruption(ysmay, resonance), 12)
 
@@ -310,11 +337,11 @@ class BurningResonanceOutOfCombat(_BurningResonance):
         resonance = ResonanceFactory(affinity=self.abyssal)
         thread = self.thread_for(ysmay, resonance)
 
-        told, units = self.cast_with_outcome(ysmay, self.cast_line(thread, 6), "Success")
+        told, channeled = self.cast_with_outcome(ysmay, self.cast_line(thread, 6), "Success")
 
         self.assertIn(f"You burn 4 of 6 {resonance.name} resonance.", told)
         self.assertNotIn("pair rate", told)
-        self.assertEqual(units, [4])
+        self.assertEqual(channeled, 20 + 40)
         self.assertEqual(self.corruption(ysmay, resonance), 5)
 
     def test_celestial_burning_its_own_resonance_costs_only_the_resonance(self) -> None:
@@ -386,6 +413,60 @@ class BurningResonanceOnTheWeb(_BurningResonance):
         self.assertEqual(Decimal(burn["strain_units_per_point"]), Decimal("1.50"))
         self.assertTrue(burn["hasty_fall"])
         self.assertTrue(burn["available"])
+        # The labels the Strain area shows: hers or not, and whose corruption it leaves.
+        self.assertEqual(burn["resonance_name"], resonance.name)
+        self.assertTrue(burn["off_affinity"])
+        self.assertEqual(burn["corruption_affinity_name"], self.abyssal.name)
+
+    def test_pull_preview_names_raw_off_affinity_corruption_and_own_resonance(self) -> None:
+        ysmay = self.caster("Ysmay", aura="celestial")
+        ruin = ResonanceFactory(affinity=self.abyssal)
+        dawn = ResonanceFactory(affinity=self.celestial)
+        ruin_thread = self.thread_for(ysmay, ruin)
+        dawn_thread = self.thread_for(ysmay, dawn)
+        client = self.api(self.account_of(ysmay))
+
+        def preview(resonance, thread) -> dict:
+            response = client.post(
+                "/api/magic/thread-pull-preview/",
+                {
+                    "character_sheet_id": ysmay.sheet_data.pk,
+                    "resonance_id": resonance.pk,
+                    "tier": 1,
+                    "thread_ids": [thread.pk],
+                    "technique_id": self.technique.pk,
+                },
+                format="json",
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            return response.data["burn"]
+
+        raw = preview(ruin, ruin_thread)
+        self.assertEqual((raw["off_affinity"], raw["hasty_fall"]), (True, False))
+        self.assertEqual(raw["corruption_affinity_name"], self.abyssal.name)
+        own = preview(dawn, dawn_thread)
+        # Celestial burning its own: hers, and it leaves no corruption.
+        self.assertEqual((own["off_affinity"], own["corruption_affinity_name"]), (False, None))
+
+    def test_pull_preview_refuses_a_technique_she_does_not_know(self) -> None:
+        ysmay = self.caster("Ysmay")
+        resonance = ResonanceFactory(affinity=self.primal)
+        thread = self.thread_for(ysmay, resonance)
+        stranger = TechniqueFactory(gift=GiftFactory(), intensity=90)
+
+        response = self.api(self.account_of(ysmay)).post(
+            "/api/magic/thread-pull-preview/",
+            {
+                "character_sheet_id": ysmay.sheet_data.pk,
+                "resonance_id": resonance.pk,
+                "tier": 1,
+                "thread_ids": [thread.pk],
+                "technique_id": stranger.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404, response.data)
 
     def test_scene_cast_refuses_a_bad_burn_cleanly(self) -> None:
         ysmay = self.caster("Ysmay")
@@ -411,7 +492,9 @@ class BurningResonanceOnTheWeb(_BurningResonance):
                 format="json",
             )
             self.assertEqual(response.status_code, 400, (bad, response.data))
-            self.assertIn("burn", response.data["pull"])
+            # The refusal names the burn field and says what is wrong with it.
+            message = str(response.data["pull"]["burn"][0])
+            self.assertRegex(message, r"integer|less than or equal|greater than or equal", str(bad))
         self.assertEqual(self.balance(ysmay, resonance), 10)
 
 
@@ -542,12 +625,14 @@ class BurningResonanceInCombat(_BurningResonance):
         ysmay, engagement = self.fighter()
         resonance = ResonanceFactory(affinity=self.primal)
         thread = self.thread_for(ysmay, resonance)
+        self.watch(ysmay)
 
         with force_check_outcome(CheckOutcome.objects.get(name="Success")):
             cast = self.dispatch(
                 ysmay, self.focused_ref(), self.focused_kwargs(thread, pull_burn=6)
             )
         self.assertEqual(cast.status_code, 200, cast.data)
+        self.assertTold(ysmay, f"You burn 4 of 6 {resonance.name} resonance.")
         clash = self.dispatch(
             ysmay,
             {
@@ -590,9 +675,90 @@ class BurningResonanceInCombat(_BurningResonance):
             CombatPull.objects.get(participant__character_sheet=sheet).resonance_burned, 4
         )
         self.assertEqual(self.balance(ysmay, resonance), 5)
-        self.assertNotIn("Traceback", told)
+        self.assertIn("You ready your action for this round.", told)
 
         before = engagement.intensity_modifier
         self.assertEqual(self.resolve_watching_the_curve(), [4])
         engagement.refresh_from_db()
         self.assertEqual(engagement.intensity_modifier - before, 20)
+
+    def clash_ref(self) -> dict:
+        return {
+            "backend": "combat",
+            "clash_id": self.clash.pk,
+            "clash_action_slot": ClashActionSlot.FOCUSED,
+        }
+
+    def test_web_focused_cast_and_clash_with_one_pull_both_succeed(self) -> None:
+        """The web client sends a cast and a clash; the pull and burn ride the clash alone.
+
+        Both jobs go through the real dispatch endpoint exactly as YourTurn builds them
+        when a clash is chosen: the focused cast without pull kwargs, then the clash
+        carrying the pull and its burn. Both succeed and the burn strains the clash.
+        """
+        ysmay, engagement = self.fighter()
+        resonance = ResonanceFactory(affinity=self.primal)
+        thread = self.thread_for(ysmay, resonance)
+        self.watch(ysmay)
+
+        cast = self.dispatch(ysmay, self.focused_ref(), self.focused_kwargs())
+        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+            clash = self.dispatch(
+                ysmay,
+                self.clash_ref(),
+                {
+                    "technique_id": self.technique.pk,
+                    "strain_commitment": 0,
+                    "pull_resonance_id": resonance.pk,
+                    "pull_tier": 1,
+                    "pull_thread_ids": [thread.pk],
+                    "pull_burn": 6,
+                },
+            )
+
+        self.assertEqual(cast.status_code, 200, cast.data)
+        self.assertEqual(clash.status_code, 200, clash.data)
+        pull = CombatPull.objects.get(participant__character_sheet=ysmay.sheet_data)
+        self.assertEqual((pull.burned_for, pull.resonance_burned), (PullBurnAction.CLASH, 4))
+        self.assertEqual(self.balance(ysmay, resonance), 10 - 1 - 4)
+        self.assertTold(ysmay, f"You burn 4 of 6 {resonance.name} resonance.")
+
+        before = engagement.intensity_modifier
+        # Two actions resolve through the cast pipeline; only one of them was strained.
+        self.assertEqual(self.resolve_watching_the_curve(), [4])
+        self.assertTrue(ClashContribution.objects.filter(character=ysmay.sheet_data).exists())
+        engagement.refresh_from_db()
+        self.assertEqual(engagement.intensity_modifier - before, 20)
+
+    def test_resubmitting_a_focused_cast_does_not_charge_its_pull_twice(self) -> None:
+        """A submit that failed after the cast's pull committed can be sent again."""
+        ysmay, _engagement = self.fighter()
+        resonance = ResonanceFactory(affinity=self.primal)
+        thread = self.thread_for(ysmay, resonance)
+        other = ResonanceFactory(affinity=self.primal)
+        other_thread = self.thread_for(ysmay, other)
+        self.watch(ysmay)
+
+        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+            first = self.dispatch(
+                ysmay, self.focused_ref(), self.focused_kwargs(thread, pull_burn=6)
+            )
+        self.assertEqual(first.status_code, 200, first.data)
+        # A later job in the same submit fails, so the client sends the whole submit again.
+        later = self.dispatch(
+            ysmay, self.clash_ref(), {"technique_id": self.technique.pk, "pull_burn": "lots"}
+        )
+        self.assertEqual(later.status_code, 400, later.data)
+
+        again = self.dispatch(ysmay, self.focused_ref(), self.focused_kwargs(thread, pull_burn=6))
+
+        self.assertEqual(again.status_code, 200, again.data)
+        self.assertEqual(CombatPull.objects.filter(resonance=resonance).count(), 1)
+        self.assertEqual(self.balance(ysmay, resonance), 10 - 1 - 4)
+        self.assertEqual(self.said(ysmay).count("You burn 4 of 6"), 1)
+
+        # A different pull this round is still refused, and charges nothing.
+        different = self.dispatch(ysmay, self.focused_ref(), self.focused_kwargs(other_thread))
+        self.assertEqual(different.status_code, 400, different.data)
+        self.assertEqual(different.data["detail"], "You have already pulled a thread this round.")
+        self.assertEqual(self.balance(ysmay, other), 10)
