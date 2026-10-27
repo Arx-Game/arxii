@@ -42,8 +42,11 @@ POTENCY_LABELS: dict[str, str] = {
 }
 
 
-def surge_tuning_for(trigger_kind: str) -> SurgeTuning | None:
+def surge_tuning_for(trigger_kind: str, *, warn: bool = True) -> SurgeTuning | None:
     """The ``SurgeTuning`` authored for ``trigger_kind``, or None with a logged warning.
+
+    ``warn=False`` stays quiet for a caller on a per-hit path (the hurt-ally surge), where a
+    row staff have not authored yet is not an event worth a log line every hit.
 
     Always looked up by kind, never by name. Callers that roll before they surge (an NPC
     taunt) read it first so a missing row skips the roll as well as the surge.
@@ -51,7 +54,7 @@ def surge_tuning_for(trigger_kind: str) -> SurgeTuning | None:
     tuning = (
         SurgeTuning.objects.select_related("check_type").filter(trigger_kind=trigger_kind).first()
     )
-    if tuning is None:
+    if tuning is None and warn:
         logger.warning("No SurgeTuning is authored for trigger kind %s; no surge.", trigger_kind)
     return tuning
 
@@ -133,6 +136,7 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     subject_sheet: CharacterSheet | None = None,
     intensity_scale: float = 1.0,
     source_character: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - the taunter, any object
+    tuning: SurgeTuning | None = None,
 ) -> DramaticSurgeBeat | None:
     """Write one rolled surge from the band the roll's outcome picks (#4737).
 
@@ -146,12 +150,16 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     the beat name it only if it actually applied. The surge and the condition are written
     in one transaction.
 
+    A caller that already read the ``SurgeTuning`` passes it as ``tuning`` so it is not
+    looked up again for each participant; omitted, it is looked up by ``trigger_kind``.
+
     The roll line goes to the surged player's character only; the room still gets just
     the generic narration ``apply_dramatic_surge`` sends.
     """
     if encounter.escalation_curve is None:
         return None
-    tuning = surge_tuning_for(trigger_kind)
+    if tuning is None:
+        tuning = surge_tuning_for(trigger_kind)
     if tuning is None:
         return None
     band = band_for_outcome(tuning, outcome)

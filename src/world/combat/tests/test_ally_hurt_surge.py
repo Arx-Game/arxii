@@ -1,5 +1,7 @@
 """A hurt bonded ally raises a player character's intensity through a roll (#4737)."""
 
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 
 from flows.models import Trigger
@@ -22,6 +24,7 @@ from world.combat.factories import (
 )
 from world.combat.models import DramaticSurgeRecord
 from world.combat.services import apply_damage_to_participant
+from world.combat.surge_rolls import surge_roll_for_participant
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
@@ -169,6 +172,41 @@ class AllyHurtRollTests(AllyHurtSurgeTestCase):
         self.assertEqual(capture.target_difficulty, POTENCY_BASE + POTENCY_PER_DEPTH * 14)
 
 
+class AllyHurtTwoProtectorTests(AllyHurtSurgeTestCase):
+    def test_two_bonded_protectors_both_surge_independently(self) -> None:
+        self._bond()
+        second = CombatParticipantFactory(encounter=self.encounter, status=ParticipantStatus.ACTIVE)
+        second_char = second.character_sheet.character
+        second_char.location = self.encounter.room
+        begin_engagement(second_char, EngagementType.COMBAT, source=self.encounter)
+        rel_type = RelationshipTypeFactory(valence=TypeValence.WARM, fuels_escalation_spikes=True)
+        relationship = CharacterRelationshipFactory(
+            source=second.character_sheet,
+            target=self.victim.character_sheet,
+            is_active=True,
+        )
+        RelationshipLabelFactory(relationship=relationship, type=rel_type)
+        relationship.invested_depth = 12
+        relationship.save()
+
+        # force_check_outcome is single-shot, so force each protector's real roll in turn.
+        def forced_roll(participant, check_type, potency):
+            with force_check_outcome(self.success):
+                return surge_roll_for_participant(participant, check_type, potency)
+
+        with patch("world.combat.surge_rolls.surge_roll_for_participant", side_effect=forced_roll):
+            self._hurt(damage=60)
+
+        self.assertEqual(self._records().count(), 2)
+        self.assertEqual(
+            set(self._records().values_list("participant_id", flat=True)),
+            {self.protector.pk, second.pk},
+        )
+        potencies = {r.participant_id: r.potency for r in self._records()}
+        self.assertEqual(potencies[self.protector.pk], POTENCY_BASE + POTENCY_PER_DEPTH * 10)
+        self.assertEqual(potencies[second.pk], POTENCY_BASE + POTENCY_PER_DEPTH * 12)
+
+
 class AllyHurtRepeatTests(AllyHurtSurgeTestCase):
     def test_two_hits_same_round_one_surge(self) -> None:
         self._bond()
@@ -221,11 +259,19 @@ class AllyHurtNoopTests(AllyHurtSurgeTestCase):
             self._hurt(damage=60)
         self.assertFalse(self._records().exists())
 
-    def test_no_tuning_row_is_a_logged_noop(self) -> None:
+    def test_no_tuning_row_is_a_quiet_noop(self) -> None:
         self._bond()
         self.tuning.delete()
-        with self.assertLogs("world.combat.surge_rolls", level="WARNING"):
+        with self.assertNoLogs("world.combat.surge_rolls", level="WARNING"):
             self._hurt(damage=60)
+        self.assertFalse(self._records().exists())
+
+    def test_protector_without_a_combat_engagement_does_not_roll(self) -> None:
+        self._bond()
+        CharacterEngagement.objects.filter(character=self.protector.character_sheet).delete()
+        with force_check_outcome(self.success) as capture:
+            self._hurt(damage=60)
+        self.assertIsNone(capture.check_type)
         self.assertFalse(self._records().exists())
 
 

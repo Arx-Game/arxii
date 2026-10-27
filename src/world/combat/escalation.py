@@ -558,6 +558,77 @@ def peril_spike_handler(*, payload: Any) -> None:
     apply_peril_escalation_spike(victim_character=payload.target, room=room)
 
 
+def _hurt_ally_rollers(
+    encounter: CombatEncounter,
+    victim_sheet: CharacterSheet,
+) -> list[tuple[CombatParticipant, int]]:
+    """The participants who roll for a hurt ``victim_sheet`` this round, with bond depth (#4737).
+
+    Four queries for the whole encounter whatever its size: its active participants, their
+    qualifying bonds to the victim, the surge rows already written this round, and the
+    COMBAT engagements sourced to this encounter. A participant rolls only when they have a
+    qualifying bond (the peril-leg rule), have not surged for this victim this round, and
+    have the engagement ``apply_dramatic_surge`` needs, so a roll that could not surge never
+    spends a contributing condition.
+    """
+    from world.combat.models import (  # noqa: PLC0415
+        CombatEncounter as _CombatEncounter,
+        CombatParticipant,
+        DramaticSurgeRecord,
+    )
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+
+    participants = list(
+        CombatParticipant.objects.filter(encounter=encounter, status=ParticipantStatus.ACTIVE)
+        .exclude(character_sheet=victim_sheet)
+        .select_related("character_sheet__character")
+    )
+    if not participants:
+        return []
+    depth_by_sheet: dict[int, int] = {}
+    bonds = (
+        CharacterRelationship.objects.filter(
+            source__in=[p.character_sheet for p in participants],
+            target=victim_sheet,
+            is_active=True,
+            labels__ended_at__isnull=True,
+            labels__type__fuels_escalation_spikes=True,
+        )
+        .annotate(_depth=F("scene_depth") + F("invested_depth"))
+        .filter(_depth__gte=encounter.escalation_curve.spike_minimum_track_points)
+        .values_list("source_id", "_depth")
+    )
+    for source_id, depth in bonds:
+        depth_by_sheet[source_id] = max(depth, depth_by_sheet.get(source_id, 0))
+    candidates = [p for p in participants if p.character_sheet_id in depth_by_sheet]
+    if not candidates:
+        return []
+    # Must mirror apply_dramatic_surge's dedup key (encounter, participant, kind,
+    # subject_sheet, repeat_round); a row here means this hit would be swallowed there.
+    surged = set(
+        DramaticSurgeRecord.objects.filter(
+            encounter=encounter,
+            trigger_kind=SurgeTriggerKind.ALLY_HURT,
+            repeat_round=encounter.round_number,
+            subject_sheet=victim_sheet,
+        ).values_list("participant_id", flat=True)
+    )
+    engaged = set(
+        CharacterEngagement.objects.filter(
+            character__in=[p.character_sheet for p in candidates],
+            engagement_type=EngagementType.COMBAT,
+            source_content_type=ContentType.objects.get_for_model(_CombatEncounter),
+            source_id=encounter.pk,
+        ).values_list("character_id", flat=True)
+    )
+    return [
+        (p, depth_by_sheet[p.character_sheet_id])
+        for p in candidates
+        if p.pk not in surged and p.character_sheet_id in engaged
+    ]
+
+
 def apply_ally_hurt_surge(
     *,
     victim_character: ObjectDB,  # noqa: OBJECTDB_PARAM - payload carries ObjectDB
@@ -574,24 +645,21 @@ def apply_ally_hurt_surge(
     ``potency_base + potency_per_depth * depth``; the band the outcome picks is scaled by
     the wound (``damage / max_health``, at most 1) and written through ``apply_rolled_surge``.
     Dedup is per round per ally in the surge record, so a second hit on the same ally in
-    the same round does nothing, and the roll is skipped when that row already exists.
+    the same round does nothing, and the roll is skipped when that row already exists or the
+    participant has no COMBAT engagement sourced to the encounter (``_hurt_ally_rollers``).
 
     DAMAGE_APPLIED fires on every hit, so the cheap exits (no damage, no sheet, no live
-    escalating encounter, no tuning) all come before any per-participant query. An
+    escalating encounter, no tuning) all come before any per-participant query, and the
+    tuning is read quietly (a row staff have not authored yet is not a per-hit log line). An
     exception from the surge write is not caught: it is atomic and a swallowed failure
     would leave the cached engagement stale.
     """
-    from world.combat.models import (  # noqa: PLC0415
-        CombatEncounter,
-        CombatParticipant,
-        DramaticSurgeRecord,
-    )
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
     from world.combat.surge_rolls import (  # noqa: PLC0415
         apply_rolled_surge,
         surge_roll_for_participant,
         surge_tuning_for,
     )
-    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
     from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     if damage <= 0 or max_health <= 0:
@@ -606,44 +674,14 @@ def apply_ally_hurt_surge(
     )
     if not encounters:
         return
-    tuning = surge_tuning_for(SurgeTriggerKind.ALLY_HURT)
+    # Quiet: an unauthored row is not worth a log line on every hit.
+    tuning = surge_tuning_for(SurgeTriggerKind.ALLY_HURT, warn=False)
     if tuning is None:
         return
     wound = min(1.0, damage / max_health)
 
     for encounter in encounters:
-        curve = encounter.escalation_curve
-        participants = (
-            CombatParticipant.objects.filter(encounter=encounter, status=ParticipantStatus.ACTIVE)
-            .exclude(character_sheet=victim_sheet)
-            .select_related("character_sheet__character")
-        )
-        for participant in participants:
-            depth = (
-                CharacterRelationship.objects.filter(
-                    source=participant.character_sheet,
-                    target=victim_sheet,
-                    is_active=True,
-                    labels__ended_at__isnull=True,
-                    labels__type__fuels_escalation_spikes=True,
-                )
-                .annotate(_depth=F("scene_depth") + F("invested_depth"))
-                .filter(_depth__gte=curve.spike_minimum_track_points)
-                .order_by("-_depth")
-                .values_list("_depth", flat=True)
-                .first()
-            )
-            if depth is None:
-                continue
-            already_surged = DramaticSurgeRecord.objects.filter(
-                encounter=encounter,
-                participant=participant,
-                trigger_kind=SurgeTriggerKind.ALLY_HURT,
-                repeat_round=encounter.round_number,
-                subject_sheet=victim_sheet,
-            ).exists()
-            if already_surged:
-                continue
+        for participant, depth in _hurt_ally_rollers(encounter, victim_sheet):
             potency = tuning.potency_base + tuning.potency_per_depth * depth
             result = surge_roll_for_participant(participant, tuning.check_type, potency)
             apply_rolled_surge(
@@ -654,6 +692,7 @@ def apply_ally_hurt_surge(
                 potency=potency,
                 subject_sheet=victim_sheet,
                 intensity_scale=wound,
+                tuning=tuning,
             )
 
 
