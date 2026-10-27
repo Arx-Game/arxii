@@ -11,14 +11,6 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddConstraint(
             model_name="alternateself",
-            constraint=models.UniqueConstraint(
-                condition=models.Q(("emerges_at_audere", True)),
-                fields=("character",),
-                name="one_audere_alternate_self_per_character",
-            ),
-        ),
-        migrations.AddConstraint(
-            model_name="alternateself",
             constraint=models.CheckConstraint(
                 condition=models.Q(
                     models.Q(

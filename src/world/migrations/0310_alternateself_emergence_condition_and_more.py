@@ -24,14 +24,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="alternateself",
-            name="emerges_at_audere",
-            field=models.BooleanField(
-                default=False,
-                help_text="When set, this is the alternate self the character becomes when Audere begins (#4731). At most one per character.",
-            ),
-        ),
-        migrations.AddField(
-            model_name="alternateself",
             name="revert_kind",
             field=models.CharField(
                 choices=[
@@ -41,6 +33,36 @@ class Migration(migrations.Migration):
                 default="automatic",
                 help_text="Whether this self drops away when Audere ends, or persists until someone talks the character down.",
                 max_length=20,
+            ),
+        ),
+        migrations.AddField(
+            model_name="alternateself",
+            name="ultimate_techniques",
+            field=models.ManyToManyField(
+                blank=True,
+                help_text="#4731: ultimates this alternate self makes available at Audere. Choosing one of its cards in the reveal puts the character in this self.",
+                limit_choices_to={"is_ultimate": True},
+                related_name="ultimate_for_alternate_selves",
+                to="arxii.technique",
+            ),
+        ),
+        migrations.AlterField(
+            model_name="alternateself",
+            name="techniques",
+            field=models.ManyToManyField(
+                blank=True,
+                help_text="Techniques granted on assuming this alternate self. Never an ultimate (#4098): an ultimate is reachable only by discovering it at Audere/Audere Majora; list this self's ultimates under ultimate techniques instead.",
+                limit_choices_to={"is_ultimate": False},
+                related_name="alternate_self_grants",
+                to="arxii.technique",
+            ),
+        ),
+        migrations.AddField(
+            model_name="activealternateself",
+            name="assumed_at_audere",
+            field=models.BooleanField(
+                default=False,
+                help_text="Set when the character took on this self by choosing its card in the Audere ultimate reveal (#4731); Audere's end reverts such a self when it reverts on its own. False for a self she put on herself.",
             ),
         ),
     ]

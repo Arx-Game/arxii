@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import partial
 import logging
 from typing import TYPE_CHECKING
 
@@ -389,15 +388,6 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         anima.maximum += threshold.anima_pool_bonus
         anima.save(update_fields=["pre_audere_maximum", "maximum"])
 
-    # The self the character becomes at Audere, if staff flagged one (#4731). Deferred to
-    # the commit of the outermost transaction (resolve_audere_offer wraps this call in its
-    # own atomic), so a rolled-back accept never transforms her and a broken alternate
-    # self can never undo the surge; robust=True logs anything the callback misses.
-    if sheet is not None:
-        from world.forms.services import emerge_audere_alternate_self
-
-        transaction.on_commit(partial(emerge_audere_alternate_self, sheet), robust=True)
-
     _announce_surge(character, threshold)
     shake_witnesses(character, SpectacleKind.AUDERE_ENTRY, display_name="surge into Audere")
 
@@ -564,6 +554,8 @@ def end_audere(character: ObjectDB) -> None:
             anima.pre_audere_maximum = None
             anima.save(update_fields=["maximum", "current", "pre_audere_maximum"])
 
+    # A self she took on by choosing its card in the reveal drops away with Audere when it
+    # reverts on its own (#4731).
     if sheet is not None:
         from world.forms.services import revert_audere_alternate_self
 

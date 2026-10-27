@@ -583,8 +583,18 @@ class AlternateSelf(SharedMemoryModel):
         limit_choices_to={"is_ultimate": False},
         help_text=(
             "Techniques granted on assuming this alternate self. Never an ultimate "
-            "(#4098) — past-life bond ultimates are out of scope; an ultimate is "
-            "reachable only by discovering it at Audere/Audere Majora."
+            "(#4098): an ultimate is reachable only by discovering it at Audere/Audere "
+            "Majora; list this self's ultimates under ultimate techniques instead."
+        ),
+    )
+    ultimate_techniques = models.ManyToManyField(
+        "arxii.Technique",
+        blank=True,
+        related_name="ultimate_for_alternate_selves",
+        limit_choices_to={"is_ultimate": True},
+        help_text=(
+            "#4731: ultimates this alternate self makes available at Audere. Choosing "
+            "one of its cards in the reveal puts the character in this self."
         ),
     )
     tuning_value = models.IntegerField(null=True, blank=True)
@@ -613,13 +623,6 @@ class AlternateSelf(SharedMemoryModel):
         ),
     )
 
-    emerges_at_audere = models.BooleanField(
-        default=False,
-        help_text=(
-            "When set, this is the alternate self the character becomes when "
-            "Audere begins (#4731). At most one per character."
-        ),
-    )
     revert_kind = models.CharField(
         max_length=20,
         choices=AlternateSelfRevertKind.choices,
@@ -644,11 +647,6 @@ class AlternateSelf(SharedMemoryModel):
     class Meta:
         ordering = ["character", "display_name"]
         constraints = [
-            models.UniqueConstraint(
-                fields=["character"],
-                condition=models.Q(emerges_at_audere=True),
-                name="one_audere_alternate_self_per_character",
-            ),
             models.CheckConstraint(
                 condition=(
                     models.Q(
@@ -725,6 +723,14 @@ class ActiveAlternateSelf(SharedMemoryModel):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="return_for_active",
+    )
+    assumed_at_audere = models.BooleanField(
+        default=False,
+        help_text=(
+            "Set when the character took on this self by choosing its card in the Audere "
+            "ultimate reveal (#4731); Audere's end reverts such a self when it reverts on "
+            "its own. False for a self she put on herself."
+        ),
     )
 
     class Meta:

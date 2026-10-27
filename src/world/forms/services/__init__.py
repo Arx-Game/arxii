@@ -359,7 +359,11 @@ def assume_alternate_self(
     )
 
     active.alternate_self = alt
-    active.save(update_fields=["alternate_self", "return_form", "return_persona"])
+    # A fresh assumption is her own unless the Audere reveal marks it afterwards (#4731).
+    active.assumed_at_audere = False
+    active.save(
+        update_fields=["alternate_self", "return_form", "return_persona", "assumed_at_audere"]
+    )
     return active
 
 
@@ -462,7 +466,10 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     active.alternate_self = None
     active.return_form = None
     active.return_persona = None
-    active.save(update_fields=["alternate_self", "return_form", "return_persona"])
+    active.assumed_at_audere = False
+    active.save(
+        update_fields=["alternate_self", "return_form", "return_persona", "assumed_at_audere"]
+    )
 
 
 def _walk_species_chain(species: Species) -> list[Species]:
@@ -1048,37 +1055,60 @@ def learn_style(
     )
 
 
-def audere_alternate_self(sheet: CharacterSheet) -> AlternateSelf | None:
-    """The alternate self this character becomes at Audere, if staff flagged one (#4731)."""
-    return AlternateSelf.objects.filter(character=sheet, emerges_at_audere=True).first()
+def _self_name(alt: AlternateSelf) -> str:
+    return alt.display_name or "an alternate self"
 
 
-def emerge_audere_alternate_self(sheet: CharacterSheet) -> AlternateSelf | None:
-    """Become the flagged alternate self once an Audere accept has committed (#4731).
+def assume_alternate_self_for_audere(sheet: CharacterSheet, alt: AlternateSelf) -> bool:
+    """Put her in the alternate self whose reveal card she chose at Audere (#4731).
 
-    ``offer_audere`` registers this with ``transaction.on_commit`` (robust), so it runs
-    only after the accept is durable: a rolled-back accept never transforms her, and
-    nothing here can undo the surge. Returns the self assumed, or None when nothing is
-    flagged, a different alternate self is already worn, or the flagged self cannot be
-    assumed (bad staff data: a form or persona the character does not own). The attempt
-    runs in its own atomic block, so a half-built assumption is rolled back, and a refusal
-    is logged rather than raised. A self that must be talked down also takes its emergence
-    condition; if that condition does not land (immunity, stacking), a warning is logged,
-    because nothing then stops her reverting at will.
+    ``choose_ultimate`` registers this with ``transaction.on_commit`` (robust), so it runs
+    only after the choice is durable, and nothing here undoes the choice, the readied
+    ultimate or Audere. The self is marked ``assumed_at_audere`` so Audere's end reverts
+    it when its ``revert_kind`` is AUTOMATIC. A TALKED_DOWN self also takes its emergence
+    condition; if that does not land (immunity, stacking) a warning is logged, because
+    nothing then stops her reverting at will.
+
+    The self she already wears is left as it is, unmarked: she put it on herself. A
+    different worn self is reverted first, in its own savepoint; when that revert is
+    refused because she is not in control, she is told why and the chosen self does not
+    come out. Any other forms refusal (bad staff data: a form or persona she does not own)
+    is logged, never raised. Returns True when she assumed the chosen self.
     """
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.forms.services.transformation import trigger_transformation  # noqa: PLC0415
     from world.scenes.services import ActivePersonaError  # noqa: PLC0415
 
-    alt = audere_alternate_self(sheet)
-    if alt is None:
-        return None
-    active = ActiveAlternateSelf.objects.filter(character=sheet).first()
-    if active is not None and active.alternate_self_id not in (None, alt.pk):
-        return None
+    active = (
+        ActiveAlternateSelf.objects.filter(character=sheet).select_related("alternate_self").first()
+    )
+    worn = None if active is None else active.alternate_self
+    if worn is not None and worn.pk == alt.pk:
+        return False
+    if worn is not None:
+        try:
+            with transaction.atomic():
+                revert_alternate_self(sheet)
+        except RevertBlockedError:
+            sheet.character.msg(
+                f"You cannot leave {_self_name(worn)} while not in control of yourself, "
+                f"so {_self_name(alt)} does not come out."
+            )
+            return False
+        except (AlternateSelfActiveError, FormOwnershipError, ActivePersonaError):
+            logger.warning(
+                "Audere could not take %s out of alternate self %s for %s (#4731).",
+                sheet.character,
+                worn,
+                alt,
+                exc_info=True,
+            )
+            return False
     try:
         with transaction.atomic():
-            trigger_transformation(sheet, alt, cause="audere")
+            assumed = trigger_transformation(sheet, alt, cause="audere")
+            assumed.assumed_at_audere = True
+            assumed.save(update_fields=["assumed_at_audere"])
             if alt.revert_kind == AlternateSelfRevertKind.TALKED_DOWN:
                 applied = apply_condition(target=sheet.character, condition=alt.emergence_condition)
                 if not applied.success:
@@ -1092,51 +1122,53 @@ def emerge_audere_alternate_self(sheet: CharacterSheet) -> AlternateSelf | None:
                     )
     except (AlternateSelfActiveError, FormOwnershipError, ActivePersonaError):
         logger.warning(
-            "Audere could not put %s in alternate self %s (#4731); accept carried on.",
+            "Audere could not put %s in alternate self %s (#4731); the choice stands.",
             sheet.character,
             alt,
             exc_info=True,
         )
-        return None
-    sheet.character.msg(f"You assume {alt.display_name or 'an alternate self'}.")
-    return alt
+        return False
+    sheet.character.msg(f"You assume {_self_name(alt)}.")
+    return True
+
+
+def _audere_selves_to_revert() -> QuerySet[ActiveAlternateSelf]:
+    """Worn selves taken on through the Audere reveal that revert on their own."""
+    return ActiveAlternateSelf.objects.filter(
+        assumed_at_audere=True,
+        alternate_self__revert_kind=AlternateSelfRevertKind.AUTOMATIC,
+    ).select_related("character", "alternate_self")
 
 
 def revert_audere_alternate_self(sheet: CharacterSheet) -> bool:
-    """Revert the flagged self when Audere ends, if it is active and reverts on its own.
+    """Revert the self she took on through the Audere reveal, when Audere ends (#4731).
 
-    Called for every participant when a fight's Audere ends (``end_audere`` and the
-    encounter cleanup); a no-op when the flagged self is not worn. A self she already
-    wore before Audere is reverted too when it is the flagged AUTOMATIC one. A
-    talked-down self stays; a blocked revert (not in control) is left as it is. Runs in
-    its own savepoint and never raises the forms refusals, so encounter cleanup is never
-    rolled back by it. Returns True when the revert happened.
+    Called by ``end_audere``; a no-op unless the worn self is
+    marked ``assumed_at_audere`` and is AUTOMATIC. A self she put on herself stays, a
+    talked-down one stays, and a blocked revert (not in control) is left as it is. Runs
+    in its own savepoint and never raises the forms refusals, so encounter cleanup is
+    never rolled back by it. Returns True when the revert happened.
     """
-    alt = audere_alternate_self(sheet)
-    if alt is None or alt.revert_kind != AlternateSelfRevertKind.AUTOMATIC:
+    active = _audere_selves_to_revert().filter(character=sheet).first()
+    if active is None:
         return False
-    if not ActiveAlternateSelf.objects.filter(character=sheet, alternate_self=alt).exists():
-        return False
-    return _revert_flagged_self(sheet, alt)
+    return _revert_audere_self(sheet, active.alternate_self)
 
 
 def revert_audere_alternate_selves(sheet_ids: list[int]) -> None:
-    """Revert every flagged AUTOMATIC self worn among ``sheet_ids``, in one query (#4731).
+    """Revert every Audere-assumed AUTOMATIC self worn among ``sheet_ids``, in one query.
 
-    The fight-end sibling of ``revert_audere_alternate_self``: encounter cleanup calls
-    it once for all participants, so participants wearing no flagged self cost nothing.
+    The fight-end sibling of ``revert_audere_alternate_self`` (#4731): encounter cleanup
+    calls it once for all participants, covering an Audere that ran out mid-fight on a
+    round duration and a self taken on at an Audere Majora Crossing, so participants
+    wearing no such self cost nothing.
     """
-    worn = ActiveAlternateSelf.objects.filter(
-        character_id__in=sheet_ids,
-        alternate_self__emerges_at_audere=True,
-        alternate_self__revert_kind=AlternateSelfRevertKind.AUTOMATIC,
-    ).select_related("character", "alternate_self")
-    for active in worn:
-        _revert_flagged_self(active.character, active.alternate_self)
+    for active in _audere_selves_to_revert().filter(character_id__in=sheet_ids):
+        _revert_audere_self(active.character, active.alternate_self)
 
 
-def _revert_flagged_self(sheet: CharacterSheet, alt: AlternateSelf) -> bool:
-    """Revert ``sheet`` out of its worn flagged self ``alt``, logging any refusal."""
+def _revert_audere_self(sheet: CharacterSheet, alt: AlternateSelf) -> bool:
+    """Revert ``sheet`` out of ``alt``, logging any refusal."""
     from world.scenes.services import ActivePersonaError  # noqa: PLC0415
 
     try:

@@ -1,12 +1,14 @@
-"""Journeys for the self a character becomes when she surges into Audere (#4731).
+"""Journeys for an alternate self chosen in the Audere ultimate reveal (#4731, #4098).
 
-Staff flag one alternate self per character as her Audere self. Accepting the surge
-puts her in it; when the fight ends and Audere ends, an AUTOMATIC self drops away on
-its own, while a TALKED_DOWN self stays, holding a behavior-altering condition that
-blocks `form revert` until she breaks free of it. Another alternate self already worn
-is never swapped out. Names are invented.
+Each alternate self that carries ultimates is a bond source in the reveal, beside
+patrons and companions: its cards appear after the surge, and choosing one readies the
+ultimate and puts her in that self. When Audere or the fight ends, an AUTOMATIC self
+taken on this way drops away; a TALKED_DOWN self stays, holding a behavior-altering
+condition that blocks `form revert` until she breaks free of it. A self she put on
+herself beforehand is never reverted by Audere. Choosing a card while another self is
+worn swaps them, unless she is not in control. Names are invented.
 
-The emergence runs on the accept's commit (``transaction.on_commit``), so every accept
+The self comes out on the choice's commit (``transaction.on_commit``), so every choice
 here sits inside ``captureOnCommitCallbacks(execute=True)``, which runs the callbacks the
 way the real commit would.
 """
@@ -38,6 +40,7 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.conditions.services import remove_condition
+from world.covenants.constants import RoleArchetype
 from world.forms.constants import AlternateSelfRevertKind
 from world.forms.factories import (
     AlternateSelfFactory,
@@ -45,13 +48,17 @@ from world.forms.factories import (
     CharacterFormStateFactory,
 )
 from world.forms.models import ActiveAlternateSelf, AlternateSelf, FormType
-from world.magic.audere import PendingAudereOffer
+from world.forms.services import assume_alternate_self
+from world.magic.audere import PendingAudereOffer, end_audere
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
     ResonanceFactory,
+    TechniqueFactory,
+    UltimateTechniqueFactory,
     ensure_canonical_affinities,
 )
+from world.magic.models import KnownUltimate
 from world.magic.services.acting_aura import acting_aura
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
@@ -60,13 +67,23 @@ from world.mechanics.engagement import CharacterEngagement
 from world.scenes.factories import PersonaFactory
 from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
 
+_ULTIMATES_URL = "/api/magic/audere/ultimates/"
+_CHOOSE_URL = "/api/magic/audere/ultimates/choose/"
+
 
 class _AudereSelfJourney(ResonanceCacheIsolationMixin, JourneyCase):
-    """A played character with an open Audere offer and the gate authored."""
+    """A played character in a fight with an open Audere offer and two selves with
+    ultimates: The Ashen Ysmay (Abyssal, a Sword ultimate) and The Quiet Ysmay (a
+    Shield ultimate). The Plain Ysmay carries none."""
 
     def setUp(self) -> None:
         super().setUp()
         self.gate = build_audere_gate_fixture(tier_suffix=type(self).__name__)
+        threshold = self.gate.threshold
+        threshold.sword_reveal_label = "Edge"
+        threshold.shield_reveal_label = "Wall"
+        threshold.reveal_framing_text = ""
+        threshold.save()
         self.room = self.make_room("The Lantern")
         self.character = self.make_player("Ysmay", room=self.room)
         self.sheet = self.character.sheet_data
@@ -80,7 +97,7 @@ class _AudereSelfJourney(ResonanceCacheIsolationMixin, JourneyCase):
         CharacterAnimaFactory(character=self.sheet, current=50, maximum=50)
         CharacterEngagement.objects.create(
             character=self.sheet,
-            engagement_type=EngagementType.CHALLENGE,
+            engagement_type=EngagementType.COMBAT,
             source_content_type=ContentType.objects.get_for_model(ObjectDB),
             source_id=self.character.pk,
         )
@@ -98,24 +115,44 @@ class _AudereSelfJourney(ResonanceCacheIsolationMixin, JourneyCase):
         true_form = CharacterFormFactory(character=self.sheet, name="True", form_type=FormType.TRUE)
         CharacterFormStateFactory(character=self.sheet, active_form=true_form)
 
-    def _flag(self, **kwargs):
-        return AlternateSelfFactory(
+        self.cinder_crown = UltimateTechniqueFactory(
+            name="Cinder Crown", archetype_alignment=RoleArchetype.SWORD
+        )
+        self.still_water = UltimateTechniqueFactory(
+            name="Still Water", archetype_alignment=RoleArchetype.SHIELD
+        )
+        self.quiet = AlternateSelfFactory(character=self.sheet, display_name="The Quiet Ysmay")
+        self.quiet.ultimate_techniques.add(self.still_water)
+        self.plain = AlternateSelfFactory(character=self.sheet, display_name="The Plain Ysmay")
+
+    def _ashen(self, **kwargs) -> AlternateSelf:
+        ashen = AlternateSelfFactory(
             character=self.sheet,
             display_name="The Ashen Ysmay",
             resonance=self.resonance,
-            emerges_at_audere=True,
             **kwargs,
         )
+        ashen.ultimate_techniques.add(self.cinder_crown)
+        return ashen
 
-    def _worn(self):
+    def _worn(self) -> AlternateSelf | None:
         row = ActiveAlternateSelf.objects.filter(character=self.sheet).first()
         return None if row is None else row.alternate_self
 
-    def _accept(self) -> str:
-        """Type ``accept surge`` and let the accept commit."""
+    def _surge(self) -> str:
+        """Type ``accept surge``; the reveal listing follows the surge line."""
         with self.captureOnCommitCallbacks(execute=True):
-            self.telnet(self.character, "accept surge")
+            return self.telnet(self.character, "accept surge")
+
+    def _choose(self, number: int) -> str:
+        """Type ``accept ultimate <number>`` and let the choice commit."""
+        with self.captureOnCommitCallbacks(execute=True):
+            self.telnet(self.character, f"accept ultimate {number}")
         return self.said(self.character)
+
+    def _readied(self) -> str | None:
+        known = KnownUltimate.objects.filter(character=self.sheet, readied=True).first()
+        return None if known is None else known.technique.name
 
     def _end_the_fight(self) -> CombatEncounter:
         """End a fight she took part in.
@@ -134,62 +171,170 @@ class _AudereSelfJourney(ResonanceCacheIsolationMixin, JourneyCase):
             target=self.character, condition__name="Audere", resolved_at__isnull=True
         ).exists()
 
+    def _charm(self) -> None:
+        """An unrelated charm takes her out of control."""
+        charm = ConditionTemplateFactory(
+            name="Honeyed Words",
+            category=ConditionCategoryFactory(name="Charm", alters_behavior=True),
+        )
+        ConditionInstanceFactory(target=self.character, condition=charm)
+        self.assertFalse(self.sheet.in_control)
 
-class AnAutomaticSelfComesAndGoesWithAudere(_AudereSelfJourney):
-    def test_accept_by_telnet_wears_the_self_and_the_fight_ending_drops_it(self) -> None:
-        alt = self._flag()
-        self._accept()
-        self.assertTold(self.character, "The surge takes hold.")
+
+class EverySelfWithUltimatesIsABondCard(_AudereSelfJourney):
+    def test_both_selves_are_listed_and_choosing_one_by_telnet_assumes_it(self) -> None:
+        self._ashen()
+        listing = self._surge()
+        self.assertIn("The surge takes hold.", listing)
+        self.assertIn("1) Edge (undiscovered; bond: The Ashen Ysmay)", listing)
+        self.assertIn("2) Wall (undiscovered; bond: The Quiet Ysmay)", listing)
+        self.assertNotIn("The Plain Ysmay", listing)
+        self.assertNotIn("Cinder Crown", listing)
+        self.assertIsNone(self._worn())
+
+        chosen = self._choose(2)
+
+        self.assertIn("Still Water", chosen)
+        self.assertTold(self.character, "You assume The Quiet Ysmay.")
+        self.assertEqual(self._worn(), self.quiet)
+        self.assertEqual(self._readied(), "Still Water")
+
+    def test_choosing_the_other_card_over_the_web_assumes_the_other_self(self) -> None:
+        ashen = self._ashen()
+        self._surge()
+        self.watch(self.character)
+        client = self.api(self.account_of(self.character))
+
+        state = client.get(_ULTIMATES_URL, {"character_sheet_id": self.sheet.pk})
+
+        self.assertEqual(state.status_code, status.HTTP_200_OK, state.content)
+        groups = state.json()["reveal"]["groups"]
+        self.assertEqual(
+            [(g["source"], g["alternate_self_name"]) for g in groups],
+            [("alternate_self", "The Ashen Ysmay"), ("alternate_self", "The Quiet Ysmay")],
+        )
+        card = groups[0]["cards"][0]
+        self.assertEqual((card["kind"], card["label"], card["name"]), ("category", "Edge", ""))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            chosen = client.post(
+                _CHOOSE_URL,
+                {"character_sheet_id": self.sheet.pk, "choice_key": card["choice_key"]},
+                format="json",
+            )
+
+        self.assertEqual(chosen.status_code, status.HTTP_200_OK, chosen.content)
+        self.assertEqual(chosen.json()["name"], "Cinder Crown")
         self.assertTold(self.character, "You assume The Ashen Ysmay.")
-        self.assertEqual(self._worn(), alt)
-        self.assertTrue(self._audere_held())
+        self.assertEqual(self._worn(), ashen)
         self.assertEqual(acting_aura(self.sheet).percent_for(self.abyssal), Decimal(100))
 
-        self._end_the_fight()
+    def test_a_character_whose_selves_carry_no_ultimates_sees_no_self_card(self) -> None:
+        self.quiet.ultimate_techniques.clear()
+        listing = self._surge()
+        self.assertIn("The surge takes hold.", listing)
+        self.assertNotIn("Ultimates:", listing)
+        self.assertNotIn("bond:", listing)
+
+    def test_a_non_ultimate_technique_row_never_makes_a_card(self) -> None:
+        """Rows written past the admin's ultimates-only picker are still not offered."""
+        self.quiet.ultimate_techniques.clear()
+        self.quiet.ultimate_techniques.add(TechniqueFactory(name="Plain Strike"))
+        listing = self._surge()
+        self.assertNotIn("bond:", listing)
+
+
+class AnAutomaticSelfComesAndGoesWithAudere(_AudereSelfJourney):
+    def test_audere_ending_drops_the_self(self) -> None:
+        """No player command ends Audere outside a fight; ``end_audere`` is the seam the
+        encounter cleanup and the Audere round countdown both call."""
+        ashen = self._ashen()
+        self._surge()
+        self._choose(1)
+        self.assertEqual(self._worn(), ashen)
+
+        end_audere(self.character)
 
         self.assertIsNone(self._worn())
         self.assertFalse(self._audere_held())
         self.assertEqual(acting_aura(self.sheet).percent_for(self.abyssal), Decimal(20))
 
-    def test_accept_over_the_web_does_the_same(self) -> None:
-        alt = self._flag()
-        self.watch(self.character)
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.api(self.account_of(self.character)).post(
-                "/api/magic/audere/respond/",
-                {"offer_id": self.offer.pk, "accept": True},
-                format="json",
-            )
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        self.assertTrue(response.json()["accepted"])
-        self.assertTold(self.character, "You assume The Ashen Ysmay.")
-        self.assertEqual(self._worn(), alt)
+    def test_the_fight_ending_drops_the_self(self) -> None:
+        self._ashen()
+        self._surge()
+        self._choose(1)
 
         self._end_the_fight()
-        self.assertIsNone(self._worn())
 
-    def test_no_flagged_self_means_nothing_changes(self) -> None:
-        AlternateSelfFactory(character=self.sheet, resonance=self.resonance)
-        self._accept()
-        self.assertNotTold(self.character, "You assume")
-        self.assertTrue(self._audere_held())
         self.assertIsNone(self._worn())
+        self.assertFalse(self._audere_held())
+        self.assertIsNone(self._readied())
 
     def test_audere_that_ran_out_mid_fight_still_drops_the_self_at_the_end(self) -> None:
         """A round duration strips the Audere condition without ``end_audere``."""
-        alt = self._flag()
-        self._accept()
-        self.assertEqual(self._worn(), alt)
+        ashen = self._ashen()
+        self._surge()
+        self._choose(1)
         remove_condition(self.character, ConditionTemplate.get_by_name("Audere"))
         self.assertFalse(self._audere_held())
-        self.assertEqual(self._worn(), alt)
+        self.assertEqual(self._worn(), ashen)
 
         self._end_the_fight()
         self.assertIsNone(self._worn())
 
 
+class ASelfSheWoreBeforeAudereStays(_AudereSelfJourney):
+    """She put on The Quiet Ysmay herself before the surge."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        assume_alternate_self(self.sheet, self.quiet)
+
+    def test_choosing_the_worn_selfs_card_keeps_it_hers_and_the_fight_end_leaves_it(
+        self,
+    ) -> None:
+        self._surge()
+        self._choose(1)
+        self.assertNotTold(self.character, "You assume")
+        self.assertEqual(self._readied(), "Still Water")
+        self.assertEqual(self._worn(), self.quiet)
+
+        self._end_the_fight()
+
+        self.assertFalse(self._audere_held())
+        self.assertEqual(self._worn(), self.quiet)
+
+    def test_choosing_another_selfs_card_swaps_them(self) -> None:
+        ashen = self._ashen()
+        self._surge()
+        self._choose(1)
+        self.assertTold(self.character, "You assume The Ashen Ysmay.")
+        self.assertEqual(self._worn(), ashen)
+
+        # The chosen self was taken on at Audere, so it drops away; she comes back to
+        # her true self, not to the one she wore before.
+        self._end_the_fight()
+        self.assertIsNone(self._worn())
+
+    def test_the_swap_is_refused_while_she_is_not_in_control(self) -> None:
+        self._ashen()
+        self._surge()
+        self._charm()
+
+        self._choose(1)
+
+        self.assertTold(
+            self.character,
+            "You cannot leave The Quiet Ysmay while not in control of yourself, "
+            "so The Ashen Ysmay does not come out.",
+        )
+        self.assertNotTold(self.character, "You assume")
+        self.assertEqual(self._worn(), self.quiet)
+        self.assertEqual(self._readied(), "Cinder Crown")
+
+
 class _ATalkedDownSelf(_AudereSelfJourney):
-    """Her flagged self must be talked down: it holds an Ashen Fury condition."""
+    """Her Ashen self must be talked down: it holds an Ashen Fury condition."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -201,20 +346,22 @@ class _ATalkedDownSelf(_AudereSelfJourney):
             break_free_check_type=CheckTypeFactory(),
             break_free_difficulty=10,
         )
-        self.alt = self._flag(
+        self.alt = self._ashen(
             revert_kind=AlternateSelfRevertKind.TALKED_DOWN, emergence_condition=self.fury
         )
+
+    def _fury_held(self) -> bool:
+        return ConditionInstance.objects.filter(
+            target=self.character, condition=self.fury, resolved_at__isnull=True
+        ).exists()
 
 
 class ATalkedDownSelfStaysUntilSheBreaksFree(_ATalkedDownSelf):
     def test_she_stays_transformed_until_the_fury_is_broken(self) -> None:
-        self._accept()
+        self._surge()
+        self._choose(1)
         self.assertEqual(self._worn(), self.alt)
-        self.assertTrue(
-            ConditionInstance.objects.filter(
-                target=self.character, condition=self.fury, resolved_at__isnull=True
-            ).exists()
-        )
+        self.assertTrue(self._fury_held())
 
         self._end_the_fight()
         self.assertFalse(self._audere_held())
@@ -226,41 +373,10 @@ class ATalkedDownSelfStaysUntilSheBreaksFree(_ATalkedDownSelf):
 
         with force_check_outcome(CheckOutcomeFactory(name="Broke Free", success_level=2)):
             self.telnet(self.character, "breakfree")
-        self.assertFalse(
-            ConditionInstance.objects.filter(
-                target=self.character, condition=self.fury, resolved_at__isnull=True
-            ).exists()
-        )
+        self.assertFalse(self._fury_held())
 
         self.assertIn("You revert to your true self.", self.telnet(self.character, "form revert"))
         self.assertIsNone(self._worn())
-
-
-class ABrokenSelfDoesNotStopTheSurge(_AudereSelfJourney):
-    def test_a_persona_she_does_not_own_leaves_audere_accepted(self) -> None:
-        self._flag(persona=PersonaFactory())
-        self._accept()
-        self.assertTold(self.character, "The surge takes hold.")
-        self.assertNotTold(self.character, "You assume")
-        self.assertTrue(self._audere_held())
-        self.assertFalse(PendingAudereOffer.objects.filter(pk=self.offer.pk).exists())
-        self.assertIsNone(self._worn())
-
-
-class ADifferentSelfAlreadyWornIsNotSwapped(_AudereSelfJourney):
-    def test_accept_succeeds_and_keeps_the_worn_self(self) -> None:
-        self._flag()
-        other = AlternateSelfFactory(character=self.sheet, display_name="The Quiet Ysmay")
-        ActiveAlternateSelf.objects.update_or_create(
-            character=self.sheet, defaults={"alternate_self": other}
-        )
-        self._accept()
-        self.assertNotTold(self.character, "You assume")
-        self.assertTrue(self._audere_held())
-        self.assertEqual(self._worn(), other)
-
-        self._end_the_fight()
-        self.assertEqual(self._worn(), other)
 
 
 class AFriendRalliesHerOutOfTheFury(_ATalkedDownSelf):
@@ -273,13 +389,9 @@ class AFriendRalliesHerOutOfTheFury(_ATalkedDownSelf):
         self.hobb = self.make_player("Hobb", room=self.room)
         self.watch(self.hobb)
 
-    def _fury_held(self) -> bool:
-        return ConditionInstance.objects.filter(
-            target=self.character, condition=self.fury, resolved_at__isnull=True
-        ).exists()
-
     def test_the_rally_backs_her_break_free_and_she_reverts(self) -> None:
-        self._accept()
+        self._surge()
+        self._choose(1)
         self._end_the_fight()
         refused = self.telnet(self.character, "form revert")
         self.assertIn("You can't revert while not in control of yourself.", refused)
@@ -301,25 +413,34 @@ class AFriendRalliesHerOutOfTheFury(_ATalkedDownSelf):
         self.assertIsNone(self._worn())
 
 
+class ABrokenSelfDoesNotUndoTheChoice(_AudereSelfJourney):
+    def test_a_persona_she_does_not_own_leaves_the_ultimate_readied(self) -> None:
+        self._ashen(persona=PersonaFactory())
+        self._surge()
+        with self.assertLogs("world.forms.services", level="WARNING") as logged:
+            self._choose(1)
+        self.assertIn("Audere could not put Ysmay in alternate self", logged.output[0])
+        self.assertNotTold(self.character, "You assume")
+        self.assertTrue(self._audere_held())
+        self.assertEqual(self._readied(), "Cinder Crown")
+        self.assertIsNone(self._worn())
+
+
 class ABlockedRevertDoesNotStopTheFightEnding(_AudereSelfJourney):
     """An automatic self wants to drop at fight's end, but an unrelated charm holds her."""
 
     def test_the_fight_ends_and_she_stays_in_the_self_with_the_refusal_logged(self) -> None:
-        alt = self._flag()
-        self._accept()
-        self.assertEqual(self._worn(), alt)
-        charm = ConditionTemplateFactory(
-            name="Honeyed Words",
-            category=ConditionCategoryFactory(name="Charm", alters_behavior=True),
-        )
-        ConditionInstanceFactory(target=self.character, condition=charm)
-        self.assertFalse(self.sheet.in_control)
+        ashen = self._ashen()
+        self._surge()
+        self._choose(1)
+        self.assertEqual(self._worn(), ashen)
+        self._charm()
 
         with self.assertLogs("world.forms.services", level="INFO") as logged:
             self._end_the_fight()
 
         self.assertFalse(self._audere_held())
-        self.assertEqual(self._worn(), alt)
+        self.assertEqual(self._worn(), ashen)
         # end_audere and the encounter cleanup each try the revert; both are refused.
         self.assertEqual(
             set(logged.output),
@@ -331,7 +452,8 @@ class ABlockedRevertDoesNotStopTheFightEnding(_AudereSelfJourney):
 
 
 class StaffAuthorTheAudereSelfInTheAdmin(RefusedAdminSaveCase):
-    """Staff flag a character's alternate self and set how it ends, on the stock admin page."""
+    """Staff give a character's alternate self its ultimates and set how it ends, on the
+    stock admin page."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -340,6 +462,8 @@ class StaffAuthorTheAudereSelfInTheAdmin(RefusedAdminSaveCase):
             name="Ashen Fury",
             category=ConditionCategoryFactory(name="Ashen Fury", alters_behavior=True),
         )
+        self.ultimate = UltimateTechniqueFactory(name="Cinder Crown")
+        self.ordinary = TechniqueFactory(name="Plain Strike")
         self.first = AlternateSelfFactory(character=self.sheet, display_name="The Ashen Ysmay")
         self.url = reverse("admin:arxii_alternateself_change", args=[self.first.pk])
 
@@ -347,15 +471,18 @@ class StaffAuthorTheAudereSelfInTheAdmin(RefusedAdminSaveCase):
         page = self.client.get(self.url)
         self.assertEqual(page.status_code, 200)
         form = page.context["adminform"].form
-        self.assertEqual(form.fields["emerges_at_audere"].label, "Emerges at audere")
+        self.assertEqual(form.fields["ultimate_techniques"].label, "Ultimate techniques")
         self.assertEqual(form.fields["revert_kind"].label, "Revert kind")
         self.assertEqual(form.fields["emergence_condition"].label, "Emergence condition")
-        for name in ("emerges_at_audere", "revert_kind", "emergence_condition"):
+        offered = set(form.fields["ultimate_techniques"].queryset)
+        self.assertIn(self.ultimate, offered)
+        self.assertNotIn(self.ordinary, offered)
+        for name in ("ultimate_techniques", "revert_kind", "emergence_condition"):
             self.assertContains(page, f'name="{name}"')
 
-    def test_staff_flag_a_talked_down_self_with_a_condition_and_the_row_holds_it(self) -> None:
+    def test_staff_save_a_talked_down_self_with_an_ultimate_and_the_row_holds_it(self) -> None:
         data = self.change_post(self.url)
-        data["emerges_at_audere"] = "on"
+        data["ultimate_techniques"] = [str(self.ultimate.pk)]
         data["revert_kind"] = AlternateSelfRevertKind.TALKED_DOWN
         data["emergence_condition"] = str(self.fury.pk)
 
@@ -363,31 +490,19 @@ class StaffAuthorTheAudereSelfInTheAdmin(RefusedAdminSaveCase):
 
         self.assertEqual(saved.status_code, 302, saved.content[:2000])
         row = AlternateSelf.objects.get(pk=self.first.pk)
-        self.assertTrue(row.emerges_at_audere)
         self.assertEqual(row.revert_kind, "talked_down")
         self.assertEqual(row.emergence_condition, self.fury)
+        self.assertEqual(list(row.ultimate_techniques.all()), [self.ultimate])
 
-    def test_a_second_flagged_self_on_the_same_character_is_refused_with_a_form_error(
-        self,
-    ) -> None:
-        AlternateSelf.objects.filter(pk=self.first.pk).update_with_reason(
-            reason="flag the first self without the admin", emerges_at_audere=True
-        )
-        second = AlternateSelfFactory(character=self.sheet, display_name="The Quiet Ysmay")
-        url = reverse("admin:arxii_alternateself_change", args=[second.pk])
-        data = self.change_post(url)
-        data["emerges_at_audere"] = "on"
+    def test_a_technique_that_is_not_an_ultimate_is_refused(self) -> None:
+        data = self.change_post(self.url)
+        data["ultimate_techniques"] = [str(self.ordinary.pk)]
 
-        refused = self.client.post(url, data)
+        refused = self.client.post(self.url, data)
 
         self.assertEqual(refused.status_code, 200)
-        self.assertContains(
-            refused, "Constraint \u201cone_audere_alternate_self_per_character\u201d is violated."
-        )
-        self.assertFalse(AlternateSelf.objects.get(pk=second.pk).emerges_at_audere)
-        self.assertFalse(
-            AlternateSelf.objects.filter(pk=second.pk, emerges_at_audere=True).exists()
-        )
+        self.assertIn("ultimate_techniques", refused.context["adminform"].form.errors)
+        self.assertFalse(AlternateSelf.objects.get(pk=self.first.pk).ultimate_techniques.exists())
 
 
 class TheDatabaseRefusesAnUnendableSelf(JourneyCase):

@@ -1,13 +1,15 @@
-"""Constraint and clean() rules for AlternateSelf's Audere fields (#4731)."""
+"""Constraint, clean() and choice rules for AlternateSelf's Audere fields (#4731)."""
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.forms import modelform_factory
 from django.test import TestCase
 
 from world.conditions.factories import ConditionCategoryFactory, ConditionTemplateFactory
 from world.forms.constants import AlternateSelfRevertKind
 from world.forms.factories import AlternateSelfFactory
 from world.forms.models import AlternateSelf
+from world.magic.factories import TechniqueFactory, UltimateTechniqueFactory
 
 
 class AlternateSelfAudereFieldsTests(TestCase):
@@ -23,25 +25,15 @@ class AlternateSelfAudereFieldsTests(TestCase):
             category=ConditionCategoryFactory(alters_behavior=False)
         )
 
-    def test_one_flagged_row_per_character(self):
-        self.assertIn(
-            "one_audere_alternate_self_per_character",
-            {constraint.name for constraint in AlternateSelf._meta.constraints},
-        )
-        first = AlternateSelfFactory(emerges_at_audere=True)
-        with self.assertRaises(IntegrityError) as ctx, transaction.atomic():
-            AlternateSelfFactory(character=first.character, emerges_at_audere=True)
-        # SQLite names the column of a failed unique index, PostgreSQL the index.
-        message = str(ctx.exception)
-        self.assertTrue(
-            "one_audere_alternate_self_per_character" in message or "character_id" in message,
-            message,
-        )
-
-    def test_unflagged_rows_unrestricted(self):
-        first = AlternateSelfFactory(emerges_at_audere=True)
-        AlternateSelfFactory(character=first.character)
-        AlternateSelfFactory(character=first.character)
+    def test_ultimate_techniques_offer_only_ultimates(self):
+        """A model form (the admin's included) refuses a non-ultimate on this field."""
+        ultimate = UltimateTechniqueFactory()
+        ordinary = TechniqueFactory()
+        form_class = modelform_factory(AlternateSelf, fields=["ultimate_techniques"])
+        self.assertTrue(form_class({"ultimate_techniques": [ultimate.pk]}).is_valid())
+        refused = form_class({"ultimate_techniques": [ordinary.pk]})
+        self.assertFalse(refused.is_valid())
+        self.assertIn("ultimate_techniques", refused.errors)
 
     def test_talked_down_without_condition_fails_clean_and_db(self):
         row = AlternateSelfFactory.build(revert_kind=AlternateSelfRevertKind.TALKED_DOWN)

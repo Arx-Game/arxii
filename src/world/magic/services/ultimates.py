@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
+from functools import partial
 import logging
 from typing import TYPE_CHECKING
 
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.classes.models import Path
     from world.companions.models import Companion
+    from world.forms.models import AlternateSelf
     from world.magic.models import Gift, KnownUltimate, Technique
     from world.worship.models import WorshippedBeing
 
@@ -70,6 +72,7 @@ class _Pool:
     gift: Gift | None = None
     being: WorshippedBeing | None = None
     companion: Companion | None = None
+    alternate_self: AlternateSelf | None = None
 
 
 def active_ceremony(character: ObjectDB) -> str | None:  # noqa: OBJECTDB_PARAM - condition target
@@ -256,6 +259,36 @@ def _gift_pools(sheet: CharacterSheet) -> list[_Pool]:
     ]
 
 
+def _alternate_self_pools(sheet: CharacterSheet) -> list[_Pool]:
+    """Each of her alternate selves that carries ultimates (#4731; #4098's past-life bond).
+
+    Every self is offered, worn or not: choosing one of its cards puts her in it.
+    """
+    from world.forms.models import AlternateSelf  # noqa: PLC0415
+
+    links = (
+        AlternateSelf.ultimate_techniques.through.objects.filter(
+            alternateself__character=sheet, technique__is_ultimate=True
+        )
+        .select_related("alternateself", "technique")
+        .order_by("alternateself__display_name", "alternateself_id")
+    )
+    selves: dict[int, AlternateSelf] = {}
+    by_self: dict[int, list[Technique]] = {}
+    for link in links:
+        selves[link.alternateself_id] = link.alternateself
+        by_self.setdefault(link.alternateself_id, []).append(link.technique)
+    return [
+        _Pool(
+            UltimateSource.ALTERNATE_SELF,
+            self_id,
+            _ordered(by_self[self_id]),
+            alternate_self=alt,
+        )
+        for self_id, alt in selves.items()
+    ]
+
+
 def _pools(sheet: CharacterSheet) -> list[_Pool]:
     """Every source pool, a technique appearing in an earlier pool dropped from later ones."""
     seen: set[int] = set()
@@ -265,6 +298,7 @@ def _pools(sheet: CharacterSheet) -> list[_Pool]:
         + _owned_known_pools(sheet)
         + _patron_pools(sheet)
         + _companion_pools(sheet)
+        + _alternate_self_pools(sheet)
         + _gift_pools(sheet)
     )
     for pool in every_pool:
@@ -362,6 +396,7 @@ def _build_reveal(sheet: CharacterSheet, ceremony: str) -> UltimateReveal | None
                     gift=pool.gift,
                     being=pool.being,
                     companion=pool.companion,
+                    alternate_self=pool.alternate_self,
                 )
             )
     if not groups:
@@ -476,9 +511,26 @@ def choose_ultimate(sheet: CharacterSheet, choice_key: str) -> KnownUltimate:
         # round 1, M2).
         raise UltimateRevealClosed from exc
     transaction.on_commit(lambda: _route_ultimate_chosen(locked, technique))
+    alternate_self = _chosen_alternate_self(reveal, choice_key)
+    if alternate_self is not None:
+        # The self comes out only once the choice is durable, and a self that cannot be
+        # assumed never undoes the choice (#4731); robust=True logs anything it misses.
+        from world.forms.services import assume_alternate_self_for_audere  # noqa: PLC0415
+
+        transaction.on_commit(
+            partial(assume_alternate_self_for_audere, locked, alternate_self), robust=True
+        )
     if created:
         fire_first_discoveries(locked, [technique])
     return known
+
+
+def _chosen_alternate_self(reveal: UltimateReveal, choice_key: str) -> AlternateSelf | None:
+    """The alternate self whose card was chosen, or None for any other source's card."""
+    for group, card in reveal.flat_cards():
+        if card.choice_key == choice_key:
+            return group.alternate_self
+    return None
 
 
 def _route_ultimate_chosen(sheet: CharacterSheet, technique: Technique) -> None:
