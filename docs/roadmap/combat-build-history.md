@@ -371,6 +371,14 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   `DramaticSurgeRecord` gained `subject_opponent`/`subject_phase_number` and a third
   partial unique constraint - a boss beat dedups per boss per phase, not once per
   encounter (ADR-0250).
+- **Steeling yourself (#4738, slice 2 of #4727) - DONE:** `SurgeTriggerKind.STEELED` joins
+  `ROLLED_SURGE_TRIGGER_KINDS` (a `SurgeTuning` may carry `potency_base`); `StrainConfig`
+  gains `steel_fatigue_category`, `steel_fatigue_cost`, `free_steels_per_encouragement`;
+  `CharacterEngagement.free_steels` holds free steels until the fight ends. Service
+  `world/combat/steel.py`, action `combat_steel`, telnet `combat steel`, web
+  `POST /api/combat/<id>/steel/`, the `SteelYourself` button. A successful Rally grants free
+  steels. Migration 0322. Journeys: `test_steel_journeys.py`. Inert until staff author the
+  `STEELED` tuning (the Required content `surge-tuning` probe enumerates it).
 - **Rolled surges (#4737, slice 1 of #4727) - DONE:** taunts, encouragement and a hurt
   bonded ally raise a player character's intensity through a roll with degrees instead of
   a fixed curve amount. New trigger kinds `TAUNT_RECEIVED`, `RALLIED`, `ALLY_HURT`; staff

@@ -8493,6 +8493,18 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   and `apply_relationship_escalation_spike` qualifies the owner on `target_companion`;
   `DramaticSurgeRecord.subject_companion` is the dedup subject. The peril leg never fires
   for a companion (no opponent peril band).
+- **Steeling yourself (#4738, slice 2 of #4727) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR A
+  `STEELED` `SurgeTuning`]:** `combat steel` / `combat_steel` (`SteelYourselfAction`) /
+  `POST /api/combat/<id>/steel/` runs `world/combat/steel.steel_yourself`: an immediate act,
+  once per round (the rolled-surge dedup), in a declaring round with a COMBAT engagement and
+  an escalation curve. A free steel (`CharacterEngagement.free_steels`) is spent if held, else
+  `StrainConfig.steel_fatigue_cost` of `steel_fatigue_category` fatigue is charged (a failed
+  roll still costs); then the `STEELED` tuning's check is rolled against its `potency_base`
+  and the outcome's band is written by `apply_rolled_surge`. A successful Rally
+  (success_level >= 1) grants `StrainConfig.free_steels_per_encouragement` free steels to the
+  ally. Refusals are `SteelRefusedError` with a `user_message`. The participant payload
+  carries `steel` (`SteelOffer`: free steels, fatigue pool, cost) to its owner only; the
+  combat panel's `SteelYourself` button reads it. Journeys: `test_steel_journeys`.
 - **Rolled surges (#4737, ADR-4737) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR CONTENT]:** a
   taunt, a rally and a hurt bonded ally raise a player character's intensity through a roll
   with degrees. `SurgeTriggerKind` has twelve members: the nine older kinds above and

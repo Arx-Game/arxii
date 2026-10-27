@@ -564,6 +564,11 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   CHARACTER_INCAPACITATED; owner surges once on a companion-targeted relationship
   (world/combat/tests/test_escalation_companion_fall.py).
 
+- **Steeling yourself (#4738, slice 2 of #4727), journey-proven (`test_steel_journeys`).**
+  `combat steel` rolls the staff-authored `STEELED` tuning's check and raises the player's
+  own intensity by the outcome's band, once a round, for configured fatigue or a free steel
+  an ally's successful Rally granted. Inert until staff author the `STEELED` tuning and
+  bands. Surrendering control (part B) is not built.
 - **Rolled surges (#4737), journey-proven (`test_surge_rolls_journeys`,
   `test_taunt_targets_journeys`).** An NPC taunt entry surges a player character through a
   Composure roll with degrees (a better result surges more, the roll line reaches only that
