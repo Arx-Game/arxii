@@ -2688,7 +2688,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="drift-focus-check-type",
             label="Focus check type set on the drift configuration",
             tier=DependencyTier.REQUIRED,
-            consumer="world/magic/services/drift.py get_drift_config()",
+            consumer="world/magic/services/drift.py check_resonance_focus()",
             consequence=(
                 "A character carrying drift toward an affinity other than her aura's "
                 "has no check to roll to keep her focus, so the contest cannot resolve."
@@ -2700,7 +2700,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="drift-conflict-condition",
             label="Conflict condition set on the drift configuration",
             tier=DependencyTier.REQUIRED,
-            consumer="world/magic/services/drift.py get_drift_config()",
+            consumer="world/magic/services/drift.py check_resonance_focus()",
             consequence=(
                 "A failed focus roll has no condition to apply, so carried drift "
                 "never costs the character anything."
@@ -2712,7 +2712,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="drift-conflict-condition-self-shakeable",
             label="Drift conflict condition is in a self-shakeable category",
             tier=DependencyTier.REQUIRED,
-            consumer="world/magic/services/drift.py get_drift_config()",
+            consumer="world/magic/services/drift.py check_resonance_focus()",
             consequence=(
                 "A character who fails to keep her focus cannot shake the conflict "
                 "off herself with breakfree; only staff can lift it."

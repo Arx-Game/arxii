@@ -1674,6 +1674,7 @@ class TestDriftConfigProbes(TestCase):
         get_drift_config()
         self.assertFalse(self._result("drift-focus-check-type").present)
         self.assertFalse(self._result("drift-conflict-condition").present)
+        self.assertTrue(self._result("drift-conflict-condition-self-shakeable").present)
 
     def test_set_fields_pass_and_category_flag_is_checked(self) -> None:
         from world.checks.factories import CheckTypeFactory
