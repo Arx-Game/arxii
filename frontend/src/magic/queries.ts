@@ -26,6 +26,7 @@ import type {
   EntryFlourishRespondRequest,
   GlimpseDistinctionLinkRequest,
   PatchThreadRequest,
+  PullPreviewRequest,
   RescueRequest,
   SetGlimpseProseRequest,
   SetGlimpseTagsRequest,
@@ -79,6 +80,9 @@ export const magicKeys = {
 
   applicablePulls: (context: ApplicablePullsRequest | null) =>
     [...magicKeys.all, 'applicable-pulls', context] as const,
+
+  pullBurnPreview: (request: PullPreviewRequest | null) =>
+    [...magicKeys.all, 'pull-burn-preview', request] as const,
 
   characterAnima: (characterId: number) =>
     [...magicKeys.all, 'character-anima', characterId] as const,
@@ -557,6 +561,19 @@ export function useApplicablePulls(context: ApplicablePullsRequest | null) {
 // ---------------------------------------------------------------------------
 // Technique builder mutation hooks
 // ---------------------------------------------------------------------------
+
+/**
+ * Pull preview carrying the burn numbers (#4736). The request must name a
+ * technique_id or the response's `burn` is null. Disabled while `request` is null.
+ */
+export function usePullBurnPreview(request: PullPreviewRequest | null) {
+  return useQuery({
+    queryKey: magicKeys.pullBurnPreview(request),
+    queryFn: () => api.previewPull(request!),
+    enabled: request !== null,
+    staleTime: 5_000,
+  });
+}
 
 /**
  * Dry-run pricing mutation for the technique builder live budget meter.

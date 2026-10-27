@@ -13,8 +13,13 @@
  */
 
 import { useState, useMemo } from 'react';
-import { useThreads, useCharacterResonances } from '@/magic/queries';
-import type { Thread, ApplicablePullsRequest } from '@/magic/types';
+import { useThreads, useCharacterResonances, usePullBurnPreview } from '@/magic/queries';
+import type {
+  Thread,
+  ApplicablePullsRequest,
+  BurnPreview,
+  PullPreviewRequest,
+} from '@/magic/types';
 import type { CastableTechnique, CastPullRequestBody } from '@/scenes/actionTypes';
 
 // ---------------------------------------------------------------------------
@@ -28,6 +33,13 @@ export interface CastPullSelection {
   pullNotice: string | null;
   setPullNotice: (msg: string | null) => void;
   pullsContext: ApplicablePullsRequest | null;
+  /** Resonance to burn for strain on this cast (#4736). */
+  burn: number;
+  setBurn: (next: number) => void;
+  /** Burn numbers from the pull preview; null until a pull is chosen. */
+  burnPreview: BurnPreview | null;
+  /** The chosen pull's tier, for the ceiling line; null with no paid pull. */
+  pullTier: 1 | 2 | 3 | null;
   balanceByResonanceId: Record<number, number>;
   handlePullsChange: (next: Record<number, 0 | 1 | 2 | 3>) => void;
   /** Returns ``{ pull }`` (or ``{}``) on success, or ``{ error }`` when the
@@ -55,6 +67,7 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
   const [selectedPulls, setSelectedPulls] = useState<Record<number, 0 | 1 | 2 | 3>>({});
   const [showInapplicable, setShowInapplicable] = useState(false);
   const [pullNotice, setPullNotice] = useState<string | null>(null);
+  const [burn, setBurn] = useState(0);
 
   // Threads — fetched only while the cast dialog is open to avoid an
   // unnecessary warm-up fetch and to allow the gating test (brief item 6).
@@ -85,6 +98,32 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
       scene_id: Number(sceneId),
     };
   }, [castOpen, selectedTechnique, characterId, castTargetPersonaId, sceneId]);
+
+  // Burn ceiling: preview the chosen pull against the selected technique.
+  const pullGroup = useMemo(() => {
+    const paid = Object.entries(selectedPulls).filter(([, tier]) => tier > 0);
+    if (paid.length === 0) return null;
+    const thread = threadById.get(Number(paid[0][0]));
+    if (!thread) return null;
+    return {
+      resonanceId: thread.resonance,
+      tier: paid[0][1] as 1 | 2 | 3,
+      threadIds: paid.map(([id]) => Number(id)),
+    };
+  }, [selectedPulls, threadById]);
+  const pullTier = pullGroup?.tier ?? null;
+  const previewRequest = useMemo<PullPreviewRequest | null>(() => {
+    if (!castOpen || !selectedTechnique || characterId === null || !pullGroup) return null;
+    return {
+      character_sheet_id: characterId,
+      resonance_id: pullGroup.resonanceId,
+      tier: pullGroup.tier,
+      thread_ids: pullGroup.threadIds,
+      technique_id: selectedTechnique.id,
+    };
+  }, [castOpen, selectedTechnique, characterId, pullGroup]);
+  const { data: burnPreviewData } = usePullBurnPreview(previewRequest);
+  const burnPreview = previewRequest ? (burnPreviewData?.burn ?? null) : null;
 
   /**
    * Constrain pull selection to a single (resonance, tier) group — the cast
@@ -152,12 +191,16 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
       tier: paid[0][1] as 1 | 2 | 3,
       thread_ids: paid.map(([id]) => Number(id)),
     };
+    // The ceiling can shrink when the pull changes; never send past it.
+    const burnToSend = burnPreview?.available ? Math.min(burn, burnPreview.ceiling) : 0;
+    if (burnToSend > 0) pull.burn = burnToSend;
     return { pull };
   }
 
   function reset(): void {
     setSelectedPulls({});
     setPullNotice(null);
+    setBurn(0);
   }
 
   return {
@@ -167,6 +210,10 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     pullNotice,
     setPullNotice,
     pullsContext,
+    burn,
+    setBurn,
+    burnPreview,
+    pullTier,
     balanceByResonanceId,
     handlePullsChange,
     buildPullPayload,

@@ -180,6 +180,9 @@ export type PreviewedEffect = components['schemas']['ResolvedPullEffect'];
 
 export type PullPreviewResponse = components['schemas']['ThreadPullPreviewResponse'];
 
+/** Burn numbers on a pull preview (#4736); null when the preview named no technique. */
+export type BurnPreview = components['schemas']['BurnPreview'];
+
 // ---------------------------------------------------------------------------
 // Teaching Offer accept
 //

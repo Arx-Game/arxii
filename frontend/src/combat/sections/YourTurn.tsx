@@ -348,6 +348,7 @@ function buildFocusedJob(
     pullKwargs.pull_resonance_id = selectedPull.resonance_id;
     pullKwargs.pull_tier = selectedPull.tier;
     pullKwargs.pull_thread_ids = selectedPull.thread_ids;
+    if (selectedPull.burn > 0) pullKwargs.pull_burn = selectedPull.burn;
   }
 
   const furyKwargs: Record<string, number> = {};
@@ -461,6 +462,7 @@ function buildClashJob(
     pullKwargs.pull_resonance_id = selectedPull.resonance_id;
     pullKwargs.pull_tier = selectedPull.tier;
     pullKwargs.pull_thread_ids = selectedPull.thread_ids;
+    if (selectedPull.burn > 0) pullKwargs.pull_burn = selectedPull.burn;
   }
 
   return () =>
@@ -1407,6 +1409,8 @@ function SubmitDeclarations({
 
 interface ThreadPullSectionProps {
   characterSheetId: number;
+  /** The focused technique; the dialog needs it to show the burn ceiling (#4736). */
+  techniqueId: number | undefined;
   pullDialogOpen: boolean;
   selectedPull: PullSelection | null;
   isLocked: boolean;
@@ -1416,6 +1420,7 @@ interface ThreadPullSectionProps {
 
 function ThreadPullSection({
   characterSheetId,
+  techniqueId,
   pullDialogOpen,
   selectedPull,
   isLocked,
@@ -1462,6 +1467,7 @@ function ThreadPullSection({
           <p className="text-[10px] text-primary/70" data-testid="selected-pull-summary">
             Tier {selectedPull.tier} pull: {selectedPull.thread_ids.length} thread
             {selectedPull.thread_ids.length === 1 ? '' : 's'} selected
+            {selectedPull.burn > 0 ? `, burning ${selectedPull.burn}` : ''}
           </p>
         )}
       </div>
@@ -1469,6 +1475,7 @@ function ThreadPullSection({
       <ThreadPullDialog
         characterSheetId={characterSheetId}
         open={pullDialogOpen}
+        techniqueId={techniqueId}
         onClose={() => setPullDialogOpen(false)}
         onSelect={(selection) => {
           setSelectedPull(selection);
@@ -2785,6 +2792,7 @@ export function YourTurn({
 
       <ThreadPullSection
         characterSheetId={characterSheetId}
+        techniqueId={focusedContext.techniqueId}
         pullDialogOpen={pullDialogOpen}
         selectedPull={selectedPull}
         isLocked={isLocked}

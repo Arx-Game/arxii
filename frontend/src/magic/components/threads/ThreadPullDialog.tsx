@@ -24,6 +24,7 @@ import {
   NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { previewPull } from '../../api';
+import { PullBurnInput } from './PullBurnInput';
 import { useCharacterResonances, useThreads } from '../../queries';
 import type { PullPreviewResponse, Thread } from '../../types';
 
@@ -35,6 +36,8 @@ export interface PullSelection {
   resonance_id: number;
   tier: 1 | 2 | 3;
   thread_ids: number[];
+  /** Resonance burned for strain on this cast (#4736); 0 when none. */
+  burn: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,6 +59,8 @@ export interface ThreadPullDialogProps {
   characterSheetId: number;
   open: boolean;
   onClose: () => void;
+  /** The technique being cast; lets the preview answer with the burn ceiling (#4736). */
+  techniqueId?: number;
   /** Combat mode: provided by the combat declaration panel.
    *  involvedTraitIds / involvedTechniqueIds unlock TRAIT/TECHNIQUE threads
    *  whose anchor PK is in the respective set.
@@ -97,6 +102,7 @@ export function ThreadPullDialog({
   open,
   onClose,
   combat,
+  techniqueId,
   onSelect,
 }: ThreadPullDialogProps) {
   const { data: allThreads } = useThreads();
@@ -105,6 +111,7 @@ export function ThreadPullDialog({
   const [selectedResonanceId, setSelectedResonanceId] = useState<number | null>(null);
   const [selectedTier, setSelectedTier] = useState<1 | 2 | 3>(1);
   const [selectedThreadIds, setSelectedThreadIds] = useState<number[]>([]);
+  const [burn, setBurn] = useState(0);
   const [preview, setPreview] = useState<PullPreviewResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -117,6 +124,7 @@ export function ThreadPullDialog({
       setSelectedResonanceId(null);
       setSelectedTier(1);
       setSelectedThreadIds([]);
+      setBurn(0);
       setPreview(null);
       setPreviewLoading(false);
       setPreviewError(null);
@@ -153,6 +161,7 @@ export function ThreadPullDialog({
       resonance_id: selectedResonanceId,
       tier: selectedTier,
       thread_ids: selectedThreadIds,
+      ...(techniqueId !== undefined ? { technique_id: techniqueId } : {}),
     })
       .then((result) => {
         setPreview(result);
@@ -162,7 +171,7 @@ export function ThreadPullDialog({
         setPreviewError(err instanceof Error ? err.message : 'Failed to load preview.');
         setPreviewLoading(false);
       });
-  }, [characterSheetId, selectedResonanceId, selectedTier, selectedThreadIds]);
+  }, [characterSheetId, selectedResonanceId, selectedTier, selectedThreadIds, techniqueId]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -178,12 +187,17 @@ export function ThreadPullDialog({
     );
   }
 
+  // The ceiling can shrink when the player changes the pull; never send past it.
+  const burnPreview = preview?.burn ?? null;
+  const effectiveBurn = burnPreview?.available ? Math.min(burn, burnPreview.ceiling) : 0;
+
   function handleSelect() {
     if (selectedResonanceId === null || selectedThreadIds.length === 0) return;
     onSelect({
       resonance_id: selectedResonanceId,
       tier: selectedTier,
       thread_ids: selectedThreadIds,
+      burn: effectiveBurn,
     });
     onClose();
   }
@@ -349,6 +363,12 @@ export function ThreadPullDialog({
                   ))}
                 </ul>
               )}
+              <PullBurnInput
+                burn={burnPreview}
+                value={effectiveBurn}
+                onChange={setBurn}
+                tier={selectedTier}
+              />
             </div>
           )}
         </div>

@@ -25,6 +25,7 @@ import { fetchScene, sceneKeys } from '../queries';
 import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
+import { PullBurnInput } from '@/magic/components/threads/PullBurnInput';
 import { useCastPullSelection } from '../hooks/useCastPullSelection';
 import { isMapOnlyAction } from '@/combat/roundActionHelpers';
 import { extractErrorMessage } from '@/lib/errors';
@@ -946,6 +947,20 @@ export function ActionPanel({ sceneId }: Props) {
                             onAutoRevertNotice={pull.setPullNotice}
                             balanceByResonanceId={pull.balanceByResonanceId}
                           />
+                          {pull.pullTier !== null && (
+                            <div className="mt-2">
+                              <PullBurnInput
+                                burn={pull.burnPreview}
+                                value={
+                                  pull.burnPreview?.available
+                                    ? Math.min(pull.burn, pull.burnPreview.ceiling)
+                                    : 0
+                                }
+                                onChange={pull.setBurn}
+                                tier={pull.pullTier}
+                              />
+                            </div>
+                          )}
                           {pull.pullNotice && (
                             <p className="mt-1 text-xs text-amber-400">{pull.pullNotice}</p>
                           )}

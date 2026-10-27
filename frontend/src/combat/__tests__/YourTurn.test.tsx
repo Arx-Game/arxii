@@ -46,19 +46,26 @@ vi.mock('@/inventory/hooks/useInventory', () => ({
 vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
   ThreadPullDialog: ({
     open,
+    techniqueId,
     onSelect,
   }: {
     open: boolean;
+    techniqueId?: number;
     onClose: () => void;
-    onSelect?: (sel: { resonance_id: number; tier: 1 | 2 | 3; thread_ids: number[] }) => void;
+    onSelect?: (sel: {
+      resonance_id: number;
+      tier: 1 | 2 | 3;
+      thread_ids: number[];
+      burn: number;
+    }) => void;
   }) => {
     if (!open) return null;
     return (
-      <div data-testid="thread-pull-dialog-stub">
+      <div data-testid="thread-pull-dialog-stub" data-technique-id={String(techniqueId)}>
         <button
           type="button"
           data-testid="simulate-pull-select"
-          onClick={() => onSelect?.({ resonance_id: 5, tier: 2, thread_ids: [10, 11] })}
+          onClick={() => onSelect?.({ resonance_id: 5, tier: 2, thread_ids: [10, 11], burn: 3 })}
         >
           Simulate Select Pull
         </button>
@@ -1583,6 +1590,8 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455)', () => {
     // Open the pull dialog and simulate selecting a pull.
     await userEvent.click(screen.getByTestId('open-pull-dialog-btn'));
     expect(screen.getByTestId('thread-pull-dialog-stub')).toBeInTheDocument();
+    // The dialog is told which technique is being cast so it can show the burn ceiling.
+    expect(screen.getByTestId('thread-pull-dialog-stub')).toHaveAttribute('data-technique-id', '7');
     await userEvent.click(screen.getByTestId('simulate-pull-select'));
 
     // Dialog stub closes after selection (open=false) — verify the summary shows.
@@ -1604,6 +1613,7 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455)', () => {
       pull_resonance_id: 5,
       pull_tier: 2,
       pull_thread_ids: [10, 11],
+      pull_burn: 3,
     });
 
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
@@ -1659,6 +1669,7 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455)', () => {
       pull_resonance_id: 5,
       pull_tier: 2,
       pull_thread_ids: [10, 11],
+      pull_burn: 3,
     });
 
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
@@ -1678,6 +1689,7 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455)', () => {
       expect(screen.getByTestId('selected-pull-summary')).toBeInTheDocument();
     });
     expect(screen.getByTestId('selected-pull-summary')).toHaveTextContent('Tier 2 pull');
+    expect(screen.getByTestId('selected-pull-summary')).toHaveTextContent('burning 3');
 
     // Clear button removes the selection.
     await userEvent.click(screen.getByTestId('clear-pull-btn'));
