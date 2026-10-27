@@ -35,8 +35,9 @@ class AlternateSelfAudereFieldsTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             row.clean()
         self.assertIn("emergence_condition", ctx.exception.message_dict)
-        with self.assertRaises(IntegrityError), transaction.atomic():
+        with self.assertRaises(IntegrityError) as db_ctx, transaction.atomic():
             AlternateSelfFactory(revert_kind=AlternateSelfRevertKind.TALKED_DOWN)
+        self.assertIn("alternate_self_talked_down_needs_condition", str(db_ctx.exception))
 
     def test_non_behavior_condition_fails_clean(self):
         row = AlternateSelfFactory.build(
@@ -52,3 +53,11 @@ class AlternateSelfAudereFieldsTests(TestCase):
         )
         row.clean()
         self.assertEqual(AlternateSelf.objects.get(pk=row.pk).emergence_condition, self.behavior)
+
+    def test_automatic_revert_with_condition_fails_clean(self):
+        row = AlternateSelfFactory.build(
+            revert_kind=AlternateSelfRevertKind.AUTOMATIC, emergence_condition=self.behavior
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            row.clean()
+        self.assertIn("emergence_condition", ctx.exception.message_dict)

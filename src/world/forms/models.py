@@ -664,6 +664,15 @@ class AlternateSelf(SharedMemoryModel):
     def clean(self) -> None:
         super().clean()
         if self.revert_kind != AlternateSelfRevertKind.TALKED_DOWN:
+            if self.emergence_condition is not None:
+                raise ValidationError(
+                    {
+                        "emergence_condition": (
+                            "An automatic revert cannot carry a condition; a behavior-altering "
+                            "condition would block the revert."
+                        )
+                    }
+                )
             return
         if self.emergence_condition is None:
             raise ValidationError(

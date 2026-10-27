@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 
+from world.forms.constants import AlternateSelfRevertKind
 from world.forms.models import (
     ActiveAlternateSelf,
     AlternateSelf,
@@ -1041,3 +1042,48 @@ def learn_style(
         option=option,
         defaults={"taught_by_label": taught_by_label},
     )
+
+
+def audere_alternate_self(sheet: CharacterSheet) -> AlternateSelf | None:
+    """The alternate self this character becomes at Audere, if staff flagged one (#4731)."""
+    return AlternateSelf.objects.filter(character=sheet, emerges_at_audere=True).first()
+
+
+def emerge_audere_alternate_self(sheet: CharacterSheet) -> AlternateSelf | None:
+    """Become the flagged alternate self as Audere is accepted (#4731).
+
+    Returns the self assumed, or None when nothing is flagged or a different alternate
+    self is already active (Audere never swaps one out and never raises into the accept).
+    A self that must be talked down also takes its emergence condition.
+    """
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+    from world.forms.services.transformation import trigger_transformation  # noqa: PLC0415
+
+    alt = audere_alternate_self(sheet)
+    if alt is None:
+        return None
+    active = ActiveAlternateSelf.objects.filter(character=sheet).first()
+    if active is not None and active.alternate_self_id not in (None, alt.pk):
+        return None
+    trigger_transformation(sheet, alt, cause="audere")
+    if alt.revert_kind == AlternateSelfRevertKind.TALKED_DOWN:
+        apply_condition(target=sheet.character, condition=alt.emergence_condition)
+    return alt
+
+
+def revert_audere_alternate_self(sheet: CharacterSheet) -> bool:
+    """Revert the flagged self when Audere ends, if it is active and reverts on its own.
+
+    A talked-down self stays; a blocked revert (not in control) is left as it is.
+    Returns True when the revert happened.
+    """
+    alt = audere_alternate_self(sheet)
+    if alt is None or alt.revert_kind != AlternateSelfRevertKind.AUTOMATIC:
+        return False
+    if not ActiveAlternateSelf.objects.filter(character=sheet, alternate_self=alt).exists():
+        return False
+    try:
+        revert_alternate_self(sheet)
+    except RevertBlockedError:
+        return False
+    return True

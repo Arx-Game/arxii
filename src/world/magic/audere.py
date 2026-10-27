@@ -375,6 +375,12 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         # Apply Audere condition
         apply_condition(target=character, condition=audere_template)
 
+        # The self the character becomes at Audere, if staff flagged one (#4731).
+        if sheet is not None:
+            from world.forms.services import emerge_audere_alternate_self
+
+            emerge_audere_alternate_self(sheet)
+
         # Boost engagement intensity modifier
         engagement = CharacterEngagement.objects.select_for_update().get(
             character_id=character.pk,
@@ -553,6 +559,11 @@ def end_audere(character: ObjectDB) -> None:
             anima.current = min(anima.current, anima.maximum)
             anima.pre_audere_maximum = None
             anima.save(update_fields=["maximum", "current", "pre_audere_maximum"])
+
+    if sheet is not None:
+        from world.forms.services import revert_audere_alternate_self
+
+        revert_audere_alternate_self(sheet)
 
 
 def maybe_create_audere_offer(
