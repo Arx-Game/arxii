@@ -2076,6 +2076,15 @@ older sense (shift in aura percentages). Do not mix the two in names.
   and game pages (`frontend/src/magic/CLAUDE.md`). Required content row `drift-correction-config`.
   Details: `docs/systems/magic.md` "Drift correction".
 
+**Thread retune (#4735, slice 6 of #4672).** `services/thread_resonance.py` moves ONE thread
+through the SERVICE ritual at `THREAD_RESONANCE_SERVICE_PATH` (found by path, never by name):
+same affinity one to one, across affinities at the `conversion_pair` rate floored at 1, merging
+into a live same-anchor thread via `conversion._reanchor_thread` (shared with the full Fall).
+`PerformRitualAction._precheck` calls `check_thread_resonance_change` before components and anima
+are spent; `kwargs["target_resonance"]` is the components' `resonance_context`. Telnet
+`resonance=<id>`, REST `GET /api/magic/threads/{id}/resonance-options/`, Required content row
+`thread-resonance-ritual`. Details: `docs/systems/magic.md` "Thread retune".
+
 **Seed content:** `wire_fall_redemption_content()` in `factories.py`,
 called by `seed_magic_dev()`. Seeds the "Ritual of Falling" Ritual row
 (SERVICE dispatch), the `FallRedemptionConfig` singleton, example

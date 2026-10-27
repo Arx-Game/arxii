@@ -4334,6 +4334,50 @@ offer and target resonance.
 `test_ritual_components_target_mode.py`, `test_drift_correction_views.py`; journey
 `integration_tests/test_drift_correction_journeys.py` (telnet, web, lapse, negatives).
 
+### Thread retune: moving a thread to another resonance (slice 6 of #4672) [BUILT & WIRED]
+
+A player moves one thread to another resonance by performing the retune rite: the SERVICE
+`Ritual` whose `service_function_path` is `THREAD_RESONANCE_SERVICE_PATH`
+(`world.magic.services.thread_resonance.change_thread_resonance`). Staff author the row and its
+`RitualComponentRequirement` rows; code finds it with `thread_resonance_ritual()` (first by pk),
+the way the Rite of Honors is found by `HONORS_SERVICE_PATH`. No roll.
+
+- **Targets** (`thread_resonance_options(thread)` -> `ThreadResonanceOption`): every other
+  resonance of the thread's affinity (rate 1, `conversion_type` None), plus, for each other
+  affinity, the `ResonanceConversion` counterpart of the thread's resonance when
+  `conversion_pair` succeeds (the pair's multiplier and Fall / Redemption type). No mapping or no
+  pair: not offered. Sorted own affinity first, then affinity and resonance name, for display.
+- **Points**: `developed_points` within the affinity unchanged; across affinities
+  `scaled_thread_points` = `max(1, int(points x multiplier))` while points > 0 (a Redemption
+  shrinks a thread but never empties it, like `convert_resonance_amount`). `level` is unchanged.
+- **Merge**: `_reanchor_thread(thread, target_resonance_id, new_points)` (`services/conversion.py`,
+  shared with the full Fall conversion's `_reanchor_threads`) adds the points to a live thread on
+  the same anchor in the target resonance and retires the moved thread, else re-anchors it.
+  `_find_existing_target_thread` compares every typed target FK id (organization included).
+- **Refusals** (`ThreadResonanceChangeError`, `check_thread_resonance_change`): no thread named,
+  a thread that is not the performer's or is retired, no target named (the message lists the
+  options as "Name (id, same affinity|Fall|Redemption)"), a target not among the options (its own
+  resonance included), and a retired thread on the same anchor already holding the target for the
+  kinds whose unique constraint counts retired rows (`RETIREMENT_BLIND_TARGET_KINDS`: trait,
+  technique, relationship track, relationship capstone), which the database would reject.
+- **Nothing spent on refusal**: `PerformRitualAction._precheck` runs
+  `check_thread_resonance_change` for this rite before components and anima are spent;
+  `change_thread_resonance` locks the thread row and checks again. `_validate_components` passes
+  `resonance_context=kwargs["target_resonance"]`, so a `matches_target_resonance` requirement is
+  paid toward the chosen resonance (material, facet or keepsake; `offered_target_components` in
+  `services/ritual_components.py`, shared with drift correction's `offered_components`).
+- **Aura**: balances are untouched, so no `recompute_aura`; `character.threads.invalidate()` runs.
+- **Surfaces**: telnet `ritual <rite> thread=<id> resonance=<id>` (alias `target_resonance=`;
+  leave it out to list the options); web `POST /api/magic/rituals/perform/` with
+  `kwargs: {thread_id, target_resonance}` (`RitualPerformView` resolves both; the result is
+  `ThreadResonanceChangeResult`: `thread_id` of the survivor, `from_resonance_id`,
+  `to_resonance_id`, `points_before`, `points_moved`, `points_after`, `merged`,
+  `conversion_type`); `GET /api/magic/threads/{id}/resonance-options/` (owner only) returns
+  `{ritual_id | null, options: [{resonance_id, resonance_name, affinity_name, conversion_type,
+  projected_points, qualifying: [{item_id, name, mode}]}]}`. Required content row
+  `thread-resonance-ritual` ("No ritual changes a thread's resonance"). Journey:
+  `integration_tests/test_thread_resonance_journeys.py`.
+
 ### Resonance-Environment Interaction (universal path — 2026-05-16)
 
 **Design:** `docs/architecture/resonance-environment-universal-path.md`

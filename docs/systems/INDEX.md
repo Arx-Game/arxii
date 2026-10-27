@@ -82,6 +82,16 @@
   `DriftConversionOfferDialog` on the scene page and game page. One Required content row,
   `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
 
+- **Thread retune (slice 6 of #4672):** `services/thread_resonance.py` moves one thread to
+  another resonance through the SERVICE ritual at `THREAD_RESONANCE_SERVICE_PATH`
+  (`thread_resonance_ritual`, `thread_resonance_options` -> `ThreadResonanceOption`,
+  `check_thread_resonance_change`, `change_thread_resonance` -> `ThreadResonanceChangeResult`,
+  `ThreadResonanceChangeError`); within the affinity one to one, across it at the authored pair
+  rate floored at 1, merging into a live same-anchor thread via `conversion._reanchor_thread`.
+  `PerformRitualAction._precheck` refuses before anything is spent. Telnet `ritual <rite>
+  thread=<id> resonance=<id>`; REST `GET /api/magic/threads/{id}/resonance-options/`. Required
+  content row `thread-resonance-ritual`. Details: [magic.md](magic.md) "Thread retune".
+
 - **Facet vocabulary guards (#4197, ADR-4197):** `Facet` is a flat vocabulary typed by many
   hands. `world/magic/services/facets.py` holds the one spelling rule (`facet_key`),
   `find_facet` / `near_facets` (what a spelling resolves to, and what it is near; aliases

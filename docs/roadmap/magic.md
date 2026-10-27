@@ -1046,6 +1046,25 @@ from the check type, once as the technique skill.
 check-type rows that weight them; staff rename, repoint or remove them in admin as part of the skill
 revamp, working from the new dashboard row.
 
+## Changing a thread's resonance (#4735, slice 6 of #4672, BUILT 2026-10-27)
+
+A player can move one of their threads to another resonance through a rite: a retune within the
+thread's affinity keeps every point, a Fall or Redemption across affinities converts them at the
+authored pair rate (a Redemption never empties a thread), and a live thread already on the same
+anchor in the new resonance takes the points while the moved one retires.
+
+**Built (backend, telnet, web API):** `services/thread_resonance.py` (options, a pre-spend check,
+the change), the shared `conversion._reanchor_thread` merge (and `_find_existing_target_thread`
+without `getattr`), `PerformRitualAction._precheck` so a refused move spends nothing, the
+target-resonance offering paid toward the chosen resonance, telnet `resonance=<id>`, web
+`kwargs.target_resonance`, `GET /api/magic/threads/{id}/resonance-options/`, and Required content
+row `thread-resonance-ritual`. Journey: `integration_tests/test_thread_resonance_journeys.py`.
+
+**Not built here:** the Spellbook thread card's "Change to" pills (Task 2 of the slice). Nothing is
+authored: until staff create the SERVICE ritual, the dashboard row lists it.
+
+---
+
 ## Drift correction: the conversion offer and rite (#4733, slice 4 of #4672, BUILT 2026-10-27)
 
 A character who earns resonance from a deed while holding resonance that sits off their aura can
