@@ -9,7 +9,9 @@ on her, and its authored -10 on her cast check reaches the very cast that failed
 Worn, her Abyssal alternate self turns the measure around: her Celestial balance becomes
 the drift.
 
-Rolls are read off the check engine through spies; the focus outcome is forced with
+Spies on the check engine read the focus roll's difficulty and the cast's modifier
+breakdown, which no player-facing line carries; everything else is read off what she is
+told and the condition she holds. The focus outcome is forced with
 ``force_check_outcome``, which the focus roll consumes because it is the cast's first
 roll. Names are invented.
 """
@@ -35,12 +37,16 @@ from world.checks.factories import (
 )
 from world.checks.test_helpers import force_check_outcome
 from world.combat import services as combat_services
-from world.combat.constants import ActionCategory, ParticipantStatus
+from world.combat.constants import ActionCategory, ClashStatus, PaceMode, ParticipantStatus
 from world.combat.factories import (
+    ClashConfigFactory,
+    ClashFactory,
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    StrainConfigFactory,
 )
+from world.combat.models import ClashContribution
 from world.combat.services import resolve_round
 from world.conditions.constants import DurationType
 from world.conditions.factories import (
@@ -72,12 +78,14 @@ from world.magic.services.drift import get_drift_config
 from world.magic.services.threads import weave_thread
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.types.pull import CastPullDeclaration
-from world.progression.models import KudosSourceCategory
-from world.scenes import action_services
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
-from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
+from world.traits.factories import (
+    CheckOutcomeFactory,
+    CheckSystemSetupFactory,
+    StatTraitFactory,
+)
 from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
 
@@ -123,6 +131,11 @@ class _Recorder:
             p.stop()
 
 
+def _labels(breakdown) -> dict[str, int]:
+    """A modifier breakdown's contributions, by the label a player sees."""
+    return {c.source_label: c.value for c in breakdown.contributions}
+
+
 def _author_conflict(cast_check_type):
     """The config, focus check and conflict condition staff author for the contest."""
     focus_type = CheckTypeFactory(name="Keeping Focus")
@@ -159,9 +172,6 @@ class _Drifting(_AShifter):
         CharacterVitals.objects.create(
             character_sheet=self.sheet, health=50, max_health=50, base_max_health=50
         )
-        accrue = patch("world.scenes.action_services.accrue")
-        accrue.start()
-        self.addCleanup(accrue.stop)
 
         self.cast_type = CheckTypeFactory()
         self.cast_stat = StatTraitFactory()
@@ -217,10 +227,6 @@ class _Drifting(_AShifter):
     def conflict(self) -> ConditionInstance | None:
         return ConditionInstance.objects.filter(target=self.ysmay, condition=self.condition).first()
 
-    @staticmethod
-    def labels(breakdown) -> dict[str, int]:
-        return {c.source_label: c.value for c in breakdown.contributions}
-
 
 class DriftOnTheThresholdCallsForNothing(_Drifting):
     abyssal_balance = 50
@@ -260,20 +266,22 @@ class DriftPastTheThreshold(_Drifting):
     """60 Abyssal against a threshold of 50: one step, focus difficulty 12."""
 
     def test_a_failed_focus_roll_penalises_the_same_cast(self) -> None:
+        self.watch(self.ysmay)
         rec = self.cast(focus="Failure")
 
         self.assertEqual(rec.focus_difficulties, [12])
+        self.assertTold(self.ysmay, f"You lose your focus as you work Lantern Ward: {CONFLICT}.")
         instance = self.conflict()
         self.assertIsNotNone(instance)
         self.assertEqual(instance.severity, 3)  # one step + (1 - (-1))
-        self.assertEqual(self.labels(rec.cast_breakdowns[0]).get(CONFLICT), PENALTY)
+        self.assertEqual(_labels(rec.cast_breakdowns[0]).get(CONFLICT), PENALTY)
 
     def test_a_kept_focus_applies_nothing(self) -> None:
         rec = self.cast(focus="Success")
 
         self.assertEqual(rec.focus_difficulties, [12])
         self.assertIsNone(self.conflict())
-        self.assertNotIn(CONFLICT, self.labels(rec.cast_breakdowns[0]))
+        self.assertNotIn(CONFLICT, _labels(rec.cast_breakdowns[0]))
 
     def test_a_worse_roll_costs_more(self) -> None:
         self.cast(focus="Partial Success")
@@ -288,11 +296,6 @@ class DriftPastTheThreshold(_Drifting):
         self.cast(focus="Failure")
         self.cast(focus="Success")
         self.assertEqual(self.conflict().severity, 3)
-
-    def test_she_is_told_what_took_hold(self) -> None:
-        self.watch(self.ysmay)
-        self.cast(focus="Failure")
-        self.assertTold(self.ysmay, CONFLICT)
 
 
 class AnOffAuraPullAddsAStep(_Drifting):
@@ -367,20 +370,21 @@ class NoAuraNoContest(ResonanceCacheIsolationMixin, JourneyCase):
         CharacterResonanceFactory(
             character_sheet=sheet, resonance=ResonanceFactory(affinity=abyssal), balance=500
         )
-        focus_type, _condition = _author_conflict(cast_type)
-        with patch.object(
-            check_services,
-            "perform_check_with_modifiers",
-            wraps=check_services.perform_check_with_modifiers,
-        ) as spy:
+        _focus_type, condition = _author_conflict(cast_type)
+        self.watch(hobb)
+        # A failure is forced for the first roll: had a focus roll been made, it would
+        # have taken it and laid the conflict on her.
+        with force_check_outcome(CheckOutcome.objects.get(name="Failure")):
             outcome = self.web(hobb, "cast_technique", technique_id=technique.pk)
         self.assertTrue(outcome.detail.success, outcome.detail.message)
-        self.assertFalse(any(call.args[1] == focus_type for call in spy.call_args_list))
+        self.assertFalse(
+            ConditionInstance.objects.filter(target=hobb, condition=condition).exists()
+        )
+        self.assertNotTold(hobb, "You lose your focus")
 
 
-class ACombatCastRollsFocusOnce(_AShifter):
-    """Ysmay, 60 Abyssal against 100 Celestial, declares a technique in a combat round
-    from telnet; the round's resolution rolls her focus once, before her offense roll."""
+class _DriftingInCombat(_AShifter):
+    """Ysmay, 60 Abyssal against 100 Celestial, in a combat round against Gristle."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -390,7 +394,8 @@ class ACombatCastRollsFocusOnce(_AShifter):
             "Ysmay", room=self.room, mask_affinity=self.abyssal
         )
         self.cast_type = CheckTypeFactory()
-        CheckTypeTraitFactory(check_type=self.cast_type, trait=StatTraitFactory(), weight=1)
+        self.cast_stat = StatTraitFactory()
+        CheckTypeTraitFactory(check_type=self.cast_type, trait=self.cast_stat, weight=1)
         self.technique = TechniqueFactory(
             name="Ember Lash",
             gift=GiftFactory(),
@@ -398,6 +403,7 @@ class ACombatCastRollsFocusOnce(_AShifter):
             effect_type=EffectTypeFactory(base_power=10),
             action_category=ActionCategory.PHYSICAL,
             action_template=ActionTemplateFactory(check_type=self.cast_type),
+            clash_capable=True,
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
         CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
@@ -409,39 +415,122 @@ class ACombatCastRollsFocusOnce(_AShifter):
             resonance=ResonanceFactory(affinity=self.celestial),
             balance=100,
         )
+        self.abyssal_resonance = ResonanceFactory(name="Ashfall", affinity=self.abyssal)
         CharacterResonanceFactory(
-            character_sheet=self.sheet,
-            resonance=ResonanceFactory(affinity=self.abyssal),
-            balance=60,
+            character_sheet=self.sheet, resonance=self.abyssal_resonance, balance=60
         )
         self.focus_type, self.condition = _author_conflict(self.cast_type)
+        # A manual pace: the declaration never resolves the round by itself, and the
+        # resolve below is the one a GM's resolve call makes.
         self.encounter = CombatEncounterFactory(
-            status=RoundStatus.DECLARING, round_number=1, room=self.room
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            room=self.room,
+            pace_mode=PaceMode.MANUAL,
         )
         CombatParticipantFactory(
             encounter=self.encounter, character_sheet=self.sheet, status=ParticipantStatus.ACTIVE
         )
         self.opponent = CombatOpponentFactory(encounter=self.encounter, name="Gristle")
 
+
+class ACombatCastRollsFocusOnce(_DriftingInCombat):
+    """Ysmay declares a technique in a combat round from telnet; the round's resolution
+    rolls her focus once, before her offense roll."""
+
     def test_the_round_rolls_focus_once_and_the_conflict_reaches_the_offense_roll(self) -> None:
         failure = CheckOutcome.objects.get(name="Failure")
+        self.watch(self.ysmay)
         with (
             _Recorder(focus_type=self.focus_type, cast_type=self.cast_type) as rec,
             force_check_outcome(failure),
         ):
             told = self.telnet(self.ysmay, "cast Ember Lash at Gristle")
             self.encounter.refresh_from_db()
-            if self.encounter.round_number == 1:
-                resolve_round(self.encounter)
+            self.assertEqual(self.encounter.round_number, 1, told)
+            self.assertEqual(rec.focus_difficulties, [], "declaring rolls nothing")
+            resolve_round(self.encounter)
         self.assertEqual(rec.focus_difficulties, [12], told)
+        self.assertTold(self.ysmay, f"You lose your focus as you work Ember Lash: {CONFLICT}.")
         self.assertTrue(
             ConditionInstance.objects.filter(target=self.ysmay, condition=self.condition).exists()
         )
         self.assertEqual(len(rec.cast_breakdowns), 1)
-        self.assertEqual(
-            {c.source_label: c.value for c in rec.cast_breakdowns[0].contributions}.get(CONFLICT),
-            PENALTY,
+        self.assertEqual(_labels(rec.cast_breakdowns[0]).get(CONFLICT), PENALTY)
+
+
+class ACombatRoundPullAddsAStep(_DriftingInCombat):
+    """Ysmay pulls an Abyssal thread with her combat cast. The pull is committed when she
+    declares, and the round's resolution counts it toward her focus roll: one step for
+    her drift (59 Abyssal after the pull's cost) and one for the off-aura pull,
+    difficulty 14."""
+
+    def test_the_committed_pull_makes_the_focus_roll_harder(self) -> None:
+        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TRAIT,
+            resonance=self.abyssal_resonance,
+            tier=1,
+            flat_bonus_amount=1,
+            effect_kind=EffectKind.FLAT_BONUS,
         )
+        CharacterThreadWeavingUnlockFactory(
+            character=self.sheet,
+            unlock=ThreadWeavingUnlockFactory(
+                target_kind=TargetKind.TRAIT, unlock_trait=self.cast_stat
+            ),
+        )
+        weave_thread(
+            self.sheet, TargetKind.TRAIT, self.cast_stat, self.abyssal_resonance, name="Ash"
+        )
+        success = CheckOutcome.objects.get(name="Success")
+        with (
+            _Recorder(focus_type=self.focus_type, cast_type=self.cast_type) as rec,
+            force_check_outcome(success),
+        ):
+            told = self.telnet(self.ysmay, "cast Ember Lash at Gristle pull=Ash resonance=Ashfall")
+            self.ysmay.resonances.invalidate()
+            resolve_round(self.encounter)
+        self.assertEqual(rec.focus_difficulties, [14], told)
+
+
+class AClashContributionRollsFocus(_DriftingInCombat):
+    """Ysmay commits Ember Lash to a clash against Gristle from telnet. When the round
+    resolves, her contribution rolls her focus first; the conflict a failed roll lays
+    on her is on that same contribution's roll."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        ClashConfigFactory()
+        StrainConfigFactory()
+        # The clash settles its round on an outcome tier the check charts do not carry.
+        CheckOutcomeFactory(name="Clash Lost", success_level=-2)
+        self.clash = ClashFactory(
+            encounter=self.encounter,
+            npc_opponent=self.opponent,
+            status=ClashStatus.ACTIVE,
+            started_round=1,
+        )
+
+    def test_the_conflict_reaches_the_contribution_roll(self) -> None:
+        failure = CheckOutcome.objects.get(name="Failure")
+        self.watch(self.ysmay)
+        with (
+            _Recorder(focus_type=self.focus_type, cast_type=self.cast_type) as rec,
+            force_check_outcome(failure),
+        ):
+            told = self.telnet(self.ysmay, "clash Gristle with Ember Lash")
+            self.assertEqual(rec.focus_difficulties, [], "committing rolls nothing")
+            resolve_round(self.encounter)
+        self.assertEqual(rec.focus_difficulties, [12], told)
+        self.assertTold(self.ysmay, f"You lose your focus as you work Ember Lash: {CONFLICT}.")
+        self.assertTrue(
+            ClashContribution.objects.filter(
+                clash_round__clash=self.clash, character=self.sheet
+            ).exists()
+        )
+        self.assertEqual(len(rec.cast_breakdowns), 1)
+        self.assertEqual(_labels(rec.cast_breakdowns[0]).get(CONFLICT), PENALTY)
 
 
 class AnEnchantedFlirtRollsFocusToo(ResonanceCacheIsolationMixin, JourneyCase):
@@ -455,16 +544,7 @@ class AnEnchantedFlirtRollsFocusToo(ResonanceCacheIsolationMixin, JourneyCase):
         AffinityInteraction.objects.clear_cache()
         celestial, _primal, abyssal = ensure_canonical_affinities()
         CheckSystemSetupFactory.create()
-        KudosSourceCategory.objects.get_or_create(
-            name="social_engagement",
-            defaults={
-                "display_name": "Social Engagement",
-                "description": "Seeded for tests on the no-migrations fast tier.",
-                "default_amount": 1,
-            },
-        )
-        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
-        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+        self.seed_social_engagement()
         self.parlor = self.make_room("The Parlor")
         self.scene = SceneFactory(room=self.parlor)
         flirt = next(t for t in create_social_action_templates() if t.name == "Flirt")
@@ -512,6 +592,7 @@ class AnEnchantedFlirtRollsFocusToo(ResonanceCacheIsolationMixin, JourneyCase):
         )
         self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
         failure = CheckOutcome.objects.get(name="Failure")
+        self.watch(self.ysmay)
         with (
             _Recorder(focus_type=self.focus_type, cast_type=self.flirt_type) as rec,
             force_check_outcome(failure),
@@ -524,6 +605,9 @@ class AnEnchantedFlirtRollsFocusToo(ResonanceCacheIsolationMixin, JourneyCase):
             )
         self.assertEqual(accepted.status_code, status.HTTP_200_OK, accepted.data)
         self.assertEqual(rec.focus_difficulties, [12])
+        self.assertTold(
+            self.ysmay, f"You lose your focus as you work Mesmerizing Gaze: {CONFLICT}."
+        )
         self.assertTrue(
             ConditionInstance.objects.filter(target=self.ysmay, condition=self.condition).exists()
         )

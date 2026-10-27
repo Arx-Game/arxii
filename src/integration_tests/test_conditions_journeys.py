@@ -30,8 +30,6 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     RestoreToSenseActionTemplateFactory,
 )
-from world.progression.seeds import seed_social_engagement_kudos_category
-from world.scenes import action_services
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
@@ -151,17 +149,26 @@ class ShakingOffAResonanceConflict(JourneyCase):
         self.assertEqual(severity_of(self.held), 2)
         self.assertTrue(self.ysmay.sheet_data.in_control)
 
-    def test_a_friend_rallies_her(self) -> None:
+    def test_a_friend_rallies_her_and_her_next_attempt_carries_it(self) -> None:
         with ROLL_WELL:
             told = self.telnet(self.hobb, "rally Ysmay")
         self.assertIn(
             "You rally Ysmay, granting them +5 to their next attempt to break free.", told
         )
+        self.assertEqual(severity_of(self.held), 3)
+        self.assertTrue(self.ysmay.sheet_data.in_control)
+        with ROLL_WELL:
+            told = self.telnet(self.ysmay, "breakfree")
+        self.assertIn("You push back against the effect, weakening its hold.", told)
+        self.assertEqual(severity_of(self.held), 2)
         self.assertTrue(self.ysmay.sheet_data.in_control)
 
 
 class StirringUpAResonanceConflict(JourneyCase):
-    """An authored social action applies the condition again; the higher severity wins.
+    """An authored social action lays the condition on its target.
+
+    Someone free of it gains it at the authored severity; someone already holding
+    it keeps the higher of the two severities.
 
     No new code path: the Intimidate template's pool applies the condition to its
     target through the ordinary APPLY_CONDITION effect.
@@ -170,10 +177,7 @@ class StirringUpAResonanceConflict(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
         content = SocialContent.create_all()
-        seed_social_engagement_kudos_category()
-        # _get_social_engagement_category memoizes at module level; reset around the test.
-        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
-        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+        self.seed_social_engagement()
         self.room = self.make_room("The Lantern")
         self.ysmay = self.make_player("Ysmay", room=self.room)
         self.hobb = self.make_player("Hobb", room=self.room)
@@ -190,26 +194,47 @@ class StirringUpAResonanceConflict(JourneyCase):
             break_free_check_type=CheckTypeFactory(name="Focus"),
             break_free_difficulty=10,
         )
+        # Staff point the Intimidate pool's condition effects at the conflict, at severity 2.
         pool = content.templates["intimidate"].consequence_pool
+        self.repointed = 0
         for effect in ConsequenceEffect.objects.filter(
             consequence__pool_entries__pool=pool, condition_template__isnull=False
         ):
             effect.condition_template = self.conflict
             effect.condition_severity = 2
             effect.save()
-        self.held = ConditionInstanceFactory(target=self.hobb, condition=self.conflict, severity=3)
+            self.repointed += 1
 
-    def test_being_stirred_never_lowers_the_hold_and_she_can_still_shake_it(self) -> None:
-        self.telnet(self.ysmay, "intimidate Hobb")
+    def stir(self) -> tuple[str, str]:
+        """Ysmay intimidates Hobb and he accepts; what each of them was told."""
+        intimidated = self.telnet(self.ysmay, "intimidate Hobb")
         with ROLL_WELL:
-            self.telnet(self.hobb, "accept")
+            accepted = self.telnet(self.hobb, "accept")
+        return intimidated, accepted
+
+    def held(self) -> ConditionInstance | None:
+        return ConditionInstance.objects.filter(target=self.hobb, condition=self.conflict).first()
+
+    def test_the_stir_lays_the_conflict_on_someone_free_of_it(self) -> None:
+        self.assertGreater(self.repointed, 0)
+        intimidated, accepted = self.stir()
+        self.assertIn("You move to intimidate Hobb.", intimidated)
+        self.assertIn("You accept the action against you.", accepted)
+        held = self.held()
+        self.assertIsNotNone(held)
+        self.assertEqual(severity_of(held), 2)
+        self.assertTrue(self.hobb.sheet_data.in_control)
+
+    def test_being_stirred_never_lowers_the_hold_and_he_can_still_shake_it(self) -> None:
+        held = ConditionInstanceFactory(target=self.hobb, condition=self.conflict, severity=3)
+        self.stir()
         # The stir's authored severity is 2; the higher severity wins, so the hold stays 3.
-        self.assertEqual(severity_of(self.held), 3)
+        self.assertEqual(severity_of(held), 3)
         self.assertTrue(self.hobb.sheet_data.in_control)
         with ROLL_WELL:
             told = self.telnet(self.hobb, "breakfree")
         self.assertIn("You push back against the effect, weakening its hold.", told)
-        self.assertEqual(severity_of(self.held), 2)
+        self.assertEqual(severity_of(held), 2)
 
 
 class TreatingAFeverAtTheClinic(JourneyCase):

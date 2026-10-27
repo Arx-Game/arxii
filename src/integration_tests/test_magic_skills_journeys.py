@@ -81,8 +81,7 @@ from world.magic.services.threads import weave_thread
 from world.magic.specialization.services import grant_gift_to_character
 from world.magic.types.pull import CastPullDeclaration
 from world.progression.factories import CharacterPathHistoryFactory
-from world.progression.models import KudosSourceCategory, WeeklySkillUsage
-from world.scenes import action_services
+from world.progression.models import WeeklySkillUsage
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
@@ -223,18 +222,7 @@ class FlirtingWithATechniqueSkill(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
         CheckSystemSetupFactory.create()
-        # PG tier seeds social_engagement (world/progression/seeds.py); the fast tier does not.
-        KudosSourceCategory.objects.get_or_create(
-            name="social_engagement",
-            defaults={
-                "display_name": "Social Engagement",
-                "description": "Seeded for tests on the no-migrations fast tier.",
-                "default_amount": 1,
-            },
-        )
-        # _get_social_engagement_category memoizes at module level; reset around each test.
-        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
-        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+        self.seed_social_engagement()
         self.skill = SkillFactory()
         self.parlor = self.make_room("The Parlor")
         self.scene = SceneFactory(room=self.parlor)
