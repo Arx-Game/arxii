@@ -35,7 +35,7 @@ from world.contributors.admin import CREDIT_FIELDSET
 
 @admin.register(ConditionCategory)
 class ConditionCategoryAdmin(admin.ModelAdmin):
-    list_display = ["name", "is_negative", "display_order"]
+    list_display = ["name", "is_negative", "self_shakeable", "display_order"]
     list_editable = ["display_order"]
     search_fields = ["name"]
 

@@ -98,6 +98,7 @@ from world.magic.models.dramatic_moment import (
     DramaticMomentTag,
     DramaticMomentType,
 )
+from world.magic.models.drift import DriftConfig
 from world.magic.models.endorsement import (
     EntryFlourishRecord,
     PoseEndorsement,
@@ -345,6 +346,7 @@ __all__ = [
     "DistinctionRitualGrant",
     "DramaticMomentTag",
     "DramaticMomentType",
+    "DriftConfig",
     "EffectType",
     "EffectTypeManager",
     # endorsement — entry flourish (#545)

@@ -1278,6 +1278,61 @@ def _probe_soulfray_condition_set() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _drift_config():
+    """The drift configuration row, or None when none exists (never creates one)."""
+    from world.magic.models import DriftConfig  # noqa: PLC0415
+
+    return DriftConfig.objects.cached_singleton()
+
+
+def _probe_drift_focus_check_type() -> ProbeResult:
+    """`DriftConfig.focus_check_type` names the check a character rolls to keep focus (#4732)."""
+    config = _drift_config()
+    if config is None:
+        return ProbeResult(present=False, detail="No drift configuration row exists.")
+    if config.focus_check_type_id is None:
+        return ProbeResult(
+            present=False,
+            detail="The drift configuration's Focus check type field is empty.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_drift_conflict_condition() -> ProbeResult:
+    """`DriftConfig.conflict_condition` names the condition a failed focus roll applies (#4732)."""
+    config = _drift_config()
+    if config is None:
+        return ProbeResult(present=False, detail="No drift configuration row exists.")
+    if config.conflict_condition_id is None:
+        return ProbeResult(
+            present=False,
+            detail="The drift configuration's Conflict condition field is empty.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_drift_conflict_condition_self_shakeable() -> ProbeResult:
+    """The conflict condition's category is `self_shakeable` (#4732).
+
+    Without the flag a character cannot shake the conflict off herself with
+    breakfree, so a failed focus roll would leave her stuck until staff step in.
+    A missing config or unset condition is the other probes' gap, so it is not
+    reported twice here.
+    """
+    config = _drift_config()
+    if config is None or config.conflict_condition_id is None:
+        return ProbeResult(present=True)
+    if config.conflict_condition.category.self_shakeable:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        detail=(
+            f"The conflict condition's category ({config.conflict_condition.category.name}) "
+            "is not marked self-shakeable."
+        ),
+    )
+
+
 def _probe_soulfray_stage_pools() -> ProbeResult:
     """Every Soulfray stage has a pool that draws at least one consequence (#4089).
 
@@ -2628,6 +2683,42 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_soulfray_condition_set),
             admin_model="SoulfrayConfig",
+        ),
+        ContentDependency(
+            key="drift-focus-check-type",
+            label="Focus check type set on the drift configuration",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/drift.py get_drift_config()",
+            consequence=(
+                "A character carrying drift toward an affinity other than her aura's "
+                "has no check to roll to keep her focus, so the contest cannot resolve."
+            ),
+            probe=CustomProbe(fn=_probe_drift_focus_check_type),
+            admin_model="DriftConfig",
+        ),
+        ContentDependency(
+            key="drift-conflict-condition",
+            label="Conflict condition set on the drift configuration",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/drift.py get_drift_config()",
+            consequence=(
+                "A failed focus roll has no condition to apply, so carried drift "
+                "never costs the character anything."
+            ),
+            probe=CustomProbe(fn=_probe_drift_conflict_condition),
+            admin_model="DriftConfig",
+        ),
+        ContentDependency(
+            key="drift-conflict-condition-self-shakeable",
+            label="Drift conflict condition is in a self-shakeable category",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/drift.py get_drift_config()",
+            consequence=(
+                "A character who fails to keep her focus cannot shake the conflict "
+                "off herself with breakfree; only staff can lift it."
+            ),
+            probe=CustomProbe(fn=_probe_drift_conflict_condition_self_shakeable),
+            admin_model="DriftConfig",
         ),
         ContentDependency(
             key="soulfray-stage-pools",

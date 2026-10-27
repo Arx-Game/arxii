@@ -55,6 +55,7 @@ from world.magic.models import (
     DistinctionResonanceGrant,
     DistinctionResonanceRankThreshold,
     DistinctionRitualGrant,
+    DriftConfig,
     EffectType,
     Facet,
     FacetAlias,
@@ -210,6 +211,7 @@ class AffinityInteractionAdmin(admin.ModelAdmin):
         "kind",
         "aggressor",
         "severity_multiplier",
+        "conflict_weight",
         "conversion_type",
         "conversion_multiplier",
     ]
@@ -2835,3 +2837,27 @@ class CastOutcomeLevelShiftAdmin(admin.ModelAdmin):
     list_display = ["success_level", "level_shift"]
     list_editable = ["level_shift"]
     ordering = ["success_level"]
+
+
+@admin.register(DriftConfig)
+class DriftConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for carried drift and the focus contest (#4732)."""
+
+    autocomplete_fields = ["focus_check_type", "conflict_condition", "updated_by"]
+
+    list_display = (
+        "pk",
+        "threshold_percent",
+        "threshold_floor",
+        "severity_step",
+        "off_aura_pull_steps",
+        "focus_check_type",
+        "conflict_condition",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not DriftConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False

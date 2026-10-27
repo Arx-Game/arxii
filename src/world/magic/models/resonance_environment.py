@@ -102,6 +102,8 @@ class AffinityInteraction(SharedMemoryModel):
     kind                 — AMPLIFY / REJECT / REPEL / CORRUPT.
     aggressor            — who acts on whom (ENVIRONMENT or CASTER).
     severity_multiplier  — scales the effect magnitude; default 1.00.
+    conflict_weight      — how much a point of carried drift in the source
+                           affinity pulls against the place's affinity (#4732).
 
     Unique per ordered (source_affinity, environment_affinity) pair.
     """
@@ -138,6 +140,16 @@ class AffinityInteraction(SharedMemoryModel):
         decimal_places=2,
         default=Decimal("1.00"),
         help_text="Scales the interaction's effect magnitude.",
+    )
+    conflict_weight = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        help_text=(
+            "How strongly carried drift in the source affinity pulls against this "
+            "place's affinity when deciding whether the character's focus is "
+            "contested. 1.00 is a neutral weight."
+        ),
     )
     conversion_multiplier = models.DecimalField(
         max_digits=4,

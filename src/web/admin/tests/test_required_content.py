@@ -1654,3 +1654,40 @@ class TestSettleActionTemplateProbe(TestCase):
         ActionTemplateFactory(name="Settle RC", category="social", settles_allegiance=True)
         result = _probe_for("settle-action-template").resolve(None)
         self.assertTrue(result.present)
+
+
+class TestDriftConfigProbes(TestCase):
+    """The drift configuration's check type, condition and category flag (#4732)."""
+
+    def _result(self, key: str) -> rc.ProbeResult:
+        return _probe_for(key).resolve(None)
+
+    def test_all_three_report_missing_without_a_config_row(self) -> None:
+        self.assertFalse(self._result("drift-focus-check-type").present)
+        self.assertFalse(self._result("drift-conflict-condition").present)
+        # The category probe leaves the missing-config gap to the other two.
+        self.assertTrue(self._result("drift-conflict-condition-self-shakeable").present)
+
+    def test_unset_fields_are_reported(self) -> None:
+        from world.magic.services.drift import get_drift_config
+
+        get_drift_config()
+        self.assertFalse(self._result("drift-focus-check-type").present)
+        self.assertFalse(self._result("drift-conflict-condition").present)
+
+    def test_set_fields_pass_and_category_flag_is_checked(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.conditions.factories import ConditionCategoryFactory
+        from world.magic.services.drift import get_drift_config
+
+        category = ConditionCategoryFactory(self_shakeable=False)
+        config = get_drift_config()
+        config.focus_check_type = CheckTypeFactory()
+        config.conflict_condition = ConditionTemplateFactory(category=category)
+        config.save()
+        self.assertTrue(self._result("drift-focus-check-type").present)
+        self.assertTrue(self._result("drift-conflict-condition").present)
+        self.assertFalse(self._result("drift-conflict-condition-self-shakeable").present)
+        category.self_shakeable = True
+        category.save()
+        self.assertTrue(self._result("drift-conflict-condition-self-shakeable").present)
