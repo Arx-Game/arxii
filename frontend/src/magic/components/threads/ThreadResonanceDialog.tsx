@@ -20,14 +20,17 @@ const CONVERSION_TYPE_LABELS: Record<string, string> = {
   REDEMPTION: 'Redemption',
 };
 
-// Affinity squares take a palette slot by order of first appearance, so no affinity is named in code.
-const AFFINITY_SWATCHES = [
-  'bg-sky-500',
-  'bg-rose-500',
-  'bg-amber-500',
-  'bg-emerald-500',
-  'bg-violet-500',
-];
+// The square marks what the move is (a retune, a Fall, a Redemption), the same on every thread.
+const MOVE_SWATCHES: Record<string, string> = {
+  FALL: 'bg-rose-500',
+  REDEMPTION: 'bg-amber-500',
+};
+const RETUNE_SWATCH = 'bg-primary';
+
+function swatchFor(option: ThreadResonanceOption): string {
+  if (option.conversion_type === null) return RETUNE_SWATCH;
+  return MOVE_SWATCHES[option.conversion_type] ?? RETUNE_SWATCH;
+}
 
 function optionSuffix(option: ThreadResonanceOption): string {
   if (option.conversion_type === null) return '(same affinity)';
@@ -48,7 +51,6 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
 
   const options = data?.options ?? [];
   const selected = options.find((o) => o.resonance_id === pickedResonanceId) ?? options[0];
-  const affinities = Array.from(new Set(options.map((o) => o.affinity_name)));
   const ritualId = data?.ritual_id ?? null;
   const needsComponent = (selected?.qualifying.length ?? 0) > 0;
   const canRetune =
@@ -115,14 +117,7 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
                     o.resonance_id === selected.resonance_id
                   )}`}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={`h-2.5 w-2.5 rounded-sm ${
-                      AFFINITY_SWATCHES[
-                        affinities.indexOf(o.affinity_name) % AFFINITY_SWATCHES.length
-                      ]
-                    }`}
-                  />
+                  <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${swatchFor(o)}`} />
                   {o.resonance_name} {optionSuffix(o)}
                 </button>
               ))}
