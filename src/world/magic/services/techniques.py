@@ -59,7 +59,7 @@ if TYPE_CHECKING:
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.magic.types import MishapResult
-    from world.magic.types.burn import BurnValuation, ResonanceBurnResult
+    from world.magic.types.burn import ResonanceBurnResult
     from world.magic.types.magic_skills import CastCheck
     from world.magic.types.personalization import PricePayment
     from world.magic.types.pull import CastPullDeclaration
@@ -175,11 +175,11 @@ class _PullSpend:
     raw: int = 0
     hasty_fall_points: int = 0
 
-    def add_burn(self, valuation: BurnValuation) -> None:
-        if valuation.hasty_fall:
-            self.hasty_fall_points += valuation.valued_points
+    def add_burn(self, *, points: int, valued_points: int, hasty_fall: bool) -> None:
+        if hasty_fall:
+            self.hasty_fall_points += valued_points
         else:
-            self.raw += valuation.points
+            self.raw += points
 
 
 def _pull_spends_for_cast(
@@ -188,36 +188,62 @@ def _pull_spends_for_cast(
     cast_pull: CastPullDeclaration | None,
     cast_pull_spent: int,
     burn_result: ResonanceBurnResult | None,
+    combat_burn_for: str = "",
 ) -> dict[int, tuple[Resonance, _PullSpend]]:
     """Resonance pk -> what the pulls of this cast spent, burns included.
 
     Reads the character's active combat pulls for the round (combat casts and clash
     contributions) and the non-combat cast pull charged with this cast, so a pull's
-    spend reaches corruption on both paths.
+    spend reaches corruption on both paths. A combat burn is paid once: it counts only
+    for the action it was declared with (``combat_burn_for``), valued as it was then.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-    from world.magic.services.burn import value_burn  # noqa: PLC0415
 
     spends: dict[int, tuple[Resonance, _PullSpend]] = {}
     try:
         active_pulls = character.combat_pulls.active()
-        sheet = character.sheet_data
     except ObjectDoesNotExist:
         # Character has no CharacterSheet (e.g., NPCs); treat as no active pulls.
         active_pulls = []
-        sheet = None
     for pull in active_pulls:
         spend = spends.setdefault(pull.resonance_id, (pull.resonance, _PullSpend()))[1]
         spend.raw += pull.resonance_spent
-        if pull.resonance_burned > 0 and sheet is not None:
-            spend.add_burn(value_burn(sheet, pull.resonance, pull.resonance_burned))
+        if pull.resonance_burned > 0 and combat_burn_for and pull.burned_for == combat_burn_for:
+            spend.add_burn(
+                points=pull.resonance_burned,
+                valued_points=pull.burn_valued_points,
+                hasty_fall=pull.burn_hasty_fall,
+            )
     if cast_pull is not None:
         spend = spends.setdefault(cast_pull.resonance.pk, (cast_pull.resonance, _PullSpend()))[1]
         spend.raw += cast_pull_spent
         if burn_result is not None:
-            spend.add_burn(burn_result.valuation)
+            valuation = burn_result.valuation
+            spend.add_burn(
+                points=valuation.points,
+                valued_points=valuation.valued_points,
+                hasty_fall=valuation.hasty_fall,
+            )
     return spends
+
+
+def _combat_burn_strain_units(character: ObjectDB, combat_burn_for: str) -> int:
+    """Strain units this round's combat pull burned for the action ``combat_burn_for``.
+
+    The burn was resolved, debited and valued at declaration (``commit_combat_pull``);
+    it strains only the action it was declared with, once.
+    """
+    if not combat_burn_for:
+        return 0
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        active_pulls = character.combat_pulls.active()
+    except ObjectDoesNotExist:
+        return 0
+    return sum(
+        pull.burn_strain_units for pull in active_pulls if pull.burned_for == combat_burn_for
+    )
 
 
 def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged pull
@@ -228,6 +254,7 @@ def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged 
     cast_pull: CastPullDeclaration | None = None,
     cast_pull_spent: int = 0,
     burn_result: ResonanceBurnResult | None = None,
+    combat_burn_for: str = "",
 ) -> tuple[ResonanceInvolvement, ...]:
     """Compute per-resonance involvement for one cast.
 
@@ -250,6 +277,7 @@ def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged 
         cast_pull=cast_pull,
         cast_pull_spent=cast_pull_spent,
         burn_result=burn_result,
+        combat_burn_for=combat_burn_for,
     )
     if not resonances and not spends:
         return ()
@@ -1131,6 +1159,8 @@ class _CastPreparation:
     charged_pull: CastPullDeclaration | None = None
     charged_pull_spent: int = 0
     burn_result: ResonanceBurnResult | None = None
+    #: The combat action whose declared burn this cast carries (``PullBurnAction``).
+    combat_burn_for: str = ""
 
 
 def _validate_strain_commitment(strain_commitment: int) -> None:
@@ -1452,6 +1482,7 @@ def _complete_technique_cast(  # noqa: PLR0913
         cast_pull=preparation.charged_pull,
         cast_pull_spent=preparation.charged_pull_spent,
         burn_result=preparation.burn_result,
+        combat_burn_for=preparation.combat_burn_for,
     )
     technique_result = TechniqueUseResult(
         anima_cost=cost,
@@ -1527,15 +1558,16 @@ def use_technique(  # noqa: PLR0913
     strain_power_enabled: bool = True,
     defer_soulfray_reveal: bool = False,
     cast_check: CastCheck | None = None,
-    burn_strain_units: int = 0,
+    combat_burn_for: str = "",
 ) -> TechniqueUseResult:
     """Orchestrate technique use from cost validation through post-cast events.
 
     Burning resonance (#4736): a non-combat ``cast_pull`` with ``burn > 0`` is resolved
     here (ceiling, strain check, reach) once the Soulfray gate passes, and its strain
-    units join the anima strain before the one curve. Combat burns were resolved and
-    debited at declaration with the round's pull; their callers pass the units as
-    ``burn_strain_units`` (``burn_strain_units_for_participant``).
+    units join the anima strain before the one curve. Combat burns were resolved, debited
+    and valued at declaration with the round's pull; a combat caller names the action
+    it resolves as ``combat_burn_for`` (``PullBurnAction``) and only a burn declared
+    for that action strains it, once.
 
     ``cast_check`` is the check this cast rolls, when the caller already holds it (#4450);
     a paid cast pull builds its involved traits from it. ``None`` re-resolves the caster's
@@ -1579,7 +1611,11 @@ def use_technique(  # noqa: PLR0913
     burn_result = _resolve_cast_burn(
         character=character, cast_pull=cast_pull, runtime_intensity=stats.intensity
     )
-    burn_units = burn_result.strain_units if burn_result is not None else burn_strain_units
+    burn_units = (
+        burn_result.strain_units
+        if burn_result is not None
+        else _combat_burn_strain_units(character, combat_burn_for)
+    )
     if burn_units > 0:
         strain_power_bonus = _strain_power_bonus(
             effective_strain + burn_units, strain_config, strain_power_enabled
@@ -1611,6 +1647,7 @@ def use_technique(  # noqa: PLR0913
             strain_power_bonus=strain_power_bonus,
         )
     preparation.strain_power_bonus = strain_power_bonus
+    preparation.combat_burn_for = combat_burn_for
     # Resolution may supply an explicit check result; retain it over extraction.
     # The price settles with resolve_fn in one savepoint (_resolve_and_settle_price).
     return _complete_technique_cast(

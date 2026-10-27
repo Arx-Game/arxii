@@ -314,6 +314,7 @@ class CombatRoundContext(RoundContext):
         declaration here rather than through ``CastTechniqueAction.round_declaration``;
         without this the pull was dropped. Same commit as the telnet seam.
         """
+        from world.combat.constants import PullBurnAction  # noqa: PLC0415
         from world.combat.pull_helpers import (  # noqa: PLC0415
             commit_combat_pull,
             resolve_pull_from_kwargs,
@@ -328,11 +329,21 @@ class CombatRoundContext(RoundContext):
             raise ActionDispatchError(ActionDispatchError.PULL_INVALID) from exc
         if cast_pull is None:
             return
+        # The Soulfray gate, as on telnet (``CastTechniqueAction._combat_soulfray_gate``):
+        # no resonance or anima is charged for a cast whose Soulfray risk she has not
+        # accepted. Telnet holds the whole declaration for ``accept soulfray``; the web
+        # sends ``confirm_soulfray_risk`` with it, so an unconfirmed pull is refused.
+        if not kwargs.get("confirm_soulfray_risk"):
+            from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
+
+            if get_soulfray_warning(sheet.character) is not None:
+                raise ActionDispatchError(ActionDispatchError.PULL_NEEDS_SOULFRAY_CONSENT)
         commit_combat_pull(
             cast_pull=cast_pull,
             participant=participant,
             encounter=self._encounter,
             technique_id=technique.pk,
+            burned_for=PullBurnAction.CAST,
             target=resolve_focused_target_objectdb(self._encounter, kwargs),
             cast_check=resolve_cast_check(sheet.character, technique),
         )

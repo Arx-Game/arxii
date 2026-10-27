@@ -930,6 +930,7 @@ def _dispatch_clash_contribution(
     # resolve_pull_from_kwargs normalises both the telnet path (pre-built
     # CastPullDeclaration in kwargs["cast_pull"]) and the web path (raw IDs:
     # pull_resonance_id / pull_tier / pull_thread_ids) into one optional declaration.
+    from world.combat.constants import PullBurnAction  # noqa: PLC0415
     from world.combat.pull_helpers import (  # noqa: PLC0415
         commit_combat_pull,
         resolve_pull_from_kwargs,
@@ -945,6 +946,7 @@ def _dispatch_clash_contribution(
             participant=ctx.participant,
             encounter=ctx.participant.encounter,
             technique_id=technique_id,
+            burned_for=PullBurnAction.CLASH,
             target=clash.npc_opponent.objectdb,
             cast_check=resolve_cast_check(sheet.character, technique),
         )

@@ -19,17 +19,13 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from actions.constants import ActionBackend
-from actions.errors import ActionDispatchError
 from actions.factories import ActionTemplateFactory
-from actions.player_interface import dispatch_player_action
-from actions.types import ActionRef
 from commands import pending_actions
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import PathFactory
-from world.combat.constants import ActionCategory, ClashStatus, OpponentTier
+from world.combat.constants import ActionCategory, ClashActionSlot, ClashStatus, OpponentTier
 from world.combat.factories import (
     ClashConfigFactory,
     ClashFactory,
@@ -39,7 +35,7 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
-from world.combat.models import CombatPull, StrainBurnReach
+from world.combat.models import ClashContribution, CombatPull, StrainBurnReach
 from world.combat.services import resolve_round
 from world.combat.services.encounter.config import get_strain_config
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
@@ -202,8 +198,11 @@ class _BurningResonance(JourneyCase):
         with (
             force_check_outcome(outcome),
             patch("world.magic.services.techniques.strain_to_intensity", side_effect=curve),
+            self.captureOnCommitCallbacks(execute=True),
         ):
             told = self.telnet(character, line)
+        # The burn line is sent on commit, after the command's own reply.
+        told = self.said(character)
         return told, units
 
 
@@ -335,7 +334,10 @@ class BurningResonanceOnTheWeb(_BurningResonance):
         scene = Scene.objects.get(location_id=self.lantern.pk, is_active=True)
         self.watch(ysmay)
 
-        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+        with (
+            force_check_outcome(CheckOutcome.objects.get(name="Success")),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             response = self.api(self.account_of(ysmay)).post(
                 "/api/action-requests/cast/",
                 {
@@ -381,66 +383,36 @@ class BurningResonanceOnTheWeb(_BurningResonance):
         self.assertTrue(burn["hasty_fall"])
         self.assertTrue(burn["available"])
 
-    def test_combat_burn_without_a_pull_is_refused(self) -> None:
-        ysmay = self.caster("Ysmay")
-        encounter = CombatEncounterFactory(
-            status=RoundStatus.DECLARING, round_number=1, room=self.lantern
-        )
-        CombatParticipantFactory(encounter=encounter, character_sheet=ysmay.sheet_data)
-        opponent = CombatOpponentFactory(encounter=encounter)
-        ref = ActionRef(
-            backend=ActionBackend.COMBAT, technique_id=self.technique.pk, action_slot="focused"
-        )
-
-        with self.assertRaises(ActionDispatchError) as raised:
-            dispatch_player_action(
-                ysmay,
-                ref,
-                {
-                    "effort_level": EffortLevel.MEDIUM,
-                    "focused_opponent_target_id": opponent.pk,
-                    "pull_burn": 3,
-                },
-            )
-
-        self.assertEqual(raised.exception.code, ActionDispatchError.BURN_NEEDS_PULL)
-
-    def test_combat_declaration_burns_with_the_pull(self) -> None:
+    def test_scene_cast_refuses_a_bad_burn_cleanly(self) -> None:
         ysmay = self.caster("Ysmay")
         resonance = ResonanceFactory(affinity=self.primal)
         thread = self.thread_for(ysmay, resonance)
-        encounter = CombatEncounterFactory(
-            status=RoundStatus.DECLARING, round_number=1, room=self.lantern
-        )
-        CombatParticipantFactory(encounter=encounter, character_sheet=ysmay.sheet_data)
-        opponent = CombatOpponentFactory(encounter=encounter)
-        ref = ActionRef(
-            backend=ActionBackend.COMBAT, technique_id=self.technique.pk, action_slot="focused"
-        )
-        self.watch(ysmay)
+        scene = Scene.objects.get(location_id=self.lantern.pk, is_active=True)
+        client = self.api(self.account_of(ysmay))
 
-        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
-            dispatch_player_action(
-                ysmay,
-                ref,
+        for bad in (-1, 2**31, "lots", [3], True):
+            response = client.post(
+                "/api/action-requests/cast/",
                 {
-                    "effort_level": EffortLevel.MEDIUM,
-                    "focused_opponent_target_id": opponent.pk,
-                    "pull_resonance_id": resonance.pk,
-                    "pull_tier": 1,
-                    "pull_thread_ids": [thread.pk],
-                    "pull_burn": 6,
+                    "scene": scene.pk,
+                    "initiator_persona": ysmay.sheet_data.primary_persona.pk,
+                    "technique_id": self.technique.pk,
+                    "pull": {
+                        "resonance_id": resonance.pk,
+                        "tier": 1,
+                        "thread_ids": [thread.pk],
+                        "burn": bad,
+                    },
                 },
+                format="json",
             )
-
-        pull = CombatPull.objects.get(participant__character_sheet=ysmay.sheet_data)
-        self.assertEqual(pull.resonance_burned, 4)
-        self.assertEqual(self.balance(ysmay, resonance), 5)
-        self.assertTold(ysmay, f"You burn 4 of 6 {resonance.name} resonance.")
+            self.assertEqual(response.status_code, 400, (bad, response.data))
+            self.assertIn("burn", response.data["pull"])
+        self.assertEqual(self.balance(ysmay, resonance), 10)
 
 
-class BurningResonanceInAClash(_BurningResonance):
-    """Review focus 5: a clash contribution with a burn behaves like a cast."""
+class BurningResonanceInCombat(_BurningResonance):
+    """Review focus 5 and the one-action ruling, by telnet and the web dispatch endpoint."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -470,28 +442,39 @@ class BurningResonanceInAClash(_BurningResonance):
             started_round=1,
         )
 
-    def test_clash_burn_is_debited_at_declaration_and_strains_the_contribution(self) -> None:
-        ysmay = self.caster("Ysmay")
-        sheet = ysmay.sheet_data
-        CombatParticipantFactory(encounter=self.encounter, character_sheet=sheet)
-        engagement = CharacterEngagementFactory(character=sheet)
-        resonance = ResonanceFactory(affinity=self.primal)
-        thread = self.thread_for(ysmay, resonance)
-        line = (
-            f"clash {self.opponent.name} with {self.technique.name} pull={thread.name} "
-            f"resonance={resonance.name} burn=6"
-        )
+    def fighter(self, name: str = "Ysmay"):
+        character = self.caster(name)
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=character.sheet_data)
+        engagement = CharacterEngagementFactory(character=character.sheet_data)
+        return character, engagement
 
-        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
-            told = self.telnet(ysmay, line)
+    def dispatch(self, character, ref: dict, kwargs: dict):
+        """POST a declaration through the web dispatch endpoint, as the client does."""
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.api(self.account_of(character)).post(
+                f"/api/actions/characters/{character.pk}/dispatch/",
+                {"ref": ref, "kwargs": kwargs},
+                format="json",
+            )
 
-        self.assertIn(f"You burn 4 of 6 {resonance.name} resonance.", told)
-        self.assertEqual(
-            CombatPull.objects.get(participant__character_sheet=sheet).resonance_burned, 4
-        )
-        self.assertEqual(self.balance(ysmay, resonance), 5)
+    def focused_ref(self) -> dict:
+        return {"backend": "combat", "technique_id": self.technique.pk, "action_slot": "focused"}
 
-        before = engagement.intensity_modifier
+    def focused_kwargs(self, thread=None, **extra) -> dict:
+        kwargs = {
+            "effort_level": EffortLevel.MEDIUM,
+            "focused_opponent_target_id": self.opponent.pk,
+        }
+        if thread is not None:
+            kwargs |= {
+                "pull_resonance_id": thread.resonance.pk,
+                "pull_tier": 1,
+                "pull_thread_ids": [thread.pk],
+            }
+        return kwargs | extra
+
+    def resolve_watching_the_curve(self) -> list[int]:
+        """Resolve the round with every roll a Success; return each curve call's units."""
         rolled = MagicMock(success_level=2, outcome=CheckOutcome.objects.get(name="Success"))
         units: list[int] = []
 
@@ -504,8 +487,108 @@ class BurningResonanceInAClash(_BurningResonance):
             patch("world.magic.services.techniques.strain_to_intensity", side_effect=curve),
         ):
             resolve_round(self.encounter)
+        return units
 
-        self.assertEqual(units, [4])
+    def test_web_combat_refuses_a_bad_or_lone_burn_cleanly(self) -> None:
+        ysmay, _engagement = self.fighter()
+        resonance = ResonanceFactory(affinity=self.primal)
+        thread = self.thread_for(ysmay, resonance)
+
+        for bad in ("3", [3], 1.5, True, -1, 2**31):
+            response = self.dispatch(
+                ysmay, self.focused_ref(), self.focused_kwargs(thread, pull_burn=bad)
+            )
+            self.assertEqual(response.status_code, 400, (bad, response.data))
+            self.assertEqual(
+                response.data["detail"], "A burn must be a whole number of resonance, 0 or more."
+            )
+        lone = self.dispatch(ysmay, self.focused_ref(), self.focused_kwargs(pull_burn=3))
+        self.assertEqual(lone.status_code, 400, lone.data)
+        self.assertEqual(
+            lone.data["detail"], "Burning resonance needs a thread pull in the same action."
+        )
+        self.assertEqual(self.balance(ysmay, resonance), 10)
+        self.assertFalse(CombatPull.objects.exists())
+
+    def test_web_focused_cast_burns_at_declaration_and_strains_at_resolution(self) -> None:
+        ysmay, engagement = self.fighter()
+        resonance = ResonanceFactory(affinity=self.primal)
+        thread = self.thread_for(ysmay, resonance)
+        self.watch(ysmay)
+
+        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+            response = self.dispatch(
+                ysmay, self.focused_ref(), self.focused_kwargs(thread, pull_burn=6)
+            )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        pull = CombatPull.objects.get(participant__character_sheet=ysmay.sheet_data)
+        self.assertEqual((pull.resonance_burned, pull.burn_strain_units), (4, 4))
+        self.assertEqual(self.balance(ysmay, resonance), 5)
+        self.assertTold(ysmay, f"You burn 4 of 6 {resonance.name} resonance.")
+
+        before = engagement.intensity_modifier
+        self.assertEqual(self.resolve_watching_the_curve(), [4])
         engagement.refresh_from_db()
         # Half of the 40 power the 4 burned units bought feeds her engagement.
+        self.assertEqual(engagement.intensity_modifier - before, 20)
+
+    def test_a_burn_strains_only_the_action_it_was_declared_with(self) -> None:
+        """A focused cast's burn never strains her clash contribution in the same round."""
+        ysmay, engagement = self.fighter()
+        resonance = ResonanceFactory(affinity=self.primal)
+        thread = self.thread_for(ysmay, resonance)
+
+        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+            cast = self.dispatch(
+                ysmay, self.focused_ref(), self.focused_kwargs(thread, pull_burn=6)
+            )
+        self.assertEqual(cast.status_code, 200, cast.data)
+        clash = self.dispatch(
+            ysmay,
+            {
+                "backend": "combat",
+                "clash_id": self.clash.pk,
+                "clash_action_slot": ClashActionSlot.FOCUSED,
+            },
+            {"technique_id": self.technique.pk},
+        )
+        self.assertEqual(clash.status_code, 200, clash.data)
+
+        before = engagement.intensity_modifier
+        units = self.resolve_watching_the_curve()
+
+        # Both resolved through the cast pipeline; the burn's 4 units reached one of them.
+        contribution = ClashContribution.objects.get(character=ysmay.sheet_data)
+        self.assertEqual(contribution.anima_committed, 0)
+        self.assertEqual(units, [4])
+        engagement.refresh_from_db()
+        self.assertEqual(engagement.intensity_modifier - before, 20)
+
+    def test_clash_burn_is_debited_at_declaration_and_strains_the_contribution(self) -> None:
+        ysmay, engagement = self.fighter()
+        sheet = ysmay.sheet_data
+        resonance = ResonanceFactory(affinity=self.primal)
+        thread = self.thread_for(ysmay, resonance)
+        line = (
+            f"clash {self.opponent.name} with {self.technique.name} pull={thread.name} "
+            f"resonance={resonance.name} burn=6"
+        )
+
+        with (
+            force_check_outcome(CheckOutcome.objects.get(name="Success")),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            told = self.telnet(ysmay, line)
+
+        self.assertIn(f"You burn 4 of 6 {resonance.name} resonance.", self.said(ysmay))
+        self.assertEqual(
+            CombatPull.objects.get(participant__character_sheet=sheet).resonance_burned, 4
+        )
+        self.assertEqual(self.balance(ysmay, resonance), 5)
+        self.assertNotIn("Traceback", told)
+
+        before = engagement.intensity_modifier
+        self.assertEqual(self.resolve_watching_the_curve(), [4])
+        engagement.refresh_from_db()
         self.assertEqual(engagement.intensity_modifier - before, 20)

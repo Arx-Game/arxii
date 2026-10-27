@@ -885,3 +885,9 @@ class ResonanceBurnNeedsPull(MagicError):
     """A burn was asked for without a thread pull in the same action (#4736)."""
 
     user_message = "Burning resonance needs a thread pull in the same action."
+
+
+class ResonanceBurnInvalid(MagicError):
+    """A burn amount that is not a whole number from 0 up (#4736)."""
+
+    user_message = "A burn must be a whole number of resonance, 0 or more."

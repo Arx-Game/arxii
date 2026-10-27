@@ -26,6 +26,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.magic.constants import MagicActivity
 from world.magic.exceptions import AffinityNotConfigured, ResonanceBurnUnavailable
 from world.magic.models.affinity import Affinity
@@ -37,7 +39,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.combat.models import CombatParticipant, StrainConfig
+    from world.combat.models import StrainConfig
     from world.covenants.perks.context import SituationContext
     from world.magic.models import Resonance, Technique
     from world.traits.models import CheckOutcome
@@ -153,6 +155,7 @@ def resolve_resonance_burn(  # noqa: PLR0913 - one burn request and the action i
         check_result = perform_check_with_modifiers(
             sheet.character,
             config.strain_check_type,
+            target_difficulty=config.strain_check_difficulty,
             situation_ctx=situation_ctx,
             extra_traits=activity_skill_terms(MagicActivity.PUSHING_HARD),
         )
@@ -179,23 +182,12 @@ def burn_message(result: ResonanceBurnResult) -> str:
 
 
 def announce_burn(character: ObjectDB, result: ResonanceBurnResult) -> None:
-    """Tell the caster what she burned, once the debit has landed."""
-    character.msg(burn_message(result))
+    """Tell the caster what she burned once the debit commits.
 
-
-def burn_strain_units_for_participant(participant: CombatParticipant) -> int:
-    """Strain units from the resonance this participant burned with this round's pull.
-
-    Combat burns are resolved and debited at declaration with the pull; the round's
-    casts read them back here at resolution.
+    Sent on commit, so a declaration or cast that rolls back tells her nothing.
     """
-    sheet = participant.character_sheet
-    pulls = sheet.character.combat_pulls.active_for_encounter(participant.encounter)
-    return sum(
-        value_burn(sheet, pull.resonance, pull.resonance_burned).strain_units
-        for pull in pulls
-        if pull.resonance_burned > 0
-    )
+    message = burn_message(result)
+    transaction.on_commit(lambda: character.msg(message))
 
 
 def preview_burn(

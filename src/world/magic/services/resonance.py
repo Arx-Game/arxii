@@ -71,6 +71,7 @@ if TYPE_CHECKING:
     from world.magic.models.power_config import CapabilityPowerConfig
     from world.magic.models.threads import ThreadPullEffect
     from world.magic.types import PullActionContext
+    from world.magic.types.burn import BurnValuation
     from world.missions.models import MissionDeedRewardLine
     from world.projects.models import Project
     from world.relationships.models import CharacterRelationship, RelationshipCapstone
@@ -1256,6 +1257,8 @@ def _persist_combat_pull(  # noqa: PLR0913
     resonance_cost: int,
     anima_total: int,
     resonance_burned: int = 0,
+    burn_valuation: BurnValuation | None = None,
+    burned_for: str = "",
 ) -> None:
     """Write the CombatPull + CombatPullResolvedEffect rows for a combat pull.
 
@@ -1280,6 +1283,10 @@ def _persist_combat_pull(  # noqa: PLR0913
         resonance_spent=resonance_cost,
         anima_spent=anima_total,
         resonance_burned=resonance_burned,
+        burn_valued_points=burn_valuation.valued_points if burn_valuation else 0,
+        burn_strain_units=burn_valuation.strain_units if burn_valuation else 0,
+        burn_hasty_fall=burn_valuation.hasty_fall if burn_valuation else False,
+        burned_for=burned_for if resonance_burned > 0 else "",
     )
     pull.threads.set(threads)
     for r in resolved:
@@ -1348,6 +1355,8 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
     beseech_bonus: int = 0,
     anima_cost_override: int | None = None,
     burn: int = 0,
+    burn_valuation: BurnValuation | None = None,
+    burned_for: str = "",
 ) -> ResonancePullResult:
     """Atomic pull commit (Spec A §5.4 + §7.4).
 
@@ -1376,6 +1385,9 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
             amount from ``resolve_resonance_burn``, debited with the pull under the
             same lock and recorded on ``CombatPull.resonance_burned``. The balance
             must cover the pull cost plus the burn, or nothing is debited.
+        burn_valuation: What the burn is worth, valued at declaration; a combat pull
+            stores it so the action reads it at resolution without re-valuing.
+        burned_for: The declared action a combat burn strains (``PullBurnAction``).
 
     Returns:
         ResonancePullResult with resonance_spent, anima_spent, resolved_effects.
@@ -1464,6 +1476,8 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
             resonance_cost=cost.resonance_cost,
             anima_total=anima_total,
             resonance_burned=burn,
+            burn_valuation=burn_valuation,
+            burned_for=burned_for,
         )
     # Debit only after persistence succeeded (mutates SharedMemoryModel-cached
     # instances in place).

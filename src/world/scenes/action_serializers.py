@@ -9,6 +9,7 @@ from rest_framework import serializers
 
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
 from world.fatigue.constants import EffortLevel
+from world.magic.constants import MAX_RESONANCE_BURN
 from world.magic.models.techniques import Technique
 from world.magic.serializers import (
     TechniqueEffectSummarySerializer,
@@ -172,7 +173,9 @@ class CastPullWithBurnRequestSerializer(CastPullRequestSerializer):
     The burn lives inside the pull, so a burn without a pull cannot be sent.
     """
 
-    burn = serializers.IntegerField(min_value=0, required=False, default=0)
+    burn = serializers.IntegerField(
+        min_value=0, max_value=MAX_RESONANCE_BURN, required=False, default=0
+    )
 
 
 def _validate_pull_declaration(attrs: dict, *, hostile_check: bool = False) -> dict:

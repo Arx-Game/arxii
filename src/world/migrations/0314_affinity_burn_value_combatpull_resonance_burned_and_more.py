@@ -14,6 +14,49 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.AddField(
+            model_name="combatpull",
+            name="burn_hasty_fall",
+            field=models.BooleanField(
+                default=False,
+                help_text="True when an Abyssal caster burned Celestial or Primal resonance.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="combatpull",
+            name="burn_strain_units",
+            field=models.PositiveIntegerField(
+                default=0,
+                help_text="Strain units the burn adds to the action it was declared with.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="combatpull",
+            name="burn_valued_points",
+            field=models.PositiveIntegerField(
+                default=0,
+                help_text="The burned points as valued at declaration: equal to resonance_burned, or converted at the Fall pair rate on a hasty fall.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="combatpull",
+            name="burned_for",
+            field=models.CharField(
+                blank=True,
+                choices=[("cast", "Focused cast"), ("clash", "Clash contribution")],
+                default="",
+                help_text="The declared action the burn strains (a focused cast or a clash contribution); blank when nothing was burned.",
+                max_length=8,
+            ),
+        ),
+        migrations.AddField(
+            model_name="strainconfig",
+            name="strain_check_difficulty",
+            field=models.PositiveSmallIntegerField(
+                default=0,
+                help_text="Target difficulty of the strain check a character rolls to push hard when she burns resonance. Higher makes reaching the burn harder.",
+            ),
+        ),
+        migrations.AddField(
             model_name="affinity",
             name="burn_value",
             field=models.DecimalField(

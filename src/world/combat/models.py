@@ -67,6 +67,7 @@ from world.combat.constants import (
     OpponentTier,
     PaceMode,
     ParticipantStatus,
+    PullBurnAction,
     RiskLevel,
     SelectionType,
     SpectacleKind,
@@ -2217,6 +2218,31 @@ class CombatPull(SharedMemoryModel):
         default=0,
         help_text="Resonance burned on top of the pull for strain; 0 when none was.",
     )
+    burn_valued_points = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "The burned points as valued at declaration: equal to resonance_burned, or "
+            "converted at the Fall pair rate on a hasty fall."
+        ),
+    )
+    burn_strain_units = models.PositiveIntegerField(
+        default=0,
+        help_text="Strain units the burn adds to the action it was declared with.",
+    )
+    burn_hasty_fall = models.BooleanField(
+        default=False,
+        help_text="True when an Abyssal caster burned Celestial or Primal resonance.",
+    )
+    burned_for = models.CharField(
+        max_length=8,
+        choices=PullBurnAction.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "The declared action the burn strains (a focused cast or a clash "
+            "contribution); blank when nothing was burned."
+        ),
+    )
     committed_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -2590,6 +2616,13 @@ class StrainConfig(SharedMemoryModel):
             "Percentage (0-100) of the strain bonus a cast earns that is also added to "
             "the caster's engagement intensity modifier, so strained intensity feeds back "
             "into her engagement."
+        ),
+    )
+    strain_check_difficulty = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Target difficulty of the strain check a character rolls to push hard when "
+            "she burns resonance. Higher makes reaching the burn harder."
         ),
     )
     strain_check_type = models.ForeignKey(

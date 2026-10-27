@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from commands.exceptions import CommandError
+from world.magic.constants import MAX_RESONANCE_BURN
 
 if TYPE_CHECKING:
     from world.magic.types.pull import CastPullDeclaration
@@ -189,8 +190,9 @@ class PullParsingMixin:
         for token in raw.split():
             if token.lower().startswith(_BURN_PREFIX):
                 burn_str = token[len(_BURN_PREFIX) :]
-                if not burn_str.isdigit():
-                    msg = f"Invalid burn value '{burn_str}' - must be a non-negative integer."
+                # isdecimal, not isdigit: "²" is a digit that int() refuses.
+                if not burn_str.isdecimal() or int(burn_str) > MAX_RESONANCE_BURN:
+                    msg = f"Invalid burn value '{burn_str}' - must be a whole number, 0 or more."
                     raise CommandError(msg)
                 burn = int(burn_str)
             else:

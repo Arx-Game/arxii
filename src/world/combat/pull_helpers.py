@@ -79,10 +79,13 @@ def build_cast_pull_declaration(
             at the ``MagicError`` boundary; the DRF serializer maps it to a
             ``ValidationError`` at the serializer boundary.
     """
-    from world.magic.exceptions import InvalidImbueAmount  # noqa: PLC0415
+    from world.magic.constants import MAX_RESONANCE_BURN  # noqa: PLC0415
+    from world.magic.exceptions import InvalidImbueAmount, ResonanceBurnInvalid  # noqa: PLC0415
     from world.magic.models import Resonance, Thread  # noqa: PLC0415
     from world.magic.types.pull import CastPullDeclaration as _CastPullDeclaration  # noqa: PLC0415
 
+    if not 0 <= burn <= MAX_RESONANCE_BURN:
+        raise ResonanceBurnInvalid
     try:
         resonance = Resonance.objects.get(pk=resonance_id)
     except Resonance.DoesNotExist:
@@ -108,7 +111,7 @@ def build_cast_pull_declaration(
         resonance=resonance,
         tier=tier,
         threads=tuple(threads),
-        burn=max(burn, 0),
+        burn=burn,
     )
 
 
@@ -162,7 +165,7 @@ def resolve_pull_from_kwargs(
     resonance_id = kwargs.get("pull_resonance_id")
     tier = kwargs.get("pull_tier")
     thread_ids = kwargs.get("pull_thread_ids")
-    burn = int(kwargs.get("pull_burn") or 0)
+    burn = _parse_pull_burn(kwargs.get("pull_burn"))
     if resonance_id is not None and tier is not None and thread_ids is not None:
         return build_cast_pull_declaration(
             sheet.pk,
@@ -179,6 +182,26 @@ def resolve_pull_from_kwargs(
     return None
 
 
+def _parse_pull_burn(raw: object) -> int:
+    """The web ``pull_burn`` kwarg as a burn amount, strictly (#4736).
+
+    Absent or ``None`` is no burn. Anything but a whole number from 0 to
+    ``MAX_RESONANCE_BURN`` (a string, a list, a float, a bool, a negative) is refused,
+    never coerced or clamped.
+
+    Raises:
+        ActionDispatchError(BURN_INVALID): The value is not such a number.
+    """
+    from actions.errors import ActionDispatchError  # noqa: PLC0415
+    from world.magic.constants import MAX_RESONANCE_BURN  # noqa: PLC0415
+
+    if raw is None:
+        return 0
+    if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= MAX_RESONANCE_BURN:
+        raise ActionDispatchError(ActionDispatchError.BURN_INVALID)
+    return raw
+
+
 def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belongs to
     cast_pull: CastPullDeclaration,
     participant: CombatParticipant,
@@ -186,6 +209,7 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
     technique_id: int,
     target: ObjectDB | None = None,
     cast_check: CastCheck | None = None,
+    burned_for: str = "",
 ) -> None:
     """Commit *cast_pull* as a ``CombatPull`` row for the current round.
 
@@ -221,6 +245,8 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
         cast_check: What the cast rolls, from ``resolve_cast_check`` (#4450). Its stat and
             skill traits are the ``involved_traits`` a TRAIT thread is matched against;
             without it no TRAIT thread is in the action.
+        burned_for: The declared action a burn on this pull strains (``PullBurnAction``,
+            #4736). A burn is paid once and strains only that action.
 
     Raises:
         ActionDispatchError(PULL_ALREADY_COMMITTED): When the
@@ -287,6 +313,8 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
             beseech_bonus_thread_id=beseech_bonus_thread_id,
             beseech_bonus=applied_bonus,
             burn=burn_result.reached if burn_result is not None else 0,
+            burn_valuation=burn_result.valuation if burn_result is not None else None,
+            burned_for=burned_for,
         )
     except IntegrityError as exc:
         raise ActionDispatchError(ActionDispatchError.PULL_ALREADY_COMMITTED) from exc

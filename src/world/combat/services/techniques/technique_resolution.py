@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.combat.constants import PullBurnAction
 from world.combat.models import CombatParticipant, CombatRoundAction
 from world.combat.services.damage.vulnerability import _vulnerability_intensity_bonus
 from world.combat.services.techniques.intensity import _sum_active_flat_bonuses
@@ -125,16 +126,14 @@ def resolve_combat_technique(
         participant.character_sheet.character, action.focused_action
     )
 
-    from world.magic.services.burn import burn_strain_units_for_participant  # noqa: PLC0415
-
     technique_use_result = use_technique(
         character=participant.character_sheet.character,
         technique=action.focused_action,
         resolve_fn=resolver,
         confirm_soulfray_risk=action.confirm_soulfray_risk,
         strain_commitment=action.strain_commitment,
-        # #4736: resonance burned with this round's pull (resolved at declaration).
-        burn_strain_units=burn_strain_units_for_participant(participant),
+        # #4736: a burn declared with this focused cast's pull strains it, once.
+        combat_burn_for=PullBurnAction.CAST,
         targets=targets,
         lethal=encounter.is_lethal,
         cast_check=cast_check,

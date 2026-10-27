@@ -929,3 +929,14 @@ HELD_GROUND_NO_CHALLENGE: Final = "There is no way past them."
 HELD_GROUND_NOT_HELD: Final = "No one holds that place."
 HELD_GROUND_NO_CAPABILITY: Final = "You have no way past them."
 HELD_GROUND_NOT_THAT_WAY: Final = "You cannot get past them that way."
+
+
+class PullBurnAction(models.TextChoices):
+    """Which declared action a combat pull's resonance burn strains (#4736).
+
+    A burn is a strain cost paid once: it strains only the action it was declared with,
+    never a second action in the same round.
+    """
+
+    CAST = "cast", "Focused cast"
+    CLASH = "clash", "Clash contribution"
