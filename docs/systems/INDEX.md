@@ -81,6 +81,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   (`world/forms/services`): a self chosen in the Audere reveal is assumed on the choice's
   commit and reverted from `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
   work in the worn self's affinity. See magic.md.
+- **Drift and Resonance Conflict (#4732):** `DriftConfig` (singleton, `get_drift_config()`),
+  `AffinityInteraction.conflict_weight`, `drift_for(sheet)`, and `check_resonance_focus` (once per
+  cast, before modifier collection, scene and combat); the conflict condition is authored and
+  `ConditionCategory.self_shakeable` lets `breakfree`/`rally` reach it. See magic.md.
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
     `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),
@@ -1167,6 +1171,8 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 
 - **Models:** `ConditionCategory` (`alters_behavior` bool — marks behavior-altering categories
   such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent;
+  `self_shakeable` bool — the character may shake the category's conditions off with `breakfree`
+  without them altering her behaviour (Resonance Conflict, #4732; `breakable_condition_filter()`),
   `grants_intangibility` bool — marks intangibility categories; `is_untargetable` queries this),
   `ConditionTemplate` (`upkeep_anima_per_round` int — anima drained per round for reactive
   conditions; `reactive_anima_cost` int — anima paid per reactive-defense fire; ADR-0060),

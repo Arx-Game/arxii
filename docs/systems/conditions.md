@@ -47,7 +47,7 @@ from world.conditions.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionCategory` | High-level groupings (damage-over-time, buff, debuff, etc.) | `name`, `description`, `display_order`, `is_negative`, `alters_behavior` |
+| `ConditionCategory` | High-level groupings (damage-over-time, buff, debuff, etc.) | `name`, `description`, `display_order`, `is_negative`, `alters_behavior`, `self_shakeable` |
 | `CapabilityType` | Actions that conditions can restrict/enhance | `name`, `description`, `innate_baseline` (int, default 0 — the ladder position every character starts from before modifiers/conditions; #2704, ADR-0164) |
 | `CheckType` | Check types that receive bonuses/penalties | `name`, `description` |
 | `DamageType` | Damage types for dealing/resisting | `name`, `description`, `resonance` (OneToOne to `mechanics.ModifierTarget`), `color_hex`, `icon` |
@@ -719,6 +719,16 @@ stats. It is the consent signal used by cast targeting and by
 `CharacterSheet.in_control`. The canonical seeded behavior-altering category is
 `Control` (`alters_behavior=True`), and the `Berserk` condition created by the fury
 system belongs to it.
+
+## Self-shakeable categories (#4732)
+
+`ConditionCategory.self_shakeable` (default False) marks conditions the character may shake
+off herself with `breakfree` (and an ally may help with `rally`) without them altering her
+behaviour. Resonance Conflict is the first. It is deliberately not `alters_behavior`, which
+drives `in_control`, consent and form revert. `breakable_condition_filter()` in
+`world/conditions/services.py` is `alters_behavior OR self_shakeable` and is used by
+`BreakFreeAction`, `RallyAction` and `process_break_free_tick`; `RevealConditionAction` stays on
+`alters_behavior`. Conditions still need a `break_free_mode` other than NONE.
 
 ---
 

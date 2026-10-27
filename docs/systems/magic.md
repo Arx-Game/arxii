@@ -2954,6 +2954,45 @@ gift's resonances. Readers that keep the TRUE aura (who she is): the Fall thresh
 and the `magical_profile` gate in `refresh_resonance_alignment`. An alternate self with no
 resonance changes nothing.
 
+**Drift and Resonance Conflict (#4732, slice 3 of #4672).** Resonance a character carries
+outside the affinity she acts with is *drift*; drift past an authored threshold makes casting
+call for a focus check, and a failed check puts the authored Resonance Conflict condition on
+her for the scene. All of it lives in `world/magic/services/drift.py` and the
+`DriftConfig` singleton (`models/drift.py`, `get_drift_config()`); no number is in code.
+
+- `DriftConfig` fields: `threshold_percent` (percent of the main balance), `threshold_floor`,
+  `severity_step` (drift points past the threshold per severity step), `off_aura_pull_steps`
+  (steps an off-aura pull adds), `focus_base_difficulty`, `focus_difficulty_per_step`, and two
+  designations by FK, `focus_check_type` and `conflict_condition`. Either designation unset
+  means the check does not run; the Required content dashboard probes list both and require
+  the conflict condition's category to be `self_shakeable`.
+- `AffinityInteraction.conflict_weight` (default 1.00): how hard a balance in the first affinity
+  pulls against the second. A pair with no authored row counts at 1.00.
+- `drift_for(sheet) -> DriftReading` (`drift`, `threshold`, `steps_past`, `dominant_affinity`):
+  the dominant affinity is `acting_aura(sheet).dominant_affinity`, so a worn alternate self turns
+  her balance in her true affinity into drift. Main balance is the sum of her balances in the
+  dominant affinity; drift is the sum of every other balance times its `conflict_weight`;
+  threshold is `max(threshold_floor, main * threshold_percent / 100)`; `steps_past` is 0 at or
+  under the threshold, else `1 + (drift - threshold - 1) // severity_step`. No aura or no
+  held resonance reads zero.
+- `check_resonance_focus(character, technique, *, pulled_resonance=None) -> FocusOutcome | None`
+  runs once per cast, before the cast's modifiers are collected (scene cast in
+  `scenes/cast_services.py`, combat cast in the technique resolver), so the condition's own
+  authored `ConditionCheckModifier` reaches the same roll under its own label through
+  `condition_contributions`. Difficulty is `focus_base_difficulty + steps *
+  focus_difficulty_per_step`; the roll is `focus_check_type` with `MagicActivity.KEEPING_FOCUS`
+  skill terms. A success level of 1 or more changes nothing. Below that, severity is `steps +
+  (1 - success_level)` (a worse roll never costs less); already holding the condition, its
+  severity advances by one instead.
+- Shaking it off: `ConditionCategory.self_shakeable` (default False) is separate from
+  `alters_behavior`, which drives `in_control`, consent and form revert and is never set for
+  Resonance Conflict. `breakable_condition_filter()` (`world/conditions/services.py`) is
+  `alters_behavior OR self_shakeable`; `breakfree`, `rally` and the break-free tick use it,
+  `reveal` stays on `alters_behavior`. She types `breakfree`, an ally's `rally` helps.
+- Stirring it up is authored content, not code: a social action whose consequence pool has an
+  `APPLY_CONDITION` effect for the conflict condition on its target advances a holder's
+  severity through the ordinary `apply_condition` refresh (the higher severity wins).
+
 **`RenownAwardConfig`** (`world/societies/renown_config.py` — relocated from
 `world/magic/models/renown_config.py` in #1621 so any app can inherit it without a
 magic import cycle) — abstract base (SharedMemoryModel) shared by

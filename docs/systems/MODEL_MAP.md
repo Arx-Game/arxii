@@ -3273,6 +3273,7 @@
 - `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None - On ascending stage changes, apply the stage's on_entry_conditions.`
 - `attempt_break_free(instance: world.conditions.models.ConditionInstance, *, extra_modifiers: int = 0, helper_bonus: int = 0, in_combat_tick: bool = False, level_override: int | None = None) -> world.conditions.types.BreakFreeResult - Resolve a single break-free attempt against an applied condition.`
 - `batch_chronic_effect_tick() -> world.conditions.types.ChronicTickSummary - Scheduler entry point. Advance long-term (chronic) DoT by one tick.`
+- `breakable_condition_filter() -> django.db.models.query_utils.Q - Filter for condition instances a character may fight off or be rallied against.`
 - `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '', soulfray_consented: bool = False) -> list[world.conditions.types.ApplyConditionResult] - Apply multiple conditions in a single transaction with batched queries.`
 - `can_perceive(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Whether *actor* can perceive *target*.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int - Remove all conditions from a target.`
@@ -5808,6 +5809,12 @@
 **Pointed to by:**
   - tags <- magic.DramaticMomentTag
   - suggestions <- gm.GMPrompt
+
+### DriftConfig
+**Foreign Keys:**
+  - focus_check_type -> checks.CheckType [FK] (nullable)
+  - conflict_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### EffectType
 **Foreign Keys:**

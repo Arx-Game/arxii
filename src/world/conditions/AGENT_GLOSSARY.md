@@ -12,6 +12,9 @@ _Avoid_: active status, applied effect, buff (for the runtime row)
 One step in a progressive condition (`ConditionStage`), ordered within its template, with its own rounds-to-next, resist check/difficulty, and severity multiplier. A condition advances stage-by-stage as rounds elapse.
 _Avoid_: phase, level, step
 
+**self_shakeable**:
+A boolean on `ConditionCategory`: the character may shake the category's conditions off herself with `breakfree` (and be helped by `rally`) without them altering her behaviour. Resonance Conflict's category sets it. Separate from `alters_behavior`, which drives `in_control`, consent and form revert. Read through `breakable_condition_filter()`.
+
 **alters_behavior**:
 A boolean flag on `ConditionCategory` marking conditions that change how a character BEHAVES (compulsion, charm, fear, rage) rather than only their capabilities or stats. It is the consent gate: a behavior-altering effect on another PC requires that PC's consent; pure capability/stat effects do not. The canonical behavior-altering category is `Control`, seeded with `alters_behavior=True`, and the fury `Berserk` condition belongs to it. Distinct from `sets_allegiance` (below): `alters_behavior` is the PC-consent gate and is never read to derive an NPC's side; before #4091 a name match stood in for the allegiance read, which `sets_allegiance` replaced.
 _Avoid_: is_mental, is_control, hostile (the flag is about behavior-change, not harm)

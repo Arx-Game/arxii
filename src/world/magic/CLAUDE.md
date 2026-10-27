@@ -1701,6 +1701,16 @@ ACTS with (cast alignment, place of power on arrival and during a cast, defileme
 attacker affinity); `working_affinities` puts a cast in the worn self's affinity. Fall, Soul
 Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/magic.md`.
 
+**Drift and Resonance Conflict (#4732):** `services/drift.py` holds `drift_for(sheet)` (weighted
+off-aura balance against `acting_aura(sheet).dominant_affinity`, via
+`AffinityInteraction.conflict_weight`) and `check_resonance_focus(character, technique, *,
+pulled_resonance=None)`, called once per cast BEFORE modifier collection on the scene and combat
+cast paths. Every number and both designations (focus check type, conflict condition) are on the
+`DriftConfig` singleton (`get_drift_config()`); unset designations skip the check and show on the
+Required content dashboard. The penalty is the conflict condition's authored
+`ConditionCheckModifier`; never set `alters_behavior` for it (use `ConditionCategory.self_shakeable`).
+Stirring it up is an authored social action applying the condition, not code.
+
 `models/renown_config.py` — `RenownAwardConfig`: **abstract base** (SharedMemoryModel)
 shared by `DramaticMomentType` and `AudereMajoraThreshold`. Carries four authored
 knobs consumed by `fire_renown_award`: `magnitude`, `risk`, `reach` (nullable

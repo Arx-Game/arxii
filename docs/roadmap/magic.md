@@ -1068,6 +1068,22 @@ working affinities that follow the worn self's resonance (`working_affinities`),
 in `integration_tests/test_acting_aura_journeys.py` and
 `integration_tests/test_audere_alternate_self_journeys.py`.
 
+## Drift and Resonance Conflict (#4732, slice 3 of #4672, BUILT 2026-10-27)
+
+Resonance carried outside the affinity she acts with is drift. Drift strictly past an authored
+threshold makes casting call for a focus check (once per cast, before modifiers, scene and
+combat); a failed check applies the authored Resonance Conflict condition for the scene, whose
+check modifier is a labelled penalty on that same roll, severity rising with a worse roll.
+Built: `DriftConfig` singleton (every number plus the focus check type and conflict condition
+designations), `AffinityInteraction.conflict_weight`, `MagicActivity.KEEPING_FOCUS`, `drift_for`,
+`check_resonance_focus`, `ConditionCategory.self_shakeable` with `breakable_condition_filter()`
+so `breakfree`, `rally` and the break-free tick reach it while `in_control` stays on
+`alters_behavior`, Required content probes, and journeys in
+`integration_tests/test_resonance_conflict_journeys.py` and
+`integration_tests/test_conditions_journeys.py`. Stirring it up is authored content (a social
+action's consequence pool applying the condition). Content (the condition, its modifier, the
+check type, weights) is for staff to author.
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)
