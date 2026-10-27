@@ -704,10 +704,12 @@ class AnAllyBeingWounded(_SurgeField):
         self._captain_wounds_tomas(20, round_number=self.WOUND_ROUND + 1)
         self.resolve(self.success)
 
-        # Nine for the first wound; the second adds to it (its size depends on how much
-        # health the first took off the ceiling, which this journey does not pin).
-        self.assertGreater(self.intensity(self.mira), 9)
-        self.assertEqual(self.records(SurgeTriggerKind.ALLY_HURT).count(), 2)
+        # The second round's wound is a fresh surge of its own: twenty percent of the Success
+        # band's 15, as in the smaller-wound journey. Her total intensity also carries the
+        # per-round escalation tick, so the surge record is what is pinned here.
+        surges = list(self.records(SurgeTriggerKind.ALLY_HURT).order_by("repeat_round"))
+        self.assertEqual(len(surges), 2)
+        self.assertEqual(surges[1].amount, 3)
 
     def test_an_encounter_without_a_curve_surges_nobody(self) -> None:
         self.encounter.escalation_curve = None
