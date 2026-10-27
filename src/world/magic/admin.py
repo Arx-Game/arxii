@@ -1350,6 +1350,7 @@ class AudereThresholdAdmin(admin.ModelAdmin):
                 "fields": (
                     "minimum_intensity_tier",
                     "minimum_warp_stage",
+                    "control_per_stage_earlier",
                     "intensity_bonus",
                     "anima_pool_bonus",
                     "warp_multiplier",
@@ -1409,7 +1410,16 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "social_safety_bonus",
     ]
     list_select_related = ["condition", "resilience_check_type"]
-    autocomplete_fields = ["condition"]
+    autocomplete_fields = ["condition", "anima_zero_stage"]
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # The anima-0 stage picker offers Soulfray stages only (#4740); clean() also
+        # refuses a stage of another condition.
+        if db_field.name == "anima_zero_stage":  # noqa: STRING_LITERAL
+            from world.magic.services.soulfray import soulfray_stages  # noqa: PLC0415
+
+            kwargs["queryset"] = soulfray_stages()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(AnimaRitualBudgetAward)
