@@ -12,7 +12,7 @@
  *   successful cast or when the dialog closes.
  */
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useThreads, useCharacterResonances, usePullBurnPreview } from '@/magic/queries';
 import type {
   Thread,
@@ -21,6 +21,7 @@ import type {
   PullPreviewRequest,
 } from '@/magic/types';
 import type { CastableTechnique, CastPullRequestBody } from '@/scenes/actionTypes';
+import { effectiveBurn } from '@/magic/burn';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -68,6 +69,12 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
   const [showInapplicable, setShowInapplicable] = useState(false);
   const [pullNotice, setPullNotice] = useState<string | null>(null);
   const [burn, setBurn] = useState(0);
+
+  // A burn is sized against the technique's ceiling; a new technique starts over.
+  const selectedTechniqueId = selectedTechnique?.id ?? null;
+  useEffect(() => {
+    setBurn(0);
+  }, [selectedTechniqueId]);
 
   // Threads — fetched only while the cast dialog is open to avoid an
   // unnecessary warm-up fetch and to allow the gating test (brief item 6).
@@ -192,7 +199,7 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
       thread_ids: paid.map(([id]) => Number(id)),
     };
     // The ceiling can shrink when the pull changes; never send past it.
-    const burnToSend = burnPreview?.available ? Math.min(burn, burnPreview.ceiling) : 0;
+    const burnToSend = effectiveBurn(burnPreview, burn);
     if (burnToSend > 0) pull.burn = burnToSend;
     return { pull };
   }

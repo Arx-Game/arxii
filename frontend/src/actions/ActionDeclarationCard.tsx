@@ -25,6 +25,8 @@ import { useAvailableActionsQuery } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import { useTechnique, useCharacterResonances } from '@/magic/queries';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
+import { PullBurnInput } from '@/magic/components/threads/PullBurnInput';
+import { burnStrainUnits, effectiveBurn, type StrainBurn } from '@/magic/burn';
 import type { ApplicablePullsRequest } from '@/magic/types';
 import type {
   ActionContext,
@@ -89,6 +91,11 @@ export interface ActionDeclarationCardProps {
   strainMax?: number;
   /** Server-derived ordinary-cast preview. Omitted for scene actions. */
   strainPreview?: PlayerAction['strain'];
+  /**
+   * Resonance burn on this round's thread pull (#4736), shown in the Strain area
+   * beside the anima strain. Omitted when no pull is chosen.
+   */
+  strainBurn?: StrainBurn;
 }
 
 // ---------------------------------------------------------------------------
@@ -673,6 +680,7 @@ export function ActionDeclarationCard({
   onCastPositionChange,
   strainMax,
   strainPreview,
+  strainBurn,
 }: ActionDeclarationCardProps) {
   // Fetch available techniques for this character.
   const { data, isLoading } = useAvailableActionsQuery(characterId);
@@ -920,6 +928,24 @@ export function ActionDeclarationCard({
                   </div>
                 )}
               </div>
+            )}
+            {strainBurn && (
+              <PullBurnInput
+                {...strainBurn}
+                disabled={readOnly}
+                powerBonus={
+                  strainPreview
+                    ? strainPowerBonus(
+                        strainPreview,
+                        actionContext.strainCommitment +
+                          burnStrainUnits(
+                            strainBurn.preview,
+                            effectiveBurn(strainBurn.preview, strainBurn.value)
+                          )
+                      )
+                    : null
+                }
+              />
             )}
           </div>
         )}
