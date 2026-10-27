@@ -1126,9 +1126,9 @@ def ensure_obstacle_content() -> None:
 def ensure_incorporeal_content() -> None:
     """Idempotently seed the Ghostform (incorporeal) bundle (#1584, Task 14c).
 
-    No handler or trigger is wired — the Task 8 targeting gate reads
-    ``ConditionCategory.grants_intangibility`` to make the bearer untargetable while
-    Ghostform is active.  Creates (get_or_create):
+    No handler or trigger is wired. ``ConditionCategory.grants_intangibility`` makes
+    the bearer hold no ground, and the seeded Physical resistance row protects her
+    (#4742); she stays targetable.  Creates (get_or_create):
 
     1. An "Incorporeal" ``ConditionCategory`` with ``grants_intangibility=True``.
     2. A "Ghostform" ``ConditionTemplate`` (``INCORPOREAL_CONDITION_NAME``) lasting
@@ -1141,7 +1141,7 @@ def ensure_incorporeal_content() -> None:
         INCORPOREAL_CONDITION_NAME,
         description=(
             "The caster's body becomes insubstantial, phasing through physical matter "
-            "and rendering them untargetable by mundane attacks.  Lasts until the end "
+            "so that mundane blows mostly pass through them.  Lasts until the end "
             "of combat or until dispelled."
         ),
         default_duration_type=DurationType.UNTIL_END_OF_COMBAT,
@@ -1155,7 +1155,7 @@ def ensure_incorporeal_content() -> None:
         description="Techniques that phase the caster out of the physical plane.",
         technique_description=(
             "Render yourself incorporeal for the duration of the encounter, passing "
-            "through physical barriers and becoming untargetable by mundane weapons."
+            "through physical barriers while mundane weapons mostly pass through you."
         ),
         condition_template=condition,
     )
@@ -1179,8 +1179,8 @@ def ensure_sink_content() -> None:
     condition = _seed_intangibility_condition(
         SINK_CONDITION_NAME,
         description=(
-            "The caster sinks into the earth momentarily, becoming untargetable for "
-            "one round before surfacing.  A brief but potent defensive maneuver."
+            "The caster sinks into the earth momentarily, beyond the reach of most blows "
+            "for one round before surfacing.  A brief but potent defensive maneuver."
         ),
         default_duration_type=DurationType.ROUNDS,
         default_duration_value=1,
@@ -1192,7 +1192,7 @@ def ensure_sink_content() -> None:
         effect_type_name="Earth Sink",
         description="Techniques that merge the caster with the earth for a fleeting moment.",
         technique_description=(
-            "Sink into the earth for one round, becoming untargetable.  "
+            "Sink into the earth for one round, beyond the reach of most blows.  "
             "A burst defensive technique with the shortest possible window of intangibility."
         ),
         condition_template=condition,
