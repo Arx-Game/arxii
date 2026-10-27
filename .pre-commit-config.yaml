@@ -68,6 +68,16 @@ repos:
         # #4418: a live web session's protocol_key is "websocket" or "ajax/comet";
         # "webclient/websocket" is overwritten at session creation. A classifier or a
         # test fake using it passes against fakes and fails against every real browser.
+      - id: msg-frame-keywords
+        name: Block .msg(type=...) and .msg(kwargs=...)
+        entry: uv run python tools/lint_msg_frame_keywords.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/
+        # #4774: every keyword to msg is its own frame. msg(type=..., kwargs=...) sent
+        # every web action's reply as two frames named "type" and "kwargs" that the
+        # client never handles. Name the frame with the keyword instead.
       - id: msg-beside-push
         name: Block an untargeted .msg beside a structured interaction push
         entry: uv run python tools/lint_msg_beside_push.py

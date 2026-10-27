@@ -47,9 +47,21 @@ def _make_session(puppet: object = None) -> MagicMock:
 
 
 def _result_payload(session: MagicMock) -> dict:
-    """Pull the kwargs payload from the most recent ``session.msg`` call."""
+    """Return the most recent ``session.msg`` call as the one frame the client receives.
+
+    Evennia turns every keyword given to ``msg`` into its own frame named after the
+    keyword, so a single ``action_result`` frame is exactly one keyword whose value is
+    ``(args, kwargs)``. Reading the call's keywords as one dict hid #4774, where
+    ``msg(type=..., kwargs=...)`` reached the browser as two frames nobody handles.
+    """
     assert session.msg.called, "session.msg was not called"
-    return session.msg.call_args.kwargs
+    call = session.msg.call_args
+    assert not call.args, f"session.msg got positional args: {call.args!r}"
+    assert len(call.kwargs) == 1, f"one msg call must be one frame, got {sorted(call.kwargs)}"
+    ((name, value),) = call.kwargs.items()
+    args, payload = value
+    assert args == (), f"{name} frame carries args {args!r}"
+    return {"type": name, "kwargs": payload}
 
 
 class ExecuteActionInputfuncTests(TestCase):
