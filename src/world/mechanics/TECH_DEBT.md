@@ -89,5 +89,5 @@ Target FKs to be added when their systems are built:
 | goal_percent | target_goal_domain? | Blocked on Goal modifier system |
 | goal_points | target system TBD | Blocked on Goal modifier system |
 | condition_control_percent | target_condition? | Blocked on Condition modifier system |
-| condition_intensity_percent | target_condition? | Blocked on Condition modifier system |
+| condition_intensity_percent | target_condition? | Unread: its never-wired lookup was deleted (#4739); a condition's per-round intensity is now `ConditionStage.intensity_per_round`. Wire a percent later via a condition FK if wanted |
 | condition_penalty_percent | target_condition? | Blocked on Condition modifier system |

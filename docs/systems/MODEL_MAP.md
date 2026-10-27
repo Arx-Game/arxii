@@ -2767,6 +2767,13 @@
   - challenge_instance -> mechanics.ChallengeInstance [FK]
   - challenge_approach -> mechanics.ChallengeApproach [FK]
 
+### SocialManeuverConfig
+**Foreign Keys:**
+  - taunt_check_type -> checks.CheckType [FK] (nullable)
+  - demoralize_check_type -> checks.CheckType [FK] (nullable)
+  - parley_check_type -> checks.CheckType [FK] (nullable)
+  - rally_success_condition -> conditions.ConditionTemplate [FK] (nullable)
+
 ### SpectacleConfig
 
 ### SpectacleReactionLine
@@ -2908,6 +2915,7 @@
 - `get_or_create_threat_record(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant') -> 'ThreatRecord' - Get or create the ThreatRecord for an (opponent, participant) pairing (#2020).`
 - `get_penetration_check_type() -> 'CheckType' - Return the seeded 'penetration' CheckType for the ward contest (#639).`
 - `get_resolution_order(encounter: 'CombatEncounter') -> 'list[tuple[str, CombatParticipant | CombatOpponent]]' - Build the resolution order for a combat round.`
+- `get_social_maneuver_config() -> 'SocialManeuverConfig' - The SocialManeuverConfig singleton (pk=1, #4739), created empty if missing.`
 - `get_strain_config() -> 'StrainConfig' - Get-or-create the StrainConfig singleton (pk=1).`
 - `has_persistent_identity_references(objectdb: 'ObjectDB') -> 'bool' - Return True if this ObjectDB is referenced by any model that signals`
 - `increment_probing(opponent: 'CombatOpponent', amount: 'int') -> 'None' - Add ``amount`` to an opponent's probing counter (clamped at zero) and persist.`
@@ -3328,7 +3336,6 @@
 - `get_check_modifier(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> world.conditions.types.CheckModifierResult - Get the total modifier for a check type from active conditions.`
 - `get_condition_control_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int - Get percentage modifier to control loss rate for a condition.`
 - `get_condition_instance(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> world.conditions.models.ConditionInstance | None - Get a specific condition instance on a target.`
-- `get_condition_intensity_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int - Get percentage modifier to intensity gain for a condition.`
 - `get_condition_modifier_breakdown(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> list[tuple[str, int]] - Per-source sibling of get_condition_modifier_total (#639 power ledger).`
 - `get_condition_modifier_total(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> int - Sum active-condition contributions to a mechanics ModifierTarget (#636).`
 - `get_condition_modifier_vow_contributions(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> list['ConditionModifierVowContribution'] - Vow-keyed sibling of get_condition_modifier_breakdown (#2643).`
@@ -5676,6 +5683,8 @@
 **Foreign Keys:**
   - minimum_intensity_tier -> magic.IntensityTier [FK]
   - minimum_warp_stage -> conditions.ConditionStage [FK]
+  - audere_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - audere_majora_condition -> conditions.ConditionTemplate [FK] (nullable)
 
 ### AuraAffinityThreshold
 **Foreign Keys:**
@@ -5930,6 +5939,8 @@
   - scene -> scenes.Scene [FK] (nullable)
 
 ### FuryConfig
+**Foreign Keys:**
+  - berserk_condition -> conditions.ConditionTemplate [FK] (nullable)
 
 ### FuryTier
 
@@ -11274,6 +11285,9 @@
   - default_wound_pool -> actions.ConsequencePool [FK] (nullable)
   - default_death_pool -> actions.ConsequencePool [FK] (nullable)
   - physical_damage_type -> conditions.DamageType [FK] (nullable)
+  - bleed_out_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - plummeting_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - surrounded_condition -> conditions.ConditionTemplate [FK] (nullable)
 
 ### WoundDetails
 **Foreign Keys:**

@@ -8495,8 +8495,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   for a companion (no opponent peril band).
 - **Rolled surges (#4737, ADR-4737) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR CONTENT]:** a
   taunt, a rally and a hurt bonded ally raise a player character's intensity through a roll
-  with degrees. `SurgeTriggerKind` has twelve members: the nine older kinds above and
-  `TAUNT_RECEIVED` / `RALLIED` / `ALLY_HURT` (`ROLLED_SURGE_TRIGGER_KINDS`). **All three are
+  with degrees. `SurgeTriggerKind` has thirteen members: the nine older kinds above,
+  `TAUNT_RECEIVED` / `RALLIED` / `ALLY_HURT` (`ROLLED_SURGE_TRIGGER_KINDS`), and
+  `CONDITION_FED` ("Emotional Condition", #4739: an emotional condition's per-round feed
+  from `ConditionStage.intensity_per_round`; not rolled, so its per-round record has a
+  `repeat_round` and no `outcome`, the one exception the `surge_rolled_has_round_and_outcome`
+  constraint allows). **All three are
   off until staff author a `SurgeTuning` row per kind with bands** (no data migration seeds
   them; the Required content `surge-tuning` probe, `_probe_surge_tuning`, names each kind
   with no row and every stored band set that breaks the monotonic rule). The hurt-ally surge
@@ -8549,6 +8553,16 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   lock. Not built: implore and challenge verbs, a Pressure card, a targeting lock. Journeys:
   `integration_tests/test_surge_rolls_journeys.py`, `test_taunt_targets_journeys.py`.
   Architecture: `docs/architecture/runtime-modifiers-audere.md`.
+- **Social maneuver designations (#4739) [BUILT; call sites move in later #4739 tasks]:**
+  `SocialManeuverConfig` (singleton pk=1, `world/combat/models.py`) holds
+  `taunt_check_type` (the taunter's own check; the target's composure roll is the
+  `TAUNT_RECEIVED` tuning's check), `demoralize_check_type`, `parley_check_type` and
+  `rally_success_condition` (Inspired), each a nullable PROTECT FK. Rally's own check is the
+  `RALLIED` `SurgeTuning.check_type`, not a field here. Read through
+  `world.combat.services.encounter.config.get_social_maneuver_config()` (cached singleton,
+  created empty if missing). Required content rows: `social-maneuver-taunt-check`,
+  `-demoralize-check`, `-parley-check`, `-rally-success-condition`, `rallied-tuning-check`,
+  and `emotional-condition-on-failure-band`.
 - **Effect-palette / allegiance / intangibility services (#1584):**
   - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
     returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the

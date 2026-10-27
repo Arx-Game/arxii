@@ -57,7 +57,7 @@ from world.conditions.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings (`cure_check_type`/`cure_difficulty`), apply-time resist-check (`resist_check_type`/`resist_difficulty`, #1738), combat settings (`affects_turn_order`, `draws_aggro`, and the #4584 reactive fields `forces_attack_on_source`, `source_guards_bearer`, `prevents_knockout`), reactive-effect settings (`reactive_anima_cost`, and the strike-back trio `retaliation_damage`, `retaliation_damage_type`, `retaliation_condition`, #4584), display settings, allegiance settings (`sets_allegiance`, `allegiance_break_check_type`, `settle_consequence_pool`, #4091, see below) |
-| `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty`, `severity_multiplier`, `settle_consequence_pool` (#4091, overrides the template's pool at this stage) |
+| `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty`, `severity_multiplier`, `settle_consequence_pool` (#4091, overrides the template's pool at this stage), `intensity_per_round` (#4739, intensity this stage adds to the bearer's combat engagement each round; default 0. `clean()` refuses a positive value when a `SurgeDegreeBand` with an outcome below success level 1 carries the template - emotional conditions come only from a success or a choice; the Required content row `emotional-condition-on-failure-band` lists stored violations) |
 
 **Charm / Calm content (#1590).** The `Charm` `ConditionCategory` (`alters_behavior=True`) and
 `Charmed` / `Calm` templates are seeded idempotently by `ensure_charm_content()` in
@@ -233,7 +233,6 @@ from world.conditions.services import (
 
     # Distinction-based percentage modifiers
     get_condition_control_percent_modifier,    # Control loss rate modifier
-    get_condition_intensity_percent_modifier,  # Intensity gain modifier
     get_condition_penalty_percent_modifier,    # Check penalty modifier
 
     # Treatment (player surface)
@@ -760,6 +759,24 @@ drives `in_control`, consent and form revert. `breakable_condition_filter()` in
 `alters_behavior`. Conditions still need a `break_free_mode` other than NONE.
 
 ---
+
+## Designated conditions (#4739) [BUILT, call sites move in later #4739 tasks]
+
+Conditions the code has to find are designated on a config singleton by a nullable
+`ForeignKey(PROTECT, related_name="+")`, never matched by name, so renaming the
+template in admin changes nothing. Each has a lookup and a Required content row that
+lists it while unset. No migration sets any of them; staff do.
+
+| Condition | Field | Lookup |
+|---|---|---|
+| Soulfray | `SoulfrayConfig.condition` (#4122) | `world.magic.services.soulfray.soulfray_condition_id()` |
+| Audere | `AudereThreshold.audere_condition` | `world.magic.audere.audere_condition_id()` |
+| Audere Majora | `AudereThreshold.audere_majora_condition` | `world.magic.audere.audere_majora_condition_id()` |
+| Berserk | `FuryConfig.berserk_condition` | `world.magic.services.fury.get_berserk_template()` |
+| Bleeding Out | `VitalsConsequenceConfig.bleed_out_condition` | `world.vitals.peril_designations.bleed_out_condition_id()` |
+| Plummeting | `VitalsConsequenceConfig.plummeting_condition` | `world.vitals.peril_designations.plummeting_condition_id()` |
+| Surrounded | `VitalsConsequenceConfig.surrounded_condition` | `world.vitals.peril_designations.surrounded_condition_id()` |
+| Inspired (Rally success) | `SocialManeuverConfig.rally_success_condition` | `world.combat.services.encounter.config.get_social_maneuver_config()` |
 
 ## Admin
 

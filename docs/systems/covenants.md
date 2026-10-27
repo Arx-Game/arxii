@@ -98,7 +98,11 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `CONTENT_MODELS`).
 - **`CovenantRoleActionScaling`** (#2529, ADR-0149; replaced `ArchetypeActionScaling`)
   — authored config: one row per `(covenant_role, action_key)` with a
-  `thread_level_multiplier` (Decimal). Natural-key content
+  `thread_level_multiplier` (Decimal). `action_key` is a `CovenantScaledAction`
+  choice (#4739; `world/covenants/constants.py`): `combat_interpose` (Interpose),
+  `combat_rally` (Rally) and `surges_given` ("Surges given by Rally" - scales the
+  intensity a rallier's Rally surges the rallied ally by; the stored values of the
+  first two are the maneuvers' Action keys and did not change). Natural-key content
   (`covenants.covenantroleactionscaling` in `CONTENT_MODELS`). Read by
   `covenant_role_action_scaling_bonus(character, action_key)` at the combat action
   resolution seam — sums `thread_level × multiplier` across the character's engaged
