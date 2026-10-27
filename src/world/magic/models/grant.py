@@ -573,8 +573,9 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="FALL_CONVERSION"),
             ),
-            # #4733 — DRIFT_CORRECTION: no typed source FK. The offer's cap rows name the
-            # grants it converted (DriftConversionCap.grants), so the ledger row stays untyped.
+            # #4733 — DRIFT_CORRECTION: no typed source FK, untyped like COMPROMISE and
+            # PENANCE. The offer and its caps are deleted on accept, decline or scene end,
+            # so the ledger row carries no provenance link afterwards.
             models.CheckConstraint(
                 name="res_grant_drift_correction_shape",
                 check=(

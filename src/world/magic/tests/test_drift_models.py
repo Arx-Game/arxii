@@ -74,6 +74,12 @@ class DriftCorrectionConfigTests(TestCase):
         self.assertEqual(config.check_difficulty, 0)
         self.assertEqual(config.cap_percent, 50)
 
+    def test_cap_percent_over_one_hundred_is_invalid(self):
+        config = DriftCorrectionConfig(pk=1, cap_percent=101)
+        with self.assertRaises(ValidationError) as ctx:
+            config.full_clean()
+        self.assertIn("cap_percent", ctx.exception.message_dict)
+
     def test_factory_returns_the_single_row(self):
         first = DriftCorrectionConfigFactory()
         self.assertEqual(DriftCorrectionConfigFactory().pk, first.pk)
@@ -166,6 +172,22 @@ class RitualComponentRequirementModeTests(TestCase):
             ritual=self.ritual, matches_target_resonance=True, min_item_meaning=3
         )
         requirement.full_clean()
+
+    def test_min_item_meaning_of_zero_is_invalid(self):
+        requirement = RitualComponentRequirement(
+            ritual=self.ritual, matches_target_resonance=True, min_item_meaning=0
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            requirement.full_clean()
+        self.assertIn("min_item_meaning", ctx.exception.message_dict)
+
+    def test_target_mode_reads_as_a_target_resonance_item_not_none(self):
+        requirement = RitualComponentRequirement(
+            ritual=self.ritual, matches_target_resonance=True, quantity=2
+        )
+        text = str(requirement)
+        self.assertIn("target resonance", text)
+        self.assertNotIn("None", text)
 
     def test_template_mode_still_builds_from_the_factory(self):
         requirement = RitualComponentRequirementFactory(ritual=self.ritual)

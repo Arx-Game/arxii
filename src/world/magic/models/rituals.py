@@ -7,6 +7,7 @@ fallback prose keyed on (resonance, target_kind).
 """
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from core.descriptors import ReverseOneToOneOrNone
@@ -262,17 +263,19 @@ class RitualComponentRequirement(SharedMemoryModel):
     matches_target_resonance = models.BooleanField(
         default=False,
         help_text=(
-            "Target-resonance mode: an item that ties to the resonance the performer is "
-            "converting toward satisfies this requirement. Exclusive with item_template "
-            "and min_touchstone_tier."
+            "Target-resonance mode: the requirement is met by any one of three routes, an "
+            "item tied to the resonance the performer is converting toward, an item with a "
+            "motif facet tied to that resonance, or an item at or over the min_item_meaning "
+            "bar. Exclusive with item_template and min_touchstone_tier."
         ),
     )
     min_item_meaning = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
+        validators=[MinValueValidator(1)],
         help_text=(
-            "Target-resonance mode only: the least meaning the item must carry for the "
-            "target resonance. Blank asks for any tie."
+            "Target-resonance mode only: the meaning bar for the item-meaning route. "
+            "Blank turns that route off; 0 is not allowed, since it would admit every item."
         ),
     )
     quantity = models.PositiveSmallIntegerField(default=1)
@@ -317,7 +320,13 @@ class RitualComponentRequirement(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.ritual.name} needs {self.quantity}x {self.item_template_id}"
+        if self.matches_target_resonance:
+            needed = f"{self.quantity}x item tied to the target resonance"
+        elif self.min_touchstone_tier_id is not None:
+            needed = f"{self.quantity}x touchstone of tier {self.min_touchstone_tier_id}"
+        else:
+            needed = f"{self.quantity}x {self.item_template_id}"
+        return f"{self.ritual.name} needs {needed}"
 
 
 class PendingRitualEffect(SharedMemoryModel):

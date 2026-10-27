@@ -11,6 +11,7 @@ much of the cap a roll converts through ``DriftCorrectionOutcomeShare``.
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator
 from django.db import models
 
 from core.managers import ArxSharedMemoryManager
@@ -25,6 +26,11 @@ class DriftCorrectionConfig(SharedMemoryModel):
 
     Every foreign key is nullable so the lazily created row is valid before staff author
     it; the rite refuses to run until the rite and check type are set.
+
+    ``check_type`` and ``check_difficulty`` are deliberately NOT a ``RitualCheckConfig``
+    sidecar: that model requires a stat and a skill, and ``perform_ritual_check`` looks the
+    config up by ritual NAME and accepts no extra modifiers. This rite designates its ritual
+    and its check by foreign key and rolls with a focus modifier.
     """
 
     objects = ArxSharedMemoryManager()
@@ -51,6 +57,7 @@ class DriftCorrectionConfig(SharedMemoryModel):
     )
     cap_percent = models.PositiveSmallIntegerField(
         default=50,
+        validators=[MaxValueValidator(100)],
         help_text="Percent of a deed's resonance grant that may be converted.",
     )
 
@@ -133,7 +140,12 @@ class DriftConversionOffer(SharedMemoryModel):
 
 
 class DriftConversionCap(SharedMemoryModel):
-    """How much of an offer's deed gain may be converted toward one target resonance."""
+    """How much of an offer's deed gain may be converted toward one target resonance.
+
+    ``cap`` is a deliberate snapshot taken at grant time: a later change to
+    ``DriftCorrectionConfig.cap_percent`` mid-scene does not rewrite it. ``grants`` links the
+    grants that fed this cap and stops one grant counting twice inside a scene's offer.
+    """
 
     offer = models.ForeignKey(
         DriftConversionOffer,
@@ -155,6 +167,7 @@ class DriftConversionCap(SharedMemoryModel):
     )
 
     class Meta:
+        ordering = ["offer", "target_resonance"]
         constraints = [
             models.UniqueConstraint(
                 fields=["offer", "target_resonance"],
