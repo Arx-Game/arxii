@@ -2297,6 +2297,26 @@ def scaled_resistance_value(
     return modifier.modifier_value
 
 
+def scaled_outgoing_damage(
+    attacker: "ObjectDB | None",  # noqa: OBJECTDB_PARAM - PC body or NPC opponent body
+    amount: int,
+    damage_type: "DamageType | None",
+) -> int:
+    """*amount* after the attacker's own ConditionDamageDealtModifier rows (#4742).
+
+    The one outgoing-damage seam: PC technique profiles, PC combo riders and joust
+    strikes, and NPC attacks all call it with the hit's type (untyped is Physical).
+    No attacker, or one with no condition handler, leaves the amount unchanged.
+    Floored at 0.
+    """
+    if attacker is None or not hasattr(attacker, "conditions"):
+        return amount
+    percent = attacker.conditions.damage_dealt_percent(resolved_damage_type(damage_type))
+    if percent == 0:
+        return amount
+    return max(0, int(amount * (100 + percent) / 100))
+
+
 def scaled_damage_dealt_percent(
     modifier: "ConditionDamageDealtModifier", instance: ConditionInstance
 ) -> int:

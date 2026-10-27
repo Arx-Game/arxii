@@ -1198,7 +1198,8 @@ class ConditionDamageDealtModifier(
     The attacker-side mirror of ConditionResistanceModifier: resistance is a flat
     amount off incoming hits, this is a percent on the bearer's own hits. A smoke
     form carries Physical -75 so plain steel barely lands, and no Fire row, so her
-    fire strikes are untouched. Read per damage profile in the technique resolver.
+    fire strikes are untouched. Read by ``scaled_outgoing_damage`` for PC technique
+    profiles, combo riders and joust strikes, and NPC attacks.
     """
 
     damage_type = models.ForeignKey(

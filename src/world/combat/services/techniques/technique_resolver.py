@@ -477,7 +477,10 @@ class CombatTechniqueResolver:
         weapon augment, before the CHARGE and property bonuses and the floor: a
         vow added effect's thread-level ``damage_bonus`` (#4581). Default 0.
         """
-        from world.conditions.services import resolved_damage_type  # noqa: PLC0415
+        from world.conditions.services import (  # noqa: PLC0415
+            resolved_damage_type,
+            scaled_outgoing_damage,
+        )
         from world.mechanics.services import property_damage_bonus  # noqa: PLC0415
 
         if sl < profile.minimum_success_level:
@@ -502,11 +505,12 @@ class CombatTechniqueResolver:
         # own damage-dealt rows (a smoke form's Physical -75 leaves Fire untouched).
         profile_damage_type = resolved_damage_type(profile_damage_type)
         budget = max(0, budget + property_damage_bonus(target.objectdb, profile_damage_type))
-        dealt_percent = self.participant.character_sheet.character.conditions.damage_dealt_percent(
-            profile_damage_type
+        scaled = scaled_outgoing_damage(
+            self.participant.character_sheet.character,
+            int(budget * multiplier),
+            profile_damage_type,
         )
-        scaled = int(budget * multiplier * (100 + dealt_percent) / 100)
-        return max(0, scaled), profile_damage_type
+        return scaled, profile_damage_type
 
     def _apply_conditions(
         self,

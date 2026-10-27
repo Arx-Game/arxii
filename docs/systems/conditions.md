@@ -146,7 +146,7 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 | `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `value` (additive integer; negative reduces, positive enhances), `scales_with_severity` (inherited from `ConditionOrStageEffect`; honoured by all three readers as of #2708 — see "Capability magnitude curve" below) |
 | `ConditionCheckModifier` | How a condition modifies checks | `check_type` OR `check_category` (exactly one; category targets all checks in a category, including per-character magic checks — #2697), `modifier_value`, `scales_with_severity` |
 | `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value`, `scales_with_severity` (#4728: multiplies by the instance's `effective_severity`; unset rows are flat, with no stage-multiplier fallback, because stage rows are authored per stage. One rule, `scaled_resistance_value`, read by the damage seam through `CharacterConditionHandler.resistance_modifier` and by `get_resistance_modifier`) |
-| `ConditionDamageDealtModifier` | How a condition changes its bearer's OUTGOING damage of one type (#4742) | `damage_type` (required; a type with no row is unchanged), `modifier_percent` (-75 = a quarter), `scales_with_severity` (same rule as resistance, `scaled_damage_dealt_percent`). Read per damage profile in `CombatTechniqueResolver._profile_damage` through `CharacterConditionHandler.damage_dealt_percent` |
+| `ConditionDamageDealtModifier` | How a condition changes its bearer's OUTGOING damage of one type (#4742) | `damage_type` (required; a type with no row is unchanged), `modifier_percent` (-75 = a quarter), `scales_with_severity` (same rule as resistance, `scaled_damage_dealt_percent`). Read by `scaled_outgoing_damage` (PC technique profiles, combo riders, joust, NPC attacks) through `ConditionHandler.damage_dealt_percent` |
 | `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` (after combat, a settled ROUNDS row ticks these through the non-lethal clamp, see "Settled round effects") |
 
 #### DoT tick timing (`DamageTickTiming`) — #1762
@@ -315,7 +315,10 @@ ADR-0158.
   and grips are resisted by degrees through the condition's own resist roll
   (`_check_application_resist`) plus the form's check modifiers on that roll.
 - **Her own strikes.** `ConditionDamageDealtModifier` rows change the bearer's outgoing damage
-  of one type by a percent, read per profile at the end of `_profile_damage`. A smoke form with
+  of one type by a percent, through one seam, `scaled_outgoing_damage(attacker, amount, type)`:
+  PC technique profiles (end of `_profile_damage`), PC combo riders and joust strikes, and NPC
+  attacks (`npc_attack`, `npc_action`) all call it. Battle failure damage and falls are not
+  strikes and do not. A smoke form with
   Physical -75 and no Fire row hits a quarter as hard with plain steel and at full strength with
   a Fire profile.
 

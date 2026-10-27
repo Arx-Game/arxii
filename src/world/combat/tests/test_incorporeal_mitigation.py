@@ -255,3 +255,19 @@ class IncorporealHoldsNoGroundTests(TestCase):
                 holds = encounter_holds(encounter, acting_participants=handed_in)
                 self.assertIn(solid_position, holds.acting_pcs)
                 self.assertNotIn(smoke_position, holds.acting_pcs)
+
+
+class NpcAttackerDamageDealtTests(TestCase):
+    """An NPC opponent in smoke form hits a quarter as hard with Physical, full with Fire."""
+
+    def test_npc_body_rows_cut_its_physical_hits(self):
+        from world.conditions.services import scaled_outgoing_damage
+
+        physical = _designate_physical()
+        fire = DamageTypeFactory(name="Fire")
+        opponent = CombatOpponentFactory()
+        apply_condition(opponent.objectdb, _smoke_form(physical))
+
+        self.assertEqual(scaled_outgoing_damage(opponent.objectdb, 40, None), 10)
+        self.assertEqual(scaled_outgoing_damage(opponent.objectdb, 40, fire), 40)
+        self.assertEqual(scaled_outgoing_damage(None, 40, None), 40)

@@ -3349,6 +3349,7 @@
 - `round_half_up(value: 'Decimal') -> 'int' - ``value`` to a whole number, halves away from zero (so -1.5 is -2, signed alike).`
 - `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
 - `scaled_damage_dealt_percent(modifier: 'ConditionDamageDealtModifier', instance: world.conditions.models.ConditionInstance) -> int - One ConditionDamageDealtModifier's percent on one active instance (#4742).`
+- `scaled_outgoing_damage(attacker: 'ObjectDB | None', amount: int, damage_type: 'DamageType | None') -> int - *amount* after the attacker's own ConditionDamageDealtModifier rows (#4742).`
 - `scaled_resistance_value(modifier: world.conditions.models.ConditionResistanceModifier, instance: world.conditions.models.ConditionInstance) -> int - One ConditionResistanceModifier's contribution on one active instance (#4728).`
 - `settle_round_effects(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionInstance] - Convert round-counted conditions on the targets into wall-clock expiries (#4120).`
 - `settled_effects_tick() -> world.conditions.types.SettledTickSummary - Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).`
