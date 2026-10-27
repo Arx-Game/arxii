@@ -184,6 +184,11 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
                 ))}
               </div>
             ) : null}
+            {offeringRequired && selected.qualifying.length === 0 ? (
+              <p role="status" className="text-sm" data-testid="resonance-no-offering">
+                You carry no offering for {selected.resonance_name}.
+              </p>
+            ) : null}
 
             <p className="text-sm" data-testid="resonance-projected">
               {thread.developed_points} points → {selected.projected_points}

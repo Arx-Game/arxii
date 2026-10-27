@@ -119,6 +119,16 @@ describe('ThreadResonanceDialog', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Retuned.'));
   });
 
+  it('says so when nothing carried pays the offering', async () => {
+    vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(makeOptions());
+    renderDialog();
+    fireEvent.click(await screen.findByTestId('resonance-option-3'));
+    expect(screen.getByTestId('resonance-no-offering')).toHaveTextContent(
+      'You carry no offering for Umbra.'
+    );
+    expect(screen.getByTestId('resonance-retune')).toBeDisabled();
+  });
+
   it('disables the button when no ritual is authored', async () => {
     vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(
       makeOptions({ ritual_id: null })
