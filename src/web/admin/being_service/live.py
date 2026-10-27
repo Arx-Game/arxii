@@ -324,7 +324,10 @@ def _request_supply(request, stalls_by_template: dict[int, set[str]]) -> str:
     """Describe where the requested template or facet can be obtained."""
     if request.item_template_id is None:
         count = request.cheap_templates
-        return f"{count} cheap template{'s' if count != 1 else ''} carry it" if count else ""
+        if not count:
+            return ""
+        suffix = "s" if count != 1 else ""
+        return f"{count} cheap template{suffix} carry it"
     template = request.item_template
     stalls = sorted(stalls_by_template.get(template.pk, ()))
     parts = [f"sold at {', '.join(stalls)}"] if stalls else []

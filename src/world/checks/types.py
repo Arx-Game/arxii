@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from decimal import ROUND_HALF_UP, Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from world.checks.constants import ROLL_COUNTED_SOURCE_KINDS
 
@@ -80,7 +80,7 @@ class CheckResult:
 
     def with_outcome(self, outcome: CheckOutcome | None) -> CheckResult:
         """Copy the result while replacing only its outcome tier."""
-        return replace(self, outcome=outcome)
+        return cast(CheckResult, replace(self, outcome=outcome))
 
     @property
     def rank_text(self) -> str:
