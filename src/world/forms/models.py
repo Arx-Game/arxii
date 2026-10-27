@@ -594,7 +594,9 @@ class AlternateSelf(SharedMemoryModel):
         limit_choices_to={"is_ultimate": True},
         help_text=(
             "#4731: ultimates this alternate self makes available at Audere. Choosing "
-            "one of its cards in the reveal puts the character in this self."
+            "one of its cards in the reveal puts the character in this self. An ultimate also "
+            "offered by her Path and Gift, a patron or a companion shows under that source instead "
+            "and does not bring this self out."
         ),
     )
     tuning_value = models.IntegerField(null=True, blank=True)

@@ -338,6 +338,15 @@ class ASelfSheWoreBeforeAudereStays(_AudereSelfJourney):
         self._end_the_fight()
         self.assertIsNone(self._worn())
 
+    def test_a_broken_self_never_takes_her_out_of_the_one_she_wears(self) -> None:
+        self._ashen(persona=PersonaFactory())
+        self._surge()
+        with self.assertLogs("world.forms.services", level="WARNING") as logged:
+            self._choose(1)
+        self.assertIn("its form or persona is not hers", logged.output[0])
+        self.assertNotTold(self.character, "You assume")
+        self.assertEqual(self._worn(), self.quiet)
+
     def test_the_swap_is_refused_while_she_is_not_in_control(self) -> None:
         self._ashen()
         self._surge()
@@ -441,7 +450,7 @@ class ABrokenSelfDoesNotUndoTheChoice(_AudereSelfJourney):
         self._surge()
         with self.assertLogs("world.forms.services", level="WARNING") as logged:
             self._choose(1)
-        self.assertIn("Audere could not put Ysmay in alternate self", logged.output[0])
+        self.assertIn("its form or persona is not hers", logged.output[0])
         self.assertNotTold(self.character, "You assume")
         self.assertTrue(self._audere_held())
         self.assertEqual(self._readied(), "Cinder Crown")

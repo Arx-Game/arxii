@@ -1055,6 +1055,17 @@ def learn_style(
     )
 
 
+def _alternate_self_is_hers(sheet: CharacterSheet, alt: AlternateSelf) -> bool:
+    """Whether the self's form and persona both belong to ``sheet``.
+
+    Checked before taking her out of a worn self, so bad staff data never leaves her in
+    her true form with a half-applied swap.
+    """
+    if alt.form_id is not None and alt.form.character_id != sheet.pk:
+        return False
+    return alt.persona_id is None or alt.persona.character_sheet_id == sheet.pk
+
+
 def assume_alternate_self_for_audere(sheet: CharacterSheet, alt: AlternateSelf) -> bool:
     """Put her in the alternate self whose reveal card she chose at Audere (#4731).
 
@@ -1082,6 +1093,14 @@ def assume_alternate_self_for_audere(sheet: CharacterSheet, alt: AlternateSelf) 
     )
     worn = None if active is None else active.alternate_self
     if worn is not None and worn.pk == alt.pk:
+        return False
+    if not _alternate_self_is_hers(sheet, alt):
+        logger.warning(
+            "Audere cannot bring out alternate self %s for %s: its form or persona is not "
+            "hers (#4731).",
+            alt,
+            sheet.character,
+        )
         return False
     if worn is not None:
         try:
