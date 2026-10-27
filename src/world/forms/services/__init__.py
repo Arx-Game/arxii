@@ -1112,13 +1112,33 @@ def revert_audere_alternate_self(sheet: CharacterSheet) -> bool:
     its own savepoint and never raises the forms refusals, so encounter cleanup is never
     rolled back by it. Returns True when the revert happened.
     """
-    from world.scenes.services import ActivePersonaError  # noqa: PLC0415
-
     alt = audere_alternate_self(sheet)
     if alt is None or alt.revert_kind != AlternateSelfRevertKind.AUTOMATIC:
         return False
     if not ActiveAlternateSelf.objects.filter(character=sheet, alternate_self=alt).exists():
         return False
+    return _revert_flagged_self(sheet, alt)
+
+
+def revert_audere_alternate_selves(sheet_ids: list[int]) -> None:
+    """Revert every flagged AUTOMATIC self worn among ``sheet_ids``, in one query (#4731).
+
+    The fight-end sibling of ``revert_audere_alternate_self``: encounter cleanup calls
+    it once for all participants, so participants wearing no flagged self cost nothing.
+    """
+    worn = ActiveAlternateSelf.objects.filter(
+        character_id__in=sheet_ids,
+        alternate_self__emerges_at_audere=True,
+        alternate_self__revert_kind=AlternateSelfRevertKind.AUTOMATIC,
+    ).select_related("character", "alternate_self")
+    for active in worn:
+        _revert_flagged_self(active.character, active.alternate_self)
+
+
+def _revert_flagged_self(sheet: CharacterSheet, alt: AlternateSelf) -> bool:
+    """Revert ``sheet`` out of its worn flagged self ``alt``, logging any refusal."""
+    from world.scenes.services import ActivePersonaError  # noqa: PLC0415
+
     try:
         with transaction.atomic():
             revert_alternate_self(sheet)
