@@ -186,6 +186,7 @@ def _pull_spends_for_cast(
     *,
     character: ObjectDB,
     cast_pull: CastPullDeclaration | None,
+    cast_pull_spent: int,
     burn_result: ResonanceBurnResult | None,
 ) -> dict[int, tuple[Resonance, _PullSpend]]:
     """Resonance pk -> what the pulls of this cast spent, burns included.
@@ -197,7 +198,6 @@ def _pull_spends_for_cast(
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
     from world.magic.services.burn import value_burn  # noqa: PLC0415
-    from world.magic.services.threads import get_pull_cost  # noqa: PLC0415
 
     spends: dict[int, tuple[Resonance, _PullSpend]] = {}
     try:
@@ -214,18 +214,19 @@ def _pull_spends_for_cast(
             spend.add_burn(value_burn(sheet, pull.resonance, pull.resonance_burned))
     if cast_pull is not None:
         spend = spends.setdefault(cast_pull.resonance.pk, (cast_pull.resonance, _PullSpend()))[1]
-        spend.raw += get_pull_cost(cast_pull.tier, None).resonance_cost
+        spend.raw += cast_pull_spent
         if burn_result is not None:
             spend.add_burn(burn_result.valuation)
     return spends
 
 
-def _build_resonance_involvements(
+def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged pull
     *,
     technique: Technique,
     character: ObjectDB,
     runtime_intensity: int,
     cast_pull: CastPullDeclaration | None = None,
+    cast_pull_spent: int = 0,
     burn_result: ResonanceBurnResult | None = None,
 ) -> tuple[ResonanceInvolvement, ...]:
     """Compute per-resonance involvement for one cast.
@@ -245,7 +246,10 @@ def _build_resonance_involvements(
 
     resonances = list(gift_resonances_for(character, technique.gift))
     spends = _pull_spends_for_cast(
-        character=character, cast_pull=cast_pull, burn_result=burn_result
+        character=character,
+        cast_pull=cast_pull,
+        cast_pull_spent=cast_pull_spent,
+        burn_result=burn_result,
     )
     if not resonances and not spends:
         return ()
@@ -1014,7 +1018,7 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
     target: ObjectDB | None = None,
     cast_check: CastCheck | None = None,
     burn_result: ResonanceBurnResult | None = None,
-) -> tuple[int, int, list[ResolvedPullEffect]]:
+) -> tuple[int, int, list[ResolvedPullEffect], int]:
     """Charge a non-combat cast pull and return resolved effects.
 
     ``burn_result`` (#4736) is the burn ``use_technique`` resolved for this pull; its
@@ -1041,7 +1045,8 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
     (``commit_combat_pull``) uses, so a non-combat ``beseech=N`` cast rolls the
     same Court-grant petition check and gets the same bonus/debt treatment.
 
-    Returns ``(pull_flat_bonus, effective_power, resolved_effects)`` so callers
+    Returns ``(pull_flat_bonus, effective_power, resolved_effects, resonance_spent)``
+    (``resonance_spent`` is the pull's own cost, 0 when nothing was charged) so callers
     can apply further post-resolution steps (e.g. ASSUME_ALTERNATE_SELF) without
     re-resolving.  Extracting this block reduces ``use_technique``'s cognitive
     complexity (C901).
@@ -1058,7 +1063,7 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
     pull_flat_bonus = 0
     pull_sheet = _get_character_sheet(character)
     if pull_sheet is None:
-        return pull_flat_bonus, effective_power, []
+        return pull_flat_bonus, effective_power, [], 0
 
     beseech_bonus_thread_id = None
     applied_bonus = 0
@@ -1100,7 +1105,12 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
         elif eff.kind == EffectKind.INTENSITY_BUMP:
             pull_intensity_bonus += eff.scaled_value or 0
     effective_power += pull_intensity_bonus
-    return pull_flat_bonus, effective_power, pull_result.resolved_effects
+    return (
+        pull_flat_bonus,
+        effective_power,
+        pull_result.resolved_effects,
+        pull_result.resonance_spent,
+    )
 
 
 @dataclass
@@ -1116,9 +1126,10 @@ class _CastPreparation:
     pull_flat_bonus: int
     pull_resolved_effects: list[ResolvedPullEffect]
     strain_power_bonus: int = 0
-    #: The non-combat pull charged with this cast and the burn debited with it (#4736),
-    #: so the cast's corruption counts what they spent.
+    #: The non-combat pull charged with this cast, what it cost, and the burn debited
+    #: with it (#4736), so the cast's corruption counts what they spent.
     charged_pull: CastPullDeclaration | None = None
+    charged_pull_spent: int = 0
     burn_result: ResonanceBurnResult | None = None
 
 
@@ -1296,8 +1307,9 @@ def _prepare_technique_cast(  # noqa: PLR0913
     effective_power = effective_ledger.total
     pull_flat_bonus = 0
     pull_resolved_effects: list[ResolvedPullEffect] = []
+    pull_spent = 0
     if cast_pull is not None:
-        pull_flat_bonus, effective_power, pull_resolved_effects = _charge_cast_pull(
+        pull_flat_bonus, effective_power, pull_resolved_effects, pull_spent = _charge_cast_pull(
             character=character,
             technique=technique,
             cast_pull=cast_pull,
@@ -1317,6 +1329,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
         pull_resolved_effects,
         strain_power_bonus=0,
         charged_pull=cast_pull,
+        charged_pull_spent=pull_spent,
         burn_result=burn_result if cast_pull is not None else None,
     )
 
@@ -1437,6 +1450,7 @@ def _complete_technique_cast(  # noqa: PLR0913
         character=character,
         runtime_intensity=stats.intensity,
         cast_pull=preparation.charged_pull,
+        cast_pull_spent=preparation.charged_pull_spent,
         burn_result=preparation.burn_result,
     )
     technique_result = TechniqueUseResult(
