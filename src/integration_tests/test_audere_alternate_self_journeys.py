@@ -46,6 +46,7 @@ from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
+from world.scenes.factories import PersonaFactory
 
 
 class _AudereSelfJourney(ResonanceCacheIsolationMixin, JourneyCase):
@@ -187,6 +188,15 @@ class ATalkedDownSelfStaysUntilSheBreaksFree(_AudereSelfJourney):
         )
 
         self.telnet(self.character, "form revert")
+        self.assertIsNone(self._worn())
+
+
+class ABrokenSelfDoesNotStopTheSurge(_AudereSelfJourney):
+    def test_a_persona_she_does_not_own_leaves_audere_accepted(self) -> None:
+        self._flag(persona=PersonaFactory())
+        self.telnet(self.character, "accept surge")
+        self.assertTrue(self._audere_held())
+        self.assertFalse(PendingAudereOffer.objects.filter(pk=self.offer.pk).exists())
         self.assertIsNone(self._worn())
 
 

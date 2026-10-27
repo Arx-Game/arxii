@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 from typing import TYPE_CHECKING, Any
 
@@ -36,6 +37,9 @@ from world.species.models import Species
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Persona
+
+
+logger = logging.getLogger(__name__)
 
 
 class NonCosmeticTraitError(ValueError):
@@ -1052,12 +1056,15 @@ def audere_alternate_self(sheet: CharacterSheet) -> AlternateSelf | None:
 def emerge_audere_alternate_self(sheet: CharacterSheet) -> AlternateSelf | None:
     """Become the flagged alternate self as Audere is accepted (#4731).
 
-    Returns the self assumed, or None when nothing is flagged or a different alternate
-    self is already active (Audere never swaps one out and never raises into the accept).
-    A self that must be talked down also takes its emergence condition.
+    Returns the self assumed, or None when nothing is flagged, a different alternate
+    self is already worn, or the flagged self cannot be assumed (bad staff data: a form
+    or persona the character does not own). Never raises into the Audere accept: the
+    attempt runs in its own savepoint, so a half-built assumption is rolled back, and the
+    refusal is logged. A self that must be talked down also takes its emergence condition.
     """
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.forms.services.transformation import trigger_transformation  # noqa: PLC0415
+    from world.scenes.services import ActivePersonaError  # noqa: PLC0415
 
     alt = audere_alternate_self(sheet)
     if alt is None:
@@ -1065,9 +1072,19 @@ def emerge_audere_alternate_self(sheet: CharacterSheet) -> AlternateSelf | None:
     active = ActiveAlternateSelf.objects.filter(character=sheet).first()
     if active is not None and active.alternate_self_id not in (None, alt.pk):
         return None
-    trigger_transformation(sheet, alt, cause="audere")
-    if alt.revert_kind == AlternateSelfRevertKind.TALKED_DOWN:
-        apply_condition(target=sheet.character, condition=alt.emergence_condition)
+    try:
+        with transaction.atomic():
+            trigger_transformation(sheet, alt, cause="audere")
+            if alt.revert_kind == AlternateSelfRevertKind.TALKED_DOWN:
+                apply_condition(target=sheet.character, condition=alt.emergence_condition)
+    except (AlternateSelfActiveError, FormOwnershipError, ActivePersonaError):
+        logger.warning(
+            "Audere could not put %s in alternate self %s (#4731); accept carried on.",
+            sheet.character,
+            alt,
+            exc_info=True,
+        )
+        return None
     return alt
 
 
@@ -1085,5 +1102,10 @@ def revert_audere_alternate_self(sheet: CharacterSheet) -> bool:
     try:
         revert_alternate_self(sheet)
     except RevertBlockedError:
+        logger.info(
+            "Audere ended but %s is not in control; alternate self %s stays until reverted.",
+            sheet.character,
+            alt,
+        )
         return False
     return True

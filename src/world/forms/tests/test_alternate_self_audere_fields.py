@@ -61,3 +61,10 @@ class AlternateSelfAudereFieldsTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             row.clean()
         self.assertIn("emergence_condition", ctx.exception.message_dict)
+
+    def test_automatic_revert_with_condition_fails_the_database(self):
+        with self.assertRaises(IntegrityError) as ctx, transaction.atomic():
+            AlternateSelfFactory(
+                revert_kind=AlternateSelfRevertKind.AUTOMATIC, emergence_condition=self.behavior
+            )
+        self.assertIn("alternate_self_talked_down_needs_condition", str(ctx.exception))

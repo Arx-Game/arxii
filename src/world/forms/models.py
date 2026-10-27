@@ -651,8 +651,14 @@ class AlternateSelf(SharedMemoryModel):
             ),
             models.CheckConstraint(
                 condition=(
-                    ~models.Q(revert_kind=AlternateSelfRevertKind.TALKED_DOWN)
-                    | models.Q(emergence_condition__isnull=False)
+                    models.Q(
+                        revert_kind=AlternateSelfRevertKind.TALKED_DOWN,
+                        emergence_condition__isnull=False,
+                    )
+                    | models.Q(
+                        revert_kind=AlternateSelfRevertKind.AUTOMATIC,
+                        emergence_condition__isnull=True,
+                    )
                 ),
                 name="alternate_self_talked_down_needs_condition",
             ),

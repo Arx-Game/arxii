@@ -21,8 +21,14 @@ class Migration(migrations.Migration):
             model_name="alternateself",
             constraint=models.CheckConstraint(
                 condition=models.Q(
-                    models.Q(("revert_kind", "talked_down"), _negated=True),
-                    ("emergence_condition__isnull", False),
+                    models.Q(
+                        ("emergence_condition__isnull", False),
+                        ("revert_kind", "talked_down"),
+                    ),
+                    models.Q(
+                        ("emergence_condition__isnull", True),
+                        ("revert_kind", "automatic"),
+                    ),
                     _connector="OR",
                 ),
                 name="alternate_self_talked_down_needs_condition",

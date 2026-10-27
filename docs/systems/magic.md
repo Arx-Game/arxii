@@ -2879,15 +2879,18 @@ scene-EMIT mechanics live in the shared `broadcast_scene_emit`
 character `emerges_at_audere` (a unique constraint allows at most one). `offer_audere`
 calls `emerge_audere_alternate_self(sheet)` (`world/forms/services/__init__.py`) right after
 the Audere condition applies: it assumes the flagged self through
-`trigger_transformation(cause="audere")`, and skips quietly (never raises into the accept)
-when a different alternate self is already worn. `AlternateSelf.revert_kind` says how it
+`trigger_transformation(cause="audere")`, and runs after the accept commits and skips quietly
+when a different alternate self is already worn or the self cannot be assumed (a form or
+persona the character does not own: `FormOwnershipError` / `ActivePersonaError`, logged as a
+warning, the attempt rolled back in its own savepoint); it never undoes the accept. `AlternateSelf.revert_kind` says how it
 ends. `AUTOMATIC`: `end_audere` calls `revert_audere_alternate_self(sheet)`, so the self
 drops when the fight ends (`cleanup_completed_encounter`); a revert blocked by
-`in_control` is left as it is. `TALKED_DOWN`: the self also takes `emergence_condition`
+`in_control` (another behavior-altering condition) is logged at info and the self stays until
+the player reverts it once in control. `TALKED_DOWN`: the self also takes `emergence_condition`
 (a behavior-altering `ConditionTemplate`, required by a DB check constraint and `clean()`),
 stays after Audere ends, and `form revert` is refused until the condition is cleared by
-`breakfree`, a rally or a calm-down. `clean()` rejects an emergence condition on an
-`AUTOMATIC` self (it would block its own revert). Known gap, unchanged here: an Audere
+`breakfree`, a rally or a calm-down. `clean()` and the DB check reject an emergence
+condition on an `AUTOMATIC` self (it would block its own revert). Known gap, unchanged here: an Audere
 condition that expires by round duration without `end_audere` does not revert the self
 (`required_content.py:820`).
 

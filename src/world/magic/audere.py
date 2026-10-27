@@ -375,12 +375,6 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         # Apply Audere condition
         apply_condition(target=character, condition=audere_template)
 
-        # The self the character becomes at Audere, if staff flagged one (#4731).
-        if sheet is not None:
-            from world.forms.services import emerge_audere_alternate_self
-
-            emerge_audere_alternate_self(sheet)
-
         # Boost engagement intensity modifier
         engagement = CharacterEngagement.objects.select_for_update().get(
             character_id=character.pk,
@@ -393,6 +387,13 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         anima.pre_audere_maximum = anima.maximum
         anima.maximum += threshold.anima_pool_bonus
         anima.save(update_fields=["pre_audere_maximum", "maximum"])
+
+    # The self the character becomes at Audere, if staff flagged one (#4731). After the
+    # accept commits: a broken alternate self must not undo the surge.
+    if sheet is not None:
+        from world.forms.services import emerge_audere_alternate_self
+
+        emerge_audere_alternate_self(sheet)
 
     _announce_surge(character, threshold)
     shake_witnesses(character, SpectacleKind.AUDERE_ENTRY, display_name="surge into Audere")
