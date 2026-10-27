@@ -30,6 +30,13 @@ class VitalsFatigueSerializer(serializers.Serializer):
     rested_today = serializers.BooleanField()
 
 
+class HeldBreathSerializer(serializers.Serializer):
+    """One condition the character keeps only while holding her breath (#4741)."""
+
+    name = serializers.CharField()
+    rounds_remaining = serializers.IntegerField(allow_null=True)
+
+
 class CharacterVitalsSerializer(serializers.Serializer):
     """Read-only vitals payload for the character sheet panel (#521)."""
 
@@ -46,3 +53,4 @@ class CharacterVitalsSerializer(serializers.Serializer):
         ]
     )
     fatigue = VitalsFatigueSerializer()
+    held_breath = HeldBreathSerializer(many=True)

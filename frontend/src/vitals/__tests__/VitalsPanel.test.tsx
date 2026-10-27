@@ -28,6 +28,7 @@ const VITALS: CharacterVitalsData = {
     well_rested: false,
     rested_today: false,
   },
+  held_breath: [],
 };
 
 function setQueries(vitals: CharacterVitalsData | null, anima: unknown, isLoading = false) {

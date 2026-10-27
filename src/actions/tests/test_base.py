@@ -405,6 +405,7 @@ class ActionRegistryTests(TestCase):
             "org_appeal_withdraw",
             "treat_condition",
             "break_free",
+            "take_breath",
             "reveal_condition",
             "rally",
             "declare_label",

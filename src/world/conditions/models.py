@@ -26,6 +26,7 @@ from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.areas.positioning.constants import CreatureTraversal, ReactionCostKind, ReactionReach
 from world.checks.constants import ModifierSize
+from world.checks.models import OutcomeTierAward
 from world.conditions.constants import (
     Allegiance,
     BreakFreeMode,
@@ -362,6 +363,35 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Base difficulty for the target's resist check.",
     )
 
+    # === Held Breath (#4741) ===
+    holds_breath = models.BooleanField(
+        default=False,
+        help_text=(
+            "Lasts only while the bearer holds her breath: a smoke form, being "
+            "underwater. On application she rolls the breath check (Breath hold config) "
+            "and its outcome sets the rounds; she ends it at will by taking a breath. "
+            "Requires a Rounds duration."
+        ),
+    )
+    breath_runs_out_condition = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Applied when the held breath runs out on its own (not when she breathes "
+            "by choice or is made to): Drowning for being underwater. Blank: it just ends."
+        ),
+    )
+    breaks_held_breath = models.BooleanField(
+        default=False,
+        help_text=(
+            "Landing this condition makes the bearer breathe, ending every held-breath "
+            "condition on her: a coughing fit. Its resist roll is her chance to avoid it."
+        ),
+    )
+
     # === Break-Free Settings (#2706) ===
     break_free_mode = models.CharField(
         max_length=20,
@@ -638,6 +668,10 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         if self.sets_allegiance and self.allegiance_break_check_type_id is None:
             raise ValidationError(
                 {"allegiance_break_check_type": "Required when this condition sets allegiance."}
+            )
+        if self.holds_breath and self.default_duration_type != DurationType.ROUNDS:
+            raise ValidationError(
+                {"default_duration_type": "A held-breath condition lasts a number of rounds."}
             )
 
     @classmethod
@@ -2175,3 +2209,48 @@ class HazardResponseState(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"HazardResponse for instance {self.condition_instance_id}"
+
+
+class BreathHoldConfig(SharedMemoryModel):
+    """Singleton (pk=1): the check a character rolls to hold her breath (#4741).
+
+    Read through ``get_breath_hold_config()``. The check's outcome tier picks the
+    rounds from ``BreathHoldDurationAward``, so how long anyone can hold her breath
+    is the whole check total (stats, skills, modifiers), tuned here and per tier.
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    check_type = models.ForeignKey(
+        _CHECK_TYPE_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The check rolled on entering a held-breath condition. Blank: the "
+            "condition's own default rounds apply."
+        ),
+    )
+    target_difficulty = models.PositiveIntegerField(
+        default=10,
+        help_text="Difficulty of the breath check.",
+    )
+
+    def __str__(self) -> str:
+        return "Breath hold config"
+
+
+class BreathHoldDurationAward(OutcomeTierAward):
+    """Rounds of held breath per CheckOutcome tier (#4741).
+
+    A missing row falls back to the condition's own default rounds.
+    """
+
+    rounds = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Rounds she can hold her breath at this outcome.",
+    )
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier}: {self.rounds} rounds"

@@ -1172,6 +1172,9 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   conditions; `reactive_anima_cost` int — anima paid per reactive-defense fire; ADR-0060),
   `ConditionStage`, `ConditionInstance` (`absorb_remaining` int nullable — Aegis Field
   absorption buffer seeded by `init_absorb_buffer`), `ConditionCapabilityEffect`,
+  `BreathHoldConfig` + `BreathHoldDurationAward` (held-breath rounds per outcome, #4741;
+  `ConditionTemplate.holds_breath` / `breath_runs_out_condition` / `breaks_held_breath`,
+  services `take_breath`, `breath_hold_rounds`, action `take_breath`, telnet `breathe`),
   `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageDealtModifier`
   (the bearer's outgoing damage of one type, as a percent, #4742), `ConditionDamageOverTime`,
   `ConditionDamageInteraction`, `ConditionConditionInteraction`, `TreatmentTemplate`

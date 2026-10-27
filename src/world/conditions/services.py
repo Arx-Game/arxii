@@ -52,6 +52,8 @@ from world.conditions.constants import (
     TreatmentTargetKind,
 )
 from world.conditions.models import (
+    BreathHoldConfig,
+    BreathHoldDurationAward,
     CapabilityType,
     ConditionCapabilityEffect,
     ConditionCategory,
@@ -201,6 +203,71 @@ def get_settle_config() -> SettleConfig:
     if cfg is None:
         cfg, _ = SettleConfig.objects.get_or_create(pk=1)
     return cfg
+
+
+def get_breath_hold_config() -> BreathHoldConfig:
+    """Return the BreathHoldConfig singleton (pk=1), creating it lazily (#4741)."""
+    cfg = BreathHoldConfig.objects.cached_singleton()
+    if cfg is None:
+        cfg, _ = BreathHoldConfig.objects.get_or_create(pk=1)
+    return cfg
+
+
+def breath_hold_rounds(target: "ObjectDB") -> int | None:  # noqa: OBJECTDB_PARAM
+    """Roll *target*'s breath check and return how many rounds she can hold it (#4741).
+
+    The outcome tier picks ``BreathHoldDurationAward.rounds``. Returns None when no
+    breath check is configured, the roll has no outcome tier, or the tier has no
+    row; the caller then uses the condition's own default rounds.
+    """
+    config = get_breath_hold_config()
+    if config.check_type_id is None:
+        return None
+    result = perform_check_with_modifiers(
+        character=target,
+        check_type=config.check_type,
+        target_difficulty=config.target_difficulty,
+    )
+    if result.outcome is None:
+        return None
+    award = BreathHoldDurationAward.objects.filter(outcome_tier=result.outcome).first()
+    return award.rounds if award is not None else None
+
+
+def held_breath_instances(target: "ObjectDB") -> list[ConditionInstance]:  # noqa: OBJECTDB_PARAM
+    """The bearer's active conditions that last only while she holds her breath."""
+    return [i for i in get_active_conditions(target) if i.condition.holds_breath]
+
+
+def take_breath(target: "ObjectDB") -> list[ConditionTemplate]:  # noqa: OBJECTDB_PARAM
+    """She breathes: every held-breath condition on her ends (#4741).
+
+    The one way a held breath ends early, whether she chose it (``TakeBreathAction``)
+    or was made to (a ``breaks_held_breath`` condition landing). Never applies the
+    condition's ``breath_runs_out_condition``: she breathed, so it did not run out.
+    Returns the templates that ended.
+    """
+    ended: list[ConditionTemplate] = []
+    for instance in held_breath_instances(target):
+        template = instance.condition
+        if remove_condition(target, template, remove_all_stacks=True):
+            ended.append(template)
+    return ended
+
+
+def _breath_ran_out(target: "ObjectDB", template: ConditionTemplate) -> None:  # noqa: OBJECTDB_PARAM
+    """A held breath expired on its own: apply what running out means (#4741)."""
+    if template.holds_breath and template.breath_runs_out_condition_id is not None:
+        apply_condition(target, template.breath_runs_out_condition)
+
+
+def _rounds_for_application(template: ConditionTemplate, params: "_ApplyConditionParams") -> int:
+    """Rounds for a new or refreshed instance: the breath roll for a held breath."""
+    if template.holds_breath:
+        rounds = breath_hold_rounds(params.target)
+        if rounds is not None:
+            return rounds
+    return params.duration_rounds or template.default_duration_value
 
 
 def _not_suppressed_q() -> Q:
@@ -829,7 +896,7 @@ def _create_instance_from_context(
     ctx: _BulkConditionContext,
 ) -> ApplyConditionResult:
     """Create a new condition instance using pre-fetched stage data."""
-    rounds = params.duration_rounds or template.default_duration_value
+    rounds = _rounds_for_application(template, params)
     rounds_remaining = rounds if template.default_duration_type == DurationType.ROUNDS else None
 
     expires_at = (
@@ -958,7 +1025,7 @@ def _handle_stacking(
         StackBehavior.DURATION,
         StackBehavior.BOTH,
     ):
-        rounds = params.duration_rounds or template.default_duration_value
+        rounds = _rounds_for_application(template, params)
         if _return_to_round_accounting(existing, template):
             existing.rounds_remaining = rounds
         elif existing.rounds_remaining is not None:
@@ -993,7 +1060,7 @@ def _handle_refresh(
         )
 
     existing.severity = params.severity
-    rounds = params.duration_rounds or template.default_duration_value
+    rounds = _rounds_for_application(template, params)
     if template.default_duration_type == DurationType.ROUNDS:
         _return_to_round_accounting(existing, template)
         existing.rounds_remaining = rounds
@@ -1081,6 +1148,8 @@ def apply_condition(  # noqa: PLR0913
         _install_reactive_side_effects(target, condition, result.instance)
         _make_just_installed_triggers_live(target)
         _register_unseen_observer_if_concealing(target, condition)
+        if condition.breaks_held_breath:
+            take_breath(target)
 
     if result.instance is not None and target_location is not None:
         emit_event(
@@ -1197,6 +1266,8 @@ def _bulk_apply_one(  # noqa: PLR0913
         _register_unseen_observer_if_concealing(app.target, app.template)
         _stamp_cast_positions(result.instance, app)
         _stamp_modifier_sizing(result.instance, app)
+        if app.template.breaks_held_breath and take_breath(app.target):
+            ctx.forget_spent_instances(app.target.pk)
 
     if result.instance is not None and target_location is not None:
         emit_event(
@@ -3304,6 +3375,7 @@ def _process_duration_and_progression(
                 expired_condition = instance.condition
                 instance.delete()
                 _clear_unseen_observer_if_concealing(target, expired_condition)
+                _breath_ran_out(target, expired_condition)
                 continue
 
         _advance_stage(instance, result)
@@ -4522,6 +4594,7 @@ def settled_effects_tick() -> SettledTickSummary:
             instance.target, instance.condition, include_suppressed=True
         ):
             summary.removed += 1
+            _breath_ran_out(instance.target, instance.condition)
 
     # DoT rows hang off the template or its stage; load them once for every survivor.
     rows: list[ConditionDamageOverTime] = list(

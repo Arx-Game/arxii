@@ -30697,6 +30697,7 @@ export interface components {
       wound_description: string;
       status: components['schemas']['CharacterVitalsStatusEnum'];
       fatigue: components['schemas']['VitalsFatigue'];
+      held_breath: components['schemas']['HeldBreath'][];
     };
     /**
      * @description * `alive` - alive
@@ -35550,6 +35551,11 @@ export interface components {
       is_cg_selectable?: boolean;
       /** @description What character creation says about picking this band, shown on the option (for example what opens a band players cannot normally take) */
       cg_hint?: string;
+    };
+    /** @description One condition the character keeps only while holding her breath (#4741). */
+    HeldBreath: {
+      name: string;
+      rounds_remaining: number | null;
     };
     /** @description One clue a character holds — the journal row (#1575). */
     HeldClue: {

@@ -63,6 +63,14 @@ check term that fed a real roll (`spend_contributing_conditions`; previews and
 use), a grace stopping a knockout, a seeded marker's flow having run.
 _Avoid_: consumed, charges, expired (that is the time-based end)
 
+**Held breath**:
+A condition that lasts only while its bearer holds her breath (`ConditionTemplate.holds_breath`):
+a smoke form, being underwater. Its rounds come from her breath check's outcome
+(`BreathHoldConfig`, `BreathHoldDurationAward`); it ends when she takes a breath (`take_breath`,
+telnet `breathe`) or a `breaks_held_breath` condition lands (a coughing fit); if it runs out on
+its own, `breath_runs_out_condition` lands (Drowning) (#4741).
+_Avoid_: breath meter, air supply (there is no separate pool; the rounds are the hold)
+
 **conceals_from_perception**:
 A boolean flag on `ConditionCategory` marking conditions that make the bearer imperceptible to others (invisibility, magical concealment, stealth). Aggregated by `is_concealed()`; `can_perceive()` composes it with per-observer detection state (`ConditionInstance.detected_by`) and co-location. Distinct from `grants_intangibility`: incorporeal is not the same as unseen. The OOC player-transparency guarantee this powers is a separate, unconditional mechanism (ADR-0083), not gated by this flag's detection contest.
 _Avoid_: is_invisible, is_hidden, is_stealthed (the flag is about perceptibility, not any one source of it)
