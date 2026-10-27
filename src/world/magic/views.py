@@ -2210,7 +2210,9 @@ class PendingDriftConversionOfferViewSet(viewsets.ReadOnlyModelViewSet):
     GET /api/magic/drift-correction/pending/
     GET /api/magic/drift-correction/pending/{id}/
 
-    Scoped to the authenticated user's character sheets (active tenures).
+    Scoped to the authenticated user's character sheets (active tenures), and to offers
+    whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+    that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
     """
 
     permission_classes = [IsAuthenticated]
@@ -2224,7 +2226,7 @@ class PendingDriftConversionOfferViewSet(viewsets.ReadOnlyModelViewSet):
 
         return _account_scoped_offer_queryset(
             DriftConversionOffer, self.request.user, "character_sheet", "scene"
-        )
+        ).filter(scene__is_active=True, scene__date_finished__isnull=True)
 
 
 class DriftCorrectionConvertView(APIView):

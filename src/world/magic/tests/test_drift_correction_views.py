@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -101,6 +102,20 @@ class PendingOfferTests(DriftCorrectionViewTestBase):
             for i in c["qualifying_components"]
         }
         self.assertNotIn(self.other_item.pk, ids)
+
+    def test_an_offer_left_on_a_finished_scene_is_not_listed(self) -> None:
+        # A finish route that bypasses Scene.finish_scene leaves the offer row in place.
+        self.scene.is_active = False
+        self.scene.date_finished = timezone.now()
+        self.scene.save(update_fields=["is_active", "date_finished"])
+        self.assertTrue(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
+
+        response = self.client.get(_PENDING_URL)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data["results"], [])
+        detail = self.client.get(f"{_PENDING_URL}{self.offer.pk}/")
+        self.assertEqual(detail.status_code, 404)
 
     def test_detail_of_another_accounts_offer_is_404(self) -> None:
         response = self.client.get(f"{_PENDING_URL}{self.other_offer.pk}/")
