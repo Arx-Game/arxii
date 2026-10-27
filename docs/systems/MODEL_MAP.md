@@ -4190,6 +4190,7 @@
   - resonance -> magic.Resonance [FK] (nullable)
   - emergence_condition -> conditions.ConditionTemplate [FK] (nullable)
   - techniques -> magic.Technique [M2M]
+  - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - active_for <- forms.ActiveAlternateSelf
 
@@ -4325,11 +4326,10 @@
 ### Service Functions
 - `apply_disguise(character: 'Any', disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance: 'Any' = None) -> 'CharacterFormState' - Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' - Assume an alternate self — swap in form/persona facets, create the`
-- `audere_alternate_self(sheet: 'CharacterSheet') -> 'AlternateSelf | None' - The alternate self this character becomes at Audere, if staff flagged one (#4731).`
+- `assume_alternate_self_for_audere(sheet: 'CharacterSheet', alt: 'AlternateSelf') -> 'bool' - Put her in the alternate self whose reveal card she chose at Audere (#4731).`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `change_appearance(character: 'Any', trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None, blend: 'bool' = False) -> 'CharacterFormValue' - Cosmetically edit one trait of the character's real form (hair dye, restyle).`
 - `create_true_form(character: 'Any', selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' - Create the true form for a character during character creation.`
-- `emerge_audere_alternate_self(sheet: 'CharacterSheet') -> 'AlternateSelf | None' - Become the flagged alternate self as Audere is accepted (#4731).`
 - `get_apparent_build(character: 'Any') -> 'Build | None' - Get the apparent build for a character.`
 - `get_apparent_form(character: 'Any') -> 'dict[FormTrait, FormTraitOption]' - Get the apparent form for a character, combining active form with temporaries.`
 - `get_apparent_height(character: 'Any') -> 'tuple[int, HeightBand | None]' - Get the apparent height for a character including trait modifiers.`
@@ -4343,7 +4343,8 @@
 - `remove_disguise(character: 'Any') -> 'None' - Drop the active fake overlay — the real form presents again (#1110). Idempotent.`
 - `reset_trait_to_natural(character: 'Any', trait: 'FormTrait', *, persona: 'Persona', actor_persona: 'Persona | None' = None, note: 'str' = '') -> 'CharacterFormValue' - Restore one trait to its natural (origin) value — "wash out the dye.`
 - `revert_alternate_self(sheet: 'CharacterSheet') -> 'None' - Revert the active alternate self — restore return anchors, delete the`
-- `revert_audere_alternate_self(sheet: 'CharacterSheet') -> 'bool' - Revert the flagged self when Audere ends, if it is active and reverts on its own.`
+- `revert_audere_alternate_self(sheet: 'CharacterSheet') -> 'bool' - Revert the self she took on through the Audere reveal, when Audere ends (#4731).`
+- `revert_audere_alternate_selves(sheet_ids: 'list[int]') -> 'None' - Revert every Audere-assumed AUTOMATIC self worn among ``sheet_ids``, in one query.`
 - `revert_to_true_form(character: 'Any') -> 'None' - Revert a character to their true form.`
 - `switch_form(character: 'Any', target_form: 'CharacterForm') -> 'None' - Switch a character to a different form.`
 
@@ -6463,6 +6464,7 @@
   - ultimate_for_companion_archetypes <- companions.CompanionArchetype
   - companion_abilities <- companions.CompanionAbility
   - alternate_self_grants <- forms.AlternateSelf
+  - ultimate_for_alternate_selves <- forms.AlternateSelf
   - gm_prompts <- gm.GMPrompt
   - train_offers <- npc_services.TrainOfferDetails
   - scene_action_requests <- scenes.SceneActionRequest

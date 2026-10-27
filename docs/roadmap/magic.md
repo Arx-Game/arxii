@@ -756,7 +756,8 @@ Audere into the moment a character's magic reaches powers otherwise out of reach
   character's single `readied` pick enforced by a DB constraint. Attaches via
   `PathGiftGrant.ultimate_techniques` (owned: Path x major Gift),
   `WorshippedBeing.ultimate_techniques` (bond: patron), and
-  `CompanionArchetype.ultimate_techniques` (bond: companion), and (#4118)
+  `CompanionArchetype.ultimate_techniques` (bond: companion),
+  `AlternateSelf.ultimate_techniques` (bond: alternate self, #4731), and (#4118)
   `Gift.ultimate_techniques` (minor gifts).
 - Every ordinary acquisition surface (CG catalog, covenant role grants, the Sphinx's
   shopping list, the ORGANIZATION thread weave, alternate-self grants, item
@@ -797,8 +798,8 @@ Audere into the moment a character's magic reaches powers otherwise out of reach
   and "Certain Death Deferral" sections; ADR-4098.
 
 **Deferred (spec scope, not a gap in this build):**
-- Past-life bond ultimates - the natural home is the past life's alternate self,
-  whose ability suite already grants techniques; not wired to ultimates yet.
+- ~~Past-life bond ultimates~~ BUILT in #4731: `AlternateSelf.ultimate_techniques`, an
+  alternate-self bond source in the reveal.
 - Authoring the ultimates themselves, and the category display labels, is staff work
   tracked under #4089 - production has 76 Path x Gift grants and 0 authored ultimates
   today, which is exactly what the Required-content sentinel above is for.
@@ -1050,15 +1051,22 @@ revamp, working from the new dashboard row.
 ## Acting aura and the Audere alternate self (#4731, slice 2 of #4672, BUILT 2026-10-27)
 
 An alternate self with a resonance now changes the aura a character acts with
-(`acting_aura`), and staff can flag one alternate self per character to emerge when she
-accepts Audere, ending automatically with the fight or holding until talked down. Built:
-the three `AlternateSelf` fields with a unique and a check constraint, `acting_aura` and
-its readers (cast alignment, place of power on arrival and during a cast, defilement,
-covenant attacker affinity), working affinities that follow the worn self's resonance
-(`working_affinities`), the emergence hook run on the accept's commit, the revert hook in
-`end_audere` and in encounter cleanup for every participant (so a duration-expired Audere
-still drops an automatic self), journeys in `integration_tests/test_acting_aura_journeys.py`
-and `integration_tests/test_audere_alternate_self_journeys.py`.
+(`acting_aura`), and an alternate self is a bond source in the Audere ultimate reveal (the
+past-life source #4098 deferred): every self with ultimates offers its cards, and choosing
+one readies the ultimate and puts her in that self, which ends automatically with Audere or
+the fight, or holds until she is talked down. Revised 2026-10-27 (owner): the reveal's choice
+replaced a one-per-character emerges-at-Audere flag. Built: `AlternateSelf.ultimate_techniques`,
+`revert_kind` and `emergence_condition` with a check constraint,
+`ActiveAlternateSelf.assumed_at_audere`, `UltimateSource.ALTERNATE_SELF` and
+`_alternate_self_pools`, `assume_alternate_self_for_audere` run on the choice's commit
+(swapping out a different worn self, refused with a message when she is not in control),
+the revert in `end_audere` and in encounter cleanup for every participant (so a
+duration-expired Audere still drops an automatic self), the telnet `bond: <name>` label
+and the web reveal's alternate-self heading, `acting_aura` and its readers (cast alignment,
+place of power on arrival and during a cast, defilement, covenant attacker affinity),
+working affinities that follow the worn self's resonance (`working_affinities`), journeys
+in `integration_tests/test_acting_aura_journeys.py` and
+`integration_tests/test_audere_alternate_self_journeys.py`.
 
 ## Deeper design & history
 

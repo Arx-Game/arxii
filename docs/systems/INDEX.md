@@ -75,10 +75,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 
 - **Acting aura and Audere alternate self (#4731):** `acting_aura(sheet)`
   (`world/magic/services/acting_aura.py`) is the aura she acts with (alternate self's
-  resonance, else true `CharacterAura`); `AlternateSelf.emerges_at_audere` / `revert_kind` /
-  `emergence_condition` with `emerge_audere_alternate_self` / `revert_audere_alternate_self`
-  (`world/forms/services`): emergence on the Audere accept's commit, revert from
-  `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
+  resonance, else true `CharacterAura`); `AlternateSelf.ultimate_techniques` / `revert_kind` /
+  `emergence_condition` and `ActiveAlternateSelf.assumed_at_audere` with
+  `assume_alternate_self_for_audere` / `revert_audere_alternate_self(s)`
+  (`world/forms/services`): a self chosen in the Audere reveal is assumed on the choice's
+  commit and reverted from `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
   work in the worn self's affinity. See magic.md.
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
@@ -737,12 +738,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `docs/systems/progression.md`'s "Path and Technique Requirements" section;
   `docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`.
 - **Ultimates (#4098):** `Technique.is_ultimate` flags a technique as a Path x
-  major-Gift / patron / companion / minor-gift ultimate, discovered through `KnownUltimate`
+  major-Gift / patron / companion / alternate-self / minor-gift ultimate, discovered through `KnownUltimate`
   (`character`, `technique`, nullable `crossing`, `readied` - constrained to one row
   per `(character, technique)` and at most one `readied=True` row per character),
   never a `CharacterTechnique`. Attachment M2Ms: `PathGiftGrant.ultimate_techniques`,
   `WorshippedBeing.ultimate_techniques` (`world.worship`), `CompanionArchetype
-  .ultimate_techniques` (`world.companions`), and (#4118) `Gift.ultimate_techniques`
+  .ultimate_techniques` (`world.companions`), (#4731) `AlternateSelf.ultimate_techniques`
+  (`world.forms`, revealed as `UltimateSource.ALTERNATE_SELF` through
+  `_alternate_self_pools`), and (#4118) `Gift.ultimate_techniques`
   (minor gifts only, revealed as `UltimateSource.GIFT` through `_gift_pools`). Services
   (`world.magic.services.ultimates`): `ultimate_reveal_for(sheet)` (derives
   the reveal on read - owned/owned-known/bond pools, grouped by category, filtered by

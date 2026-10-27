@@ -448,8 +448,9 @@ only through Audere or Audere Majora. Reuses the catalog, payload tables, and ca
 path of an ordinary technique; the flag is what keeps it off every everyday cast
 surface, not a separate model. Two kinds: **owned** (the character's Path x major
 Gift pushed to its limit, attached via `PathGiftGrant.ultimate_techniques`) and
-**bond** (a patron being or a companion archetype makes it available while the bond
-holds; past-life bond ultimates are deferred, see `docs/roadmap/magic.md`). A Court
+**bond** (a patron being, a companion archetype, or one of the character's alternate
+selves makes it available while the bond holds; choosing an alternate self's ultimate puts
+her in that self, #4731). A Court
 pact enhances qualifying ultimates the same way it enhances qualifying techniques; it
 never grants ultimates of its own.
 _Avoid_: super move, limit break, unlocked technique.
@@ -489,12 +490,13 @@ _Avoid_: offer, ultimate list (the reveal is derived state, not a stored offer).
 
 **Owned ultimate** / **Bond ultimate** (#4098):
 The two kinds of ultimate (spec decision 1). An **owned** ultimate comes from the
-character's own Path x major Gift; a **bond** ultimate comes from a patron being or a
-companion archetype and is available only while that bond holds, since bonds make
+character's own Path x major Gift; a **bond** ultimate comes from a patron being, a
+companion archetype or one of her alternate selves and is available only while that bond
+holds, since bonds make
 ultimates available but never spend or refuse on the character's behalf (spec
 decision 5, "the character pays").
-_Avoid_: patron ultimate / companion ultimate as the category name (those are the two
-bond *sources*, not a third kind alongside owned and bond).
+_Avoid_: patron ultimate / companion ultimate as the category name (those are bond
+*sources*, not a third kind alongside owned and bond).
 
 **Certain death (deferred)** (#4098):
 See `vitals/AGENT_GLOSSARY.md`.

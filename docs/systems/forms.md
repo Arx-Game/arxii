@@ -199,13 +199,16 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError whi
 - `FormOwnershipError(user_message=...)` — raised by `switch_form` on a cross-sheet
   `CharacterForm` FK; surfaced as a safe failure by the actions.
 
-- `AlternateSelf.emerges_at_audere` / `revert_kind` / `emergence_condition` (#4731) mark the
-  self a character becomes at Audere. `audere_alternate_self(sheet)` returns the flagged row;
-  `emerge_audere_alternate_self(sheet)` runs on the commit of an Audere accept
-  (`offer_audere` registers it with `transaction.on_commit`), and
-  `revert_audere_alternate_self(sheet)` is called by `end_audere` and, for every
-  participant, by `cleanup_completed_encounter`. See `docs/systems/magic.md` "Audere alternate
-  self".
+- `AlternateSelf.ultimate_techniques` / `revert_kind` / `emergence_condition` (#4731): an
+  alternate self with ultimates is a bond source in the Audere reveal.
+  `assume_alternate_self_for_audere(sheet, alt)` runs on the commit of the reveal choice
+  (`choose_ultimate` registers it with `transaction.on_commit`), swaps out a different worn
+  self or tells her why it cannot, and marks `ActiveAlternateSelf.assumed_at_audere`
+  (`assume_alternate_self` and `revert_alternate_self` reset it). `revert_audere_alternate_self(sheet)`
+  is called by `end_audere` and `revert_audere_alternate_selves(sheet_ids)` by
+  `cleanup_completed_encounter`; both revert only a marked AUTOMATIC self.
+  `AlternateSelf.shown_name` is the player-facing name (display name, else persona name,
+  else "an alternate self"). See `docs/systems/magic.md` "Audere alternate self".
 
 ### Alternate-self actions
 

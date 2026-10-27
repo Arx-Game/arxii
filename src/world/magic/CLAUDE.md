@@ -1689,11 +1689,14 @@ accepted — the plain-Audere echo of the Majora manifestation, via the shared
 primary persona's name; blank text keeps the accept room-silent (staff authors
 the line — a required-content row for the #3444 sentinel, never code prose).
 
-**Audere alternate self + acting aura (#4731):** `offer_audere` registers
-`world.forms.services.emerge_audere_alternate_self` with `transaction.on_commit` (it runs
-after the whole accept commits), and `end_audere` plus `cleanup_completed_encounter` (every
-participant) call `revert_audere_alternate_self` (AUTOMATIC reverts, TALKED_DOWN stays with
-its `emergence_condition`). `acting_aura(sheet)` (`services/acting_aura.py`) is the aura she
+**Audere alternate self + acting aura (#4731):** an alternate self with ultimates is a bond
+source in the reveal (`UltimateSource.ALTERNATE_SELF`); choosing its card makes
+`choose_ultimate` register `world.forms.services.assume_alternate_self_for_audere` with
+`transaction.on_commit` (swaps out a different worn self, or refuses with a message when she
+is not in control), which marks `ActiveAlternateSelf.assumed_at_audere`. `end_audere` calls
+`revert_audere_alternate_self` and `cleanup_completed_encounter` calls
+`revert_audere_alternate_selves` for every participant; only a marked AUTOMATIC self
+reverts, a TALKED_DOWN one stays with its `emergence_condition`. `acting_aura(sheet)` (`services/acting_aura.py`) is the aura she
 ACTS with (cast alignment, place of power on arrival and during a cast, defilement, covenant
 attacker affinity); `working_affinities` puts a cast in the worn self's affinity. Fall, Soul
 Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/magic.md`.
@@ -1753,7 +1756,9 @@ ultimate is a `Technique` with `is_ultimate=True`, never a `CharacterTechnique` 
 every ordinary cast surface reads `CharacterTechnique` and so excludes ultimates by
 construction. Attaches via `PathGiftGrant.ultimate_techniques` (owned, major gifts
 only), `WorshippedBeing.ultimate_techniques` / `CompanionArchetype.ultimate_techniques`
-(bond, active-bond-only), and `Gift.ultimate_techniques` (#4118: MINOR gifts only,
+(bond, active-bond-only), `AlternateSelf.ultimate_techniques` (#4731, bond:
+`UltimateSource.ALTERNATE_SELF` via `_alternate_self_pools`; choosing its card assumes the
+self), and `Gift.ultimate_techniques` (#4118: MINOR gifts only,
 `UltimateSource.GIFT` via `_gift_pools`; membership rules in `GiftAdminForm`, while
 `Gift.clean()` only rejects flipping a gift with ultimates to MAJOR).
 
