@@ -15,6 +15,7 @@ from world.checks.factories import CheckTypeFactory
 from world.checks.modifier_models import ModifierValue
 from world.conditions.factories import (
     ConditionCheckModifierFactory,
+    ConditionModifierEffectFactory,
     ConditionTemplateFactory,
 )
 from world.conditions.models import ConditionInstance
@@ -35,6 +36,8 @@ from world.magic.services.modifier_sizing import (
     load_cast_level_table,
 )
 from world.magic.services.technique_effects import invalidate_technique_payload_caches
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+from world.traits.factories import StatTraitFactory
 
 
 class CastLevelTableTests(SimpleTestCase):
@@ -238,10 +241,33 @@ class SizeCheckTests(TestCase):
         self.assertEqual(
             applied_condition_size_warnings(technique),
             [
-                "Hollow is sized Large, but it changes no check, so its size has nothing to act "
-                "on yet."
+                "Hollow is sized Large, but it changes no check or stat, so its size has "
+                "nothing to act on yet."
             ],
         )
+
+    def test_a_sized_condition_that_changes_a_stat_does_not_warn(self) -> None:
+        """#4726: a stat buff is valued from the stat lane, so its size acts."""
+        technique = TechniqueFactory(name="Ox Strength", damage_profile=False)
+        condition = ConditionTemplateFactory(name="Ox Strength")
+        ConditionModifierEffectFactory(
+            condition=condition,
+            modifier_target=ModifierTargetFactory(
+                name="strength_4726",
+                category=ModifierCategoryFactory(name="stat"),
+                target_trait=StatTraitFactory(name="strength_4726"),
+            ),
+            value=10,
+        )
+        TechniqueAppliedConditionFactory(
+            technique=technique,
+            condition=condition,
+            target_kind=ConditionTargetKind.ALLY,
+            modifier_size=ModifierSize.LARGE,
+        )
+        invalidate_technique_payload_caches(technique)
+
+        self.assertEqual(applied_condition_size_warnings(technique), [])
 
     def test_paramount_cannot_be_authored(self) -> None:
         row = TechniqueAppliedConditionFactory.build(
