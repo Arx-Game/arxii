@@ -4353,11 +4353,14 @@ the way the Rite of Honors is found by `HONORS_SERVICE_PATH`. No roll.
 - **Merge**: `_reanchor_thread(thread, target_resonance_id, new_points)` (`services/conversion.py`,
   shared with the full Fall conversion's `_reanchor_threads`) adds the points to a live thread on
   the same anchor in the target resonance and retires the moved thread, else re-anchors it.
-  `_find_existing_target_thread` compares every typed target FK id (organization included).
+  The merge locks the surviving row and adds to the points the database holds, so two merges
+  into one thread both count. `_find_existing_target_thread` compares every typed target FK id
+  (organization included).
 - **Refusals** (`ThreadResonanceChangeError`, `check_thread_resonance_change`): no thread named,
   a thread that is not the performer's or is retired, no target named (the message lists the
   options as "Name (id, same affinity|Fall|Redemption)"), and a target not among the options
-  (its own resonance included). A retired thread holds no place: every per-anchor `Thread`
+  (its own resonance included). Under the lock it also refuses a thread whose resonance moved
+  since it was read (`THREAD_MOVED_MESSAGE`). A retired thread holds no place: every per-anchor `Thread`
   unique constraint applies to live threads only (migration 0322 brought trait, technique,
   relationship track and relationship capstone in line with the others), so a merged thread
   can move back onto the resonance its retired partner left, by a retune or the full Fall.
@@ -4369,10 +4372,17 @@ the way the Rite of Honors is found by `HONORS_SERVICE_PATH`. No roll.
 - **Nothing spent on refusal**: `PerformRitualAction._precheck` runs
   `check_thread_resonance_change` for this rite before components and anima are spent;
   `change_thread_resonance` locks the thread row and checks again. `_validate_components` passes
-  `resonance_context=kwargs["target_resonance"]`, so a `matches_target_resonance` requirement is
-  paid toward the chosen resonance (material, facet or keepsake; `offered_target_components` in
-  `services/ritual_components.py`, shared with drift correction's `offered_components`).
+  `kwargs["target_resonance"]` as `resonance_context`, but only for a ritual that has a
+  `matches_target_resonance` requirement (`has_target_resonance_requirement`), so the offering
+  is paid toward the chosen resonance (material, facet or keepsake) and a stray `resonance=`
+  changes no other ritual's components. The keepsake bar is `target_resonance_meaning_bar`
+  (`services/ritual_components.py`, shared with drift correction's `offered_components`).
 - **Aura**: balances are untouched, so no `recompute_aura`; `character.threads.invalidate()` runs.
+- **Resolvers**: `resolve_target_resonance(id)` (`UnknownResonance`) and
+  `resolve_owned_thread(sheet, id)` (`UnknownOwnedThread`), in `services/thread_resonance.py`,
+  are shared by telnet's `ritual` command and `RitualPerformView`: a non-integer, unknown or
+  foreign id is a plain refusal (telnet) or a 400 (web), never a 500. `target_resonance` is
+  resolved for every ritual; `thread_id` through this resolver for the retune rite.
 - **Surfaces**: telnet `ritual <rite> thread=<id> resonance=<id>` (alias `target_resonance=`;
   leave it out to list the options); web `POST /api/magic/rituals/perform/` with
   `kwargs: {thread_id, target_resonance}` (`RitualPerformView` resolves both; the result is
@@ -4380,8 +4390,12 @@ the way the Rite of Honors is found by `HONORS_SERVICE_PATH`. No roll.
   `to_resonance_id`, `points_before`, `points_moved`, `points_after`, `merged`,
   `conversion_type`); `GET /api/magic/threads/{id}/resonance-options/` (owner only) returns
   `{ritual_id | null, options: [{resonance_id, resonance_name, affinity_name, conversion_type,
-  projected_points, qualifying: [{item_id, name, mode}]}]}`. Required content row
-  `thread-resonance-ritual` ("No ritual changes a thread's resonance"). Journey:
+  projected_points, qualifying: [{item_id, name, mode}]}]}`; the view works out every option's
+  qualifying items in one batch (`qualifying_components_by_target` in `services/drift.py`), so
+  its query count does not grow with the number of options. Required content rows
+  `thread-resonance-ritual` ("No ritual changes a thread's resonance") and
+  `thread-resonance-ritual-single` (TUNING: a second ritual on the path, which the Spellbook
+  never offers). Journey:
   `integration_tests/test_thread_resonance_journeys.py`.
 
 ### Resonance-Environment Interaction (universal path — 2026-05-16)
