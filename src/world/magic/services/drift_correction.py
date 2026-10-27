@@ -162,6 +162,8 @@ def max_yield_per_earned_point(config: DriftCorrectionConfig) -> Decimal:
 
     ``cap_percent / 100 x the largest authored pair multiplier x the largest converted
     share``. Tuning keeps this below 1, so correcting drift never out-earns the deed itself.
+    It is the per-point rate: a new cap row also opens at a floor of 1 point
+    (``open_or_extend_conversion_offer``), once per offer and target resonance, on top of it.
     """
     max_multiplier = AffinityInteraction.objects.filter(
         conversion_multiplier__isnull=False

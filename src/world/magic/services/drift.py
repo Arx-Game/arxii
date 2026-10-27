@@ -111,10 +111,15 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
     """Open (or extend) the character's conversion offer for the scene a deed grant happened in.
 
     Returns None, changing nothing, unless all of these hold: the grant is a deed; it grew a
-    resonance of the character's own affinity; the character has convertible drift toward
-    that resonance; and the character stands in a live scene. A deed made outside a live
-    scene opens no offer and is not an error. The cap toward the granted resonance grows by
-    ``cap_percent`` of the grant (at least 1), and the grant is linked to that cap.
+    resonance of the character's own affinity; the configured ``cap_percent`` is above 0;
+    the character has convertible drift toward that resonance; and the character stands in
+    a live scene. A deed made outside a live scene opens no offer and is not an error.
+
+    The cap toward the granted resonance grows by ``floor(grant.amount x cap_percent / 100)``,
+    and the grant is linked to that cap. Only the grant that creates the cap row is floored
+    at 1, so a first small deed still opens a usable cap; a later small deed can add 0. A
+    cap therefore never exceeds ``cap_percent / 100`` of the deed points linked to it, plus
+    that one floored point.
 
     A NEW offer or a NEW cap row (a new target resonance) tells the character, once the
     surrounding transaction commits (``grant_resonance`` is atomic); bumping an existing cap
@@ -128,6 +133,9 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
     own = own_affinity(sheet)
     if own is None or grant.resonance.affinity_id != own.pk:
         return None
+    percent = get_drift_correction_config().cap_percent
+    if percent == 0:
+        return None
     # The scene lookup is cached on the room, so a character outside a scene costs no
     # query; the drift query below only runs for someone who could hold an offer.
     scene = get_active_scene(sheet.character.location)
@@ -136,26 +144,43 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
         return None
     if not convertible_drift(sheet, grant.resonance):
         return None
-    with transaction.atomic():
-        offer, offer_created = DriftConversionOffer.objects.get_or_create(
-            character_sheet=sheet, scene=scene
-        )
-        cap, cap_created = DriftConversionCap.objects.get_or_create(
-            offer=offer, target_resonance=grant.resonance, defaults={"cap": 0}
-        )
-        # Lock the offer row so concurrent grants for it serialize. A filter, not get():
-        # the identity map would answer get() without touching the database or the lock.
-        list(DriftConversionOffer.objects.select_for_update().filter(pk=offer.pk))
-        if cap.grants.filter(pk=grant.pk).exists():
+    # A decline or a lapse can delete the offer between get_or_create and the lock; one
+    # retry then opens a fresh offer instead of writing a cap onto a vanished row.
+    for _attempt in range(2):
+        with transaction.atomic():
+            offer, offer_created = DriftConversionOffer.objects.get_or_create(
+                character_sheet=sheet, scene=scene
+            )
+            # Lock the offer row so concurrent grants for it serialize. A filter, not
+            # get(): the identity map would answer get() without the database or the lock.
+            if not list(DriftConversionOffer.objects.select_for_update().filter(pk=offer.pk)):
+                continue
+            _extend_cap(offer, grant, percent, announce=offer_created)
             return offer
-        percent = get_drift_correction_config().cap_percent
-        cap.cap += max(1, grant.amount * percent // 100)
-        cap.save(update_fields=["cap"])
-        cap.grants.add(grant)
-        if offer_created or cap_created:
-            character = sheet.character
-            transaction.on_commit(lambda: _tell_non_web(character, _OFFER_OPENED_TEXT))
-    return offer
+    return None
+
+
+def _extend_cap(
+    offer: DriftConversionOffer, grant: ResonanceGrant, percent: int, *, announce: bool
+) -> None:
+    """Add ``grant`` to the offer's cap toward its resonance, under the offer's row lock."""
+    cap, cap_created = DriftConversionCap.objects.get_or_create(
+        offer=offer, target_resonance=grant.resonance, defaults={"cap": 0}
+    )
+    if cap.grants.filter(pk=grant.pk).exists():
+        return
+    # Read the stored cap, not the cached one: a rolled-back outer transaction can leave
+    # the shared instance holding a cap the table never kept.
+    stored = DriftConversionCap.objects.filter(pk=cap.pk).values_list("cap", flat=True).get()
+    increment = grant.amount * percent // 100
+    if cap_created:
+        increment = max(1, increment)
+    cap.cap = stored + increment
+    cap.save(update_fields=["cap"])
+    cap.grants.add(grant)
+    if announce or cap_created:
+        character = offer.character_sheet.character
+        transaction.on_commit(lambda: _tell_non_web(character, _OFFER_OPENED_TEXT))
 
 
 def lapse_conversion_offers(scene: Scene) -> int:

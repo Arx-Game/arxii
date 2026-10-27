@@ -3956,10 +3956,14 @@ from a scene, such as the weekly pose-endorsement settlement, therefore opens no
 an accepted consequence, not an error. A finished scene cached on a room counts as no scene.
 
 One `DriftConversionOffer` exists per character and scene (unique constraint); it holds one
-`DriftConversionCap` per target resonance. Each qualifying grant adds `max(1, amount x
-cap_percent // 100)` to that cap and is linked in `cap.grants`, which stops a grant counting
-twice. `cap` is a snapshot: a later change to `cap_percent` does not rewrite it. The offer row
-is locked with `select_for_update` while a cap changes.
+`DriftConversionCap` per target resonance. Each qualifying grant adds `amount x cap_percent
+// 100` to that cap and is linked in `cap.grants`, which stops a grant counting twice. Only the
+grant that creates the cap row is floored at 1, so a first small deed opens a usable cap while
+later small deeds can add 0; a cap never exceeds `cap_percent / 100` of its linked deed points
+plus that one point. A `cap_percent` of 0 opens no offer at all. `cap` is a snapshot: a later
+change to `cap_percent` does not rewrite it. The offer row is locked with `select_for_update`
+while a cap changes, and the cap is re-read from the table under that lock; if a decline or a
+lapse deleted the offer before the lock, the grant retries once and opens a fresh offer.
 
 **Notices.** A new offer or a new cap row sends a telnet-only line on commit
 (`send_text_to_non_web`, after `transaction.on_commit`); web players learn from the polled
@@ -4016,7 +4020,9 @@ the Fall and Redemption pair multipliers in admin; offers and caps are read-only
 the rite and check type are set and every tier has a share, the rite refuses ("not set up yet")
 though offers still open; the `drift-correction-config` Required content probe reports it.
 `max_yield_per_earned_point(config)` is the anti-farm estimator: `cap_percent / 100 x largest
-pair multiplier x largest share`, kept below 1 so correcting never out-earns the deed.
+pair multiplier x largest share`, kept below 1 so correcting never out-earns the deed. It is
+the per-point rate; the one floored point a new cap row opens with sits on top of it, once per
+offer and target resonance.
 
 **Tests.** `test_deed_classification.py`, `test_drift_models.py`, `test_drift_offer.py`,
 `test_drift_correction_rite.py`, `test_conversion_amount.py`,

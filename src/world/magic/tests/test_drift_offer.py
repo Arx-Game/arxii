@@ -26,6 +26,7 @@ from world.magic.models import (
 from world.magic.services.drift import (
     convertible_drift,
     drift_holdings,
+    get_drift_correction_config,
     lapse_conversion_offers,
     open_or_extend_conversion_offer,
     own_affinity,
@@ -146,6 +147,64 @@ class OpenOfferTests(DriftOfferTestBase):
     def test_tiny_grant_still_adds_at_least_one(self) -> None:
         self.deed(amount=1)
         self.assertEqual(DriftConversionCap.objects.get().cap, 1)
+
+    def test_many_small_deeds_floor_only_the_first(self) -> None:
+        # At 50%, twenty 1-point deeds are worth 10 points of cap at most plus the one
+        # floored point the first deed opens; per-grant flooring would have made it 20.
+        for _ in range(20):
+            self.deed(amount=1)
+        cap = DriftConversionCap.objects.get()
+        self.assertEqual(cap.cap, 1)
+        self.assertLessEqual(cap.cap, 20 * 50 // 100 + 1)
+        self.assertEqual(cap.grants.count(), 20)
+
+    def test_small_deeds_add_their_share_once_it_rounds_up_to_a_point(self) -> None:
+        self.deed(amount=1)  # opens the cap at the floor of 1
+        self.deed(amount=3)  # 50% of 3 rounds down to 1
+        self.assertEqual(DriftConversionCap.objects.get().cap, 2)
+
+    def test_a_cap_percent_of_zero_opens_nothing(self) -> None:
+        config = get_drift_correction_config()
+        original = config.cap_percent
+
+        # The singleton is identity-mapped, so the test's rollback alone would leave 0 behind.
+        def restore() -> None:
+            config.cap_percent = original
+
+        self.addCleanup(restore)
+        config.cap_percent = 0
+        config.save(update_fields=["cap_percent"])
+        self.deed()
+        self.assertFalse(DriftConversionOffer.objects.exists())
+        self.assertFalse(DriftConversionCap.objects.exists())
+
+    def test_the_cap_is_read_from_the_table_not_the_cached_instance(self) -> None:
+        self.deed()
+        cap = DriftConversionCap.objects.get()
+        cap.cap = 999  # what a rolled-back transaction can leave on the shared instance
+        self.deed()
+        self.assertEqual(DriftConversionCap.objects.values_list("cap", flat=True).get(), 20)
+
+    def test_an_offer_deleted_before_the_lock_is_opened_again(self) -> None:
+        manager = DriftConversionOffer.objects
+        real_get_or_create = manager.get_or_create
+        calls = []
+
+        def vanish_after_first(**kwargs):
+            offer, created = real_get_or_create(**kwargs)
+            calls.append(offer.pk)
+            if len(calls) == 1:
+                # A decline or lapse lands between get_or_create and the lock.
+                DriftConversionOffer.objects.filter(pk=offer.pk).delete()
+            return offer, created
+
+        with patch.object(manager, "get_or_create", side_effect=vanish_after_first):
+            self.deed()
+        offer = DriftConversionOffer.objects.get()
+        self.assertEqual(len(calls), 2)
+        self.assertNotEqual(calls[0], calls[1])
+        cap = DriftConversionCap.objects.get()
+        self.assertEqual((cap.offer, cap.cap), (offer, 10))
 
     def test_non_deed_source_opens_nothing(self) -> None:
         grant_resonance(self.sheet, self.dawnlight, 20, source=GainSource.STAFF_GRANT)

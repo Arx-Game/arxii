@@ -2010,7 +2010,8 @@ older sense (shift in aura percentages). Do not mix the two in names.
   `RitualCheckConfig` sidecar. Never match the rite, check or affinities by name.
 - Components: `qualifying_components` (`ComponentMode` MATERIAL, FACET, KEEPSAKE, in that order).
   `focus_bonus` adds to the check, not the output. `max_yield_per_earned_point` is the anti-farm
-  estimator.
+  estimator (per point). A cap grows by `amount x cap_percent // 100` per deed; only the deed
+  that creates the cap row is floored at 1; `cap_percent` 0 opens no offer.
 - Surfaces: actions in `actions/definitions/drift_correction.py`, telnet `drift`
   (`commands/drift_correction.py`), REST `/api/magic/drift-correction/`, React gate on the scene
   and game pages (`frontend/src/magic/CLAUDE.md`). Required content row `drift-correction-config`.
