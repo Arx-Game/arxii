@@ -4,9 +4,11 @@
 [with <item>]`` performs the rite and ``drift decline`` lets the offer go. Thin: every rule
 lives in the actions and ``world.magic.services.drift_correction``.
 
-A faceted or keepsake item is only ever offered when the player names it with ``with``:
-the rite spends the first item that counts, and a worn faceted cloak or a keepsake must
-never go without being chosen.
+An item that counts only by the facet or keepsake route is offered only when the player
+names it with ``with``: the rite spends the first item that counts, and a worn faceted
+cloak or a keepsake must never go without being chosen. An item that counts by the
+material route (tied to the target resonance) is offered by default, even when it is
+also a keepsake.
 """
 
 from __future__ import annotations

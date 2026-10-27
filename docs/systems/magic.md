@@ -4011,9 +4011,9 @@ modifier target + `touchstone_cast_bonus`. It adds to the check, not to the outp
 
 **Surfaces.** Actions `perform_drift_correction` and `decline_drift_correction`
 (`actions/definitions/drift_correction.py`); telnet `drift`, `drift convert <from>=<into>
-[<amount>] [with <item>]`, `drift decline` (by default offers every carried item except those
-that count only as a facet or a keepsake, so a plain material is spent; `with <item>` names a
-faceted item or keepsake to spend instead); REST `GET /api/magic/drift-correction/pending/` (+ `{id}/`), `POST .../convert/`,
+[<amount>] [with <item>]` (by default offers every carried item except those that count only
+as a facet or a keepsake, so a plain material is spent; `with <item>` names a faceted item or
+keepsake to spend instead), `drift decline`; REST `GET /api/magic/drift-correction/pending/` (+ `{id}/`), `POST .../convert/`,
 `POST .../decline/`, all scoped to the caller's own characters. React:
 `DriftConversionOfferGate` polls the inbox and `DriftConversionOfferDialog` answers it; the gate
 is mounted on `SceneDetailPage` and `GamePage`, keyed by scene id so each shows the offer of the
