@@ -49,6 +49,7 @@ from world.combat.services.damage.interpose_dispatch import (
     apply_interpose_outcome,
 )
 from world.combat.services.damage.soak import (
+    _duel_mirror_pc_reduction,
     _effective_resistance_for_opponent,
     _effective_soak_for_opponent,
 )
@@ -262,6 +263,11 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     resistance = _effective_resistance_for_opponent(opponent, damage_type, resistance_shift)
 
     damage_through = max(0, raw_damage - effective_soak - resistance)
+    damage_through = _duel_mirror_pc_reduction(
+        opponent,
+        damage_through,
+        armor_soak_applies=not (bypass_soak or ignores_soak),
+    )
 
     # Execute (#2643): smooth ramp off the opponent's PRE-hit health, captured here
     # before this hit's own subtraction below — a second profile/hit in the same cast
