@@ -201,8 +201,10 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError whi
 
 - `AlternateSelf.emerges_at_audere` / `revert_kind` / `emergence_condition` (#4731) mark the
   self a character becomes at Audere. `audere_alternate_self(sheet)` returns the flagged row;
-  `emerge_audere_alternate_self(sheet)` and `revert_audere_alternate_self(sheet)` are the
-  hooks `offer_audere` and `end_audere` call. See `docs/systems/magic.md` "Audere alternate
+  `emerge_audere_alternate_self(sheet)` runs on the commit of an Audere accept
+  (`offer_audere` registers it with `transaction.on_commit`), and
+  `revert_audere_alternate_self(sheet)` is called by `end_audere` and, for every
+  participant, by `cleanup_completed_encounter`. See `docs/systems/magic.md` "Audere alternate
   self".
 
 ### Alternate-self actions

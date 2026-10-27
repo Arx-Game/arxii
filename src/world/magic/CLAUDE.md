@@ -1689,12 +1689,14 @@ accepted — the plain-Audere echo of the Majora manifestation, via the shared
 primary persona's name; blank text keeps the accept room-silent (staff authors
 the line — a required-content row for the #3444 sentinel, never code prose).
 
-**Audere alternate self + acting aura (#4731):** `offer_audere` calls
-`world.forms.services.emerge_audere_alternate_self` after the condition applies and
-`end_audere` calls `revert_audere_alternate_self` (AUTOMATIC reverts, TALKED_DOWN stays
-with its `emergence_condition`). `acting_aura(sheet)` (`services/acting_aura.py`) is the
-aura she ACTS with (casts, place of power, covenant attacker affinity); Fall, Soul Tether
-and the sheet display keep the true `CharacterAura`. See `docs/systems/magic.md`.
+**Audere alternate self + acting aura (#4731):** `offer_audere` registers
+`world.forms.services.emerge_audere_alternate_self` with `transaction.on_commit` (it runs
+after the whole accept commits), and `end_audere` plus `cleanup_completed_encounter` (every
+participant) call `revert_audere_alternate_self` (AUTOMATIC reverts, TALKED_DOWN stays with
+its `emergence_condition`). `acting_aura(sheet)` (`services/acting_aura.py`) is the aura she
+ACTS with (cast alignment, place of power on arrival and during a cast, defilement, covenant
+attacker affinity); `working_affinities` puts a cast in the worn self's affinity. Fall, Soul
+Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/magic.md`.
 
 `models/renown_config.py` — `RenownAwardConfig`: **abstract base** (SharedMemoryModel)
 shared by `DramaticMomentType` and `AudereMajoraThreshold`. Carries four authored
