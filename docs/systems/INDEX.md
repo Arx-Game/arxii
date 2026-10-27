@@ -84,7 +84,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **Audere control step and Soulfray anima-0 stage (#4740):**
   `AudereThreshold.control_per_stage_earlier` + `required_stage_order(threshold,
   runtime_control)` (`world/magic/audere.py`) let high control open the Audere offer at an
-  earlier Soulfray stage (never below the first); `check_audere_eligibility` /
+  earlier Soulfray stage (steps back along the ladder, never below the first;
+  `stages_lowered_by_control` feeds the offer's "break through earlier" line on web and
+  telnet); `check_audere_eligibility` /
   `maybe_create_audere_offer` take `runtime_control`, stored as
   `PendingAudereOffer.fired_control`. `SoulfrayConfig.anima_zero_stage` +
   `anima_zero_ceiling(current_anima)` keep Soulfray below that stage while anima is left

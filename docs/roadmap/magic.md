@@ -1073,7 +1073,9 @@ in `integration_tests/test_acting_aura_journeys.py` and
 High control now lets a character reach the Audere offer at an earlier Soulfray stage, the
 dangerous Soulfray stages need anima at 0, and no intensity tier reads as a control penalty.
 Built: `AudereThreshold.control_per_stage_earlier` (default 0, off) and
-`required_stage_order`, the control passed from the cast hook (`stats.control`, after Fury)
+`required_stage_order` (steps back along the actual ladder, so non-contiguous stage orders
+work), the player told on the web dialog and the telnet `accept` listing when control
+lowered the stage (`stages_lowered_by_control`), the control passed from the cast hook (`stats.control`, after Fury)
 through `maybe_create_audere_offer` and stored as `PendingAudereOffer.fired_control` for the
 accept re-check; `SoulfrayConfig.anima_zero_stage` and its cap in
 `_handle_soulfray_accumulation` (lower of it and the non-lethal cap); `IntensityTier

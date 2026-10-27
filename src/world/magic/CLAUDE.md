@@ -1682,9 +1682,11 @@ To add a new handler: implement the `OfferHandler` protocol and call
 `audere.py` — Audere, the in-the-moment intensity surge: `AudereThreshold` (global
 config), `PendingAudereOffer` (poll-able offer, one per character),
 `check_audere_eligibility` (intensity tier + Soulfray stage + engagement; high runtime
-control lowers the stage needed by `AudereThreshold.control_per_stage_earlier` steps,
-never below the first stage, via `required_stage_order`, and the offer keeps
-`fired_control` for the accept re-check, #4740),
+control steps the stage needed back along the Soulfray ladder, one stage per
+`AudereThreshold.control_per_stage_earlier`, never below the first stage, via
+`required_stage_order`; the offer keeps `fired_control` for the accept re-check, and the
+offer surfaces tell the player via `stages_lowered_by_control` / `control_lowered_line`,
+#4740),
 `offer_audere`/`end_audere` lifecycle, `AbstractPendingOffer` (shared offer base).
 **Surge broadcast (#3451):** `AudereThreshold.surge_manifestation_text` (blank
 default) is EMITted to the active scene by `_broadcast_surge` when a surge is

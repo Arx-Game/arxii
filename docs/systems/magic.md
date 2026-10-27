@@ -2864,16 +2864,22 @@ audience watches. See `world/checks/CLAUDE.md`'s "#924 theater" section and ADR-
 
 **High control opens Audere earlier (#4740, #4727 decision 6).**
 `AudereThreshold.control_per_stage_earlier` (PositiveSmallIntegerField, default 0 = off):
-each full step of runtime control lowers the Soulfray stage the plain Audere offer needs by
-one, never below the first Soulfray stage. `required_stage_order(threshold, runtime_control)`
-(`world/magic/audere.py`) computes it; negative control lowers nothing, and the first
-stage's order is read only when control lowers the requirement. `_evaluate_audere_gates`,
+each full step of runtime control steps the Soulfray stage the plain Audere offer needs back
+one stage along the actual Soulfray ladder (stage orders need not be contiguous: on a
+10/20/30 ladder one step from 30 is 20), never below the first Soulfray stage.
+`required_stage_order(threshold, runtime_control)` (`world/magic/audere.py`) computes it;
+negative control lowers nothing, and the ladder is read (one query) only when control
+lowers the requirement. `stages_lowered_by_control(threshold, runtime_control)` counts the
+stages taken off; `PendingAudereOfferSerializer.stages_lowered_by_control` exposes it from
+the offer's `fired_control`, the web offer dialog renders "Your control lets you break
+through one Soulfray stage earlier than usual." (or "N Soulfray stages") when it is above
+0, and the telnet `accept` listing appends the same line (`control_lowered_line`). `_evaluate_audere_gates`,
 `check_audere_eligibility(character, runtime_intensity, runtime_control=0)` and
 `maybe_create_audere_offer(character, runtime_intensity, *, runtime_control=0, sheet=None)`
 take the control; the cast hook in `use_technique` passes `stats.control` (the control as
 cast, after any Fury penalty). `PendingAudereOffer.fired_control` stores it so
 `resolve_audere_offer`'s stale re-check asks for the same stage the cast did. Audere Majora's
-own `minimum_warp_stage` gate is unchanged (it requires an active Audere).
+own `minimum_warp_stage` gate is unchanged (by default it also requires an active Audere).
 
 **Intensity tiers never lower control (#4740, #4727 decisions 5 and 13).**
 `IntensityTier.control_modifier` has `MinValueValidator(0)` (the admin refuses a negative
