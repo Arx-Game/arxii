@@ -128,6 +128,10 @@ def check_resonance_focus(
         return None
 
     difficulty = cfg.focus_base_difficulty + steps * cfg.focus_difficulty_per_step
+    character.msg(
+        f"Focus check: you are carrying drift past your threshold against your "
+        f"{reading.dominant_affinity.name} aura."
+    )
     result = perform_check_with_modifiers(
         character,
         cfg.focus_check_type,

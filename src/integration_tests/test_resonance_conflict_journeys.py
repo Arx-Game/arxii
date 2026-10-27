@@ -270,6 +270,7 @@ class DriftPastTheThreshold(_Drifting):
         rec = self.cast(focus="Failure")
 
         self.assertEqual(rec.focus_difficulties, [12])
+        self.assertTold(self.ysmay, "Focus check: you are carrying drift past your threshold")
         self.assertTold(self.ysmay, f"You lose your focus as you work Lantern Ward: {CONFLICT}.")
         instance = self.conflict()
         self.assertIsNotNone(instance)

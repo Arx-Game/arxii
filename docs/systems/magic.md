@@ -3001,7 +3001,9 @@ her for the template's duration (authored as the scene). All of it lives in `wor
   roll under its own label through `condition_contributions`. Difficulty is
   `focus_base_difficulty + steps * focus_difficulty_per_step` (an off-aura pull adds
   `off_aura_pull_steps` to the steps); the roll is `focus_check_type` with
-  `MagicActivity.KEEPING_FOCUS` skill terms. A success level of 1 or more changes nothing.
+  `MagicActivity.KEEPING_FOCUS` skill terms. Before the roll she is told the check is
+  happening and against which aura (the demo's Screen 4 warning line); a failure also tells her
+  the condition took hold. A success level of 1 or more changes nothing.
   Below that, severity is `steps + (1 - success_level)` (a worse roll never costs less);
   already holding the condition, its severity advances by one instead.
 - Shaking it off: `ConditionCategory.self_shakeable` (default False) is separate from
