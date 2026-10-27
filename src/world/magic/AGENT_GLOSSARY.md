@@ -6,6 +6,9 @@ One of the three magical sources — Celestial, Primal, or Abyssal — modeled a
 **Aura**:
 A character's soul-state expressed as a percentage share per Affinity, one `CharacterAuraShare` row per affinity, constrained to sum to 100. Its presence is the derived gate for whether a character can work magic at all.
 
+**Acting aura**:
+The aura a character acts with right now: 100% of the worn alternate self's resonance affinity when it has one, otherwise her true aura. Casts, places of power and covenant attacker affinity read it; the Fall, the Soul Tether gate and the sheet display keep the true aura. Looked up with `acting_aura(sheet)`. _Avoid_: effective aura, mask aura.
+
 **Aura share**:
 One affinity's percentage of a character's aura: a `CharacterAuraShare` row keyed on the aura and the `Affinity` row. Code reads shares by Affinity row, never by a name or a per-affinity column.
 

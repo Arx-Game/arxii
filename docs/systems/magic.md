@@ -2875,6 +2875,31 @@ scene-EMIT mechanics live in the shared `broadcast_scene_emit`
 (`world/scenes/interaction_services.py`), which the Audere Majora
 `_broadcast_manifestation` also delegates to — one dispatch shape for both beats.
 
+**Audere alternate self (#4731, slice 2 of #4672).** Staff may flag one `AlternateSelf` per
+character `emerges_at_audere` (a unique constraint allows at most one). `offer_audere`
+calls `emerge_audere_alternate_self(sheet)` (`world/forms/services/__init__.py`) right after
+the Audere condition applies: it assumes the flagged self through
+`trigger_transformation(cause="audere")`, and skips quietly (never raises into the accept)
+when a different alternate self is already worn. `AlternateSelf.revert_kind` says how it
+ends. `AUTOMATIC`: `end_audere` calls `revert_audere_alternate_self(sheet)`, so the self
+drops when the fight ends (`cleanup_completed_encounter`); a revert blocked by
+`in_control` is left as it is. `TALKED_DOWN`: the self also takes `emergence_condition`
+(a behavior-altering `ConditionTemplate`, required by a DB check constraint and `clean()`),
+stays after Audere ends, and `form revert` is refused until the condition is cleared by
+`breakfree`, a rally or a calm-down. `clean()` rejects an emergence condition on an
+`AUTOMATIC` self (it would block its own revert). Known gap, unchanged here: an Audere
+condition that expires by round duration without `end_audere` does not revert the self
+(`required_content.py:820`).
+
+**Acting aura (#4731).** `acting_aura(sheet)` (`world/magic/services/acting_aura.py`)
+returns an `ActingAura` (`percent_for(affinity)`, `dominant_affinity`, `is_alternate_self`):
+100% of the active alternate self's resonance affinity when it has one, else the sheet's
+`CharacterAura`. Readers that follow it (what she acts with): the technique cast
+aura-alignment term, the place-of-power / resonance-environment boon on arrival, and the
+covenant `ATTACKER_AFFINITY` situation. Readers that keep the TRUE aura (who she is): the
+Fall threshold (`perform_fall`), the Soul Tether affinity gate, and the sheet's aura
+display/serializer. An alternate self with no resonance changes nothing.
+
 **`RenownAwardConfig`** (`world/societies/renown_config.py` — relocated from
 `world/magic/models/renown_config.py` in #1621 so any app can inherit it without a
 magic import cycle) — abstract base (SharedMemoryModel) shared by
