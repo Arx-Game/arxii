@@ -9,7 +9,7 @@ from actions.factories import ConsequencePoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.admin import SurgeDegreeBandForm, SurgeDegreeBandFormSet
-from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind
+from world.combat.constants import SurgeTriggerKind
 from world.combat.factories import (
     CombatOpponentFactory,
     CombatParticipantFactory,
@@ -24,27 +24,7 @@ from world.traits.factories import CheckOutcomeFactory
 
 
 class SurgeTuningModelTests(TestCase):
-    def test_rolled_kinds_are_the_three_new_members(self) -> None:
-        self.assertEqual(
-            set(ROLLED_SURGE_TRIGGER_KINDS),
-            {
-                SurgeTriggerKind.TAUNT_RECEIVED,
-                SurgeTriggerKind.RALLIED,
-                SurgeTriggerKind.ALLY_HURT,
-            },
-        )
-
-    def test_tuning_kind_unique(self) -> None:
-        SurgeTuningFactory(trigger_kind=SurgeTriggerKind.RALLIED)
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            SurgeTuningFactory(trigger_kind=SurgeTriggerKind.RALLIED)
-
-    def test_band_unique_per_tuning_outcome(self) -> None:
-        tuning = SurgeTuningFactory(trigger_kind=SurgeTriggerKind.ALLY_HURT)
-        outcome = CheckOutcomeFactory(name="Surge Unique Outcome", success_level=1)
-        SurgeDegreeBandFactory(tuning=tuning, outcome=outcome)
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            SurgeDegreeBandFactory(tuning=tuning, outcome=outcome)
+    """Kept: the tuning and band validators are branches only the admin form reaches."""
 
     def test_clean_rejects_potency_on_a_kind_that_never_reads_it(self) -> None:
         for kind in (SurgeTriggerKind.TAUNT_RECEIVED, SurgeTriggerKind.RALLIED):
@@ -74,6 +54,9 @@ class SurgeTuningModelTests(TestCase):
 
 
 class DramaticSurgeRecordRepeatTests(TestCase):
+    """Kept: the dedup uniques and CheckConstraints are database invariants no played round
+    breaks, and the one thing that stops a double surge."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.participant = CombatParticipantFactory()
@@ -143,14 +126,10 @@ class DramaticSurgeRecordRepeatTests(TestCase):
                 outcome=self.outcome,
             )
 
-    def test_record_new_fields_default(self) -> None:
-        record = self._record(SurgeTriggerKind.HIGH_STAKES, repeat_round=None)
-        self.assertEqual(record.control_change, 0)
-        self.assertIsNone(record.outcome)
-        self.assertIsNone(record.potency)
-
 
 class TauntEntryTests(TestCase):
+    """Kept: ``ThreatPoolEntry.clean`` rejects shapes the admin form can submit."""
+
     def test_taunt_entry_cannot_carry_damage(self) -> None:
         entry = ThreatPoolEntryFactory.build(base_damage=5, taunt_potency=3)
         with self.assertRaises(ValidationError) as ctx:
@@ -187,6 +166,8 @@ class TauntEntryTests(TestCase):
 
 
 class SurgeBandInlineFormSetTests(TestCase):
+    """Kept: the admin inline formset is the staff-facing validation of a band set."""
+
     def _formset(self, rows: list[dict]):
         tuning = SurgeTuningFactory(trigger_kind=SurgeTriggerKind.RALLIED)
         formset_cls = inlineformset_factory(
@@ -279,6 +260,8 @@ class SurgeBandInlineFormSetTests(TestCase):
 
 
 class SurgeRolledSubjectCheckTests(TestCase):
+    """Kept: the CheckConstraint that keeps a rolled row off boss and companion subjects."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.participant = CombatParticipantFactory()

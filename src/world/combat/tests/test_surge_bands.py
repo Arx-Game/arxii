@@ -1,4 +1,6 @@
-"""Monotonic validation of surge degree bands (#4737)."""
+"""Monotonic validation of surge degree bands (#4737).
+
+Kept: a pure validator with branches; the admin reaches it only through a form."""
 
 from django.test import TestCase
 

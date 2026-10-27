@@ -1,4 +1,10 @@
-"""Surge beats in the round payload carry the roll for owner, GM and staff only (#4737)."""
+"""Stored rolled records as the round payload renders them (#4737).
+
+Who sees the roll (the surged player, a GM and staff, never a bystander) is asserted by the
+journey ``TheRoundPayloadShowsTheRollToTheRightPeople``. What stays here is what a played
+round cannot produce: a record written directly (an old kind, a hand-built rolled record), a
+band or tuning edited or deleted after the record was written, and a patched condition refusal.
+"""
 
 from unittest.mock import patch
 
@@ -25,13 +31,11 @@ from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement
 from world.roster.factories import RosterTenureFactory
 from world.scenes.constants import RoundStatus
-from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.factories import SceneFactory
 from world.traits.factories import CheckOutcomeFactory
 
 GENERIC_KEYS = {"id", "narration"}
 OWNER_KEYS = {"trigger_kind", "amount", "participant"}
-ROLL_KEYS = {"outcome", "potency", "control_change", "condition", "roll"}
-ROLL_LINE = "Composure check vs taunt potency 14. Partial. Intensity +5, control -1. Goaded."
 
 
 def _player(username: str, db_key: str) -> tuple[object, object]:
@@ -59,8 +63,6 @@ class SurgeBeatRollFieldTests(TestCase):
         cls.owner_account, cls.owner_sheet = _player("surge_owner", "Surgeowner")
         cls.other_account, cls.other_sheet = _player("surge_other", "Surgeother")
         cls.staff_account = AccountFactory(username="surge_staff", is_staff=True)
-        cls.gm_account = AccountFactory(username="surge_gm")
-        SceneParticipationFactory(scene=cls.scene, account=cls.gm_account, is_gm=True)
         cls.owner_seat = CombatParticipantFactory(
             encounter=cls.encounter,
             character_sheet=cls.owner_sheet,
@@ -103,24 +105,6 @@ class SurgeBeatRollFieldTests(TestCase):
         )
         self.assertIsNotNone(beat)
 
-    def test_surge_beat_roll_visible_to_owner_staff_hidden_from_others(self) -> None:
-        self._rolled_surge()
-
-        for account in (self.owner_account, self.staff_account, self.gm_account):
-            (beat,) = self._beats_seen_by(account)
-            self.assertEqual(set(beat), GENERIC_KEYS | OWNER_KEYS | ROLL_KEYS)
-            self.assertEqual(beat["outcome"], "Partial")
-            self.assertEqual(beat["potency"], 14)
-            self.assertEqual(beat["control_change"], -1)
-            self.assertEqual(beat["condition"], "Goaded")
-            self.assertEqual(beat["roll"], ROLL_LINE)
-            self.assertEqual(beat["trigger_kind"], SurgeTriggerKind.TAUNT_RECEIVED)
-            self.assertEqual(beat["amount"], 5)
-
-        (beat,) = self._beats_seen_by(self.other_account)
-        self.assertEqual(set(beat), GENERIC_KEYS)
-        self.assertEqual(beat["narration"], "Surgeowner surges.")
-
     def _rallied_tuning(self) -> None:
         tuning = SurgeTuningFactory(
             trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(name="Rally")
@@ -140,6 +124,7 @@ class SurgeBeatRollFieldTests(TestCase):
         self.assertIsNotNone(beat)
 
     def test_a_band_without_a_condition_gives_a_null_condition_and_no_condition_text(self) -> None:
+        """Kept: a record with a null potency is one only a direct write makes."""
         self._rallied_tuning()
         self._rallied_surge()
 
@@ -149,6 +134,7 @@ class SurgeBeatRollFieldTests(TestCase):
         self.assertEqual(beat["roll"], "Rally check. Partial. Intensity +4, control 0.")
 
     def test_a_condition_that_did_not_take_hold_is_not_named(self) -> None:
+        """Kept: a refused condition needs a patched ``apply_condition``."""
         refused = ApplyConditionResult(success=False, instance=None, message="resisted")
         with patch("world.conditions.services.apply_condition", return_value=refused):
             self._rolled_surge()
@@ -160,6 +146,7 @@ class SurgeBeatRollFieldTests(TestCase):
         )
 
     def test_the_condition_that_applied_is_shown_after_the_band_is_retuned(self) -> None:
+        """Kept: the band is edited after the record is written."""
         tuning = SurgeTuningFactory(
             trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(name="Rally")
         )
@@ -176,6 +163,7 @@ class SurgeBeatRollFieldTests(TestCase):
         self.assertEqual(beat["roll"], "Rally check. Partial. Intensity +4, control 0. Goaded.")
 
     def test_a_control_only_surge_beat_has_no_power_surges_narration(self) -> None:
+        """Kept: a zero-intensity band is a hand-authored shape no played round reaches."""
         tuning = SurgeTuningFactory(
             trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(name="Rally")
         )
@@ -188,6 +176,7 @@ class SurgeBeatRollFieldTests(TestCase):
         self.assertEqual(owner_beat["roll"], "Rally check. Partial. Intensity +0, control -2.")
 
     def test_old_kind_surge_beat_unchanged(self) -> None:
+        """Kept: the older kinds are written by their own triggers, not by these journeys."""
         apply_dramatic_surge(
             encounter=self.encounter,
             participant=self.owner_seat,
@@ -204,6 +193,7 @@ class SurgeBeatRollFieldTests(TestCase):
         self.assertEqual(set(other_beat), GENERIC_KEYS)
 
     def test_a_rolled_beat_whose_tuning_was_removed_keeps_the_stored_roll_fields(self) -> None:
+        """Kept: the tuning is deleted after the record is written."""
         self._rallied_tuning()
         self._rallied_surge()
         SurgeTuning.objects.get(trigger_kind=SurgeTriggerKind.RALLIED).delete()

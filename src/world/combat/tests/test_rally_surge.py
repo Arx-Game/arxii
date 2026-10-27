@@ -1,4 +1,9 @@
-"""Rally raises the rallied ally's intensity through a rolled surge (#4737)."""
+"""Rally raises the rallied ally's intensity through a rolled surge (#4737).
+
+The journey ``BeingRallied`` types ``combat rally`` and plays the round (the roll line, the
+record, Inspired, the next round). What stays here: the tuned-check and name fallbacks,
+degrees across every band, a failed rally, and the missing-tuning and no-curve edges.
+"""
 
 from unittest.mock import patch
 
@@ -70,21 +75,6 @@ class RallySurgeTests(TestCase):
         with force_check_outcome(outcome):
             _resolve_rally(self.rallier, action)
 
-    def test_rally_success_surges_ally_by_speaker_degree(self) -> None:
-        self._rally(self.success)
-        record = DramaticSurgeRecord.objects.get()
-        self.assertEqual(record.participant, self.ally)
-        self.assertEqual(record.trigger_kind, SurgeTriggerKind.RALLIED)
-        self.assertEqual(record.subject_sheet, self.rallier.character_sheet)
-        self.assertEqual(record.outcome, self.success)
-        self.assertEqual(record.potency, RALLY_BASE_DIFFICULTY)
-        self.assertEqual(self._intensity(), 5)
-
-        DramaticSurgeRecord.objects.all().delete()
-        before = self._intensity()
-        self._rally(self.great)
-        self.assertEqual(self._intensity() - before, 8)
-
     def test_rally_rolls_the_tuned_check_at_the_fixed_difficulty(self) -> None:
         action = declare_rally(self.rallier, self.ally)
         with (
@@ -104,15 +94,6 @@ class RallySurgeTests(TestCase):
         with force_check_outcome(self.success) as capture:
             _resolve_rally(self.rallier, action)
         self.assertEqual(capture.check_type.name, "Rally")
-
-    def test_rally_success_still_inspires_the_ally(self) -> None:
-        self._rally(self.success)
-        self.assertTrue(
-            ConditionInstance.objects.filter(
-                target=self.ally.character_sheet.character,
-                condition__name=INSPIRED_CONDITION_NAME,
-            ).exists()
-        )
 
     def test_rally_failure_gives_smaller_or_no_surge_never_more(self) -> None:
         amounts = {}
@@ -135,16 +116,6 @@ class RallySurgeTests(TestCase):
                 condition__name=INSPIRED_CONDITION_NAME,
             ).exists()
         )
-
-    def test_rally_second_round_surges_again(self) -> None:
-        self._rally(self.success)
-        self._rally(self.success)
-        self.assertEqual(DramaticSurgeRecord.objects.count(), 1)
-        self.encounter.round_number = 2
-        self.encounter.save(update_fields=["round_number"])
-        self._rally(self.success)
-        self.assertEqual(DramaticSurgeRecord.objects.count(), 2)
-        self.assertEqual(self._intensity(), 10)
 
     def test_rally_with_no_tuning_still_inspires_and_does_not_crash(self) -> None:
         self.tuning.delete()

@@ -1,4 +1,11 @@
-"""An NPC taunt entry supplies a potency the targeted player character rolls against (#4737)."""
+"""An NPC taunt entry supplies a potency the targeted player character rolls against (#4737).
+
+The journey ``BeingTauntedByAnNpc`` plays the entry through a real round: no damage, the
+record, the roll line, the room's generic line, a better result and an encounter with no
+curve. What stays here is what that journey cannot reach: the no-roll edges (a second taunt,
+no engagement, an entry aimed at an opponent) and an ordinary entry. The authored hit
+text and the plain line are read off the pushed row in that journey.
+"""
 
 from unittest.mock import patch
 
@@ -24,7 +31,6 @@ from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.factories import CharacterVitalsFactory
-from world.vitals.models import CharacterVitals
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
@@ -69,50 +75,6 @@ class NpcTauntEntryTests(TestCase):
         engagement = CharacterEngagement.objects.get(character=self.target.character_sheet)
         return engagement.intensity_modifier
 
-    def test_npc_taunt_entry_does_no_damage_and_surges_pc(self) -> None:
-        action = self._taunt_action()
-        health_before = CharacterVitals.objects.filter(
-            character_sheet=self.target.character_sheet
-        ).values_list("health", flat=True)
-        health_before = list(health_before)
-        result, _ = self._resolve(action, self.partial)
-
-        self.assertEqual(result.damage_results, [])
-        self.assertEqual(result.damage_consequences, [])
-        health_after = list(
-            CharacterVitals.objects.filter(character_sheet=self.target.character_sheet).values_list(
-                "health", flat=True
-            )
-        )
-        self.assertEqual(health_after, health_before)
-        record = DramaticSurgeRecord.objects.get()
-        self.assertEqual(record.participant, self.target)
-        self.assertEqual(record.trigger_kind, SurgeTriggerKind.TAUNT_RECEIVED)
-        self.assertEqual(record.potency, 14)
-        self.assertEqual(record.outcome, self.partial)
-        self.assertIsNone(record.subject_sheet)
-        self.assertEqual(self._intensity(), 3)
-
-    def test_better_roll_against_npc_taunt_surges_more(self) -> None:
-        self._resolve(self._taunt_action(), self.partial)
-        low = self._intensity()
-        DramaticSurgeRecord.objects.all().delete()
-        self._resolve(self._taunt_action(), self.success)
-        self.assertGreater(self._intensity() - low, low)
-
-    def test_roll_line_goes_to_the_targeted_character(self) -> None:
-        action = self._taunt_action()
-        live = CombatParticipant.objects.get(pk=self.target.pk)  # the idmapper's instance
-        with (
-            patch.object(live.character_sheet.character, "msg") as own_msg,
-            self.captureOnCommitCallbacks(execute=True),
-        ):
-            self._resolve(action, self.partial)
-        self.assertIn(
-            "Npc Taunt Composure check vs taunt potency 14. Npc Taunt Partial.",
-            own_msg.call_args.args[0],
-        )
-
     def test_a_second_taunt_on_the_same_pc_in_a_round_rolls_nothing_and_prints_nothing(
         self,
     ) -> None:
@@ -145,38 +107,6 @@ class NpcTauntEntryTests(TestCase):
         result, broadcast = self._resolve(action, self.partial)
         self.assertEqual(result.damage_results, [])
         broadcast.assert_not_called()
-        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
-
-    def test_outcome_line_uses_authored_hit_narration(self) -> None:
-        action = self._taunt_action(hit_narration="{actor} sneers at {target}.")
-        _, broadcast = self._resolve(action, self.partial)
-        narration = broadcast.call_args.kwargs["narration"]
-        self.assertTrue(narration.startswith(self.opponent.name))
-        self.assertIn("sneers at", narration)
-        self.assertNotIn("{", narration)
-        self.assertNotIn("misses", narration)
-
-    def test_outcome_line_without_authored_text_is_plain(self) -> None:
-        action = self._taunt_action()
-        _, broadcast = self._resolve(action, self.partial)
-        narration = broadcast.call_args.kwargs["narration"]
-        self.assertTrue(narration.startswith(f"{self.opponent.name} taunts "))
-        self.assertNotIn("damage", narration)
-        self.assertNotIn("misses", narration)
-
-    def test_npc_taunt_without_a_curve_does_nothing(self) -> None:
-        plain = CombatEncounterFactory(round_number=1)
-        target = CombatParticipantFactory(encounter=plain, status=ParticipantStatus.ACTIVE)
-        begin_engagement(target.character_sheet.character, EngagementType.COMBAT, source=plain)
-        opponent = CombatOpponentFactory(encounter=plain)
-        entry = ThreatPoolEntryFactory(base_damage=0, taunt_potency=14)
-        action = CombatOpponentActionFactory(opponent=opponent, threat_entry=entry, round_number=1)
-        action.targets.add(target)
-        with (
-            force_check_outcome(self.partial),
-            patch("world.combat.interaction_services.broadcast_action_outcome"),
-        ):
-            _resolve_npc_action(opponent, action, None, None)
         self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
 
     def test_ordinary_entry_still_deals_damage_and_never_surges(self) -> None:

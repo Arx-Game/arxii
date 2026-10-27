@@ -1,4 +1,9 @@
-"""A player character taunts another player character (#4737): a roll, then a rolled surge."""
+"""A player character taunts another player character (#4737): a roll, then a rolled surge.
+
+The journey ``BeingTauntedByAnotherPlayer`` types ``combat taunt Tomas`` and plays the round:
+the potency from the taunter's real rating, the record, the roll line, a better result and
+the next round. The declaration's error mapping and the resolution's no-op edges stay here.
+"""
 
 from contextlib import ExitStack
 from unittest.mock import patch
@@ -97,6 +102,8 @@ class PlayerTauntTestCase(TestCase):
 
 
 class DeclareTests(PlayerTauntTestCase):
+    """Kept: the declaration's error mapping is a parser with branches, not a played story."""
+
     def test_participant_target_is_stored_as_ally_target(self) -> None:
         action = declare_taunt(self.taunter, self.target)
         self.assertEqual(action.maneuver, CombatManeuver.TAUNT)
@@ -128,30 +135,11 @@ class DeclareTests(PlayerTauntTestCase):
 
 
 class ResolveTests(PlayerTauntTestCase):
-    def test_pc_taunts_pc_potency_is_the_taunters_check_rating(self) -> None:
-        target_rolls = self._taunt(self.partial, rating=17)
-        # One roll, the target's, against the taunter's rating: nothing is rolled for the taunter.
-        self.assertEqual(target_rolls, [(self.composure, 17)])
-        record = DramaticSurgeRecord.objects.get()
-        self.assertEqual(record.potency, 17)
-        self.assertEqual(record.trigger_kind, SurgeTriggerKind.TAUNT_RECEIVED)
+    """Kept: clamps, dedup and quiet no-ops need a pinned rating, a removed row or a status flip."""
 
     def test_a_negative_rating_is_a_potency_of_zero(self) -> None:
         self._taunt(self.partial, rating=-4)
         self.assertEqual(DramaticSurgeRecord.objects.get().potency, 0)
-
-    def test_the_rating_is_read_for_the_taunt_check_type_and_taunting_character(self) -> None:
-        from world.checks.models import CheckType
-
-        action = declare_taunt(self.taunter, self.target)
-        with (
-            patch("world.checks.services.compute_check_rating", return_value=5) as rating,
-            force_check_outcome(self.partial),
-        ):
-            _resolve_taunt(self.taunter, action)
-        character, check_type = rating.call_args.args
-        self.assertEqual(character, self.taunter.character_sheet.character)
-        self.assertEqual(check_type, CheckType.objects.get(name="Taunt"))
 
     def test_a_second_taunt_on_the_same_target_rolls_nothing(self) -> None:
         self._taunt(self.partial)
@@ -163,32 +151,6 @@ class ResolveTests(PlayerTauntTestCase):
         CharacterEngagement.objects.filter(character=self.target.character_sheet).delete()
         self.assertEqual(self._taunt(self.partial), [])
         self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
-
-    def test_pc_taunt_surges_target_and_records_roll(self) -> None:
-        with (
-            patch.object(self.target_character, "msg") as own_msg,
-            self.captureOnCommitCallbacks(execute=True),
-        ):
-            self._taunt(self.partial)
-        record = DramaticSurgeRecord.objects.get()
-        self.assertEqual(record.participant, self.target)
-        self.assertEqual(record.subject_sheet, self.taunter.character_sheet)
-        self.assertEqual(record.outcome, self.partial)
-        self.assertEqual(record.amount, 3)
-        self.assertEqual(self._intensity(), 3)
-        line = own_msg.call_args.args[0]
-        self.assertIn("Taunt Composure check vs taunt potency", line)
-        self.assertIn("Taunt Partial", line)
-
-    def test_better_composure_surges_more(self) -> None:
-        amounts = []
-        for outcome in (self.fail, self.partial, self.success):
-            DramaticSurgeRecord.objects.all().delete()
-            before = self._intensity()
-            self._taunt(outcome)
-            amounts.append(self._intensity() - before)
-        self.assertEqual(amounts, sorted(amounts))
-        self.assertGreater(amounts[-1], amounts[0])
 
     def test_taunt_on_npc_unchanged_threat_only(self) -> None:
         opponent = CombatOpponentFactory(encounter=self.encounter, threat_pool=ThreatPoolFactory())
@@ -203,16 +165,6 @@ class ResolveTests(PlayerTauntTestCase):
         self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
         self.assertEqual(self._intensity(), 0)
 
-    def test_second_round_taunt_surges_again_and_same_round_once(self) -> None:
-        self._taunt(self.partial)
-        self._taunt(self.partial)
-        self.assertEqual(DramaticSurgeRecord.objects.count(), 1)
-        self.encounter.round_number = 2
-        self.encounter.save(update_fields=["round_number"])
-        self._taunt(self.partial)
-        self.assertEqual(DramaticSurgeRecord.objects.count(), 2)
-        self.assertEqual(self._intensity(), 6)
-
     def test_target_who_left_between_declaration_and_resolution_is_a_noop(self) -> None:
         action = declare_taunt(self.taunter, self.target)
         self.target.status = ParticipantStatus.FLED
@@ -226,16 +178,6 @@ class ResolveTests(PlayerTauntTestCase):
         self._kill_target()
         with force_check_outcome(self.success):
             _resolve_taunt(self.taunter, action)
-        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
-
-    def test_no_escalation_curve_is_a_noop(self) -> None:
-        plain = CombatEncounterFactory(round_number=1, status=RoundStatus.DECLARING)
-        taunter = CombatParticipantFactory(encounter=plain, status=ParticipantStatus.ACTIVE)
-        target = CombatParticipantFactory(encounter=plain, status=ParticipantStatus.ACTIVE)
-        begin_engagement(target.character_sheet.character, EngagementType.COMBAT, source=plain)
-        action = declare_taunt(taunter, target)
-        with force_check_outcome(self.success):
-            _resolve_taunt(taunter, action)
         self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
 
     def test_no_tuning_is_a_noop(self) -> None:

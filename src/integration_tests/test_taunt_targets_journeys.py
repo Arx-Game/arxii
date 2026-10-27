@@ -2,10 +2,13 @@
 
 Mira and Tomas are played fighters in one declaring round-1 encounter in "The Road", against
 a Bandit Captain. `combat taunt <name>` takes either kind of name through the command
-handler and declares the same TAUNT maneuver, aimed at the right target.
+handler and declares the same TAUNT maneuver, aimed at the right target. The REST endpoint
+and the web dispatch take the same two kinds of target, exactly one at a time.
 """
 
 from __future__ import annotations
+
+from rest_framework import status as http_status
 
 from integration_tests.harness import JourneyCase
 from world.combat.constants import CombatManeuver, ParticipantStatus
@@ -17,6 +20,8 @@ from world.combat.factories import (
 from world.combat.models import CombatRoundAction
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
+
+ONE_TARGET_MESSAGE = "Name exactly one target to taunt: an opponent or a participant."
 
 
 class TauntingByName(JourneyCase):
@@ -99,4 +104,59 @@ class TauntingByName(JourneyCase):
 
         self.assertFalse(result.detail.success)
         self.assertEqual(result.detail.message, "Name one target to taunt: an opponent or an ally.")
+        self.assertIsNone(self._taunt_action())
+
+    # -- the REST endpoint ----------------------------------------------------
+
+    def _post_taunt(self, body: dict) -> object:
+        client = self.api(self.account_of(self.mira))
+        return client.post(f"/api/combat/{self.encounter.pk}/taunt/", body, format="json")
+
+    def test_the_rest_endpoint_takes_an_ally(self) -> None:
+        response = self._post_taunt({"participant_id": self.tomas_seat.pk})
+
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK, response.content)
+        action = self._taunt_action()
+        self.assertEqual(action.focused_ally_target, self.tomas_seat)
+        self.assertIsNone(action.focused_opponent_target)
+
+    def test_the_rest_endpoint_takes_an_opponent(self) -> None:
+        response = self._post_taunt({"opponent_id": self.captain.pk})
+
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK, response.content)
+        action = self._taunt_action()
+        self.assertEqual(action.focused_opponent_target, self.captain)
+        self.assertIsNone(action.focused_ally_target)
+
+    def test_the_rest_endpoint_refuses_two_targets_in_plain_words(self) -> None:
+        response = self._post_taunt(
+            {"participant_id": self.tomas_seat.pk, "opponent_id": self.captain.pk}
+        )
+
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json(), {"non_field_errors": [ONE_TARGET_MESSAGE]})
+        self.assertIsNone(self._taunt_action())
+
+    def test_the_rest_endpoint_refuses_no_target_in_plain_words(self) -> None:
+        response = self._post_taunt({})
+
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json(), {"non_field_errors": [ONE_TARGET_MESSAGE]})
+        self.assertIsNone(self._taunt_action())
+
+    def test_taunting_yourself_over_rest_is_a_plain_400(self) -> None:
+        response = self._post_taunt({"participant_id": self.mira_seat.pk})
+
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn("yourself", response.content.decode())
+        self.assertIsNone(self._taunt_action())
+
+    def test_a_participant_of_another_encounter_is_a_404(self) -> None:
+        stranger = CombatParticipantFactory(
+            encounter=CombatEncounterFactory(), status=ParticipantStatus.ACTIVE
+        )
+
+        response = self._post_taunt({"participant_id": stranger.pk})
+
+        self.assertEqual(response.status_code, http_status.HTTP_404_NOT_FOUND)
         self.assertIsNone(self._taunt_action())

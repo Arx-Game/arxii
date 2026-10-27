@@ -1,6 +1,11 @@
-"""The surge-roll core service (#4737): bands, dedup, control, conditions, roll line."""
+"""The surge-roll core service (#4737): bands, dedup, control, conditions, roll line.
 
-from itertools import pairwise
+What the played journeys (``integration_tests.test_surge_rolls_journeys``) assert is the
+whole path from a typed command or a round to what the player was told. What stays here is
+what no journey reaches: pure band selection with its fallbacks, rounding, the dedup key,
+collaborator failure and refusal, and the zero-amount and deferred-delivery edges.
+"""
+
 import logging
 from unittest.mock import patch
 
@@ -9,7 +14,6 @@ from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
-from world.checks.types import CheckResult
 from world.combat.constants import (
     ROLLED_SURGE_TRIGGER_KINDS,
     ParticipantStatus,
@@ -29,7 +33,6 @@ from world.combat.surge_rolls import (
     band_for_outcome,
     roll_line,
     rolled_surge_possible,
-    surge_roll_for_participant,
 )
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
@@ -84,20 +87,7 @@ class SurgeRollTestCase(TestCase):
 
 
 class BandSelectionTests(SurgeRollTestCase):
-    def test_better_outcome_never_surges_less(self) -> None:
-        self._band(self.fail, 1)
-        self._band(self.partial, 3)
-        self._band(self.success, 6)
-        amounts = []
-        for outcome in (self.fail, self.partial, self.success):
-            DramaticSurgeRecord.objects.all().delete()
-            before = self._engagement().intensity_modifier
-            beat = self._surge(outcome)
-            self.assertIsNotNone(beat)
-            amounts.append(beat.amount)
-            self.assertEqual(self._engagement().intensity_modifier - before, beat.amount)
-        for worse, better in pairwise(amounts):
-            self.assertGreaterEqual(better, worse)
+    """Kept: pure band selection and its fallbacks are branches no played roll walks."""
 
     def test_band_fallback_uses_nearest_lower(self) -> None:
         low = self._band(self.fail, 1)
@@ -117,6 +107,8 @@ class BandSelectionTests(SurgeRollTestCase):
 
 
 class QuietNoopTests(SurgeRollTestCase):
+    """Kept: each missing-content no-op (no tuning, band, curve, outcome) is authoring state."""
+
     def test_no_tuning_is_quiet_noop(self) -> None:
         self.tuning.delete()
         with self.assertLogs("world.combat.surge_rolls", level=logging.WARNING):
@@ -152,15 +144,7 @@ class QuietNoopTests(SurgeRollTestCase):
 
 
 class RepeatAndDedupTests(SurgeRollTestCase):
-    def test_second_round_surges_again(self) -> None:
-        self._band(self.partial, 3)
-        self.assertIsNotNone(self._surge(self.partial))
-        self.encounter.round_number += 1
-        self.encounter.save(update_fields=["round_number"])
-        self.assertIsNotNone(self._surge(self.partial))
-        self.assertEqual(self._engagement().intensity_modifier, 6)
-        rounds = set(DramaticSurgeRecord.objects.values_list("repeat_round", flat=True))
-        self.assertEqual(rounds, {self.encounter.round_number - 1, self.encounter.round_number})
+    """Kept: the dedup key (round, subject) and the stored roll, called directly."""
 
     def test_same_round_same_subject_once(self) -> None:
         self._band(self.partial, 3)
@@ -187,6 +171,8 @@ class RepeatAndDedupTests(SurgeRollTestCase):
 
 
 class EffectTests(SurgeRollTestCase):
+    """Kept: rounding, source attribution and the error paths need a patched collaborator."""
+
     def test_control_change_lowers_engagement_control(self) -> None:
         self._band(self.fail, 0, control=-2)
         before = self._engagement().control_modifier
@@ -256,28 +242,8 @@ class EffectTests(SurgeRollTestCase):
         self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
 
 
-class NarrationTests(SurgeRollTestCase):
-    def test_roll_line_goes_to_participant_only_and_room_gets_generic_narration(self) -> None:
-        goaded = ConditionTemplateFactory(name="Surge Goaded Line")
-        self._band(self.partial, 5, condition=goaded)
-        bystander = CombatParticipantFactory(encounter=self.encounter).character_sheet.character
-        with (
-            patch.object(self.character, "msg") as own_msg,
-            patch.object(bystander, "msg") as other_msg,
-            patch.object(self.encounter.room, "msg_contents") as room_msg,
-            self.captureOnCommitCallbacks(execute=True),
-        ):
-            self._surge(self.partial)
-        own_msg.assert_called_once_with(
-            "Surge Composure check vs taunt potency 14. Surge Partial. "
-            "Intensity +5, control 0. Surge Goaded Line."
-        )
-        other_msg.assert_not_called()
-        room_msg.assert_called_once()
-        generic = room_msg.call_args.args[0]
-        self.assertEqual(generic, f"{self.character.db_key} surges.")
-        for secret in ("Surge Composure", "potency", "Partial", "Goaded"):
-            self.assertNotIn(secret, generic)
+class RollLineDeliveryTests(SurgeRollTestCase):
+    """Kept: a journey cannot open a round's transaction to see the line deferred or dropped."""
 
     def test_roll_line_waits_for_the_surrounding_transaction_to_commit(self) -> None:
         self._band(self.partial, 3)
@@ -307,7 +273,10 @@ class NarrationTests(SurgeRollTestCase):
 
 
 class ZeroAmountTests(SurgeRollTestCase):
-    """A surge that adds no intensity, control or condition writes nothing (#4737)."""
+    """A surge that adds no intensity, control or condition writes nothing (#4737).
+
+    Kept: a zero amount needs a scale or band no authored journey sets up.
+    """
 
     def test_zero_amount_with_nothing_else_writes_nothing_and_keeps_the_slot_free(self) -> None:
         self._band(self.partial, 3)
@@ -349,6 +318,8 @@ class ZeroAmountTests(SurgeRollTestCase):
 
 
 class PotencyLabelTests(SurgeRollTestCase):
+    """Kept: a new rolled kind without a label would only fail in a journey for that kind."""
+
     def test_every_rolled_kind_has_a_potency_label(self) -> None:
         self.assertEqual(set(POTENCY_LABELS), set(ROLLED_SURGE_TRIGGER_KINDS))
 
@@ -366,6 +337,8 @@ class PotencyLabelTests(SurgeRollTestCase):
 
 
 class RolledSurgePossibleTests(SurgeRollTestCase):
+    """Kept: the pre-roll predicate has four branches, two of them dedup state."""
+
     def test_possible_with_an_engagement_and_no_record(self) -> None:
         self.assertTrue(rolled_surge_possible(self.encounter, self.participant, KIND, None))
 
@@ -387,23 +360,3 @@ class RolledSurgePossibleTests(SurgeRollTestCase):
     def test_not_possible_without_a_combat_engagement(self) -> None:
         CharacterEngagement.objects.filter(character=self.character.sheet_data).delete()
         self.assertFalse(rolled_surge_possible(self.encounter, self.participant, KIND, None))
-
-
-class RollTests(SurgeRollTestCase):
-    def test_surge_roll_goes_through_the_social_check_seam(self) -> None:
-        forced = CheckResult(
-            check_type=self.check_type,
-            outcome=self.success,
-            chart=None,
-            roller_rank=None,
-            target_rank=None,
-            rank_difference=0,
-            trait_points=0,
-            aspect_bonus=0,
-            total_points=0,
-        )
-        with patch("world.checks.services.perform_check", return_value=forced) as rolled:
-            result = surge_roll_for_participant(self.participant, self.check_type, 14)
-        self.assertIs(result, forced)
-        self.assertEqual(rolled.call_args.kwargs["target_difficulty"], 14)
-        self.assertEqual(rolled.call_args.args[:2], (self.character, self.check_type))

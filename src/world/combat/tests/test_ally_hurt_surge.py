@@ -1,4 +1,10 @@
-"""A hurt bonded ally raises a player character's intensity through a roll (#4737)."""
+"""A hurt bonded ally raises a player character's intensity through a roll (#4737).
+
+The journey ``AnAllyBeingWounded`` plays a wound through a real round (60 and 20 percent, an
+unbonded ally, the next round, an encounter without a curve). What stays here is what that
+journey cannot reach: rounding and caps, the bond gates, no-op guards, the install of the
+room triggers, and the two-protector fan-out.
+"""
 
 from unittest.mock import patch
 
@@ -103,17 +109,7 @@ class AllyHurtSurgeTestCase(TestCase):
 
 
 class AllyHurtRollTests(AllyHurtSurgeTestCase):
-    def test_bonded_ally_wound_surges_in_proportion(self) -> None:
-        self._bond()
-        with force_check_outcome(self.success):
-            self._hurt(damage=60)
-        # 60% of the band's 15 is 9.
-        self.assertEqual(self._intensity(self.protector_char), 9)
-        record = self._records().get()
-        self.assertEqual(record.participant, self.protector)
-        self.assertEqual(record.subject_sheet, self.victim.character_sheet)
-        self.assertEqual(record.outcome, self.success)
-        self.assertEqual(self._intensity(self.victim_char), 0)
+    """Kept: rounding, caps, the scratch rule, bond gates and depth, called directly."""
 
     def test_small_wound_rounds_half_up(self) -> None:
         self._bond()
@@ -154,12 +150,6 @@ class AllyHurtRollTests(AllyHurtSurgeTestCase):
             self._hurt(damage=30, max_health=40)
         self.assertEqual(self._records().get().amount, 2)
 
-    def test_unbonded_ally_gets_nothing(self) -> None:
-        with force_check_outcome(self.success):
-            self._hurt(damage=60)
-        self.assertEqual(self._intensity(self.protector_char), 0)
-        self.assertFalse(self._records().exists())
-
     def test_bond_of_a_type_that_does_not_fuel_spikes_gets_nothing(self) -> None:
         self._bond(fuels=False)
         with force_check_outcome(self.success):
@@ -189,6 +179,8 @@ class AllyHurtRollTests(AllyHurtSurgeTestCase):
 
 
 class AllyHurtTwoProtectorTests(AllyHurtSurgeTestCase):
+    """Kept: two protectors need a second bond and a patched roll, one forced shot each."""
+
     def test_two_bonded_protectors_both_surge_independently(self) -> None:
         self._bond()
         second = CombatParticipantFactory(encounter=self.encounter, status=ParticipantStatus.ACTIVE)
@@ -224,6 +216,8 @@ class AllyHurtTwoProtectorTests(AllyHurtSurgeTestCase):
 
 
 class AllyHurtRepeatTests(AllyHurtSurgeTestCase):
+    """Kept: two hits in one round are one event each; the journey plays one wound a round."""
+
     def test_two_hits_same_round_one_surge(self) -> None:
         self._bond()
         with force_check_outcome(self.success):
@@ -233,27 +227,9 @@ class AllyHurtRepeatTests(AllyHurtSurgeTestCase):
         self.assertEqual(self._records().count(), 1)
         self.assertEqual(self._intensity(self.protector_char), 9)
 
-    def test_next_round_surges_again(self) -> None:
-        self._bond()
-        with force_check_outcome(self.success):
-            self._hurt(damage=60)
-        self.encounter.round_number = 2
-        self.encounter.save()
-        with force_check_outcome(self.success):
-            self._hurt(damage=60)
-        self.assertEqual(self._records().count(), 2)
-        self.assertEqual(self._intensity(self.protector_char), 18)
-
 
 class AllyHurtNoopTests(AllyHurtSurgeTestCase):
-    def test_no_curve_no_surge(self) -> None:
-        self._bond()
-        self.encounter.escalation_curve = None
-        self.encounter.save()
-        with force_check_outcome(self.success):
-            self._hurt(damage=60)
-        self.assertFalse(self._records().exists())
-        self.assertEqual(self._intensity(self.protector_char), 0)
+    """Kept: each guard (zero damage, zero max health, completed, no tuning, no engagement)."""
 
     def test_zero_damage_noop(self) -> None:
         self._bond()
@@ -292,6 +268,8 @@ class AllyHurtNoopTests(AllyHurtSurgeTestCase):
 
 
 class AllyHurtWiringTests(AllyHurtSurgeTestCase):
+    """Kept: the install and removal of the room triggers is not a thing a player does."""
+
     def setUp(self) -> None:
         super().setUp()
         wire_escalation_content()
@@ -308,20 +286,6 @@ class AllyHurtWiringTests(AllyHurtSurgeTestCase):
         self.assertEqual(installed.count(), 1)
         remove_escalation_room_triggers(self.encounter)
         self.assertFalse(installed.exists())
-
-    def test_damage_applied_event_reaches_handler(self) -> None:
-        self._bond()
-        install_escalation_room_triggers(self.encounter)
-        CharacterVitals.objects.update_or_create(
-            character_sheet=self.victim.character_sheet,
-            defaults={"health": 100, "max_health": 100},
-        )
-        with force_check_outcome(self.success):
-            apply_damage_to_participant(self.victim, 60)
-        self.assertEqual(self._intensity(self.protector_char), 9)
-        record = self._records().get()
-        self.assertEqual(record.participant, self.protector)
-        self.assertEqual(record.subject_sheet, self.victim.character_sheet)
 
     def test_damage_in_a_room_without_the_trigger_does_nothing(self) -> None:
         self._bond()
