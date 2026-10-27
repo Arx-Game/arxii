@@ -8,6 +8,8 @@ from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import ParticipantState, ParticipationRule
 from world.magic.factories import (
+    CharacterAuraFactory,
+    CharacterTraditionFactory,
     RitualFactory,
     RitualSessionFactory,
     RitualSessionParticipantFactory,
@@ -25,6 +27,7 @@ from world.progression.services.durance_registration import (
     register_durance_via_session,
 )
 from world.scenes.factories import SceneFactory
+from world.scenes.models import Interaction
 from world.societies.factories import OrganizationFactory
 
 
@@ -61,7 +64,9 @@ class TestDuranceRegistrationServices(TestCase):
         sheet.refresh_from_db()
         self.assertEqual(sheet.durance_cohort, cohort)
 
-    def _create_registration_session(self, inductee, officiant):
+    def _create_registration_session(
+        self, inductee, officiant, testament="I am here to begin my Durance."
+    ):
         if inductee.character.location is None:
             room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
             _place_in_room(inductee, room)
@@ -91,7 +96,7 @@ class TestDuranceRegistrationServices(TestCase):
             session=session,
             character_sheet=inductee,
             state=ParticipantState.ACCEPTED,
-            participant_kwargs={"testament": "I am here to begin my Durance."},
+            participant_kwargs={"testament": testament},
         )
         return session
 
@@ -110,6 +115,54 @@ class TestDuranceRegistrationServices(TestCase):
         self.assertIsNotNone(inductee.durance_entered_at)
         self.assertIsNotNone(inductee.durance_cohort)
         self.assertTrue(CohortEnrollment.objects.filter(persona=persona).exists())
+
+    def _register_with_empty_testament(self, inductee):
+        officiant = CharacterSheetFactory()
+        OrganizationFactory(name="Shroudwatch Academy")
+        session = self._create_registration_session(inductee, officiant, testament="")
+        with patch("world.progression.services.durance_registration._fire_enrollment_antiphon"):
+            register_durance_via_session(session=session)
+        return Interaction.objects.filter(scene=session.scene, persona=inductee.primary_persona)
+
+    def test_empty_testament_includes_glimpse_story_when_aura_exists(self):
+        inductee = CharacterSheetFactory()
+        CharacterAuraFactory(character=inductee, glimpse_story="A lamp lit itself in my hands.")
+
+        posted = self._register_with_empty_testament(inductee)
+
+        content = posted.get().content
+        self.assertIn(f"I am {inductee.character.key}.", content)
+        self.assertIn("A lamp lit itself in my hands.", content)
+
+    def test_empty_testament_is_composed_without_glimpse_story_when_no_aura(self):
+        inductee = CharacterSheetFactory()
+
+        posted = self._register_with_empty_testament(inductee)
+
+        self.assertEqual(posted.get().content, f"I am {inductee.character.key}.")
+        inductee.refresh_from_db()
+        self.assertIsNotNone(inductee.durance_entered_at)
+
+    def _antiphon_text(self, inductee):
+        officiant = CharacterSheetFactory()
+        OrganizationFactory(name="Shroudwatch Academy")
+        session = self._create_registration_session(inductee, officiant)
+        room = session.scene.room
+        with patch.object(type(room), "msg_contents") as msg_contents:
+            register_durance_via_session(session=session)
+        msg_contents.assert_called_once()
+        return msg_contents.call_args.args[0]
+
+    def test_antiphon_is_sponsored_for_a_character_with_a_tradition(self):
+        inductee = CharacterSheetFactory()
+        CharacterTraditionFactory(character=inductee)
+
+        self.assertEqual(self._antiphon_text(inductee), "[durance_antiphon_sponsored]")
+
+    def test_antiphon_is_unsponsored_for_a_character_without_a_tradition(self):
+        inductee = CharacterSheetFactory()
+
+        self.assertEqual(self._antiphon_text(inductee), "[durance_antiphon_unsponsored]")
 
     def test_register_via_session_is_idempotent(self):
         officiant = CharacterSheetFactory()
