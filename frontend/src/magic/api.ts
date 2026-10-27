@@ -16,6 +16,7 @@ import { readErrorDetail } from '@/lib/errors';
 import { getRituals } from '@/rituals/api';
 import type { components } from '@/generated/api';
 import type {
+  ThreadResonanceOptions,
   AcceptTeachingOfferRequest,
   AcceptTeachingOfferResponse,
   AlterationLibraryEntry,
@@ -443,6 +444,18 @@ export async function getThread(id: number): Promise<Thread> {
   const res = await apiFetch(`${THREADS_URL}/${id}/`);
   if (!res.ok) throw new Error(`Failed to load thread ${id}`);
   return res.json() as Promise<Thread>;
+}
+
+/**
+ * GET /api/magic/threads/{id}/resonance-options/
+ *
+ * The resonances a thread can be retuned to, with projected points and the
+ * carried items that pay the rite. Owner-only.
+ */
+export async function getThreadResonanceOptions(id: number): Promise<ThreadResonanceOptions> {
+  const res = await apiFetch(`${THREADS_URL}/${id}/resonance-options/`);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load resonance options');
+  return res.json() as Promise<ThreadResonanceOptions>;
 }
 
 /**

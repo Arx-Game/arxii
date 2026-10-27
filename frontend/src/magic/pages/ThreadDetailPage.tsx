@@ -21,6 +21,7 @@ import { ImbuePanel } from '../components/threads/ImbuePanel';
 import { XPLockBoundaryPanel } from '../components/threads/XPLockBoundaryPanel';
 import { PullEffectPreview } from '../components/threads/PullEffectPreview';
 import { ThreadRenameDialog } from '../components/threads/ThreadRenameDialog';
+import { ThreadResonanceDialog } from '../components/threads/ThreadResonanceDialog';
 import { ThreadRetireDialog } from '../components/threads/ThreadRetireDialog';
 
 export function ThreadDetailPage() {
@@ -39,6 +40,7 @@ export function ThreadDetailPage() {
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
+  const [resonanceOpen, setResonanceOpen] = useState(false);
 
   const isLoading = threadLoading || summaryLoading;
 
@@ -131,6 +133,17 @@ export function ThreadDetailPage() {
             data-testid="thread-edit-button"
           >
             Edit
+          </Button>
+        )}
+        {!isRetired && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setResonanceOpen(true)}
+            data-testid="thread-change-resonance-button"
+          >
+            Change resonance
           </Button>
         )}
       </div>
@@ -239,6 +252,13 @@ export function ThreadDetailPage() {
       {/* Dialogs */}
       {renameOpen && (
         <ThreadRenameDialog thread={thread} open={renameOpen} onOpenChange={setRenameOpen} />
+      )}
+      {resonanceOpen && (
+        <ThreadResonanceDialog
+          thread={thread}
+          open={resonanceOpen}
+          onOpenChange={setResonanceOpen}
+        />
       )}
       {retireOpen && (
         <ThreadRetireDialog thread={thread} open={retireOpen} onOpenChange={setRetireOpen} />
