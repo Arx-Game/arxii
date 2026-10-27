@@ -1410,7 +1410,9 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "social_safety_bonus",
     ]
     list_select_related = ["condition", "resilience_check_type"]
-    autocomplete_fields = ["condition", "anima_zero_stage"]
+    # anima_zero_stage stays a plain select: an autocomplete widget searches every
+    # ConditionStage through ConditionStageAdmin and ignores the queryset below.
+    autocomplete_fields = ["condition"]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         # The anima-0 stage picker offers Soulfray stages only (#4740); clean() also

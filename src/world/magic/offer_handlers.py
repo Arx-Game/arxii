@@ -121,13 +121,27 @@ class SurgeOfferHandler:
         return PendingAudereOffer.objects.filter(character_sheet=sheet).first()
 
     def describe(self, offer) -> str:
-        from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
+        from world.magic.audere import (  # noqa: PLC0415
+            AudereThreshold,
+            control_lowered_line,
+            corruption_advisory_for_character,
+            stages_lowered_by_control,
+        )
 
         advisory = corruption_advisory_for_character(offer.character_sheet.character)
-        parts = [f"Intensity surge (fired: {offer.fired_intensity})"]
+        description = f"Intensity surge (fired: {offer.fired_intensity})"
         if advisory:
-            parts.append(advisory)
-        return ". ".join(parts)
+            description = f"{description}. {advisory}"
+        threshold = AudereThreshold.objects.cached_singleton()
+        if threshold is not None:
+            control_line = control_lowered_line(
+                stages_lowered_by_control(threshold, offer.fired_control)
+            )
+            if control_line:
+                if not description.endswith("."):
+                    description = f"{description}."
+                description = f"{description} {control_line}"
+        return description
 
     def accept(self, offer, caller, args: str) -> str:  # noqa: ARG002
         from world.magic.audere import resolve_audere_offer  # noqa: PLC0415

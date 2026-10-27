@@ -81768,6 +81768,11 @@ components:
           description: The authored Audere offer line, with {intensity} substituted
             (#4101).
           readOnly: true
+        stages_lowered_by_control:
+          type: integer
+          description: Soulfray stages the cast's control took off the requirement
+            (#4740); 0 if none.
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -81786,6 +81791,7 @@ components:
       - offer_title
       - reveal_framing_text
       - soulfray_stage_order
+      - stages_lowered_by_control
     PendingCrossingOffer:
       type: object
       description: Serializer for a pending crossing offer + nested options.

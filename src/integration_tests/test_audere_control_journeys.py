@@ -16,6 +16,10 @@ and Ripping (50); the Audere offer asks for Ripping and a Major intensity (15).
 - Staff see an intensity tier that lowers control on the Required content dashboard,
   and the tier's admin page refuses a negative control modifier.
 
+The cast is typed through telnet, but the round is resolved by calling ``resolve_round``
+directly: no player seam resolves a round (the round ends on a timer or a GM), and the
+offence roll is pinned there so the cast lands.
+
 Expected values are the rows built here, not anything the code computes.
 """
 
@@ -66,6 +70,11 @@ FRAYING_SEVERITY = 1
 TEARING_SEVERITY = 10
 RIPPING_SEVERITY = 50
 SPARK_CONTROL = 30
+SPARK_INTENSITY = 20
+SURGE_PROMPT = f"[surge] Intensity surge (fired: {SPARK_INTENSITY})"
+ONE_STAGE_EARLIER = "Your control lets you break through one Soulfray stage earlier than usual."
+TWO_STAGES_EARLIER = "Your control lets you break through 2 Soulfray stages earlier than usual."
+CONTROL_LINE_START = "Your control lets you break through"
 
 
 def _clean_cast(*args: object, **kwargs: object) -> MagicMock:
@@ -147,6 +156,10 @@ class _AFightWithAFrayedSoul(JourneyCase):
         resolve_round(self.encounter, offense_check_fn=_clean_cast)
         return told
 
+    def prompts(self) -> str:
+        """What she reads when she asks the game which prompts are waiting for her."""
+        return self.telnet(self.ysmay, "accept")
+
     def offer(self) -> PendingAudereOffer | None:
         return PendingAudereOffer.objects.filter(character_sheet=self.sheet).first()
 
@@ -160,7 +173,9 @@ class _HighControlOpensAudere(_AFightWithAFrayedSoul):
     def setUp(self) -> None:
         super().setUp()
         CharacterAnimaFactory(character=self.sheet, current=100, maximum=100)
-        self.spark = self.knows("Opening Spark", intensity=20, control=SPARK_CONTROL, anima_cost=3)
+        self.spark = self.knows(
+            "Opening Spark", intensity=SPARK_INTENSITY, control=SPARK_CONTROL, anima_cost=3
+        )
 
     def step(self, control: int) -> None:
         self.gate.threshold.control_per_stage_earlier = control
@@ -174,10 +189,8 @@ class HighControlOpensAudereAStageEarlier(_HighControlOpensAudere):
 
         self.cast_in_the_round(self.spark)
 
-        offer = self.offer()
-        self.assertIsNotNone(offer)
-        self.assertEqual(offer.soulfray_stage_order, self.tearing.stage_order)
-        self.assertEqual(offer.fired_control, SPARK_CONTROL)
+        self.assertIn(f"{SURGE_PROMPT}. {ONE_STAGE_EARLIER}", self.prompts())
+        self.assertEqual(self.offer().soulfray_stage_order, self.tearing.stage_order)
 
         told = self.telnet(self.ysmay, "accept surge")
 
@@ -195,6 +208,7 @@ class HighControlOpensAudereAStageEarlier(_HighControlOpensAudere):
 
         self.cast_in_the_round(self.spark)
 
+        self.assertNotIn("[surge]", self.prompts())
         self.assertIsNone(self.offer())
 
     def test_a_step_of_zero_changes_nothing(self) -> None:
@@ -203,6 +217,7 @@ class HighControlOpensAudereAStageEarlier(_HighControlOpensAudere):
 
         self.cast_in_the_round(self.spark)
 
+        self.assertNotIn("[surge]", self.prompts())
         self.assertIsNone(self.offer())
 
     def test_at_ripping_the_offer_opens_whatever_the_step(self) -> None:
@@ -211,7 +226,37 @@ class HighControlOpensAudereAStageEarlier(_HighControlOpensAudere):
 
         self.cast_in_the_round(self.spark)
 
+        told = self.prompts()
+        self.assertIn(SURGE_PROMPT, told)
+        self.assertNotIn(CONTROL_LINE_START, told)
         self.assertEqual(self.offer().soulfray_stage_order, self.ripping.stage_order)
+
+
+class ControlStepsBackAlongTheLadderNotTheNumbers(_HighControlOpensAudere):
+    """Staff number the ladder 10, 20, 30. One step of control is one stage, Tearing,
+    not stage order 29."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        for stage, order in ((self.ripping, 30), (self.tearing, 20), (self.fraying, 10)):
+            stage.stage_order = order
+            stage.save(update_fields=["stage_order"])
+        self.step(25)
+
+    def test_one_step_opens_the_offer_at_tearing(self) -> None:
+        self.frayed_at(self.tearing, TEARING_SEVERITY)
+
+        self.cast_in_the_round(self.spark)
+
+        self.assertIn(f"{SURGE_PROMPT}. {ONE_STAGE_EARLIER}", self.prompts())
+        self.assertEqual(self.offer().soulfray_stage_order, 20)
+
+    def test_fraying_is_still_short(self) -> None:
+        self.frayed_at(self.fraying, FRAYING_SEVERITY)
+
+        self.cast_in_the_round(self.spark)
+
+        self.assertNotIn("[surge]", self.prompts())
 
 
 class ControlNeverAsksBelowTheFirstStage(_HighControlOpensAudere):
@@ -226,16 +271,23 @@ class ControlNeverAsksBelowTheFirstStage(_HighControlOpensAudere):
 
         self.cast_in_the_round(self.spark)
 
+        self.assertIn(f"{SURGE_PROMPT}. {TWO_STAGES_EARLIER}", self.prompts())
         self.assertEqual(self.offer().soulfray_stage_order, self.fraying.stage_order)
 
     def test_with_no_soulfray_at_all_there_is_no_offer(self) -> None:
         self.cast_in_the_round(self.spark)
 
+        self.assertNotIn("[surge]", self.prompts())
         self.assertIsNone(self.offer())
 
 
 class SoulfraysDangerStageNeedsAnimaAtZero(_AFightWithAFrayedSoul):
-    """Ripping is the anima-0 stage. Ember Lash costs 15 anima a cast."""
+    """Ripping is the anima-0 stage. Ember Lash costs 15 anima a cast.
+
+    The game tells her nothing about her Soulfray stage here: the round sends her no
+    line about it and no telnet command reads it back. So these journeys assert the
+    stage and her anima as stored.
+    """
 
     def setUp(self) -> None:
         super().setUp()
@@ -298,7 +350,7 @@ class StaffSeeAnIntensityTierThatLowersControl(JourneyCase):
         body = page.content.decode()
         self.assertIn("Intensity tiers never lower control", body)
         self.assertIn("Searing: -4", body)
-        self.assertNotIn("Steady: 2", body)
+        self.assertNotIn("Steady", body)
 
     def test_with_no_negative_tier_the_row_is_clear(self) -> None:
         IntensityTierFactory(name="Steady", threshold=40, control_modifier=0)
@@ -306,7 +358,9 @@ class StaffSeeAnIntensityTierThatLowersControl(JourneyCase):
         page = self.client.get(reverse("admin_ops_required_content"))
 
         self.assertEqual(page.status_code, 200)
-        self.assertNotIn("Steady: 0", page.content.decode())
+        body = page.content.decode()
+        self.assertIn("Intensity tiers never lower control", body)
+        self.assertNotIn("Steady", body)
 
 
 class TheTierAdminRefusesANegativeControlModifier(RefusedAdminSaveCase):

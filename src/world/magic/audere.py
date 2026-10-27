@@ -226,26 +226,65 @@ def _check_intensity_gate(runtime_intensity: int, minimum_tier_threshold: int) -
     return runtime_intensity >= minimum_tier_threshold
 
 
-def required_stage_order(threshold: AudereThreshold, runtime_control: int) -> int:
-    """The Soulfray ``stage_order`` this cast's Audere offer needs (#4740, decision 6).
+def _control_lowered_stage(threshold: AudereThreshold, runtime_control: int) -> tuple[int, int]:
+    """The Soulfray ``stage_order`` this cast's Audere offer needs, and how many stages
+    control lowered it (#4740, decision 6).
 
-    Each full ``control_per_stage_earlier`` of runtime control lowers the threshold's
-    ``minimum_warp_stage`` by one stage, never below the first Soulfray stage. A step
-    of 0 turns this off, and negative control lowers nothing. The first stage's order
-    is read only when control actually lowers the requirement (one query).
+    Each full ``control_per_stage_earlier`` of runtime control steps the threshold's
+    ``minimum_warp_stage`` back one stage on the actual Soulfray ladder (stage orders
+    need not be contiguous), never below the first stage. A step of 0 turns this off,
+    and negative control lowers nothing. The ladder is read only when control actually
+    lowers the requirement (one query).
     """
     from world.magic.services.soulfray import soulfray_stages
 
     authored = threshold.minimum_warp_stage.stage_order
     step = threshold.control_per_stage_earlier
     if not step or runtime_control <= 0:
-        return authored
+        return authored, 0
     steps_earlier = runtime_control // step
     if not steps_earlier:
-        return authored
-    first_order = soulfray_stages().values_list("stage_order", flat=True).first()
-    floor = authored if first_order is None else first_order
-    return max(floor, authored - steps_earlier)
+        return authored, 0
+    orders = list(
+        soulfray_stages().filter(stage_order__lte=authored).values_list("stage_order", flat=True)
+    )
+    if not orders:
+        return authored, 0
+    authored_index = len(orders) - 1
+    index = max(0, authored_index - steps_earlier)
+    return orders[index], authored_index - index
+
+
+def required_stage_order(threshold: AudereThreshold, runtime_control: int) -> int:
+    """The Soulfray ``stage_order`` this cast's Audere offer needs (#4740, decision 6).
+
+    See ``_control_lowered_stage``: control steps the authored stage back along the
+    Soulfray ladder, one stage per full ``control_per_stage_earlier``, never below the
+    first stage.
+    """
+    return _control_lowered_stage(threshold, runtime_control)[0]
+
+
+def stages_lowered_by_control(threshold: AudereThreshold, runtime_control: int) -> int:
+    """How many Soulfray stages ``runtime_control`` took off the offer's requirement.
+
+    0 when control lowered nothing. The offer surfaces tell the player about it.
+    """
+    return _control_lowered_stage(threshold, runtime_control)[1]
+
+
+def control_lowered_line(stages_lowered: int) -> str:
+    """The line that tells the player control lowered the stage; '' when it did not.
+
+    The web dialog renders the same sentence from ``stages_lowered_by_control``.
+    """
+    if stages_lowered <= 0:
+        return ""
+    if stages_lowered == 1:
+        amount = "one Soulfray stage"
+    else:
+        amount = f"{stages_lowered} Soulfray stages"
+    return f"Your control lets you break through {amount} earlier than usual."
 
 
 def _evaluate_audere_gates(

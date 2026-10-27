@@ -197,7 +197,11 @@ class RuntimeStatsEngagementTests(TestCase):
 
 
 class RuntimeStatsIntensityTierTests(TestCase):
-    """IntensityTier.control_modifier integration."""
+    """IntensityTier.control_modifier integration.
+
+    U-keep: pure tier arithmetic. No player seam shows the computed control alone, so a
+    journey cannot reach these sums.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
