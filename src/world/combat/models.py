@@ -4255,6 +4255,15 @@ class DramaticSurgeRecord(SharedMemoryModel):
             "SET_NULL: the record is history, so it outlives the template."
         ),
     )
+    cause = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "The line the surged player, GMs and staff read for this surge (#4737), written "
+            "when the surge happened (who taunted or rallied, or the wound). Written by the "
+            "surge service; never shown to other viewers, who get the generic line."
+        ),
+    )
     repeat_round = models.PositiveIntegerField(
         null=True,
         blank=True,
