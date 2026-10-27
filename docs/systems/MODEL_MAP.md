@@ -3055,6 +3055,12 @@
   - other_condition -> conditions.ConditionTemplate [FK]
   - result_condition -> conditions.ConditionTemplate [FK] (nullable)
 
+### ConditionDamageDealtModifier
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK] (nullable)
+  - stage -> conditions.ConditionStage [FK] (nullable)
+  - damage_type -> conditions.DamageType [FK]
+
 ### ConditionDamageInteraction
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -3120,6 +3126,7 @@
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
+  - conditiondamagedealtmodifier_set <- conditions.ConditionDamageDealtModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditioninstance_set <- conditions.ConditionInstance
   - auderethreshold_set <- magic.AudereThreshold
@@ -3159,6 +3166,7 @@
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
+  - conditiondamagedealtmodifier_set <- conditions.ConditionDamageDealtModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - damage_interactions <- conditions.ConditionDamageInteraction
   - applied_by_damage_interaction <- conditions.ConditionDamageInteraction
@@ -3208,6 +3216,7 @@
   - rampart_resistances <- areas.RampartElementResistance
   - consequence_effects <- checks.ConsequenceEffect
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
+  - conditiondamagedealtmodifier_set <- conditions.ConditionDamageDealtModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
   - modifier_target <- mechanics.ModifierTarget
@@ -3312,8 +3321,8 @@
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool - Check if target has a specific condition.`
 - `has_death_deferred(character: 'ObjectDB') -> bool - Return True if the character has any active condition granting death_deferred.`
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
+- `is_intangible(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
 - `is_magical_treatment(treatment: world.conditions.models.TreatmentTemplate, *, technique_driven: bool = False) -> bool - Whether ``treatment`` is magical; otherwise it is mundane first aid (#4450, #4600).`
-- `is_untargetable(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
 - `knockout_preventing_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).`
 - `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
 - `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
@@ -3334,9 +3343,11 @@
 - `remove_condition_by_name(*, payload: object, condition_name: str) -> bool - Remove a named condition from the character carried by the payload.`
 - `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] - Remove all conditions in a category from a target.`
 - `resolve_damage_type_resistance(character: 'ObjectDB', damage_amount: int, damage_type: 'DamageType | None', *, resistance_shift: int = 0) -> int - Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).`
+- `resolved_damage_type(damage_type: 'DamageType | None') -> 'DamageType | None' - The damage type a hit really is: untyped damage is Physical (#4742).`
 - `retaliating_instances(target: 'ObjectDB') -> list[world.conditions.models.ConditionInstance] - The bearer's active strike-back instances, oldest first, in one query (#4584).`
 - `round_half_up(value: 'Decimal') -> 'int' - ``value`` to a whole number, halves away from zero (so -1.5 is -2, signed alike).`
 - `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
+- `scaled_damage_dealt_percent(modifier: 'ConditionDamageDealtModifier', instance: world.conditions.models.ConditionInstance) -> int - One ConditionDamageDealtModifier's percent on one active instance (#4742).`
 - `scaled_resistance_value(modifier: world.conditions.models.ConditionResistanceModifier, instance: world.conditions.models.ConditionInstance) -> int - One ConditionResistanceModifier's contribution on one active instance (#4728).`
 - `settle_round_effects(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionInstance] - Convert round-counted conditions on the targets into wall-clock expiries (#4120).`
 - `settled_effects_tick() -> world.conditions.types.SettledTickSummary - Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).`
@@ -11197,6 +11208,7 @@
   - knockout_pool -> actions.ConsequencePool [FK] (nullable)
   - default_wound_pool -> actions.ConsequencePool [FK] (nullable)
   - default_death_pool -> actions.ConsequencePool [FK] (nullable)
+  - physical_damage_type -> conditions.DamageType [FK] (nullable)
 
 ### WoundDetails
 **Foreign Keys:**

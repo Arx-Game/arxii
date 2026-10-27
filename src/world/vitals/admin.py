@@ -25,7 +25,8 @@ class VitalsConsequenceConfigAdmin(admin.ModelAdmin):
     knockout_pool fires when a character is knocked out (damage-type-agnostic).
     default_wound_pool / default_death_pool are the fallbacks used when a
     DamageType doesn't specify its own wound_pool / death_pool. Leaving a slot
-    null makes that branch skip silently.
+    null makes that branch skip silently. physical_damage_type names the type
+    untyped damage is (#4742).
     """
 
     list_display = [
@@ -35,7 +36,12 @@ class VitalsConsequenceConfigAdmin(admin.ModelAdmin):
         "default_death_pool",
         "updated_at",
     ]
-    autocomplete_fields = ["knockout_pool", "default_wound_pool", "default_death_pool"]
+    autocomplete_fields = [
+        "knockout_pool",
+        "default_wound_pool",
+        "default_death_pool",
+        "physical_damage_type",
+    ]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second config — there can be only one."""

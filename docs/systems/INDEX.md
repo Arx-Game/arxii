@@ -1157,12 +1157,13 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 
 - **Models:** `ConditionCategory` (`alters_behavior` bool — marks behavior-altering categories
   such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent;
-  `grants_intangibility` bool — marks intangibility categories; `is_untargetable` queries this),
+  `grants_intangibility` bool — marks incorporeal categories; `is_intangible` queries this for held ground only, #4742),
   `ConditionTemplate` (`upkeep_anima_per_round` int — anima drained per round for reactive
   conditions; `reactive_anima_cost` int — anima paid per reactive-defense fire; ADR-0060),
   `ConditionStage`, `ConditionInstance` (`absorb_remaining` int nullable — Aegis Field
   absorption buffer seeded by `init_absorb_buffer`), `ConditionCapabilityEffect`,
-  `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`,
+  `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageDealtModifier`
+  (the bearer's outgoing damage of one type, as a percent, #4742), `ConditionDamageOverTime`,
   `ConditionDamageInteraction`, `ConditionConditionInteraction`, `TreatmentTemplate`
   (`mend_on_crit`/`mend_on_success`/`mend_on_partial` PositiveSmallInt, default 0 — HP mend
   amounts routed through `world.vitals.services.mend_wound()`, #2644; `once_per_wound_per_helper`
@@ -8451,10 +8452,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `ParticipantSerializer._combat_engagement`, #3573) for the character's live COMBAT
     `CharacterEngagement`, falling back to lethal when None. See ADR-0255 (amends
     ADR-0118).
-  - `is_untargetable(target: ObjectDB) -> bool` (`world/conditions/services.py`) — returns
-    True when the target has an active `ConditionInstance` whose
-    `ConditionCategory.grants_intangibility` is True; used by NPC targeting + PC AoE
-    filter sites to honour the intangibility gate.
+  - `is_intangible(target: ObjectDB) -> bool` (`world/conditions/services.py`, was
+    `is_untargetable`) — returns True when the target has an active `ConditionInstance`
+    whose `ConditionCategory.grants_intangibility` is True. Read by held ground
+    (`encounter_holds`): an incorporeal PC blocks nobody. Since #4742 it no longer gates
+    NPC or area targeting; incorporeal protection is severity-scaled Physical resistance.
 - **Cast-position targeting (#2206):** runtime destination selection for the
   position-consuming effect-palette techniques (Barricade/obstacle, Phase Jump/teleport,
   Force Grip/telekinesis — previously placeholder `destination_position_id=0` at seed
@@ -8507,7 +8509,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   start of each round by `begin_round_of_combat`; `drain_reactive_upkeep` subscribes to it.
 - **Condition fields added for effect palette (#1584):**
   - `ConditionCategory.grants_intangibility` (bool) — marks intangibility categories
-    (Ghostform, Earthmeld); the `is_untargetable` gate reads this.
+    (Ghostform, Earthmeld); `is_intangible` reads this for held ground (#4742).
   - `ConditionTemplate.upkeep_anima_per_round` (int) — anima drained per round from the
     bearer when they hold this reactive condition (0 = no upkeep).
   - `ConditionTemplate.reactive_anima_cost` (int) — anima paid per reactive-defense fire;
@@ -9228,7 +9230,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
   conditions (`bulk_apply_conditions` — now installs reactive side-effects;
-  `is_untargetable` for intangibility gate; `ConditionCategory.grants_intangibility`),
+  `is_intangible` for held ground; `ConditionCategory.grants_intangibility`),
   mechanics (`dispatch_capability_reaction`, `resolve_challenge`),
   flows (`DAMAGE_PRE_APPLY` event; `COMBAT_ROUND_STARTING` event; `MODIFY_PAYLOAD` flow
   action for DEFEND; reactive-defense handlers in `world/magic/services/effect_handlers.py`),

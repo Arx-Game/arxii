@@ -29,6 +29,7 @@ from django.db.models import Prefetch
 from django.utils.functional import cached_property
 
 from world.conditions.models import (
+    ConditionDamageDealtModifier,
     ConditionInstance,
     ConditionResistanceModifier,
 )
@@ -182,6 +183,16 @@ class CharacterConditionHandler(ConditionHandler):
                     queryset=ConditionResistanceModifier.objects.select_related("damage_type"),
                     to_attr="stage_resistance_modifiers_cached",
                 ),
+                Prefetch(
+                    "condition__conditiondamagedealtmodifier_set",
+                    queryset=ConditionDamageDealtModifier.objects.all(),
+                    to_attr="cached_damage_dealt_modifiers",
+                ),
+                Prefetch(
+                    "current_stage__conditiondamagedealtmodifier_set",
+                    queryset=ConditionDamageDealtModifier.objects.all(),
+                    to_attr="cached_damage_dealt_modifiers",
+                ),
             )
         )
 
@@ -197,6 +208,29 @@ class CharacterConditionHandler(ConditionHandler):
         return sum(
             _instance_resistance_modifier(instance, damage_type) for instance in self._active
         )
+
+    def damage_dealt_percent(self, damage_type: DamageType | None) -> int:
+        """Summed percent change to this character's outgoing damage of *damage_type*.
+
+        Sums ConditionDamageDealtModifier rows (template + current stage) across active
+        instances whose type matches (#4742). Rows are always type-specific, so a type
+        with no row returns 0. Query-free past the first access, like resistance.
+        """
+        if damage_type is None:
+            return 0
+        from world.conditions.services import scaled_damage_dealt_percent  # noqa: PLC0415
+
+        total = 0
+        for instance in self._active:
+            rows = list(instance.condition.cached_damage_dealt_modifiers)
+            if instance.current_stage_id:
+                rows += instance.current_stage.cached_damage_dealt_modifiers
+            total += sum(
+                scaled_damage_dealt_percent(row, instance)
+                for row in rows
+                if row.damage_type_id == damage_type.pk
+            )
+        return total
 
 
 class ConditionTemplateReactiveHandler:

@@ -60,7 +60,10 @@ from world.conditions.constants import (
     BLINK_CONDITION_NAME,
     FORCE_FIELD_CONDITION_NAME,
     INCORPOREAL_CONDITION_NAME,
+    INCORPOREAL_PHYSICAL_DAMAGE_DEALT_PERCENT,
+    INCORPOREAL_PHYSICAL_RESISTANCE_PER_SEVERITY,
     OBSTACLE_CONDITION_NAME,
+    PHYSICAL_DAMAGE_TYPE_NAME,
     REFLECT_CONDITION_NAME,
     SINK_CONDITION_NAME,
     SUMMONING_CONDITION_NAME,
@@ -919,8 +922,10 @@ def _seed_intangibility_condition(
     """Get-or-create a ``ConditionTemplate`` whose category has ``grants_intangibility=True``.
 
     Used by Ghostform (incorporeal) and Earthmeld (sink into earth).  These conditions
-    carry no reactive triggers — the Task 8 targeting gate reads ``grants_intangibility``
-    to make the bearer untargetable while the condition is active.
+    carry no reactive triggers.  ``grants_intangibility`` makes the bearer hold no
+    ground; the bearer stays targetable and is protected instead by a severity-scaled
+    Physical resistance row, with a Physical damage-dealt penalty on its own strikes
+    (#4742).  Both numbers are seed values for staff to retune.
     """
     from world.conditions.models import ConditionCategory  # noqa: PLC0415
 
@@ -928,8 +933,8 @@ def _seed_intangibility_condition(
         name="Incorporeal",
         defaults={
             "description": (
-                "Conditions that render the bearer untargetable by phasing them out of "
-                "the physical plane (incorporeal flight, earthbound sink, etc.)."
+                "Conditions that phase the bearer out of the physical plane (incorporeal "
+                "flight, earthbound sink, etc.): physical harm mostly passes through."
             ),
             "is_negative": False,
             "display_order": 30,
@@ -949,7 +954,38 @@ def _seed_intangibility_condition(
             "can_be_dispelled": True,
         },
     )
+    _seed_incorporeal_mitigation(template)
     return template
+
+
+def _seed_incorporeal_mitigation(template: ConditionTemplate) -> None:
+    """Physical resistance (per severity) and a Physical damage-dealt penalty (#4742).
+
+    Skipped when no Physical ``DamageType`` is authored (content-repo row).
+    """
+    from world.conditions.models import (  # noqa: PLC0415
+        ConditionDamageDealtModifier,
+        ConditionResistanceModifier,
+        DamageType,
+    )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    physical = authored_or_sample(DamageType, {}, name=PHYSICAL_DAMAGE_TYPE_NAME)
+    if physical is None:
+        return
+    ConditionResistanceModifier.objects.get_or_create(
+        condition=template,
+        damage_type=physical,
+        defaults={
+            "modifier_value": INCORPOREAL_PHYSICAL_RESISTANCE_PER_SEVERITY,
+            "scales_with_severity": True,
+        },
+    )
+    ConditionDamageDealtModifier.objects.get_or_create(
+        condition=template,
+        damage_type=physical,
+        defaults={"modifier_percent": INCORPOREAL_PHYSICAL_DAMAGE_DEALT_PERCENT},
+    )
 
 
 def ensure_teleport_content() -> None:

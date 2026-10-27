@@ -468,13 +468,16 @@ class CombatTechniqueResolver:
         ``sl``; otherwise folds the equipped weapon's contribution, a CHARGE
         maneuver's flat CHARGE_DAMAGE_BONUS (#1843, doubled for a LANCE), and
         the target's Property-driven damage bonus (#1793) into the formula
-        budget, then applies the success-level multiplier. Budget is floored
-        at 0 after the (possibly negative) property bonus is applied.
+        budget, then applies the success-level multiplier and the attacker's
+        condition damage-dealt percent for the profile's type (#4742). Budget
+        is floored at 0 after the (possibly negative) property bonus, and the
+        result at 0 after the (possibly negative) percent.
 
         ``budget_bonus`` is a flat amount added to the budget right after the
         weapon augment, before the CHARGE and property bonuses and the floor: a
         vow added effect's thread-level ``damage_bonus`` (#4581). Default 0.
         """
+        from world.conditions.services import resolved_damage_type  # noqa: PLC0415
         from world.mechanics.services import property_damage_bonus  # noqa: PLC0415
 
         if sl < profile.minimum_success_level:
@@ -495,8 +498,15 @@ class CombatTechniqueResolver:
             if _equipped_weapon_archetype(character) == GearArchetype.LANCE:
                 charge_damage_bonus *= 2
             budget += charge_damage_bonus
+        # Untyped damage is Physical (#4742), for the bonus below and the attacker's
+        # own damage-dealt rows (a smoke form's Physical -75 leaves Fire untouched).
+        profile_damage_type = resolved_damage_type(profile_damage_type)
         budget = max(0, budget + property_damage_bonus(target.objectdb, profile_damage_type))
-        return int(budget * multiplier), profile_damage_type
+        dealt_percent = self.participant.character_sheet.character.conditions.damage_dealt_percent(
+            profile_damage_type
+        )
+        scaled = int(budget * multiplier * (100 + dealt_percent) / 100)
+        return max(0, scaled), profile_damage_type
 
     def _apply_conditions(
         self,

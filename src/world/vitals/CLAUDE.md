@@ -20,7 +20,8 @@ combat, poison, spells, exhaustion, and any other damage source.
   puppet lock — see "Death off-ramp" below).
 - **`VitalsConsequenceConfig`** (singleton pk=1): tunable difficulty scaling (`knockout_base_difficulty`,
   `death_base_difficulty`, `wound_base_difficulty` + per-percent scalars) and the global
-  `knockout_pool`, `default_wound_pool`, `default_death_pool`. #2287 adds the wake-arc knobs
+  `knockout_pool`, `default_wound_pool`, `default_death_pool`, and `physical_damage_type` (the
+  type untyped damage is, read by `conditions.services.resolved_damage_type`, #4742). #2287 adds the wake-arc knobs
   (`wake_base_difficulty`, `wake_scaling_per_percent`, `wake_ease_per_round`,
   `wake_guaranteed_rounds`), `auto_retire_days`, and the admin-editable `death_condolence_body`
   (PLACEHOLDER text seeded; final wording is ApostateCD's).

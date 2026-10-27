@@ -215,6 +215,10 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
 
     character = participant.character_sheet.character
     room = character.location
+    from world.conditions.services import resolved_damage_type  # noqa: PLC0415
+
+    # Untyped damage is Physical (#4742): resolve once so every read below agrees.
+    damage_type = resolved_damage_type(damage_type)
 
     if not bypass_pre_apply:
         damage = apply_rampart_interception(
@@ -251,14 +255,6 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
             permanent_wound_eligible=False,
         )
 
-    # Deliberate ordering: the on-hit pool (knockback/trap) resolves and may
-    # apply its own damage to vitals.health BEFORE the triggering hit's own
-    # `vitals.health -= effective_damage` below runs. Both writes land on the
-    # same idmapper-cached CharacterVitals instance, so the arithmetic still
-    # composes correctly regardless of order (e.g. 100 - 10 hit - 30 trap = 60).
-    if on_hit_pool is not None:
-        _fire_on_hit_pool(character, source, on_hit_pool)
-
     # Use the (possibly interposed/modified) amount from the payload.
     # Coerce to int: the MODIFY_PAYLOAD multiply op (DEFEND halves amount by
     # multiplying by 0.5) and INTERPOSE's floor-division both can widen an
@@ -279,15 +275,25 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
 
     # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
     # The species drawback's negative ConditionResistanceModifier (vulnerability) and
-    # the species-gift thread's positive RESISTANCE pull-effect net here. None
-    # damage_type is a no-op. Mirrors the three non-combat damage seams that now call
-    # the same function.
+    # the species-gift thread's positive RESISTANCE pull-effect net here. Untyped
+    # damage was resolved to Physical at entry. Mirrors the three non-combat damage
+    # seams that now call the same function.
     # A fully absorbed hit stays absorbed; vulnerability must not recreate damage
     # after the thread survivability baseline has reduced it to zero.
     if effective_damage > 0:
         effective_damage = resolve_damage_type_resistance(
             character, effective_damage, damage_type, resistance_shift=resistance_shift
         )
+
+    # Deliberate ordering: the on-hit pool (knockback/trap) fires only for a hit that
+    # survives thread DR and resistance (#4742), so an incorporeal bearer who absorbs
+    # the blow is not shoved; a hit soaked by armor or cover below still knocks back.
+    # The pool may apply its own damage to vitals.health BEFORE this hit's own
+    # `vitals.health -= effective_damage` runs; both writes land on the same
+    # idmapper-cached CharacterVitals, so the arithmetic composes in either order
+    # (e.g. 100 - 10 hit - 30 trap = 60).
+    if on_hit_pool is not None and effective_damage > 0:
+        _fire_on_hit_pool(character, source, on_hit_pool)
 
     # Equipped-armor soak (issue #508). PCs have no authored soak field; worn
     # armor is their only soak source, and absorbing pieces take durability wear.

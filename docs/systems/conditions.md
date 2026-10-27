@@ -146,6 +146,7 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 | `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `value` (additive integer; negative reduces, positive enhances), `scales_with_severity` (inherited from `ConditionOrStageEffect`; honoured by all three readers as of #2708 — see "Capability magnitude curve" below) |
 | `ConditionCheckModifier` | How a condition modifies checks | `check_type` OR `check_category` (exactly one; category targets all checks in a category, including per-character magic checks — #2697), `modifier_value`, `scales_with_severity` |
 | `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value`, `scales_with_severity` (#4728: multiplies by the instance's `effective_severity`; unset rows are flat, with no stage-multiplier fallback, because stage rows are authored per stage. One rule, `scaled_resistance_value`, read by the damage seam through `CharacterConditionHandler.resistance_modifier` and by `get_resistance_modifier`) |
+| `ConditionDamageDealtModifier` | How a condition changes its bearer's OUTGOING damage of one type (#4742) | `damage_type` (required; a type with no row is unchanged), `modifier_percent` (-75 = a quarter), `scales_with_severity` (same rule as resistance, `scaled_damage_dealt_percent`). Read per damage profile in `CombatTechniqueResolver._profile_damage` through `CharacterConditionHandler.damage_dealt_percent` |
 | `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` (after combat, a settled ROUNDS row ticks these through the non-lethal clamp, see "Settled round effects") |
 
 #### DoT tick timing (`DamageTickTiming`) — #1762
@@ -292,6 +293,31 @@ damage — the clamp bounds only the live application; the unclamped sum still r
 on the returned `DamageInteractionResult`. See `docs/systems/magic.md`'s "The Damage
 Identity" section for the sibling bounded percent lane (the ally-buff side) and
 ADR-0158.
+
+### Incorporeal and untyped damage (#4742, ADR-4742-A) [BUILT & WIRED]
+
+- **Untyped damage is Physical.** `resolved_damage_type(damage_type)` returns the given type, or
+  `VitalsConsequenceConfig.physical_damage_type` when it is empty (set by migration 0311 and the
+  survivability seeder; code never looks Physical up by name). Every damage seam calls it at
+  entry: `apply_damage_to_participant`, `apply_damage_to_opponent`, `apply_resolved_damage`,
+  `process_damage_consequences`, `resolve_damage_type_resistance` and
+  `CombatTechniqueResolver._profile_damage`. So Physical and all-types resistance rows, cover,
+  property bonuses, damage interactions and Physical's consequence pools all meet weapon hits.
+  With no Physical row configured (an empty database) untyped damage stays untyped.
+- **Incorporeal is resistance, never untargetability.** `ConditionCategory.grants_intangibility`
+  (`is_intangible`) is read only by held ground: an incorporeal PC blocks nobody. NPC picks and
+  area casts include her. Her protection is a severity-scaled Physical
+  `ConditionResistanceModifier` on the form's condition, so a hit below it does nothing and an
+  overwhelming hit lands the difference.
+- **Riders need a hit that survives resistance.** In `apply_damage_to_participant` the on-hit
+  pool (knockback) fires only when damage remains after thread damage reduction and resistance;
+  armor soak and cover still allow it. Sent flying already needs `damage_dealt > 0`. Grapples
+  and grips are resisted by degrees through the condition's own resist roll
+  (`_check_application_resist`) plus the form's check modifiers on that roll.
+- **Her own strikes.** `ConditionDamageDealtModifier` rows change the bearer's outgoing damage
+  of one type by a percent, read per profile at the end of `_profile_damage`. A smoke form with
+  Physical -75 and no Fire row hits a quarter as hard with plain steel and at full strength with
+  a Fire profile.
 
 ### Bounded-Percent Lane Pricing (#2643)
 
