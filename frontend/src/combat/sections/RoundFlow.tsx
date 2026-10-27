@@ -110,7 +110,7 @@ function EscalationStrip({ encounter }: { encounter: EncounterDetail }) {
 function SurgeBeats({ encounter }: { encounter: EncounterDetail }) {
   const beats: SurgeBeatTyped[] = encounter.surge_beats ?? [];
   // A beat with neither a narration line nor a roll line has nothing to show.
-  const shown = beats.filter((beat) => beat.narration || beat.roll);
+  const shown = beats.filter((beat) => beat.cause || beat.narration || beat.roll);
   if (shown.length === 0) {
     return null;
   }
@@ -119,15 +119,17 @@ function SurgeBeats({ encounter }: { encounter: EncounterDetail }) {
       {shown.map((beat) => (
         <div
           key={beat.id}
-          className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1"
+          className="rounded-r-md border-l-[3px] border-rose-500 bg-rose-500/10 px-2.5 py-1.5"
           data-testid="surge-beat-line"
         >
-          {beat.narration && (
+          {/* The surged player, GMs and staff read what caused the surge; everyone else
+              reads the generic line. */}
+          {(beat.cause || beat.narration) && (
             <p
-              className="text-xs font-semibold italic text-rose-300"
+              className="text-xs italic text-rose-800 dark:text-rose-300"
               data-testid="surge-beat-narration"
             >
-              {beat.narration}
+              {beat.cause || beat.narration}
             </p>
           )}
           {beat.roll && (

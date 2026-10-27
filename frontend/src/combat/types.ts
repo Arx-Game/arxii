@@ -73,7 +73,8 @@ export type SurgeBeatTyped = components['schemas']['SurgeBeat'];
  * Typed overlay for RoundAction entries from RoundActionSerializer.
  * Extends the opaque blob with the fields we actually consume in the UI.
  * maneuver: null = no special maneuver; "flee" / "cover" / "interpose" (#2207,
- * "Guard" in the UI) / "await_opening" (the waiting strike, #4608) = declared maneuver.
+ * "Guard" in the UI) / "await_opening" (the waiting strike, #4608) / "taunt" and "rally"
+ * (social maneuvers, #4737) = declared maneuver.
  * focused_ally_target: CombatParticipant PK of the covered/guarded ally
  * (cover/interpose only — null on interpose means "guard whoever is hit").
  */
@@ -81,8 +82,10 @@ export interface RoundActionTyped extends RoundAction {
   participant: number;
   participant_name: string;
   is_ready: boolean;
-  maneuver: 'flee' | 'cover' | 'interpose' | 'await_opening' | null;
+  maneuver: 'flee' | 'cover' | 'interpose' | 'await_opening' | 'taunt' | 'rally' | null;
   focused_ally_target: number | null;
+  /** CombatOpponent PK a taunt is aimed at (#4737); null for an ally target. */
+  focused_opponent_target?: number | null;
   /** Technique PK of the declared focused action (the held strike for "await_opening"). */
   focused_action?: number | null;
   /** ComboDefinition PK when this round's action has been upgraded to a combo, else null (#3381). */

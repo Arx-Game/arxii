@@ -326,7 +326,7 @@ describe('SurgeBeats', () => {
           potency: 14,
           control_change: 0,
           condition: null,
-          roll: 'Composure check vs taunt potency 14. Partial. Intensity +5, control 0.',
+          roll: 'Composure check vs taunt potency 14 · Partial · Intensity +5',
         },
       ],
     });
@@ -335,7 +335,7 @@ describe('SurgeBeats', () => {
     render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
 
     expect(screen.getByTestId('surge-beat-roll')).toHaveTextContent(
-      'Composure check vs taunt potency 14. Partial. Intensity +5, control 0.'
+      'Composure check vs taunt potency 14 · Partial · Intensity +5'
     );
   });
 
@@ -351,6 +351,65 @@ describe('SurgeBeats', () => {
     expect(screen.queryByTestId('surge-beat-roll')).not.toBeInTheDocument();
   });
 
+  it('reads the cause line, not the generic narration, when the beat carries one', () => {
+    const encounter = makeEncounter([], [], 1, {
+      surge_beats: [
+        {
+          id: 6,
+          narration: 'Kira surges.',
+          cause: 'Bandit Captain taunts you.',
+          trigger_kind: 'taunt_received',
+          amount: 5,
+          participant: 1,
+          roll: 'Composure check vs taunt potency 14 · Partial · Intensity +5',
+        },
+      ],
+    });
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('surge-beat-narration')).toHaveTextContent(
+      'Bandit Captain taunts you.'
+    );
+    expect(screen.queryByText('Kira surges.')).not.toBeInTheDocument();
+    expect(screen.getByTestId('surge-beat-roll')).toBeInTheDocument();
+  });
+
+  it('shows a bystander the generic line alone', () => {
+    const encounter = makeEncounter([], [], 1, {
+      surge_beats: [{ id: 7, narration: 'Kira surges.' }],
+    });
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('surge-beat-narration')).toHaveTextContent('Kira surges.');
+    expect(screen.queryByTestId('surge-beat-roll')).not.toBeInTheDocument();
+  });
+
+  it('reads cause and caption for a zero-intensity surge with no generic narration', () => {
+    const encounter = makeEncounter([], [], 1, {
+      surge_beats: [
+        {
+          id: 8,
+          narration: '',
+          cause: 'Mira rallies you.',
+          trigger_kind: 'rallied',
+          amount: 0,
+          participant: 1,
+          roll: 'Rally check · Partial · Intensity +0 · control -2',
+        },
+      ],
+    });
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('surge-beat-narration')).toHaveTextContent('Mira rallies you.');
+    expect(screen.getByTestId('surge-beat-roll')).toHaveTextContent('control -2');
+  });
+
   it('shows only the roll line when a beat has no narration', () => {
     const encounter = makeEncounter([], [], 1, {
       surge_beats: [
@@ -364,7 +423,7 @@ describe('SurgeBeats', () => {
           potency: null,
           control_change: -2,
           condition: null,
-          roll: 'Rally check. Partial. Intensity +0, control -2.',
+          roll: 'Rally check · Partial · Intensity +0 · control -2',
         },
       ],
     });
@@ -373,7 +432,7 @@ describe('SurgeBeats', () => {
     render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
 
     expect(screen.getByTestId('surge-beat-roll')).toHaveTextContent(
-      'Rally check. Partial. Intensity +0, control -2.'
+      'Rally check · Partial · Intensity +0 · control -2'
     );
     expect(screen.queryByTestId('surge-beat-narration')).not.toBeInTheDocument();
   });
