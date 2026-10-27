@@ -81,6 +81,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   (`world/forms/services`): a self chosen in the Audere reveal is assumed on the choice's
   commit and reverted from `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
   work in the worn self's affinity. See magic.md.
+- **Audere control step and Soulfray anima-0 stage (#4740):**
+  `AudereThreshold.control_per_stage_earlier` + `required_stage_order(threshold,
+  runtime_control)` (`world/magic/audere.py`) let high control open the Audere offer at an
+  earlier Soulfray stage (never below the first); `check_audere_eligibility` /
+  `maybe_create_audere_offer` take `runtime_control`, stored as
+  `PendingAudereOffer.fired_control`. `SoulfrayConfig.anima_zero_stage` +
+  `anima_zero_ceiling(current_anima)` keep Soulfray below that stage while anima is left
+  (`_handle_soulfray_accumulation`, lower of it and the non-lethal cap).
+  `IntensityTier.control_modifier` is 0 or more; Required content row
+  `intensity-tiers-never-lower-control`. See magic.md.
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
     `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),

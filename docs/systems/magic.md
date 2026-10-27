@@ -75,7 +75,7 @@ and the 5-axis Thread model no longer exist.
 | `EffectType` | Types of magical effects (Attack, Defense, Movement) | `name`, `description`, `base_power`, `base_anima_cost`, `has_power_scaling` |
 | `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. `cast_concealment` (#2710, ADR-0170) is the style's difficulty floor for being noticed while casting — 0 (default) is overt and skips detection entirely; see "Cast observation" below. A Gift may set its own style (`Gift.style`), which wins over the caster's Path style for `cast_concealment` on that gift's techniques (capability gating still reads the caster's Path) (#2905, ADR-0199). | `name`, `description`, `cast_concealment` |
 | `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
-| `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
+| `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier` (0 or more: a tier only adds control, #4740), `description` |
 | `Restriction` | Limitations that grant power bonuses (DESIGN kind) or a price a caster attaches to their own hold of a technique (PRICE kind, #4099, ADR-4099) | `name`, `description`, `power_bonus`, `kind` (`RestrictionKind`: DESIGN/PRICE), `creation_point_cost` (PRICE only, nullable; blank = not offered in creation), `cast_narration` (PRICE only; joins the cast narration) |
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
@@ -2816,6 +2816,17 @@ one, and the checkpoint never warned of it. Both now read `get_effective_consequ
 (`get_soulfray_warning`) or `soulfray_ladder_summary()` (`nonlethal_severity_ceiling`),
 which merge in the inherited rows the same way the draw itself does.
 
+**The anima-0 stage (#4740, #4727 decision 7).** `SoulfrayConfig.anima_zero_stage`
+(nullable FK to a Soulfray `ConditionStage`, PROTECT; `clean()` requires a stage of
+`condition` with a `severity_threshold`, and the admin picker offers Soulfray stages only)
+is the stage the dangerous part of the ladder starts at. While she has anima left after a
+cast's deduction, `_handle_soulfray_accumulation` keeps the cumulative severity at or below
+`anima_zero_ceiling(current) = anima_zero_stage.severity_threshold - 1`, on both the
+first-creation and the advance branch, through the same bound the non-lethal cap uses
+(`_bounded_advance`); when both caps apply, the lower wins. At anima 0, or with the field
+unset, there is no anima cap. `accumulate_soulfray` passes the refreshed `anima.current`;
+a direct caller that passes none gets no anima cap.
+
 **Authoring path.** A Soulfray stage's own fields, its on-entry conditions, its
 resilience-check penalty, its consequence pool (own rows and an optional one-level-deep
 shared parent) and each own row's effects are authored on the **Soulfray Stage Builder**
@@ -2850,6 +2861,25 @@ audience watches. See `world/checks/CLAUDE.md`'s "#924 theater" section and ADR-
 ---
 
 ### Audere & Audere Majora (models/audere.py, audere_majora.py)
+
+**High control opens Audere earlier (#4740, #4727 decision 6).**
+`AudereThreshold.control_per_stage_earlier` (PositiveSmallIntegerField, default 0 = off):
+each full step of runtime control lowers the Soulfray stage the plain Audere offer needs by
+one, never below the first Soulfray stage. `required_stage_order(threshold, runtime_control)`
+(`world/magic/audere.py`) computes it; negative control lowers nothing, and the first
+stage's order is read only when control lowers the requirement. `_evaluate_audere_gates`,
+`check_audere_eligibility(character, runtime_intensity, runtime_control=0)` and
+`maybe_create_audere_offer(character, runtime_intensity, *, runtime_control=0, sheet=None)`
+take the control; the cast hook in `use_technique` passes `stats.control` (the control as
+cast, after any Fury penalty). `PendingAudereOffer.fired_control` stores it so
+`resolve_audere_offer`'s stale re-check asks for the same stage the cast did. Audere Majora's
+own `minimum_warp_stage` gate is unchanged (it requires an active Audere).
+
+**Intensity tiers never lower control (#4740, #4727 decisions 5 and 13).**
+`IntensityTier.control_modifier` has `MinValueValidator(0)` (the admin refuses a negative
+value), the bootstrap seed sets Moderate and Major to 0, and the Required content row
+`intensity-tiers-never-lower-control` lists any tier still below 0 (rows authored before the
+rule are not migrated; staff fix them).
 
 **Audere check level bonus (#4147).** `AudereThreshold.check_level_bonus` and
 `AudereMajoraThreshold.check_level_bonus` (PositiveSmallIntegerField, default 0) are the

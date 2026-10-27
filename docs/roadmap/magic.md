@@ -1068,6 +1068,20 @@ working affinities that follow the worn self's resonance (`working_affinities`),
 in `integration_tests/test_acting_aura_journeys.py` and
 `integration_tests/test_audere_alternate_self_journeys.py`.
 
+## Audere earlier with control; Soulfray's anima-0 stage (#4740, slice 4 of #4727, BUILT 2026-10-27)
+
+High control now lets a character reach the Audere offer at an earlier Soulfray stage, the
+dangerous Soulfray stages need anima at 0, and no intensity tier reads as a control penalty.
+Built: `AudereThreshold.control_per_stage_earlier` (default 0, off) and
+`required_stage_order`, the control passed from the cast hook (`stats.control`, after Fury)
+through `maybe_create_audere_offer` and stored as `PendingAudereOffer.fired_control` for the
+accept re-check; `SoulfrayConfig.anima_zero_stage` and its cap in
+`_handle_soulfray_accumulation` (lower of it and the non-lethal cap); `IntensityTier
+.control_modifier` refusing negatives, the seed's Moderate and Major at 0, and the Required
+content row "Intensity tiers never lower control". Audere Majora is unchanged. Staff still
+set the step and the anima-0 stage; both default off. Journeys in
+`integration_tests/test_audere_control_journeys.py`.
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)

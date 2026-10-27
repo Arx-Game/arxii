@@ -6390,6 +6390,7 @@
 **Foreign Keys:**
   - resilience_check_type -> checks.CheckType [FK]
   - condition -> conditions.ConditionTemplate [FK] (nullable)
+  - anima_zero_stage -> conditions.ConditionStage [FK] (nullable)
 
 ### StandingCapBand
 
