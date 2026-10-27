@@ -1114,7 +1114,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
         cls.major_tier = IntensityTierFactory(
             name="MajorRT",
             threshold=15,
-            control_modifier=-3,
+            control_modifier=3,
         )
 
     def tearDown(self) -> None:
@@ -1191,7 +1191,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
     # --- Test 5: IntensityTier control modifier ---
 
     def test_intensity_tier_control_modifier(self) -> None:
-        """High runtime intensity triggers tier-based control penalty."""
+        """High runtime intensity adds the tier's control bonus (never a penalty, #4740)."""
         # Create technique with intensity 20 (hits MajorRT tier at threshold 15)
         high_technique = TechniqueFactory(
             name="Inferno Burst",
@@ -1208,9 +1208,9 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
         )
 
         stats = get_runtime_technique_stats(high_technique, self.character)
-        # intensity = 20, control = 12 + tier modifier (-3 from MajorRT) = 9
+        # intensity = 20, control = 12 + tier modifier (+3 from MajorRT) = 15
         assert stats.intensity == 20
-        assert stats.control == 12 + (-3)
+        assert stats.control == 12 + 3
 
     # --- Test 6: Audere eligibility — all gates ---
 
