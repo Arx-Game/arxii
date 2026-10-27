@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 import pytest
 
 from world.character_sheets.factories import (
@@ -283,8 +284,6 @@ class InControlPropertyTests(TestCase):
 
     def test_in_control_true_once_alters_behavior_condition_is_resolved(self):
         """A rally that decays the condition to severity 0 sets resolved_at (#4752)."""
-        from django.utils import timezone
-
         fake_condition = MagicMock()
         fake_condition.condition.category.alters_behavior = True
         fake_condition.resolved_at = timezone.now()
@@ -314,8 +313,6 @@ class InControlRealConditionTests(TestCase):
         self.assertIs(self.sheet.in_control, False)
 
     def test_resolved_altering_condition_returns_control(self):
-        from django.utils import timezone
-
         ConditionInstanceFactory(
             target=self.character, condition=self.template, resolved_at=timezone.now()
         )
