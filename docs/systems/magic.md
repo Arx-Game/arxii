@@ -2891,6 +2891,69 @@ scene-EMIT mechanics live in the shared `broadcast_scene_emit`
 (`world/scenes/interaction_services.py`), which the Audere Majora
 `_broadcast_manifestation` also delegates to — one dispatch shape for both beats.
 
+**Audere alternate self (#4731, slice 2 of #4672).** An alternate self is a bond source in
+the Audere ultimate reveal (#4098's deferred past-life source; see "Ultimates" below). Staff
+attach ultimates to it with `AlternateSelf.ultimate_techniques` (M2M, ultimates only), and
+every alternate self of hers that carries one shows up as a reveal group, worn or not;
+a character may offer several. There is no flag: the player picks. When she chooses one of
+that group's cards, `choose_ultimate` readies the ultimate as for any card and registers
+`assume_alternate_self_for_audere(sheet, alt)` (`world/forms/services/__init__.py`) with
+`transaction.on_commit(..., robust=True)`, so the self comes out only once the choice is
+durable and nothing it does can undo the choice, the readied ultimate or Audere. The callback
+assumes the self through `trigger_transformation(cause="audere")` in its own atomic block,
+marks `ActiveAlternateSelf.assumed_at_audere=True`, and tells her "You assume <name>." (the
+name is `AlternateSelf.shown_name`: display name, else persona name, else "an alternate
+self"). The self she already wears is left as it is and unmarked, since she put it on
+herself. A different worn self is reverted first in its own savepoint; when that revert is
+refused because she is not in control, she is told "You cannot leave <worn> while not in
+control of yourself, so <chosen> does not come out." and keeps the worn self, the ultimate
+still readied. A self that cannot be assumed (a form or persona she does not own:
+`AlternateSelfActiveError` / `FormOwnershipError` / `ActivePersonaError`) logs a warning and
+rolls back the half-built assumption.
+
+`AlternateSelf.revert_kind` says how it ends. `AUTOMATIC`: `revert_audere_alternate_self(sheet)`
+reverts a worn self marked `assumed_at_audere` when Audere ends (`end_audere`), and
+`revert_audere_alternate_selves(sheet_ids)` does the same for every participant at
+`cleanup_completed_encounter` in one query, so the self also drops at the fight's end when
+the Audere condition already ran out on a round duration, and after a self taken on at an
+Audere Majora Crossing. A self she put on herself (`assumed_at_audere` False; every
+assumption and revert resets it) is never reverted by Audere. The revert runs in its own
+savepoint and never raises into encounter cleanup: a revert blocked by `in_control` is
+logged at info and the self stays until she reverts it once in control; the forms refusals
+are logged as warnings. `TALKED_DOWN`: the self also takes `emergence_condition` (a
+behavior-altering `ConditionTemplate`, required by a DB check constraint and `clean()`),
+stays after Audere ends, and `form revert` is refused until the condition is cleared by
+`breakfree`, a rally or a calm-down. If the condition does not land (immunity, stacking), a
+warning is logged, because nothing then stops her reverting at will. `clean()` and the DB
+check reject an emergence condition on an `AUTOMATIC` self (it would block its own revert).
+
+**Acting aura (#4731).** `acting_aura(sheet)` (`world/magic/services/acting_aura.py`)
+returns an `ActingAura` (`percent_for(affinity)`, `dominant_affinity`, `is_alternate_self`):
+100% of the active alternate self's resonance affinity when it has one, else the sheet's
+`CharacterAura`. Readers that follow it (what she acts with):
+
+- the technique cast aura-alignment term (`_aura_alignment`, `services/power_terms.py`);
+- the place-of-power alignment boon on arrival (`refresh_resonance_alignment` via
+  `evaluate_resonance_environment` with no technique);
+- the place reaction during a cast (`use_technique` evaluates
+  `evaluate_resonance_environment` with the technique; `resonance_environment_for_cast`
+  and the power ledger consume that result);
+- defilement, which reads the same `evaluate_resonance_environment` result;
+- the covenant `ATTACKER_AFFINITY` situation (`_attacker_aura`,
+  `world/covenants/perks/evaluators.py`).
+
+Working affinities follow the alternate self too. `working_affinities(sheet, resonances)`
+(same module) returns the worn self's resonance affinity in place of the gift's
+resonances, as variant resolution does (`_effective_variant_resonance`), so her own
+techniques work in the affinity she acts with: a Celestial-gift technique cast in an
+Abyssal self gets the full alignment term. The alignment term and the cast-time resonance
+of place (`_working_affinity_cast_time`, `_working_affinities_for_raw`) read it;
+`gift_resonances_for` itself is unchanged, and the resonance-standing term still reads the
+gift's resonances. Readers that keep the TRUE aura (who she is): the Fall threshold
+(`perform_fall`), the Soul Tether affinity gate, the sheet's aura display and serializer,
+and the `magical_profile` gate in `refresh_resonance_alignment`. An alternate self with no
+resonance changes nothing.
+
 **`RenownAwardConfig`** (`world/societies/renown_config.py` — relocated from
 `world/magic/models/renown_config.py` in #1621 so any app can inherit it without a
 magic import cycle) — abstract base (SharedMemoryModel) shared by
@@ -2978,6 +3041,7 @@ construction rather than by a filter someone could forget.
 | Owned (Path x major Gift) | `PathGiftGrant.ultimate_techniques` (M2M, mirrors `starter_techniques`) | major gifts only |
 | Bond: patron | `WorshippedBeing.ultimate_techniques` (M2M) | devotees of that being |
 | Bond: companion | `CompanionArchetype.ultimate_techniques` (M2M) | that archetype's bonded companions |
+| Bond: alternate self (#4731) | `AlternateSelf.ultimate_techniques` (M2M, `limit_choices_to={"is_ultimate": True}`) | the character who has that alternate self |
 | Gift (#4118) | `Gift.ultimate_techniques` (M2M, `limit_choices_to={"is_ultimate": True}`) | MINOR gifts only; any character holding the gift, Path-agnostic |
 
 A minor gift's ultimates [BUILT & WIRED] are the fourth source (`UltimateSource.GIFT`,
@@ -2994,8 +3058,12 @@ ultimates stay on its Path Gift Grants. No required-content probe flags a minor 
 no ultimate: that is allowed.
 
 Court pacts give enhancements only (decision 8), never ultimates of their own. Past-life
-bond ultimates are deferred (spec scope) - the natural home is the past life's alternate
-self, whose ability suite already grants techniques.
+bond ultimates [BUILT & WIRED] (#4731) live on the past life's alternate self:
+`UltimateSource.ALTERNATE_SELF`, `_alternate_self_pools`, one group per alternate self with
+ultimates (between the companion and gift pools), labelled `bond: <name>` on telnet and by
+`alternate_self_name` on the web. Choosing one of its cards also puts her in that self; see
+"Audere alternate self" above. The pools are the same at an Audere Majora Crossing as at a
+plain Audere, as for patron and companion bonds.
 
 **Every ordinary acquisition surface excludes `is_ultimate=True`.** CG catalog pick
 lists, covenant role auto-grants, the Sphinx's shopping list, the ORGANIZATION thread
@@ -3013,7 +3081,8 @@ the new Path x major Gift, for Audere Majora), owned-known pools (any technique 
 character already knows via `KnownUltimate` whose grant is for a Gift still held as
 MAJOR, regardless of which Path is current - so an owned known ultimate survives a
 Crossing), bond pools (active patron devotion, active companion bond only - a
-released bond's ultimates simply fall out of the pool, no extra check needed), and gift
+released bond's ultimates simply fall out of the pool, no extra check needed - and each of
+her alternate selves with ultimates, #4731), and gift
 pools (held MINOR gifts, #4118).
 Candidates are filtered through #4097's `exclude_unmet_technique_requirements`
 (promoted from the Sphinx's own prerequisite filter, now shared). Each pool is grouped

@@ -1,8 +1,8 @@
 """Untyped damage is Physical (#4742): point the vitals config at the Physical row.
 
-Data-only (the field is added in 0310). Production authors a DamageType named
+Data-only (the field is added in 0312). Production authors a DamageType named
 "Physical"; an empty database has none, and the field stays null there until the
-seeder or staff set it. Reversing is a no-op: reversing 0310 drops the field.
+seeder or staff set it. Reversing is a no-op: reversing 0312 drops the field.
 """
 
 from django.db import migrations
@@ -24,9 +24,7 @@ def set_physical_damage_type(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0310_physical_damage_type_and_damage_dealt_modifier"),
-    ]
+    dependencies = [("arxii", "0312_physical_damage_type_and_damage_dealt_modifier")]
 
     operations = [
         migrations.RunPython(set_physical_damage_type, migrations.RunPython.noop),

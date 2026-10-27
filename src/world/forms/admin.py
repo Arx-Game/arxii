@@ -217,9 +217,10 @@ class AlternateSelfAdmin(admin.ModelAdmin):
         "persona",
         "combat_profile",
         "resonance",
+        "revert_kind",
         "has_thumbnail",
     ]
-    list_filter = ["form__form_type", "resonance__affinity"]
+    list_filter = ["form__form_type", "resonance__affinity", "revert_kind"]
     search_fields = ["character__character__db_key", "display_name"]
     autocomplete_fields = [
         "character",
@@ -228,7 +229,11 @@ class AlternateSelfAdmin(admin.ModelAdmin):
         "combat_profile",
         "techniques",
         "resonance",
+        "emergence_condition",
     ]
+    # Ultimates only (limit_choices_to on the field), the widget WorshippedBeingAdmin and
+    # CompanionArchetypeAdmin use for their ultimate_techniques (#4731).
+    filter_horizontal = ["ultimate_techniques"]
 
     @admin.display(boolean=True, description="Has Thumbnail")
     def has_thumbnail(self, obj):
@@ -237,7 +242,13 @@ class AlternateSelfAdmin(admin.ModelAdmin):
 
 @admin.register(ActiveAlternateSelf)
 class ActiveAlternateSelfAdmin(admin.ModelAdmin):
-    list_display = ["character", "alternate_self", "return_form", "return_persona"]
+    list_display = [
+        "character",
+        "alternate_self",
+        "assumed_at_audere",
+        "return_form",
+        "return_persona",
+    ]
     search_fields = ["character__character__db_key"]
     autocomplete_fields = ["character", "alternate_self", "return_form", "return_persona"]
 

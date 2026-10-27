@@ -20,6 +20,9 @@ character may assume as a single shapeshift/identity shift. Stored in
 `forms.AlternateSelf`; the currently assumed one is tracked per-character in
 `forms.ActiveAlternateSelf`. _Avoid_: alt form, shape.
 
+**Audere alternate self**:
+An `AlternateSelf` the character took on by choosing one of its ultimates in the Audere reveal (`AlternateSelf.ultimate_techniques`); `ActiveAlternateSelf.assumed_at_audere` marks it. A character may have several to choose from. `revert_kind` is `AUTOMATIC` (drops when Audere ends) or `TALKED_DOWN` (stays, holding its `emergence_condition`, until she is talked or broken out of it). _Avoid_: Audere form, rage form.
+
 **Unnatural option** (#3739):
 `FormTrait.unnatural_option` — the umbrella `FormTraitOption` for a colour no species
 carries, the off-species sibling of `composite_option`. Never in a CG palette; reached

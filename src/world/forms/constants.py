@@ -36,3 +36,10 @@ class MarkingSource(models.TextChoices):
     CHARGEN = "chargen", "Character Creation"
     GM_GRANT = "gm_grant", "GM Grant"
     SYSTEM = "system", "System"
+
+
+class AlternateSelfRevertKind(models.TextChoices):
+    """How an Audere-emergent alternate self ends (#4731)."""
+
+    AUTOMATIC = "automatic", "Reverts when Audere ends"
+    TALKED_DOWN = "talked_down", "Must be talked down"

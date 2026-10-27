@@ -8,7 +8,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0309_condition_instance_modifier_vow_step"),
+        ("arxii", "0311_alternateself_audere_constraints"),
     ]
 
     operations = [

@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -6,7 +7,7 @@ from core.managers import GuardedSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
-from world.forms.constants import MarkingKind, MarkingSource
+from world.forms.constants import AlternateSelfRevertKind, MarkingKind, MarkingSource
 from world.items.constants import BodyRegion
 from world.species.models import Species
 
@@ -582,8 +583,20 @@ class AlternateSelf(SharedMemoryModel):
         limit_choices_to={"is_ultimate": False},
         help_text=(
             "Techniques granted on assuming this alternate self. Never an ultimate "
-            "(#4098) — past-life bond ultimates are out of scope; an ultimate is "
-            "reachable only by discovering it at Audere/Audere Majora."
+            "(#4098): an ultimate is reachable only by discovering it at Audere/Audere "
+            "Majora; list this self's ultimates under ultimate techniques instead."
+        ),
+    )
+    ultimate_techniques = models.ManyToManyField(
+        "arxii.Technique",
+        blank=True,
+        related_name="ultimate_for_alternate_selves",
+        limit_choices_to={"is_ultimate": True},
+        help_text=(
+            "#4731: ultimates this alternate self makes available at Audere. Choosing "
+            "one of its cards in the reveal puts the character in this self. An ultimate also "
+            "offered by her Path and Gift, a patron or a companion shows under that source instead "
+            "and does not bring this self out."
         ),
     )
     tuning_value = models.IntegerField(null=True, blank=True)
@@ -612,11 +625,83 @@ class AlternateSelf(SharedMemoryModel):
         ),
     )
 
+    revert_kind = models.CharField(
+        max_length=20,
+        choices=AlternateSelfRevertKind.choices,
+        default=AlternateSelfRevertKind.AUTOMATIC,
+        help_text=(
+            "Whether this self drops away when Audere ends, or persists until "
+            "someone talks the character down."
+        ),
+    )
+    emergence_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="alternate_self_emergences",
+        help_text=(
+            "Behavior-altering condition applied while this self is out. "
+            "Required when the self must be talked down."
+        ),
+    )
+
     class Meta:
         ordering = ["character", "display_name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        revert_kind=AlternateSelfRevertKind.TALKED_DOWN,
+                        emergence_condition__isnull=False,
+                    )
+                    | models.Q(
+                        revert_kind=AlternateSelfRevertKind.AUTOMATIC,
+                        emergence_condition__isnull=True,
+                    )
+                ),
+                name="alternate_self_talked_down_needs_condition",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.display_name or f"{self.character} alt-self"
+
+    @property
+    def shown_name(self) -> str:
+        """The name a player reads for this self: its display name, else its persona's
+        name, else "an alternate self" (#4731). Never ``__str__``, which names the sheet."""
+        if self.display_name:
+            return self.display_name
+        if self.persona is not None:
+            return self.persona.name
+        return "an alternate self"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.revert_kind != AlternateSelfRevertKind.TALKED_DOWN:
+            if self.emergence_condition is not None:
+                raise ValidationError(
+                    {
+                        "emergence_condition": (
+                            "An automatic revert cannot carry a condition; a behavior-altering "
+                            "condition would block the revert."
+                        )
+                    }
+                )
+            return
+        if self.emergence_condition is None:
+            raise ValidationError(
+                {"emergence_condition": "A self that must be talked down needs a condition."}
+            )
+        if not self.emergence_condition.category.alters_behavior:
+            raise ValidationError(
+                {
+                    "emergence_condition": (
+                        "Talking down only means something for a behavior-altering condition."
+                    )
+                }
+            )
 
 
 class ActiveAlternateSelf(SharedMemoryModel):
@@ -650,6 +735,14 @@ class ActiveAlternateSelf(SharedMemoryModel):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="return_for_active",
+    )
+    assumed_at_audere = models.BooleanField(
+        default=False,
+        help_text=(
+            "Set when the character took on this self by choosing its card in the Audere "
+            "ultimate reveal (#4731); Audere's end reverts such a self when it reverts on "
+            "its own. False for a self she put on herself."
+        ),
     )
 
     class Meta:

@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from typeclasses.characters import Character
     from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
     from world.conditions.models import ConditionInstance
-    from world.magic.models.aura import CharacterAura
+    from world.magic.types.aura import ActingAura
 
 SITUATION_EVALUATORS: dict[str, Callable[[SituationContext, SituationParams], bool]] = {}
 
@@ -784,28 +784,28 @@ def ally_intercepted_for_me(ctx: SituationContext, params: SituationParams) -> b
     return any(d.participant.character_sheet_id in mate_sheet_ids for d in guarding)
 
 
-def _attacker_aura(attacker: object) -> CharacterAura | None:
-    """Reachable ``CharacterAura`` for ``attacker`` — ``attacker.objectdb.aura`` for
-    a ``CombatOpponent`` (``objectdb`` nullable), else ``attacker.aura`` for a bare
-    ObjectDB attacker. ``None`` on any missing relation; never raises. Split out of
-    ``attacker_affinity`` to keep that function's return-statement count under the
-    repo's lint threshold.
+def _attacker_aura(attacker: object) -> ActingAura | None:
+    """The aura the attacker acts with: ``attacker.objectdb`` for a ``CombatOpponent``
+    (``objectdb`` nullable), else the attacker itself as a bare ObjectDB. An active
+    alternate self counts. ``None`` on any missing relation; never raises. Split out
+    of ``attacker_affinity`` to keep that function's return-statement count under
+    the repo's lint threshold.
     """
     try:
         objectdb = attacker.objectdb
     except AttributeError:
-        # Not a CombatOpponent (no `.objectdb` indirection) — treat the
-        # attacker itself as the ObjectDB to read `.aura` off directly.
+        # Not a CombatOpponent (no `.objectdb` indirection) - treat the
+        # attacker itself as the ObjectDB.
         objectdb = attacker
     if objectdb is None:
         return None
 
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+    from world.magic.services.acting_aura import acting_aura  # noqa: PLC0415
 
-    try:
-        return objectdb.aura
-    except (ObjectDoesNotExist, AttributeError):
+    sheet = objectdb.character_sheet
+    if sheet is None:
         return None
+    return acting_aura(sheet)
 
 
 @register(Situation.ATTACKER_AFFINITY)
@@ -866,7 +866,7 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
         return authored_id == wanted.pk
 
     aura = _attacker_aura(attacker)
-    if aura is None or not aura.cached_shares:
+    if aura is None or not aura.has_shares:
         return False
     if params.threshold_percent is not None:
         # A missing share reads as 0 and so misses; never raises.
