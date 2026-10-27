@@ -43,6 +43,20 @@ POTENCY_LABELS: dict[str, str] = {
 }
 
 
+def surge_tuning_for(trigger_kind: str) -> SurgeTuning | None:
+    """The ``SurgeTuning`` authored for ``trigger_kind``, or None with a logged warning.
+
+    Always looked up by kind, never by name. Callers that roll before they surge (an NPC
+    taunt) read it first so a missing row skips the roll as well as the surge.
+    """
+    tuning = (
+        SurgeTuning.objects.select_related("check_type").filter(trigger_kind=trigger_kind).first()
+    )
+    if tuning is None:
+        logger.warning("No SurgeTuning is authored for trigger kind %s; no surge.", trigger_kind)
+    return tuning
+
+
 def surge_roll_for_participant(
     participant: CombatParticipant,
     check_type: CheckType,
@@ -132,11 +146,8 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     """
     if encounter.escalation_curve is None:
         return None
-    tuning = (
-        SurgeTuning.objects.select_related("check_type").filter(trigger_kind=trigger_kind).first()
-    )
+    tuning = surge_tuning_for(trigger_kind)
     if tuning is None:
-        logger.warning("No SurgeTuning is authored for trigger kind %s; no surge.", trigger_kind)
         return None
     band = band_for_outcome(tuning, outcome)
     if band is None or outcome is None:

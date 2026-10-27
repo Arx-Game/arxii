@@ -1,0 +1,147 @@
+"""Rally raises the rallied ally's intensity through a rolled surge (#4737)."""
+
+from django.test import TestCase, override_settings
+
+from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import force_check_outcome
+from world.combat.constants import ParticipantStatus, SurgeTriggerKind
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatParticipantFactory,
+    EscalationCurveFactory,
+    SurgeDegreeBandFactory,
+    SurgeTuningFactory,
+)
+from world.combat.models import DramaticSurgeRecord
+from world.combat.services import _resolve_rally, declare_rally
+from world.combat.social_combat_content import (
+    INSPIRED_CONDITION_NAME,
+    ensure_social_combat_content,
+)
+from world.conditions.models import ConditionInstance
+from world.mechanics.constants import EngagementType
+from world.mechanics.engagement import CharacterEngagement
+from world.mechanics.services import begin_engagement
+from world.scenes.constants import RoundStatus
+from world.traits.factories import CheckOutcomeFactory
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # curve factory and social content gate on #2698
+class RallySurgeTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ensure_social_combat_content()
+        cls.curve = EscalationCurveFactory(surge_narration="{character} surges.")
+        cls.encounter = CombatEncounterFactory(
+            escalation_curve=cls.curve, round_number=1, status=RoundStatus.DECLARING
+        )
+        cls.rallier = CombatParticipantFactory(
+            encounter=cls.encounter, status=ParticipantStatus.ACTIVE
+        )
+        cls.ally = CombatParticipantFactory(
+            encounter=cls.encounter, status=ParticipantStatus.ACTIVE
+        )
+        begin_engagement(
+            cls.ally.character_sheet.character, EngagementType.COMBAT, source=cls.encounter
+        )
+        cls.tuning = SurgeTuningFactory(
+            trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(name="Rally Surge")
+        )
+        cls.fail = CheckOutcomeFactory(name="Rally Failure", success_level=-1)
+        cls.partial = CheckOutcomeFactory(name="Rally Partial", success_level=0)
+        cls.success = CheckOutcomeFactory(name="Rally Success", success_level=1)
+        cls.great = CheckOutcomeFactory(name="Rally Great", success_level=2)
+        for outcome, intensity in (
+            (cls.fail, 1),
+            (cls.partial, 2),
+            (cls.success, 5),
+            (cls.great, 8),
+        ):
+            SurgeDegreeBandFactory(tuning=cls.tuning, outcome=outcome, intensity=intensity)
+
+    def _intensity(self) -> int:
+        engagement = CharacterEngagement.objects.get(character=self.ally.character_sheet)
+        return engagement.intensity_modifier
+
+    def _rally(self, outcome) -> None:
+        action = declare_rally(self.rallier, self.ally)
+        with force_check_outcome(outcome):
+            _resolve_rally(self.rallier, action)
+
+    def test_rally_success_surges_ally_by_speaker_degree(self) -> None:
+        self._rally(self.success)
+        record = DramaticSurgeRecord.objects.get()
+        self.assertEqual(record.participant, self.ally)
+        self.assertEqual(record.trigger_kind, SurgeTriggerKind.RALLIED)
+        self.assertEqual(record.subject_sheet, self.rallier.character_sheet)
+        self.assertEqual(record.outcome, self.success)
+        self.assertIsNone(record.potency)
+        self.assertEqual(self._intensity(), 5)
+
+        DramaticSurgeRecord.objects.all().delete()
+        before = self._intensity()
+        self._rally(self.great)
+        self.assertEqual(self._intensity() - before, 8)
+
+    def test_rally_success_still_inspires_the_ally(self) -> None:
+        self._rally(self.success)
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.ally.character_sheet.character,
+                condition__name=INSPIRED_CONDITION_NAME,
+            ).exists()
+        )
+
+    def test_rally_failure_gives_smaller_or_no_surge_never_more(self) -> None:
+        amounts = {}
+        for outcome in (self.fail, self.partial, self.success, self.great):
+            DramaticSurgeRecord.objects.all().delete()
+            before = self._intensity()
+            self._rally(outcome)
+            amounts[outcome.name] = self._intensity() - before
+        self.assertLessEqual(amounts["Rally Failure"], amounts["Rally Success"])
+        self.assertLessEqual(amounts["Rally Failure"], amounts["Rally Great"])
+        self.assertEqual(
+            list(amounts.values()), sorted(amounts.values()), "a better rally never surges less"
+        )
+
+    def test_failed_rally_does_not_inspire(self) -> None:
+        self._rally(self.fail)
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.ally.character_sheet.character,
+                condition__name=INSPIRED_CONDITION_NAME,
+            ).exists()
+        )
+
+    def test_rally_second_round_surges_again(self) -> None:
+        self._rally(self.success)
+        self._rally(self.success)
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 1)
+        self.encounter.round_number = 2
+        self.encounter.save(update_fields=["round_number"])
+        self._rally(self.success)
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 2)
+        self.assertEqual(self._intensity(), 10)
+
+    def test_rally_with_no_tuning_still_inspires_and_does_not_crash(self) -> None:
+        self.tuning.delete()
+        with self.assertLogs("world.combat.surge_rolls", level="WARNING"):
+            self._rally(self.success)
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.ally.character_sheet.character,
+                condition__name=INSPIRED_CONDITION_NAME,
+            ).exists()
+        )
+
+    def test_rally_without_a_curve_gives_no_surge(self) -> None:
+        plain = CombatEncounterFactory(round_number=1, status=RoundStatus.DECLARING)
+        rallier = CombatParticipantFactory(encounter=plain, status=ParticipantStatus.ACTIVE)
+        ally = CombatParticipantFactory(encounter=plain, status=ParticipantStatus.ACTIVE)
+        begin_engagement(ally.character_sheet.character, EngagementType.COMBAT, source=plain)
+        action = declare_rally(rallier, ally)
+        with force_check_outcome(self.success):
+            _resolve_rally(rallier, action)
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)

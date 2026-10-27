@@ -59,6 +59,43 @@ def _npc_action_target_label(
     return ", ".join(names)
 
 
+def _resolve_npc_taunt_on_target(
+    target_participant: CombatParticipant,
+    *,
+    opponent: CombatOpponent,
+    potency: int,
+) -> None:
+    """An NPC taunt entry against one player character: they roll, the NPC does not (#4737).
+
+    The entry only supplies ``potency``. The targeted player character rolls the tuned
+    check (Taunt Received, Composure) against it, and the roll's degree picks the surge
+    band. A quiet no-op with no escalation curve (ADR-0098) or no tuning authored.
+    """
+    from world.combat.constants import SurgeTriggerKind  # noqa: PLC0415
+    from world.combat.surge_rolls import (  # noqa: PLC0415
+        apply_rolled_surge,
+        surge_roll_for_participant,
+        surge_tuning_for,
+    )
+
+    encounter = opponent.encounter
+    if encounter.escalation_curve is None:
+        return
+    tuning = surge_tuning_for(SurgeTriggerKind.TAUNT_RECEIVED)
+    if tuning is None:
+        return
+    result = surge_roll_for_participant(target_participant, tuning.check_type, potency)
+    apply_rolled_surge(
+        encounter=encounter,
+        participant=target_participant,
+        trigger_kind=SurgeTriggerKind.TAUNT_RECEIVED,
+        outcome=result.outcome,
+        potency=potency,
+        subject_sheet=None,
+        source_character=opponent.objectdb,
+    )
+
+
 def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution needs full context
     target_participant: CombatParticipant,
     *,
@@ -90,6 +127,14 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
     # PCs still take damage (incapacitation/dying are conditions, not a gate
     # on damage application). Only the dead are excluded.
     if is_dead(target_participant.character_sheet):
+        return
+
+    # A taunt entry deals no damage and has no defense roll (#4737): the target rolls
+    # against its potency instead.
+    if npc_action.threat_entry.taunt_potency is not None:
+        _resolve_npc_taunt_on_target(
+            target_participant, opponent=opponent, potency=npc_action.threat_entry.taunt_potency
+        )
         return
 
     # Survivability pipeline — knockout, death, wound checks.
@@ -236,6 +281,33 @@ def _resolve_npc_action_on_opponent_target(  # noqa: PLR0913 - needs full resolu
         condition_applications.extend((target_opponent.objectdb, ct) for ct in conditions)
 
 
+def _npc_action_narration(
+    opponent: CombatOpponent,
+    npc_action: CombatOpponentAction,
+    target_label: str | None,
+    outcome: ActionOutcome,
+) -> str:
+    """The one outcome line for an NPC action: a plain taunt line, or the damage line (#4737)."""
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        render_action_outcome_narration,
+        render_taunt_narration,
+    )
+
+    entry = npc_action.threat_entry
+    if entry.taunt_potency is not None:
+        return render_taunt_narration(
+            actor_label=opponent.name, target_label=target_label, hit_text=entry.hit_narration
+        )
+    return render_action_outcome_narration(
+        actor_label=opponent.name,
+        technique_name=entry.name,
+        target_label=target_label,
+        outcome=outcome,
+        hit_text=entry.hit_narration,
+        miss_text=entry.miss_narration,
+    )
+
+
 def _resolve_npc_action(
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
@@ -361,20 +433,12 @@ def _resolve_npc_action(
     # Broadcast a durable, Narrator-authored OUTCOME line for the NPC action.
     from world.combat.interaction_services import (  # noqa: PLC0415
         broadcast_action_outcome,
-        render_action_outcome_narration,
     )
 
     # Same label_targets as npc_action_label above -- reuse rather than
     # re-running persona_names_for_sheets for the identical list.
     npc_target_label = npc_action_label
-    npc_narration = render_action_outcome_narration(
-        actor_label=opponent.name,
-        technique_name=npc_action.threat_entry.name,
-        target_label=npc_target_label,
-        outcome=outcome,
-        hit_text=npc_action.threat_entry.hit_narration,
-        miss_text=npc_action.threat_entry.miss_narration,
-    )
+    npc_narration = _npc_action_narration(opponent, npc_action, npc_target_label, outcome)
     broadcast_action_outcome(
         encounter=opponent.encounter,
         narration=npc_narration,
