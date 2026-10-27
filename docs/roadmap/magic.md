@@ -1047,6 +1047,19 @@ revamp, working from the new dashboard row.
 
 ---
 
+## Acting aura and the Audere alternate self (#4731, slice 2 of #4672, BUILT 2026-10-27)
+
+An alternate self with a resonance now changes the aura a character acts with
+(`acting_aura`), and staff can flag one alternate self per character to emerge when she
+accepts Audere, ending automatically with the fight or holding until talked down. Built:
+the three `AlternateSelf` fields with a unique and a check constraint, `acting_aura` and
+its readers (cast alignment, place of power on arrival and during a cast, defilement,
+covenant attacker affinity), working affinities that follow the worn self's resonance
+(`working_affinities`), the emergence hook run on the accept's commit, the revert hook in
+`end_audere` and in encounter cleanup for every participant (so a duration-expired Audere
+still drops an automatic self), journeys in `integration_tests/test_acting_aura_journeys.py`
+and `integration_tests/test_audere_alternate_self_journeys.py`.
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)

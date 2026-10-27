@@ -107,6 +107,13 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
             condition_name, end_fn, pending_offer_model, participant_targets
         )
 
+    # The Audere self drops away with the fight even when Audere already ran out
+    # mid-fight on a round duration (which removes the condition without end_audere).
+    # A no-op for anyone not wearing a flagged AUTOMATIC self (#4731).
+    from world.forms.services import revert_audere_alternate_selves  # noqa: PLC0415
+
+    revert_audere_alternate_selves([participant.character_sheet_id for participant in participants])
+
     expire_end_of_combat_conditions(participant_targets + opponent_targets)
 
     # Settle round-counted effects into wall-clock expiries (#4120). Rounds only

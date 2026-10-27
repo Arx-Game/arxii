@@ -73,6 +73,13 @@
   crafting; `facetKey` mirrors the rule in TypeScript.
 Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Scars.
 
+- **Acting aura and Audere alternate self (#4731):** `acting_aura(sheet)`
+  (`world/magic/services/acting_aura.py`) is the aura she acts with (alternate self's
+  resonance, else true `CharacterAura`); `AlternateSelf.emerges_at_audere` / `revert_kind` /
+  `emergence_condition` with `emerge_audere_alternate_self` / `revert_audere_alternate_self`
+  (`world/forms/services`): emergence on the Audere accept's commit, revert from
+  `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
+  work in the worn self's affinity. See magic.md.
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
     `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),

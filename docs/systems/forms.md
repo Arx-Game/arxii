@@ -199,6 +199,14 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError whi
 - `FormOwnershipError(user_message=...)` — raised by `switch_form` on a cross-sheet
   `CharacterForm` FK; surfaced as a safe failure by the actions.
 
+- `AlternateSelf.emerges_at_audere` / `revert_kind` / `emergence_condition` (#4731) mark the
+  self a character becomes at Audere. `audere_alternate_self(sheet)` returns the flagged row;
+  `emerge_audere_alternate_self(sheet)` runs on the commit of an Audere accept
+  (`offer_audere` registers it with `transaction.on_commit`), and
+  `revert_audere_alternate_self(sheet)` is called by `end_audere` and, for every
+  participant, by `cleanup_completed_encounter`. See `docs/systems/magic.md` "Audere alternate
+  self".
+
 ### Alternate-self actions
 
 Both verbs are thin REGISTRY actions in `actions/definitions/forms.py` so telnet

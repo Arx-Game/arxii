@@ -2891,6 +2891,60 @@ scene-EMIT mechanics live in the shared `broadcast_scene_emit`
 (`world/scenes/interaction_services.py`), which the Audere Majora
 `_broadcast_manifestation` also delegates to — one dispatch shape for both beats.
 
+**Audere alternate self (#4731, slice 2 of #4672).** Staff may flag one `AlternateSelf` per
+character `emerges_at_audere` (a unique constraint allows at most one). After applying the
+Audere condition, `offer_audere` registers `emerge_audere_alternate_self(sheet)`
+(`world/forms/services/__init__.py`) with `transaction.on_commit(..., robust=True)`.
+`resolve_audere_offer` wraps `offer_audere` in its own atomic block, so the emergence runs
+only once the whole accept has committed: a rolled-back accept never transforms her, and
+nothing the emergence does can undo the surge. The callback assumes the flagged self
+through `trigger_transformation(cause="audere")` in its own atomic block and tells her
+"You assume <display name>."; it skips quietly when a different alternate self is already
+worn, and when the self cannot be assumed (a form or persona the character does not own:
+`AlternateSelfActiveError` / `FormOwnershipError` / `ActivePersonaError`) it logs a warning
+and rolls back the half-built assumption. `AlternateSelf.revert_kind` says how it ends.
+`AUTOMATIC`: `revert_audere_alternate_self(sheet)` reverts it when Audere ends. Both
+`end_audere` and `cleanup_completed_encounter` call it, the latter for every participant,
+so the self also drops at the fight's end when the Audere condition already ran out on a
+round duration without `end_audere`. It is a no-op when the flagged self is not worn. A self
+she already wore before accepting is reverted too, if it is the flagged `AUTOMATIC` one.
+The revert runs in its own savepoint and never raises into encounter cleanup: a revert
+blocked by `in_control` (another behavior-altering condition) is logged at info and the self
+stays until the player reverts it once in control; the forms refusals are logged as
+warnings. `TALKED_DOWN`: the self also takes `emergence_condition` (a behavior-altering
+`ConditionTemplate`, required by a DB check constraint and `clean()`), stays after Audere
+ends, and `form revert` is refused until the condition is cleared by `breakfree`, a rally or
+a calm-down. If the condition does not land (immunity, stacking), a warning is logged,
+because nothing then stops her reverting at will. `clean()` and the DB check reject an
+emergence condition on an `AUTOMATIC` self (it would block its own revert).
+
+**Acting aura (#4731).** `acting_aura(sheet)` (`world/magic/services/acting_aura.py`)
+returns an `ActingAura` (`percent_for(affinity)`, `dominant_affinity`, `is_alternate_self`):
+100% of the active alternate self's resonance affinity when it has one, else the sheet's
+`CharacterAura`. Readers that follow it (what she acts with):
+
+- the technique cast aura-alignment term (`_aura_alignment`, `services/power_terms.py`);
+- the place-of-power alignment boon on arrival (`refresh_resonance_alignment` via
+  `evaluate_resonance_environment` with no technique);
+- the place reaction during a cast (`use_technique` evaluates
+  `evaluate_resonance_environment` with the technique; `resonance_environment_for_cast`
+  and the power ledger consume that result);
+- defilement, which reads the same `evaluate_resonance_environment` result;
+- the covenant `ATTACKER_AFFINITY` situation (`_attacker_aura`,
+  `world/covenants/perks/evaluators.py`).
+
+Working affinities follow the alternate self too. `working_affinities(sheet, resonances)`
+(same module) returns the worn self's resonance affinity in place of the gift's
+resonances, as variant resolution does (`_effective_variant_resonance`), so her own
+techniques work in the affinity she acts with: a Celestial-gift technique cast in an
+Abyssal self gets the full alignment term. The alignment term and the cast-time resonance
+of place (`_working_affinity_cast_time`, `_working_affinities_for_raw`) read it;
+`gift_resonances_for` itself is unchanged, and the resonance-standing term still reads the
+gift's resonances. Readers that keep the TRUE aura (who she is): the Fall threshold
+(`perform_fall`), the Soul Tether affinity gate, the sheet's aura display and serializer,
+and the `magical_profile` gate in `refresh_resonance_alignment`. An alternate self with no
+resonance changes nothing.
+
 **`RenownAwardConfig`** (`world/societies/renown_config.py` — relocated from
 `world/magic/models/renown_config.py` in #1621 so any app can inherit it without a
 magic import cycle) — abstract base (SharedMemoryModel) shared by
