@@ -49,6 +49,7 @@ from world.conditions.services import (
     get_aggro_priority,
     get_treatment_candidates,
     get_turn_order_modifier,
+    scaled_resistance_value,
 )
 from world.conditions.types import CapabilitySummary, EffectLookups
 
@@ -277,9 +278,11 @@ def _aggregate_check_modifiers(lookups: EffectLookups) -> dict[str, int]:
         if not inst:
             continue
         modifier_value = mod.modifier_value
+        # effective_severity already folds in the stage multiplier: if/elif, as in
+        # _check_modifier_for_target, never both.
         if mod.scales_with_severity:
             modifier_value = modifier_value * inst.effective_severity
-        if inst.current_stage:
+        elif inst.current_stage:
             modifier_value = int(modifier_value * inst.current_stage.severity_multiplier)
         check_name = (
             f"{mod.check_category.name} (category)"
@@ -299,9 +302,8 @@ def _aggregate_resistance_modifiers(lookups: EffectLookups) -> dict[str, int]:
         inst = _resolve_instance(mod, lookups)
         if not inst:
             continue
-        modifier_value = mod.modifier_value
-        if inst.current_stage:
-            modifier_value = int(modifier_value * inst.current_stage.severity_multiplier)
+        # The same rule the damage seam reads (#4728).
+        modifier_value = scaled_resistance_value(mod, inst)
         if mod.damage_type:
             dtype_name = mod.damage_type.name
             result[dtype_name] = result.get(dtype_name, 0) + modifier_value
