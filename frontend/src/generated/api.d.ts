@@ -46605,6 +46605,8 @@ export interface components {
       readonly offer_strip_label: string;
       /** @description The authored Audere offer line, with {intensity} substituted (#4101). */
       readonly offer_body_text: string;
+      /** @description Soulfray stages the cast's control took off the requirement (#4740); 0 if none. */
+      readonly stages_lowered_by_control: number;
       /** Format: date-time */
       readonly created_at: string;
     };
