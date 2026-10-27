@@ -569,7 +569,7 @@ class AccentArchetypeAllowance(SharedMemoryModel):
     until curated). Apostate's ratified matrix: function accents (stealthy,
     unassuming, nimble) are garment-only — except unassuming plate, which can
     get lost in a crowd; presence accents span everything worn including
-    jewelry; menace touches weapons (and jewelry — spiked torcs); regal
+    jewelry; menace touches weapons (and jewelry — spiked torcs); majestic
     weapons are ornate. Data rows, never an enum.
     """
 

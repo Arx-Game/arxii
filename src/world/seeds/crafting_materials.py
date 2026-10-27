@@ -94,15 +94,15 @@ def seed_crafting_materials() -> None:
 # The ratified accent vocabulary (#2886, Apostate 2026-08-02): seven axes.
 # (name, adjective, check_type_name or None). Unwired axes stay authored-but-
 # dormant — flagged skill-list holes (crowd-blending, courtly command), never
-# force-fit. Regal stayed dormant until a courtly CheckType existed; #3739 seeded
-# one (Command: presence + Leadership) and bound the axis to it.
+# force-fit. Majesty (once called regal) stayed dormant until a courtly CheckType
+# existed; #3739 seeded one (Command: presence + Leadership) and bound the axis to it.
 _ACCENT_AXES = (
     ("allure", "alluring", None),  # attraction reads wire via npc_services, not a CheckType
     ("menace", "menacing", "Intimidation"),
     # #3739 — bound now that a Command CheckType exists (presence + Leadership,
     # ``world.seeds.governance_checks``); the fill-if-found wiring below attaches it
     # to a target seeded before the check did.
-    ("regal", "regal", "Command"),
+    ("majesty", "majestic", "Command"),
     ("dramatic", "dramatic", "Performance"),
     ("stealthy", "stealthy", "Stealth"),
     ("unassuming", "unassuming", None),
@@ -115,7 +115,7 @@ _ACCENT_EXCLUSIONS = (("dramatic", "unassuming"),)
 # The ratified archetype matrix (Apostate 2026-08-02): function accents are
 # garment-only (except unassuming plate — bland enough to get lost in a
 # crowd); presence accents span everything worn including jewelry; menace
-# touches weapons and jewelry (spiked torcs); regal weapons are ornate.
+# touches weapons and jewelry (spiked torcs); majestic weapons are ornate.
 _GARMENTS = ("clothing", "robe", "light_armor")
 _ALL_ARMOR = ("light_armor", "medium_armor", "heavy_armor")
 _WORN = ("clothing", "robe", "jewelry", *_ALL_ARMOR)
@@ -123,7 +123,7 @@ _WEAPONS = ("melee_one_hand", "melee_two_hand", "ranged", "thrown", "shield", "l
 _ACCENT_ARCHETYPES = {
     "allure": _WORN,
     "menace": (*_WORN, *_WEAPONS),
-    "regal": (*_WORN, *_WEAPONS),
+    "majesty": (*_WORN, *_WEAPONS),
     "dramatic": _WORN,
     "stealthy": _GARMENTS,
     "unassuming": ("clothing", "robe", *_ALL_ARMOR),

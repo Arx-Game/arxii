@@ -216,7 +216,7 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     # per feature (a trait row or a marking) rather than once per character; the
     # ``opens_feature`` row is the one-point "Make it distinctive" pick that opens a
     # feature's description, every option of its trait and the axis rows; a
-    # ``requires_feature_opened`` row (Alluring, Menacing, Regal) may be held on a
+    # ``requires_feature_opened`` row (Alluring, Menacing, Majestic) may be held on a
     # feature only where an ``opens_feature`` row is held. ``cg_max_rank`` caps the
     # rank character creation allows below ``max_rank`` (3 in CG, higher in play).
     taken_per_feature = models.BooleanField(
