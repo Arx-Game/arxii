@@ -1671,6 +1671,34 @@ class TestDriftCorrectionConfigProbe(TestCase):
         result = _probe_for("drift-correction-config").resolve(None)
         self.assertFalse(result.present)
         self.assertEqual(result.missing, ("the rite", "the check type"))
+        self.assertEqual(
+            result.detail,
+            "The drift correction configuration has no rite and no check type.",
+        )
+
+    def test_detail_names_only_the_missing_rite(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.factories import DriftCorrectionConfigFactory
+
+        config = DriftCorrectionConfigFactory()
+        config.check_type = CheckTypeFactory(name="RC Drift Check Rite Gap")
+        config.save()
+        result = _probe_for("drift-correction-config").resolve(None)
+        self.assertEqual(result.missing, ("the rite",))
+        self.assertEqual(result.detail, "The drift correction configuration has no rite.")
+
+    def test_detail_names_only_the_missing_check_type(self) -> None:
+        from world.magic.factories import (
+            DriftCorrectionConfigFactory,
+            DriftCorrectionRiteFactory,
+        )
+
+        config = DriftCorrectionConfigFactory()
+        config.rite = DriftCorrectionRiteFactory()
+        config.save()
+        result = _probe_for("drift-correction-config").resolve(None)
+        self.assertEqual(result.missing, ("the check type",))
+        self.assertEqual(result.detail, "The drift correction configuration has no check type.")
 
     def test_names_the_tier_with_no_share(self) -> None:
         from world.checks.factories import CheckTypeFactory
@@ -1692,6 +1720,8 @@ class TestDriftCorrectionConfigProbe(TestCase):
         self.assertFalse(result.present)
         self.assertIn("RC Uncovered", result.missing)
         self.assertNotIn("RC Covered", result.missing)
+        self.assertIn("No drift correction share for outcome(s): ", result.detail)
+        self.assertIn("RC Uncovered", result.detail)
 
     def test_present_when_authored_and_every_tier_has_a_share(self) -> None:
         from world.checks.factories import CheckTypeFactory

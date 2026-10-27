@@ -1340,16 +1340,18 @@ def _probe_drift_correction_config() -> ProbeResult:
     from world.traits.models import CheckOutcome  # noqa: PLC0415
 
     config = DriftCorrectionConfig.objects.cached_singleton()
-    gaps = []
+    # (the label the panel lists as missing, the bare noun the detail sentence uses)
+    gaps: list[tuple[str, str]] = []
     if config is None or config.rite_id is None:
-        gaps.append("the rite")
+        gaps.append(("the rite", "rite"))
     if config is None or config.check_type_id is None:
-        gaps.append("the check type")
+        gaps.append(("the check type", "check type"))
     if gaps:
+        nouns = " and no ".join(noun for _label, noun in gaps)
         return ProbeResult(
             present=False,
-            missing=tuple(gaps),
-            detail=f"The drift correction configuration has no {' and no '.join(gaps)}.",
+            missing=tuple(label for label, _noun in gaps),
+            detail=f"The drift correction configuration has no {nouns}.",
         )
     missing = tuple(
         CheckOutcome.objects.exclude(
