@@ -1,10 +1,12 @@
 """Rally raises the rallied ally's intensity through a rolled surge (#4737)."""
 
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import ParticipantStatus, SurgeTriggerKind
+from world.combat.constants import RALLY_BASE_DIFFICULTY, ParticipantStatus, SurgeTriggerKind
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatParticipantFactory,
@@ -75,13 +77,33 @@ class RallySurgeTests(TestCase):
         self.assertEqual(record.trigger_kind, SurgeTriggerKind.RALLIED)
         self.assertEqual(record.subject_sheet, self.rallier.character_sheet)
         self.assertEqual(record.outcome, self.success)
-        self.assertIsNone(record.potency)
+        self.assertEqual(record.potency, RALLY_BASE_DIFFICULTY)
         self.assertEqual(self._intensity(), 5)
 
         DramaticSurgeRecord.objects.all().delete()
         before = self._intensity()
         self._rally(self.great)
         self.assertEqual(self._intensity() - before, 8)
+
+    def test_rally_rolls_the_tuned_check_at_the_fixed_difficulty(self) -> None:
+        action = declare_rally(self.rallier, self.ally)
+        with (
+            patch.object(self.ally.character_sheet.character, "msg") as ally_msg,
+            self.captureOnCommitCallbacks(execute=True),
+            force_check_outcome(self.success) as capture,
+        ):
+            _resolve_rally(self.rallier, action)
+        self.assertEqual(capture.check_type, self.tuning.check_type)
+        self.assertEqual(capture.target_difficulty, RALLY_BASE_DIFFICULTY)
+        line = ally_msg.call_args.args[0]
+        self.assertIn(f"Rally Surge check vs rally difficulty {RALLY_BASE_DIFFICULTY}.", line)
+
+    def test_rally_without_a_tuning_still_rolls_the_rally_check_by_name(self) -> None:
+        self.tuning.delete()
+        action = declare_rally(self.rallier, self.ally)
+        with force_check_outcome(self.success) as capture:
+            _resolve_rally(self.rallier, action)
+        self.assertEqual(capture.check_type.name, "Rally")
 
     def test_rally_success_still_inspires_the_ally(self) -> None:
         self._rally(self.success)

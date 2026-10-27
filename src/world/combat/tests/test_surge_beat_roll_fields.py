@@ -175,6 +175,18 @@ class SurgeBeatRollFieldTests(TestCase):
         self.assertEqual(beat["condition"], "Goaded")
         self.assertEqual(beat["roll"], "Rally check. Partial. Intensity +4, control 0. Goaded.")
 
+    def test_a_control_only_surge_beat_has_no_power_surges_narration(self) -> None:
+        tuning = SurgeTuningFactory(
+            trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(name="Rally")
+        )
+        SurgeDegreeBandFactory(tuning=tuning, outcome=self.partial, intensity=0, control_change=-2)
+        self._rallied_surge()
+
+        (other_beat,) = self._beats_seen_by(self.other_account)
+        self.assertEqual(other_beat["narration"], "")
+        (owner_beat,) = self._beats_seen_by(self.owner_account)
+        self.assertEqual(owner_beat["roll"], "Rally check. Partial. Intensity +0, control -2.")
+
     def test_old_kind_surge_beat_unchanged(self) -> None:
         apply_dramatic_surge(
             encounter=self.encounter,

@@ -21,6 +21,7 @@ from django.db import transaction
 from world.combat.constants import SurgeTriggerKind
 from world.combat.escalation import apply_dramatic_surge
 from world.combat.models import DramaticSurgeRecord, SurgeDegreeBand, SurgeTuning
+from world.mechanics.constants import EngagementType
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -42,6 +43,43 @@ POTENCY_LABELS: dict[str, str] = {
     SurgeTriggerKind.RALLIED: "rally difficulty",
     SurgeTriggerKind.ALLY_HURT: "peril difficulty",
 }
+
+
+def rolled_surge_possible(
+    encounter: CombatEncounter,
+    participant: CombatParticipant,
+    trigger_kind: str,
+    subject_sheet: CharacterSheet | None,
+) -> bool:
+    """Whether a rolled surge for this beat could still be written this round (#4737).
+
+    True when the participant has a COMBAT engagement sourced to ``encounter`` and no
+    rolled record exists yet for (encounter, participant, kind, this round, subject): the
+    two things ``apply_dramatic_surge`` checks before it writes. A caller asks this before
+    rolling, so a roll that could only be swallowed never spends a contributing condition
+    or prints a line. It must mirror ``apply_dramatic_surge``'s dedup key, and
+    ``escalation._hurt_ally_rollers`` mirrors it in batch form.
+    """
+    from django.contrib.contenttypes.models import ContentType  # noqa: PLC0415
+
+    from world.combat.models import CombatEncounter as _CombatEncounter  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    engaged = CharacterEngagement.objects.filter(
+        character=participant.character_sheet,
+        engagement_type=EngagementType.COMBAT,
+        source_content_type=ContentType.objects.get_for_model(_CombatEncounter),
+        source_id=encounter.pk,
+    ).exists()
+    if not engaged:
+        return False
+    return not DramaticSurgeRecord.objects.filter(
+        encounter=encounter,
+        participant=participant,
+        trigger_kind=trigger_kind,
+        repeat_round=encounter.round_number,
+        subject_sheet=subject_sheet,
+    ).exists()
 
 
 def surge_tuning_for(trigger_kind: str, *, warn: bool = True) -> SurgeTuning | None:
@@ -134,7 +172,8 @@ def roll_line(  # noqa: PLR0913 - the line is built from each part of the roll
     The surged player's character is sent it live; the round payload rebuilds it from the
     stored record for the same viewers (#4737).
     """
-    against = f" vs {POTENCY_LABELS[trigger_kind]} {potency}" if potency is not None else ""
+    label = POTENCY_LABELS.get(trigger_kind, "difficulty")
+    against = f" vs {label} {potency}" if potency is not None else ""
     control = f"{control_change:+d}" if control_change else "0"
     line = (
         f"{check_type.name} check{against}. {outcome.name}. Intensity +{amount}, control {control}."
@@ -159,20 +198,24 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     """Write one rolled surge from the band the roll's outcome picks (#4737).
 
     A quiet no-op (None) when the encounter has no escalation curve (ADR-0098), when no
-    ``SurgeTuning`` is authored for ``trigger_kind`` (logged), or when no band fits the
-    outcome. Otherwise the surge is written through ``apply_dramatic_surge`` with
-    ``repeat_round`` set to the encounter's round: a later round surges again, the same
-    round and subject surges once. ``intensity_scale`` scales the band's intensity (a
-    hurt ally's depth, say). A band's condition is applied to the participant's character
-    when the surge was written, with ``source_character`` as its source; the roll line and
-    the beat name it only if it actually applied. The surge and the condition are written
-    in one transaction.
+    ``SurgeTuning`` is authored for ``trigger_kind`` (logged), when no band fits the
+    outcome, or when the scaled amount is 0 and the band carries neither a control change
+    nor a condition (nothing to write, so the round's dedup slot stays free). A band that
+    scales to 0 intensity but still changes control or applies a condition is written, with
+    no "power surges" room line. Otherwise the surge is written through
+    ``apply_dramatic_surge`` with ``repeat_round`` set to the encounter's round: a later
+    round surges again, the same round and subject surges once. ``intensity_scale`` scales
+    the band's intensity (a hurt ally's depth, say). A band's condition is applied to the
+    participant's character when the surge was written, with ``source_character`` as its
+    source; the roll line and the beat name it only if it actually applied. The surge and
+    the condition are written in one transaction.
 
     A caller that already read the ``SurgeTuning`` passes it as ``tuning`` so it is not
     looked up again for each participant; omitted, it is looked up by ``trigger_kind``.
 
-    The roll line goes to the surged player's character only; the room still gets just
-    the generic narration ``apply_dramatic_surge`` sends.
+    The roll line goes to the surged player's character only, once the surrounding
+    transaction commits; the room still gets just the generic narration
+    ``apply_dramatic_surge`` sends.
     """
     if encounter.escalation_curve is None:
         return None
@@ -187,6 +230,8 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
 
     # Half-up, not round(): banker's rounding turns an intensity-1 band at half scale to 0.
     amount = math.floor(band.intensity * intensity_scale + 0.5)
+    if amount == 0 and not band.control_change and band.condition is None:
+        return None
     character = participant.character_sheet.character
     condition_name = ""
     # One transaction: if applying the condition raises, the surge record rolls back too,
@@ -202,6 +247,7 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
             potency=potency,
             control_change=band.control_change,
             repeat_round=encounter.round_number,
+            narrate=amount > 0,
         )
         if beat is None:
             return None
@@ -221,15 +267,15 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
                 record = DramaticSurgeRecord.objects.get(pk=beat.record_id)
                 record.condition = band.condition
                 record.save(update_fields=["condition"])
-    character.msg(
-        roll_line(
-            check_type=tuning.check_type,
-            trigger_kind=trigger_kind,
-            potency=potency,
-            outcome=outcome,
-            amount=amount,
-            control_change=band.control_change,
-            condition_name=condition_name,
-        )
+    line = roll_line(
+        check_type=tuning.check_type,
+        trigger_kind=trigger_kind,
+        potency=potency,
+        outcome=outcome,
+        amount=amount,
+        control_change=band.control_change,
+        condition_name=condition_name,
     )
+    # The round resolves inside an atomic block: tell the player once it has committed.
+    transaction.on_commit(lambda: character.msg(line))
     return replace(beat, condition_name=condition_name)

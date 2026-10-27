@@ -138,6 +138,22 @@ class AllyHurtRollTests(AllyHurtSurgeTestCase):
             self._hurt(damage=100)
         self.assertGreaterEqual(self._intensity(self.protector_char) - worse, worse)
 
+    def test_a_scratch_that_scales_to_nothing_writes_no_record_and_spares_the_round(self) -> None:
+        self._bond()
+        with (
+            force_check_outcome(self.fail),
+            patch.object(self.encounter.room, "msg_contents") as room_msg,
+        ):
+            self._hurt(damage=3, max_health=40)
+        # The failure band's 3 intensity at 3 of 40 HP is 0.225, which floors to 0.
+        self.assertEqual(self._records().count(), 0)
+        room_msg.assert_not_called()
+        self.assertEqual(self._intensity(self.protector_char), 0)
+        # The round's slot is still free for a real wound.
+        with force_check_outcome(self.fail):
+            self._hurt(damage=30, max_health=40)
+        self.assertEqual(self._records().get().amount, 2)
+
     def test_unbonded_ally_gets_nothing(self) -> None:
         with force_check_outcome(self.success):
             self._hurt(damage=60)

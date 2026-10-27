@@ -103,12 +103,49 @@ class NpcTauntEntryTests(TestCase):
     def test_roll_line_goes_to_the_targeted_character(self) -> None:
         action = self._taunt_action()
         live = CombatParticipant.objects.get(pk=self.target.pk)  # the idmapper's instance
-        with patch.object(live.character_sheet.character, "msg") as own_msg:
+        with (
+            patch.object(live.character_sheet.character, "msg") as own_msg,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self._resolve(action, self.partial)
         self.assertIn(
             "Npc Taunt Composure check vs taunt potency 14. Npc Taunt Partial.",
             own_msg.call_args.args[0],
         )
+
+    def test_a_second_taunt_on_the_same_pc_in_a_round_rolls_nothing_and_prints_nothing(
+        self,
+    ) -> None:
+        self._resolve(self._taunt_action(), self.partial)
+        live = CombatParticipant.objects.get(pk=self.target.pk)
+        with (
+            patch("world.combat.surge_rolls.surge_roll_for_participant") as roll,
+            patch.object(live.character_sheet.character, "msg") as own_msg,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self._resolve(self._taunt_action(), self.partial)
+        roll.assert_not_called()
+        own_msg.assert_not_called()
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 1)
+        self.assertEqual(self._intensity(), 3)
+
+    def test_a_target_with_no_combat_engagement_is_not_rolled_for(self) -> None:
+        CharacterEngagement.objects.filter(character=self.target.character_sheet).delete()
+        with patch("world.combat.surge_rolls.surge_roll_for_participant") as roll:
+            self._resolve(self._taunt_action(), self.partial)
+        roll.assert_not_called()
+
+    def test_a_taunt_entry_aimed_at_an_opponent_is_skipped_entirely(self) -> None:
+        victim = CombatOpponentFactory(encounter=self.encounter)
+        entry = ThreatPoolEntryFactory(base_damage=0, taunt_potency=14)
+        action = CombatOpponentActionFactory(
+            opponent=self.opponent, threat_entry=entry, round_number=1
+        )
+        action.opponent_targets.add(victim)
+        result, broadcast = self._resolve(action, self.partial)
+        self.assertEqual(result.damage_results, [])
+        broadcast.assert_not_called()
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
 
     def test_outcome_line_uses_authored_hit_narration(self) -> None:
         action = self._taunt_action(hit_narration="{actor} sneers at {target}.")

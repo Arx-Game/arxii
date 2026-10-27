@@ -14,12 +14,13 @@ from world.combat.constants import (
 )
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
 from world.combat.services.declarations.social_check import roll_social_check
-from world.combat.surge_rolls import apply_rolled_surge
+from world.combat.surge_rolls import apply_rolled_surge, surge_tuning_for
 from world.combat.types import ActionOutcome
 from world.fatigue.constants import EffortLevel
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
+    from world.combat.models import SurgeTuning
     from world.traits.models import CheckOutcome
 
 
@@ -83,11 +84,14 @@ def _surge_rallied_ally(
     rallier: CombatParticipant,
     ally: CombatParticipant,
     rally_outcome: CheckOutcome | None,
+    tuning: SurgeTuning | None,
+    difficulty: int,
 ) -> None:
     """The rallied ally's surge, banded by the Rally roll's outcome (#4737).
 
-    A quiet no-op for an ally who left the encounter or died since the declaration. The
-    rally difficulty is fixed, so there is no potency to show on the roll line.
+    A quiet no-op for an ally who left the encounter or died since the declaration.
+    ``difficulty`` is the fixed rally difficulty the roll was made against, shown on the
+    roll line; ``tuning`` is the already-read ``SurgeTuning`` (None looks it up).
     """
     from world.vitals.services import is_dead  # noqa: PLC0415
 
@@ -98,9 +102,10 @@ def _surge_rallied_ally(
         participant=ally,
         trigger_kind=SurgeTriggerKind.RALLIED,
         outcome=rally_outcome,
-        potency=None,
+        potency=difficulty,
         subject_sheet=rallier.character_sheet,
         source_character=rallier.character_sheet.character,
+        tuning=tuning,
     )
 
 
@@ -115,7 +120,9 @@ def _resolve_rally(
     also restores morale to ally-side summon opponents.
 
     Whatever the roll, the ally then gets a rolled surge (#4737): the Rally check's outcome
-    picks the band, so a better rally never surges the ally less.
+    picks the band, so a better rally never surges the ally less. When staff authored a
+    ``RALLIED`` ``SurgeTuning``, the check it names is the one rolled; without one the
+    Rally check type is found by name, as before.
     """
     from world.combat.constants import (  # noqa: PLC0415
         RALLY_BASE_DIFFICULTY,
@@ -130,7 +137,12 @@ def _resolve_rally(
 
     from world.checks.models import CheckType  # noqa: PLC0415
 
-    rally_check = CheckType.objects.filter(name="Rally", is_active=True).first()
+    surge_tuning = surge_tuning_for(SurgeTriggerKind.RALLIED, warn=False)
+    rally_check = (
+        surge_tuning.check_type
+        if surge_tuning is not None
+        else CheckType.objects.filter(name="Rally", is_active=True).first()
+    )
     rally_result = (
         None
         if rally_check is None
@@ -172,6 +184,8 @@ def _resolve_rally(
                 opp.save(update_fields=["morale"])
 
     if rally_result is not None and ally is not None:
-        _surge_rallied_ally(participant, ally, rally_result.outcome)
+        _surge_rallied_ally(
+            participant, ally, rally_result.outcome, surge_tuning, RALLY_BASE_DIFFICULTY
+        )
 
     return outcome

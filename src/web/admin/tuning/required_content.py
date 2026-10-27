@@ -1718,6 +1718,29 @@ def _probe_risk_calibrations() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_surge_tuning() -> ProbeResult:
+    """Every rolled surge kind has a `SurgeTuning` row, and every stored band set is sane (#4737).
+
+    Consumer: `world/combat/surge_rolls.py` (`surge_tuning_for`, `apply_rolled_surge`). A kind
+    with no row never surges, so a taunt, a rally or a hurt ally does nothing to engagement
+    intensity; a band set where a better outcome gives less than a worse one (`SurgeDegreeBand`
+    stored through a path that skipped the admin form's check) is reported by line.
+    """
+    from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind  # noqa: PLC0415
+    from world.combat.models import SurgeTuning  # noqa: PLC0415
+    from world.combat.surge_bands import check_stored_surge_bands  # noqa: PLC0415
+
+    authored = set(SurgeTuning.objects.values_list("trigger_kind", flat=True))
+    missing = [
+        f"SurgeTuning for {SurgeTriggerKind(kind).label}"
+        for kind in ROLLED_SURGE_TRIGGER_KINDS
+        if kind not in authored
+    ]
+    missing.extend(check_stored_surge_bands())
+    detail = f"Rolled surge content to fix: {'; '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=tuple(missing), detail=detail)
+
+
 def _declarations() -> tuple[ContentDependency, ...]:
     """Every hard-coded row dependency the sentinel tracks.
 
@@ -2778,6 +2801,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=CustomProbe(fn=_probe_capability_bridges),
         ),
         # --- TUNING tier: singleton config tables (dormant-by-design, not yet set) -------
+        ContentDependency(
+            key="surge-tuning",
+            label="Rolled surge tuning",
+            tier=DependencyTier.TUNING,
+            consumer="world/combat/surge_rolls.py surge_tuning_for(), apply_rolled_surge()",
+            consequence=(
+                "A taunt, a rally or a hurt bonded ally with no tuning row raises nobody's "
+                "intensity, and a band set where a better roll gives less than a worse one "
+                "pays a better roll less."
+            ),
+            probe=CustomProbe(fn=_probe_surge_tuning),
+            admin_model="SurgeTuning",
+        ),
         ContentDependency(
             key="audere-ultimate-copy",
             label="Audere reveal labels and lines",

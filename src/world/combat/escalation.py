@@ -290,6 +290,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     potency: int | None = None,
     control_change: int = 0,
     repeat_round: int | None = None,
+    narrate: bool = True,
 ) -> DramaticSurgeBeat | None:
     """Write one dramatic-surge event (#2013): the shared seam every trigger leg uses.
 
@@ -318,6 +319,8 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     kind and subject can surge again in a later round while the same round still dedups.
     ``outcome`` and ``potency`` are the roll that picked the amount, kept on the record;
     ``control_change`` is added to the engagement's control modifier in the same save.
+    ``narrate=False`` skips the room line (a surge whose intensity scaled to 0 would
+    announce a power surge that added none).
     """
     from world.combat.models import (  # noqa: PLC0415
         CombatEncounter as _CombatEncounter,
@@ -365,7 +368,9 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
 
     curve = encounter.escalation_curve
     character_name = participant.character_sheet.character.db_key
-    narration = _render_surge_narration(curve, character_name) if curve is not None else ""
+    narration = (
+        _render_surge_narration(curve, character_name) if curve is not None and narrate else ""
+    )
     room = encounter.room
     if room is not None and narration:
         room.msg_contents(narration)

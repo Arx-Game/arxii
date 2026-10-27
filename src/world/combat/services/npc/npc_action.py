@@ -69,11 +69,14 @@ def _resolve_npc_taunt_on_target(
 
     The entry only supplies ``potency``. The targeted player character rolls the tuned
     check (Taunt Received, Composure) against it, and the roll's degree picks the surge
-    band. A quiet no-op with no escalation curve (ADR-0098) or no tuning authored.
+    band. A quiet no-op with no escalation curve (ADR-0098) or no tuning authored, and
+    when the target could not surge this round (no combat engagement, or already taunted
+    this round): no roll is made, nothing is spent, nothing is printed.
     """
     from world.combat.constants import SurgeTriggerKind  # noqa: PLC0415
     from world.combat.surge_rolls import (  # noqa: PLC0415
         apply_rolled_surge,
+        rolled_surge_possible,
         surge_roll_for_participant,
         surge_tuning_for,
     )
@@ -84,6 +87,10 @@ def _resolve_npc_taunt_on_target(
     tuning = surge_tuning_for(SurgeTriggerKind.TAUNT_RECEIVED)
     if tuning is None:
         return
+    if not rolled_surge_possible(
+        encounter, target_participant, SurgeTriggerKind.TAUNT_RECEIVED, None
+    ):
+        return
     result = surge_roll_for_participant(target_participant, tuning.check_type, potency)
     apply_rolled_surge(
         encounter=encounter,
@@ -93,6 +100,7 @@ def _resolve_npc_taunt_on_target(
         potency=potency,
         subject_sheet=None,
         source_character=opponent.objectdb,
+        tuning=tuning,
     )
 
 
@@ -265,9 +273,14 @@ def _resolve_npc_action_on_opponent_target(  # noqa: PLR0913 - needs full resolu
     null-safe when neither applies. A threat entry's ``conditions_applied`` now lands
     on an opponent target too, when the hit dealt damage (#4091) — the bulk apply
     after the resolution loops in ``_resolve_npc_action`` covers it.
+
+    A taunt entry (``taunt_potency``) acts on player characters only: here it is skipped
+    entirely, with no zero-damage hit and no taunt line.
     """
     # Mirror the participant guard: skip an escaped/defeated (non-ACTIVE) target.
     if target_opponent.status != OpponentStatus.ACTIVE:
+        return
+    if npc_action.threat_entry.taunt_potency is not None:
         return
 
     dmg_result = _svc.apply_damage_to_opponent(
@@ -308,6 +321,21 @@ def _npc_action_narration(
     )
 
 
+def _action_targets(
+    npc_action: CombatOpponentAction,
+) -> tuple[list[CombatParticipant], list[CombatOpponent]]:
+    """The participant and opponent targets of ``npc_action``, from the prefetch when present."""
+    try:
+        targets: list[CombatParticipant] = npc_action.cached_targets
+    except AttributeError:
+        targets = list(npc_action.targets.all())
+    try:
+        opponent_targets: list[CombatOpponent] = npc_action.cached_opponent_targets
+    except AttributeError:
+        opponent_targets = list(npc_action.opponent_targets.all())
+    return targets, opponent_targets
+
+
 def _resolve_npc_action(
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
@@ -344,15 +372,12 @@ def _resolve_npc_action(
         broadcast_cannot_reach(opponent)
         return outcome
 
-    try:
-        targets: list[CombatParticipant] = npc_action.cached_targets
-    except AttributeError:
-        targets = list(npc_action.targets.all())
+    targets, opponent_targets = _action_targets(npc_action)
 
-    try:
-        opponent_targets: list[CombatOpponent] = npc_action.cached_opponent_targets
-    except AttributeError:
-        opponent_targets = list(npc_action.opponent_targets.all())
+    # A taunt entry acts on player characters only (#4737): aimed at opponents alone it does
+    # nothing, so there is nothing to resolve and no line to print.
+    if npc_action.threat_entry.taunt_potency is not None and not targets:
+        return outcome
 
     # Exactly one relation is populated; use whichever for narration labels.
     label_targets: list = targets or opponent_targets

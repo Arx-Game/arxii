@@ -4,12 +4,17 @@ from itertools import pairwise
 import logging
 from unittest.mock import patch
 
+from django.db import transaction
 from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.types import CheckResult
-from world.combat.constants import ParticipantStatus, SurgeTriggerKind
+from world.combat.constants import (
+    ROLLED_SURGE_TRIGGER_KINDS,
+    ParticipantStatus,
+    SurgeTriggerKind,
+)
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatParticipantFactory,
@@ -19,8 +24,11 @@ from world.combat.factories import (
 )
 from world.combat.models import DramaticSurgeRecord
 from world.combat.surge_rolls import (
+    POTENCY_LABELS,
     apply_rolled_surge,
     band_for_outcome,
+    roll_line,
+    rolled_surge_possible,
     surge_roll_for_participant,
 )
 from world.conditions.factories import ConditionTemplateFactory
@@ -229,6 +237,7 @@ class EffectTests(SurgeRollTestCase):
         with (
             patch("world.conditions.services.apply_condition", return_value=refused),
             patch.object(self.character, "msg") as own_msg,
+            self.captureOnCommitCallbacks(execute=True),
         ):
             beat = self._surge(self.fail)
         self.assertEqual(beat.condition_name, "")
@@ -256,6 +265,7 @@ class NarrationTests(SurgeRollTestCase):
             patch.object(self.character, "msg") as own_msg,
             patch.object(bystander, "msg") as other_msg,
             patch.object(self.encounter.room, "msg_contents") as room_msg,
+            self.captureOnCommitCallbacks(execute=True),
         ):
             self._surge(self.partial)
         own_msg.assert_called_once_with(
@@ -268,6 +278,115 @@ class NarrationTests(SurgeRollTestCase):
         self.assertEqual(generic, f"{self.character.db_key} surges.")
         for secret in ("Surge Composure", "potency", "Partial", "Goaded"):
             self.assertNotIn(secret, generic)
+
+    def test_roll_line_waits_for_the_surrounding_transaction_to_commit(self) -> None:
+        self._band(self.partial, 3)
+        with (
+            patch.object(self.character, "msg") as own_msg,
+            self.captureOnCommitCallbacks(execute=False) as callbacks,
+        ):
+            self._surge(self.partial)
+            own_msg.assert_not_called()
+        self.assertEqual(len(callbacks), 1)
+        with patch.object(self.character, "msg") as own_msg:
+            callbacks[0]()
+        own_msg.assert_called_once()
+
+    def test_a_rolled_back_surge_sends_no_roll_line(self) -> None:
+        self._band(self.partial, 3)
+        failure = RuntimeError("the round failed")
+        with (
+            patch.object(self.character, "msg") as own_msg,
+            self.captureOnCommitCallbacks(execute=True),
+            self.assertRaises(RuntimeError),
+            transaction.atomic(),
+        ):
+            self._surge(self.partial)
+            raise failure
+        own_msg.assert_not_called()
+
+
+class ZeroAmountTests(SurgeRollTestCase):
+    """A surge that adds no intensity, control or condition writes nothing (#4737)."""
+
+    def test_zero_amount_with_nothing_else_writes_nothing_and_keeps_the_slot_free(self) -> None:
+        self._band(self.partial, 3)
+        with patch.object(self.encounter.room, "msg_contents") as room_msg:
+            self.assertIsNone(self._surge(self.partial, intensity_scale=0.1))
+        room_msg.assert_not_called()
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
+        # The slot is still free: a bigger hit the same round can still surge.
+        self.assertIsNotNone(self._surge(self.partial, intensity_scale=1.0))
+        self.assertEqual(self._engagement().intensity_modifier, 3)
+
+    def test_zero_intensity_band_with_nothing_else_writes_nothing(self) -> None:
+        self._band(self.fail, 0)
+        self.assertIsNone(self._surge(self.fail))
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
+
+    def test_zero_amount_with_a_control_change_writes_but_does_not_announce_a_surge(self) -> None:
+        self._band(self.fail, 0, control=-2)
+        with patch.object(self.encounter.room, "msg_contents") as room_msg:
+            beat = self._surge(self.fail)
+        room_msg.assert_not_called()
+        self.assertEqual(beat.narration, "")
+        self.assertEqual(self._engagement().control_modifier, -2)
+        self.assertEqual(DramaticSurgeRecord.objects.get().amount, 0)
+
+    def test_zero_amount_with_a_condition_writes_but_does_not_announce_a_surge(self) -> None:
+        goaded = ConditionTemplateFactory(name="Surge Goaded Zero")
+        self._band(self.fail, 0, condition=goaded)
+        with patch.object(self.encounter.room, "msg_contents") as room_msg:
+            beat = self._surge(self.fail)
+        room_msg.assert_not_called()
+        self.assertEqual(beat.condition_name, "Surge Goaded Zero")
+
+    def test_a_surge_with_intensity_still_announces(self) -> None:
+        self._band(self.partial, 3)
+        with patch.object(self.encounter.room, "msg_contents") as room_msg:
+            self._surge(self.partial)
+        room_msg.assert_called_once()
+
+
+class PotencyLabelTests(SurgeRollTestCase):
+    def test_every_rolled_kind_has_a_potency_label(self) -> None:
+        self.assertEqual(set(POTENCY_LABELS), set(ROLLED_SURGE_TRIGGER_KINDS))
+
+    def test_roll_line_never_raises_for_an_unlabelled_kind(self) -> None:
+        line = roll_line(
+            check_type=self.check_type,
+            trigger_kind=SurgeTriggerKind.HIGH_STAKES,
+            potency=9,
+            outcome=self.partial,
+            amount=2,
+            control_change=0,
+            condition_name="",
+        )
+        self.assertIn("vs difficulty 9", line)
+
+
+class RolledSurgePossibleTests(SurgeRollTestCase):
+    def test_possible_with_an_engagement_and_no_record(self) -> None:
+        self.assertTrue(rolled_surge_possible(self.encounter, self.participant, KIND, None))
+
+    def test_not_possible_once_the_round_has_a_record_for_the_subject(self) -> None:
+        subject = CharacterSheetFactory()
+        self._band(self.partial, 3)
+        self._surge(self.partial, subject_sheet=subject)
+        self.assertFalse(rolled_surge_possible(self.encounter, self.participant, KIND, subject))
+        self.assertTrue(
+            rolled_surge_possible(self.encounter, self.participant, KIND, CharacterSheetFactory())
+        )
+
+    def test_possible_again_next_round(self) -> None:
+        self._band(self.partial, 3)
+        self._surge(self.partial)
+        self.encounter.round_number += 1
+        self.assertTrue(rolled_surge_possible(self.encounter, self.participant, KIND, None))
+
+    def test_not_possible_without_a_combat_engagement(self) -> None:
+        CharacterEngagement.objects.filter(character=self.character.sheet_data).delete()
+        self.assertFalse(rolled_surge_possible(self.encounter, self.participant, KIND, None))
 
 
 class RollTests(SurgeRollTestCase):

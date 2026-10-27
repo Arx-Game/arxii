@@ -1354,7 +1354,9 @@ class SurgeBeatSerializer(serializers.Serializer):
     )
     control_change = serializers.IntegerField(required=False)
     condition = serializers.CharField(
-        required=False, allow_null=True, help_text="Name of the condition the band carries."
+        required=False,
+        allow_null=True,
+        help_text="Name of the condition the surge actually applied.",
     )
     roll = serializers.CharField(
         required=False,
@@ -1816,13 +1818,15 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         The record itself stores only trigger_kind/amount/subject (audit
         data) — narration is derived at read time from the encounter's
-        current curve, same as the live broadcast at write time.
+        current curve, same as the live broadcast at write time. A record that
+        added no intensity (a control-only or condition-only surge) was never
+        announced, so it renders nothing.
         """
         from world.combat.escalation import _render_surge_narration  # noqa: PLC0415
 
         curve = record.encounter.escalation_curve
         character_name = record.participant.character_sheet.character.db_key
-        if curve is None:
+        if curve is None or record.amount == 0:
             return ""
         return _render_surge_narration(curve, character_name)
 

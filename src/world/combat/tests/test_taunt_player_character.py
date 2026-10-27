@@ -7,7 +7,6 @@ from django.test import TestCase, override_settings
 
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.checks.types import CheckResult
 from world.combat.constants import CombatManeuver, ParticipantStatus, SurgeTriggerKind
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -20,7 +19,6 @@ from world.combat.factories import (
 )
 from world.combat.models import DramaticSurgeRecord, ThreatRecord
 from world.combat.services import _resolve_taunt, declare_taunt
-from world.combat.services.declarations.social_check import roll_social_check
 from world.combat.social_combat_content import ensure_social_combat_content
 from world.combat.surge_rolls import surge_roll_for_participant
 from world.mechanics.constants import EngagementType
@@ -71,35 +69,31 @@ class PlayerTauntTestCase(TestCase):
         engagement = CharacterEngagement.objects.get(character=self.target.character_sheet)
         return engagement.intensity_modifier
 
-    def _taunt(self, target_outcome, taunter=None, target=None) -> list[CheckResult]:
-        """Declare and resolve a taunt, forcing the taunter's roll and then the target's.
+    def _taunt(self, target_outcome, rating: int = 12, taunter=None, target=None) -> list:
+        """Declare and resolve a taunt, forcing the target's roll.
 
-        Returns the taunter's roll so a test can read its points.
+        The taunter's check rating is pinned to ``rating`` (nothing is rolled for the
+        taunter). Returns the (check type, difficulty) of every roll the target made.
         """
         taunter = taunter or self.taunter
         target = target or self.target
         action = declare_taunt(taunter, target)
-        taunter_rolls: list[CheckResult] = []
+        target_rolls: list = []
 
-        def taunter_roll(*args, **kwargs) -> CheckResult:
-            result = roll_social_check(*args, **kwargs)
-            taunter_rolls.append(result)
-            return result
-
-        def target_roll(*args, **kwargs) -> CheckResult:
+        def target_roll(participant, check_type, potency):
+            target_rolls.append((check_type, potency))
             with force_check_outcome(target_outcome):
-                return surge_roll_for_participant(*args, **kwargs)
+                return surge_roll_for_participant(participant, check_type, potency)
 
         with ExitStack() as stack:
             stack.enter_context(
-                patch(f"{TAUNT_MODULE}.roll_social_check", side_effect=taunter_roll)
+                patch("world.checks.services.compute_check_rating", return_value=rating)
             )
             stack.enter_context(
                 patch(f"{TAUNT_MODULE}.surge_roll_for_participant", side_effect=target_roll)
             )
-            stack.enter_context(force_check_outcome(self.success))
             _resolve_taunt(taunter, action)
-        return taunter_rolls
+        return target_rolls
 
 
 class DeclareTests(PlayerTauntTestCase):
@@ -134,15 +128,47 @@ class DeclareTests(PlayerTauntTestCase):
 
 
 class ResolveTests(PlayerTauntTestCase):
-    def test_pc_taunts_pc_actor_result_is_target_potency(self) -> None:
-        taunter_rolls = self._taunt(self.partial)
-        self.assertEqual(len(taunter_rolls), 1)
+    def test_pc_taunts_pc_potency_is_the_taunters_check_rating(self) -> None:
+        target_rolls = self._taunt(self.partial, rating=17)
+        # One roll, the target's, against the taunter's rating: nothing is rolled for the taunter.
+        self.assertEqual(target_rolls, [(self.composure, 17)])
         record = DramaticSurgeRecord.objects.get()
-        self.assertEqual(record.potency, taunter_rolls[0].total_points)
+        self.assertEqual(record.potency, 17)
         self.assertEqual(record.trigger_kind, SurgeTriggerKind.TAUNT_RECEIVED)
 
+    def test_a_negative_rating_is_a_potency_of_zero(self) -> None:
+        self._taunt(self.partial, rating=-4)
+        self.assertEqual(DramaticSurgeRecord.objects.get().potency, 0)
+
+    def test_the_rating_is_read_for_the_taunt_check_type_and_taunting_character(self) -> None:
+        from world.checks.models import CheckType
+
+        action = declare_taunt(self.taunter, self.target)
+        with (
+            patch("world.checks.services.compute_check_rating", return_value=5) as rating,
+            force_check_outcome(self.partial),
+        ):
+            _resolve_taunt(self.taunter, action)
+        character, check_type = rating.call_args.args
+        self.assertEqual(character, self.taunter.character_sheet.character)
+        self.assertEqual(check_type, CheckType.objects.get(name="Taunt"))
+
+    def test_a_second_taunt_on_the_same_target_rolls_nothing(self) -> None:
+        self._taunt(self.partial)
+        again = self._taunt(self.partial)
+        self.assertEqual(again, [])
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 1)
+
+    def test_a_target_with_no_combat_engagement_rolls_nothing(self) -> None:
+        CharacterEngagement.objects.filter(character=self.target.character_sheet).delete()
+        self.assertEqual(self._taunt(self.partial), [])
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
+
     def test_pc_taunt_surges_target_and_records_roll(self) -> None:
-        with patch.object(self.target_character, "msg") as own_msg:
+        with (
+            patch.object(self.target_character, "msg") as own_msg,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self._taunt(self.partial)
         record = DramaticSurgeRecord.objects.get()
         self.assertEqual(record.participant, self.target)

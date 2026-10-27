@@ -10,14 +10,11 @@ from world.combat.constants import (
     SurgeTriggerKind,
 )
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
-from world.combat.services.declarations.social_check import (
-    _social_verb_success_level,
-    roll_social_check,
-)
+from world.combat.services.declarations.social_check import _social_verb_success_level
 from world.combat.services.encounter.threat import accumulate_threat
-from world.combat.services.techniques.technique_targets import _resolve_primary_target_sheet
 from world.combat.surge_rolls import (
     apply_rolled_surge,
+    rolled_surge_possible,
     surge_roll_for_participant,
     surge_tuning_for,
 )
@@ -36,7 +33,7 @@ def declare_taunt(
     against the target's Composure; on success it accumulates threat on the existing
     ``ThreatRecord`` seam, biasing the NPC's target selection toward the taunter.
     Against another player character it stores the target on ``focused_ally_target`` and
-    the resolution turns the taunter's roll into a potency the target rolls Composure
+    the resolution turns the taunter's check rating into a potency the target rolls Composure
     against (a rolled surge, #4737). This function only records the declaration, and
     refuses nothing a taunted player character later declares.
     """
@@ -100,17 +97,19 @@ def declare_taunt(
 def _resolve_taunt_on_participant(
     participant: CombatParticipant,
     target: CombatParticipant,
-    action: CombatRoundAction,
 ) -> None:
     """A player character taunts another: the taunter's roll is the taunt's potency (#4737).
 
-    Stage 1: the taunter rolls the Taunt check at difficulty 0 and its ``total_points``
-    become the potency. Stage 2: the target rolls the tuned check (Composure) against that
-    potency, and the roll's degree picks the surge band. A target who left the encounter
-    or died since the declaration, an encounter with no escalation curve, and a missing
-    Taunt check or tuning are all quiet no-ops (no roll is spent).
+    The potency is the taunter's check RATING for the Taunt check type (no dice, nothing
+    spent for the taunter: the player character who is taunted is the one who rolls). The
+    target then rolls the tuned check (Composure) against that potency, and the roll's
+    degree picks the surge band. A target who left the encounter or died since the
+    declaration, an encounter with no escalation curve, a missing Taunt check or tuning,
+    and a target who could not surge this round (no combat engagement, or already surged by
+    this taunter) are all quiet no-ops: no roll is made and no condition is spent.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import compute_check_rating  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
     encounter = participant.encounter
@@ -124,10 +123,13 @@ def _resolve_taunt_on_participant(
     taunt_check = CheckType.objects.filter(name="Taunt", is_active=True).first()
     if tuning is None or taunt_check is None:
         return
+    if not rolled_surge_possible(
+        encounter, target, SurgeTriggerKind.TAUNT_RECEIVED, participant.character_sheet
+    ):
+        return
 
-    potency = roll_social_check(
-        participant, taunt_check, 0, target=_resolve_primary_target_sheet(action)
-    ).total_points
+    # A rating can be negative; the stored potency is unsigned.
+    potency = max(0, compute_check_rating(participant.character_sheet.character, taunt_check))
     result = surge_roll_for_participant(target, tuning.check_type, potency)
     apply_rolled_surge(
         encounter=encounter,
@@ -137,6 +139,7 @@ def _resolve_taunt_on_participant(
         potency=potency,
         subject_sheet=participant.character_sheet,
         source_character=participant.character_sheet.character,
+        tuning=tuning,
     )
 
 
@@ -167,6 +170,6 @@ def _resolve_taunt(
                 success_level * TAUNT_THREAT_PER_LEVEL,
             )
     elif action.focused_ally_target is not None:
-        _resolve_taunt_on_participant(participant, action.focused_ally_target, action)
+        _resolve_taunt_on_participant(participant, action.focused_ally_target)
 
     return outcome
