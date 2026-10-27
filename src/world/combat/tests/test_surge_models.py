@@ -6,15 +6,17 @@ from django.forms import inlineformset_factory
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.admin import SurgeDegreeBandFormSet
+from world.combat.admin import SurgeDegreeBandForm, SurgeDegreeBandFormSet
 from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind
 from world.combat.factories import (
+    CombatOpponentFactory,
     CombatParticipantFactory,
     SurgeDegreeBandFactory,
     SurgeTuningFactory,
     ThreatPoolEntryFactory,
 )
 from world.combat.models import DramaticSurgeRecord, SurgeDegreeBand, SurgeTuning
+from world.companions.factories import CompanionFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -116,6 +118,7 @@ class SurgeBandInlineFormSetTests(TestCase):
         formset_cls = inlineformset_factory(
             SurgeTuning,
             SurgeDegreeBand,
+            form=SurgeDegreeBandForm,
             formset=SurgeDegreeBandFormSet,
             fields=["outcome", "intensity", "control_change", "condition"],
             extra=len(rows),
@@ -153,3 +156,82 @@ class SurgeBandInlineFormSetTests(TestCase):
             ]
         )
         self.assertTrue(formset.is_valid(), formset.errors)
+
+    def test_inline_edits_two_persisted_bands_together(self) -> None:
+        tuning = SurgeTuningFactory(trigger_kind=SurgeTriggerKind.ALLY_HURT)
+        worse = CheckOutcomeFactory(name="Surge Persisted Worse", success_level=-1)
+        better = CheckOutcomeFactory(name="Surge Persisted Better", success_level=2)
+        low = SurgeDegreeBandFactory(tuning=tuning, outcome=worse, intensity=1)
+        high = SurgeDegreeBandFactory(tuning=tuning, outcome=better, intensity=4)
+        formset = self._persisted_formset(tuning, [(low, 5), (high, 6)])
+        self.assertTrue(formset.is_valid(), formset.errors)
+        formset.save()
+        low.refresh_from_db()
+        high.refresh_from_db()
+        self.assertEqual((low.intensity, high.intensity), (5, 6))
+
+    def test_inline_rejects_violating_persisted_set(self) -> None:
+        tuning = SurgeTuningFactory(trigger_kind=SurgeTriggerKind.ALLY_HURT)
+        worse = CheckOutcomeFactory(name="Surge Persisted Bad Worse", success_level=-1)
+        better = CheckOutcomeFactory(name="Surge Persisted Bad Better", success_level=2)
+        low = SurgeDegreeBandFactory(tuning=tuning, outcome=worse, intensity=1)
+        high = SurgeDegreeBandFactory(tuning=tuning, outcome=better, intensity=4)
+        formset = self._persisted_formset(tuning, [(low, 7), (high, 6)])
+        self.assertFalse(formset.is_valid())
+        self.assertTrue(formset.non_form_errors())
+
+    def _persisted_formset(self, tuning, edits: list[tuple]):
+        formset_cls = inlineformset_factory(
+            SurgeTuning,
+            SurgeDegreeBand,
+            form=SurgeDegreeBandForm,
+            formset=SurgeDegreeBandFormSet,
+            fields=["outcome", "intensity", "control_change", "condition"],
+            extra=0,
+        )
+        data = {
+            "bands-TOTAL_FORMS": str(len(edits)),
+            "bands-INITIAL_FORMS": str(len(edits)),
+            "bands-MIN_NUM_FORMS": "0",
+            "bands-MAX_NUM_FORMS": "1000",
+        }
+        for index, (band, intensity) in enumerate(edits):
+            data[f"bands-{index}-id"] = str(band.pk)
+            data[f"bands-{index}-tuning"] = str(tuning.pk)
+            data[f"bands-{index}-outcome"] = str(band.outcome_id)
+            data[f"bands-{index}-intensity"] = str(intensity)
+            data[f"bands-{index}-control_change"] = str(band.control_change)
+        return formset_cls(data, instance=tuning, prefix="bands")
+
+
+class SurgeRolledSubjectCheckTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.participant = CombatParticipantFactory()
+        cls.encounter = cls.participant.encounter
+
+    def test_rolled_row_with_boss_subject_is_rejected(self) -> None:
+        opponent = CombatOpponentFactory(encounter=self.encounter)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DramaticSurgeRecord.objects.create(
+                encounter=self.encounter,
+                participant=self.participant,
+                trigger_kind=SurgeTriggerKind.TAUNT_RECEIVED,
+                subject_opponent=opponent,
+                subject_phase_number=1,
+                amount=2,
+                round_number=1,
+                repeat_round=1,
+            )
+
+    def test_rolled_row_with_companion_subject_is_rejected(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DramaticSurgeRecord.objects.create(
+                encounter=self.encounter,
+                participant=self.participant,
+                trigger_kind=SurgeTriggerKind.RALLIED,
+                subject_companion=CompanionFactory(owner=self.participant.character_sheet),
+                amount=2,
+                round_number=1,
+                repeat_round=1,
+            )

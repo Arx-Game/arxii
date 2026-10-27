@@ -8,35 +8,54 @@ check all call ``validate_surge_bands`` so there is one rule.
 """
 
 from collections.abc import Sequence
-from itertools import pairwise
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.combat.models import SurgeDegreeBand
 
 
-def _outcome_label(band: "SurgeDegreeBand") -> str:
-    return band.outcome.name
+def _pair(better: "SurgeDegreeBand", worse: "SurgeDegreeBand") -> str:
+    return f"'{better.outcome.name}' is a better outcome than '{worse.outcome.name}'"
 
 
 def validate_surge_bands(bands: Sequence["SurgeDegreeBand"]) -> list[str]:
-    """Return a problem line for every adjacent pair of bands that breaks the rule.
+    """Return a problem line for every band that is worse than a strictly worse outcome.
 
-    Bands are sorted by ``outcome.success_level`` and each is compared with the next
-    better one, so a single bad row produces a single line.
+    Bands are sorted by ``outcome.success_level``. Each band is compared with the best
+    values seen at strictly lower success levels (several outcomes can share a level, and
+    those are not compared with each other), so one bad row produces one line per field.
     """
     ordered = sorted(bands, key=lambda band: band.outcome.success_level)
     problems: list[str] = []
-    for worse, better in pairwise(ordered):
-        if worse.outcome.success_level == better.outcome.success_level:
-            continue
-        pair = f"'{_outcome_label(better)}' is a better outcome than '{_outcome_label(worse)}'"
-        if better.intensity < worse.intensity:
-            problems.append(f"{pair}, so its intensity cannot be lower ({better.intensity}).")
-        if better.control_change < worse.control_change:
-            problems.append(f"{pair}, so its control change cannot be lower.")
-        if better.condition_id is not None and worse.condition_id is None:
-            problems.append(f"{pair}, so it cannot carry a condition the worse outcome lacks.")
+    top_intensity: SurgeDegreeBand | None = None
+    top_control: SurgeDegreeBand | None = None
+    bare: SurgeDegreeBand | None = None  # a lower band with no condition
+    index = 0
+    while index < len(ordered):
+        level = ordered[index].outcome.success_level
+        tier = [band for band in ordered[index:] if band.outcome.success_level == level]
+        index += len(tier)
+        for band in tier:
+            if top_intensity is not None and band.intensity < top_intensity.intensity:
+                problems.append(
+                    f"{_pair(band, top_intensity)}, so its intensity cannot be lower "
+                    f"({band.intensity})."
+                )
+            if top_control is not None and band.control_change < top_control.control_change:
+                problems.append(
+                    f"{_pair(band, top_control)}, so its control change cannot be lower."
+                )
+            if band.condition_id is not None and bare is not None:
+                problems.append(
+                    f"{_pair(band, bare)}, so it cannot carry a condition the worse outcome lacks."
+                )
+        for band in tier:
+            if top_intensity is None or band.intensity > top_intensity.intensity:
+                top_intensity = band
+            if top_control is None or band.control_change > top_control.control_change:
+                top_control = band
+            if bare is None and band.condition_id is None:
+                bare = band
     return problems
 
 

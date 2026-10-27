@@ -63,6 +63,26 @@ class SurgeBandMonotonicTests(TestCase):
         ]
         self.assertEqual(validate_surge_bands(bands), [])
 
+    def test_monotonic_compares_across_a_tied_success_level(self) -> None:
+        tied = CheckOutcomeFactory(name="Surge Tied", success_level=2)
+        bands = [
+            self._band(self.worse, intensity=5, control_change=0),
+            self._band(self.better, intensity=6, control_change=0),
+            self._band(tied, intensity=2, control_change=0),
+        ]
+        problems = validate_surge_bands(bands)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("Surge Tied", problems[0])
+        self.assertIn("Surge Worse", problems[0])
+
+    def test_monotonic_does_not_compare_bands_at_the_same_level(self) -> None:
+        tied = CheckOutcomeFactory(name="Surge Tied Peer", success_level=2)
+        bands = [
+            self._band(self.better, intensity=6, control_change=0),
+            self._band(tied, intensity=2, control_change=0),
+        ]
+        self.assertEqual(validate_surge_bands(bands), [])
+
     def test_check_stored_bands_reports_bad_rows(self) -> None:
         SurgeDegreeBandFactory(tuning=self.tuning, outcome=self.worse, intensity=5)
         SurgeDegreeBandFactory(tuning=self.tuning, outcome=self.better, intensity=1)

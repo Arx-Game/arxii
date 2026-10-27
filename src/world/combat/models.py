@@ -4066,11 +4066,18 @@ class SurgeDegreeBand(SharedMemoryModel):
             ),
         ]
 
+    # The admin inline's form turns this off for the length of its own validation: the
+    # inline formset checks the whole in-flight set, and comparing one edited row to the
+    # still-stored values of its siblings would refuse a valid edit of two rows at once.
+    validate_against_stored_siblings: bool = True
+
     def clean(self) -> None:
         """Reject a band that breaks monotonic order against its tuning's other bands."""
         from world.combat.surge_bands import validate_surge_bands  # noqa: PLC0415
 
         super().clean()
+        if not self.validate_against_stored_siblings:
+            return
         if self.tuning_id is None or self.outcome_id is None:
             return
         siblings = [

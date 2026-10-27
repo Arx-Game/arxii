@@ -1,5 +1,6 @@
 """Django admin configuration for the combat system."""
 
+from django import forms
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 
@@ -430,6 +431,19 @@ class EscalationCurveAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
+class SurgeDegreeBandForm(forms.ModelForm):
+    """Inline row form: the formset owns the cross-row rule, so skip the stored-sibling check."""
+
+    def _post_clean(self) -> None:
+        self.instance.validate_against_stored_siblings = False
+        try:
+            super()._post_clean()
+        finally:
+            # Drop the instance attribute so the idmapper-shared row reverts to the class
+            # default for any later plain full_clean().
+            del self.instance.validate_against_stored_siblings
+
+
 class SurgeDegreeBandFormSet(OneRowPerFormSet):
     """Checks the in-flight set of bands is monotonic before it is saved (#4737)."""
 
@@ -451,6 +465,7 @@ class SurgeDegreeBandFormSet(OneRowPerFormSet):
 
 class SurgeDegreeBandInline(admin.TabularInline):
     model = SurgeDegreeBand
+    form = SurgeDegreeBandForm
     formset = SurgeDegreeBandFormSet
     extra = 0
     fields = ["outcome", "intensity", "control_change", "condition"]
