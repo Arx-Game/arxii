@@ -48,12 +48,12 @@ export function SteelYourself({
       <button
         type="button"
         data-testid="steel-button"
-        disabled={isLocked}
+        disabled={isLocked || offer.steeled_this_round}
         onClick={steel}
         className={cn(
           'flex w-full items-center justify-between rounded border border-border px-3 py-1.5',
           'text-left text-sm hover:bg-muted/50',
-          isLocked && 'cursor-not-allowed opacity-50'
+          (isLocked || offer.steeled_this_round) && 'cursor-not-allowed opacity-50'
         )}
       >
         <span className="font-medium">Steel yourself</span>

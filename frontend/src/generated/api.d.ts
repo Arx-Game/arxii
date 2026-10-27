@@ -51624,6 +51624,8 @@ export interface components {
       fatigue_category: string;
       /** @description Fatigue a steel costs without a free one. */
       fatigue_cost: number;
+      /** @description Whether she has already steeled herself this round. */
+      steeled_this_round: boolean;
       /** @description Name of the ally whose encouragement gave her free steels, if any. */
       given_by: string | null;
     };

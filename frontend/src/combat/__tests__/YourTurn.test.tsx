@@ -514,6 +514,39 @@ describe('YourTurn — Task 7.1 slot composition', () => {
 // Task 7.2 — Combo upgrade affordances
 // ---------------------------------------------------------------------------
 
+describe('YourTurn — steeling yourself (#4738)', () => {
+  const offer = {
+    free_steels: 1,
+    fatigue_category: 'mental',
+    fatigue_cost: 3,
+    given_by: 'Bram',
+    steeled_this_round: false,
+  };
+
+  it('renders the steel button with its free chip when her row carries an offer', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      participants: [{ ...makeSelfParticipant(5), steel: offer }],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('steel-button')).toBeEnabled();
+    expect(screen.getByTestId('steel-chip')).toHaveTextContent(
+      "1 free steel from Bram's encouragement"
+    );
+  });
+
+  it('renders nothing for a row with no offer', () => {
+    setupMocks();
+    const encounter = makeEncounter({ participants: [makeSelfParticipant(5)] });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('steel-button')).toBeNull();
+  });
+});
+
 describe('YourTurn — Task 7.2 combo upgrade', () => {
   it('does not render combo section when no combos available', () => {
     setupMocks({ combos: [] });

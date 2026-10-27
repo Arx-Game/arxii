@@ -2782,7 +2782,7 @@ export function YourTurn({
       {myParticipantSelf?.steel && (
         <SteelYourself
           offer={myParticipantSelf.steel}
-          isLocked={isLocked || !isDeclaringPhase}
+          isLocked={readOnly || !isDeclaringPhase}
           dispatchAction={dispatchAction}
           onDispatched={refreshEncounter}
         />

@@ -4,7 +4,13 @@ import { vi } from 'vitest';
 import { SteelYourself } from './SteelYourself';
 import { steelChipLabel, steelCostLabel } from '../steeling';
 
-const paid = { free_steels: 0, fatigue_category: 'mental', fatigue_cost: 3, given_by: null };
+const paid = {
+  free_steels: 0,
+  fatigue_category: 'mental',
+  fatigue_cost: 3,
+  given_by: null,
+  steeled_this_round: false,
+};
 
 describe('steelCostLabel', () => {
   it('names the fatigue pool and amount', () => {
@@ -57,6 +63,17 @@ describe('SteelYourself', () => {
     );
     expect(screen.getByTestId('steel-chip')).toHaveTextContent('2 free steels');
     expect(screen.getByTestId('steel-cost')).toHaveTextContent('Free');
+  });
+
+  it('is disabled once she has steeled this round', () => {
+    render(
+      <SteelYourself
+        offer={{ ...paid, steeled_this_round: true }}
+        isLocked={false}
+        dispatchAction={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('steel-button')).toBeDisabled();
   });
 
   it('is disabled when locked', () => {
