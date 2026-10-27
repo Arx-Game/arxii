@@ -93,8 +93,10 @@ class BulkConditionApplication:
     # check modifiers read the value table. None keeps the flat authored values.
     modifier_level: int | None = None
     modifier_size: int | None = None
-    # #4747: the level the caster's vow size step is valued at, or None for no step.
+    # #4747: the level the caster's vow size step is valued at and its share in tenths.
+    # None for no step.
     modifier_vow_level: int | None = None
+    modifier_vow_tenths: int | None = None
 
 
 @dataclass(frozen=True)

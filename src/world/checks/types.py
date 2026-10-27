@@ -218,7 +218,8 @@ class CountedContribution:
     counted: Decimal
 
 
-def _round_half_up(value: Decimal) -> int:
+def round_half_up(value: Decimal) -> int:
+    """``value`` to a whole number, halves away from zero (so -1.5 is -2, signed alike)."""
     return int(value.to_integral_value(rounding=ROUND_HALF_UP))
 
 
@@ -290,11 +291,11 @@ class ModifierBreakdown:
 
     @property
     def total(self) -> int:
-        return _round_half_up(sum((c.counted for c in self.counted()), Decimal(0)))
+        return round_half_up(sum((c.counted for c in self.counted()), Decimal(0)))
 
     @property
     def extra_modifiers_total(self) -> int:
-        return _round_half_up(
+        return round_half_up(
             sum(
                 (
                     c.counted

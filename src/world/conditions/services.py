@@ -35,7 +35,7 @@ from world.checks.constants import ModifierLane, ModifierSourceKind
 from world.checks.models import CheckType
 from world.checks.modifier_values import ValueTable, load_taper_rules, load_value_table
 from world.checks.services import perform_check_with_modifiers
-from world.checks.types import ModifierBreakdown, ModifierContribution
+from world.checks.types import ModifierBreakdown, ModifierContribution, round_half_up
 from world.conditions.constants import (
     POISON_CATEGORY_NAME,
     POISON_DAMAGE_TYPE_NAME,
@@ -1367,27 +1367,43 @@ def _stamp_modifier_sizing(instance: "ConditionInstance", app: BulkConditionAppl
 
     A re-application keeps the higher level, the way intensity stacking keeps the
     higher severity; the size is the applying technique's own, so the latest wins.
-    The vow step's level (#4747) also keeps the higher of the old and the new, so a
-    re-cast by a caster with no step never strips one already there.
-    No-op for an unsized application.
+    The vow step (#4747) keeps the stronger of the old and the new, compared by level
+    and then share, so a re-cast by a caster with no step never strips one already
+    there. No-op for an unsized application.
     """
     if app.modifier_level is None or app.modifier_size is None:
         return
     level = app.modifier_level
     if instance.modifier_level is not None:
         level = max(level, instance.modifier_level)
-    vow_levels = [v for v in (app.modifier_vow_level, instance.modifier_vow_level) if v]
-    vow_level = max(vow_levels) if vow_levels else None
+    steps = [
+        (vow_level, tenths)
+        for vow_level, tenths in (
+            (app.modifier_vow_level, app.modifier_vow_tenths),
+            (instance.modifier_vow_level, instance.modifier_vow_tenths),
+        )
+        if vow_level and tenths
+    ]
+    vow_level, vow_tenths = max(steps) if steps else (None, None)
     if (
         instance.modifier_level == level
         and instance.modifier_size == app.modifier_size
         and instance.modifier_vow_level == vow_level
+        and instance.modifier_vow_tenths == vow_tenths
     ):
         return
     instance.modifier_level = level
     instance.modifier_size = app.modifier_size
     instance.modifier_vow_level = vow_level
-    instance.save(update_fields=["modifier_level", "modifier_size", "modifier_vow_level"])
+    instance.modifier_vow_tenths = vow_tenths
+    instance.save(
+        update_fields=[
+            "modifier_level",
+            "modifier_size",
+            "modifier_vow_level",
+            "modifier_vow_tenths",
+        ]
+    )
 
 
 def _make_just_installed_triggers_live(target: "ObjectDB") -> None:  # noqa: OBJECTDB_PARAM
@@ -2777,19 +2793,21 @@ def _vow_step_value(
 ) -> int:
     """The caster's vow size step on one of ``instance``'s sized modifiers, or 0 (#4747).
 
-    value(L, size + 1) - value(L, size) at the stored ``modifier_vow_level`` L, signed
+    (value(L, size + 1) - value(L, size)) x tenths / 10 at the stored
+    ``modifier_vow_level`` L and ``modifier_vow_tenths``, rounded half up and signed
     like the authored value, so a debuff's step is a further penalty. 0 when the
     instance has no step or the table lacks either row. Read from stored columns only:
     no query.
     """
     vow_level = instance.modifier_vow_level
-    if not vow_level or not _is_sized(instance):
+    tenths = instance.modifier_vow_tenths
+    if not vow_level or not tenths or not _is_sized(instance):
         return 0
     stepped = value_table.signed_value(authored_value, vow_level, instance.modifier_size + 1)
     base = value_table.signed_value(authored_value, vow_level, instance.modifier_size)
     if stepped is None or base is None:
         return 0
-    return stepped - base
+    return round_half_up(Decimal(stepped - base) * tenths / 10)
 
 
 def _priced_sized_modifier(

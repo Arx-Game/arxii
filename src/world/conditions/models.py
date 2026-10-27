@@ -1602,8 +1602,19 @@ class ConditionInstance(SharedMemoryModel):
             "The level the caster's vow size step is valued at (#4747): her vow thread's "
             "shown level, fixed when the buff was cast (never capped by modifier_level). "
             "Set only when her engaged vow has a technique specialty for one of the "
-            "technique's functions. Each modifier then adds value(this level, size + 1) "
-            "minus value(this level, size), never tapered. Null means no step."
+            "technique's functions. Null means no step."
+        ),
+    )
+    modifier_vow_tenths = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The vow size step's share in tenths (#4747), fixed at cast: the matching "
+            "technique specialty's multiplier_tenths (the larger when role and sub-role "
+            "both match), times SecondaryVowConfig.potency_tenths / 10 for a secondary "
+            "vow. Each modifier adds (value(modifier_vow_level, size + 1) minus "
+            "value(modifier_vow_level, size)) x this / 10, rounded half up, never "
+            "tapered. Null or 0 means no step."
         ),
     )
     soulfray_consented = models.BooleanField(

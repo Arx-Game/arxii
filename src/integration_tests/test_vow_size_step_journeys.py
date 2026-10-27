@@ -3,26 +3,28 @@
 Slice 9 of #4551. Selene (level 6) holds a Sword vow whose role carries a technique
 specialty for Defense Buff. When she casts a sized buff whose technique carries that
 function, the buff counts one size step stronger, valued at her vow thread's shown
-level, and that extra part is never tapered. Points only: no outcome floor or ceiling.
+level and scaled by the specialty row's ``multiplier_tenths`` (10 = one whole step), and
+that extra part is never tapered. Points only: no outcome floor or ceiling. Only the
+one-size-up shape is code; every amount is staff-tuned rows.
 
 Every cast goes the way the web client sends it (``cast_technique`` through dispatch),
-or, for the fight, a declared combat action resolved by ``resolve_round``. The rows are
-the example seed (``world.seeds.modifier_values``), so every expected number below is
-worked by hand from it:
+or, for the fight, a declared combat action resolved by ``resolve_round``. The value and
+taper rows are the example seed (``world.seeds.modifier_values``), so every expected
+number below is worked by hand from it:
 
 * check and stat lane values: Large = 3 at level 1, 10 at level 6, 16 at level 11;
   Exceptional = 1.5 x Large, rounded half to even: 4 at level 1 (4.5), 15 at level 6,
   24 at level 11. A level reads the row at the highest seeded level at or below it, so
   level 4 reads level 1's row.
-* the step at thread level 6 is 15 - 10 = 5; at thread level 4 it is 4 - 3 = 1.
+* a whole step at thread level 6 is 15 - 10 = 5; at thread level 4 it is 4 - 3 = 1. A
+  share of it rounds half away from zero.
 * the taper: the k-th largest of a pile counts (7/8)^(k-1), never below 2/3.
-* cast power to level: 0-7 is level 1, 16-29 level 6, 30-44 level 11; a Success
-  shifts nothing.
 
-Selene's vow role has no blend weight on Crown (the techniques' axis) and her
-specialty's power multiplier is 0, so the vow adds nothing to her cast's power and her
-buff lands at the level her intensity alone gives. That isolates the size step from
-the specialty's power bonus (#2443), which is covered elsewhere.
+The specialty's multiplier also adds cast power (#2443: total thread level x tenths /
+10), which would move the buff's own level with every thread and multiplier. So each
+journey has staff's power-to-level table hold one row (``_pin_cast_level``): every cast
+lands at the level that row names, whatever its power, and the buff's own value is known
+by hand. Selene's role has no Crown weight, so the blend term adds nothing either.
 """
 
 from __future__ import annotations
@@ -106,13 +108,20 @@ def _vow_role() -> object:
     return CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1, crown_weight=0)
 
 
+def _pin_cast_level(level: int) -> None:
+    """Staff's power-to-level table holds one row: every cast lands at ``level``."""
+    CastPowerLevel.objects.all().delete()
+    CastPowerLevel.objects.create(min_power=0, level=level)
+
+
 class AVowedCastersBuffsStep(JourneyCase):
-    """Selene buffs Vesper's Ward Reading beside three buffs from Aldric (level 11)."""
+    """Selene buffs Vesper's Ward Reading beside three Large buffs already on her."""
 
     def setUp(self) -> None:
         super().setUp()
         seed_check_resolution_tables()
         seed_modifier_value_tables()
+        _pin_cast_level(6)
         self.room = self.make_room("The Lantern Gallery")
         SceneFactory(room=self.room)
         self.ward_reading = CheckTypeFactory(name="Ward Reading")
@@ -131,19 +140,8 @@ class AVowedCastersBuffsStep(JourneyCase):
         self.selene = self.player("Selene", level=6)
         self.aldric = self.player("Aldric", level=11)
         self.vesper = self.player("Vesper", level=6)
-
-        # Selene's buff: intensity 20 lands at level 6.
-        self.warding_word = self.buff_technique("Warding Word", intensity=20)
-        # A weak casting of the same kind: intensity 5 lands at level 1.
-        self.faint_ward = self.buff_technique("Faint Ward", intensity=5)
-        # Aldric's three buffs: intensity 30 lands at level 11.
-        self.aldric_buffs = [
-            self.buff_technique(f"Lantern Sight {index + 1}", intensity=30) for index in range(3)
-        ]
-        for technique in (self.warding_word, self.faint_ward):
-            grant_technique(self.selene.sheet_data.primary_persona, technique)
-        for technique in self.aldric_buffs:
-            grant_technique(self.aldric.sheet_data.primary_persona, technique)
+        self.warding_word = self.buff_technique("Warding Word")
+        grant_technique(self.selene.sheet_data.primary_persona, self.warding_word)
 
     # -- setup helpers ----------------------------------------------------------
 
@@ -162,12 +160,12 @@ class AVowedCastersBuffsStep(JourneyCase):
         character.traits.set_trait_value(self.strength.name, 20)
         return character
 
-    def technique(self, name: str, *, intensity: int, condition: ConditionTemplate) -> Technique:
+    def technique(self, name: str, *, condition: ConditionTemplate) -> Technique:
         """A Defense Buff technique whose whole effect is one Large ally buff."""
         technique = TechniqueFactory(
             name=name,
             gift=GiftFactory(),
-            intensity=intensity,
+            intensity=20,
             anima_cost=1,
             effect_type=BinaryEffectTypeFactory(),
             damage_profile=False,
@@ -183,22 +181,35 @@ class AVowedCastersBuffsStep(JourneyCase):
         )
         return technique
 
-    def buff_technique(self, name: str, *, intensity: int) -> Technique:
+    def ward_condition(self, name: str) -> ConditionTemplate:
         condition = ConditionTemplateFactory(name=name)
         ConditionCheckModifierFactory(
             condition=condition, check_type=self.ward_reading, modifier_value=FLAT_AUTHORED
         )
-        return self.technique(name, intensity=intensity, condition=condition)
+        return condition
 
-    def swear(self, *, thread_level: int, function: str = TechniqueFunction.DEFENSE_BUFF) -> None:
-        """Selene engages her vow, whose role specializes in ``function``."""
+    def buff_technique(self, name: str) -> Technique:
+        return self.technique(name, condition=self.ward_condition(name))
+
+    def swear(
+        self,
+        *,
+        thread_level: int,
+        function: str = TechniqueFunction.DEFENSE_BUFF,
+        tenths: int = 10,
+        is_secondary: bool = False,
+    ) -> None:
+        """Selene engages her vow, whose role specializes in ``function`` at ``tenths``."""
         role = _vow_role()
-        # Multiplier 0: the specialty names the function and adds no cast power.
         CovenantRoleTechniqueSpecialtyFactory(
-            covenant_role=role, function=function, multiplier_tenths=0
+            covenant_role=role, function=function, multiplier_tenths=tenths
         )
         engage_vow_with_thread(
-            self.selene.sheet_data, role, covenant=self.covenant, thread_level=thread_level
+            self.selene.sheet_data,
+            role,
+            covenant=self.covenant,
+            thread_level=thread_level,
+            is_secondary=is_secondary,
         )
 
     def cast(self, caster: ObjectDB, target: ObjectDB, technique: Technique) -> None:
@@ -219,31 +230,35 @@ class AVowedCastersBuffsStep(JourneyCase):
     def ward_check(self) -> CheckResult:
         return perform_check_with_modifiers(self.vesper, self.ward_reading, target_difficulty=50)
 
-    def buff_vesper_beside_aldric(self) -> int:
-        """Aldric's three buffs, then Selene's; returns the check's gain."""
+    def buff_vesper_beside_others(self) -> int:
+        """Three Large buffs other casters left on Vesper, then Selene's; the check's gain."""
         before = self.ward_check().total_points
-        for technique in self.aldric_buffs:
-            self.cast(self.aldric, self.vesper, technique)
+        for index in range(3):
+            # Cast earlier by stronger casters: level 11, Large.
+            ConditionInstanceFactory(
+                target=self.vesper,
+                condition=self.ward_condition(f"Lantern Sight {index + 1}"),
+                modifier_level=11,
+                modifier_size=ModifierSize.LARGE,
+            )
         self.cast(self.selene, self.vesper, self.warding_word)
-        for technique in self.aldric_buffs:
-            self.assertEqual(self.landed(technique).modifier_level, 11)
         self.assertEqual(self.landed(self.warding_word).modifier_level, 6)
         return self.ward_check().total_points - before
 
     # -- journeys -----------------------------------------------------------------
 
-    def test_her_step_at_thread_six_counts_whole_beside_a_tapered_pile(self) -> None:
+    def test_her_whole_step_at_thread_six_counts_beside_a_tapered_pile(self) -> None:
         self.swear(thread_level=6)
 
-        gain = self.buff_vesper_beside_aldric()
+        gain = self.buff_vesper_beside_others()
 
         selene = self.landed(self.warding_word)
-        self.assertEqual(selene.modifier_vow_level, 6)
-        # The pile: Aldric's three Large at level 11 (16 each) and Selene's Large at
-        # level 6 (10), tapered together: 16 + 16 x 7/8 + 16 x (7/8)^2 + 10 x (7/8)^3
-        # = 16 + 14 + 12.25 + 6.69921875 = 48.94921875. Her step, Exceptional minus
-        # Large at level 6 = 15 - 10 = 5, counts whole: 53.94921875, which rounds to 54.
-        # Tapered as part of a 15 it would be 42.25 + 15 x (7/8)^3 = 52.30, so 52.
+        self.assertEqual((selene.modifier_vow_level, selene.modifier_vow_tenths), (6, 10))
+        # The pile: three Large at level 11 (16 each) and Selene's Large at level 6 (10),
+        # tapered together: 16 + 16 x 7/8 + 16 x (7/8)^2 + 10 x (7/8)^3
+        # = 16 + 14 + 12.25 + 6.69921875 = 48.94921875. Her step, Exceptional minus Large
+        # at level 6 = 15 - 10 = 5 at 10 tenths, counts whole: 53.94921875, which rounds
+        # to 54. Tapered as part of a 15 it would be 42.25 + 15 x (7/8)^3 = 52.30, so 52.
         self.assertEqual(gain, 54)
         breakdown = collect_check_modifiers(self.vesper.sheet_data, self.ward_reading)
         (contribution,) = [c for c in breakdown.contributions if c.vow_part]
@@ -252,7 +267,7 @@ class AVowedCastersBuffsStep(JourneyCase):
     def test_at_thread_four_the_step_is_smaller(self) -> None:
         self.swear(thread_level=4)
 
-        gain = self.buff_vesper_beside_aldric()
+        gain = self.buff_vesper_beside_others()
 
         self.assertEqual(self.landed(self.warding_word).modifier_vow_level, 4)
         # Level 4 reads level 1's row: Exceptional 4 minus Large 3 = 1.
@@ -262,22 +277,47 @@ class AVowedCastersBuffsStep(JourneyCase):
     def test_a_vow_without_the_functions_specialty_adds_nothing(self) -> None:
         self.swear(thread_level=6, function=TechniqueFunction.STRIKE)
 
-        gain = self.buff_vesper_beside_aldric()
+        gain = self.buff_vesper_beside_others()
 
-        self.assertIsNone(self.landed(self.warding_word).modifier_vow_level)
+        selene = self.landed(self.warding_word)
+        self.assertEqual((selene.modifier_vow_level, selene.modifier_vow_tenths), (None, None))
         # The tapered pile alone: 48.94921875, which rounds to 49.
         self.assertEqual(gain, 49)
 
+    def test_a_three_tenths_specialty_gives_a_small_step(self) -> None:
+        self.swear(thread_level=6, tenths=3)
+
+        gain = self.buff_vesper_beside_others()
+
+        self.assertEqual(self.landed(self.warding_word).modifier_vow_tenths, 3)
+        # The step: 5 x 3/10 = 1.5, rounded half up to 2. 48.94921875 + 2 = 50.94921875,
+        # which rounds to 51. (Unrounded, 50.45 would round to 50.)
+        self.assertEqual(gain, 51)
+
+    def test_a_secondary_vow_steps_at_the_secondary_potency(self) -> None:
+        # Her only engaged vow is a secondary one. The default SecondaryVowConfig potency
+        # is 6 tenths, so her 10-tenths specialty counts 10 x 6/10 = 6 tenths.
+        self.swear(thread_level=6, is_secondary=True)
+
+        gain = self.buff_vesper_beside_others()
+
+        selene = self.landed(self.warding_word)
+        self.assertEqual((selene.modifier_vow_level, selene.modifier_vow_tenths), (6, 6))
+        # The step at the full thread level 6: 5 x 6/10 = 3. 48.94921875 + 3 = 51.95, so
+        # 52. (Scaling the level instead, 6 x 0.6 = 3 reads level 1's row: a step of 1,
+        # 50.)
+        self.assertEqual(gain, 52)
+
     def test_a_weak_cast_from_a_deep_vow_still_steps_at_the_vows_level(self) -> None:
         self.swear(thread_level=6)
+        _pin_cast_level(1)
         before = self.ward_check().total_points
 
-        self.cast(self.selene, self.vesper, self.faint_ward)
+        self.cast(self.selene, self.vesper, self.warding_word)
 
-        faint = self.landed(self.faint_ward)
-        # Intensity 5 sits in the 0-7 power row: level 1. The step is valued at her
-        # thread's level 6, never at the buff's own level 1.
-        self.assertEqual((faint.modifier_level, faint.modifier_vow_level), (1, 6))
+        weak = self.landed(self.warding_word)
+        # The buff lands at level 1; the step is valued at her thread's level 6.
+        self.assertEqual((weak.modifier_level, weak.modifier_vow_level), (1, 6))
         # Large at level 1 = 3, plus the level-6 step 15 - 10 = 5: 8.
         # (Capped at the buff's level the step would be 4 - 3 = 1, for 4.)
         self.assertEqual(self.ward_check().total_points - before, 8)
@@ -289,9 +329,9 @@ class AVowedCastersBuffsStep(JourneyCase):
 
         self.cast(self.aldric, self.vesper, self.warding_word)
 
-        # Aldric has no vow; the re-application keeps the higher step level, as it
-        # keeps the higher modifier level (his intensity-20 cast is level 6 too).
-        self.assertEqual(self.landed(self.warding_word).modifier_vow_level, 6)
+        # Aldric has no vow; the re-application keeps the stronger step already there.
+        selene = self.landed(self.warding_word)
+        self.assertEqual((selene.modifier_vow_level, selene.modifier_vow_tenths), (6, 10))
 
     def test_a_stat_buff_steps_in_the_stat_lane(self) -> None:
         self.swear(thread_level=6)
@@ -299,7 +339,7 @@ class AVowedCastersBuffsStep(JourneyCase):
         ConditionModifierEffectFactory(
             condition=condition, modifier_target=self.strength_target, value=FLAT_AUTHORED
         )
-        iron_grip = self.technique("Iron Grip", intensity=20, condition=condition)
+        iron_grip = self.technique("Iron Grip", condition=condition)
         grant_technique(self.selene.sheet_data.primary_persona, iron_grip)
         before = self.vesper.traits.get_trait_value(self.strength.name)
 
@@ -308,7 +348,7 @@ class AVowedCastersBuffsStep(JourneyCase):
         instance = ConditionInstance.objects.get(target=self.vesper, condition=condition)
         self.assertEqual((instance.modifier_level, instance.modifier_vow_level), (6, 6))
         # The stat lane's seed equals the check lane's: Large at level 6 = 10, and the
-        # step 15 - 10 = 5, so strength gains 15 stored units.
+        # whole step 15 - 10 = 5, so strength gains 15 stored units.
         self.assertEqual(self.vesper.traits.get_trait_value(self.strength.name) - before, 15)
 
 
@@ -333,9 +373,9 @@ class AHexersDebuffStepsOnAnOpponent(JourneyCase):
         CheckSystemSetupFactory.create()
         DamageSuccessLevelMultiplierFactory(min_success_level=1, multiplier=1)
         seed_modifier_value_tables()
-        # One power row: every cast in this fight lands at level 6, whatever its power.
-        CastPowerLevel.objects.all().delete()
-        CastPowerLevel.objects.create(min_power=0, level=6)
+        # One power row: every cast in this fight lands at level 6, whatever its power
+        # (her specialty's multiplier also adds cast power, #2443).
+        _pin_cast_level(6)
         self.yard = self.make_room("The Yard")
         self.check_type = CheckTypeFactory()
         CheckTypeTraitFactory(check_type=self.check_type, trait=StatTraitFactory(), weight=1)
@@ -378,7 +418,7 @@ class AHexersDebuffStepsOnAnOpponent(JourneyCase):
         """Selene's vow (thread 6) specializes in ``specialty``; returns the difficulty drop."""
         role = _vow_role()
         CovenantRoleTechniqueSpecialtyFactory(
-            covenant_role=role, function=specialty, multiplier_tenths=0
+            covenant_role=role, function=specialty, multiplier_tenths=10
         )
         engage_vow_with_thread(
             self.selene.sheet_data,
