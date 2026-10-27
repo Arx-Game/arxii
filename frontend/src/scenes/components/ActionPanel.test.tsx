@@ -1519,7 +1519,7 @@ describe('ActionPanel', () => {
     });
   });
 
-  it('sends the typed burn inside the cast pull, capped at the preview ceiling', async () => {
+  it('shows the burn in the cast Strain area and sends it capped at the ceiling', async () => {
     vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
     vi.mocked(usePullBurnPreview).mockReturnValue({
       data: {
@@ -1528,31 +1528,52 @@ describe('ActionPanel', () => {
         affordable: true,
         capped_intensity: false,
         resolved_effects: [],
-        burn: { ceiling: 4, strain_units_per_point: '1', hasty_fall: false, available: true },
+        burn: {
+          ceiling: 4,
+          strain_units_per_point: '1',
+          hasty_fall: false,
+          available: true,
+          resonance_name: 'Ruin',
+          off_affinity: true,
+          corruption_affinity_name: 'Abyssal',
+          ceiling_tier_name: 'Amplified',
+        },
       },
-    } as ReturnType<typeof usePullBurnPreview>);
-    const user = userEvent.setup();
+    } as unknown as ReturnType<typeof usePullBurnPreview>);
+    try {
+      const user = userEvent.setup();
 
-    await openCastDialogWithEmberTouch(user);
-    await user.click(screen.getByRole('button', { name: 'stub-pull-7-tier2' }));
+      await openCastDialogWithEmberTouch(user);
+      expect(screen.queryByTestId('cast-strain')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'stub-pull-7-tier2' }));
 
-    expect(screen.getByTestId('pull-burn-ceiling')).toHaveTextContent(
-      'Burn ceiling at Tier 2: 4 resonance'
-    );
-    fireEvent.change(screen.getByTestId('pull-burn-input'), { target: { value: '9' } });
-    await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
-
-    await waitFor(() => {
-      expect(castTechnique).toHaveBeenCalledWith(
-        '42',
-        expect.objectContaining({
-          pull: { resonance_id: 4, tier: 2, thread_ids: [7], burn: 4 },
-        })
+      const strain = screen.getByTestId('cast-strain');
+      expect(strain).toHaveTextContent('Ruin (off-affinity)');
+      expect(screen.getByTestId('pull-burn-ceiling')).toHaveTextContent(
+        'Burn ceiling at Amplified: 4 resonance'
       );
-    });
-    vi.mocked(usePullBurnPreview).mockReturnValue({ data: undefined } as ReturnType<
-      typeof usePullBurnPreview
-    >);
+      fireEvent.change(screen.getByTestId('pull-burn-input'), { target: { value: '9' } });
+      expect(screen.getByTestId('pull-burn-off-affinity')).toHaveTextContent(
+        'Burning Ruin raw. It leaves Abyssal corruption you will need cleansed.'
+      );
+      expect(screen.getByTestId('pull-burn-check')).toHaveTextContent(
+        'Strain check on submit. Degrees decide how much of the 4 you reach.'
+      );
+      await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+      await waitFor(() => {
+        expect(castTechnique).toHaveBeenCalledWith(
+          '42',
+          expect.objectContaining({
+            pull: { resonance_id: 4, tier: 2, thread_ids: [7], burn: 4 },
+          })
+        );
+      });
+    } finally {
+      vi.mocked(usePullBurnPreview).mockReturnValue({ data: undefined } as unknown as ReturnType<
+        typeof usePullBurnPreview
+      >);
+    }
   });
 
   it('reverts conflicting paid pulls to a single (resonance, tier) group', async () => {

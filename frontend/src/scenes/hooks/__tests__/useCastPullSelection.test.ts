@@ -329,24 +329,42 @@ describe('useCastPullSelection', () => {
             strain_units_per_point: '1',
             hasty_fall: false,
             available: true,
+            resonance_name: 'Dawnlight',
+            off_affinity: false,
+            corruption_affinity_name: null,
+            ceiling_tier_name: 'Amplified',
           },
         },
-      }) as ReturnType<typeof usePullBurnPreview>;
+      }) as unknown as ReturnType<typeof usePullBurnPreview>;
 
-    it('previews the chosen pull against the selected technique', () => {
+    it('answers with the burn preview only once a pull is chosen', () => {
+      mockUsePullBurnPreview.mockReturnValue(burnData(4));
       const wrapper = createWrapper();
       const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
-      expect(mockUsePullBurnPreview).toHaveBeenLastCalledWith(null);
+      expect(result.current.burnPreview).toBeNull();
+      expect(result.current.pullTier).toBeNull();
 
       act(() => result.current.handlePullsChange({ 1: 2 }));
-      expect(mockUsePullBurnPreview).toHaveBeenLastCalledWith({
-        character_sheet_id: 7,
-        resonance_id: 10,
-        tier: 2,
-        thread_ids: [1],
-        technique_id: 42,
-      });
+      expect(result.current.burnPreview?.ceiling).toBe(4);
+      expect(result.current.burnPreview?.ceiling_tier_name).toBe('Amplified');
       expect(result.current.pullTier).toBe(2);
+    });
+
+    it('drops the burn when the technique changes', () => {
+      mockUsePullBurnPreview.mockReturnValue(burnData(4));
+      const wrapper = createWrapper();
+      const { result, rerender } = renderHook(
+        (params: typeof baseParams) => useCastPullSelection(params),
+        { wrapper, initialProps: baseParams }
+      );
+      act(() => result.current.handlePullsChange({ 1: 2 }));
+      act(() => result.current.setBurn(3));
+      expect(result.current.burn).toBe(3);
+      rerender({
+        ...baseParams,
+        selectedTechnique: { ...baseParams.selectedTechnique!, id: 43 },
+      });
+      expect(result.current.burn).toBe(0);
     });
 
     it('adds a burn to the pull payload, capped at the ceiling', () => {

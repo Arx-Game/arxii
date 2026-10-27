@@ -1,7 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ThreadPullDialog } from '../ThreadPullDialog';
-import { previewPull } from '../../../api';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -119,7 +118,6 @@ describe('ThreadPullDialog', () => {
       resonance_id: 7,
       tier: 1,
       thread_ids: [1],
-      burn: 0,
     });
     expect(onClose).toHaveBeenCalled();
   });
@@ -150,72 +148,5 @@ describe('ThreadPullDialog', () => {
     render(<ThreadPullDialog {...defaultProps} onClose={onClose} />);
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
     expect(onClose).toHaveBeenCalled();
-  });
-
-  describe('burn', () => {
-    const burnPreview = (hasty: boolean) => ({
-      resonance_cost: 6,
-      anima_cost: 2,
-      affordable: true,
-      capped_intensity: false,
-      resolved_effects: [],
-      burn: { ceiling: 5, strain_units_per_point: '1.5', hasty_fall: hasty, available: true },
-    });
-
-    async function openWithPull() {
-      fireEvent.click(screen.getByTestId('resonance-btn-7'));
-      await waitFor(() => screen.getByTestId('thread-checkbox-1'));
-      fireEvent.click(screen.getByTestId('thread-checkbox-1'));
-      await waitFor(() => screen.getByTestId('preview-panel'));
-    }
-
-    it('asks the preview for the burn ceiling of the technique being cast', async () => {
-      vi.mocked(previewPull).mockResolvedValue(burnPreview(false));
-      render(<ThreadPullDialog {...defaultProps} techniqueId={42} />);
-      await openWithPull();
-      expect(previewPull).toHaveBeenCalledWith(expect.objectContaining({ technique_id: 42 }));
-      expect(screen.getByTestId('pull-burn-ceiling')).toHaveTextContent(
-        'Burn ceiling at Tier 1: 5 resonance'
-      );
-    });
-
-    it('sends the typed burn with the selection', async () => {
-      vi.mocked(previewPull).mockResolvedValue(burnPreview(false));
-      const onSelect = vi.fn();
-      render(<ThreadPullDialog {...defaultProps} techniqueId={42} onSelect={onSelect} />);
-      await openWithPull();
-      fireEvent.change(screen.getByTestId('pull-burn-input'), { target: { value: '3' } });
-      fireEvent.click(screen.getByTestId('commit-pull-btn'));
-      expect(onSelect).toHaveBeenCalledWith({
-        resonance_id: 7,
-        tier: 1,
-        thread_ids: [1],
-        burn: 3,
-      });
-    });
-
-    it('caps a typed burn at the ceiling', async () => {
-      vi.mocked(previewPull).mockResolvedValue(burnPreview(false));
-      const onSelect = vi.fn();
-      render(<ThreadPullDialog {...defaultProps} techniqueId={42} onSelect={onSelect} />);
-      await openWithPull();
-      fireEvent.change(screen.getByTestId('pull-burn-input'), { target: { value: '99' } });
-      fireEvent.click(screen.getByTestId('commit-pull-btn'));
-      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ burn: 5 }));
-    });
-
-    it('notes a hasty fall only when the preview says so', async () => {
-      vi.mocked(previewPull).mockResolvedValue(burnPreview(true));
-      render(<ThreadPullDialog {...defaultProps} techniqueId={42} />);
-      await openWithPull();
-      expect(screen.getByTestId('pull-burn-hasty')).toBeInTheDocument();
-    });
-
-    it('shows no burn input when the preview carries no burn', async () => {
-      vi.mocked(previewPull).mockResolvedValue({ ...burnPreview(false), burn: null });
-      render(<ThreadPullDialog {...defaultProps} />);
-      await openWithPull();
-      expect(screen.queryByTestId('pull-burn')).not.toBeInTheDocument();
-    });
   });
 });
