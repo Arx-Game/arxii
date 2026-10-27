@@ -2,6 +2,7 @@
 
 from django.test import TestCase, tag
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatOpponentFactory, CombatParticipantFactory
 from world.combat.services import apply_damage_to_opponent, apply_damage_to_participant
 from world.conditions.factories import (
@@ -12,6 +13,7 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionInstance
 from world.conditions.services import apply_condition
+from world.conditions.views import _aggregate_resistance_modifiers, _build_effect_lookups
 from world.vitals.factories import CharacterVitalsFactory
 
 
@@ -96,3 +98,52 @@ class SeverityScaledResistanceTests(TestCase):
         # Effective severity is 2 x stage multiplier 2 = 4: 5 x 4 scaled + 3 flat = 23.
         self.assertEqual(character.conditions.resistance_modifier(physical), 23)
         self.assertEqual(apply(target, 50, damage_type=physical).damage_dealt, 27)
+
+
+class ResistanceSummaryMatchesDamageSeamTests(TestCase):
+    """The conditions summary a player reads shows the resistance the damage seam applies.
+
+    Compared oracle-to-oracle (summary vs handler), as the capability cross-reader
+    tests in world/conditions/tests/test_effective_capability_value.py do.
+    """
+
+    def _summary_and_seam(self, instance, character, damage_type):
+        lookups = _build_effect_lookups([instance])
+        summary = _aggregate_resistance_modifiers(lookups)
+        return summary.get(damage_type.name, 0), character.conditions.resistance_modifier(
+            damage_type
+        )
+
+    def test_scaled_row_summary_matches_seam(self):
+        physical = DamageTypeFactory()
+        smoke = ConditionTemplateFactory()
+        ConditionResistanceModifierFactory(
+            condition=smoke, damage_type=physical, modifier_value=10, scales_with_severity=True
+        )
+        character = CharacterSheetFactory().character
+        result = apply_condition(character, smoke, severity=4)
+
+        summary, seam = self._summary_and_seam(result.instance, character, physical)
+
+        self.assertEqual(seam, 40)
+        self.assertEqual(summary, seam)
+
+    @tag("postgres")
+    def test_flat_stage_row_summary_matches_seam(self):
+        """PG-only: applying a staged condition uses DISTINCT ON in _build_bulk_context."""
+        radiant = DamageTypeFactory()
+        stage = ConditionStageFactory(stage_order=1, severity_multiplier=2)
+        ConditionResistanceModifierFactory(
+            condition=None, stage=stage, damage_type=radiant, modifier_value=-30
+        )
+        character = CharacterSheetFactory().character
+        apply_condition(character, stage.condition)
+        instance = ConditionInstance.objects.get(target=character, condition=stage.condition)
+        instance.current_stage = stage
+        instance.save(update_fields=["current_stage"])
+        character.conditions.invalidate()
+
+        summary, seam = self._summary_and_seam(instance, character, radiant)
+
+        self.assertEqual(seam, -30)
+        self.assertEqual(summary, seam)
