@@ -21,7 +21,6 @@ from django.db import transaction
 from world.combat.constants import SurgeTriggerKind
 from world.combat.escalation import apply_dramatic_surge
 from world.combat.models import SurgeDegreeBand, SurgeTuning
-from world.combat.services.declarations.social_check import roll_social_check
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -68,6 +67,12 @@ def surge_roll_for_participant(
     surge roll gets the situational perks and spends contributing conditions exactly as a
     Rally or Taunt roll does.
     """
+    # Imported here: the services package imports this module (rally, taunt), so a module
+    # level import made importing surge_rolls first a circular import.
+    from world.combat.services.declarations.social_check import (  # noqa: PLC0415
+        roll_social_check,
+    )
+
     return roll_social_check(participant, check_type, potency)
 
 
