@@ -1704,12 +1704,14 @@ Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/ma
 **Drift and Resonance Conflict (#4732):** `services/drift.py` holds `drift_for(sheet)` (weighted
 off-aura balance against `acting_aura(sheet).dominant_affinity`, via
 `AffinityInteraction.conflict_weight`) and `check_resonance_focus(character, technique, *,
-pulled_resonance=None)`, called once per cast BEFORE modifier collection on the scene and combat
-cast paths. Every number and both designations (focus check type, conflict condition) are on the
+cast_pull=None)`, called once per cast from `_complete_technique_cast` inside `use_technique`
+(after anima, before `resolve_fn` gathers modifiers), so every cast path rolls it; a pull is
+part of its cast. On technique-enhanced social actions modifiers are gathered before
+`use_technique`, so the penalty counts from her next roll; the joust is not a cast. Every number and both designations (focus check type, conflict condition) are on the
 `DriftConfig` singleton (`get_drift_config()`); unset designations skip the check and show on the
 Required content dashboard. The penalty is the conflict condition's authored
 `ConditionCheckModifier`; never set `alters_behavior` for it (use `ConditionCategory.self_shakeable`).
-Stirring it up is an authored social action applying the condition, not code.
+Stirring it up is an authored social action applying the condition at a severity (the higher wins), not code.
 
 `models/renown_config.py` — `RenownAwardConfig`: **abstract base** (SharedMemoryModel)
 shared by `DramaticMomentType` and `AudereMajoraThreshold`. Carries four authored

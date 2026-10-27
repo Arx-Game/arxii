@@ -13,7 +13,7 @@ The aura a character acts with right now: 100% of the worn alternate self's reso
 Resonance a character carries outside the affinity she acts with: the sum of her balances in other affinities, each times `AffinityInteraction.conflict_weight`, measured by `drift_for(sheet)` against `acting_aura(sheet).dominant_affinity`. Drift strictly past the `DriftConfig` threshold makes a cast call for a focus check. _Avoid_: corruption, taint.
 
 **Resonance Conflict**:
-The authored condition a failed focus check (`check_resonance_focus`) puts on a character for the scene, designated by `DriftConfig.conflict_condition`; its own check modifier is the penalty. Her category is `self_shakeable`, never `alters_behavior`. She shakes it off with `breakfree`; others stir it up through authored social actions.
+The authored condition a failed focus check (`check_resonance_focus`) puts on a character for the template's duration (authored as the scene), designated by `DriftConfig.conflict_condition`; its own check modifier is the penalty. Her category is `self_shakeable`, never `alters_behavior`. She shakes it off with `breakfree`; others stir it up through authored social actions.
 
 **Aura share**:
 One affinity's percentage of a character's aura: a `CharacterAuraShare` row keyed on the aura and the `Affinity` row. Code reads shares by Affinity row, never by a name or a per-affinity column.
