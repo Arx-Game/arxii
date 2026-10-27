@@ -2080,7 +2080,8 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   projection rows are not built (they need a server projection of the spiral).
 - **Authored numbers.** `StrainConfig.burn_per_intensity`, `engagement_share_percent`,
   `strain_check_type`, `strain_check_difficulty`; `StrainBurnReach` rows; `Affinity.burn_value`;
-  `CorruptionConfig.hasty_fall_multiplier`. Migrations 0314 (fields, `CombatPull` burn columns)
+  `CorruptionConfig.hasty_fall_multiplier`; and for steeling yourself (#4738)
+  `steel_fatigue_category`, `steel_fatigue_cost`, `free_steels_per_encouragement`. Migrations 0314 (fields, `CombatPull` burn columns)
   and 0315 (`SceneActionPullDeclaration.burn`).
 - **Web combat fix.** `CombatRoundContext._record_combat_declaration` used to drop the web
   declaration card's `pull_*` kwargs, so a pull declared from the web focused cast was never

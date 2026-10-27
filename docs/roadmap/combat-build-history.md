@@ -374,7 +374,8 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - **Steeling yourself (#4738, slice 2 of #4727) - DONE:** `SurgeTriggerKind.STEELED` joins
   `ROLLED_SURGE_TRIGGER_KINDS` (a `SurgeTuning` may carry `potency_base`); `StrainConfig`
   gains `steel_fatigue_category`, `steel_fatigue_cost`, `free_steels_per_encouragement`;
-  `CharacterEngagement.free_steels` holds free steels until the fight ends. Service
+  `CharacterEngagement.free_steels` holds free steels until the fight ends,
+  `free_steels_given_by` credits the rallier, `last_steeled_round` is the once-a-round gate. Service
   `world/combat/steel.py`, action `combat_steel`, telnet `combat steel`, web
   `POST /api/combat/<id>/steel/`, the `SteelYourself` button. A successful Rally grants free
   steels. Migration 0322. Journeys: `test_steel_journeys.py`. Inert until staff author the
