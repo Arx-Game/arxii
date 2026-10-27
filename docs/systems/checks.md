@@ -149,9 +149,12 @@ The walk only reaches a check whose scoped `ModifierTarget` is in an
   pile tapers, though one scene holds at most one row per check type.
 
 **A vowed caster's size step (#4747, ADR-4747-A).** A sized condition instance whose
-`modifier_vow_level` is set (stamped at cast, see `docs/systems/magic.md`) adds, to each of its
-modifiers, value(L, size + 1) minus value(L, size) at that level L, signed like the authored
-modifier, so a debuff's step is a further penalty and lands in the penalty pile. The step is the
+`modifier_vow_level` (L) and `modifier_vow_tenths` are set (stamped at cast, see
+`docs/systems/magic.md`) adds, to each of its modifiers, (value(L, size + 1) minus
+value(L, size)) x tenths / 10, rounded half up (`checks.types.round_half_up`) and signed like
+the authored modifier, so a debuff's step is a further penalty and lands in the penalty pile.
+Only the one-size-up shape is code; the values, the level and the tenths (the vow's
+`CovenantRoleTechniqueSpecialty.multiplier_tenths`) are all data. The step is the
 contribution's `vow_part` and is never tapered; the buff's own value (at `modifier_level`) still
 tapers in its pile. L is the caster's vow thread shown level, never capped by the buff's own
 level. No table row for either size means no step. Paramount is reachable only this way. One

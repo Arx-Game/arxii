@@ -69,10 +69,13 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
   `world/seeds/tests/test_stat_lane_universality.py` holds the relation until the simulator's
   universality guard is built. The modifier pile above reads the check lane only.
 - A vowed caster's size step (#4747, ADR-4747-A) reads the same rows: a stepped buff adds
-  value(L, size + 1) minus value(L, size) at her vow thread's shown level L, untapered. So the
-  gap between adjacent sizes at each level is the vow's reward, and the Paramount rows exist only
-  for it (Exceptional plus a step). Tuning the curve tunes the vow step with it; the modifier
-  pile does not simulate it.
+  (value(L, size + 1) minus value(L, size)) x tenths / 10 at her vow thread's shown level L,
+  rounded half up, untapered. Two knobs tune it, both data: the gap between adjacent sizes at
+  each level in the value table (the Paramount rows exist only for the step above
+  Exceptional), and each vow's `CovenantRoleTechniqueSpecialty.multiplier_tenths` on the
+  covenant role admin (10 = one whole step; the same dial scales that specialty's cast power).
+  A secondary vow's tenths are also scaled by `SecondaryVowConfig.potency_tenths`. Only the
+  one-size-up shape is fixed in code. The modifier pile does not simulate the step.
 
 The panel template (`_checks_panel.html`) hosts the `roll_modifier` / `roller_points` /
 `target_difficulty` / `modifier_points` / `target_modifier_points` slider form itself,

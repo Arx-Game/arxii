@@ -1144,16 +1144,21 @@ inventory join later.
   Passive techniques (`combat/services/damage/passive_techniques.py`) are not casts and stay
   unsized. The target's level is never read.
 - **Vow size step (#4747, ADR-4747-A)** - when a row is sized, `apply_technique_conditions` also
-  calls `caster_vow_step_level(source_character, technique)` once per cast: the shown level of
-  the caster's COVENANT_ROLE thread on her first engaged vow's anchor (the vow
-  `_resolve_source_vow_anchor` stamps as `source_vow`), when that role, its resolved sub-role or
-  its anchor has a `CovenantRoleTechniqueSpecialty` for one of the technique's function tags;
-  else None. A secondary vow there steps at that level times `SecondaryVowConfig.potency_tenths`
-  / 10, floored. The level is not capped by the buff's own level, so a weak cast from a deep vow
-  steps at the vow's depth. It rides `BulkConditionApplication.modifier_vow_level` onto
-  `ConditionInstance.modifier_vow_level` through `_stamp_modifier_sizing` (a re-application
-  keeps the higher). Each modifier of the instance then adds one size step at that level as an
-  untapered `vow_part` (`docs/systems/checks.md`). Points only: no outcome floors or ceilings.
+  calls `caster_vow_step(source_character, technique) -> VowStep | None` once per cast. Its
+  vow is her first engaged role (the one `_resolve_source_vow_anchor` stamps as `source_vow`);
+  it steps when that role, its resolved sub-role or its anchor has a
+  `CovenantRoleTechniqueSpecialty` for one of the technique's function tags. `VowStep.level`
+  is the shown level of her COVENANT_ROLE thread on the anchor, never capped by the buff's own
+  level, so a weak cast from a deep vow steps at the vow's depth. `VowStep.tenths` is the
+  matching row's `multiplier_tenths` (the larger when two rows match), times
+  `SecondaryVowConfig.potency_tenths / 10` (rounded half up) for a secondary vow. None when
+  there is no match, thread, level or share. The pair rides `BulkConditionApplication` onto
+  `ConditionInstance.modifier_vow_level` / `modifier_vow_tenths` through
+  `_stamp_modifier_sizing` (a re-application keeps the stronger pair, by level then tenths).
+  Each modifier of the instance then adds the scaled size step as an untapered `vow_part`
+  (`docs/systems/checks.md`). Points only: no outcome floors or ceilings. Note the specialty's
+  multiplier also adds cast power (`covenant_role_specialty_power_term`), so a vowed buff
+  usually lands at a higher `modifier_level` too.
 - **Admin size check** — `applied_condition_size_warnings(technique)` returns plain warnings, shown
   by `TechniqueAdmin.save_related` as admin messages (never a refusal): a technique whose only
   payload is the buff should size it Large; one with other payload rows (damage, other
