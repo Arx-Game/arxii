@@ -74,6 +74,15 @@ class CharacterEngagement(SharedMemoryModel):
             "an ally's successful Rally. Spent one per steel; ends with the engagement."
         ),
     )
+    last_steeled_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The combat round number in which this character last steeled herself. Set by "
+            "the steel service, which refuses a second steel in the same round whatever "
+            "the roll or band gave."
+        ),
+    )
     started_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When the engagement began.",

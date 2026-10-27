@@ -82,6 +82,25 @@ def _spend_free_steel(engagement: CharacterEngagement) -> bool:
     return True
 
 
+def _lock_and_mark_round(engagement: CharacterEngagement, round_number: int) -> None:
+    """Lock the engagement row, refuse a second steel this round, and mark this one.
+
+    Read as values, never an instance: the identity map would hand back the cached row
+    as it was, and a steel another request just took would be missed.
+    """
+    marker, free_steels = (
+        CharacterEngagement.objects.select_for_update()
+        .filter(pk=engagement.pk)
+        .values_list("last_steeled_round", "free_steels")
+        .get()
+    )
+    if marker == round_number:
+        raise SteelRefusedError(ALREADY_STEELED_MESSAGE)
+    engagement.free_steels = free_steels
+    engagement.last_steeled_round = round_number
+    engagement.save(update_fields=["last_steeled_round"])
+
+
 def steel_yourself(participant: CombatParticipant) -> SteelResult:
     """Steel ``participant``: pay, roll resolve, surge her intensity by the outcome's band.
 
@@ -104,31 +123,43 @@ def steel_yourself(participant: CombatParticipant) -> SteelResult:
     tuning = surge_tuning_for(SurgeTriggerKind.STEELED)
     if tuning is None:
         raise SteelRefusedError(NO_STEEL_TUNING_MESSAGE)
-    if not rolled_surge_possible(encounter, participant, SurgeTriggerKind.STEELED, None):
+    # An early, friendly refusal; the locked re-check inside the transaction is the gate.
+    if engagement.last_steeled_round == encounter.round_number or not rolled_surge_possible(
+        encounter, participant, SurgeTriggerKind.STEELED, None
+    ):
         raise SteelRefusedError(ALREADY_STEELED_MESSAGE)
 
     config = steel_config()
-    with transaction.atomic():
-        used_free = _spend_free_steel(engagement)
-        fatigue_spent = 0
-        if not used_free:
-            fatigue_spent = apply_fatigue(
-                participant.character_sheet,
-                config.steel_fatigue_category,
-                config.steel_fatigue_cost,
-                EffortLevel.MEDIUM,
+    held = (engagement.free_steels, engagement.last_steeled_round)
+    committed = False
+    try:
+        with transaction.atomic():
+            _lock_and_mark_round(engagement, encounter.round_number)
+            used_free = _spend_free_steel(engagement)
+            fatigue_spent = 0
+            if not used_free:
+                fatigue_spent = apply_fatigue(
+                    participant.character_sheet,
+                    config.steel_fatigue_category,
+                    config.steel_fatigue_cost,
+                    EffortLevel.MEDIUM,
+                )
+            result = surge_roll_for_participant(participant, tuning.check_type, tuning.potency_base)
+            beat = apply_rolled_surge(
+                encounter=encounter,
+                participant=participant,
+                trigger_kind=SurgeTriggerKind.STEELED,
+                outcome=result.outcome,
+                potency=tuning.potency_base,
+                source_character=participant.character_sheet.character,
+                tuning=tuning,
+                cause=f"{persona_name_of(participant)} steels herself.",
             )
-        result = surge_roll_for_participant(participant, tuning.check_type, tuning.potency_base)
-        beat = apply_rolled_surge(
-            encounter=encounter,
-            participant=participant,
-            trigger_kind=SurgeTriggerKind.STEELED,
-            outcome=result.outcome,
-            potency=tuning.potency_base,
-            source_character=participant.character_sheet.character,
-            tuning=tuning,
-            cause=f"{persona_name_of(participant)} steels herself.",
-        )
+        committed = True
+    finally:
+        if not committed:
+            # The database rolled back; the identity-mapped row must say the same.
+            engagement.free_steels, engagement.last_steeled_round = held
     return SteelResult(
         outcome=result.outcome,
         surge_amount=beat.amount if beat is not None else 0,

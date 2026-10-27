@@ -14,12 +14,14 @@ from __future__ import annotations
 from integration_tests.test_surge_rolls_journeys import _SurgeField
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import SurgeTriggerKind
-from world.combat.models import StrainConfig
+from world.combat.factories import SurgeDegreeBandFactory
+from world.combat.models import StrainConfig, SurgeTuning
 from world.combat.social_combat_content import INSPIRED_CONDITION_NAME
 from world.conditions.factories import ConditionTemplateFactory
 from world.fatigue.services import get_or_create_fatigue_pool
 from world.mechanics.engagement import CharacterEngagement
 from world.scenes.constants import RoundStatus
+from world.traits.factories import CheckOutcomeFactory
 
 PARTIAL_STEEL = 2
 SUCCESS_STEEL = 5
@@ -141,6 +143,40 @@ class SteelingYourself(_SteelField):
         self.assertEqual(again.json()["detail"], ALREADY)
 
 
+class AFailedSteel(_SteelField):
+    """A Failure band that gives nothing writes no surge record, yet the round is spent."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.failure = CheckOutcomeFactory(name="Failure", success_level=-1)
+        SurgeDegreeBandFactory(
+            tuning=SurgeTuning.objects.get(trigger_kind=SurgeTriggerKind.STEELED),
+            outcome=self.failure,
+            intensity=0,
+        )
+
+    def test_a_failure_costs_fatigue_and_cannot_be_rerolled_the_same_round(self) -> None:
+        self.steel(self.failure)
+
+        self.assertEqual(self.mental_fatigue(), FATIGUE_COST)
+        self.assertEqual(self.intensity(self.mira), 0)
+        self.assertFalse(self.records(SurgeTriggerKind.STEELED).exists())
+
+        told = self.steel(self.success)
+
+        self.assertIn(ALREADY, told)
+        self.assertEqual(self.mental_fatigue(), FATIGUE_COST)
+        self.assertEqual(self.intensity(self.mira), 0)
+
+    def test_the_next_round_she_may_try_again(self) -> None:
+        self.steel(self.failure)
+        self.close_round()
+
+        self.steel(self.success)
+
+        self.assertEqual(self.intensity(self.mira), SUCCESS_STEEL)
+
+
 class BeingEncouraged(_SteelField):
     def setUp(self) -> None:
         super().setUp()
@@ -177,10 +213,6 @@ class BeingEncouraged(_SteelField):
         self.resolve(self.partial)
 
         self.assertEqual(self.free_steels(self.mira), 0)
-
-    def test_a_failed_steel_still_costs_what_it_cost(self) -> None:
-        self.steel(self.partial)
-        self.assertEqual(self.mental_fatigue(), FATIGUE_COST)
 
 
 class SteelingWhereYouCannot(_SteelField):
