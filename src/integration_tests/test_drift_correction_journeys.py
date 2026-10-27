@@ -22,6 +22,7 @@ the roll lands on, so the share (authored per tier) is the only thing left to de
 from __future__ import annotations
 
 from decimal import Decimal
+from types import SimpleNamespace
 
 from django.test import override_settings
 from evennia.utils.ansi import strip_ansi
@@ -33,6 +34,7 @@ from world.checks.test_helpers import force_check_outcome
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.items.services.materialize import materialize_item_game_object
+from world.magic.admin import grant_resonance_action
 from world.magic.constants import GainSource
 from world.magic.factories import (
     CharacterAuraFactory,
@@ -55,8 +57,9 @@ from world.magic.models import (
 )
 from world.magic.services.drift import get_drift_correction_config
 from world.magic.services.resonance import grant_resonance
-from world.scenes.factories import SceneFactory
-from world.scenes.interaction_services import invalidate_active_scene_cache
+from world.scenes.factories import SceneFactory, SceneOwnerParticipationFactory
+from world.scenes.interaction_services import get_active_scene, invalidate_active_scene_cache
+from world.scenes.models import Scene
 from world.seeds.game_content.magic import _seed_affinity_interactions, seed_canonical_affinities
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.services import ensure_canonical_check_outcome
@@ -269,7 +272,12 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         stranger = self.carry(self.ysmay, other, "Sunrise Candle")
         self.deed(self.ysmay)
         with force_check_outcome(self.outcomes["Success"]):
-            self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10")
+            told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10")
+        self.assertIn(
+            "Ritual 'Rite of Drift Correction' requires 1x offering for Dawnlight "
+            "that you don't have.",
+            told,
+        )
         self.assertFalse(consumed(stranger))
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
         self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
@@ -439,6 +447,7 @@ class TheSameChanceOnTheWeb(DriftJourneyCase):
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
         self.assertEqual(drift_grants(), [])
         self.assertEqual(len(ysmay_api.get(PENDING).data["results"]), 1)
+        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
 
     def test_declining_on_the_web_lets_the_offer_go(self) -> None:
         mine = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
@@ -466,8 +475,13 @@ class TheChanceLapsesWithTheScene(DriftJourneyCase):
         ysmay_api = self.api(self.account_of(self.ysmay))
         self.assertEqual(len(ysmay_api.get(PENDING).data["results"]), 1)
 
+        # Marrow owns the scene, so the real `scene finish` route runs (finish_scene_full).
+        SceneOwnerParticipationFactory(scene=self.scene, account=self.account_of(self.marrow))
         with self.captureOnCommitCallbacks(execute=True):
-            self.scene.finish_scene()
+            told = self.telnet(self.marrow, "scene finish")
+        self.assertIn("The scene comes to a close.", told)
+        self.scene.refresh_from_db()
+        self.assertTrue(self.scene.is_finished)
 
         self.assertIn(LAPSE, strip_ansi(self.said(self.ysmay)))
         self.assertIsNone(self.offer_of(self.ysmay))
@@ -478,6 +492,25 @@ class TheChanceLapsesWithTheScene(DriftJourneyCase):
         self.assertFalse(consumed(mine))
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
         self.assertEqual(drift_grants(), [])
+
+    def test_a_deed_after_the_scene_finished_opens_nothing_even_on_a_stale_room_cache(
+        self,
+    ) -> None:
+        SceneOwnerParticipationFactory(scene=self.scene, account=self.account_of(self.marrow))
+        self.telnet(self.marrow, "scene finish")
+        self.assertTrue(Scene.objects.get(pk=self.scene.pk).is_finished)
+        # `scene finish` busts the room's active-scene cache. Another process, or a route
+        # that finishes a scene without busting it, can leave the finished scene cached on
+        # the room: put it back, so only the `is_finished` guard stands between the deed
+        # and an offer for a scene that is over.
+        self.lantern._active_scene_cache = Scene.objects.get(pk=self.scene.pk)
+        self.assertEqual(get_active_scene(self.lantern).pk, self.scene.pk)
+
+        self.deed(self.ysmay)
+
+        self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
+        self.assertIsNone(self.offer_of(self.ysmay))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
 
 
 class WhenNothingOpensAChance(DriftJourneyCase):
@@ -499,15 +532,21 @@ class WhenNothingOpensAChance(DriftJourneyCase):
         self.assertIn(NO_OFFER, self.telnet(self.hobb, "drift"))
 
     def test_a_staff_grant_is_not_a_deed_and_opens_nothing(self) -> None:
-        # No telnet verb grants resonance by staff fiat: this drives the service the
-        # staff grant calls (``grant_resonance``) directly.
+        # The only real face of a staff grant is the admin action `grant_resonance_action`
+        # (src/world/magic/admin.py): no telnet verb or API route grants by staff fiat. It
+        # is a plain function of (modeladmin, request, queryset), so the journey runs it as
+        # staff would from the CharacterResonance changelist, granting 1 per selected row.
         self.connect_telnet(self.ysmay)
         self.watch(self.ysmay)
+        rows = CharacterResonance.objects.filter(
+            character_sheet=self.ysmay.sheet_data, resonance=self.dawnlight
+        )
+        staff_request = SimpleNamespace(user=self.account_of(self.marrow))
         with self.captureOnCommitCallbacks(execute=True):
-            grant_resonance(
-                self.ysmay.sheet_data, self.dawnlight, 20, source=GainSource.STAFF_GRANT
-            )
-        self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
+            grant_resonance_action(None, staff_request, rows)
+        grant = ResonanceGrant.objects.get(source=GainSource.STAFF_GRANT)
+        self.assertEqual((grant.resonance, grant.amount), (self.dawnlight, 1))
+        self.assertEqual(balance(self.ysmay, self.dawnlight), 1)
         self.assertIsNone(self.offer_of(self.ysmay))
         self.assertNotIn(NOTICE, strip_ansi(self.said(self.ysmay)))
         self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
