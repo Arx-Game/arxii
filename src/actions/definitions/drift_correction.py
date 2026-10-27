@@ -26,7 +26,7 @@ _NOT_CARRIED = "You are not carrying everything you offered."
 
 
 def _actor_sheet_pk(actor: ObjectDB) -> int | None:
-    sheet = actor.sheet_data
+    sheet = actor.character_sheet
     return None if sheet is None else sheet.pk
 
 

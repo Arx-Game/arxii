@@ -14,7 +14,7 @@ from dataclasses import asdict
 from typing import cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Prefetch, Q, QuerySet
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -2219,7 +2219,7 @@ class PendingDriftConversionOfferViewSet(viewsets.ReadOnlyModelViewSet):
     def get_serializer_class(self) -> type:
         return DriftConversionOfferSerializer
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         from world.magic.models import DriftConversionOffer  # noqa: PLC0415
 
         return _account_scoped_offer_queryset(

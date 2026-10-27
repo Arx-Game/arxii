@@ -30,35 +30,43 @@ _CONVERT = "convert"
 
 
 def _own_sheet(caller: ObjectDB) -> CharacterSheet:
-    sheet = caller.sheet_data
+    sheet = caller.character_sheet
     if sheet is None:
         msg = "You don't have a character sheet."
         raise CommandError(msg)
     return sheet
 
 
-def _open_offer(caller: ObjectDB, sheet: CharacterSheet) -> DriftConversionOffer:
-    """The caller's offer for the scene they stand in (a scene's offer lapses with it)."""
-    from world.magic.models import DriftConversionOffer  # noqa: PLC0415
-    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+def _open_offer(sheet: CharacterSheet) -> DriftConversionOffer:
+    """The character's open offer: one whose scene has not finished, wherever they stand.
 
-    scene = None if caller.location is None else get_active_scene(caller.location)
+    A character in two live scenes holds two offers (one per scene); the most recent one
+    is used, the same order the web inbox lists them in.
+    """
+    from world.magic.models import DriftConversionOffer  # noqa: PLC0415
+
     offer = (
-        None
-        if scene is None
-        else DriftConversionOffer.objects.filter(character_sheet=sheet, scene=scene).first()
+        DriftConversionOffer.objects.filter(
+            character_sheet=sheet, scene__is_active=True, scene__date_finished__isnull=True
+        )
+        .order_by("-created_at", "-pk")
+        .first()
     )
     if offer is None:
         raise CommandError(_NO_OFFER)
     return offer
 
 
-def _carried(caller: ObjectDB) -> list[ItemInstance]:
-    """The ``ItemInstance`` rows the caller carries (as ``CmdRitual`` gathers them)."""
+def _carried(caller: ObjectDB, sheet: CharacterSheet) -> list[ItemInstance]:
+    """The caller's own items among what they carry (as ``CmdRitual`` gathers them).
+
+    Only items the caller's sheet holds: an unrelated object in their hands is not an
+    offering, and would make the action refuse the whole list.
+    """
     items = []
     for obj in caller.contents:
         instance = obj.item_instance_or_none
-        if instance is not None:
+        if instance is not None and instance.holder_character_sheet_id == sheet.pk:
             items.append(instance)
     return items
 
@@ -115,11 +123,9 @@ class CmdDrift(ArxCommand):
         word, _, rest = args.partition(" ")
         sheet = _own_sheet(self.caller)
         if not args:
-            self.msg(self._describe_offer(_open_offer(self.caller, sheet)))
+            self.msg(self._describe_offer(_open_offer(sheet), sheet))
         elif word.lower() == _DECLINE and not rest.strip():
-            result = self.decline_action.run(
-                actor=self.caller, offer=_open_offer(self.caller, sheet)
-            )
+            result = self.decline_action.run(actor=self.caller, offer=_open_offer(sheet))
             self.send_result(result.message or "", failed=not result.success)
         elif word.lower() == _CONVERT:
             result = self.action.run(actor=self.caller, **self.resolve_action_args())
@@ -137,7 +143,7 @@ class CmdDrift(ArxCommand):
             raise CommandError(_USAGE)
         target_text, amount = _split_amount(target_part.strip())
         sheet = _own_sheet(self.caller)
-        offer = _open_offer(self.caller, sheet)
+        offer = _open_offer(sheet)
         source = _own_resonance(sheet, source_text.strip())
         target = _own_resonance(sheet, target_text)
         if amount is None:
@@ -158,14 +164,14 @@ class CmdDrift(ArxCommand):
             "source_resonance": source,
             "target_resonance": target,
             "amount": amount,
-            "components_provided": _carried(self.caller),
+            "components_provided": _carried(self.caller, sheet),
         }
 
-    def _describe_offer(self, offer: DriftConversionOffer) -> str:
+    def _describe_offer(self, offer: DriftConversionOffer, sheet: CharacterSheet) -> str:
         from world.magic.services.drift_correction import offer_options  # noqa: PLC0415
 
         lines = ["You may correct drift. Use |wdrift convert <from>=<into> [<amount>]|n."]
-        for option in offer_options(offer, _carried(self.caller)):
+        for option in offer_options(offer, _carried(self.caller, sheet)):
             preview = option.preview
             lines.append(f"Toward {option.target_resonance.name}: up to {preview.cap_remaining}.")
             lines.extend(

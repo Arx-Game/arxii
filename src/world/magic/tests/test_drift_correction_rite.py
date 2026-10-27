@@ -17,6 +17,7 @@ from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
     QualityTierFactory,
+    meaningful_item_for,
 )
 from world.items.models import ItemInstance
 from world.magic.constants import EffectKind, GainSource, TargetKind
@@ -148,6 +149,16 @@ class PerformRiteTests(DriftRiteTestBase):
             (result.source_resonance_id, result.target_resonance_id),
             (self.dread.pk, self.dawnlight.pk),
         )
+
+    def test_a_keepsake_listed_first_is_kept_when_a_material_is_offered_too(self) -> None:
+        requirement = self.config.rite.requirements.get(matches_target_resonance=True)
+        requirement.min_item_meaning = 2
+        requirement.save()
+        keepsake = meaningful_item_for(self.sheet)
+        keepsake_pk = keepsake.pk
+        self.perform(components=[keepsake, self.component])
+        self.assertTrue(_consumed(self.component_pk))
+        self.assertFalse(_consumed(keepsake_pk))
 
     def test_half_share_converts_half_and_keeps_the_rest_of_the_cap(self) -> None:
         self.set_shares(Success="0.50")

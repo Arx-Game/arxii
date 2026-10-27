@@ -8,11 +8,17 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from django.utils import timezone
+
 from actions.definitions.drift_correction import PerformDriftCorrectionAction
 from commands.drift_correction import CmdDrift
 from commands.exceptions import CommandError
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.services.materialize import materialize_item_game_object
+from world.magic.factories import DriftConversionCapFactory, DriftConversionOfferFactory
 from world.magic.tests.test_drift_correction_rite import DriftRiteTestBase, _tied_item
+from world.scenes.factories import SceneFactory
 
 
 class DriftCommandTestBase(DriftRiteTestBase):
@@ -62,6 +68,18 @@ class ResolveActionArgsTests(DriftCommandTestBase):
         kwargs = self.command("convert Drift Dread=Drift Dawnlight").resolve_action_args()
         self.assertEqual(kwargs["components_provided"], [item])
 
+    def test_items_held_by_someone_else_are_not_gathered(self) -> None:
+        mine = _tied_item(self.dawnlight)
+        mine.holder_character_sheet = self.sheet
+        mine.save(update_fields=["holder_character_sheet"])
+        materialize_item_game_object(mine, self.sheet)
+        stray = _tied_item(self.dawnlight)
+        stray.holder_character_sheet = CharacterSheetFactory()
+        stray.save(update_fields=["holder_character_sheet"])
+        materialize_item_game_object(stray, self.sheet)
+        kwargs = self.command("convert Drift Dread=Drift Dawnlight").resolve_action_args()
+        self.assertEqual(kwargs["components_provided"], [mine])
+
     def test_unknown_resonance_is_a_command_error_naming_what_you_hold(self) -> None:
         with self.assertRaises(CommandError) as ctx:
             self.command("convert Nonsense=Drift Dawnlight 3").resolve_action_args()
@@ -86,6 +104,34 @@ class ResolveActionArgsTests(DriftCommandTestBase):
     def test_default_amount_with_nothing_convertible_is_a_command_error(self) -> None:
         with self.assertRaises(CommandError):
             self.command("convert Drift Dawnlight=Drift Dread").resolve_action_args()
+
+
+class OfferLookupTests(DriftCommandTestBase):
+    def test_a_character_who_left_the_scene_room_still_sees_and_acts_on_the_offer(self) -> None:
+        elsewhere = ObjectDBFactory(db_key="Elsewhere", db_typeclass_path="typeclasses.rooms.Room")
+        self.caller.location = elsewhere
+        self.assertIn("Toward Drift Dawnlight: up to 12.", self.lines(""))
+        kwargs = self.command("convert Drift Dread=Drift Dawnlight 4").resolve_action_args()
+        self.assertEqual(kwargs["offer"], self.offer)
+
+    def test_a_finished_scenes_offer_is_not_offered(self) -> None:
+        self.offer.delete()
+        finished = SceneFactory(is_active=False, date_finished=timezone.now())
+        DriftConversionOfferFactory(character_sheet=self.sheet, scene=finished)
+        self.assertEqual(self.lines(""), "You have no open chance to correct drift.")
+
+    def test_with_two_open_offers_the_most_recent_is_used(self) -> None:
+        newer = DriftConversionOfferFactory(character_sheet=self.sheet, scene=SceneFactory())
+        DriftConversionCapFactory(offer=newer, target_resonance=self.sunrise, cap=3)
+        self.assertIn("Toward Drift Sunrise: up to 3.", self.lines(""))
+
+    def test_a_sheetless_caller_gets_the_friendly_refusal(self) -> None:
+        cmd = self.command("")
+        cmd.caller = CharacterFactory(db_key="Sheetless")
+        with patch.object(cmd, "msg") as msg:
+            cmd.func()
+        sent = msg.call_args_list[0].args[0]
+        self.assertEqual(sent[0], "You don't have a character sheet.")
 
 
 class CommandWiringTests(DriftCommandTestBase):

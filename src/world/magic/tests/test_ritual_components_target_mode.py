@@ -120,6 +120,20 @@ class QualifyingComponentsTests(TestCase):
         result = qualifying_components(self.sheet, self.target, [both], min_item_meaning=1)
         assert result == [QualifyingComponent(item=both, mode=ComponentMode.FACET)]
 
+    def test_routes_are_ordered_material_facet_keepsake_whatever_the_input_order(self) -> None:
+        keepsake = meaningful_item_for(self.sheet)
+        faceted = ItemInstanceFactory()
+        ItemFacetFactory(item_instance=faceted, facet=self.facet)
+        material = self._material()
+        result = qualifying_components(
+            self.sheet, self.target, [keepsake, faceted, material], min_item_meaning=2
+        )
+        assert result == [
+            QualifyingComponent(item=material, mode=ComponentMode.MATERIAL),
+            QualifyingComponent(item=faceted, mode=ComponentMode.FACET),
+            QualifyingComponent(item=keepsake, mode=ComponentMode.KEEPSAKE),
+        ]
+
     def test_destroyed_and_empty_items_never_qualify(self) -> None:
         destroyed = self._material(destroyed_at=timezone.now())
         empty = self._material(quantity=0)
@@ -198,6 +212,19 @@ class TargetModeConsumptionTests(TestCase):
             resonance_context=self.target,
         )
         assert not ItemInstance.objects.filter(pk=keepsake.pk).exists()
+
+    def test_a_material_is_spent_before_a_keepsake_listed_ahead_of_it(self) -> None:
+        self._target_requirement(min_item_meaning=2)
+        keepsake = meaningful_item_for(self.sheet)
+        material = ItemInstanceFactory(template=_tied_template(self.target))
+        resolve_and_consume_ritual_components(
+            ritual=self.ritual,
+            components=[keepsake, material],
+            performer_sheet=self.sheet,
+            resonance_context=self.target,
+        )
+        assert ItemInstance.objects.filter(pk=keepsake.pk).exists()
+        assert not ItemInstance.objects.filter(pk=material.pk).exists()
 
     def test_unsatisfied_requirement_raises_and_consumes_nothing(self) -> None:
         self._target_requirement()

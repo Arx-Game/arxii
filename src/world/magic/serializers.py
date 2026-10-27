@@ -16,6 +16,7 @@ from drf_spectacular.utils import extend_schema_field
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
+from rest_framework.request import Request
 
 from actions.models import ConsequencePool
 from actions.serializers import TargetSpecSerializer
@@ -4130,7 +4131,7 @@ class DriftConversionOfferSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     @extend_schema_field(DriftConversionCapSerializer(many=True))
-    def get_caps(self, offer) -> list[dict]:
+    def get_caps(self, offer: DriftConversionOffer) -> list[dict]:
         from world.magic.services.drift_correction import offer_options  # noqa: PLC0415
 
         # One fetch of what the character carries per offer; qualifying items are worked
@@ -4171,12 +4172,14 @@ class DriftCorrectionConvertSerializer(serializers.Serializer):
         except KeyError as exc:
             msg = "Resonance not found."
             raise NotFound(msg) from exc
-        wanted = set(attrs["component_ids"])
-        components = list(
-            ItemInstance.objects.filter(
+        wanted = list(dict.fromkeys(attrs["component_ids"]))
+        held = {
+            item.pk: item
+            for item in ItemInstance.objects.filter(
                 pk__in=wanted, holder_character_sheet_id=offer.character_sheet_id
             ).select_related("template", "quality_tier")
-        )
+        }
+        components = [held[pk] for pk in wanted if pk in held]
         if len(components) != len(wanted):
             msg = "You are not carrying everything you offered."
             raise serializers.ValidationError({"component_ids": msg})
@@ -4212,7 +4215,7 @@ class DriftCorrectionResultSerializer(serializers.Serializer):
     focus_bonus = serializers.IntegerField()
 
 
-def _own_drift_offer(offer_id: int, request):
+def _own_drift_offer(offer_id: int, request: Request) -> DriftConversionOffer:
     """The open offer ``offer_id`` if one of the caller's own characters holds it, else 404."""
     offer = (
         DriftConversionOffer.objects.filter(

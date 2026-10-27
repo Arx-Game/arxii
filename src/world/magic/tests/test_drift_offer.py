@@ -1,5 +1,7 @@
 """Drift holdings and the conversion offer a deed opens (#4733, slice 4 of #4672)."""
 
+from unittest.mock import Mock, patch
+
 from evennia.utils.test_resources import EvenniaTestCase
 
 from evennia_extensions.factories import ObjectDBFactory
@@ -271,3 +273,69 @@ class LapseTests(DriftOfferTestBase):
         )
         finish_scene_full(self.scene)
         self.assertEqual(list(DriftConversionOffer.objects.all()), [other])
+
+
+OPENED = "You carry resonance that does not fit you. Use |wdrift|n to see what you can correct."
+LAPSED = "The chance to correct drift passes with the scene."
+
+
+class OfferNoticeTests(DriftOfferTestBase):
+    """A telnet player is told when an offer opens or lapses; a web player reads the inbox."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.character = self.sheet.character
+        sessions = patch(
+            "world.scenes.interaction_services.non_web_sessions", return_value=["telnet"]
+        )
+        sessions.start()
+        self.addCleanup(sessions.stop)
+        self.msg = Mock()
+        self.character.msg = self.msg
+        self.addCleanup(self.character.__dict__.pop, "msg", None)
+
+    def deed_committed(self, *args, **kwargs):
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.deed(*args, **kwargs)
+
+    def test_a_new_offer_tells_the_non_web_session_once(self) -> None:
+        self.deed_committed()
+        self.msg.assert_called_once_with(OPENED, session=["telnet"])
+
+    def test_nothing_is_sent_before_the_transaction_commits(self) -> None:
+        self.deed()
+        self.msg.assert_not_called()
+
+    def test_a_second_deed_for_the_same_cap_says_nothing(self) -> None:
+        self.deed_committed()
+        self.msg.reset_mock()
+        self.deed_committed()
+        self.msg.assert_not_called()
+
+    def test_a_new_target_resonance_cap_tells_again(self) -> None:
+        self.deed_committed()
+        self.msg.reset_mock()
+        self.deed_committed(self.sunrise, amount=10)
+        self.msg.assert_called_once_with(OPENED, session=["telnet"])
+
+    def test_nothing_that_opens_nothing_says_anything(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            grant_resonance(self.sheet, self.dawnlight, 20, source=GainSource.STAFF_GRANT)
+        self.msg.assert_not_called()
+
+    def test_a_web_only_character_is_not_sent_the_line(self) -> None:
+        with patch("world.scenes.interaction_services.non_web_sessions", return_value=[]):
+            self.deed_committed()
+        self.msg.assert_not_called()
+
+    def test_finishing_the_scene_tells_the_character_once(self) -> None:
+        self.deed_committed()
+        self.msg.reset_mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.scene.finish_scene()
+        self.msg.assert_called_once_with(LAPSED, session=["telnet"])
+
+    def test_a_scene_with_no_offers_lapses_silently(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            self.scene.finish_scene()
+        self.msg.assert_not_called()

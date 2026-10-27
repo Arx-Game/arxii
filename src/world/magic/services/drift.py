@@ -29,6 +29,8 @@ from world.magic.services.conversion import conversion_pair
 from world.magic.types.drift import QualifyingComponent
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.models.affinity import Affinity, Resonance
@@ -88,6 +90,23 @@ def convertible_drift(sheet: CharacterSheet, target: Resonance) -> list[Characte
     ]
 
 
+_OFFER_OPENED_TEXT = (
+    "You carry resonance that does not fit you. Use |wdrift|n to see what you can correct."
+)
+_OFFER_LAPSED_TEXT = "The chance to correct drift passes with the scene."
+
+
+def _tell_non_web(character: ObjectDB, text: str) -> None:
+    """Send ``text`` to the character's telnet sessions only.
+
+    Web players learn of an offer from the polled pending endpoint, so a bare ``msg``
+    would show them the line twice.
+    """
+    from world.scenes.interaction_services import send_text_to_non_web  # noqa: PLC0415
+
+    send_text_to_non_web(character, text)
+
+
 def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOffer | None:
     """Open (or extend) the character's conversion offer for the scene a deed grant happened in.
 
@@ -96,6 +115,10 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
     that resonance; and the character stands in a live scene. A deed made outside a live
     scene opens no offer and is not an error. The cap toward the granted resonance grows by
     ``cap_percent`` of the grant (at least 1), and the grant is linked to that cap.
+
+    A NEW offer or a NEW cap row (a new target resonance) tells the character, once the
+    surrounding transaction commits (``grant_resonance`` is atomic); bumping an existing cap
+    says nothing.
     """
     from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
@@ -114,8 +137,10 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
     if not convertible_drift(sheet, grant.resonance):
         return None
     with transaction.atomic():
-        offer, _ = DriftConversionOffer.objects.get_or_create(character_sheet=sheet, scene=scene)
-        cap, _ = DriftConversionCap.objects.get_or_create(
+        offer, offer_created = DriftConversionOffer.objects.get_or_create(
+            character_sheet=sheet, scene=scene
+        )
+        cap, cap_created = DriftConversionCap.objects.get_or_create(
             offer=offer, target_resonance=grant.resonance, defaults={"cap": 0}
         )
         # Lock the offer row so concurrent grants for it serialize. A filter, not get():
@@ -127,6 +152,9 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
         cap.cap += max(1, grant.amount * percent // 100)
         cap.save(update_fields=["cap"])
         cap.grants.add(grant)
+        if offer_created or cap_created:
+            character = sheet.character
+            transaction.on_commit(lambda: _tell_non_web(character, _OFFER_OPENED_TEXT))
     return offer
 
 
@@ -136,8 +164,16 @@ def lapse_conversion_offers(scene: Scene) -> int:
     Returns how many offers lapsed.
     """
     offers = DriftConversionOffer.objects.filter(scene=scene)
+    characters = [
+        offer.character_sheet.character
+        for offer in offers.select_related("character_sheet__character")
+    ]
     lapsed = offers.count()
     offers.delete()
+    for character in characters:
+        transaction.on_commit(
+            lambda character=character: _tell_non_web(character, _OFFER_LAPSED_TEXT)
+        )
     return lapsed
 
 
