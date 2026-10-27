@@ -553,6 +553,14 @@ refusal or a failed save (#4626, ADR-4626).
 `refresh_from_db()` does not undo it: its query goes through the identity map, gets the same
 polluted instance back and copies the refused values onto themselves.
 
+**A spend that a later step can still refuse** is the game-side form of the same hazard: when
+the refusal cannot move ahead of the write (a ritual's service refuses after its components are
+consumed), keep the rows in a `core.identity_map.CacheGuard` before the write and restore them
+from a context manager entered OUTSIDE the `transaction.atomic()`, so it runs after the
+rollback (`PerformRitualAction._spend_restored_on_raise`,
+`world.items.services.materials.consumption_restored_on_raise`,
+`world.magic.services.conversion.conversion_restored_on_raise`; #4735).
+
 **Test-side convention:** a test that intentionally triggers a rollback inside an
 atomic service call and then re-reads the row **must** call
 `Model.flush_instance_cache()` before the read, or the assertion silently checks the

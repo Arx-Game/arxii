@@ -174,7 +174,10 @@ Both consumers call it:
 - `consume_item_charges`, at 0 charges;
 - `consume_materials` (`world/items/services/materials.py`), when a stack's quantity
   reaches 0. This is the shared consumer for crafting costs, ritual components and
-  technique price components.
+  technique price components. A caller that can still be refused after consuming (the
+  ritual perform) enters `consumption_restored_on_raise(items)` outside its
+  `transaction.atomic()`: on a raise it puts the items, their game objects and the holder's
+  contents back in memory to match the rolled-back rows (#4735).
 
 Three other ways an item leaves play also go through it:
 - **Building completion** (`complete_building_construction`): each contributed item is

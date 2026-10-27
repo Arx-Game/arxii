@@ -16,6 +16,8 @@ Key invariants:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -370,6 +372,40 @@ def convert_resonance(  # noqa: PLR0913
         threads_reanchored=threads_reanchored,
         multiplier=multiplier,
     )
+
+
+@contextmanager
+def conversion_restored_on_raise(character_sheet: CharacterSheet) -> Iterator[None]:
+    """Put the character's resonance and thread rows back in memory if the block raises.
+
+    The full conversion zeroes resonance balances, grants their targets and re-anchors
+    threads one by one, each written in place on the identity-mapped row. A raise part way
+    (a re-anchor the unique index refuses, ``ThreadAnchorTakenError``) rolls every write
+    back in the database, but the rows already moved would keep the move in memory (#4735).
+    Enter this OUTSIDE the conversion's ``transaction.atomic()`` so it runs after the
+    rollback. It keeps every ``CharacterResonance`` row and live thread the character holds
+    before anything changes; on a raise it writes them back onto the same objects
+    (``core.identity_map.CacheGuard``), evicts any resonance row the rolled-back
+    conversion created, clears the sheet's cached properties and the character's thread
+    handler, and re-raises.
+    """
+    from core.identity_map import CacheGuard  # noqa: PLC0415
+    from evennia_extensions.mixins import clear_django_cached_properties  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    guard = CacheGuard()
+    guard.keep(
+        *CharacterResonance.objects.filter(character_sheet=character_sheet),
+        *Thread.objects.filter(owner=character_sheet, retired_at__isnull=True),
+    )
+    guard.watch_created(CharacterResonance)
+    try:
+        yield
+    except BaseException:
+        guard.restore()
+        clear_django_cached_properties(character_sheet)
+        character_sheet.character.threads.invalidate()
+        raise
 
 
 def _reanchor_threads(

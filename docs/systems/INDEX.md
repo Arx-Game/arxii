@@ -7553,6 +7553,9 @@ holder is never notified a claim exists.
     - `consume_materials(allocations) -> None`: decrements each stack; a stack that
       reaches 0 goes through `destroy_consumed_item_instance` (`usage.py`, #4099), soft-
       or hard-delete, never a bare `delete()` that would leave a ghost game object
+    - `consumption_restored_on_raise(items)` (context manager): entered outside the
+      consuming `transaction.atomic()`, puts the items, their game objects and holders'
+      contents back in memory when the block raises (the ritual perform, #4735)
     - `meets_quality_tier(inst, requirement) -> bool`
   - **Narrative acquisition** (`world.items.services.narrative_grants`, #707 — no shop/
     merchant system exists anywhere in this codebase):

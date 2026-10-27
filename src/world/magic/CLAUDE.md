@@ -2081,7 +2081,12 @@ through the SERVICE ritual at `THREAD_RESONANCE_SERVICE_PATH` (found by path, ne
 same affinity one to one, across affinities at the `conversion_pair` rate floored at 1, merging
 into a live same-anchor thread via `conversion._reanchor_thread` (shared with the full Fall).
 `PerformRitualAction._precheck` calls `check_thread_resonance_change` before components and anima
-are spent; `kwargs["target_resonance"]` is the components' `resonance_context`. Telnet
+are spent; `kwargs["target_resonance"]` is the components' `resonance_context`. A refusal after the
+spend (`ThreadAnchorTakenError`, or any caught exception a SERVICE raises) rolls the perform back,
+and `_spend_restored_on_raise` puts the cached items, their game objects, the holder's contents
+and the anima row back to match, for every ritual; `perform_fall` does the same for the resonance
+and thread rows a half-done Fall moved (`conversion_restored_on_raise`). Both sit OUTSIDE the
+`transaction.atomic()` they guard, so they run after the rollback. Telnet
 `resonance=<id>`, REST `GET /api/magic/threads/{id}/resonance-options/`. A SANCTUM thread or a
 TECHNIQUE thread whose signature bonus requires a resonance cannot move
 (`thread_resonance_refusal`); a GIFT thread stays within a non-empty `gift.cached_resonances`.

@@ -16,6 +16,8 @@ Celestial a Redemption at 0.50. Expected numbers are worked out by hand from tho
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -31,6 +33,7 @@ from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.items.services.materialize import materialize_item_game_object
 from world.magic.constants import GainSource, RitualExecutionKind, SanctumSlotKind, TargetKind
+from world.magic.exceptions import ThreadAnchorTakenError
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
@@ -48,12 +51,15 @@ from world.magic.factories import (
 )
 from world.magic.models import (
     CharacterAnima,
+    CharacterResonance,
+    FallRedemptionRecord,
     ResonanceConversion,
     RitualComponentRequirement,
     SanctumDetails,
     SanctumOwnerMode,
     Thread,
 )
+from world.magic.services import conversion
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.thread_resonance import (
     NO_RITE_MESSAGE,
@@ -280,6 +286,91 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
             self.telnet(self.ysmay, f"ritual {RITE} thread={self.thread.pk} resonance=999999")
         )
         self.assertIn("No resonance with id 999999.", told)
+
+
+class ARetuneRefusedAfterItsOfferingIsSpent(ThreadRetuneCase):
+    """The rite spends its offering and anima, then the re-anchor is refused (#4735).
+
+    Another process wove a live Lumen thread on the same trait after the lookup ran: the
+    lookup misses it (patched to, as that race does), the unique index refuses the move, and
+    the whole perform rolls back. The offering must still be in her hands, in the database
+    and in every later read in this process, so the next retune can pay with it.
+    """
+
+    def refused_then_retried(self, candle: int) -> None:
+        held = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.lumen,
+            target_trait=self.thread.target_trait,
+            developed_points=3,
+        )
+        with mock.patch(
+            "world.magic.services.conversion._find_existing_target_thread", return_value=None
+        ):
+            told = self.retune(self.thread, self.lumen)
+
+        self.assertIn(ThreadAnchorTakenError.user_message, told)
+        row = ItemInstance.objects.filter(pk=candle).values("quantity", "destroyed_at")[0]
+        self.assertEqual(row, {"quantity": 1, "destroyed_at": None})
+        cached = ItemInstance.objects.get(pk=candle)
+        self.assertEqual(cached.quantity, 1)
+        self.assertIsNone(cached.destroyed_at)
+        self.assertEqual(cached.holder_character_sheet_id, self.sheet.pk)
+        self.assertIn("Lumen Candle", strip_ansi(self.telnet(self.ysmay, "inventory")))
+        self.assertEqual(stored(self.thread)["resonance_id"], self.bene.pk)
+
+        # The lookup finds the Lumen thread now: the retune merges into it, paying with the
+        # same candle the refused one spent and gave back.
+        told = self.retune(self.thread, self.lumen)
+        self.assertIn(f"You perform {RITE}.", told)
+        self.assertEqual(stored(held)["developed_points"], 43)
+        self.assertTrue(consumed(candle))
+        self.assertNotIn("Lumen Candle", strip_ansi(self.telnet(self.ysmay, "inventory")))
+
+    def test_a_plain_offering_is_given_back_and_pays_for_the_next_retune(self) -> None:
+        # A template-identical candle: consuming it hard-deletes the row and its game object.
+        self.rite.anima_requirement = 4
+        self.rite.save(update_fields=["anima_requirement"])
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
+        candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
+
+        self.refused_then_retried(candle)
+
+        self.assertEqual(CharacterAnima.objects.get(character=self.sheet).current, 6)
+
+    def test_the_anima_a_refused_retune_channelled_is_hers_again(self) -> None:
+        self.rite.anima_requirement = 4
+        self.rite.save(update_fields=["anima_requirement"])
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
+        self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=self.lumen,
+            target_trait=self.thread.target_trait,
+            developed_points=3,
+        )
+        with mock.patch(
+            "world.magic.services.conversion._find_existing_target_thread", return_value=None
+        ):
+            self.retune(self.thread, self.lumen)
+
+        # The row as stored, then the identity-mapped object every later read gets.
+        stored_anima = CharacterAnima.objects.filter(character=self.sheet).values("current")[0]
+        self.assertEqual(stored_anima["current"], 10)
+        self.assertEqual(CharacterAnima.objects.get(character=self.sheet).current, 10)
+
+    def test_a_named_offering_is_given_back_and_pays_for_the_next_retune(self) -> None:
+        # A candle with a name of its own is kept on consumption: soft-deleted, its game
+        # object taken out of play rather than deleted.
+        candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        item = ItemInstance.objects.get(pk=candle)
+        item.custom_name = "Lumen Candle"
+        item.save(update_fields=["custom_name"])
+        self.assertTrue(item.differs_from_template)
+
+        self.refused_then_retried(candle)
+
+        self.assertIsNotNone(ItemInstance.objects.get(pk=candle).destroyed_at)
 
 
 class RetuningThroughTheWebClient(ThreadRetuneCase):
@@ -650,3 +741,80 @@ class AFallAfterAMergeReanchorsOntoTheRetiredPlace(JourneyCase):
         self.assertEqual(row["developed_points"], 12)
         self.assertIsNone(row["retired_at"])
         self.assertEqual(stored(retired)["developed_points"], 5)
+
+
+class AFallRefusedPartWayLeavesHerThreadsWhereTheyWere(JourneyCase):
+    """The full Fall re-anchors her threads one by one; the second is refused (#4735).
+
+    Another process wove a live Praedari thread on the second thread's trait just before it
+    moved: the unique index refuses, and the whole Fall rolls back. The thread that moved
+    first and the resonance balances the Fall zeroed must read back as stored, in memory too.
+    """
+
+    def test_the_thread_that_moved_first_is_back_on_bene(self) -> None:
+        celestial, primal, _abyssal = ensure_conversion_pairs()
+        bene = ResonanceFactory(name="Bene", affinity=celestial)
+        praedari = ResonanceFactory(name="Praedari", affinity=primal)
+        ResonanceConversion.objects.create(
+            source_resonance=bene, target_affinity=primal, target_resonance=praedari
+        )
+        RitualFactory(
+            name="Ritual of Falling",
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path="world.magic.services.fall_redemption.perform_fall",
+        )
+        room = self.make_room("The Threshold")
+        ysmay = self.make_player("Ysmay", room=room)
+        sheet = ysmay.sheet_data
+        set_aura_split(
+            CharacterAuraFactory(character=sheet), celestial="50", primal="45", abyssal="5"
+        )
+        grant_resonance(sheet, bene, 100, source=GainSource.STAFF_GRANT)
+        grant_resonance(sheet, praedari, 100, source=GainSource.STAFF_GRANT)
+        first = ThreadFactory(owner=sheet, resonance=bene, developed_points=10)
+        second = ThreadFactory(owner=sheet, resonance=bene, developed_points=20)
+
+        real_reanchor = conversion._reanchor_thread
+        moved: list[int] = []
+
+        def the_second_collides(thread: Thread, target_resonance_id: int, new_points: int):
+            moved.append(thread.pk)
+            if len(moved) == 2:
+                ThreadFactory(
+                    owner=sheet,
+                    resonance=praedari,
+                    target_trait=thread.target_trait,
+                    developed_points=1,
+                )
+            return real_reanchor(thread, target_resonance_id, new_points)
+
+        with (
+            mock.patch.object(conversion, "_find_existing_target_thread", return_value=None),
+            mock.patch.object(conversion, "_reanchor_thread", side_effect=the_second_collides),
+        ):
+            told = self.telnet(ysmay, f"ritual Ritual of Falling target_affinity={primal.pk}")
+
+        self.assertIn(ThreadAnchorTakenError.user_message, told)
+        self.assertEqual(len(moved), 2)
+        self.assertFalse(FallRedemptionRecord.objects.filter(character_sheet=sheet).exists())
+        for thread, points in ((first, 10), (second, 20)):
+            self.assertEqual(stored(thread)["resonance_id"], bene.pk)
+            cached = Thread.objects.get(pk=thread.pk)
+            self.assertEqual(cached.resonance_id, bene.pk)
+            self.assertEqual(cached.resonance, bene)
+            self.assertEqual(cached.developed_points, points)
+        self.assertEqual(
+            sorted(t.pk for t in ysmay.threads.all() if t.resonance_id == bene.pk),
+            sorted([first.pk, second.pk]),
+        )
+        for resonance in (bene, praedari):
+            self.assertEqual(
+                CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance).balance,
+                100,
+            )
+
+        # Nothing in the way now: the same Fall goes through from the stored state.
+        told = self.telnet(ysmay, f"ritual Ritual of Falling target_affinity={primal.pk}")
+        self.assertIn("You perform Ritual of Falling.", told)
+        self.assertEqual(stored(first)["developed_points"], 12)
+        self.assertEqual(stored(second)["developed_points"], 24)

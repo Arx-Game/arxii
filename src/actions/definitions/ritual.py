@@ -20,6 +20,8 @@ very early; magic/combat models pull in much of the world graph).
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -100,10 +102,11 @@ class PerformRitualAction(Action):
             return self._perform_anima_ritual(sheet, ritual)
 
         try:
-            with transaction.atomic():
-                # Refusals that need no roll run before anything is spent: a raise after
-                # consumption rolls the tables back but leaves the identity map's cached
-                # items ahead of them.
+            # Refusals that need no roll run before anything is spent. A service can still
+            # refuse after the components and anima are spent; the rollback restores the
+            # tables, and _spend_restored_on_raise puts the cached rows back to match.
+            channelled = sheet.anima_or_none if ritual.anima_requirement > 0 else None
+            with _spend_restored_on_raise(components, channelled), transaction.atomic():
                 self._precheck(ritual, sheet, kwargs)
                 self._validate_components(
                     ritual, components, sheet, resonance_context=kwargs.get("target_resonance")
@@ -288,6 +291,30 @@ class PerformRitualAction(Action):
         return resolve_pool_gate(
             ritual=ritual, performer_sheet=performer_sheet, pool=contribution.amount
         )
+
+
+@contextmanager
+def _spend_restored_on_raise(components: list[Any], anima: Any) -> Iterator[None]:
+    """Put what a perform spends back in memory when the perform raises after spending it.
+
+    The perform consumes its components and channels the performer's anima inside its
+    transaction, then dispatches; a service that refuses after that (the retune's
+    ``ThreadAnchorTakenError``, any caught ritual exception) rolls the tables back, but the
+    identity-mapped items, their game objects and the anima row keep the spend (#4735). Entered
+    outside ``transaction.atomic()`` so it runs after the rollback, for every ritual alike.
+    ``anima`` is the performer's ``CharacterAnima`` when the rite channels it, else None.
+    """
+    from core.identity_map import CacheGuard  # noqa: PLC0415
+    from world.items.services.materials import consumption_restored_on_raise  # noqa: PLC0415
+
+    anima_guard = CacheGuard()
+    anima_guard.keep(anima)
+    try:
+        with consumption_restored_on_raise(components):
+            yield
+    except BaseException:
+        anima_guard.restore()
+        raise
 
 
 def _service_result_line(result: Any) -> str:
