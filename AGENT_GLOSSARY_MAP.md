@@ -353,6 +353,12 @@ Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Regard P
 Regard Modulation", "Relationship Bond Pull Modulation", "Pull Target Modulation"); covenants-side
 framing in [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
+**Surges given** (#4739):
+A `CovenantRoleActionScaling` row (`CovenantScaledAction.SURGES_GIVEN`) that scales the intensity
+a rallier's Rally surges the rallied ally by, `x (1 + bonus)`; intensity only. _Avoid_: rally
+scaling (that is the `combat_rally` morale row).
+Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
+
 ## Combat-magic surface (#1584)
 
 **Allegiance**:

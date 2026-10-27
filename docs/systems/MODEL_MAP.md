@@ -3709,7 +3709,7 @@
 - `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' - Un-engage this membership. Idempotent.`
 - `complete_rites_for_encounter(*, encounter: 'CombatEncounter') -> 'None' - Sweep covenant rite buffs when a combat encounter ends.`
 - `covenant_members_present(*, covenant: 'Covenant', room: 'ObjectDB') -> 'list[CharacterSheet]' - CharacterSheets of active `covenant` members present in `room`.`
-- `covenant_role_action_scaling_bonus(character: 'object', action_key: 'str') -> 'float' - Return the per-role scaling bonus for a combat action (#2529, was #2022).`
+- `covenant_role_action_scaling_bonus(character: 'object', action: 'CovenantScaledAction') -> 'float' - Return the per-role scaling bonus for a scaled action (#2529, was #2022; #4739).`
 - `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None, leader: 'CharacterSheet | None' = None, flat: 'bool' = False) -> 'Covenant' - Create a covenant with its initial set of founder memberships. Atomic.`
 - `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' - Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
 - `create_rank(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', name: 'str', tier: 'int', can_invite: 'bool' = False, can_kick: 'bool' = False, can_manage_ranks: 'bool' = False, can_lead_rituals: 'bool' = False) -> 'CovenantRank' - Create a new rank in the covenant's ladder. Requires can_manage_ranks.`

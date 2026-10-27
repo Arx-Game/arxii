@@ -7688,8 +7688,9 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `codex_entry` (FK → `codex.CodexEntry`, nullable, sub-roles only).
   - `CovenantRoleActionScaling` (#2529, ADR-0149; replaced `ArchetypeActionScaling`) —
     one row per `(covenant_role, action_key)` with `thread_level_multiplier`. Read by
-    `covenant_role_action_scaling_bonus(character, action_key)`, anchor-role
-    normalized. Lore-repo content.
+    `covenant_role_action_scaling_bonus(character, action: CovenantScaledAction)`,
+    anchor-role normalized. `surges_given` scales a rallier's Rally surge intensity
+    (#4739). Lore-repo content.
   - `CovenantRoleTechniqueSpecialty` (#2443, ADR-0149's 2026-07-20 amendment; **Layer 2**
     of the vow-power model) — one row per `(covenant_role, function)` keyed on
     `magic.TechniqueFunction`, `multiplier_tenths` (default 10 = ×1.0). Valid on both
@@ -7861,7 +7862,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   - `is_gear_compatible(role, archetype) -> bool`
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
     `world.mechanics.services`)
-  - `covenant_role_action_scaling_bonus(character, action_key) -> float` (#2529,
+  - `covenant_role_action_scaling_bonus(character, action: CovenantScaledAction) -> float` (#2529, #4739,
     ADR-0149; replaces `archetype_action_scaling_bonus`) — sums `thread_level ×
     multiplier` across engaged roles' `CovenantRoleActionScaling` rows, anchor-role
     normalized
@@ -8571,14 +8572,19 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   whose outcome has success level below 1 (model `clean`, admin inline formset and
   `check_stored_surge_bands` alike). Journey:
   `integration_tests/test_emotional_condition_journeys.py`.
-- **Social maneuver designations (#4739) [BUILT; call sites move in later #4739 tasks]:**
+- **Social maneuver designations (#4739) [BUILT & WIRED]:**
   `SocialManeuverConfig` (singleton pk=1, `world/combat/models.py`) holds
   `taunt_check_type` (the taunter's own check; the target's composure roll is the
   `TAUNT_RECEIVED` tuning's check), `demoralize_check_type`, `parley_check_type` and
   `rally_success_condition` (Inspired), each a nullable PROTECT FK. Rally's own check is the
   `RALLIED` `SurgeTuning.check_type`, not a field here. Read through
   `world.combat.services.encounter.config.get_social_maneuver_config()` (cached singleton,
-  created empty if missing). Required content rows: `social-maneuver-taunt-check`,
+  created empty if missing). Rally rolls only the `RALLIED` tuning's check (no tuning: no
+  roll, nothing happens) and applies `rally_success_condition` on success; Taunt (on an
+  opponent, and the taunter's rating against a player), Demoralize and Parley roll their
+  designated check through `_social_verb_success_level(participant, check_type | None,
+  action, target)`, where an unset or inactive check rolls nothing (success level 0). No
+  row is found by name. Required content rows: `social-maneuver-taunt-check`,
   `-demoralize-check`, `-parley-check`, `-rally-success-condition`, `rallied-tuning-check`,
   and `emotional-condition-on-failure-band`.
 - **Effect-palette / allegiance / intangibility services (#1584):**
@@ -8834,7 +8840,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `src/integration_tests/test_leading_the_fight_journeys.py`.
   - `ensure_social_combat_content()` (`src/world/combat/social_combat_content.py`) —
     idempotent seed for the 4 social-combat CheckTypes (Rally/Demoralize/Taunt/Parley
-    with stat+skill+spec), the Inspired condition, and a Charming Word technique.
+    with stat+skill+spec), the Inspired condition, and a Charming Word technique; points
+    each unset `SocialManeuverConfig` designation at its seeded row (#4739), never
+    overwriting one staff set. Seed names: `*_SEED_CHECK_NAME`,
+    `INSPIRED_SEED_TEMPLATE_NAME` (seeds, factories and tests only).
 - **Key Services (`world/mechanics/reactions.py`):**
   - `dispatch_capability_reaction(character, protected, challenge_name, approach, outcome_fn, *, select_best_check_rating=False)`
     — shared reactive spine; used by INTERPOSE and the catch-faller seam. `approach`
