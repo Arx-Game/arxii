@@ -1057,8 +1057,10 @@ anchor in the new resonance takes the points while the moved one retires.
 the change), the shared `conversion._reanchor_thread` merge (and `_find_existing_target_thread`
 without `getattr`), `PerformRitualAction._precheck` so a refused move spends nothing, the
 target-resonance offering paid toward the chosen resonance, telnet `resonance=<id>`, web
-`kwargs.target_resonance`, `GET /api/magic/threads/{id}/resonance-options/`, and Required content
-row `thread-resonance-ritual`. Journey: `integration_tests/test_thread_resonance_journeys.py`.
+`kwargs.target_resonance`, `GET /api/magic/threads/{id}/resonance-options/`, a result line that
+telnet and web both show, Required content row `thread-resonance-ritual`, and migration 0322:
+the trait, technique, relationship-track and relationship-capstone thread unique constraints now
+apply to live threads only, so a retired thread no longer blocks a later move (retune or Fall). Journey: `integration_tests/test_thread_resonance_journeys.py`.
 
 **Not built here:** the Spellbook thread card's "Change to" pills (Task 2 of the slice). Nothing is
 authored: until staff create the SERVICE ritual, the dashboard row lists it.

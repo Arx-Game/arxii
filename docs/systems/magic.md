@@ -4356,10 +4356,16 @@ the way the Rite of Honors is found by `HONORS_SERVICE_PATH`. No roll.
   `_find_existing_target_thread` compares every typed target FK id (organization included).
 - **Refusals** (`ThreadResonanceChangeError`, `check_thread_resonance_change`): no thread named,
   a thread that is not the performer's or is retired, no target named (the message lists the
-  options as "Name (id, same affinity|Fall|Redemption)"), a target not among the options (its own
-  resonance included), and a retired thread on the same anchor already holding the target for the
-  kinds whose unique constraint counts retired rows (`RETIREMENT_BLIND_TARGET_KINDS`: trait,
-  technique, relationship track, relationship capstone), which the database would reject.
+  options as "Name (id, same affinity|Fall|Redemption)"), and a target not among the options
+  (its own resonance included). A retired thread holds no place: every per-anchor `Thread`
+  unique constraint applies to live threads only (migration 0322 brought trait, technique,
+  relationship track and relationship capstone in line with the others), so a merged thread
+  can move back onto the resonance its retired partner left, by a retune or the full Fall.
+- **Message**: the result's `message` ("Mercy of the Healer left Bene and now channels Praedari
+  (40 points, now 48)." or "... merged into your Lumen thread on the same anchor: its 40 points
+  brought 40, and that thread now holds 50."; a thread with no name is "Your <anchor> thread")
+  is appended to "You perform <rite>." by `PerformRitualAction` (`_service_result_line`), and
+  `RitualPerformView` returns that line as `message` for every SERVICE ritual with a result.
 - **Nothing spent on refusal**: `PerformRitualAction._precheck` runs
   `check_thread_resonance_change` for this rite before components and anima are spent;
   `change_thread_resonance` locks the thread row and checks again. `_validate_components` passes
