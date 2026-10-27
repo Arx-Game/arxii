@@ -206,11 +206,9 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     # (world/scenes/action_services.py) already use. Without this, conditions
     # are structurally invisible to standalone casts (#2697).
     #
-    # Gathered inside _resolve_fn, after use_technique's gates, so that the focus
-    # check against carried drift (#4732) runs once per cast that actually rolls and
-    # a conflict it applies reaches this same roll.
+    # Gathered inside _resolve_fn, after use_technique's focus check against carried
+    # drift (#4732), so a conflict that check applies reaches this same roll.
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
-    from world.magic.services.drift import check_resonance_focus  # noqa: PLC0415
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
     applicable_threads = applicable_threads_for_cast(
@@ -242,11 +240,6 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         check_modifier_total = 0
         cast_breakdown = None
         if cast_check is not None and character_sheet is not None:
-            check_resonance_focus(
-                character,
-                technique,
-                pulled_resonance=cast_pull.resonance if cast_pull is not None else None,
-            )
             cast_breakdown = collect_check_modifiers(
                 character_sheet,
                 cast_check.check_type,

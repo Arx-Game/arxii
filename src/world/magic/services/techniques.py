@@ -1262,9 +1262,15 @@ def _complete_technique_cast(  # noqa: PLR0913
     effective_strain,
     price_payment=None,
     defer_soulfray_reveal: bool = False,
+    cast_pull: CastPullDeclaration | None = None,
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
     deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
+    # Carried drift (#4732): one focus roll per cast, on every cast path, before
+    # resolve_fn gathers the cast's modifiers so a conflict it applies reaches this roll.
+    from world.magic.services.drift import check_resonance_focus  # noqa: PLC0415
+
+    check_resonance_focus(character, technique, cast_pull=cast_pull)
     resolution_result, price_payment = _resolve_and_settle_price(
         character=character,
         technique=technique,
@@ -1466,4 +1472,5 @@ def use_technique(  # noqa: PLR0913
         effective_strain=effective_strain,
         price_payment=price_payment,
         defer_soulfray_reveal=defer_soulfray_reveal,
+        cast_pull=cast_pull,
     )

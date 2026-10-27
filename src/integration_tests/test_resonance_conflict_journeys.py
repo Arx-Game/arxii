@@ -20,11 +20,19 @@ from decimal import Decimal
 from typing import Self
 from unittest.mock import patch
 
+from django.urls import reverse
+from rest_framework import status
+
 from actions.factories import ActionTemplateFactory
+from actions.models import ActionEnhancement
 from integration_tests.harness import JourneyCase
 from integration_tests.test_acting_aura_journeys import _AShifter
 from world.checks import services as check_services
-from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
+from world.checks.factories import (
+    CheckTypeFactory,
+    CheckTypeTraitFactory,
+    create_social_action_templates,
+)
 from world.checks.test_helpers import force_check_outcome
 from world.combat import services as combat_services
 from world.combat.constants import ActionCategory, ParticipantStatus
@@ -46,6 +54,7 @@ from world.magic.factories import (
     AffinityInteractionFactory,
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
+    CharacterAuraFactory,
     CharacterResonanceFactory,
     CharacterTechniqueFactory,
     CharacterThreadWeavingUnlockFactory,
@@ -63,6 +72,8 @@ from world.magic.services.drift import get_drift_config
 from world.magic.services.threads import weave_thread
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.types.pull import CastPullDeclaration
+from world.progression.models import KudosSourceCategory
+from world.scenes import action_services
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
@@ -230,6 +241,19 @@ class DriftOnTheThresholdCallsForNothing(_Drifting):
         )
         AffinityInteraction.objects.clear_cache()
         self.assertEqual(self.cast().focus_difficulties, [])
+
+
+class AnUnsetConflictConditionRollsNothing(_Drifting):
+    """Staff have not named the conflict condition yet: the Required content dashboard
+    lists it, and a drifting cast resolves with no focus roll."""
+
+    def test_the_cast_resolves_without_a_focus_roll(self) -> None:
+        cfg = get_drift_config()
+        cfg.conflict_condition = None
+        cfg.save()
+        rec = self.cast()
+        self.assertEqual(rec.focus_difficulties, [])
+        self.assertIsNone(self.conflict())
 
 
 class DriftPastTheThreshold(_Drifting):
@@ -417,4 +441,89 @@ class ACombatCastRollsFocusOnce(_AShifter):
         self.assertEqual(
             {c.source_label: c.value for c in rec.cast_breakdowns[0].contributions}.get(CONFLICT),
             PENALTY,
+        )
+
+
+class AnEnchantedFlirtRollsFocusToo(ResonanceCacheIsolationMixin, JourneyCase):
+    """A technique-enhanced social action is a cast: Ysmay, 60 Abyssal against 100
+    Celestial, flirts with Hobb through a technique and rolls her focus at 12 when Hobb
+    accepts."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        Affinity.objects.clear_cache()
+        AffinityInteraction.objects.clear_cache()
+        celestial, _primal, abyssal = ensure_canonical_affinities()
+        CheckSystemSetupFactory.create()
+        KudosSourceCategory.objects.get_or_create(
+            name="social_engagement",
+            defaults={
+                "display_name": "Social Engagement",
+                "description": "Seeded for tests on the no-migrations fast tier.",
+                "default_amount": 1,
+            },
+        )
+        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
+        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+        self.parlor = self.make_room("The Parlor")
+        self.scene = SceneFactory(room=self.parlor)
+        flirt = next(t for t in create_social_action_templates() if t.name == "Flirt")
+        self.ysmay = self.make_player("Ysmay", room=self.parlor)
+        self.hobb = self.make_player("Hobb", room=self.parlor)
+        sheet = self.ysmay.sheet_data
+        CharacterAuraFactory(
+            character=sheet,
+            celestial=Decimal("80.00"),
+            primal=Decimal("0.00"),
+            abyssal=Decimal("20.00"),
+        )
+        self.technique = TechniqueFactory(
+            name="Mesmerizing Gaze", intensity=3, control=8, anima_cost=2, gift=GiftFactory()
+        )
+        CharacterTechniqueFactory(character=sheet, technique=self.technique)
+        CharacterAnimaFactory(character=sheet, current=30, maximum=30)
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name="Enchanted Flirt",
+            source_type="technique",
+            technique=self.technique,
+        )
+        CharacterResonanceFactory(
+            character_sheet=sheet, resonance=ResonanceFactory(affinity=celestial), balance=100
+        )
+        CharacterResonanceFactory(
+            character_sheet=sheet, resonance=ResonanceFactory(affinity=abyssal), balance=60
+        )
+        self.focus_type, self.condition = _author_conflict(flirt.check_type)
+        self.flirt_type = flirt.check_type
+
+    def test_the_flirt_rolls_focus_once(self) -> None:
+        created = self.api(self.account_of(self.ysmay)).post(
+            reverse("sceneactionrequest-list"),
+            {
+                "scene": self.scene.pk,
+                "initiator_persona": self.ysmay.sheet_data.primary_persona.pk,
+                "target_persona": self.hobb.sheet_data.primary_persona.pk,
+                "action_key": "flirt",
+                "technique_id": self.technique.pk,
+            },
+            format="json",
+            headers={"X-Character-ID": str(self.ysmay.pk)},
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        failure = CheckOutcome.objects.get(name="Failure")
+        with (
+            _Recorder(focus_type=self.focus_type, cast_type=self.flirt_type) as rec,
+            force_check_outcome(failure),
+        ):
+            accepted = self.api(self.account_of(self.hobb)).post(
+                reverse("sceneactionrequest-respond", args=[created.data["id"]]),
+                {"decision": "accept"},
+                format="json",
+                headers={"X-Character-ID": str(self.hobb.pk)},
+            )
+        self.assertEqual(accepted.status_code, status.HTTP_200_OK, accepted.data)
+        self.assertEqual(rec.focus_difficulties, [12])
+        self.assertTrue(
+            ConditionInstance.objects.filter(target=self.ysmay, condition=self.condition).exists()
         )

@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Resonance, Technique
+    from world.magic.types.pull import CastPullDeclaration
 
 # A pair with no authored AffinityInteraction row counts at full weight.
 _UNAUTHORED_PAIR_WEIGHT = Decimal(1)
@@ -73,27 +74,37 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
     threshold = max(cfg.threshold_floor, main * cfg.threshold_percent // 100)
     steps_past = 0
     if drift > threshold:
-        # The field's validator keeps severity_step at 1 or more; max() guards rows
-        # written past validation.
-        step = max(cfg.severity_step, 1)
-        steps_past = 1 + (drift - threshold - 1) // step
+        steps_past = 1 + (drift - threshold - 1) // cfg.severity_step
     return DriftReading(
         drift=drift, threshold=threshold, steps_past=steps_past, dominant_affinity=dominant
     )
+
+
+def _pulled_resonance(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the combat pull handler hangs off the character
+    cast_pull: CastPullDeclaration | None,
+) -> Resonance | None:
+    """The resonance this cast pulls: the declared cast pull's, else this round's combat pull."""
+    if cast_pull is not None:
+        return cast_pull.resonance
+    pulls = character.combat_pulls.active()
+    return pulls[0].resonance if pulls else None
 
 
 def check_resonance_focus(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - rolls, conditions and messages take the character
     technique: Technique,
     *,
-    pulled_resonance: Resonance | None = None,
+    cast_pull: CastPullDeclaration | None = None,
 ) -> FocusOutcome | None:
     """Roll the caster's focus against her carried drift, once per cast.
 
-    Call it before the cast's check modifiers are gathered, so a condition applied
-    here reaches the same cast's roll. ``pulled_resonance`` is the resonance of a
-    thread pull declared for this cast; working it outside her dominant affinity
-    adds ``off_aura_pull_steps``.
+    ``use_technique`` calls it for every cast, after anima is deducted and before
+    ``resolve_fn`` gathers the cast's check modifiers, so a condition applied here
+    reaches the same cast's roll. A pull is part of its cast, not a roll of its own:
+    the pulled resonance is ``cast_pull``'s for an out-of-combat cast, else the
+    caster's committed pull for the current combat round. Working it outside her
+    dominant affinity adds ``off_aura_pull_steps``.
 
     Returns None, rolling nothing, when the config's focus check type or conflict
     condition is unset (the Required content dashboard lists both) or when there are
@@ -121,6 +132,7 @@ def check_resonance_focus(
     if reading.dominant_affinity is None:
         return None
     steps = reading.steps_past
+    pulled_resonance = _pulled_resonance(character, cast_pull)
     if (
         pulled_resonance is not None
         and pulled_resonance.affinity_id != reading.dominant_affinity.pk

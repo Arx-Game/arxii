@@ -244,23 +244,6 @@ class CombatTechniqueResolver:
 
         return floor_ultimate_check(result, self.action.focused_action)
 
-    def _check_resonance_focus(self) -> None:
-        """Roll the caster's focus against her carried drift, once per cast (#4732).
-
-        Runs before ``_roll_check`` gathers the offense breakdown, so a conflict a
-        failed focus roll applies reaches this same cast's roll. The round's declared
-        pull (one per participant per round) supplies the pulled resonance.
-        """
-        from world.magic.services.drift import check_resonance_focus  # noqa: PLC0415
-
-        character = self.participant.character_sheet.character
-        pulls = character.combat_pulls.active_for_encounter(self.participant.encounter)
-        check_resonance_focus(
-            character,
-            self.action.focused_action,
-            pulled_resonance=pulls[0].resonance if pulls else None,
-        )
-
     def _sum_intensity_bump_pulls(self) -> int:
         """Sum INTENSITY_BUMP scaled_values from active CombatPulls."""
         encounter = self.participant.encounter
@@ -857,7 +840,6 @@ class CombatTechniqueResolver:
             .add(PowerStage.COMBAT_PULL, "combat pulls", pull_bonus)
             .build()
         )
-        self._check_resonance_focus()
         check_result = self._roll_check()
 
         # Penetration-vs-resistance contest (#639): if the focused target has a
