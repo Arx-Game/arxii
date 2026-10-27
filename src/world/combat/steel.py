@@ -153,7 +153,7 @@ def steel_yourself(participant: CombatParticipant) -> SteelResult:
                 potency=tuning.potency_base,
                 source_character=participant.character_sheet.character,
                 tuning=tuning,
-                cause=f"{persona_name_of(participant)} steels herself.",
+                cause=f"{persona_name_of(participant)} steels their resolve.",
             )
         committed = True
     finally:
